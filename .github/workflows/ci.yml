@@ -24,4 +24,4 @@ jobs:
         env:
           PYTHONPATH: "${{ github.workspace }}/golfiq/cv-engine:${{ github.workspace }}/golfiq/cv-engine/src"
         run: |
-          pytest
+          pytest -q
