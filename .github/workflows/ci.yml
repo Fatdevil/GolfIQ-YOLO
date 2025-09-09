@@ -1,0 +1,38 @@
+name: GolfIQ CI
+on:
+  push:
+  pull_request:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Cache pip
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}-${{ hashFiles('golfiq/cv-engine/**') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+      - name: Install
+        run: |
+          python -m venv .venv
+          source .venv/bin/activate
+          pip install --upgrade pip
+          if [ -d "golfiq/cv-engine" ]; then pip install -e golfiq/cv-engine; fi
+          if [ -f "server/requirements.txt" ]; then pip install -r server/requirements.txt; fi
+          pip install pytest
+      - name: Test
+        run: |
+          source .venv/bin/activate
+          PATHS=""
+          [ -d "golfiq/cv-engine/tests" ] && PATHS="$PATHS golfiq/cv-engine/tests"
+          [ -d "server/tests" ] && PATHS="$PATHS server/tests"
+          if [ -z "$PATHS" ]; then
+            echo "No tests found; exiting 0."
+            exit 0
+          fi
+          pytest $PATHS -q
