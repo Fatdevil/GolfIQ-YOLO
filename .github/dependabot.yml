@@ -1,0 +1,21 @@
+version: 2
+updates:
+  - package-ecosystem: "pip"
+    directory: "/server"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    rebase-strategy: "auto"
+    labels: ["deps", "auto"]
+  - package-ecosystem: "pip"
+    directory: "/golfiq/cv-engine"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    rebase-strategy: "auto"
+    labels: ["deps", "auto"]
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    labels: ["deps", "actions", "auto"]
