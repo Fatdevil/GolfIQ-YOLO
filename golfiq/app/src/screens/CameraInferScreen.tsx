@@ -1,100 +1,100 @@
-import React, { useEffect, useRef, useState } from 'react';
-import { View, Text, Button, StyleSheet, TextInput, Alert } from 'react-native';
-import { Camera, CameraType, useCameraPermissions } from 'expo-camera';
-import type { ImgFrame, Meta, YoloConfig } from '../lib/api';
-import { inferWithFrames } from '../lib/api';
+import React, {useEffect, useRef, useState} from 'react';
+import { View, Text, Button, TextInput, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
+import { Camera } from 'expo-camera';
 import MetricCard from '../components/MetricCard';
+import QualityBadge from '../components/QualityBadge';
+import { inferWithFrames, coachFeedback, Meta } from '../lib/api';
 
 export default function CameraInferScreen(){
-  const [permission, requestPermission] = useCameraPermissions();
-  const [ready, setReady] = useState(false);
-  const [fps, setFps] = useState('120');
-  const [scale, setScale] = useState('0.002'); // m/px (kalibrering)
-  const [serverModelPath, setServerModelPath] = useState('/abs/path/to/yolov8n.pt');
-  const [busy, setBusy] = useState(false);
-  const [result, setResult] = useState<any>(null);
   const cameraRef = useRef<Camera | null>(null);
+  const [perm, requestPerm] = Camera.useCameraPermissions();
+  const [fps, setFps] = useState('120');
+  const [scale, setScale] = useState('0.002');
+  const [modelPath, setModelPath] = useState('/abs/path/to/yolov8n.pt');
+  const [result, setResult] = useState<any>(null);
+  const [mode, setMode] = useState<'short'|'detailed'|'drill'>('short');
+  const [coachText, setCoachText] = useState('');
+  const [busy, setBusy] = useState(false);
 
   useEffect(()=>{
-    if (!permission) requestPermission();
-  }, [permission]);
+    if(!perm || !perm.granted) requestPerm();
+  },[]);
 
-  const captureBurst = async (count=12, intervalMs=60): Promise<ImgFrame[]> => {
-    const frames: ImgFrame[] = [];
-    for(let i=0;i<count;i++){
-      try{
-        const pic = await cameraRef.current?.takePictureAsync({ base64:true, quality:0.5, skipProcessing:true });
-        if (pic?.base64) frames.push({ image_b64: pic.base64 });
-      }catch(e){ console.warn('capture error', e); }
-      await new Promise(r => setTimeout(r, intervalMs));
+  const captureBurst = async () => {
+    if(!cameraRef.current) return [];
+    const frames:any[] = [];
+    for(let i=0;i<12;i++){
+      const img = await cameraRef.current.takePictureAsync({base64:true, quality:0.9, skipProcessing:true});
+      frames.push({ image_b64: img.base64 });
     }
     return frames;
   };
 
   const onAnalyze = async () => {
-    if (!permission?.granted) { Alert.alert('Kamera', 'Ge kameratillstånd först.'); return; }
-    if (!cameraRef.current) { Alert.alert('Kamera', 'Kameran är inte redo.'); return; }
-    setBusy(true); setResult(null);
+    setBusy(true); setCoachText(''); setResult(null);
     try{
-      const frames = await captureBurst(12, 60);
-      if (frames.length < 4) { Alert.alert('Kamera', 'Fick för få bilder. Försök igen.'); setBusy(false); return; }
+      const frames = await captureBurst();
       const meta: Meta = { fps: parseFloat(fps)||120, scale_m_per_px: parseFloat(scale)||0.002, calibrated:true, view:'DTL' };
-      const yolo: YoloConfig = { model_path: serverModelPath, class_map: {0:'ball',1:'club_head'}, conf: 0.25 };
+      const yolo = { model_path: modelPath, class_map: {0:'ball',1:'club_head'}, conf:0.25 };
       const r = await inferWithFrames(meta, frames, yolo);
       setResult(r);
-    } catch(e:any){
-      Alert.alert('Fel vid inferens', String(e?.message || e));
     } finally { setBusy(false); }
   };
 
-  if (!permission) return <View><Text>Kontrollerar kameratillstånd…</Text></View>;
-  if (!permission.granted){
-    return (
-      <View style={{gap:12}}>
-        <Text>Vi behöver kameratillstånd för att analysera svingen.</Text>
-        <Button title="Ge tillstånd" onPress={requestPermission} />
-      </View>
-    );
+  const onCoach = async () => {
+    if(!result) return;
+    const resp = await coachFeedback(mode, result.metrics, '');
+    setCoachText(resp.text);
+  };
+
+  if(!perm?.granted){
+    return <View style={{padding:16}}><Text>Begär kameratillstånd...</Text></View>
   }
 
   return (
-    <View>
-      <Text style={styles.h1}>Kamera → /infer (YOLO på server)</Text>
-      <View style={styles.row}>
-        <Text style={styles.label}>FPS</Text>
-        <TextInput style={styles.input} keyboardType="numeric" value={fps} onChangeText={setFps} />
-        <Text style={styles.label}>m/px</Text>
-        <TextInput style={styles.input} keyboardType="numeric" value={scale} onChangeText={setScale} />
-      </View>
-      <View style={{marginTop:8}}>
-        <Text style={styles.label}>Serverns YOLO‑modell (sökväg på servern)</Text>
-        <TextInput style={[styles.input, {width:'100%'}]} value={serverModelPath} onChangeText={setServerModelPath} />
-      </View>
-
-      <View style={{height:320, marginTop:12, borderRadius:12, overflow:'hidden', backgroundColor:'#000'}}>
-        <Camera ref={(r)=> (cameraRef.current = r)} style={{flex:1}} type={CameraType.back} onCameraReady={()=>setReady(true)} />
-      </View>
-
-      <View style={{marginTop:12}}>
-        <Button title={busy? 'Analyserar…' : 'Fånga 12 bilder och analysera'} onPress={onAnalyze} disabled={busy || !ready} />
-      </View>
+    <ScrollView contentContainerStyle={{padding:16}}>
+      <Text style={{fontSize:22, fontWeight:'700', marginBottom:12}}>Kamera → /infer</Text>
+      <Camera ref={cameraRef} style={{height:300, borderRadius:12, overflow:'hidden'}} />
+      <View style={styles.row}><Text style={styles.label}>FPS</Text><TextInput style={styles.input} value={fps} onChangeText={setFps} keyboardType='numeric'/></View>
+      <View style={styles.row}><Text style={styles.label}>m/px</Text><TextInput style={styles.input} value={scale} onChangeText={setScale} keyboardType='numeric'/></View>
+      <View style={styles.row}><Text style={styles.label}>YOLO‑modell (server)</Text><TextInput style={[styles.input,{flex:1}]} value={modelPath} onChangeText={setModelPath}/></View>
+      <Button title={busy? 'Analyserar...' : 'Fånga & analysera'} onPress={onAnalyze} />
 
       {result && (
         <View style={{marginTop:16}}>
+          <View style={{flexDirection:'row', justifyContent:'space-between', alignItems:'center', marginBottom:8}}>
+            <Text style={{fontSize:16, fontWeight:'600'}}>Resultat</Text>
+            <QualityBadge value={result.quality} />
+          </View>
           <MetricCard title="Club speed" value={(result.metrics.club_speed_mps*2.23693629).toFixed(1)} unit="mph" />
           <MetricCard title="Ball speed" value={(result.metrics.ball_speed_mps*2.23693629).toFixed(1)} unit="mph" />
           <MetricCard title="Launch" value={result.metrics.launch_deg.toFixed(1)} unit="°" />
           <MetricCard title="Carry" value={(result.metrics.carry_m*1.0936133).toFixed(0)} unit="yd" />
-          <MetricCard title="Quality" value={result.quality} />
+
+          <View style={{marginTop:16}}>
+            <Text style={{fontSize:16, fontWeight:'600', marginBottom:8}}>Coach</Text>
+            <View style={styles.modes}>
+              {(['short','detailed','drill'] as const).map(m => (
+                <TouchableOpacity key={m} style={[styles.mode, mode===m && styles.modeActive]} onPress={()=>setMode(m)}>
+                  <Text style={{fontWeight:'600'}}>{m}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+            <Button title="Få coach-feedback" onPress={onCoach} />
+            {!!coachText && <View style={styles.coachBox}><Text>{coachText}</Text></View>}
+          </View>
         </View>
       )}
-    </View>
+    </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  h1:{fontSize:20, fontWeight:'700', marginBottom:8},
-  row:{flexDirection:'row', alignItems:'center', gap:8},
-  label:{fontSize:12, color:'#666'},
-  input:{borderWidth:1, borderColor:'#ccc', padding:8, borderRadius:8, width:90}
+  row:{flexDirection:'row', alignItems:'center', marginTop:8},
+  label:{width:120},
+  input:{borderWidth:1, borderColor:'#ccc', padding:8, borderRadius:8, width:120, marginLeft:8},
+  modes:{flexDirection:'row', marginTop:8, marginBottom:8},
+  mode:{paddingVertical:6, paddingHorizontal:10, borderWidth:1, borderColor:'#ddd', borderRadius:8, marginRight:8},
+  modeActive:{backgroundColor:'#f1f1f1'},
+  coachBox:{marginTop:10, padding:12, borderRadius:10, backgroundColor:'#eef6ff', borderWidth:1, borderColor:'#cfe1ff'}
 });
