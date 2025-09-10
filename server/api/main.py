@@ -1,8 +1,14 @@
+import os
+
 from fastapi import FastAPI
+
+from server.tracking.runtime import get_tracker
 
 from .health import health as _health_handler
 from .routers import calibrate
 from .routers.coach import router as coach_router
+
+TRACKER = get_tracker(os.getenv("YOLO_RUNTIME_TRACKER", "sort"))
 
 app = FastAPI()
 app.include_router(coach_router)
