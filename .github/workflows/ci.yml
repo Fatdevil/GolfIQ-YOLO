@@ -38,6 +38,7 @@ jobs:
           pip install -r server/requirements.txt
       - name: Run tests
         env:
+          # Ensure repo root on PYTHONPATH
           PYTHONPATH: "${{ github.workspace }}:${{ github.workspace }}/golfiq/cv-engine:${{ github.workspace }}/golfiq/cv-engine/src"
         run: |
           pytest -q
