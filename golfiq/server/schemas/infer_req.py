@@ -1,5 +1,7 @@
+from typing import List, Literal, Optional
+
 from pydantic import BaseModel
-from typing import List, Optional, Literal
+
 
 class BBox(BaseModel):
     cls: str
@@ -9,16 +11,18 @@ class BBox(BaseModel):
     x2: float
     y2: float
 
+
 class FrameDetections(BaseModel):
     frame_idx: int
     detections: List[BBox]
 
+
 class InferRequest(BaseModel):
     fps: float
     scale_m_per_px: float
-    view: Literal["DTL","FO"] = "DTL"
+    view: Literal["DTL", "FO"] = "DTL"
     calibrated: bool = False
     # Choose one of the inputs:
     detections: Optional[List[FrameDetections]] = None
     frames_b64: Optional[List[str]] = None  # Optional: data URLs or raw base64 strings
-    mode: Optional[Literal["detections","frames_b64"]] = None
+    mode: Optional[Literal["detections", "frames_b64"]] = None

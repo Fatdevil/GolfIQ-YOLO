@@ -1,5 +1,5 @@
-import numpy as np
 from math import atan2, degrees
+
 
 def launch_angle_deg(ball_traj, scale_m_per_px: float) -> float:
     """

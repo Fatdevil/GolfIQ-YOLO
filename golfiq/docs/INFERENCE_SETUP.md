@@ -2,7 +2,7 @@
 
 ## Paths
 - `POST /infer` — två lägen:
-  1) **detections**: skicka färdiga detektioner per frame (CI‑vänligt).  
+  1) **detections**: skicka färdiga detektioner per frame (CI‑vänligt).
   2) **frames_b64**: skicka bildrutor som base64 (kräver YOLO vid runtime).
 
 - `GET /calibrate?a4_width_px=NNN` — ger `scale_m_per_px` (A4 = 0.210 m).

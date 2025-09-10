@@ -1,5 +1,7 @@
-from pydantic import BaseModel
 from typing import Optional
+
+from pydantic import BaseModel
+
 
 class AnalyzeMeta(BaseModel):
     fps: float
@@ -7,11 +9,13 @@ class AnalyzeMeta(BaseModel):
     calibrated: bool
     view: Optional[str] = None
 
+
 class Metrics(BaseModel):
     club_speed_mps: float
     ball_speed_mps: float
     launch_deg: float
     carry_m: float
+
 
 class AnalyzeResponse(BaseModel):
     shot_id: str
