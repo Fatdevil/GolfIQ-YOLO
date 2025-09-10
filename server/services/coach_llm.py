@@ -1,14 +1,21 @@
-import os, httpx, json
+import json
+import os
 
+import httpx
 
 SYSTEM = "Du är en golfcoach. Ge tydlig, kort feedback baserad på mätdata."
 
 
 def _offline_text(mode: str, notes: str):
     if mode == "detailed":
-        return "Din launch och hastighet ser lovande ut. Håll händerna lite högre i impact för att minska loft."
+        return (
+            "Din launch och hastighet ser lovande ut. Håll händerna lite högre i "
+            "impact för att minska loft."
+        )
     if mode == "drill":
-        return "Öva 10 slag med jämn rytm (3:1). Fokusera på stabilt huvud och jämn träff."
+        return (
+            "Öva 10 slag med jämn rytm (3:1). Fokusera på stabilt huvud och jämn träff."
+        )
     base = "Solid sving! Fortsätt träna konsekvent bollträff."
     return base + (f" Notering: {notes}" if notes else "")
 
@@ -53,4 +60,3 @@ def generate(mode: str = "short", metrics: dict | None = None, notes: str = "") 
     except Exception:
         # Faller tillbaka till offline om något går fel
         return _offline_text(mode, notes)
-

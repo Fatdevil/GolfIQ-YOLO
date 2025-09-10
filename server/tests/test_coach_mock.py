@@ -1,6 +1,8 @@
-from server.api.main import app
-from fastapi.testclient import TestClient
 import os
+
+from fastapi.testclient import TestClient
+
+from server.api.main import app
 
 
 def test_coach_mock_mode():
@@ -9,4 +11,3 @@ def test_coach_mock_mode():
     r = client.post("/coach", json={"mode": "short", "notes": "Test"})
     assert r.status_code == 200
     assert "sving" in r.json()["text"].lower()
-

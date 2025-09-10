@@ -1,5 +1,6 @@
+from typing import Any, Dict, Literal, Optional
+
 from pydantic import BaseModel, Field
-from typing import Literal, Optional, Dict, Any
 
 
 class CoachRequest(BaseModel):
@@ -10,4 +11,3 @@ class CoachRequest(BaseModel):
 
 class CoachResponse(BaseModel):
     text: str = Field(..., description="coach feedback")
-
