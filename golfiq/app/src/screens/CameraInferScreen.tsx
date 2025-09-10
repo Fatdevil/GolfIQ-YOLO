@@ -3,12 +3,16 @@ import { View, Text, Button, TextInput, StyleSheet, ScrollView, TouchableOpacity
 import { Camera } from 'expo-camera';
 import MetricCard from '../components/MetricCard';
 import QualityBadge from '../components/QualityBadge';
+import CalibrationOverlay from '../components/CalibrationOverlay';
+import QualityBanner from '../components/QualityBanner';
+import { useFps } from '../hooks/useFps';
 import { inferWithFrames, coachFeedback, Meta } from '../lib/api';
 
 export default function CameraInferScreen(){
   const cameraRef = useRef<Camera | null>(null);
   const [perm, requestPerm] = Camera.useCameraPermissions();
-  const [fps, setFps] = useState('120');
+  const { fps: fpsClient, tick } = useFps();
+  const [fpsInput, setFpsInput] = useState('120');
   const [scale, setScale] = useState('0.002');
   const [modelPath, setModelPath] = useState('/abs/path/to/yolov8n.pt');
   const [result, setResult] = useState<any>(null);
@@ -25,6 +29,7 @@ export default function CameraInferScreen(){
     const frames:any[] = [];
     for(let i=0;i<12;i++){
       const img = await cameraRef.current.takePictureAsync({base64:true, quality:0.9, skipProcessing:true});
+      tick();
       frames.push({ image_b64: img.base64 });
     }
     return frames;
@@ -34,7 +39,7 @@ export default function CameraInferScreen(){
     setBusy(true); setCoachText(''); setResult(null);
     try{
       const frames = await captureBurst();
-      const meta: Meta = { fps: parseFloat(fps)||120, scale_m_per_px: parseFloat(scale)||0.002, calibrated:true, view:'DTL' };
+      const meta: Meta = { fps: parseFloat(fpsInput)||120, scale_m_per_px: parseFloat(scale)||0.002, calibrated:true, view:'DTL' };
       const yolo = { model_path: modelPath, class_map: {0:'ball',1:'club_head'}, conf:0.25 };
       const r = await inferWithFrames(meta, frames, yolo);
       setResult(r);
@@ -54,8 +59,11 @@ export default function CameraInferScreen(){
   return (
     <ScrollView contentContainerStyle={{padding:16}}>
       <Text style={{fontSize:22, fontWeight:'700', marginBottom:12}}>Kamera → /infer</Text>
-      <Camera ref={cameraRef} style={{height:300, borderRadius:12, overflow:'hidden'}} />
-      <View style={styles.row}><Text style={styles.label}>FPS</Text><TextInput style={styles.input} value={fps} onChangeText={setFps} keyboardType='numeric'/></View>
+      <Camera ref={cameraRef} style={{height:300, borderRadius:12, overflow:'hidden'}}>
+        <CalibrationOverlay />
+        <QualityBanner quality={result?.quality} fps={fpsClient} />
+      </Camera>
+      <View style={styles.row}><Text style={styles.label}>FPS</Text><TextInput style={styles.input} value={fpsInput} onChangeText={setFpsInput} keyboardType='numeric'/></View>
       <View style={styles.row}><Text style={styles.label}>m/px</Text><TextInput style={styles.input} value={scale} onChangeText={setScale} keyboardType='numeric'/></View>
       <View style={styles.row}><Text style={styles.label}>YOLO‑modell (server)</Text><TextInput style={[styles.input,{flex:1}]} value={modelPath} onChangeText={setModelPath}/></View>
       <Button title={busy? 'Analyserar...' : 'Fånga & analysera'} onPress={onAnalyze} />
