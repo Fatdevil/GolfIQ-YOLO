@@ -2,11 +2,12 @@ import React, {useEffect, useRef, useState} from 'react';
 import { View, Text, Button, TextInput, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
 import { Camera } from 'expo-camera';
 import MetricCard from '../components/MetricCard';
+import MetricsCard from '../components/MetricsCard';
 import QualityBadge from '../components/QualityBadge';
 import CalibrationOverlay from '../components/CalibrationOverlay';
 import QualityBanner from '../components/QualityBanner';
 import { useFps } from '../hooks/useFps';
-import { inferWithFrames, coachFeedback, Meta } from '../lib/api';
+import { inferWithFrames, coachFeedback, Meta, API_BASE, metricsFaceOn } from '../lib/api';
 
 export default function CameraInferScreen(){
   const cameraRef = useRef<Camera | null>(null);
@@ -16,6 +17,7 @@ export default function CameraInferScreen(){
   const [scale, setScale] = useState('0.002');
   const [modelPath, setModelPath] = useState('/abs/path/to/yolov8n.pt');
   const [result, setResult] = useState<any>(null);
+  const [metrics, setMetrics] = useState<any>();
   const [mode, setMode] = useState<'short'|'detailed'|'drill'>('short');
   const [coachText, setCoachText] = useState('');
   const [busy, setBusy] = useState(false);
@@ -36,13 +38,23 @@ export default function CameraInferScreen(){
   };
 
   const onAnalyze = async () => {
-    setBusy(true); setCoachText(''); setResult(null);
+    setBusy(true); setCoachText(''); setResult(null); setMetrics(undefined);
     try{
       const frames = await captureBurst();
       const meta: Meta = { fps: parseFloat(fpsInput)||120, scale_m_per_px: parseFloat(scale)||0.002, calibrated:true, view:'DTL' };
       const yolo = { model_path: modelPath, class_map: {0:'ball',1:'club_head'}, conf:0.25 };
       const r = await inferWithFrames(meta, frames, yolo);
       setResult(r);
+      try {
+        const m = await metricsFaceOn(API_BASE, {
+          frame_w: r.frame_w, frame_h: r.frame_h,
+          detections: r.detections || [],
+          mm_per_px: meta.scale_m_per_px ? meta.scale_m_per_px * 1000 : undefined,
+        });
+        setMetrics(m);
+      } catch(e) {
+        console.warn('metricsFaceOn failed', e);
+      }
     } finally { setBusy(false); }
   };
 
@@ -93,6 +105,7 @@ export default function CameraInferScreen(){
           </View>
         </View>
       )}
+      <MetricsCard m={metrics} />
     </ScrollView>
   );
 }
