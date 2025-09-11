@@ -12,7 +12,13 @@ permissions:
 jobs:
   repair:
     runs-on: ubuntu-latest
+    env:
+      NPM_TOKEN: ${{ secrets.NPM_TOKEN || '' }}   # <-- lägg till
+
     steps:
+      - name: Install jq
+        run: sudo apt-get update && sudo apt-get install -y jq
+
       - name: Get PR info
         id: pr
         run: |
@@ -21,77 +27,61 @@ jobs:
           curl -s -H "Authorization: Bearer ${{ github.token }}" \
             "https://api.github.com/repos/${{ github.repository }}/pulls/$PR" > pr.json
           echo "head_ref=$(jq -r '.head.ref' pr.json)" >> $GITHUB_OUTPUT
-          echo "head_sha=$(jq -r '.head.sha' pr.json)" >> $GITHUB_OUTPUT
           echo "base_ref=$(jq -r '.base.ref' pr.json)" >> $GITHUB_OUTPUT
+
       - name: Checkout PR branch
         uses: actions/checkout@v4
         with:
           ref: ${{ steps.pr.outputs.head_ref }}
           fetch-depth: 0
 
-      - name: Create .env from repo secrets (optional)
+      - name: Configure git user
         run: |
-          touch .env
-          [ -n "${{ secrets.OPENAI_API_KEY }}" ] && echo "OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}" >> .env
-          [ -n "${{ secrets.NPM_TOKEN }}" ] && echo "NPM_TOKEN=${{ secrets.NPM_TOKEN }}" >> .env
-          [ -n "${{ secrets.SENTRY_AUTH_TOKEN }}" ] && echo "SENTRY_AUTH_TOKEN=${{ secrets.SENTRY_AUTH_TOKEN }}" >> .env
-          [ -n "${{ secrets.VERCEL_TOKEN }}" ] && echo "VERCEL_TOKEN=${{ secrets.VERCEL_TOKEN }}" >> .env
-          [ -s .env ] && echo ".env written" || echo "No env secrets written"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Merge base into PR branch
+        run: git pull --no-edit origin ${{ steps.pr.outputs.base_ref }} || true
 
       - name: Setup Node
         uses: actions/setup-node@v4
-        with:
-          node-version: "20"
-          registry-url: "https://registry.npmjs.org"
+        with: { node-version: '20', registry-url: 'https://registry.npmjs.org' }
 
-      - name: Configure npm auth (if NPM_TOKEN exists)
-        if: ${{ secrets.NPM_TOKEN != '' }}
+      - name: Auth for private npm (if any)
+        if: ${{ env.NPM_TOKEN != '' }}           # <-- ändra villkoret
         run: |
-          npm config set //registry.npmjs.org/:_authToken=${{ secrets.NPM_TOKEN }}
+          echo "//registry.npmjs.org/:_authToken=${NPM_TOKEN}" > ~/.npmrc
 
-      - name: Install deps (tolerant)
-        run: |
-          if [ -f package-lock.json ]; then
-            npm ci --legacy-peer-deps || npm install --legacy-peer-deps
-          elif [ -f pnpm-lock.yaml ]; then
-            corepack enable
-            pnpm install --no-frozen-lockfile
-          elif [ -f yarn.lock ]; then
-            corepack enable
-            yarn install --network-timeout 600000
-          else
-            npm install --legacy-peer-deps || true
-          fi
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with: { python-version: '3.12' }
 
-      - name: Lint/format (autofix best-effort)
+      - name: Install deps
         run: |
-          npx --yes prettier . -w || true
-          npx --yes eslint . --fix || true
+          python -m pip install --upgrade pip
+          pip install pre-commit black isort flake8 pytest
+          [ -f server/requirements.txt ] && pip install -r server/requirements.txt || true
+          [ -d golfiq/cv-engine ] && pip install -e golfiq/cv-engine || true
+
+      - name: Lint/format (auto-fix)
+        run: |
+          pre-commit run --all-files || true
           git add -A
-          git diff --cached --quiet || git commit -m "style: auto-fix lint/format"
+          git diff --cached --quiet || git commit -m "style: apply pre-commit fixes"
 
-      - name: Update test snapshots (best-effort)
-        run: |
-          if [ -f package.json ] && jq -e '.scripts.test' package.json > /dev/null; then
-            npm test -- -u || true
-            git add -A
-            git diff --cached --quiet || git commit -m "test: update snapshots"
-          fi
-
-      - name: Build (fail allowed to still push fixes)
-        run: |
-          if [ -f package.json ] && jq -e '.scripts.build' package.json > /dev/null; then
-            npm run build || true
-          fi
+      - name: Run tests (best effort)
+        env:
+          PYTHONPATH: "${{ github.workspace }}:${{ github.workspace }}/golfiq/cv-engine:${{ github.workspace }}/golfiq/cv-engine/src"
+        run: pytest -q || true
 
       - name: Push changes back to PR branch
-        run: |
-          git push || true
+        run: git push || true
 
       - name: Post status comment on PR
         run: |
-          MSG="PR #${{ inputs.pr_number }} repaired: deps installed, autofix attempted, snapshots updated, build tried. Re-run checks now."
+          PR=${{ inputs.pr_number }}
+          MSG="PR #$PR repaired: merged base, ran pre-commit, tests, and pushed any fixes."
           curl -s -H "Authorization: Bearer ${{ github.token }}" \
-            -H "Accept: application/vnd.github+json" \
-            -d "{\"body\":\"$MSG\"}" \
-            "https://api.github.com/repos/${{ github.repository }}/issues/${{ inputs.pr_number }}/comments"
+               -H "Accept: application/vnd.github+json" \
+               -d "{\"body\":\"$MSG\"}" \
+               "https://api.github.com/repos/${{ github.repository }}/issues/$PR/comments"
