@@ -4,43 +4,35 @@ on:
   workflow_dispatch:
     inputs:
       task:
-        description: "Bash script to run against this repo (multi-line)."
+        description: "Shellscript att köra (bash). Klistra in kommandon här när du kör."
         required: true
         type: string
 
 permissions:
   contents: write
   pull-requests: write
+  issues: write
+  actions: read
 
 jobs:
   run:
     runs-on: ubuntu-latest
-    env:
-      PAT: ${{ secrets.CODEX_PAT }}         # ← din PAT som repo-secret
-      REPO: ${{ github.repository }}
+    timeout-minutes: 120
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
-        with: { fetch-depth: 0 }
+        uses: actions/checkout@v5
 
-      - name: Tooling
-        run: |
-          sudo apt-get update -y
-          sudo apt-get install -y jq
-
-      - name: Prepare git with PAT (so pushes trigger CI)
-        run: |
-          git config user.name "codex-bot"
-          git config user.email "bot@users.noreply.github.com"
-          if [ -n "${PAT}" ]; then
-            git remote set-url origin "https://x-access-token:${PAT}@github.com/${REPO}.git"
-          fi
-
-      - name: Run task
+      - name: Kör Codex-task
         shell: bash
+        env:
+          PAT: ${{ secrets.CODEX_PAT }}          # Läggs i Settings → Secrets → Actions
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          cat > /tmp/task.sh <<'TASK'
-${{ inputs.task }}
-TASK
-          chmod +x /tmp/task.sh
-          /bin/bash -eo pipefail /tmp/task.sh
+          set -euo pipefail
+          # Spara input som ett skript så även långa, flerradiga kommandon funkar
+          cat > _task.sh <<'TASK'
+          ${{ inputs.task }}
+          TASK
+          chmod +x _task.sh
+          ./_task.sh
+
