@@ -1,8 +1,12 @@
 import os
 import pathlib
+import sys
 import time
 
-from server.retention.sweeper import sweep_retention_once
+# Add server package root to path for direct imports
+sys.path.append(str(pathlib.Path(__file__).resolve().parents[1]))
+
+from retention.sweeper import sweep_retention_once  # noqa: E402
 
 
 def test_sweeper_deletes_old_files(tmp_path: pathlib.Path):

@@ -1,6 +1,13 @@
+import pathlib
+import sys
+
 import numpy as np
-from golfiq_cv.metrics.impact import detect_impact_index
-from golfiq_cv.metrics.speed_ext import window_avg_speed_mps
+
+# Ensure local package path for golfiq_cv
+sys.path.append(str(pathlib.Path(__file__).resolve().parents[1]))
+
+from golfiq_cv.metrics.impact import detect_impact_index  # noqa: E402
+from golfiq_cv.metrics.speed_ext import window_avg_speed_mps  # noqa: E402
 
 
 def make_trajs():
