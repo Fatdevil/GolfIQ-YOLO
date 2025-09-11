@@ -45,5 +45,5 @@ jobs:
           [ -f "server/requirements.txt" ] && pip install -r server/requirements.txt || true
       - name: Run tests
         env:
-          PYTHONPATH: "${{ github.workspace }}:${{ github.workspace }}/golfiq/cv-engine:${{ github.workspace }}/golfiq/cv-engine/src"
+          PYTHONPATH: "${{ github.workspace }}:${{ env.PYTHONPATH }}"
         run: pytest -q

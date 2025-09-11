@@ -25,11 +25,13 @@ jobs:
       - name: Kör Codex-task (materialisera och kör)
         shell: bash
         env:
-          PAT: ${{ secrets.CODEX_PAT }}
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CODEX_PAT: ${{ secrets.CODEX_PAT }}
+          GITHUB_PAT: ${{ secrets.GITHUB_PAT }}
           TASK_JSON: ${{ toJson(inputs.task) }}
         run: |
           set -euo pipefail
+          PAT="${CODEX_PAT:-$GITHUB_PAT}"
+          export PAT
           python - <<'PY'
           import os, json, pathlib
           task = json.loads(os.environ['TASK_JSON'])
