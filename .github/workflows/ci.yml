@@ -1,8 +1,12 @@
 name: CI
 on:
   push:
+    branches: [ main ]
+    paths-ignore:
+      - '.github/workflows/**'
+      - '**/*.md'
   pull_request:
-  workflow_dispatch: {}
+    branches: [ main ]
 
 jobs:
   lint:
@@ -37,4 +41,3 @@ jobs:
         env:
           PYTHONPATH: "${{ github.workspace }}:${{ github.workspace }}/golfiq/cv-engine:${{ github.workspace }}/golfiq/cv-engine/src"
         run: pytest -q
-
