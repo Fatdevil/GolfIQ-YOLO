@@ -1,0 +1,14 @@
+setup.py
+golfiq_cv/__init__.py
+golfiq_cv.egg-info/PKG-INFO
+golfiq_cv.egg-info/SOURCES.txt
+golfiq_cv.egg-info/dependency_links.txt
+golfiq_cv.egg-info/top_level.txt
+golfiq_cv/metrics/__init__.py
+golfiq_cv/metrics/carry.py
+golfiq_cv/metrics/impact.py
+golfiq_cv/metrics/launch.py
+golfiq_cv/metrics/speed.py
+golfiq_cv/metrics/speed_ext.py
+tests/test_impact.py
+tests/test_metrics.py

@@ -22,5 +22,3 @@ def sweep_retention_once(dirs: Iterable[str], minutes: int) -> List[str]:
                     # ignore transient filesystem errors
                     pass
     return deleted
-
-  
