@@ -1,30 +1,38 @@
-import os, time
+import os
+import sys
+import time
 from pathlib import Path
-from server.retention.sweeper import sweep_retention_once
 
-def _touch(p: Path, age_seconds: int = 0):
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+from server.retention.sweeper import sweep_retention_once  # noqa: E402
+
+
+def touch(p: Path, age: int = 0) -> None:
     p.write_text("x")
-    if age_seconds:
-        past = time.time() - age_seconds
+    if age:
+        past = time.time() - age
         os.utime(p, (past, past))
 
-def test_deletes_old_keeps_new(tmp_path: Path):
-    oldf = tmp_path / "old.txt"
-    newf = tmp_path / "new.txt"
-    _touch(oldf, age_seconds=3600)  # 1 timme gammal
-    _touch(newf, age_seconds=10)    # ny
+
+def test_deletes_old_keeps_new(tmp_path: Path) -> None:
+    old_file = tmp_path / "old.txt"
+    new_file = tmp_path / "new.txt"
+    touch(old_file, age=3600)
+    touch(new_file)
     deleted = sweep_retention_once([str(tmp_path)], minutes=1)
-    assert str(oldf) in deleted
-    assert newf.exists()
+    assert str(old_file) in deleted
+    assert new_file.exists()
 
-def test_minutes_zero_deletes_all(tmp_path: Path):
-    f1 = tmp_path / "a.txt"; f1.write_text("x")
-    f2 = tmp_path / "b.txt"; f2.write_text("x")
+
+def test_minutes_zero_deletes_all(tmp_path: Path) -> None:
+    f1 = tmp_path / "a.txt"
+    f2 = tmp_path / "b.txt"
+    f1.write_text("x")
+    f2.write_text("x")
     deleted = sweep_retention_once([str(tmp_path)], minutes=0)
-    assert str(f1) in deleted and str(f2) in deleted
+    assert set(deleted) == {str(f1), str(f2)}
 
-def test_missing_dir_is_ok(tmp_path: Path):
+
+def test_missing_dir_is_ok(tmp_path: Path) -> None:
     missing = tmp_path / "nope"
-    out = sweep_retention_once([str(missing)], minutes=1)
-    assert out == []
-
+    assert sweep_retention_once([str(missing)], minutes=1) == []
