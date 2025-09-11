@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       task:
-        description: "Shellscript att köra (bash). Klistra in kommandon här när du kör."
+        description: "Klistra in bash-skriptet som ska köras"
         required: true
         type: string
 
@@ -22,17 +22,21 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v5
 
-      - name: Kör Codex-task
+      - name: Kör Codex-task (materialisera och kör)
         shell: bash
         env:
-          PAT: ${{ secrets.CODEX_PAT }}          # Läggs i Settings → Secrets → Actions
+          TASK_JSON: ${{ toJson(inputs.task) }}
+          PAT: ${{ secrets.CODEX_PAT }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
-          # Spara input som ett skript så även långa, flerradiga kommandon funkar
-          cat > _task.sh <<'TASK'
-          ${{ inputs.task }}
-          TASK
+          python - <<'PY'
+          import os, json, pathlib
+          task = json.loads(os.environ['TASK_JSON'])
+          pathlib.Path('_task.sh').write_text(task, encoding='utf-8')
+          PY
           chmod +x _task.sh
-          ./_task.sh
-
+          echo "---- TASK (preview) ----"
+          sed -n '1,120p' _task.sh
+          echo "---- RUN ----"
+          bash _task.sh
