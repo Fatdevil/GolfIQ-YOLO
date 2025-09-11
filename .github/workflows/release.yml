@@ -9,25 +9,21 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with: { python-version: '3.12' }
-
-      - name: Prepare server bundle
+      - name: Server bundle
         run: |
           mkdir -p dist/server
           cp -r server dist/server/
           cp README.md dist/server/ 2>/dev/null || true
           find dist/server -name "__pycache__" -type d -prune -exec rm -rf {} +
           cd dist && zip -r server.zip server
-
-      - name: Prepare app bundle (source only)
+      - name: App bundle (source)
         run: |
           mkdir -p dist/app
           cp -r golfiq/app dist/app/
           cp README.md dist/app/ 2>/dev/null || true
           cd dist && zip -r app.zip app
-
       - name: Checksums
         run: cd dist && sha256sum server.zip app.zip > checksums.txt
-
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
