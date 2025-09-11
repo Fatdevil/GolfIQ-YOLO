@@ -1,5 +1,4 @@
 name: Codex Runner
-
 on:
   workflow_dispatch:
     inputs:
@@ -7,27 +6,20 @@ on:
         description: "Bash script to run against this repo (multi-line)."
         required: true
         type: string
-
 permissions:
   contents: write
   pull-requests: write
-
 jobs:
   run:
     runs-on: ubuntu-latest
     env:
-      PAT: ${{ secrets.CODEX_PAT }}         # ← din PAT som repo-secret
+      PAT: ${{ secrets.CODEX_PAT }}
       REPO: ${{ github.repository }}
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
         with: { fetch-depth: 0 }
-
       - name: Tooling
-        run: |
-          sudo apt-get update -y
-          sudo apt-get install -y jq
-
+        run: sudo apt-get update -y && sudo apt-get install -y jq
       - name: Prepare git with PAT (so pushes trigger CI)
         run: |
           git config user.name "codex-bot"
@@ -35,12 +27,9 @@ jobs:
           if [ -n "${PAT}" ]; then
             git remote set-url origin "https://x-access-token:${PAT}@github.com/${REPO}.git"
           fi
-
       - name: Run task
         shell: bash
         run: |
-          cat > /tmp/task.sh <<'TASK'
-${{ inputs.task }}
-TASK
+          printf '%s\n' "${{ inputs.task }}" > /tmp/task.sh
           chmod +x /tmp/task.sh
           /bin/bash -eo pipefail /tmp/task.sh
