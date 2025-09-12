@@ -1,8 +1,9 @@
-pytest>=7.4
+pytest
+pytest-cov
+black
+flake8
 numpy>=1.26
-black>=23.0
 isort>=5.12
-flake8>=6.0
 pre-commit>=3.3
 fastapi
 httpx

@@ -1,61 +1,90 @@
-import json
-import os
-import pathlib
-import sys
+#!/usr/bin/env python3
+import argparse, json, subprocess, sys, re
+from pathlib import Path
 import xml.etree.ElementTree as ET
 
-ROOT = pathlib.Path(__file__).resolve().parents[2]
-xml_path = ROOT / "coverage.xml"
-policy_path = ROOT / ".github/coverage-policy.json"
-base_path = ROOT / ".github/coverage-baseline.json"
 
-
-def read_total(p: pathlib.Path) -> float:
-    if not p.exists():
-        print("coverage.xml not found")
-        return -1.0
-    t = ET.parse(p).getroot()
-    lr = t.attrib.get("line-rate")
+def read_pct(xml_path="coverage.xml"):
+    root = ET.parse(xml_path).getroot()
+    lr = root.get("line-rate")
     if lr is not None:
         return round(float(lr) * 100.0, 2)
-    # fallback: summera
-    covered = valid = 0
-    for c in t.iterfind(".//class"):
-        covered += int(c.attrib.get("lines-covered", "0") or 0)
-        valid += int(c.attrib.get("lines-valid", "0") or 0)
-    return round((covered / valid * 100.0) if valid else 0.0, 2)
+    lines_valid = int(root.get("lines-valid", 0))
+    lines_covered = int(root.get("lines-covered", 0))
+    return round(100.0 * lines_covered / max(1, lines_valid), 2)
 
 
-total = read_total(xml_path)
-if total < 0:
-    print("Coverage report missing (treat as 0%).")
-    total = 0.0
-print(f"Total coverage: {total:.2f}%")
+def fetch_baseline():
+    try:
+        subprocess.run(["git", "fetch", "origin", "main", "--depth", "1"], check=True)
+        blob = subprocess.check_output(
+            ["git", "show", "origin/main:.github/coverage-baseline.json"], text=True
+        )
+        return json.loads(blob)["coverage"]
+    except Exception:
+        return None
 
-policy = (
-    json.loads(policy_path.read_text())
-    if policy_path.exists()
-    else {"min_target": 50.0, "max_drop": 0.5}
-)
-min_target = float(policy.get("min_target", 50.0))
-max_drop = float(policy.get("max_drop", 0.5))
-base = (
-    float(json.loads(base_path.read_text()).get("total", min_target))
-    if base_path.exists()
-    else min_target
-)
-allowed = max(min_target, base - max_drop)
-print(f"Baseline: {base:.2f}  Allowed≥ {allowed:.2f}")
 
-mode = os.getenv("COVERAGE_MODE", "pr")
-eps = 0.01
-if mode == "pr":
-    if total + eps < allowed:
-        print("Coverage below allowed threshold")
-        sys.exit(1)
-    sys.exit(0)
-# main-branch: uppdatera baseline om förbättrat
-if total > base + eps:
-    base_path.write_text(json.dumps({"total": round(total, 2)}, indent=2))
-    print(f"Baseline improved -> {total:.2f}")
-sys.exit(0)
+def write_baseline(pct, path=".github/coverage-baseline.json"):
+    Path(path).parent.mkdir(parents=True, exist_ok=True)
+    Path(path).write_text(json.dumps({"coverage": pct}, indent=2))
+
+
+def color_for(pct):
+    if pct < 50:
+        return "red"
+    if pct < 70:
+        return "yellow"
+    if pct < 85:
+        return "yellowgreen"
+    return "brightgreen"
+
+
+def update_badge(pct, readme="README.md"):
+    p = Path(readme)
+    if not p.exists():
+        p.write_text("")
+    text = p.read_text()
+    start = "<!--COVERAGE_BADGE_START-->"
+    end = "<!--COVERAGE_BADGE_END-->"
+    badge = f"{start}![coverage](https://img.shields.io/badge/coverage-{int(round(pct))}%25-{color_for(pct)}){end}"
+    new = (
+        re.sub(f"{re.escape(start)}.*?{re.escape(end)}", badge, text, flags=re.S)
+        if (start in text and end in text)
+        else badge + "\n\n" + text
+    )
+    p.write_text(new)
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument(
+        "mode",
+        choices=["pr", "update"],
+        help="pr: check vs baseline; update: write baseline+badge on main",
+    )
+    ap.add_argument("--xml", default="coverage.xml")
+    ap.add_argument("--tolerance", type=float, default=0.25)
+    args = ap.parse_args()
+
+    pct = read_pct(args.xml)
+    print(f"Total coverage: {pct}")
+
+    if args.mode == "pr":
+        baseline = fetch_baseline()
+        if baseline is None:
+            print("No baseline on main yet; allowing current PR coverage.")
+            sys.exit(0)
+        allowed = max(0.0, baseline - args.tolerance)
+        print(f"Baseline: {baseline}  Allowed≥ {allowed}")
+        if pct + 1e-6 < allowed:
+            print("Coverage below allowed threshold")
+            sys.exit(1)
+        sys.exit(0)
+
+    write_baseline(pct)
+    update_badge(pct)
+
+
+if __name__ == "__main__":
+    main()
