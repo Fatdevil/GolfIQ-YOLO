@@ -3,6 +3,7 @@ import sys
 import time
 from pathlib import Path
 
+sys.modules.pop("server", None)
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from server.retention.sweeper import sweep_retention_once  # noqa: E402
 
