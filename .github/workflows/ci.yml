@@ -11,6 +11,8 @@ on:
 jobs:
   lint:
     runs-on: ubuntu-latest
+    env:
+      PYTHONPATH: ${{ github.workspace }}
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-python@v5
@@ -30,6 +32,8 @@ jobs:
 
   tests:
     runs-on: ubuntu-latest
+    env:
+      PYTHONPATH: ${{ github.workspace }}
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-python@v5
@@ -44,7 +48,5 @@ jobs:
           [ -d "golfiq/cv-engine" ] && pip install -e golfiq/cv-engine || true
           [ -f "server/requirements.txt" ] && pip install -r server/requirements.txt || true
       - name: Run pytest
-        env:
-          PYTHONPATH: ${{ github.workspace }}
         run: pytest -q
 

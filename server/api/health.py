@@ -1,6 +1,6 @@
 from typing import Dict
 
 
-async def health() -> Dict[str, bool]:
+async def health() -> Dict[str, str]:
     """Simple health check endpoint."""
-    return {"ok": True}
+    return {"status": "ok"}
