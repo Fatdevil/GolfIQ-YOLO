@@ -1,6 +1,11 @@
-from fastapi.testclient import TestClient
+import sys
+from pathlib import Path
 
-from server.app import app
+sys.path.append(str(Path(__file__).resolve().parents[2]))
+
+from fastapi.testclient import TestClient  # noqa: E402
+
+from server.app import app  # noqa: E402
 
 
 def test_health_ok():
