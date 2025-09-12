@@ -33,10 +33,14 @@ jobs:
 
   tests:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     env:
       PYTHONPATH: ${{ github.workspace }}
     steps:
       - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
@@ -49,5 +53,37 @@ jobs:
           [ -d "golfiq/cv-engine" ] && pip install -e golfiq/cv-engine || true
           [ -f "server/requirements.txt" ] && pip install -r server/requirements.txt || true
       - name: Run pytest
-        run: pytest -q
-
+        run: pytest -q --cov=server --cov=cv_engine --cov-report=xml
+      - name: Upload coverage report
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: coverage.xml
+      - name: Check coverage threshold
+        run: |
+          python - <<'PY'
+          import sys, xml.etree.ElementTree as ET
+          tree = ET.parse('coverage.xml')
+          rate = float(tree.getroot().get('line-rate')) * 100
+          print(f"Total coverage: {rate:.2f}%")
+          if rate < 70:
+              print('Coverage below 70%', file=sys.stderr)
+              sys.exit(1)
+          PY
+      - name: Update coverage badge
+        if: github.ref == 'refs/heads/main'
+        run: |
+          python - <<'PY'
+          import re, xml.etree.ElementTree as ET, pathlib
+          tree = ET.parse('coverage.xml')
+          rate = float(tree.getroot().get('line-rate')) * 100
+          badge_url = f"https://img.shields.io/badge/coverage-{rate:.0f}%25-brightgreen"
+          readme = pathlib.Path('README.md')
+          content = readme.read_text()
+          content = re.sub(r"!\[coverage\]\(.*\)", f"![coverage]({badge_url})", content)
+          readme.write_text(content)
+          PY
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git commit -am "docs: update coverage badge" || echo "No changes to commit"
+          git push
