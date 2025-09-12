@@ -43,7 +43,7 @@ jobs:
           pip install -r requirements-dev.txt
           [ -d "golfiq/cv-engine" ] && pip install -e golfiq/cv-engine || true
           [ -f "server/requirements.txt" ] && pip install -r server/requirements.txt || true
-      - name: Run tests
+      - name: Run pytest
         env:
-          PYTHONPATH: "${{ github.workspace }}:${{ env.PYTHONPATH }}"
+          PYTHONPATH: ${{ github.workspace }}
         run: pytest -q
