@@ -1,4 +1,9 @@
-pre-commit
-black
-isort
-flake8
+pytest>=7.4
+numpy>=1.26
+black>=23.0
+isort>=5.12
+flake8>=6.0
+pre-commit>=3.3
+fastapi
+httpx
+uvicorn
