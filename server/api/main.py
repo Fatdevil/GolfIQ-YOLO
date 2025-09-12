@@ -7,7 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from server.retention.sweeper import sweep_retention_once
 
 from .health import health as _health_handler
-from .routers import calibrate
+from .routers import calibrate, metrics
 from .routers.coach import router as coach_router
 
 
@@ -41,6 +41,7 @@ api_dep = _api_key_dependency()
 
 app.include_router(coach_router)
 app.include_router(calibrate.router)
+app.include_router(metrics.router)
 app.add_api_route("/health", _health_handler, methods=["GET"])
 
 
