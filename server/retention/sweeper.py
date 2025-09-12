@@ -1,7 +1,9 @@
 from __future__ import annotations
-import time, os
+
+import time
 from pathlib import Path
 from typing import Iterable, List
+
 
 def sweep_retention_once(dirs: Iterable[str] | None, minutes: int) -> List[str]:
     """
@@ -28,4 +30,3 @@ def sweep_retention_once(dirs: Iterable[str] | None, minutes: int) -> List[str]:
                 # Ignorera t.ex. permission errors eller race-conditions
                 pass
     return deleted
-

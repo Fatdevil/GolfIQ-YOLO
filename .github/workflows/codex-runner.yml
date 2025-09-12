@@ -25,8 +25,8 @@ jobs:
       - name: Kör Codex-task (materialisera och kör)
         shell: bash
         env:
-          PAT: ${{ secrets.CODEX_PAT }}
-          ALT_PAT: ${{ secrets.GITHUB_PAT }}
+          CODEX_PAT: ${{ secrets.CODEX_PAT }}
+          GITHUB_PAT: ${{ secrets.GITHUB_PAT }}
           TASK_JSON: ${{ toJson(inputs.task) }}
         run: |
           set -euo pipefail
@@ -36,7 +36,7 @@ jobs:
           pathlib.Path('_task.sh').write_text(task, encoding='utf-8')
           PY
           chmod +x _task.sh
-          TOKEN="${PAT:-$ALT_PAT}"
-          echo "Token available? $([[ -n "$TOKEN" ]] && echo yes || echo no)"
+          TOKEN="${CODEX_PAT:-$GITHUB_PAT}"
+          echo "Token available? $([[ -n "${TOKEN:-}" ]] && echo yes || echo no)"
           echo "---- PREVIEW (40 rader) ----"; sed -n '1,40p' _task.sh || true
           echo "---- RUN ----"; bash _task.sh
