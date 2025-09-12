@@ -22,7 +22,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v5
 
-            - name: Kör Codex-task (materialisera och kör)
+      - name: Kör Codex-task (materialisera och kör)
         shell: bash
         env:
           PAT: ${{ secrets.CODEX_PAT }}

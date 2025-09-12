@@ -1,8 +1,11 @@
 import asyncio
 import os
+from typing import Optional
 
 from fastapi import FastAPI
+from pydantic import BaseModel
 
+from server.metrics.faceon import compute_faceon_metrics
 from server.retention.sweeper import sweep_retention_once
 
 from .health import health as _health_handler
@@ -37,3 +40,20 @@ async def _retention_startup():
 async def analyze():
     """Simple analyze endpoint returning status."""
     return {"status": "ok"}
+
+
+class FaceOnRequest(BaseModel):
+    frame_w: int
+    frame_h: int
+    detections: list
+    mm_per_px: Optional[float] = None
+
+
+@app.post("/metrics/faceon")
+def metrics_faceon(req: FaceOnRequest):
+    return compute_faceon_metrics(
+        detections=req.detections,
+        frame_w=req.frame_w,
+        frame_h=req.frame_h,
+        mm_per_px=req.mm_per_px,
+    )

@@ -1,1 +1,1 @@
-"""Metrics package."""
+"""Metrics utilities for analyzing frames."""
