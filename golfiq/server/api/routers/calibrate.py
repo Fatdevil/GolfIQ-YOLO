@@ -2,6 +2,7 @@ from fastapi import APIRouter, Query
 
 router = APIRouter()
 
+
 @router.get("/calibrate")
 def calibrate(a4_width_px: float = Query(..., gt=0)):
     """Return scale in meters per pixel given A4 width in pixels.

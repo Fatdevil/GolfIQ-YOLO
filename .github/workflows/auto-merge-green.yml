@@ -1,0 +1,80 @@
+name: Auto Merge Green PRs
+
+on:
+  workflow_dispatch: {}
+  schedule:
+    - cron: "*/30 * * * *"
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  auto-merge:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Merge green PRs
+        env:
+          CODEX_PAT: ${{ secrets.CODEX_PAT }}
+          GITHUB_PAT: ${{ secrets.GITHUB_PAT }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          TOKEN="${CODEX_PAT:-$GITHUB_PAT}"
+          export TOKEN
+          python - <<'PY'
+          import json, os, urllib.request
+
+          repo = os.environ["REPO"]
+          token = os.environ["TOKEN"]
+          headers = {
+              "Authorization": f"token {token}",
+              "Accept": "application/vnd.github+json",
+              "User-Agent": "auto-merge-script",
+          }
+
+          def gh(url, method="GET", data=None):
+              if data is not None:
+                  data = json.dumps(data).encode()
+              req = urllib.request.Request(url, data=data, headers=headers, method=method)
+              with urllib.request.urlopen(req) as resp:
+                  if resp.status == 204:
+                      return {}
+                  return json.load(resp)
+
+          prs = gh(f"https://api.github.com/repos/{repo}/pulls?state=open&per_page=100")
+          for pr in prs:
+              num = pr["number"]
+              if pr["draft"] or pr["head"]["repo"]["fork"]:
+                  continue
+              detail = gh(f"https://api.github.com/repos/{repo}/pulls/{num}")
+              if detail.get("mergeable_state") == "dirty" or not detail.get("mergeable"):
+                  continue
+              sha = pr["head"]["sha"]
+              status = gh(f"https://api.github.com/repos/{repo}/commits/{sha}/status").get("state")
+              checks = gh(f"https://api.github.com/repos/{repo}/commits/{sha}/check-runs").get("check_runs", [])
+              if status != "success" and any(c.get("conclusion") != "success" for c in checks):
+                  continue
+              reviews = gh(f"https://api.github.com/repos/{repo}/pulls/{num}/reviews")
+              if any(r["state"] == "CHANGES_REQUESTED" for r in reviews):
+                  continue
+              gh(
+                  f"https://api.github.com/repos/{repo}/pulls/{num}/merge",
+                  method="PATCH",
+                  data={"merge_method": "squash"},
+              )
+              gh(
+                  f"https://api.github.com/repos/{repo}/git/refs/heads/{pr['head']['ref']}",
+                  method="DELETE",
+              )
+              gh(
+                  f"https://api.github.com/repos/{repo}/issues/{num}/comments",
+                  method="POST",
+                  data={"body": "Auto-merged by control-plane (all checks green)"},
+              )
+              print(f"merged #{num}")
+          PY

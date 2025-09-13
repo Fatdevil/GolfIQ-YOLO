@@ -16,7 +16,7 @@ export default function CalibrateScreen(){
   return (
     <View>
       <Text style={styles.h1}>Kalibrering (A4)</Text>
-      <Text>Fyll i hur många pixlar en A4-bredd motsvarar i din bild. Tips: ta en bild med A4 i bildplanet, 
+      <Text>Fyll i hur många pixlar en A4-bredd motsvarar i din bild. Tips: ta en bild med A4 i bildplanet,
       öppna den i valfri app och mät bredden i px – eller använd vår overlay i nästa version.</Text>
       <View style={{flexDirection:'row', alignItems:'center', marginTop:12}}>
         <TextInput style={styles.input} keyboardType='numeric' value={px} onChangeText={setPx} />
