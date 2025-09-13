@@ -6,6 +6,7 @@ numpy>=1.26
 isort>=5.12
 pre-commit>=3.3
 fastapi
+python-multipart
 httpx
 uvicorn
 python-dotenv
