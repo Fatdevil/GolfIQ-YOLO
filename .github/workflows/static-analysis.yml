@@ -1,0 +1,64 @@
+name: static-analysis
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  mypy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.11' }
+      - name: Install deps
+        run: |
+          pip install -r requirements.txt || true
+          pip install -r requirements-dev.txt
+      - name: Run mypy (blocking)
+        run: |
+          mypy . | tee mypy.txt
+      - name: Upload mypy report
+        uses: actions/upload-artifact@v4
+        with:
+          name: mypy-report
+          path: mypy.txt
+
+  bandit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.11' }
+      - name: Install bandit
+        run: pip install bandit
+      - name: Run bandit (report-only)
+        run: |
+          bandit -q -r server -x tests -f txt -o bandit.txt || true
+      - name: Upload bandit report
+        uses: actions/upload-artifact@v4
+        with:
+          name: bandit-report
+          path: bandit.txt
+
+  pip-audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.11' }
+      - name: Install pip-audit
+        run: pip install pip-audit
+      - name: Run pip-audit (report-only)
+        run: |
+          pip-audit -r requirements.txt -f json -o pip-audit.json || true
+          pip-audit -r requirements-dev.txt -f json -o pip-audit-dev.json || true
+      - name: Upload pip-audit reports
+        uses: actions/upload-artifact@v4
+        with:
+          name: pip-audit-reports
+          path: |
+            pip-audit.json
+            pip-audit-dev.json
+

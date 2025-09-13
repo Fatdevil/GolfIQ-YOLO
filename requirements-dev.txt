@@ -9,3 +9,7 @@ fastapi
 httpx
 uvicorn
 python-dotenv
+mypy
+types-requests
+bandit
+pip-audit
