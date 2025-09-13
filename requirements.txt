@@ -1,0 +1,5 @@
+fastapi
+numpy>=1.26
+python-dotenv
+python-multipart
+uvicorn
