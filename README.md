@@ -37,3 +37,7 @@ curl -X POST "http://localhost:8000/cv/analyze" \
   -F "fps=120" -F "ref_len_m=1.0" -F "ref_len_px=100" -F "mode=detector" \
   -F "frames_zip=@/path/to/frames.zip"
 ```
+
+## CI & Coverage
+
+A separate workflow publishes cv_engine coverage as an artifact (report-only).
