@@ -6,10 +6,10 @@ creates a minimal app if neither exists.
 
 try:
     # vår föredragna modul
-    from server.app import app  # type: ignore
+    from server.app import app
 except Exception:
     try:
-        from server.main import app  # type: ignore
+        from server.main import app  # type: ignore[no-redef]
     except Exception:
         # sista fallback – skapa en minimal FastAPI-app med /health
         import os

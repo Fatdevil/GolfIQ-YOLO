@@ -8,3 +8,7 @@ pre-commit>=3.3
 fastapi
 httpx
 uvicorn
+mypy
+types-requests
+bandit
+pip-audit
