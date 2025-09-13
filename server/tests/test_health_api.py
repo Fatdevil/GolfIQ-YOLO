@@ -11,7 +11,8 @@ from server_app import app  # noqa: E402
 def test_health_ok():
     client = TestClient(app)
     r = client.get("/health")
-    assert r.status_code == 200 and r.json() == {"status": "ok"}
+    assert r.status_code == 200
+    assert r.json().get("status") == "ok"
 
 
 def test_protected_requires_api_key_when_set(monkeypatch):

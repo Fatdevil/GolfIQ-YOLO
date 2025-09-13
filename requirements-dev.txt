@@ -8,3 +8,4 @@ pre-commit>=3.3
 fastapi
 httpx
 uvicorn
+python-dotenv
