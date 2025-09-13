@@ -1,7 +1,11 @@
 #!/usr/bin/env python3
-import argparse, json, subprocess, sys, re
-from pathlib import Path
+import argparse
+import json
+import re
+import subprocess
+import sys
 import xml.etree.ElementTree as ET
+from pathlib import Path
 
 
 def read_pct(xml_path="coverage.xml"):
@@ -47,7 +51,10 @@ def update_badge(pct, readme="README.md"):
     text = p.read_text()
     start = "<!--COVERAGE_BADGE_START-->"
     end = "<!--COVERAGE_BADGE_END-->"
-    badge = f"{start}![coverage](https://img.shields.io/badge/coverage-{int(round(pct))}%25-{color_for(pct)}){end}"
+    badge = (
+        f"{start}![coverage](https://img.shields.io/badge/coverage-"
+        f"{int(round(pct))}%25-{color_for(pct)}){end}"
+    )
     new = (
         re.sub(f"{re.escape(start)}.*?{re.escape(end)}", badge, text, flags=re.S)
         if (start in text and end in text)
