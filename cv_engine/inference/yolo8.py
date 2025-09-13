@@ -34,11 +34,17 @@ class YoloV8Detector:
         self.calls += 1
         k = self.calls - 1
         if self.mock or self.model is None:
-            bx1, by1, bx2, by2 = int(w * 0.45), int(h * 0.48), int(w * 0.52), int(
-                h * 0.55
+            bx1, by1, bx2, by2 = (
+                int(w * 0.45),
+                int(h * 0.48),
+                int(w * 0.52),
+                int(h * 0.55),
             )
-            cx1, cy1, cx2, cy2 = int(w * 0.30), int(h * 0.60), int(w * 0.38), int(
-                h * 0.80
+            cx1, cy1, cx2, cy2 = (
+                int(w * 0.30),
+                int(h * 0.60),
+                int(w * 0.38),
+                int(h * 0.80),
             )
             bx1 += int(self.dx_ball * k)
             bx2 += int(self.dx_ball * k)

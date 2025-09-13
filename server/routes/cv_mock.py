@@ -41,9 +41,7 @@ def analyze(req: AnalyzeRequest):
         os.environ["GOLFIQ_MOTION_DY_BALL"] = str(req.ball_dy_px)
         os.environ["GOLFIQ_MOTION_DX_CLUB"] = str(req.club_dx_px)
         os.environ["GOLFIQ_MOTION_DY_CLUB"] = str(req.club_dy_px)
-        calib = CalibrationParams.from_reference(
-            req.ref_len_m, req.ref_len_px, req.fps
-        )
+        calib = CalibrationParams.from_reference(req.ref_len_m, req.ref_len_px, req.fps)
         result = analyze_frames(frames, calib)
         return AnalyzeResponse(**result)
 

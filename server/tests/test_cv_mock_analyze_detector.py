@@ -1,6 +1,7 @@
 from fastapi.testclient import TestClient
 from server.app import app
 
+
 def test_cv_mock_analyze_detector_mode():
     client = TestClient(app)
     payload = {
