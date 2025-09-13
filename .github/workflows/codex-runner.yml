@@ -1,0 +1,39 @@
+name: Codex Runner
+on:
+  workflow_dispatch:
+    inputs:
+      task:
+        description: "Klistra in bash-skriptet som ska köras"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+  actions: read
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v5
+      - name: Kör Codex-task (materialisera och kör)
+        shell: bash
+        env:
+          CODEX_PAT: ${{ secrets.CODEX_PAT }}
+          GITHUB_PAT: ${{ secrets.GITHUB_PAT }}
+          TASK_JSON: ${{ toJson(inputs.task) }}
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import os, json, pathlib
+          task = json.loads(os.environ['TASK_JSON'])
+          pathlib.Path('_task.sh').write_text(task, encoding='utf-8')
+          PY
+          chmod +x _task.sh
+          TOKEN="${CODEX_PAT:-$GITHUB_PAT}"
+          echo "Token available? $([[ -n "${TOKEN:-}" ]] && echo yes || echo no)"
+          echo "---- PREVIEW (40 rader) ----"; sed -n '1,40p' _task.sh || true
+          echo "---- RUN ----"; bash _task.sh

@@ -1,14 +1,10 @@
 import os
 import platform
 import time
-
-from fastapi import APIRouter
-
-router = APIRouter()
+from typing import Any, Dict
 
 
-@router.get("/health")
-def health():
+async def health() -> Dict[str, Any]:
     return {
         "status": "ok",
         "ts": time.time(),

@@ -1,0 +1,37 @@
+name: Tag & Release
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag name (ex: v2025.09.12)"
+        required: true
+        type: string
+      notes:
+        description: "Release notes (optional)"
+        required: false
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with: { fetch-depth: 0 }
+      - name: Create tag and GitHub Release
+        env:
+          CODEX_PAT: ${{ secrets.CODEX_PAT }}
+          GITHUB_PAT: ${{ secrets.GITHUB_PAT }}
+          REPO: ${{ github.repository }}
+          TAG: ${{ inputs.tag }}
+          NOTES: ${{ inputs.notes }}
+        run: |
+          set -euo pipefail
+          TOKEN="${CODEX_PAT:-$GITHUB_PAT}"
+          git tag "$TAG"
+          git push origin "refs/tags/$TAG"
+          curl -s -H "Authorization: token $TOKEN" -H "Accept: application/vnd.github+json" \
+            -d "{\"tag_name\":\"$TAG\",\"name\":\"$TAG\",\"body\":${NOTES:+\"$NOTES\"},\"draft\":false,\"prerelease\":false}" \
+            "https://api.github.com/repos/$REPO/releases" > /dev/null

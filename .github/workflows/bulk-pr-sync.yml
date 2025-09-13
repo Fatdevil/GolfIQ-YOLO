@@ -1,0 +1,58 @@
+name: Bulk PR Sync
+on:
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+  actions: read
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v5
+        with: { fetch-depth: 0 }
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.11", cache: "pip" }
+      - name: Install tools
+        run: python -m pip install -U pip black isort
+      - name: Configure git user
+        run: |
+          git config user.name  "codex-bulk-sync"
+          git config user.email "codex-bulk-sync@users.noreply.github.com"
+      - name: Sync all PRs
+        env:
+          CODEX_PAT: ${{ secrets.CODEX_PAT }}
+          GITHUB_PAT: ${{ secrets.GITHUB_PAT }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json, os, subprocess, urllib.request
+          repo=os.environ["REPO"]
+          token=os.environ.get("CODEX_PAT") or os.environ.get("GITHUB_PAT")
+          req=urllib.request.Request(f"https://api.github.com/repos/{repo}/pulls?state=open&per_page=100",
+                    headers={"Authorization":f"token {token}","Accept":"application/vnd.github+json"})
+          prs=json.load(urllib.request.urlopen(req))
+          def run(*c,check=True): subprocess.run(c,check=check)
+          for p in prs:
+              num=p["number"]; ref=p["head"]["ref"]; fork=p["head"]["repo"]["fork"]
+              if fork: print(f"#{num} fork -> skip"); continue
+              print(f"\n=== Sync #{num} ({ref}) ===")
+              run("git","fetch","origin",ref); run("git","checkout","-B",ref,f"origin/{ref}")
+              run("git","merge","--no-edit","origin/main",check=False)
+              c=subprocess.run(["git","ls-files","-u"],capture_output=True,text=True).stdout.strip()
+              if c:
+                  print(f"#{num} conflict -> skip"); run("git","merge","--abort",check=False); continue
+              subprocess.run(["black","."],check=False)
+              subprocess.run(["isort",".","--profile","black"],check=False)
+              run("git","add","-A")
+              if subprocess.run(["git","diff","--cached","--quiet"]).returncode!=0:
+                  run("git","commit","-m",f"ci: bulk sync (#{num}) – merge main + format")
+                  run("git","push","origin",ref)
+              else:
+                  print(f"#{num} up-to-date")
+          PY

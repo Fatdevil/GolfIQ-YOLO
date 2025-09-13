@@ -43,3 +43,15 @@ export async function coachFeedback(mode: CoachMode, metrics: any, notes: string
   if(!r.ok) throw new Error('Coach failed');
   return await r.json(); // {text}
 }
+
+export async function metricsFaceOn(baseUrl: string, payload: {
+  frame_w: number; frame_h: number; detections: any[]; mm_per_px?: number|null;
+}) {
+  const r = await fetch(baseUrl + "/metrics/faceon", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (!r.ok) throw new Error("metricsFaceOn " + r.status);
+  return await r.json();
+}
