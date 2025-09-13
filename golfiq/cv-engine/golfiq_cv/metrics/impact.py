@@ -10,13 +10,20 @@ def _align_by_time(a: np.ndarray, b: np.ndarray) -> Tuple[np.ndarray, np.ndarray
     """
     if len(a) == 0 or len(b) == 0:
         return a, b
+    if len(b) == 1:
+        # fast-path: only one sample in b -> repeat to match a
+        return a, np.repeat(b, len(a), axis=0).astype(float)
+
     bt = b[:, 0]
-    out_b = []
-    for t in a[:, 0]:
-        # pick nearest in time from b
-        j = int(np.argmin(np.abs(bt - t)))
-        out_b.append(b[j])
-    return a, np.array(out_b, dtype=float)
+    # use searchsorted to find nearest timestamp without explicit Python loop
+    idx = np.searchsorted(bt, a[:, 0], side="left")
+    idx = np.clip(idx, 1, len(bt) - 1)
+    left = idx - 1
+    right = idx
+    choose_left = a[:, 0] - bt[left] <= bt[right] - a[:, 0]
+    idx = np.where(choose_left, left, right)
+    out_b = b[idx]
+    return a, out_b.astype(float)
 
 
 def detect_impact_index(
