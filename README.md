@@ -22,3 +22,10 @@ curl -X POST http://localhost:8000/cv/mock/analyze \
   -H "Content-Type: application/json" \
   -d '{"frames":10,"fps":120,"ref_len_m":1.0,"ref_len_px":100.0,"ball_dx_px":2,"ball_dy_px":-1}'
 ```
+
+You can switch the mock analysis to the detector-driven pipeline:
+```
+curl -X POST http://localhost:8000/cv/mock/analyze \
+  -H "Content-Type: application/json" \
+  -d '{"mode":"detector","frames":10,"fps":120,"ref_len_m":1.0,"ref_len_px":100,"ball_dx_px":2,"ball_dy_px":-1}'
+```

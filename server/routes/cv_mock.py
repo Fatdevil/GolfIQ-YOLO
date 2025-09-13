@@ -9,6 +9,7 @@ from pydantic import BaseModel, Field
 from cv_engine.calibration.simple import as_dict, measure_from_tracks
 from cv_engine.impact.detector import ImpactDetector
 from cv_engine.metrics.kinematics import CalibrationParams
+from cv_engine.pipeline.analyze import analyze_frames
 
 router = APIRouter(prefix="/cv/mock", tags=["cv-mock"])
 
@@ -22,6 +23,7 @@ class AnalyzeRequest(BaseModel):
     ball_dy_px: float = -1.0  # uppåt i bild (y minskar per frame)
     club_dx_px: float = 1.5
     club_dy_px: float = 0.0
+    mode: str = "tracks"  # "tracks" | "detector"
 
 
 class AnalyzeResponse(BaseModel):
@@ -31,19 +33,21 @@ class AnalyzeResponse(BaseModel):
 
 @router.post("/analyze", response_model=AnalyzeResponse)
 def analyze(req: AnalyzeRequest):
-    # Slå på mock-läge för CV-motorn
     os.environ.setdefault("GOLFIQ_MOCK", "1")
-
-    # 1) Kör ImpactDetector på dummy-frames (snabbt, bara demo)
     frames = [np.zeros((64, 64, 3), dtype=np.uint8) for _ in range(req.frames)]
-    events = [e.frame_index for e in ImpactDetector().run(frames)]
 
-    # 2) Syntetiska tracks (px) för mätmotor (deterministiskt)
-    #    Notera: y ökar nedåt i bild ⇒ fysikens dy inverteras i kinematik-modulen
+    if req.mode == "detector":
+        os.environ["GOLFIQ_MOTION_DX_BALL"] = str(req.ball_dx_px)
+        os.environ["GOLFIQ_MOTION_DY_BALL"] = str(req.ball_dy_px)
+        os.environ["GOLFIQ_MOTION_DX_CLUB"] = str(req.club_dx_px)
+        os.environ["GOLFIQ_MOTION_DY_CLUB"] = str(req.club_dy_px)
+        calib = CalibrationParams.from_reference(req.ref_len_m, req.ref_len_px, req.fps)
+        result = analyze_frames(frames, calib)
+        return AnalyzeResponse(**result)
+
+    events = [e.frame_index for e in ImpactDetector().run(frames)]
     ball = [(i * req.ball_dx_px, 100 + i * req.ball_dy_px) for i in range(req.frames)]
     club = [(i * req.club_dx_px, 110 + i * req.club_dy_px) for i in range(req.frames)]
-
     calib = CalibrationParams.from_reference(req.ref_len_m, req.ref_len_px, req.fps)
     m = measure_from_tracks(ball, club, calib)
-
     return AnalyzeResponse(events=events, metrics=as_dict(m))

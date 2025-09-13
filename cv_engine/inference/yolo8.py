@@ -16,6 +16,11 @@ class YoloV8Detector:
     def __init__(self, weight_path: str | None = None, device: str = "cpu"):
         self.mock = os.getenv("GOLFIQ_MOCK", "0") == "1"
         self.model = None
+        self.calls = 0
+        self.dx_ball = float(os.getenv("GOLFIQ_MOTION_DX_BALL", "2.0"))
+        self.dy_ball = float(os.getenv("GOLFIQ_MOTION_DY_BALL", "-1.0"))
+        self.dx_club = float(os.getenv("GOLFIQ_MOTION_DX_CLUB", "1.5"))
+        self.dy_club = float(os.getenv("GOLFIQ_MOTION_DY_CLUB", "0.0"))
         if not self.mock and weight_path:
             try:
                 from ultralytics import YOLO  # type: ignore
@@ -26,25 +31,40 @@ class YoloV8Detector:
 
     def run(self, image: "np.ndarray") -> List[Box]:
         h, w = image.shape[:2]
+        self.calls += 1
+        k = self.calls - 1
         if self.mock or self.model is None:
-            # deterministiska boxar: en boll och en klubba
+            bx1, by1, bx2, by2 = (
+                int(w * 0.45),
+                int(h * 0.48),
+                int(w * 0.52),
+                int(h * 0.55),
+            )
+            cx1, cy1, cx2, cy2 = (
+                int(w * 0.30),
+                int(h * 0.60),
+                int(w * 0.38),
+                int(h * 0.80),
+            )
+            bx1 += int(self.dx_ball * k)
+            bx2 += int(self.dx_ball * k)
+            by1 += int(self.dy_ball * k)
+            by2 += int(self.dy_ball * k)
+            cx1 += int(self.dx_club * k)
+            cx2 += int(self.dx_club * k)
+            cy1 += int(self.dy_club * k)
+            cy2 += int(self.dy_club * k)
+            bx1 = max(0, min(bx1, w - 1))
+            bx2 = max(0, min(bx2, w - 1))
+            by1 = max(0, min(by1, h - 1))
+            by2 = max(0, min(by2, h - 1))
+            cx1 = max(0, min(cx1, w - 1))
+            cx2 = max(0, min(cx2, w - 1))
+            cy1 = max(0, min(cy1, h - 1))
+            cy2 = max(0, min(cy2, h - 1))
             return [
-                Box(
-                    int(w * 0.45),
-                    int(h * 0.48),
-                    int(w * 0.52),
-                    int(h * 0.55),
-                    "ball",
-                    0.95,
-                ),
-                Box(
-                    int(w * 0.30),
-                    int(h * 0.60),
-                    int(w * 0.38),
-                    int(h * 0.80),
-                    "club",
-                    0.92,
-                ),
+                Box(bx1, by1, bx2, by2, "ball", 0.95),
+                Box(cx1, cy1, cx2, cy2, "club", 0.92),
             ]
         # (real-läge – håll lätt och utan tunga beroenden i tests)
         results = self.model.predict(image, device="cpu", verbose=False)  # type: ignore
