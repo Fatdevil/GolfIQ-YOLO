@@ -29,3 +29,11 @@ curl -X POST http://localhost:8000/cv/mock/analyze \
   -H "Content-Type: application/json" \
   -d '{"mode":"detector","frames":10,"fps":120,"ref_len_m":1.0,"ref_len_px":100,"ball_dx_px":2,"ball_dy_px":-1}'
 ```
+
+### Upload frames (ZIP) and analyze
+```bash
+# ZIP can contain .npy (H,W,3 uint8) and/or PNG/JPG
+curl -X POST "http://localhost:8000/cv/analyze" \
+  -F "fps=120" -F "ref_len_m=1.0" -F "ref_len_px=100" -F "mode=detector" \
+  -F "frames_zip=@/path/to/frames.zip"
+```
