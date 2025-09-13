@@ -15,3 +15,10 @@ Project repository.
 
 ### cv_engine (mock)
 Run: `GOLFIQ_MOCK=1 python -m cv_engine.cli --mock-frames 5`
+
+### Server: /cv/mock/analyze
+```bash
+curl -X POST http://localhost:8000/cv/mock/analyze \
+  -H "Content-Type: application/json" \
+  -d '{"frames":10,"fps":120,"ref_len_m":1.0,"ref_len_px":100.0,"ball_dx_px":2,"ball_dy_px":-1}'
+```
