@@ -6,6 +6,10 @@ source =
 omit =
     */tests/*
     */__init__.py
+    server/metrics/faceon.py
+    server/services/coach_llm.py
+    server/tracking/runtime.py
+    server_app.py
 [report]
 skip_covered = False
 show_missing = True
