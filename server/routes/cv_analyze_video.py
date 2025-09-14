@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import os
 
-from fastapi import APIRouter, File, HTTPException, UploadFile
+from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 from pydantic import BaseModel, Field
 
 from cv_engine.io.videoreader import fps_from_video, frames_from_video
@@ -27,9 +27,18 @@ class AnalyzeResponse(BaseModel):
 
 @router.post("/analyze/video", response_model=AnalyzeResponse)
 async def analyze_video(
-    query: AnalyzeVideoQuery,
+    fps_fallback: float = Form(120, gt=0),
+    ref_len_m: float = Form(1.0, gt=0),
+    ref_len_px: float = Form(100.0, gt=0),
+    smoothing_window: int = Form(3),
     video: UploadFile = File(..., description="Video (e.g., MP4)"),
 ):
+    query = AnalyzeVideoQuery(
+        fps_fallback=fps_fallback,
+        ref_len_m=ref_len_m,
+        ref_len_px=ref_len_px,
+        smoothing_window=smoothing_window,
+    )
     # CV i mock-läge (deterministiskt) om inget riktigt weight finns
     os.environ.setdefault("GOLFIQ_MOCK", "1")
     data = await video.read()
