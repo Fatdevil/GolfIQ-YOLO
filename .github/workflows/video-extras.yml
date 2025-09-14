@@ -1,0 +1,21 @@
+name: video-extras
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  video:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.11' }
+      - name: Install deps (with video extras)
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt || true
+          pip install -r requirements-dev.txt
+          pip install -e ".[video]"
+      - name: Run video tests (cv_engine + server)
+        run: pytest -q cv_engine/tests/test_videoreader.py server/tests/test_cv_analyze_video.py

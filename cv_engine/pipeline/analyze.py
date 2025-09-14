@@ -1,10 +1,13 @@
 from __future__ import annotations
-from typing import Iterable, Dict, Any, List, Tuple
+
+from typing import Any, Dict, Iterable, List, Tuple
+
 import numpy as np
-from ..inference.yolo8 import YoloV8Detector
+
+from ..calibration.simple import as_dict, measure_from_tracks
 from ..impact.detector import ImpactDetector
+from ..inference.yolo8 import YoloV8Detector
 from ..metrics.kinematics import CalibrationParams
-from ..calibration.simple import measure_from_tracks, as_dict
 
 
 def _centers_by_label(boxes) -> Dict[str, List[Tuple[float, float]]]:
@@ -28,7 +31,9 @@ def analyze_frames(
         if centers["club"]:
             club_track.append(centers["club"][0])
 
-    events = [e.frame_index for e in ImpactDetector().run(frames)]
+    impact_events = ImpactDetector().run(frames)
+    events = [e.frame_index for e in impact_events]
+    confidence = max((e.confidence for e in impact_events), default=0.0)
 
     if len(ball_track) < 2 or len(club_track) < 2:
         metrics = {
@@ -37,8 +42,10 @@ def analyze_frames(
             "club_speed_mps": 0.0,
             "launch_deg": 0.0,
             "carry_m": 0.0,
+            "confidence": confidence,
         }
     else:
         m = measure_from_tracks(ball_track, club_track, calib)
         metrics = as_dict(m)
+        metrics["confidence"] = confidence
     return {"events": events, "metrics": metrics}

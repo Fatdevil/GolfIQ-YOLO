@@ -8,3 +8,9 @@ line-length = 88
 [tool.isort]
 profile = "black"
 line_length = 88
+
+[project.optional-dependencies]
+video = [
+  "opencv-python-headless>=4.8",
+  "imageio[ffmpeg]>=2.34",
+]

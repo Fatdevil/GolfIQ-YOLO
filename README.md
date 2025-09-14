@@ -38,6 +38,21 @@ curl -X POST "http://localhost:8000/cv/analyze" \
   -F "frames_zip=@/path/to/frames.zip"
 ```
 
+### Video support (optional)
+Install once:
+
+```
+pip install -e ".[video]"
+```
+
+Analyze an MP4:
+
+```
+curl -X POST "http://localhost:8000/cv/analyze/video" \
+  -F "video=@/path/to/clip.mp4" \
+  -F "ref_len_m=1.0" -F "ref_len_px=100" -F "fps_fallback=120"
+```
+
 ## CI & Coverage
 
 A separate workflow publishes cv_engine coverage as an artifact (report-only).
