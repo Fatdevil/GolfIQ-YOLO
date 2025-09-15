@@ -1,80 +1,67 @@
 name: Auto Merge Green PRs
 
 on:
-  workflow_dispatch: {}
+  workflow_dispatch:
   schedule:
-    - cron: "*/30 * * * *"
+    - cron: "*/30 7-19 * * 1-5"   # optional; keep or adjust
+  pull_request:
+    types: [synchronize, reopened, labeled, ready_for_review]
+    paths-ignore:
+      - '.github/workflows/**auto-merge**.yml'
+      - '.github/workflows/**auto_merge**.yml'
 
 permissions:
   contents: write
   pull-requests: write
 
+concurrency:
+  group: auto-merge
+  cancel-in-progress: false
+
 jobs:
   auto-merge:
     runs-on: ubuntu-latest
+    # Do NOT run on PRs from forks, or on the PR that modifies this workflow
+    if: >
+      ${{
+        github.event_name != 'pull_request' ||
+        (
+          github.event.pull_request.head.repo.full_name == github.repository &&
+          !contains(github.event.pull_request.title, 'auto-merge')
+        )
+      }}
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-      - name: Merge green PRs
+      - uses: actions/checkout@v4
+
+      - uses: cli/gh-action@v2
+
+      - name: Find mergeable PRs
+        id: find
         env:
-          CODEX_PAT: ${{ secrets.CODEX_PAT }}
-          GITHUB_PAT: ${{ secrets.GITHUB_PAT }}
-          REPO: ${{ github.repository }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}  # gh prefers GH_TOKEN; GITHUB_TOKEN also works
         run: |
           set -euo pipefail
-          TOKEN="${CODEX_PAT:-$GITHUB_PAT}"
-          export TOKEN
-          python - <<'PY'
-          import json, os, urllib.request
+          # CLEAN = all checks green & mergeable
+          prs="$(gh pr list --state open \
+                 --json number,isDraft,mergeStateStatus \
+                 --jq '.[] | select(.isDraft==false) | select(.mergeStateStatus==\"CLEAN\") | .number' \
+                 || true)"
+          echo "prs=${prs}" >> "$GITHUB_OUTPUT"
+          count="$(wc -w <<<"$prs" | tr -d ' ')"
+          echo "count=${count}" >> "$GITHUB_OUTPUT"
+          echo "Found $count CLEAN PR(s)."
 
-          repo = os.environ["REPO"]
-          token = os.environ["TOKEN"]
-          headers = {
-              "Authorization": f"token {token}",
-              "Accept": "application/vnd.github+json",
-              "User-Agent": "auto-merge-script",
-          }
+      - name: Exit quietly if none
+        if: ${{ steps.find.outputs.count == '0' }}
+        run: echo "No green PRs. Exiting 0."
 
-          def gh(url, method="GET", data=None):
-              if data is not None:
-                  data = json.dumps(data).encode()
-              req = urllib.request.Request(url, data=data, headers=headers, method=method)
-              with urllib.request.urlopen(req) as resp:
-                  if resp.status == 204:
-                      return {}
-                  return json.load(resp)
-
-          prs = gh(f"https://api.github.com/repos/{repo}/pulls?state=open&per_page=100")
-          for pr in prs:
-              num = pr["number"]
-              if pr["draft"] or pr["head"]["repo"]["fork"]:
-                  continue
-              detail = gh(f"https://api.github.com/repos/{repo}/pulls/{num}")
-              if detail.get("mergeable_state") == "dirty" or not detail.get("mergeable"):
-                  continue
-              sha = pr["head"]["sha"]
-              status = gh(f"https://api.github.com/repos/{repo}/commits/{sha}/status").get("state")
-              checks = gh(f"https://api.github.com/repos/{repo}/commits/{sha}/check-runs").get("check_runs", [])
-              if status != "success" and any(c.get("conclusion") != "success" for c in checks):
-                  continue
-              reviews = gh(f"https://api.github.com/repos/{repo}/pulls/{num}/reviews")
-              if any(r["state"] == "CHANGES_REQUESTED" for r in reviews):
-                  continue
-              gh(
-                  f"https://api.github.com/repos/{repo}/pulls/{num}/merge",
-                  method="PATCH",
-                  data={"merge_method": "squash"},
-              )
-              gh(
-                  f"https://api.github.com/repos/{repo}/git/refs/heads/{pr['head']['ref']}",
-                  method="DELETE",
-              )
-              gh(
-                  f"https://api.github.com/repos/{repo}/issues/{num}/comments",
-                  method="POST",
-                  data={"body": "Auto-merged by control-plane (all checks green)"},
-              )
-              print(f"merged #{num}")
-          PY
+      - name: Merge PRs (squash + delete branch; allow auto-merge)
+        if: ${{ steps.find.outputs.count != '0' }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          for pr in ${{ steps.find.outputs.prs }}; do
+            echo "Merging #$pr…"
+            gh pr merge "$pr" --squash --delete-branch --auto || true
+          done
