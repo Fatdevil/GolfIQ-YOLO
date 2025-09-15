@@ -28,3 +28,4 @@ def test_cv_mock_analyze_returns_metrics():
     assert 25.0 <= m["launch_deg"] <= 28.5
     # Carry positiv och rimlig för låg hastighet
     assert m["carry_m"] > 0.0
+    assert "confidence" in m and 0.0 <= m["confidence"] <= 1.0

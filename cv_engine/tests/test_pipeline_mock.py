@@ -1,7 +1,9 @@
 import os
+
 import numpy as np
-from cv_engine.pipeline.analyze import analyze_frames
+
 from cv_engine.metrics.kinematics import CalibrationParams
+from cv_engine.pipeline.analyze import analyze_frames
 
 
 def test_pipeline_detector_mock_motion_produces_metrics():

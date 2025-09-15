@@ -35,3 +35,4 @@ def test_cv_upload_analyze_npy_zip():
     m = data["metrics"]
     # grova sanity checks (mock-detektor ger deterministisk rörelse)
     assert "ball_speed_mps" in m and m["carry_m"] >= 0
+    assert "confidence" in m and 0.0 <= m["confidence"] <= 1.0
