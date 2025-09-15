@@ -58,4 +58,6 @@ async def analyze(
             metrics=dict(metrics),
             events=list(events),
         )
-    return AnalyzeResponse(events=events, metrics=metrics, run_id=rec.run_id if rec else None)
+    return AnalyzeResponse(
+        events=events, metrics=metrics, run_id=rec.run_id if rec else None
+    )

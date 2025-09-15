@@ -52,8 +52,12 @@ def analyze(req: AnalyzeRequest):
         metrics = result["metrics"]
     else:
         events = [e.frame_index for e in ImpactDetector().run(frames)]
-        ball = [(i * req.ball_dx_px, 100 + i * req.ball_dy_px) for i in range(req.frames)]
-        club = [(i * req.club_dx_px, 110 + i * req.club_dy_px) for i in range(req.frames)]
+        ball = [
+            (i * req.ball_dx_px, 100 + i * req.ball_dy_px) for i in range(req.frames)
+        ]
+        club = [
+            (i * req.club_dx_px, 110 + i * req.club_dy_px) for i in range(req.frames)
+        ]
         calib = CalibrationParams.from_reference(req.ref_len_m, req.ref_len_px, req.fps)
         m = measure_from_tracks(ball, club, calib)
         metrics = as_dict(m)
@@ -70,4 +74,6 @@ def analyze(req: AnalyzeRequest):
         )
     if "confidence" not in metrics:
         metrics["confidence"] = 0.0
-    return AnalyzeResponse(events=events, metrics=metrics, run_id=rec.run_id if rec else None)
+    return AnalyzeResponse(
+        events=events, metrics=metrics, run_id=rec.run_id if rec else None
+    )
