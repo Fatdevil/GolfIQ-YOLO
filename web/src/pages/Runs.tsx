@@ -56,7 +56,7 @@ export default function RunsPage() {
     if (loading) {
       return (
         <tr>
-          <td colSpan={6} className="py-6 text-center text-sm text-slate-400">
+          <td colSpan={7} className="py-6 text-center text-sm text-slate-400">
             Loading runs…
           </td>
         </tr>
@@ -65,7 +65,7 @@ export default function RunsPage() {
     if (error) {
       return (
         <tr>
-          <td colSpan={6} className="py-6 text-center text-sm text-red-300">
+          <td colSpan={7} className="py-6 text-center text-sm text-red-300">
             {error}
           </td>
         </tr>
@@ -74,7 +74,7 @@ export default function RunsPage() {
     if (runs.length === 0) {
       return (
         <tr>
-          <td colSpan={6} className="py-6 text-center text-sm text-slate-400">
+          <td colSpan={7} className="py-6 text-center text-sm text-slate-400">
             No runs available yet. Trigger an analyze to persist a run.
           </td>
         </tr>
@@ -92,6 +92,11 @@ export default function RunsPage() {
           </td>
           <td className="px-4 py-3 text-sm text-slate-300">{run.source ?? "–"}</td>
           <td className="px-4 py-3 text-sm text-slate-300">{run.mode ?? "–"}</td>
+          <td className="px-4 py-3 text-sm text-slate-300">
+            {typeof run.confidence === "number"
+              ? `${(run.confidence * 100).toFixed(1)}%`
+              : "–"}
+          </td>
           <td className="px-4 py-3 text-sm text-slate-300">
             {typeof run.ball_speed_mps === "number" ? `${run.ball_speed_mps.toFixed(2)} m/s` : "–"}
           </td>
@@ -133,6 +138,7 @@ export default function RunsPage() {
               <th className="px-4 py-3 font-semibold">Created</th>
               <th className="px-4 py-3 font-semibold">Source</th>
               <th className="px-4 py-3 font-semibold">Mode</th>
+              <th className="px-4 py-3 font-semibold">Confidence</th>
               <th className="px-4 py-3 font-semibold">Ball speed</th>
               <th className="px-4 py-3 font-semibold text-right">Actions</th>
             </tr>

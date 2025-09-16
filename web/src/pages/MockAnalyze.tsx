@@ -9,10 +9,10 @@ interface MockFormState {
   ref_len_px: number;
   smoothing_window: number;
   persist: boolean;
-  ball_dx: number;
-  ball_dy: number;
-  club_dx: number;
-  club_dy: number;
+  ball_dx_px: number;
+  ball_dy_px: number;
+  club_dx_px: number;
+  club_dy_px: number;
 }
 
 interface MockResult {
@@ -29,10 +29,10 @@ export default function MockAnalyzePage() {
     ref_len_px: 600,
     smoothing_window: 3,
     persist: false,
-    ball_dx: 250,
-    ball_dy: -20,
-    club_dx: 220,
-    club_dy: -35,
+    ball_dx_px: 250,
+    ball_dy_px: -20,
+    club_dx_px: 220,
+    club_dy_px: -35,
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -50,8 +50,10 @@ export default function MockAnalyzePage() {
         ref_len_px: form.ref_len_px,
         smoothing_window: form.smoothing_window,
         persist: form.persist,
-        ball: { dx: form.ball_dx, dy: form.ball_dy },
-        club: { dx: form.club_dx, dy: form.club_dy },
+        ball_dx_px: form.ball_dx_px,
+        ball_dy_px: form.ball_dy_px,
+        club_dx_px: form.club_dx_px,
+        club_dy_px: form.club_dy_px,
       };
       const data = await postMockAnalyze(payload);
       setResult(data);
@@ -158,8 +160,8 @@ export default function MockAnalyzePage() {
               ΔX
               <input
                 type="number"
-                value={form.ball_dx}
-                onChange={(e) => setForm((p) => ({ ...p, ball_dx: Number(e.target.value) }))}
+                value={form.ball_dx_px}
+                onChange={(e) => setForm((p) => ({ ...p, ball_dx_px: Number(e.target.value) }))}
                 className="mt-1 rounded border border-slate-800 bg-slate-950/60 px-3 py-2"
               />
             </label>
@@ -167,8 +169,8 @@ export default function MockAnalyzePage() {
               ΔY
               <input
                 type="number"
-                value={form.ball_dy}
-                onChange={(e) => setForm((p) => ({ ...p, ball_dy: Number(e.target.value) }))}
+                value={form.ball_dy_px}
+                onChange={(e) => setForm((p) => ({ ...p, ball_dy_px: Number(e.target.value) }))}
                 className="mt-1 rounded border border-slate-800 bg-slate-950/60 px-3 py-2"
               />
             </label>
@@ -182,8 +184,8 @@ export default function MockAnalyzePage() {
               ΔX
               <input
                 type="number"
-                value={form.club_dx}
-                onChange={(e) => setForm((p) => ({ ...p, club_dx: Number(e.target.value) }))}
+                value={form.club_dx_px}
+                onChange={(e) => setForm((p) => ({ ...p, club_dx_px: Number(e.target.value) }))}
                 className="mt-1 rounded border border-slate-800 bg-slate-950/60 px-3 py-2"
               />
             </label>
@@ -191,8 +193,8 @@ export default function MockAnalyzePage() {
               ΔY
               <input
                 type="number"
-                value={form.club_dy}
-                onChange={(e) => setForm((p) => ({ ...p, club_dy: Number(e.target.value) }))}
+                value={form.club_dy_px}
+                onChange={(e) => setForm((p) => ({ ...p, club_dy_px: Number(e.target.value) }))}
                 className="mt-1 rounded border border-slate-800 bg-slate-950/60 px-3 py-2"
               />
             </label>

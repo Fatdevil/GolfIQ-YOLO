@@ -112,7 +112,7 @@ export default function AnalyzePage() {
     setError(null);
     try {
       const form = new FormData();
-      form.append("file", zipForm.file);
+      form.append("frames_zip", zipForm.file);
       const data = await postZipAnalyze(form, {
         fps: zipForm.fps,
         ref_len_m: zipForm.ref_len_m,
@@ -142,7 +142,7 @@ export default function AnalyzePage() {
     setError(null);
     try {
       const form = new FormData();
-      form.append("file", videoForm.file);
+      form.append("video", videoForm.file);
       const data = await postVideoAnalyze(form, {
         fps_fallback: videoForm.fps_fallback,
         ref_len_m: videoForm.ref_len_m,
