@@ -53,6 +53,32 @@ curl -X POST "http://localhost:8000/cv/analyze/video" \
   -F "ref_len_m=1.0" -F "ref_len_px=100" -F "fps_fallback=120"
 ```
 
+## Web UI
+
+The project ships with a Vite + React single-page app for uploading captures, kicking off mock runs, and browsing persisted runs.
+
+### Local development
+
+```bash
+cd web
+npm install
+npm run dev
+```
+
+Configure the backend origin with `VITE_API_BASE` (defaults to `http://localhost:8000`).
+
+### Build & serve from FastAPI
+
+```bash
+cd web
+npm run build
+SERVE_WEB=1 uvicorn server.app:app --reload
+```
+
+When `SERVE_WEB=1` the FastAPI server mounts the compiled SPA from `web/dist` and serves it at `/`.
+
+The UI currently calls the following endpoints: `/cv/mock/analyze`, `/cv/analyze`, `/cv/analyze/video`, and `/runs` (including `/runs/{id}` and `DELETE /runs/{id}`).
+
 ## CI & Coverage
 
 A separate workflow publishes cv_engine coverage as an artifact (report-only).
