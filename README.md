@@ -81,6 +81,7 @@ The UI currently calls the following endpoints: `/cv/mock/analyze`, `/cv/analyze
 
 ### Run with Docker
 Build locally:
+
 ```bash
 docker build -t golfiq-yolo --build-arg VIDEO_EXTRAS=1 .
 docker run -p 8000:8000 -e SERVE_WEB=1 -e GOLFIQ_MOCK=1 -v $(pwd)/data/runs:/data/runs golfiq-yolo
@@ -88,7 +89,7 @@ docker run -p 8000:8000 -e SERVE_WEB=1 -e GOLFIQ_MOCK=1 -v $(pwd)/data/runs:/dat
 
 Release image (tags v*) is published to ghcr.io/<owner>/GolfIQ-YOLO:latest. Use Compose:
 
-```
+```bash
 docker compose up --build
 ```
 
