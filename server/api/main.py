@@ -1,5 +1,7 @@
 import asyncio
 import os
+from contextlib import asynccontextmanager
+from typing import Optional
 
 from fastapi import Depends, FastAPI, HTTPException, Request, status
 from fastapi.middleware.cors import CORSMiddleware
@@ -25,7 +27,36 @@ def _api_key_dependency():
     return _dep
 
 
-app = FastAPI()
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    retention_task: Optional[asyncio.Task] = None
+
+    dirs = [x.strip() for x in os.getenv("RETENTION_DIRS", "").split(",") if x.strip()]
+    minutes = int(os.getenv("RETENTION_MINUTES", "15"))
+
+    if dirs:
+
+        async def _loop() -> None:
+            while True:
+                try:
+                    sweep_retention_once(dirs, minutes)
+                finally:
+                    await asyncio.sleep(300)  # every 5 min
+
+        retention_task = asyncio.create_task(_loop())
+
+    try:
+        yield
+    finally:
+        if retention_task:
+            retention_task.cancel()
+            try:
+                await retention_task
+            except asyncio.CancelledError:
+                pass
+
+
+app = FastAPI(lifespan=lifespan)
 app.state.STAGING = os.getenv("STAGING") == "1" or os.getenv("APP_ENV") == "staging"
 
 allow = os.getenv("CORS_ALLOW_ORIGINS", "http://localhost,http://127.0.0.1").split(",")
@@ -48,24 +79,6 @@ app.add_api_route("/health", _health_handler, methods=["GET"])
 @app.get("/protected", dependencies=[Depends(api_dep)])
 async def protected():
     return {"ok": True}
-
-
-@app.on_event("startup")
-async def _retention_startup():
-    # Comma-separated directories to sweep, e.g. 'server/tmp_frames,server/uploads'
-    dirs = [x.strip() for x in os.getenv("RETENTION_DIRS", "").split(",") if x.strip()]
-    minutes = int(os.getenv("RETENTION_MINUTES", "15"))
-    if not dirs:
-        return
-
-    async def _loop():
-        while True:
-            try:
-                sweep_retention_once(dirs, minutes)
-            finally:
-                await asyncio.sleep(300)  # every 5 min
-
-    asyncio.create_task(_loop())
 
 
 @app.post("/analyze")

@@ -28,17 +28,16 @@ def test_cv_analyze_video_endpoint():
 
     from server.app import app
 
-    client = TestClient(app)
-
-    video_bytes = _mp4_bytes(frames=12)
-    files = {"video": ("test.mp4", video_bytes, "video/mp4")}
-    data = {
-        "fps_fallback": "120",
-        "ref_len_m": "1.0",
-        "ref_len_px": "100.0",
-        "smoothing_window": "3",
-    }
-    r = client.post("/cv/analyze/video", data=data, files=files)
+    with TestClient(app) as client:
+        video_bytes = _mp4_bytes(frames=12)
+        files = {"video": ("test.mp4", video_bytes, "video/mp4")}
+        data = {
+            "fps_fallback": "120",
+            "ref_len_m": "1.0",
+            "ref_len_px": "100.0",
+            "smoothing_window": "3",
+        }
+        r = client.post("/cv/analyze/video", data=data, files=files)
     assert r.status_code == 200, r.text
     m = r.json()["metrics"]
     assert 0.0 <= m["confidence"] <= 1.0
