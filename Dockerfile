@@ -1,4 +1,6 @@
+# syntax=docker/dockerfile:1
 # -------- Web build --------
+ARG PY_IMAGE=python:3.11-slim
 FROM node:20-slim AS web
 WORKDIR /web
 COPY web/package.json web/package-lock.json* ./
