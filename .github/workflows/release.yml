@@ -39,6 +39,7 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
+            PY_IMAGE=python:3.11-slim
             VIDEO_EXTRAS=1
           cache-from: type=gha
           cache-to: type=gha,mode=max
