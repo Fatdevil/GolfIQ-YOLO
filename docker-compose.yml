@@ -1,0 +1,15 @@
+services:
+  app:
+    build:
+      context: .
+      args:
+        VIDEO_EXTRAS: "1"   # set "0" to skip video deps
+    image: ghcr.io/${GH_USER:-fatdevil}/golfiq-yolo:dev
+    ports:
+      - "8000:8000"
+    environment:
+      SERVE_WEB: "1"
+      GOLFIQ_MOCK: "1"
+      GOLFIQ_RUNS_DIR: "/data/runs"
+    volumes:
+      - ./data/runs:/data/runs
