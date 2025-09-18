@@ -79,6 +79,15 @@ When `SERVE_WEB=1` the FastAPI server mounts the compiled SPA from `web/dist` an
 
 The UI currently calls the following endpoints: `/cv/mock/analyze`, `/cv/analyze`, `/cv/analyze/video`, and `/runs` (including `/runs/{id}` and `DELETE /runs/{id}`).
 
+## Web UI
+
+The project ships with a Vite + React single-page app for uploading captures, kicking off mock runs, and browsing persisted runs.
+
+### Local development
+```bash
+cd web
+npm install
+npm run dev
 ## CI & Coverage
 
 A separate workflow publishes cv_engine coverage as an artifact (report-only).

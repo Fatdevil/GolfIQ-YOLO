@@ -4,18 +4,18 @@ from server.app import app
 
 
 def test_cv_mock_analyze_returns_metrics():
-    client = TestClient(app)
-    payload = {
-        "frames": 10,
-        "fps": 120.0,
-        "ref_len_m": 1.0,
-        "ref_len_px": 100.0,
-        "ball_dx_px": 2.0,
-        "ball_dy_px": -1.0,  # uppåt
-        "club_dx_px": 1.5,
-        "club_dy_px": 0.0,
-    }
-    r = client.post("/cv/mock/analyze", json=payload)
+    with TestClient(app) as client:
+        payload = {
+            "frames": 10,
+            "fps": 120.0,
+            "ref_len_m": 1.0,
+            "ref_len_px": 100.0,
+            "ball_dx_px": 2.0,
+            "ball_dy_px": -1.0,  # uppåt
+            "club_dx_px": 1.5,
+            "club_dy_px": 0.0,
+        }
+        r = client.post("/cv/mock/analyze", json=payload)
     assert r.status_code == 200, r.text
     data = r.json()
     assert "metrics" in data and "events" in data

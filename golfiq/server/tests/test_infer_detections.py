@@ -2,8 +2,6 @@ from fastapi.testclient import TestClient
 
 from ..api.main import app
 
-client = TestClient(app)
-
 
 def test_infer_with_detections():
     payload = {
@@ -143,7 +141,8 @@ def test_infer_with_detections():
             "calibrated": True,
         },
     }
-    r = client.post("/infer", json=payload)
+    with TestClient(app) as client:
+        r = client.post("/infer", json=payload)
     assert r.status_code == 200
     data = r.json()
     assert data["quality"] in ["green", "yellow", "red"]

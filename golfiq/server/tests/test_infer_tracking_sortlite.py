@@ -4,7 +4,6 @@ from server.api.main import app
 
 
 def test_infer_detections_sortlite():
-    client = TestClient(app)
     payload = {
         "mode": "detections",
         "detections": [
@@ -122,7 +121,8 @@ def test_infer_detections_sortlite():
         },
         "tracking": {"mode": "sortlite", "iou_thr": 0.1},
     }
-    r = client.post("/infer", json=payload)
+    with TestClient(app) as client:
+        r = client.post("/infer", json=payload)
     assert r.status_code == 200
     m = r.json()["metrics"]
     assert m["club_speed_mps"] > 0 and m["ball_speed_mps"] > 0

@@ -19,17 +19,17 @@ def _zip_of_npy(frames):
 
 
 def test_cv_upload_analyze_npy_zip():
-    client = TestClient(app)
-    frames = [np.zeros((64, 64, 3), dtype=np.uint8) for _ in range(10)]
-    payload = {
-        "fps": "120",
-        "ref_len_m": "1.0",
-        "ref_len_px": "100.0",
-        "mode": "detector",
-    }
-    zip_buf = _zip_of_npy(frames)
-    files = {"frames_zip": ("frames.zip", zip_buf.getvalue(), "application/zip")}
-    r = client.post("/cv/analyze", data=payload, files=files)
+    with TestClient(app) as client:
+        frames = [np.zeros((64, 64, 3), dtype=np.uint8) for _ in range(10)]
+        payload = {
+            "fps": "120",
+            "ref_len_m": "1.0",
+            "ref_len_px": "100.0",
+            "mode": "detector",
+        }
+        zip_buf = _zip_of_npy(frames)
+        files = {"frames_zip": ("frames.zip", zip_buf.getvalue(), "application/zip")}
+        r = client.post("/cv/analyze", data=payload, files=files)
     assert r.status_code == 200, r.text
     data = r.json()
     m = data["metrics"]
