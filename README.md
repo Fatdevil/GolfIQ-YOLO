@@ -1,4 +1,4 @@
-<!--COVERAGE_BADGE_START-->![coverage](https://img.shields.io/badge/coverage-86%25-brightgreen)<!--COVERAGE_BADGE_END-->
+<!--COVERAGE_BADGE_START-->![coverage](https://img.shields.io/badge/coverage-88%25-brightgreen)<!--COVERAGE_BADGE_END-->
 
 # GolfIQ-YOLO
 
