@@ -79,19 +79,15 @@ When `SERVE_WEB=1` the FastAPI server mounts the compiled SPA from `web/dist` an
 
 The UI currently calls the following endpoints: `/cv/mock/analyze`, `/cv/analyze`, `/cv/analyze/video`, and `/runs` (including `/runs/{id}` and `DELETE /runs/{id}`).
 
-### Run with Docker
-Build locally:
+## Web UI
+
+The project ships with a Vite + React single-page app for uploading captures, kicking off mock runs, and browsing persisted runs.
+
+### Local development
 ```bash
-docker build -t golfiq-yolo --build-arg VIDEO_EXTRAS=1 .
-docker run -p 8000:8000 -e SERVE_WEB=1 -e GOLFIQ_MOCK=1 -v $(pwd)/data/runs:/data/runs golfiq-yolo
-```
-
-Release image (tags v*) is published to ghcr.io/<owner>/GolfIQ-YOLO:latest. Use Compose:
-
-```
-docker compose up --build
-```
-
+cd web
+npm install
+npm run dev
 ## CI & Coverage
 
 A separate workflow publishes cv_engine coverage as an artifact (report-only).
