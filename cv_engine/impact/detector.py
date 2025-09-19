@@ -1,4 +1,3 @@
-import os
 from typing import Iterable, List, Sequence
 
 import numpy as np
@@ -21,7 +20,6 @@ class ImpactDetector:
     def __init__(self, detector: YoloV8Detector | None = None):
         self.detector = detector or YoloV8Detector()
         self.tracker = get_tracker()
-        self.mock = os.getenv("GOLFIQ_MOCK", "0") == "1"
 
     def run_with_boxes(
         self,

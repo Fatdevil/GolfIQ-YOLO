@@ -93,7 +93,7 @@ def test_cv_analyze_video_persists_run_when_requested(monkeypatch, client):
     assert body["events"] == [1, 2]
     assert body["run_id"] == "1700000000-deadbeef"
     assert body["metrics"]["confidence"] == 0.0
-    assert os.environ["GOLFIQ_MOCK"] == "1"
+    assert "GOLFIQ_MOCK" not in os.environ
 
     assert saved["params"]["run_name"] == "demo"
     assert saved["metrics"]["confidence"] == 0.0

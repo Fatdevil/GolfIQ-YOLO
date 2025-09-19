@@ -1,5 +1,5 @@
 import os
-from typing import List
+from typing import List, Tuple
 
 import numpy as np
 
@@ -13,14 +13,31 @@ class YoloV8Detector:
       - real-läge försöker ladda Ultralytics YOLO men faller snällt tillbaka till mock
     """
 
-    def __init__(self, weight_path: str | None = None, device: str = "cpu"):
-        self.mock = os.getenv("GOLFIQ_MOCK", "0") == "1"
+    def __init__(
+        self,
+        weight_path: str | None = None,
+        device: str = "cpu",
+        *,
+        mock: bool | None = None,
+        motion: Tuple[float, float, float, float] | None = None,
+    ):
+        default_mock = os.getenv("GOLFIQ_MOCK", "0") == "1"
+        self.mock = mock if mock is not None else default_mock
         self.model = None
         self.calls = 0
-        self.dx_ball = float(os.getenv("GOLFIQ_MOTION_DX_BALL", "2.0"))
-        self.dy_ball = float(os.getenv("GOLFIQ_MOTION_DY_BALL", "-1.0"))
-        self.dx_club = float(os.getenv("GOLFIQ_MOTION_DX_CLUB", "1.5"))
-        self.dy_club = float(os.getenv("GOLFIQ_MOTION_DY_CLUB", "0.0"))
+        default_motion = (
+            float(os.getenv("GOLFIQ_MOTION_DX_BALL", "2.0")),
+            float(os.getenv("GOLFIQ_MOTION_DY_BALL", "-1.0")),
+            float(os.getenv("GOLFIQ_MOTION_DX_CLUB", "1.5")),
+            float(os.getenv("GOLFIQ_MOTION_DY_CLUB", "0.0")),
+        )
+        motion_vals = motion if motion is not None else default_motion
+        self.dx_ball, self.dy_ball, self.dx_club, self.dy_club = (
+            float(motion_vals[0]),
+            float(motion_vals[1]),
+            float(motion_vals[2]),
+            float(motion_vals[3]),
+        )
         if not self.mock and weight_path:
             try:
                 from ultralytics import YOLO  # type: ignore
