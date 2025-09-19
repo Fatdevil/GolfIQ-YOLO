@@ -60,7 +60,7 @@ def test_cv_analyze_video_persists_run_when_requested(monkeypatch, client):
     )
     monkeypatch.setattr(video_module, "fps_from_video", lambda data: None)
 
-    def _fake_analyze(frames_in, calib):
+    def _fake_analyze(frames_in, calib, smoothing_window=None, **kwargs):
         assert frames_in == frames
         return {"events": [1, 2], "metrics": {}}
 
