@@ -37,3 +37,12 @@ def test_minutes_zero_deletes_all(tmp_path: Path) -> None:
 def test_missing_dir_is_ok(tmp_path: Path) -> None:
     missing = tmp_path / "nope"
     assert sweep_retention_once([str(missing)], minutes=1) == []
+
+
+def test_filesystem_errors_are_ignored(monkeypatch, tmp_path: Path) -> None:
+    def _boom(self, pattern):
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(Path, "rglob", _boom, raising=False)
+
+    assert sweep_retention_once([str(tmp_path)], minutes=5) == []
