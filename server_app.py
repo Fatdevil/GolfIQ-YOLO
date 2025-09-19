@@ -14,21 +14,10 @@ except Exception:
         # sista fallback – skapa en minimal FastAPI-app med /health
         import os
 
-        from fastapi import Depends, FastAPI, HTTPException, Request, status
+        from fastapi import Depends, FastAPI
         from fastapi.middleware.cors import CORSMiddleware
 
-        def _api_key_dependency():
-            async def _dep(request: Request):
-                required = os.getenv("API_KEY")
-                if not required:
-                    return
-                if request.headers.get("x-api-key") != required:
-                    raise HTTPException(
-                        status_code=status.HTTP_401_UNAUTHORIZED,
-                        detail="invalid api key",
-                    )
-
-            return _dep
+        from server.security import require_api_key
 
         def create_app() -> FastAPI:
             app = FastAPI()
@@ -42,13 +31,12 @@ except Exception:
                 allow_methods=["*"],
                 allow_headers=["*"],
             )
-            api_dep = _api_key_dependency()
 
             @app.get("/health")
             async def health():
                 return {"status": "ok"}
 
-            @app.get("/protected", dependencies=[Depends(api_dep)])
+            @app.get("/protected", dependencies=[Depends(require_api_key)])
             async def protected():
                 return {"ok": True}
 

@@ -3,28 +3,16 @@ import os
 from contextlib import asynccontextmanager
 from typing import Optional
 
-from fastapi import Depends, FastAPI, HTTPException, Request, status
+from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from server.retention.sweeper import sweep_retention_once
 
+from server.security import require_api_key
+
 from .health import health as _health_handler
 from .routers import calibrate, metrics
 from .routers.coach import router as coach_router
-
-
-def _api_key_dependency():
-    async def _dep(request: Request):
-        required = os.getenv("API_KEY")
-        if not required:
-            return
-        provided = request.headers.get("x-api-key")
-        if provided != required:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED, detail="invalid api key"
-            )
-
-    return _dep
 
 
 @asynccontextmanager
@@ -68,15 +56,13 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-api_dep = _api_key_dependency()
-
 app.include_router(coach_router)
 app.include_router(calibrate.router)
 app.include_router(metrics.router)
 app.add_api_route("/health", _health_handler, methods=["GET"])
 
 
-@app.get("/protected", dependencies=[Depends(api_dep)])
+@app.get("/protected", dependencies=[Depends(require_api_key)])
 async def protected():
     return {"ok": True}
 
