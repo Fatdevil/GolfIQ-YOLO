@@ -67,6 +67,11 @@ npm run dev
 
 Configure the backend origin with `VITE_API_BASE` (defaults to `http://localhost:8000`).
 
+#### API-nyckel
+
+- `VITE_API_KEY` skickas som `x-api-key` från webben.
+- Dev: `VITE_API_BASE=http://localhost:8000 VITE_API_KEY=s3cret npm run dev`.
+
 ### Build & serve from FastAPI
 
 ```bash
