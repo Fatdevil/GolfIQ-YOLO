@@ -2,12 +2,15 @@ from __future__ import annotations
 
 from typing import List
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 
+from ..security import require_api_key
 from ..storage.runs import RunRecord, delete_run, list_runs, load_run
 
-router = APIRouter(prefix="/runs", tags=["runs"])
+router = APIRouter(
+    prefix="/runs", tags=["runs"], dependencies=[Depends(require_api_key)]
+)
 
 
 class RunListItem(BaseModel):

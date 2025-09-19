@@ -1,14 +1,20 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+import io
+import os
+import zipfile
+
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 from pydantic import BaseModel, Field
 
 from cv_engine.io.framesource import frames_from_zip_bytes
 from cv_engine.metrics.kinematics import CalibrationParams
 from cv_engine.pipeline.analyze import analyze_frames
+from server.config import MAX_ZIP_FILES, MAX_ZIP_RATIO, MAX_ZIP_SIZE_BYTES
+from server.security import require_api_key
 from server.storage.runs import save_run
 
-router = APIRouter(prefix="/cv", tags=["cv"])
+router = APIRouter(prefix="/cv", tags=["cv"], dependencies=[Depends(require_api_key)])
 
 
 class AnalyzeQuery(BaseModel):
@@ -32,8 +38,51 @@ async def analyze(
     query: AnalyzeQuery = Depends(),
     frames_zip: UploadFile = File(..., description="ZIP med PNG/JPG eller .npy-filer"),
 ):
-    buf = await frames_zip.read()
-    frames = frames_from_zip_bytes(buf)
+    data = await frames_zip.read(MAX_ZIP_SIZE_BYTES + 1)
+    if len(data) > MAX_ZIP_SIZE_BYTES:
+        raise HTTPException(
+            status_code=status.HTTP_413_CONTENT_TOO_LARGE,
+            detail="ZIP too large",
+        )
+    try:
+        with zipfile.ZipFile(io.BytesIO(data)) as zf:
+            members = [m for m in zf.infolist() if not m.is_dir()]
+            if len(members) > MAX_ZIP_FILES:
+                raise HTTPException(
+                    status_code=status.HTTP_413_CONTENT_TOO_LARGE,
+                    detail="Too many files in ZIP",
+                )
+            uncompressed_sum = sum(m.file_size for m in members)
+            compressed_sum = sum(m.compress_size for m in members)
+            if any(m.file_size > MAX_ZIP_SIZE_BYTES for m in members):
+                raise HTTPException(
+                    status_code=status.HTTP_413_CONTENT_TOO_LARGE,
+                    detail="File too large in ZIP",
+                )
+            if compressed_sum == 0 and uncompressed_sum > 0:
+                raise HTTPException(
+                    status_code=status.HTTP_413_CONTENT_TOO_LARGE,
+                    detail="ZIP compression ratio too high",
+                )
+            if compressed_sum > 0:
+                ratio = uncompressed_sum / compressed_sum
+                if ratio > MAX_ZIP_RATIO:
+                    raise HTTPException(
+                        status_code=status.HTTP_413_CONTENT_TOO_LARGE,
+                        detail="ZIP compression ratio too high",
+                    )
+            allowed_ext = {".npy", ".png", ".jpg", ".jpeg"}
+            for member in members:
+                ext = os.path.splitext(member.filename)[1].lower()
+                if ext not in allowed_ext:
+                    raise HTTPException(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        detail="Invalid file type in ZIP",
+                    )
+    except zipfile.BadZipFile as exc:
+        raise HTTPException(status_code=400, detail="Invalid ZIP file") from exc
+
+    frames = frames_from_zip_bytes(data)
     if len(frames) < 2:
         raise HTTPException(
             status_code=400, detail="Need >=2 frames in ZIP (.npy or images)."
