@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import os
-
 import numpy as np
 from fastapi import APIRouter
 from pydantic import BaseModel, Field
@@ -38,16 +36,16 @@ class AnalyzeResponse(BaseModel):
 
 @router.post("/analyze", response_model=AnalyzeResponse)
 def analyze(req: AnalyzeRequest):
-    os.environ.setdefault("GOLFIQ_MOCK", "1")
     frames = [np.zeros((64, 64, 3), dtype=np.uint8) for _ in range(req.frames)]
 
     if req.mode == "detector":
-        os.environ["GOLFIQ_MOTION_DX_BALL"] = str(req.ball_dx_px)
-        os.environ["GOLFIQ_MOTION_DY_BALL"] = str(req.ball_dy_px)
-        os.environ["GOLFIQ_MOTION_DX_CLUB"] = str(req.club_dx_px)
-        os.environ["GOLFIQ_MOTION_DY_CLUB"] = str(req.club_dy_px)
         calib = CalibrationParams.from_reference(req.ref_len_m, req.ref_len_px, req.fps)
-        result = analyze_frames(frames, calib)
+        result = analyze_frames(
+            frames,
+            calib,
+            mock=True,
+            motion=(req.ball_dx_px, req.ball_dy_px, req.club_dx_px, req.club_dy_px),
+        )
         events = result["events"]
         metrics = result["metrics"]
     else:

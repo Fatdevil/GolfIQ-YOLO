@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import os
-
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 from pydantic import BaseModel, Field
 
@@ -47,8 +45,6 @@ async def analyze_video(
         persist=persist,
         run_name=run_name,
     )
-    # CV i mock-läge (deterministiskt) om inget riktigt weight finns
-    os.environ.setdefault("GOLFIQ_MOCK", "1")
     data = await video.read()
     try:
         frames = frames_from_video(data, max_frames=300, stride=1)
@@ -61,7 +57,12 @@ async def analyze_video(
 
     fps = fps_from_video(data) or float(query.fps_fallback)
     calib = CalibrationParams.from_reference(query.ref_len_m, query.ref_len_px, fps)
-    result = analyze_frames(frames, calib, smoothing_window=query.smoothing_window)
+    result = analyze_frames(
+        frames,
+        calib,
+        mock=True,
+        smoothing_window=query.smoothing_window,
+    )
     events = result["events"]
     metrics = result["metrics"]
     if "confidence" not in metrics:

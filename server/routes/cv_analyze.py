@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import os
-
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from pydantic import BaseModel, Field
 
@@ -34,8 +32,6 @@ async def analyze(
     query: AnalyzeQuery = Depends(),
     frames_zip: UploadFile = File(..., description="ZIP med PNG/JPG eller .npy-filer"),
 ):
-    # CV i mock-läge för determinism
-    os.environ.setdefault("GOLFIQ_MOCK", "1")
     buf = await frames_zip.read()
     frames = frames_from_zip_bytes(buf)
     if len(frames) < 2:
@@ -46,7 +42,10 @@ async def analyze(
         query.ref_len_m, query.ref_len_px, query.fps
     )
     result = analyze_frames(
-        frames, calib, smoothing_window=query.smoothing_window
+        frames,
+        calib,
+        mock=True,
+        smoothing_window=query.smoothing_window,
     )  # använder detektor + vår pipeline
     events = result["events"]
     metrics = result["metrics"]
