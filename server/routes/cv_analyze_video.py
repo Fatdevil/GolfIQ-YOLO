@@ -1,14 +1,20 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, File, Form, HTTPException, UploadFile
+from tempfile import SpooledTemporaryFile
+
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
 from pydantic import BaseModel, Field
 
 from cv_engine.io.videoreader import fps_from_video, frames_from_video
 from cv_engine.metrics.kinematics import CalibrationParams
 from cv_engine.pipeline.analyze import analyze_frames
+from server.config import MAX_VIDEO_BYTES
+from server.security import require_api_key
 from server.storage.runs import save_run
 
-router = APIRouter(prefix="/cv", tags=["cv-video"])
+router = APIRouter(
+    prefix="/cv", tags=["cv-video"], dependencies=[Depends(require_api_key)]
+)
 
 
 class AnalyzeVideoQuery(BaseModel):
@@ -45,7 +51,33 @@ async def analyze_video(
         persist=persist,
         run_name=run_name,
     )
-    data = await video.read()
+    header_len = video.headers.get("content-length")
+    if header_len:
+        try:
+            if int(header_len) > MAX_VIDEO_BYTES:
+                raise HTTPException(
+                    status_code=status.HTTP_413_CONTENT_TOO_LARGE,
+                    detail="Video too large",
+                )
+        except ValueError:
+            pass
+
+    with SpooledTemporaryFile(max_size=MAX_VIDEO_BYTES) as tmp:
+        total = 0
+        chunk_size = 1024 * 1024
+        while True:
+            chunk = await video.read(chunk_size)
+            if not chunk:
+                break
+            total += len(chunk)
+            if total > MAX_VIDEO_BYTES:
+                raise HTTPException(
+                    status_code=status.HTTP_413_CONTENT_TOO_LARGE,
+                    detail="Video too large",
+                )
+            tmp.write(chunk)
+        tmp.seek(0)
+        data = tmp.read()
     try:
         frames = frames_from_video(data, max_frames=300, stride=1)
     except ImportError:

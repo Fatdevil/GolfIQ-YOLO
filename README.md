@@ -79,6 +79,11 @@ When `SERVE_WEB=1` the FastAPI server mounts the compiled SPA from `web/dist` an
 
 The UI currently calls the following endpoints: `/cv/mock/analyze`, `/cv/analyze`, `/cv/analyze/video`, and `/runs` (including `/runs/{id}` and `DELETE /runs/{id}`).
 
+## Security & limits
+
+* Set `REQUIRE_API_KEY=1` to require the header `x-api-key` to match `API_KEY` for analysis and runs endpoints.
+* Uploads are bounded by defaults: ZIPs ≤ 50 MB, ≤ 400 files, compression ratio ≤ 200×, and videos ≤ 80 MB. Override with `MAX_ZIP_SIZE_BYTES`, `MAX_ZIP_FILES`, `MAX_ZIP_RATIO`, or `MAX_VIDEO_BYTES`.
+
 ## Web UI
 
 The project ships with a Vite + React single-page app for uploading captures, kicking off mock runs, and browsing persisted runs.
