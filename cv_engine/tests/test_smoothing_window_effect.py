@@ -29,13 +29,9 @@ def test_smoothing_window_reduces_metric_error(monkeypatch):
     base_club = [(10 + i * 1.5, 50 - i * 0.2) for i in range(len(frames))]
 
     jitter = 4.0
-    noisy_ball = [
-        (x, y + ((-1) ** i) * jitter)
-        for i, (x, y) in enumerate(base_ball)
-    ]
+    noisy_ball = [(x, y + ((-1) ** i) * jitter) for i, (x, y) in enumerate(base_ball)]
     noisy_club = [
-        (x, y + ((-1) ** i) * (jitter / 2))
-        for i, (x, y) in enumerate(base_club)
+        (x, y + ((-1) ** i) * (jitter / 2)) for i, (x, y) in enumerate(base_club)
     ]
 
     state = {"idx": 0}
