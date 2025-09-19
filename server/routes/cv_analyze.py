@@ -1,8 +1,7 @@
 from __future__ import annotations
 
-import os
-
 import io
+import os
 import zipfile
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
@@ -15,9 +14,7 @@ from server.config import MAX_ZIP_FILES, MAX_ZIP_RATIO, MAX_ZIP_SIZE_BYTES
 from server.security import require_api_key
 from server.storage.runs import save_run
 
-router = APIRouter(
-    prefix="/cv", tags=["cv"], dependencies=[Depends(require_api_key)]
-)
+router = APIRouter(prefix="/cv", tags=["cv"], dependencies=[Depends(require_api_key)])
 
 
 class AnalyzeQuery(BaseModel):

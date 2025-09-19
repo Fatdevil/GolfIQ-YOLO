@@ -5,8 +5,8 @@ from typing import List
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 
-from ..storage.runs import RunRecord, delete_run, list_runs, load_run
 from ..security import require_api_key
+from ..storage.runs import RunRecord, delete_run, list_runs, load_run
 
 router = APIRouter(
     prefix="/runs", tags=["runs"], dependencies=[Depends(require_api_key)]

@@ -11,8 +11,8 @@ from cv_engine.impact.detector import ImpactDetector
 from cv_engine.metrics.kinematics import CalibrationParams
 from cv_engine.metrics.quality import confidence as quality_confidence
 from cv_engine.pipeline.analyze import analyze_frames
-from server.storage.runs import save_run
 from server.security import require_api_key
+from server.storage.runs import save_run
 
 router = APIRouter(
     prefix="/cv/mock", tags=["cv-mock"], dependencies=[Depends(require_api_key)]
