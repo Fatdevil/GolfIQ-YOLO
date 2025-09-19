@@ -4,7 +4,7 @@ import math
 from dataclasses import dataclass
 from typing import Iterable, Tuple
 
-from cv_engine.metrics.kinematics import CalibrationParams
+from cv_engine.metrics.kinematics import CalibrationParams, velocity_avg
 
 
 @dataclass
@@ -21,16 +21,7 @@ def _velocity(
     track: Iterable[Tuple[float, float]], calib: CalibrationParams
 ) -> Tuple[float, float]:
     """Compute velocity components (vx, vy) in m/s from a track."""
-    points = list(track)
-    if len(points) < 2:
-        return 0.0, 0.0
-    (x1, y1), (x2, y2) = points[0], points[1]
-    dx = (x2 - x1) * calib.m_per_px
-    dy = (y2 - y1) * calib.m_per_px
-    dy = -dy  # invert because image y increases downward
-    vx = dx * calib.fps
-    vy = dy * calib.fps
-    return vx, vy
+    return velocity_avg(track, calib.fps, calib.m_per_px)
 
 
 def measure_from_tracks(ball, club, calib: CalibrationParams) -> KinematicMetrics:

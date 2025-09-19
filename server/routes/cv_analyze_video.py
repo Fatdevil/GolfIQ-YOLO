@@ -61,7 +61,7 @@ async def analyze_video(
 
     fps = fps_from_video(data) or float(query.fps_fallback)
     calib = CalibrationParams.from_reference(query.ref_len_m, query.ref_len_px, fps)
-    result = analyze_frames(frames, calib)
+    result = analyze_frames(frames, calib, smoothing_window=query.smoothing_window)
     events = result["events"]
     metrics = result["metrics"]
     if "confidence" not in metrics:

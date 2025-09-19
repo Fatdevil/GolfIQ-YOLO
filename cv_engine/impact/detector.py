@@ -1,5 +1,5 @@
 import os
-from typing import Iterable, List
+from typing import Iterable, List, Sequence
 
 import numpy as np
 
@@ -23,11 +23,19 @@ class ImpactDetector:
         self.tracker = get_tracker()
         self.mock = os.getenv("GOLFIQ_MOCK", "0") == "1"
 
-    def run(self, frames: Iterable["np.ndarray"]) -> List[ImpactEvent]:
-        for idx, frame in enumerate(frames):
-            boxes = self.detector.run(frame)
+    def run_with_boxes(
+        self,
+        _frames: Iterable["np.ndarray"],
+        boxes_per_frame: Sequence[Sequence[Box]],
+    ) -> List[ImpactEvent]:
+        for idx, boxes in enumerate(boxes_per_frame):
             balls = [b for b in boxes if b.label == "ball"]
             clubs = [b for b in boxes if b.label == "club"]
             if any(_overlap(b, c) for b in balls for c in clubs):
                 return [ImpactEvent(frame_index=idx, confidence=0.9)]
         return []
+
+    def run(self, frames: Iterable["np.ndarray"]) -> List[ImpactEvent]:
+        frames_list = list(frames)
+        boxes_per_frame = [self.detector.run(frame) for frame in frames_list]
+        return self.run_with_boxes(frames_list, boxes_per_frame)

@@ -18,6 +18,7 @@ class AnalyzeQuery(BaseModel):
     ref_len_m: float = Field(1.0, gt=0)
     ref_len_px: float = Field(100.0, gt=0)
     mode: str = "detector"  # "detector" | "tracks" ( tracks ej stödd här )
+    smoothing_window: int = 3
     persist: bool = False
     run_name: str | None = None
 
@@ -44,7 +45,9 @@ async def analyze(
     calib = CalibrationParams.from_reference(
         query.ref_len_m, query.ref_len_px, query.fps
     )
-    result = analyze_frames(frames, calib)  # använder detektor + vår pipeline
+    result = analyze_frames(
+        frames, calib, smoothing_window=query.smoothing_window
+    )  # använder detektor + vår pipeline
     events = result["events"]
     metrics = result["metrics"]
     if "confidence" not in metrics:
