@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from typing import Any, Dict, Iterable, List, Tuple
 
 import numpy as np
@@ -19,9 +20,14 @@ def _centers_by_label(boxes) -> Dict[str, List[Tuple[float, float]]]:
 
 
 def analyze_frames(
-    frames: Iterable["np.ndarray"], calib: CalibrationParams
+    frames: Iterable["np.ndarray"],
+    calib: CalibrationParams,
+    mock: bool | None = None,
+    motion: Tuple[float, float, float, float] | None = None,
 ) -> Dict[str, Any]:
-    det = YoloV8Detector()
+    mock_mode = mock if mock is not None else os.getenv("GOLFIQ_MOCK", "0") == "1"
+    motion_params = motion if motion is not None else (2.0, -1.0, 1.5, 0.0)
+    det = YoloV8Detector(mock=mock_mode, motion=motion_params)
     ball_track: List[Tuple[float, float]] = []
     club_track: List[Tuple[float, float]] = []
     for fr in frames:
@@ -31,7 +37,10 @@ def analyze_frames(
         if centers["club"]:
             club_track.append(centers["club"][0])
 
-    impact_events = ImpactDetector().run(frames)
+    impact_detector = ImpactDetector(
+        YoloV8Detector(mock=mock_mode, motion=motion_params)
+    )
+    impact_events = impact_detector.run(frames)
     events = [e.frame_index for e in impact_events]
     confidence = max((e.confidence for e in impact_events), default=0.0)
 

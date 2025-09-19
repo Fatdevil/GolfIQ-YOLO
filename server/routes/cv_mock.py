@@ -3,7 +3,7 @@ from __future__ import annotations
 import os
 
 import numpy as np
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 from pydantic import BaseModel, Field
 
 from cv_engine.calibration.simple import as_dict, measure_from_tracks
@@ -12,8 +12,11 @@ from cv_engine.metrics.kinematics import CalibrationParams
 from cv_engine.metrics.quality import confidence as quality_confidence
 from cv_engine.pipeline.analyze import analyze_frames
 from server.storage.runs import save_run
+from server.security import require_api_key
 
-router = APIRouter(prefix="/cv/mock", tags=["cv-mock"])
+router = APIRouter(
+    prefix="/cv/mock", tags=["cv-mock"], dependencies=[Depends(require_api_key)]
+)
 
 
 class AnalyzeRequest(BaseModel):
@@ -42,12 +45,14 @@ def analyze(req: AnalyzeRequest):
     frames = [np.zeros((64, 64, 3), dtype=np.uint8) for _ in range(req.frames)]
 
     if req.mode == "detector":
-        os.environ["GOLFIQ_MOTION_DX_BALL"] = str(req.ball_dx_px)
-        os.environ["GOLFIQ_MOTION_DY_BALL"] = str(req.ball_dy_px)
-        os.environ["GOLFIQ_MOTION_DX_CLUB"] = str(req.club_dx_px)
-        os.environ["GOLFIQ_MOTION_DY_CLUB"] = str(req.club_dy_px)
         calib = CalibrationParams.from_reference(req.ref_len_m, req.ref_len_px, req.fps)
-        result = analyze_frames(frames, calib)
+        motion = (
+            req.ball_dx_px,
+            req.ball_dy_px,
+            req.club_dx_px,
+            req.club_dy_px,
+        )
+        result = analyze_frames(frames, calib, mock=True, motion=motion)
         events = result["events"]
         metrics = result["metrics"]
     else:

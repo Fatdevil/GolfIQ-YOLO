@@ -1,5 +1,5 @@
 import os
-from typing import List
+from typing import List, Tuple
 
 import numpy as np
 
@@ -13,21 +13,30 @@ class YoloV8Detector:
       - real-läge försöker ladda Ultralytics YOLO men faller snällt tillbaka till mock
     """
 
-    def __init__(self, weight_path: str | None = None, device: str = "cpu"):
-        self.mock = os.getenv("GOLFIQ_MOCK", "0") == "1"
+    def __init__(
+        self,
+        mock: bool = False,
+        motion: Tuple[float, float, float, float] = (2.0, -1.0, 1.5, 0.0),
+    ) -> None:
+        env_mock = os.getenv("GOLFIQ_MOCK", "0") == "1"
+        self.mock = mock or env_mock
         self.model = None
         self.calls = 0
-        self.dx_ball = float(os.getenv("GOLFIQ_MOTION_DX_BALL", "2.0"))
-        self.dy_ball = float(os.getenv("GOLFIQ_MOTION_DY_BALL", "-1.0"))
-        self.dx_club = float(os.getenv("GOLFIQ_MOTION_DX_CLUB", "1.5"))
-        self.dy_club = float(os.getenv("GOLFIQ_MOTION_DY_CLUB", "0.0"))
-        if not self.mock and weight_path:
-            try:
-                from ultralytics import YOLO  # type: ignore
+        self.dx_ball, self.dy_ball, self.dx_club, self.dy_club = (
+            float(motion[0]),
+            float(motion[1]),
+            float(motion[2]),
+            float(motion[3]),
+        )
+        if not self.mock:
+            weight_path = os.getenv("YOLO_WEIGHT_PATH")
+            if weight_path:
+                try:
+                    from ultralytics import YOLO  # type: ignore
 
-                self.model = YOLO(weight_path)
-            except Exception:
-                self.mock = True
+                    self.model = YOLO(weight_path)
+                except Exception:
+                    self.mock = True
 
     def run(self, image: "np.ndarray") -> List[Box]:
         h, w = image.shape[:2]
