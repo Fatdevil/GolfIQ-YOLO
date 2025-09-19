@@ -8,6 +8,8 @@ from ..calibration.simple import as_dict, measure_from_tracks
 from ..impact.detector import ImpactDetector
 from ..inference.yolo8 import YoloV8Detector
 from ..metrics.kinematics import CalibrationParams
+from ..metrics.smoothing import moving_average
+from ..types import Box
 
 
 def _centers_by_label(boxes) -> Dict[str, List[Tuple[float, float]]]:
@@ -19,19 +21,31 @@ def _centers_by_label(boxes) -> Dict[str, List[Tuple[float, float]]]:
 
 
 def analyze_frames(
-    frames: Iterable["np.ndarray"], calib: CalibrationParams
+    frames: Iterable["np.ndarray"],
+    calib: CalibrationParams,
+    smoothing_window: int = 1,
 ) -> Dict[str, Any]:
+    frames_list = list(frames)
     det = YoloV8Detector()
+    boxes_per_frame: List[List[Box]] = []
     ball_track: List[Tuple[float, float]] = []
     club_track: List[Tuple[float, float]] = []
-    for fr in frames:
-        centers = _centers_by_label(det.run(fr))
+    for fr in frames_list:
+        boxes = det.run(fr)
+        boxes_per_frame.append(boxes)
+        centers = _centers_by_label(boxes)
         if centers["ball"]:
             ball_track.append(centers["ball"][0])
         if centers["club"]:
             club_track.append(centers["club"][0])
 
-    impact_events = ImpactDetector().run(frames)
+    if smoothing_window > 1:
+        ball_track = moving_average(ball_track, smoothing_window)
+        club_track = moving_average(club_track, smoothing_window)
+
+    impact_events = ImpactDetector(detector=det).run_with_boxes(
+        frames_list, boxes_per_frame
+    )
     events = [e.frame_index for e in impact_events]
     confidence = max((e.confidence for e in impact_events), default=0.0)
 
