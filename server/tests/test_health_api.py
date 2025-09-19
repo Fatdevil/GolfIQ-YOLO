@@ -23,7 +23,9 @@ def test_protected_requires_api_key_when_set(monkeypatch):
     protected_route = next(
         r for r in app.routes if isinstance(r, APIRoute) and r.path == "/protected"
     )
-    assert any(dep.dependency is require_api_key for dep in protected_route.dependencies)
+    assert any(
+        dep.dependency is require_api_key for dep in protected_route.dependencies
+    )
 
     with TestClient(app) as client:
         assert client.get("/protected").status_code in (401, 403)
