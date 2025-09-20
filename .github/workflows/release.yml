@@ -45,6 +45,8 @@ jobs:
           build-args: |
             PY_IMAGE=python:3.11-slim
             VIDEO_EXTRAS=1
+            BUILD_VERSION=${{ env.BUILD_VERSION }}
+            GIT_SHA=${{ env.GIT_SHA }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 

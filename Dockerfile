@@ -12,9 +12,6 @@ RUN npm run build
 ARG PY_IMAGE=python:3.11-slim
 FROM ${PY_IMAGE} AS runtime
 
-ARG BUILD_VERSION=dev
-ARG GIT_SHA=unknown
-
 # System libs for opencv/ffmpeg (video extras)
 RUN apt-get update && apt-get install -y --no-install-recommends \
       libgl1 libglib2.0-0 ffmpeg ca-certificates && \
@@ -46,9 +43,13 @@ RUN if [ "$VIDEO_EXTRAS" = "1" ]; then pip install -e ".[video]"; fi
 RUN useradd -m appuser && chown -R appuser:appuser /app
 USER appuser
 
-ENV BUILD_VERSION=${BUILD_VERSION} GIT_SHA=${GIT_SHA}
 ENV SERVE_WEB=1 PORT=8000 HOST=0.0.0.0 GOLFIQ_MOCK=1 GOLFIQ_RUNS_DIR=/data/runs
 EXPOSE 8000
 VOLUME ["/data/runs"]
+
+# Build info for /health endpoint
+ARG BUILD_VERSION=dev
+ARG GIT_SHA=unknown
+ENV BUILD_VERSION=${BUILD_VERSION} GIT_SHA=${GIT_SHA}
 
 CMD ["uvicorn", "server.app:app", "--host", "0.0.0.0", "--port", "8000"]
