@@ -26,14 +26,21 @@ def _velocity(
 
 def measure_from_tracks(ball, club, calib: CalibrationParams) -> KinematicMetrics:
     """Measure simple kinematic metrics from ball and club tracks."""
-    ball_vx, ball_vy = _velocity(ball, calib)
-    club_vx, club_vy = _velocity(club, calib)
+    ball_track = list(ball)
+    club_track = list(club)
+
+    ball_vx, ball_vy_avg = _velocity(ball_track, calib)
+    club_vx, club_vy = _velocity(club_track, calib)
+
+    g = 9.81
+    ball_steps = max(len(ball_track) - 1, 0)
+    duration_s = ball_steps / calib.fps if calib.fps else 0.0
+    ball_vy = ball_vy_avg + 0.5 * g * duration_s
 
     ball_speed = math.hypot(ball_vx, ball_vy)
     club_speed = math.hypot(club_vx, club_vy)
 
     launch_deg = math.degrees(math.atan2(ball_vy, ball_vx)) if ball_speed else 0.0
-    g = 9.81
     carry = max(ball_vx * (2 * ball_vy / g), 0.0)
 
     return KinematicMetrics(
