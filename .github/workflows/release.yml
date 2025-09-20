@@ -10,6 +10,10 @@ permissions:
   contents: read
   packages: write
 
+env:
+  BUILD_VERSION: ${{ github.ref_name }}
+  GIT_SHA: ${{ github.sha }}
+
 jobs:
   build-and-push:
     runs-on: ubuntu-latest

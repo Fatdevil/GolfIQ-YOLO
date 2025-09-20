@@ -13,6 +13,18 @@ Project repository.
 3) Testa: `GET http://localhost:8000/health` → `{\"status\":\"ok\", ...}`
    Om `API_KEY` i `.env` är satt måste klienter skicka header `x-api-key: <värdet>` (ej nödvändigt för /health).
 
+## Operations
+
+### Metrics & build info
+- `GET /metrics` exposes Prometheus metrics (`requests_total`, `request_latency_seconds`).
+- `GET /health` returns: `{"status":"ok","version":BUILD_VERSION,"git":GIT_SHA}`.
+  Set in CI/release:
+
+  ```bash
+  BUILD_VERSION=$GITHUB_REF_NAME
+  GIT_SHA=$GITHUB_SHA
+  ```
+
 ### cv_engine (mock)
 Run: `GOLFIQ_MOCK=1 python -m cv_engine.cli --mock-frames 5`
 
