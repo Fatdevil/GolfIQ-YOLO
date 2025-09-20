@@ -98,6 +98,19 @@ The project ships with a Vite + React single-page app for uploading captures, ki
 cd web
 npm install
 npm run dev
+```
+
+#### Web auth
+Set `VITE_API_KEY` to have the SPA send `x-api-key` with every request.
+
+Dev:
+```bash
+cd web
+VITE_API_BASE=http://localhost:8000 VITE_API_KEY=s3cret npm run dev
+```
+
+When backend runs with REQUIRE_API_KEY=1 and API_KEY=s3cret, the UI will work out-of-the-box.
+
 ## CI & Coverage
 
 A separate workflow publishes cv_engine coverage as an artifact (report-only).
