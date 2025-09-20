@@ -6,6 +6,9 @@ on:
       - "v*"
   workflow_dispatch:
 
+env:
+  IMAGE_REF: ghcr.io/${{ toLower(github.repository) }}
+
 permissions:
   contents: read
   packages: write
@@ -25,7 +28,7 @@ jobs:
       - uses: docker/metadata-action@v5
         id: meta
         with:
-          images: ghcr.io/${{ github.repository }}
+          images: ${{ env.IMAGE_REF }}
           tags: |
             type=ref,event=tag
             type=sha
@@ -49,10 +52,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Pull image
-        run: docker pull ghcr.io/${{ github.repository }}:latest
+        run: docker pull ${{ env.IMAGE_REF }}:latest
       - name: Run container
         run: |
-          cid=$(docker run -d -e SERVE_WEB=0 -p 8000:8000 ghcr.io/${{ github.repository }}:latest)
+          cid=$(docker run -d -e SERVE_WEB=0 -p 8000:8000 ${{ env.IMAGE_REF }}:latest)
           echo "$cid" > cid.txt
           sleep 5
       - name: Health check
