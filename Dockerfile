@@ -40,7 +40,7 @@ RUN pip install -e .
 RUN if [ "$VIDEO_EXTRAS" = "1" ]; then pip install -e ".[video]"; fi
 
 # Non-root
-RUN useradd -m appuser && chown -R appuser:app /app
+RUN useradd -m appuser && chown -R appuser:appuser /app
 USER appuser
 
 ENV SERVE_WEB=1 PORT=8000 HOST=0.0.0.0 GOLFIQ_MOCK=1 GOLFIQ_RUNS_DIR=/data/runs
