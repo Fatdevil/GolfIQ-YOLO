@@ -13,8 +13,6 @@ permissions:
 jobs:
   build-and-push:
     runs-on: ubuntu-latest
-    env:
-      IMAGE_REF: ghcr.io/${{ toLower(github.repository) }}
     steps:
       - uses: actions/checkout@v5
       - uses: docker/setup-qemu-action@v3
@@ -27,7 +25,7 @@ jobs:
       - uses: docker/metadata-action@v5
         id: meta
         with:
-          images: ${{ env.IMAGE_REF }}
+          images: ghcr.io/${{ github.repository }}
           tags: |
             type=ref,event=tag
             type=sha
@@ -49,14 +47,14 @@ jobs:
   smoke-test:
     needs: build-and-push
     runs-on: ubuntu-latest
-    env:
-      IMAGE_REF: ghcr.io/${{ toLower(github.repository) }}
     steps:
+      - name: Set image ref
+        run: echo "IMAGE_REF=ghcr.io/$(echo \"$GITHUB_REPOSITORY\" | tr '[:upper:]' '[:lower:]')" >> $GITHUB_ENV
       - name: Pull image
-        run: docker pull ${{ env.IMAGE_REF }}:latest
+        run: docker pull "$IMAGE_REF":latest
       - name: Run container
         run: |
-          cid=$(docker run -d -e SERVE_WEB=0 -p 8000:8000 ${{ env.IMAGE_REF }}:latest)
+          cid=$(docker run -d -e SERVE_WEB=0 -p 8000:8000 "$IMAGE_REF":latest)
           echo "$cid" > cid.txt
           sleep 5
       - name: Health check
