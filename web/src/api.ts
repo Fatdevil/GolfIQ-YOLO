@@ -2,15 +2,19 @@ import axios from "axios";
 
 const API = import.meta.env.VITE_API_BASE || "http://localhost:8000";
 const API_KEY = import.meta.env.VITE_API_KEY || "";
-const headers = (extra: any = {}) =>
-  API_KEY ? { "x-api-key": API_KEY, ...extra } : extra;
+
+/** Return default headers incl. x-api-key if present. */
+const withAuth = (extra: Record<string, string> = {}) =>
+  (API_KEY ? { "x-api-key": API_KEY, ...extra } : extra);
+
+export { API };
 
 export const postMockAnalyze = (body: unknown) =>
   axios
     .post(
       `${API}/cv/mock/analyze`,
       body,
-      { headers: headers({ "Content-Type": "application/json" }) }
+      { headers: withAuth({ "Content-Type": "application/json" }) }
     )
     .then((r) => r.data);
 
@@ -29,7 +33,7 @@ export const postZipAnalyze = (
     .post(
       `${API}/cv/analyze?fps=${q.fps}&ref_len_m=${q.ref_len_m}&ref_len_px=${q.ref_len_px}&mode=${q.mode || "detector"}&smoothing_window=${q.smoothing_window || 3}&persist=${!!q.persist}`,
       form,
-      { headers: headers({ "Content-Type": "multipart/form-data" }) }
+      { headers: withAuth({ "Content-Type": "multipart/form-data" }) }
     )
     .then((r) => r.data);
 
@@ -47,13 +51,13 @@ export const postVideoAnalyze = (
     .post(
       `${API}/cv/analyze/video?fps_fallback=${q.fps_fallback}&ref_len_m=${q.ref_len_m}&ref_len_px=${q.ref_len_px}&smoothing_window=${q.smoothing_window || 3}&persist=${!!q.persist}`,
       form,
-      { headers: headers({ "Content-Type": "multipart/form-data" }) }
+      { headers: withAuth({ "Content-Type": "multipart/form-data" }) }
     )
     .then((r) => r.data);
 
 export const listRuns = () =>
-  axios.get(`${API}/runs`, { headers: headers() }).then((r) => r.data);
+  axios.get(`${API}/runs`, { headers: withAuth() }).then((r) => r.data);
 export const getRun = (id: string) =>
-  axios.get(`${API}/runs/${id}`, { headers: headers() }).then((r) => r.data);
+  axios.get(`${API}/runs/${id}`, { headers: withAuth() }).then((r) => r.data);
 export const deleteRun = (id: string) =>
-  axios.delete(`${API}/runs/${id}`, { headers: headers() }).then((r) => r.data);
+  axios.delete(`${API}/runs/${id}`, { headers: withAuth() }).then((r) => r.data);
