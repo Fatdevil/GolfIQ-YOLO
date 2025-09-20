@@ -6,9 +6,6 @@ on:
       - "v*"
   workflow_dispatch:
 
-env:
-  IMAGE_REF: ghcr.io/${{ toLower(github.repository) }}
-
 permissions:
   contents: read
   packages: write
@@ -16,6 +13,8 @@ permissions:
 jobs:
   build-and-push:
     runs-on: ubuntu-latest
+    env:
+      IMAGE_REF: ghcr.io/${{ toLower(github.repository) }}
     steps:
       - uses: actions/checkout@v5
       - uses: docker/setup-qemu-action@v3
@@ -50,6 +49,8 @@ jobs:
   smoke-test:
     needs: build-and-push
     runs-on: ubuntu-latest
+    env:
+      IMAGE_REF: ghcr.io/${{ toLower(github.repository) }}
     steps:
       - name: Pull image
         run: docker pull ${{ env.IMAGE_REF }}:latest
