@@ -84,6 +84,14 @@ When `SERVE_WEB=1` the FastAPI server mounts the compiled SPA from `web/dist` an
 
 The UI currently calls the following endpoints: `/cv/mock/analyze`, `/cv/analyze`, `/cv/analyze/video`, and `/runs` (including `/runs/{id}` and `DELETE /runs/{id}`).
 
+### Calibration wizard
+
+* Open the **Calibration** tab in the web UI and upload a still image from your capture setup (keep the camera square to the target line for the cleanest scale).
+* Pick a reference distance – an A4 edge, a full driver (≈1.12 m) or enter a custom length – then click the matching start/end points in the frame.
+* Enter the capture FPS (aim for 120+). The wizard calls `POST /calibrate/measure` and reports meters-per-pixel together with quality hints.
+* If the quality badge warns about low FPS or blur, raise the frame rate and/or shorten exposure by adding light.
+* Hit **Use in session** to store the calibration in localStorage (badge “Calibrated ✓” appears in the nav).
+
 ## Security & limits
 
 * Set `REQUIRE_API_KEY=1` to require the header `x-api-key` to match `API_KEY` for analysis and runs endpoints.

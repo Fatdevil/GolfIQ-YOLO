@@ -11,7 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from server.api.health import health as _health_handler
-from server.api.routers import calibrate, metrics
+from server.api.routers import calibrate as legacy_calibrate, metrics
 from server.api.routers.coach import router as coach_router
 from server.retention.sweeper import sweep_retention_once
 
@@ -19,6 +19,7 @@ from .routes.cv_analyze import router as cv_analyze_router
 from .routes.cv_analyze_video import router as cv_analyze_video_router
 from .routes.cv_mock import router as cv_mock_router
 from .routes.runs import router as runs_router
+from .routes.calibrate import router as calibrate_router
 
 
 def _api_key_dependency():
@@ -79,7 +80,8 @@ app.add_middleware(
 api_dep = _api_key_dependency()
 
 app.include_router(coach_router)
-app.include_router(calibrate.router)
+app.include_router(legacy_calibrate.router)
+app.include_router(calibrate_router)
 app.include_router(metrics.router)
 app.add_api_route("/health", _health_handler, methods=["GET"])
 

@@ -9,6 +9,28 @@ const withAuth = (extra: Record<string, string> = {}) =>
 
 export { API };
 
+export type CalibrationMeasureBody = {
+  p1x: number;
+  p1y: number;
+  p2x: number;
+  p2y: number;
+  ref_len_m: number;
+  fps: number;
+};
+
+export type CalibrationMeasureResponse = {
+  meters_per_pixel: number;
+  fps: number;
+  quality: "ok" | "low_fps" | "blurry" | "ok_warn";
+};
+
+export const postCalibrationMeasure = (body: CalibrationMeasureBody) =>
+  axios
+    .post(`${API}/calibrate/measure`, body, {
+      headers: withAuth({ "Content-Type": "application/json" }),
+    })
+    .then((r) => r.data as CalibrationMeasureResponse);
+
 export const postMockAnalyze = (body: unknown) =>
   axios
     .post(
