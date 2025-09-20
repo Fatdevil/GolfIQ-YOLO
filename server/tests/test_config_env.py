@@ -27,6 +27,13 @@ def test_env_parsing_accepts_valid_values(monkeypatch):
     assert config.MAX_ZIP_FILES == 42
 
 
+def test_env_bool_truthy_values(monkeypatch):
+    monkeypatch.setenv("ENABLE_SPIN", "YeS")
+    sys.modules.pop("server.config", None)
+    config = importlib.import_module("server.config")
+    assert config.ENABLE_SPIN is True
+
+
 def teardown_module(module):  # noqa: D401 - test cleanup helper
     """Reset server.config module state between tests."""
 

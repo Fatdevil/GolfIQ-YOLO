@@ -2,6 +2,7 @@ import json
 import os
 import zipfile
 
+import numpy as np
 from fastapi.testclient import TestClient
 
 from server.app import app
@@ -40,3 +41,25 @@ def test_impact_preview_zip_saved(tmp_path, monkeypatch):
     assert preview_path and os.path.exists(preview_path)
     with zipfile.ZipFile(preview_path, "r") as zf:
         assert any(name.endswith(".npy") for name in zf.namelist())
+
+
+def test_save_impact_frames_filters_invalid_frames(tmp_path, monkeypatch):
+    runs_dir = (tmp_path / "runs").resolve()
+    monkeypatch.setattr(runs_storage, "RUNS_DIR", runs_dir)
+    monkeypatch.setenv("GOLFIQ_RUNS_DIR", str(runs_dir))
+
+    class FailingFrame:
+        def __array__(self, dtype=None):
+            raise RuntimeError("nope")
+
+    valid = np.zeros((2, 2), dtype=np.uint8)
+    object_frame = np.array([object()], dtype=object)
+
+    out = runs_storage.save_impact_frames(
+        "1234567890-deadbeef", [FailingFrame(), object_frame, valid]
+    )
+
+    with zipfile.ZipFile(out, "r") as zf:
+        names = zf.namelist()
+
+    assert names == ["002.npy"]
