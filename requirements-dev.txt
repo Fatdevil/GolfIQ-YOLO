@@ -14,3 +14,4 @@ mypy
 types-requests
 bandit
 pip-audit
+prometheus-client

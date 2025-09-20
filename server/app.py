@@ -6,13 +6,14 @@ import pathlib
 from contextlib import asynccontextmanager
 from typing import Optional
 
-from fastapi import Depends, FastAPI, HTTPException, Request, status
+from fastapi import APIRouter, Depends, FastAPI, HTTPException, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from server.api.health import health as _health_handler
 from server.api.routers import calibrate, metrics
 from server.api.routers.coach import router as coach_router
+from server.metrics import MetricsMiddleware, metrics_app
 from server.retention.sweeper import sweep_retention_once
 
 from .routes.cv_analyze import router as cv_analyze_router
@@ -76,12 +77,31 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+app.add_middleware(MetricsMiddleware)
+
 api_dep = _api_key_dependency()
 
 app.include_router(coach_router)
 app.include_router(calibrate.router)
 app.include_router(metrics.router)
-app.add_api_route("/health", _health_handler, methods=["GET"])
+app.add_api_route(
+    "/health",
+    _health_handler,
+    methods=["GET"],
+    response_model=None,
+    tags=["health"],
+)
+
+
+_metrics_router = APIRouter()
+
+
+@_metrics_router.get("/metrics", include_in_schema=False)
+async def _metrics_endpoint(request: Request):
+    return await metrics_app(request)
+
+
+app.include_router(_metrics_router)
 
 app.include_router(cv_mock_router)
 app.include_router(cv_analyze_router)
