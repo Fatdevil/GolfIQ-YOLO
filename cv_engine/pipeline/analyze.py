@@ -70,13 +70,18 @@ def analyze_frames(
             "ball_speed_mps": 0.0,
             "ball_speed_mph": 0.0,
             "club_speed_mps": 0.0,
+            "club_speed_mph": 0.0,
             "launch_deg": 0.0,
             "carry_m": 0.0,
+            "metrics_version": 1,
+            "spin_rpm": None,
+            "spin_axis_deg": None,
+            "club_path_deg": None,
             "confidence": confidence,
         }
         return {"events": events, "metrics": metrics}
 
     m = measure_from_tracks(ball_track, club_track, calib)
-    metrics = as_dict(m)
+    metrics = as_dict(m, include_spin_placeholders=True)
     metrics["confidence"] = confidence
     return {"events": events, "metrics": metrics}

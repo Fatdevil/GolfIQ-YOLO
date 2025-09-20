@@ -5,9 +5,13 @@ import os
 import re
 import time
 import uuid
+import zipfile
 from dataclasses import asdict, dataclass
+from io import BytesIO
 from pathlib import Path
 from typing import Any, Dict, List, Optional
+
+import numpy as np
 
 RUNS_DIR = Path(os.getenv("GOLFIQ_RUNS_DIR", "data/runs")).resolve()
 RUN_ID_RE = r"^[0-9]{10}-[0-9a-f]{8}$"
@@ -22,9 +26,10 @@ class RunRecord:
     params: Dict[str, Any]
     metrics: Dict[str, Any]
     events: List[int]
+    impact_preview: Optional[str] = None
 
 
-def _dir(run_id: str) -> Path:
+def _run_dir(run_id: str) -> Path:
     return RUNS_DIR / run_id
 
 
@@ -53,10 +58,28 @@ def save_run(
     RUNS_DIR.mkdir(parents=True, exist_ok=True)
     rid = f"{int(time.time())}-{uuid.uuid4().hex[:8]}"
     rec = RunRecord(rid, time.time(), source, mode, params, metrics, events)
-    d = _dir(rid)
+    d = _run_dir(rid)
     d.mkdir(parents=True, exist_ok=True)
     (d / "run.json").write_text(json.dumps(asdict(rec), indent=2))
     return rec
+
+
+def save_impact_frames(run_id: str, frames) -> str:
+    run_dir = _run_dir(run_id)
+    run_dir.mkdir(parents=True, exist_ok=True)
+    out_path = run_dir / "impact_preview.zip"
+    with zipfile.ZipFile(out_path, "w", compression=zipfile.ZIP_DEFLATED) as zf:
+        for idx, frame in enumerate(frames):
+            try:
+                arr = np.asarray(frame)
+            except Exception:
+                continue
+            if arr.dtype == object:
+                continue
+            buffer = BytesIO()
+            np.save(buffer, arr, allow_pickle=False)
+            zf.writestr(f"{idx:03d}.npy", buffer.getvalue())
+    return str(out_path)
 
 
 def load_run(run_id: str) -> Optional[RunRecord]:
