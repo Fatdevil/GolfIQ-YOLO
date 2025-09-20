@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass
-from typing import Iterable, Tuple
+from typing import Any, Dict, Iterable, Tuple
 
 from cv_engine.metrics.kinematics import CalibrationParams, velocity_avg
 
@@ -53,12 +53,20 @@ def measure_from_tracks(ball, club, calib: CalibrationParams) -> KinematicMetric
     )
 
 
-def as_dict(m: KinematicMetrics) -> dict:
-    return {
-        "ball_speed_mps": m.ball_speed_mps,
-        "ball_speed_mph": m.ball_speed_mph,
-        "club_speed_mps": m.club_speed_mps,
-        "club_speed_mph": m.club_speed_mph,
-        "launch_deg": m.launch_deg,
-        "carry_m": m.carry_m,
+def as_dict(
+    m: KinematicMetrics, *, include_spin_placeholders: bool = True
+) -> Dict[str, Any]:
+    out: Dict[str, Any] = {
+        "ball_speed_mps": round(m.ball_speed_mps, 2),
+        "ball_speed_mph": round(m.ball_speed_mph, 1),
+        "club_speed_mps": round(m.club_speed_mps, 2),
+        "club_speed_mph": round(m.club_speed_mph, 1),
+        "launch_deg": round(m.launch_deg, 1),
+        "carry_m": round(m.carry_m, 1),
+        "metrics_version": 1,
     }
+    if include_spin_placeholders:
+        out.setdefault("spin_rpm", None)
+        out.setdefault("spin_axis_deg", None)
+        out.setdefault("club_path_deg", None)
+    return out

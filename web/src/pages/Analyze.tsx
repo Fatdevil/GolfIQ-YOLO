@@ -7,9 +7,14 @@ interface AnalyzeMetrics {
   ball_speed_mps?: number;
   ball_speed_mph?: number;
   club_speed_mps?: number;
+  club_speed_mph?: number;
   launch_deg?: number;
   carry_m?: number;
   confidence?: number;
+  metrics_version?: number;
+  spin_rpm?: number | null;
+  spin_axis_deg?: number | null;
+  club_path_deg?: number | null;
   [key: string]: unknown;
 }
 
@@ -71,7 +76,7 @@ export default function AnalyzePage() {
   const { inputRef: zipRef, reset: resetZip } = useFileInput();
   const { inputRef: videoRef, reset: resetVideo } = useFileInput();
 
-  const metrics = useMemo(() => result?.metrics ?? {}, [result]);
+  const metrics = useMemo<AnalyzeMetrics>(() => result?.metrics ?? {}, [result]);
 
   const [zipForm, setZipForm] = useState({
     file: null as File | null,
@@ -172,6 +177,15 @@ export default function AnalyzePage() {
           secondary={metric.secondary?.(metrics)}
         />
       ))}
+      {metrics?.spin_rpm != null && (
+        <MetricCard title="Spin (rpm)" value={metrics.spin_rpm} />
+      )}
+      {metrics?.spin_axis_deg != null && (
+        <MetricCard title="Spin Axis (°)" value={metrics.spin_axis_deg} />
+      )}
+      {metrics?.club_path_deg != null && (
+        <MetricCard title="Club Path (°)" value={metrics.club_path_deg} />
+      )}
     </div>
   );
 

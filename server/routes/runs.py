@@ -52,6 +52,7 @@ def get_run(run_id: str):
         "params": r.params,
         "metrics": r.metrics,
         "events": r.events,
+        "impact_preview": r.impact_preview,
     }
 
 

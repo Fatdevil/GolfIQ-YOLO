@@ -15,9 +15,11 @@ interface MockFormState {
   club_dy_px: number;
 }
 
+type MockMetrics = Record<string, number | null | undefined>;
+
 interface MockResult {
   run_id?: string;
-  metrics?: Record<string, number>;
+  metrics?: MockMetrics;
   events?: Array<Record<string, unknown>>;
 }
 
@@ -65,7 +67,7 @@ export default function MockAnalyzePage() {
     }
   };
 
-  const metrics = result?.metrics ?? {};
+  const metrics: MockMetrics = result?.metrics ?? {};
 
   return (
     <section className="space-y-6">
@@ -220,9 +222,26 @@ export default function MockAnalyzePage() {
               </p>
             )}
             <div className="mt-6 grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-              {Object.entries(metrics).map(([key, value]) => (
-                <MetricCard key={key} title={key} value={value} />
-              ))}
+              {Object.entries(metrics)
+                .filter(
+                  ([key]) =>
+                    key !== "spin_rpm" &&
+                    key !== "spin_axis_deg" &&
+                    key !== "club_path_deg" &&
+                    key !== "metrics_version"
+                )
+                .map(([key, value]) => (
+                  <MetricCard key={key} title={key} value={value} />
+                ))}
+              {metrics?.spin_rpm != null && (
+                <MetricCard title="Spin (rpm)" value={metrics.spin_rpm} />
+              )}
+              {metrics?.spin_axis_deg != null && (
+                <MetricCard title="Spin Axis (°)" value={metrics.spin_axis_deg} />
+              )}
+              {metrics?.club_path_deg != null && (
+                <MetricCard title="Club Path (°)" value={metrics.club_path_deg} />
+              )}
             </div>
           </div>
           {result.events && result.events.length > 0 && (

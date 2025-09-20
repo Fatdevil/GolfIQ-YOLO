@@ -4,6 +4,7 @@ import { getRun } from "../api";
 
 interface RunDetailData {
   run_id?: string;
+  impact_preview?: string | null;
   [key: string]: unknown;
 }
 
@@ -71,6 +72,21 @@ export default function RunDetailPage() {
       {error && (
         <div className="rounded-md border border-red-500/40 bg-red-500/10 px-4 py-3 text-sm text-red-200">
           {error}
+        </div>
+      )}
+
+      {!loading && data?.impact_preview && (
+        <div className="rounded-md border border-emerald-500/40 bg-emerald-500/10 px-4 py-3 text-xs text-emerald-100">
+          Impact preview saved as{" "}
+          <a
+            href={String(data.impact_preview)}
+            target="_blank"
+            rel="noreferrer"
+            className="font-semibold text-emerald-200 underline decoration-dotted"
+          >
+            impact_preview.zip
+          </a>
+          .
         </div>
       )}
 

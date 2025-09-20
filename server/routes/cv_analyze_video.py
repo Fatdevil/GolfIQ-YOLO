@@ -8,9 +8,14 @@ from pydantic import BaseModel, Field
 from cv_engine.io.videoreader import fps_from_video, frames_from_video
 from cv_engine.metrics.kinematics import CalibrationParams
 from cv_engine.pipeline.analyze import analyze_frames
-from server.config import MAX_VIDEO_BYTES
+from server.config import (
+    CAPTURE_IMPACT_FRAMES,
+    IMPACT_CAPTURE_AFTER,
+    IMPACT_CAPTURE_BEFORE,
+    MAX_VIDEO_BYTES,
+)
 from server.security import require_api_key
-from server.storage.runs import save_run
+from server.storage.runs import save_impact_frames, save_run
 
 router = APIRouter(
     prefix="/cv", tags=["cv-video"], dependencies=[Depends(require_api_key)]
@@ -108,6 +113,22 @@ async def analyze_video(
             metrics=dict(metrics),
             events=list(events),
         )
+        impact_idx = events[0] if events else None
+        if rec and CAPTURE_IMPACT_FRAMES and impact_idx is not None:
+            start = max(0, impact_idx - IMPACT_CAPTURE_BEFORE)
+            stop = min(len(frames), impact_idx + IMPACT_CAPTURE_AFTER)
+            if stop > start:
+                preview = save_impact_frames(rec.run_id, frames[start:stop])
+                import json
+                from pathlib import Path
+
+                run_json_path = Path(preview).parent / "run.json"
+                try:
+                    data = json.loads(run_json_path.read_text())
+                    data["impact_preview"] = preview
+                    run_json_path.write_text(json.dumps(data, indent=2))
+                except Exception:
+                    pass
     return AnalyzeResponse(
         events=events, metrics=metrics, run_id=rec.run_id if rec else None
     )
