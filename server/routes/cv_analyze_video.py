@@ -13,6 +13,7 @@ from server.config import (
     IMPACT_CAPTURE_AFTER,
     IMPACT_CAPTURE_BEFORE,
     MAX_VIDEO_BYTES,
+    YOLO_INFERENCE,
 )
 from server.security import require_api_key
 from server.storage.runs import save_impact_frames, save_run
@@ -97,7 +98,7 @@ async def analyze_video(
     result = analyze_frames(
         frames,
         calib,
-        mock=True,
+        mock=(None if YOLO_INFERENCE else True),
         smoothing_window=query.smoothing_window,
     )
     events = result["events"]

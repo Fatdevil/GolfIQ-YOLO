@@ -17,6 +17,7 @@ from server.config import (
     MAX_ZIP_FILES,
     MAX_ZIP_RATIO,
     MAX_ZIP_SIZE_BYTES,
+    YOLO_INFERENCE,
 )
 from server.security import require_api_key
 from server.storage.runs import save_impact_frames, save_run
@@ -100,7 +101,7 @@ async def analyze(
     result = analyze_frames(
         frames,
         calib,
-        mock=True,
+        mock=(None if YOLO_INFERENCE else True),
         smoothing_window=query.smoothing_window,
     )  # använder detektor + vår pipeline
     events = result["events"]
