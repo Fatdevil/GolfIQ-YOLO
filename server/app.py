@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import asyncio
 import os
@@ -21,6 +21,7 @@ from .routes.cv_analyze_video import router as cv_analyze_video_router
 from .routes.cv_mock import router as cv_mock_router
 from .routes.runs import router as runs_router
 from .routes.calibrate import router as calibrate_router
+from .routes.caddie_recommend import router as caddie_router
 
 
 def _api_key_dependency():
@@ -85,6 +86,7 @@ api_dep = _api_key_dependency()
 app.include_router(coach_router)
 app.include_router(legacy_calibrate.router)
 app.include_router(calibrate_router)
+app.include_router(caddie_router)
 app.include_router(metrics.router)
 app.add_api_route(
     "/health",

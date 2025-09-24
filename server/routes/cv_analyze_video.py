@@ -61,7 +61,7 @@ async def analyze_video(
         try:
             if int(header_len) > MAX_VIDEO_BYTES:
                 raise HTTPException(
-                    status_code=status.HTTP_413_CONTENT_TOO_LARGE,
+                    status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
                     detail="Video too large",
                 )
         except ValueError:
@@ -77,7 +77,7 @@ async def analyze_video(
             total += len(chunk)
             if total > MAX_VIDEO_BYTES:
                 raise HTTPException(
-                    status_code=status.HTTP_413_CONTENT_TOO_LARGE,
+                    status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
                     detail="Video too large",
                 )
             tmp.write(chunk)

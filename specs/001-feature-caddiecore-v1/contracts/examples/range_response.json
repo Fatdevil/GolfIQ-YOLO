@@ -1,0 +1,30 @@
+{
+  "recommendation": {
+    "club": "7i",
+    "carry_p50_m": 151,
+    "carry_p80_m": 158.5,
+    "safety_margin_m": 6,
+    "conservative_club": null,
+    "confidence": "high",
+    "hazard_flag": false
+  },
+  "explain_score": [
+    {
+      "name": "target_gap",
+      "weight": 0.45,
+      "direction": "positive"
+    },
+    {
+      "name": "wind_effect",
+      "weight": 0.3,
+      "direction": "positive"
+    },
+    {
+      "name": "dispersion_margin",
+      "weight": 0.25,
+      "direction": "negative"
+    }
+  ],
+  "telemetry_id": "cad-20250923-0001",
+  "generated_at": "2025-09-23T10:30:00Z"
+}
