@@ -26,3 +26,7 @@ line-length = 88
 profile = "black"
 line_length = 88
 
+[project.dependencies]
+fastapi = "*"
+prometheus-client = "*"
+numpy = ">=1.26"

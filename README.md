@@ -158,9 +158,10 @@ A separate workflow publishes cv_engine coverage as an artifact (report-only).
   ],
   "target": {
     "target_distance_m": 152,
-    "elevation_diff_m": -3,
-    "wind": {"speed_ms": 4.0, "direction_deg": -20},
-    "lie": "fairway",
+    "elevation_delta_m": -3,
+    "wind_speed_mps": 4.0,
+    "wind_direction_deg": 340,
+    "lie_type": "fairway",
     "hazard_distance_m": 145
   },
   "scenario": "range"

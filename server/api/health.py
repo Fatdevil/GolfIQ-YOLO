@@ -1,4 +1,4 @@
-import os
+﻿import os
 import platform
 import time
 from typing import Any, Dict
@@ -21,3 +21,4 @@ async def health() -> Dict[str, Any]:
             "python": platform.python_version(),
         },
     }
+

@@ -1,0 +1,362 @@
+﻿[
+    {
+        "club":  "7i",
+        "carry_m":  145,
+        "lateral_m":  -2,
+        "timestamp":  "2025-08-02T14:00:00.0000000+02:00"
+    },
+    {
+        "club":  "8i",
+        "carry_m":  144,
+        "lateral_m":  0,
+        "timestamp":  "2025-08-02T14:01:00.0000000+02:00"
+    },
+    {
+        "club":  "PW",
+        "carry_m":  121,
+        "lateral_m":  -3,
+        "timestamp":  "2025-08-02T14:02:00.0000000+02:00"
+    },
+    {
+        "club":  "7i",
+        "carry_m":  149,
+        "lateral_m":  0,
+        "timestamp":  "2025-08-02T14:03:00.0000000+02:00"
+    },
+    {
+        "club":  "8i",
+        "carry_m":  135,
+        "lateral_m":  2,
+        "timestamp":  "2025-08-02T14:04:00.0000000+02:00"
+    },
+    {
+        "club":  "PW",
+        "carry_m":  121,
+        "lateral_m":  2,
+        "timestamp":  "2025-08-02T14:05:00.0000000+02:00"
+    },
+    {
+        "club":  "7i",
+        "carry_m":  151,
+        "lateral_m":  -3,
+        "timestamp":  "2025-08-02T14:06:00.0000000+02:00"
+    },
+    {
+        "club":  "8i",
+        "carry_m":  144,
+        "lateral_m":  1,
+        "timestamp":  "2025-08-02T14:07:00.0000000+02:00"
+    },
+    {
+        "club":  "PW",
+        "carry_m":  123,
+        "lateral_m":  -2,
+        "timestamp":  "2025-08-02T14:08:00.0000000+02:00"
+    },
+    {
+        "club":  "7i",
+        "carry_m":  152,
+        "lateral_m":  2,
+        "timestamp":  "2025-08-02T14:09:00.0000000+02:00"
+    },
+    {
+        "club":  "8i",
+        "carry_m":  143,
+        "lateral_m":  -2,
+        "timestamp":  "2025-08-02T14:10:00.0000000+02:00"
+    },
+    {
+        "club":  "PW",
+        "carry_m":  127,
+        "lateral_m":  -3,
+        "timestamp":  "2025-08-02T14:11:00.0000000+02:00"
+    },
+    {
+        "club":  "7i",
+        "carry_m":  150,
+        "lateral_m":  -2,
+        "timestamp":  "2025-08-02T14:12:00.0000000+02:00"
+    },
+    {
+        "club":  "8i",
+        "carry_m":  136,
+        "lateral_m":  -3,
+        "timestamp":  "2025-08-02T14:13:00.0000000+02:00"
+    },
+    {
+        "club":  "PW",
+        "carry_m":  122,
+        "lateral_m":  1,
+        "timestamp":  "2025-08-02T14:14:00.0000000+02:00"
+    },
+    {
+        "club":  "7i",
+        "carry_m":  151,
+        "lateral_m":  -1,
+        "timestamp":  "2025-08-02T14:15:00.0000000+02:00"
+    },
+    {
+        "club":  "8i",
+        "carry_m":  135,
+        "lateral_m":  1,
+        "timestamp":  "2025-08-02T14:16:00.0000000+02:00"
+    },
+    {
+        "club":  "PW",
+        "carry_m":  128,
+        "lateral_m":  0,
+        "timestamp":  "2025-08-02T14:17:00.0000000+02:00"
+    },
+    {
+        "club":  "7i",
+        "carry_m":  148,
+        "lateral_m":  -1,
+        "timestamp":  "2025-08-02T14:18:00.0000000+02:00"
+    },
+    {
+        "club":  "8i",
+        "carry_m":  144,
+        "lateral_m":  -1,
+        "timestamp":  "2025-08-02T14:19:00.0000000+02:00"
+    },
+    {
+        "club":  "PW",
+        "carry_m":  127,
+        "lateral_m":  0,
+        "timestamp":  "2025-08-02T14:20:00.0000000+02:00"
+    },
+    {
+        "club":  "7i",
+        "carry_m":  155,
+        "lateral_m":  -1,
+        "timestamp":  "2025-08-02T14:21:00.0000000+02:00"
+    },
+    {
+        "club":  "8i",
+        "carry_m":  139,
+        "lateral_m":  3,
+        "timestamp":  "2025-08-02T14:22:00.0000000+02:00"
+    },
+    {
+        "club":  "PW",
+        "carry_m":  127,
+        "lateral_m":  2,
+        "timestamp":  "2025-08-02T14:23:00.0000000+02:00"
+    },
+    {
+        "club":  "7i",
+        "carry_m":  153,
+        "lateral_m":  2,
+        "timestamp":  "2025-08-02T14:24:00.0000000+02:00"
+    },
+    {
+        "club":  "8i",
+        "carry_m":  136,
+        "lateral_m":  0,
+        "timestamp":  "2025-08-02T14:25:00.0000000+02:00"
+    },
+    {
+        "club":  "PW",
+        "carry_m":  129,
+        "lateral_m":  -1,
+        "timestamp":  "2025-08-02T14:26:00.0000000+02:00"
+    },
+    {
+        "club":  "7i",
+        "carry_m":  153,
+        "lateral_m":  -1,
+        "timestamp":  "2025-08-02T14:27:00.0000000+02:00"
+    },
+    {
+        "club":  "8i",
+        "carry_m":  137,
+        "lateral_m":  2,
+        "timestamp":  "2025-08-02T14:28:00.0000000+02:00"
+    },
+    {
+        "club":  "PW",
+        "carry_m":  120,
+        "lateral_m":  -3,
+        "timestamp":  "2025-08-02T14:29:00.0000000+02:00"
+    },
+    {
+        "club":  "7i",
+        "carry_m":  148,
+        "lateral_m":  -2,
+        "timestamp":  "2025-08-02T14:30:00.0000000+02:00"
+    },
+    {
+        "club":  "8i",
+        "carry_m":  145,
+        "lateral_m":  2,
+        "timestamp":  "2025-08-02T14:31:00.0000000+02:00"
+    },
+    {
+        "club":  "PW",
+        "carry_m":  129,
+        "lateral_m":  3,
+        "timestamp":  "2025-08-02T14:32:00.0000000+02:00"
+    },
+    {
+        "club":  "7i",
+        "carry_m":  154,
+        "lateral_m":  0,
+        "timestamp":  "2025-08-02T14:33:00.0000000+02:00"
+    },
+    {
+        "club":  "8i",
+        "carry_m":  145,
+        "lateral_m":  -2,
+        "timestamp":  "2025-08-02T14:34:00.0000000+02:00"
+    },
+    {
+        "club":  "PW",
+        "carry_m":  122,
+        "lateral_m":  0,
+        "timestamp":  "2025-08-02T14:35:00.0000000+02:00"
+    },
+    {
+        "club":  "7i",
+        "carry_m":  147,
+        "lateral_m":  1,
+        "timestamp":  "2025-08-02T14:36:00.0000000+02:00"
+    },
+    {
+        "club":  "8i",
+        "carry_m":  145,
+        "lateral_m":  -1,
+        "timestamp":  "2025-08-02T14:37:00.0000000+02:00"
+    },
+    {
+        "club":  "PW",
+        "carry_m":  121,
+        "lateral_m":  -2,
+        "timestamp":  "2025-08-02T14:38:00.0000000+02:00"
+    },
+    {
+        "club":  "7i",
+        "carry_m":  149,
+        "lateral_m":  0,
+        "timestamp":  "2025-08-02T14:39:00.0000000+02:00"
+    },
+    {
+        "club":  "8i",
+        "carry_m":  143,
+        "lateral_m":  2,
+        "timestamp":  "2025-08-02T14:40:00.0000000+02:00"
+    },
+    {
+        "club":  "PW",
+        "carry_m":  130,
+        "lateral_m":  -1,
+        "timestamp":  "2025-08-02T14:41:00.0000000+02:00"
+    },
+    {
+        "club":  "7i",
+        "carry_m":  145,
+        "lateral_m":  -1,
+        "timestamp":  "2025-08-02T14:42:00.0000000+02:00"
+    },
+    {
+        "club":  "8i",
+        "carry_m":  145,
+        "lateral_m":  0,
+        "timestamp":  "2025-08-02T14:43:00.0000000+02:00"
+    },
+    {
+        "club":  "PW",
+        "carry_m":  128,
+        "lateral_m":  -3,
+        "timestamp":  "2025-08-02T14:44:00.0000000+02:00"
+    },
+    {
+        "club":  "7i",
+        "carry_m":  151,
+        "lateral_m":  0,
+        "timestamp":  "2025-08-02T14:45:00.0000000+02:00"
+    },
+    {
+        "club":  "8i",
+        "carry_m":  138,
+        "lateral_m":  0,
+        "timestamp":  "2025-08-02T14:46:00.0000000+02:00"
+    },
+    {
+        "club":  "PW",
+        "carry_m":  120,
+        "lateral_m":  3,
+        "timestamp":  "2025-08-02T14:47:00.0000000+02:00"
+    },
+    {
+        "club":  "7i",
+        "carry_m":  149,
+        "lateral_m":  1,
+        "timestamp":  "2025-08-02T14:48:00.0000000+02:00"
+    },
+    {
+        "club":  "8i",
+        "carry_m":  140,
+        "lateral_m":  -1,
+        "timestamp":  "2025-08-02T14:49:00.0000000+02:00"
+    },
+    {
+        "club":  "PW",
+        "carry_m":  127,
+        "lateral_m":  0,
+        "timestamp":  "2025-08-02T14:50:00.0000000+02:00"
+    },
+    {
+        "club":  "7i",
+        "carry_m":  149,
+        "lateral_m":  0,
+        "timestamp":  "2025-08-02T14:51:00.0000000+02:00"
+    },
+    {
+        "club":  "8i",
+        "carry_m":  145,
+        "lateral_m":  3,
+        "timestamp":  "2025-08-02T14:52:00.0000000+02:00"
+    },
+    {
+        "club":  "PW",
+        "carry_m":  126,
+        "lateral_m":  0,
+        "timestamp":  "2025-08-02T14:53:00.0000000+02:00"
+    },
+    {
+        "club":  "7i",
+        "carry_m":  152,
+        "lateral_m":  -1,
+        "timestamp":  "2025-08-02T14:54:00.0000000+02:00"
+    },
+    {
+        "club":  "8i",
+        "carry_m":  142,
+        "lateral_m":  2,
+        "timestamp":  "2025-08-02T14:55:00.0000000+02:00"
+    },
+    {
+        "club":  "PW",
+        "carry_m":  126,
+        "lateral_m":  0,
+        "timestamp":  "2025-08-02T14:56:00.0000000+02:00"
+    },
+    {
+        "club":  "7i",
+        "carry_m":  155,
+        "lateral_m":  0,
+        "timestamp":  "2025-08-02T14:57:00.0000000+02:00"
+    },
+    {
+        "club":  "8i",
+        "carry_m":  137,
+        "lateral_m":  -3,
+        "timestamp":  "2025-08-02T14:58:00.0000000+02:00"
+    },
+    {
+        "club":  "PW",
+        "carry_m":  123,
+        "lateral_m":  -1,
+        "timestamp":  "2025-08-02T14:59:00.0000000+02:00"
+    }
+]
