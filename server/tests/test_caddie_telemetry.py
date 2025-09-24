@@ -1,4 +1,3 @@
-
 import pytest
 
 from server.services.caddie_core import telemetry
