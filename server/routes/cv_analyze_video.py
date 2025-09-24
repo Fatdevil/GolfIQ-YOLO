@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from tempfile import SpooledTemporaryFile
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
@@ -36,6 +37,12 @@ class AnalyzeResponse(BaseModel):
     events: list[int]
     metrics: dict
     run_id: str | None = None
+
+
+def _yolo_inference_enabled() -> bool:
+    """Return True when runtime YOLO inference should be used."""
+
+    return os.getenv("YOLO_INFERENCE", "false").lower() == "true"
 
 
 @router.post("/analyze/video", response_model=AnalyzeResponse)
@@ -97,7 +104,7 @@ async def analyze_video(
     result = analyze_frames(
         frames,
         calib,
-        mock=True,
+        mock=not _yolo_inference_enabled(),
         smoothing_window=query.smoothing_window,
     )
     events = result["events"]
