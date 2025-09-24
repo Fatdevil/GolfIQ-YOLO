@@ -13,7 +13,9 @@ def client():
 
 
 def load_example_request() -> dict:
-    example_path = Path("specs/001-feature-caddiecore-v1/contracts/examples/range_request.json")
+    example_path = Path(
+        "specs/001-feature-caddiecore-v1/contracts/examples/range_request.json"
+    )
     with example_path.open("r", encoding="utf-8") as fh:
         return json.load(fh)
 

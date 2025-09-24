@@ -47,10 +47,16 @@ def record_recommendation_metrics(
     factors_count: int,
 ) -> None:
     """Publish Prometheus metrics for a recommendation."""
-    _inference_histogram.labels(scenario=scenario, confidence=confidence).observe(duration_ms)
-    _inference_histogram_compat.labels(scenario=scenario, confidence=confidence).observe(duration_ms)
+    _inference_histogram.labels(scenario=scenario, confidence=confidence).observe(
+        duration_ms
+    )
+    _inference_histogram_compat.labels(
+        scenario=scenario, confidence=confidence
+    ).observe(duration_ms)
     _request_counter.labels(scenario=scenario, confidence=confidence).inc()
-    _factors_histogram.labels(scenario=scenario, confidence=confidence).observe(factors_count)
+    _factors_histogram.labels(scenario=scenario, confidence=confidence).observe(
+        factors_count
+    )
 
 
 def build_structured_log_payload(

@@ -16,7 +16,9 @@ FACTOR_WHITELIST = {
 
 def build_explain_score(factors: dict[str, float]) -> list[dict[str, object]]:
     """Return the top three factors with normalized weights."""
-    filtered = {name: value for name, value in factors.items() if name in FACTOR_WHITELIST}
+    filtered = {
+        name: value for name, value in factors.items() if name in FACTOR_WHITELIST
+    }
     if not filtered:
         return []
 

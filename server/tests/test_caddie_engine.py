@@ -37,6 +37,8 @@ def test_compute_dispersion_by_club_requires_minimum_samples():
 
     with pytest.raises(ValueError):
         engine.compute_dispersion_by_club(shot_samples, minimum_samples=2)
+
+
 def test_wind_effect_returns_carry_and_lateral_adjustments():
     effect = engine.wind_effect(speed_mps=4.0, direction_deg=0)
 
@@ -66,6 +68,8 @@ def test_elevation_effect_scales_with_height_delta():
 
     assert uphill == pytest.approx(2.4)
     assert downhill == pytest.approx(-1.6)
+
+
 def test_choose_club_returns_primary_when_margin_safe():
     aggregates = {
         "7i": {"count": 210, "carry_mean": 152.0, "carry_std": 7.5, "lateral_std": 3.0},
@@ -131,5 +135,3 @@ def test_choose_club_forces_conservative_when_confidence_low():
 
     assert result["confidence"] == "low"
     assert result["conservative_club"] == "8i"
-
-

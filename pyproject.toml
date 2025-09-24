@@ -9,6 +9,11 @@ description = "GolfIQ: CV engine + FastAPI server (mock-friendly)"
 readme = "README.md"
 requires-python = ">=3.11"
 authors = [{ name = "Fatdevil" }]
+dependencies = [
+  "fastapi",
+  "prometheus-client",
+  "numpy>=1.26",
+]
 
 [project.optional-dependencies]
 video = [
@@ -26,7 +31,4 @@ line-length = 88
 profile = "black"
 line_length = 88
 
-[project.dependencies]
-fastapi = "*"
-prometheus-client = "*"
-numpy = ">=1.26"
+ 

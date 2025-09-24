@@ -11,7 +11,9 @@ from pathlib import Path
 
 
 def compute_aggregates(samples: list[dict]) -> dict[str, dict[str, float]]:
-    grouped: dict[str, dict[str, list[float]]] = defaultdict(lambda: {"carry": [], "lateral": []})
+    grouped: dict[str, dict[str, list[float]]] = defaultdict(
+        lambda: {"carry": [], "lateral": []}
+    )
     for sample in samples:
         grouped[sample["club"]]["carry"].append(sample["carry_m"])
         grouped[sample["club"]]["lateral"].append(sample["lateral_m"])
@@ -31,8 +33,14 @@ def compute_aggregates(samples: list[dict]) -> dict[str, dict[str, float]]:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Seed demo aggregates for CaddieCore")
-    parser.add_argument("--input", required=True, type=Path, help="Path to raw shot samples JSON")
-    parser.add_argument("--output", type=Path, default=Path("server/services/caddie_core/demo_aggregates.json"))
+    parser.add_argument(
+        "--input", required=True, type=Path, help="Path to raw shot samples JSON"
+    )
+    parser.add_argument(
+        "--output",
+        type=Path,
+        default=Path("server/services/caddie_core/demo_aggregates.json"),
+    )
     args = parser.parse_args()
 
     samples = json.loads(args.input.read_text(encoding="utf-8"))

@@ -16,8 +16,12 @@ def test_build_explain_score_returns_top_three_normalized_factors():
 
     assert len(score) == 3
     names = [item["name"] for item in score]
-    assert set(names).issubset({"target_gap", "wind_effect", "dispersion_margin", "lie_penalty"})
-    assert score[0]["weight"] + score[1]["weight"] + score[2]["weight"] == pytest.approx(1.0)
+    assert set(names).issubset(
+        {"target_gap", "wind_effect", "dispersion_margin", "lie_penalty"}
+    )
+    assert score[0]["weight"] + score[1]["weight"] + score[2][
+        "weight"
+    ] == pytest.approx(1.0)
     assert score[0]["weight"] >= score[1]["weight"] >= score[2]["weight"]
 
 

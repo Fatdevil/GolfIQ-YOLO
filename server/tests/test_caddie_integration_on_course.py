@@ -30,4 +30,6 @@ def test_on_course_hazard_returns_conservative_option(client):
 
     assert body["recommendation"]["hazard_flag"] is True
     assert body["recommendation"]["conservative_club"]
-    assert any(factor["name"] == "dispersion_margin" for factor in body["explain_score"])
+    assert any(
+        factor["name"] == "dispersion_margin" for factor in body["explain_score"]
+    )

@@ -21,4 +21,3 @@ async def health() -> Dict[str, Any]:
             "python": platform.python_version(),
         },
     }
-

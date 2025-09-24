@@ -27,7 +27,9 @@ def test_record_recommendation_metrics_observes_histogram_and_counter(monkeypatc
 
     monkeypatch.setattr(telemetry, "_inference_histogram", histogram, raising=False)
     monkeypatch.setattr(telemetry, "_request_counter", counter, raising=False)
-    monkeypatch.setattr(telemetry, "_factors_histogram", factors_histogram, raising=False)
+    monkeypatch.setattr(
+        telemetry, "_factors_histogram", factors_histogram, raising=False
+    )
 
     telemetry.record_recommendation_metrics(
         duration_ms=32.5,

@@ -36,7 +36,9 @@ def compute_dispersion_by_club(
     minimum_samples: int = MINIMUM_SAMPLES,
 ) -> dict[str, dict[str, float]]:
     """Aggregate carry and lateral dispersion for each club."""
-    grouped: dict[str, dict[str, list[float]]] = defaultdict(lambda: {"carry": [], "lateral": []})
+    grouped: dict[str, dict[str, list[float]]] = defaultdict(
+        lambda: {"carry": [], "lateral": []}
+    )
 
     for sample in shot_samples:
         club = sample.get("club")
@@ -89,7 +91,11 @@ def wind_effect(speed_mps: float, direction_deg: float) -> dict[str, float]:
     else:
         carry_delta = speed_mps * HEADWIND_COEFFICIENT
 
-    lateral_margin = speed_mps * abs(math.sin(math.radians(normalized))) * CROSSWIND_MARGIN_COEFFICIENT
+    lateral_margin = (
+        speed_mps
+        * abs(math.sin(math.radians(normalized)))
+        * CROSSWIND_MARGIN_COEFFICIENT
+    )
 
     return {
         "carry_delta_m": carry_delta,
@@ -131,19 +137,25 @@ def choose_club(
 
     primary = _select_primary(clubs, target_distance_m, lie)
 
-    primary_confidence_enum = _classify_confidence(primary["count"], primary["carry_std"])
+    primary_confidence_enum = _classify_confidence(
+        primary["count"], primary["carry_std"]
+    )
     safety_margin = k_sigma_primary * primary["carry_std"] + hazard_buffer_m
 
     conservative = None
     hazard_flag = False
-    if hazard_distance_m is not None and primary["carry_mean"] >= (hazard_distance_m - hazard_buffer_m):
+    if hazard_distance_m is not None and primary["carry_mean"] >= (
+        hazard_distance_m - hazard_buffer_m
+    ):
         hazard_flag = True
         conservative = _find_conservative(clubs, primary)
 
     if primary_confidence_enum is Confidence.LOW:
         conservative = conservative or _find_conservative(clubs, primary)
 
-    conservative_std = (conservative["carry_std"] if conservative else primary["carry_std"])
+    conservative_std = (
+        conservative["carry_std"] if conservative else primary["carry_std"]
+    )
     conservative_margin = k_sigma_conservative * conservative_std + hazard_buffer_m
 
     return {

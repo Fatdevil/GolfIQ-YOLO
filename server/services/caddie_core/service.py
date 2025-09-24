@@ -31,11 +31,18 @@ def recommend(payload: RecommendationPayload) -> Tuple[RecommendationResponse, d
     sample_maps = [_serialise_shot(sample) for sample in payload.shot_samples]
     aggregates = engine.compute_dispersion_by_club(sample_maps, minimum_samples=1)
 
-    wind = engine.wind_effect(payload.target.wind_speed_mps, payload.target.wind_direction_deg)
+    wind = engine.wind_effect(
+        payload.target.wind_speed_mps, payload.target.wind_direction_deg
+    )
     elevation = engine.elevation_effect(payload.target.elevation_delta_m)
     lie_penalties = engine.lie_penalty(payload.target.lie_type, 0.0)
 
-    effective_target = payload.target.target_distance_m + wind["carry_delta_m"] + elevation + lie_penalties["distance"]
+    effective_target = (
+        payload.target.target_distance_m
+        + wind["carry_delta_m"]
+        + elevation
+        + lie_penalties["distance"]
+    )
 
     selection = engine.choose_club(
         target_distance_m=effective_target,
@@ -70,7 +77,9 @@ def recommend(payload: RecommendationPayload) -> Tuple[RecommendationResponse, d
         "dispersion_margin": selection["safety_margin_m"],
     }
     if payload.target.hazard_distance_m is not None:
-        factors["hazard_margin"] = payload.target.hazard_distance_m - payload.target.target_distance_m
+        factors["hazard_margin"] = (
+            payload.target.hazard_distance_m - payload.target.target_distance_m
+        )
 
     explain_score = explain.build_explain_score(factors)
 

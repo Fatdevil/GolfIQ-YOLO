@@ -48,4 +48,3 @@ def post_recommend(payload: dict):
     logger.info("caddie_recommend", extra={"caddie_core": log_payload})
 
     return schemas.from_domain(response)
-

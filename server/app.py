@@ -128,4 +128,3 @@ dist = pathlib.Path(__file__).resolve().parent.parent / "web" / "dist"
 
 if os.getenv("SERVE_WEB", "0") == "1" and dist.exists():
     app.mount("/", StaticFiles(directory=str(dist), html=True), name="web")
-

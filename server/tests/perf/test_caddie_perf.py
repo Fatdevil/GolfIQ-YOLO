@@ -8,7 +8,11 @@ from server import app as fastapi_app
 @pytest.mark.skip(reason="Perf harness for manual runs; not part of CI gating")
 def test_caddie_recommend_p95_manual():
     client = TestClient(fastapi_app.app)
-    payload = json.loads(Path("specs/001-feature-caddiecore-v1/contracts/examples/range_request.json").read_text())
+    payload = json.loads(
+        Path(
+            "specs/001-feature-caddiecore-v1/contracts/examples/range_request.json"
+        ).read_text()
+    )
     samples = []
     for _ in range(50):
         t0 = time.perf_counter()
