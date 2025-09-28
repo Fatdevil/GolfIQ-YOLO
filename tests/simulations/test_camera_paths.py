@@ -1,5 +1,3 @@
-import pytest
-
 from arhud.simulation.camera_paths import simulate_camera_path
 
 
