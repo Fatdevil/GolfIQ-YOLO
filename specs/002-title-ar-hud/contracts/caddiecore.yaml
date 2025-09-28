@@ -1,0 +1,133 @@
+openapi: 3.0.1
+info:
+  title: CaddieCore v1 Integration
+  version: 1.0.0
+servers:
+  - url: https://api.caddiecore.example.com
+paths:
+  /caddie/suggest:
+    get:
+      summary: Retrieve read-only club suggestion and rationale
+      operationId: getCaddieSuggestion
+      parameters:
+        - in: query
+          name: lie
+          required: true
+          schema:
+            type: string
+            example: wind_breeze_2mps_cross
+            enum: [tee, fairway, rough, approach]
+        - in: query
+          name: distance_m
+          required: true
+          schema:
+            type: number
+            format: float
+            minimum: 0
+        - in: query
+          name: wind_tier
+          required: false
+          schema:
+            type: string
+            enum: [calm, breeze, windy]
+        - in: header
+          name: X-Client-Version
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Suggested club with reasoning
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CaddieSuggestion'
+        '408':
+          description: Upstream exceeded 200 ms timeout
+        '5XX':
+          description: Server error; client must fall back to cached suggestion
+  /caddie/targets:
+    get:
+      summary: Retrieve hole targets (pin + layup markers)
+      operationId: getCaddieTargets
+      parameters:
+        - in: query
+          name: hole_id
+          required: true
+          schema:
+            type: string
+        - in: header
+          name: X-Client-Version
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Hole targets for caching
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HoleTargets'
+        '502':
+          description: Upstream unavailable; client must reuse cached targets
+components:
+  schemas:
+    CaddieSuggestion:
+      type: object
+      required: [club, reasoning, confidence]
+      properties:
+        club:
+          type: string
+          example: 7i
+        reasoning:
+          type: array
+          items:
+            type: string
+            example: wind_breeze_2mps_cross
+        confidence:
+          type: string
+          enum: [low, medium, high]
+        conservative_club:
+          type: string
+          nullable: true
+          description: Optional alternate club recommendation
+          example: 6i
+        expires_at:
+          type: string
+          format: date-time
+    HoleTargets:
+      type: object
+      required: [pin_gps, layups]
+      properties:
+        pin_gps:
+          $ref: '#/components/schemas/LatLng'
+        layups:
+          type: array
+          items:
+            $ref: '#/components/schemas/LayupTarget'
+        updated_at:
+          type: string
+          format: date-time
+    LatLng:
+      type: object
+      required: [lat, lng]
+      properties:
+        lat:
+          type: number
+          format: float
+        lng:
+          type: number
+          format: float
+    LayupTarget:
+      type: object
+      required: [id, name, distance_meters]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        distance_meters:
+          type: number
+        hazard_distance_meters:
+          type: number
+          nullable: true

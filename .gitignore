@@ -2,3 +2,14 @@
 golfiq-v0.9-*.zip
 web/node_modules/
 web/dist/
+.codex/sessions/
+.codex/log/
+.codex/sessions/
+.codex/log/
+
+# Codex & artifacts
+.codex/*
+!.codex/prompts/
+!.codex/README.md
+artifacts/
+.nvmrc

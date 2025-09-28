@@ -1,0 +1,47 @@
+openapi: 3.0.1
+info:
+  title: AR-HUD Feature Flags
+  version: 1.0.0
+paths:
+  /feature-flags/hud:
+    get:
+      summary: Retrieve feature flag overrides for AR-HUD v1
+      operationId: getHudFeatureFlags
+      parameters:
+        - in: header
+          name: X-Device-ID
+          required: true
+          schema:
+            type: string
+        - in: header
+          name: X-App-Version
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Feature flag state
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HudFeatureFlags'
+        '204':
+          description: No overrides; client must use defaults (all on)
+components:
+  schemas:
+    HudFeatureFlags:
+      type: object
+      required: [hud_wind_hint, hud_target_line, hud_battery_saver]
+      properties:
+        hud_wind_hint:
+          type: boolean
+          default: true
+        hud_target_line:
+          type: boolean
+          default: true
+        hud_battery_saver:
+          type: boolean
+          default: true
+        expires_at:
+          type: string
+          format: date-time
