@@ -2,8 +2,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from arhud.revalidation import should_revalidate
-
 default_threshold_quality = 0.6
 
 default_timeout = 2.0

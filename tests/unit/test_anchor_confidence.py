@@ -1,5 +1,3 @@
-import pytest
-
 from arhud.metrics import compute_anchor_confidence
 
 

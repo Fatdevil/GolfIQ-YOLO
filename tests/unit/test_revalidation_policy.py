@@ -1,5 +1,3 @@
-import pytest
-
 from arhud.revalidation import should_revalidate
 
 

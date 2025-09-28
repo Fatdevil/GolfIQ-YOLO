@@ -1,5 +1,3 @@
-import pytest
-
 from arhud.simulation.performance_budget import estimate_performance_budget
 
 REFERENCE_CONFIG = {
