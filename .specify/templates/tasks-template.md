@@ -1,124 +1,101 @@
 # Tasks: [FEATURE NAME]
 
 **Input**: Design documents from `/specs/[###-feature-name]/`
-**Prerequisites**: plan.md (required), research.md, data-model.md, contracts/
+**Prerequisites**: plan.md (required), research.md, data-model.md, simulation specs, telemetry checklist
+
 ## Execution Flow (main)
 ```
 1. Load plan.md from feature directory
-   → If not found: ERROR "No implementation plan found"
-   → Extract: tech stack, libraries, structure
+   -> If not found: ERROR "No implementation plan found"
+   -> Extract: supported scope, SLOs, telemetry requirements, device matrix
 2. Load optional design documents:
-   → data-model.md: Extract entities → model tasks
-   → contracts/: Each file → contract test task
-   → research.md: Extract decisions → setup tasks
-3. Generate tasks by category:
-   - Setup: project init, dependencies, linting
-   - Tests: contract tests, integration tests
-   - Core: models, services, CLI commands
-   - Integration: DB, middleware, logging
-   - Observability: /health endpoint, Prometheus metrics, build info, KPI telemetry
-   - Polish: unit tests, performance, docs
-4. Apply task rules:
-   → Different files = mark [P] for parallel
-   → Same file = sequential (no [P])
-   → Tests before implementation (TDD)
-5. Number tasks sequentially (T001, T002...)
-6. Generate dependency graph
-7. Create parallel execution examples
-8. Validate task completeness:
-   → All contracts have tests?
-   → All entities have models?
-   → All endpoints implemented?
-9. Return: SUCCESS (tasks ready for execution)
+   -> data-model.md: anchor definitions, transform math
+   -> simulation specs: synthetic camera paths, jitter, drift, latency scenarios
+   -> research.md: environment assumptions, thermal limits, offline behaviour
+   -> telemetry checklist: metrics, logs, sampling rates, dashboard ownership
+3. Build the Constitution Check from plan.md so every principle (performance, accuracy, reliability, UX, security/privacy, observability, quality gates, testing, interoperability, developer experience, release criteria, terminology) maps to explicit tasks.
+4. Generate task categories:
+   - Setup & tooling
+   - Tests (unit + simulation)
+   - Device implementation (iOS, Android, or other clients)
+   - Observability & telemetry
+   - Field validation & SLO verification
+   - Compliance & release readiness
+5. Enforce sequencing:
+   -> Tests before implementation
+   -> Instrumentation before field validation
+   -> Field validation before release packaging
+6. Assign coverage and lint gates (>=85% line coverage, zero lint errors, <=5 warnings).
+7. Number tasks sequentially (T001, T002, ...).
+8. Generate dependency graph.
+9. Create parallel execution examples (only when files differ and no dependency).
+10. Validate completeness: tasks cover SLOs, telemetry, golden screenshots, privacy, and release sign-offs.
+```
+
 ## Format: `[ID] [P?] Description`
 - **[P]**: Can run in parallel (different files, no dependencies)
 - Include exact file paths in descriptions
+
 ## Path Conventions
-- **Single project**: `src/`, `tests/` at repository root
-- **Web app**: `backend/src/`, `frontend/src/`
-- **Mobile**: `api/src/`, `ios/src/` or `android/src/`
-- Paths shown below assume single project - adjust based on plan.md structure
-## Phase 3.1: Setup
-- [ ] T001 Create project structure per implementation plan
-- [ ] T002 Initialize [language] project with [framework] dependencies
-- [ ] T003 [P] Configure linting and formatting tools
-## Phase 3.2: Tests First (TDD) ⚠️ MUST COMPLETE BEFORE 3.3
-**CRITICAL: These tests MUST be written and MUST FAIL before ANY implementation**
-- [ ] T004 [P] Contract test POST /api/users in tests/contract/test_users_post.py
-- [ ] T005 [P] Contract test GET /api/users/{id} in tests/contract/test_users_get.py
-- [ ] T006 [P] Integration test user registration in tests/integration/test_registration.py
-- [ ] T007 [P] Integration test auth flow in tests/integration/test_auth.py
-## Phase 3.3: Core Implementation (ONLY after tests are failing)
-- [ ] T008 [P] User model in src/models/user.py
-- [ ] T009 [P] UserService CRUD in src/services/user_service.py
-- [ ] T010 [P] CLI --create-user in src/cli/user_commands.py
-- [ ] T011 POST /api/users endpoint
-- [ ] T012 GET /api/users/{id} endpoint
-- [ ] T013 Input validation
-- [ ] T014 Error handling and logging
-## Phase 3.4: Integration
-- [ ] T015 Connect UserService to DB
-- [ ] T016 Auth middleware
-- [ ] T017 Observability instrumentation for `/health`, Prometheus metrics, and build info
-- [ ] T018 KPI telemetry for calibration timing and P95 latency dashboards
-## Phase 3.5: Polish
-- [ ] T019 [P] Unit tests for validation in tests/unit/test_validation.py
-- [ ] T020 Coverage verification: backend >=70% and critical UI flows >=50%
-- [ ] T021 Performance validation: backend API P95 <300 ms, mobile LCP <2.5 s, AR calibration <=8 s, and re-centering <=2 s
-- [ ] T022 [P] Update docs/api.md
-- [ ] T023 Remove duplication
-- [ ] T024 [P] Run bandit and pip-audit (no HIGH findings)
-- [ ] T025 Run manual-testing.md
+- **iOS app**: `ios/` (e.g., `ios/App/`, `ios/Tests/`)
+- **Android app**: `android/app/src/` (e.g., `android/app/src/main/java/`, `android/app/src/test/java/`)
+- **Shared assets**: `shared/`, `data/demo-hole/`, `artifacts/golden/`
+- Adjust paths per plan.md if the project uses `mobile/` or other roots
+
+## Phase 3.1: Setup & Tooling
+- [ ] T001 Ensure `make run-ios` and `make run-android` launch the demo hole end-to-end (update `Makefile` and `scripts/run_*.sh` as required).
+- [ ] T002 [P] Pin toolchains and dependency versions (Swift, Gradle, npm, etc.) and record them in `docs/toolchains.md`.
+- [ ] T003 [P] Stage sample hole data and golden assets under `data/demo-hole/` and `artifacts/golden/README.md` per plan assumptions.
+
+## Phase 3.2: Tests First (Unit + Simulation) � MUST COMPLETE BEFORE 3.3
+- [ ] T004 Add HUD math unit tests in `ios/Tests/HUDMathTests.swift` (transforms, projections, distance math) so they fail initially.
+- [ ] T005 [P] Mirror HUD math unit tests in `android/app/src/test/java/[package]/HudMathTests.kt`.
+- [ ] T006 [P] Create simulation suite for camera paths, jitter, drift, and latency in `tests/simulations/test_camera_paths.py`.
+- [ ] T007 [P] Add battery and cold-start simulation harness in `tests/simulations/test_performance_budget.py` (records fps, latency, battery projections).
+- [ ] T008 Generate golden screenshot baselines for primary HUD states at three font scales in `tests/golden/hud_states/`.
+
+## Phase 3.3: Device Implementation (ONLY after tests are failing)
+- [ ] T009 Implement AR-HUD overlay pipeline with guardrails (ZIP/video limits, anchor persistence) in `ios/App/HUDOverlayView.swift`.
+- [ ] T010 [P] Implement equivalent overlay pipeline in `android/app/src/main/java/[package]/HudOverlayView.kt` with identical guardrails.
+- [ ] T011 Integrate CaddieCore v1 read-only client with 200 ms timeout and graceful degradation in `shared/caddie_core_client.py` (or platform-specific services).
+- [ ] T012 Wire downgrade to 2D compass view with auto-recovery when tracking improves in `shared/state/HudFallbackController.ts` (adjust extension per platform).
+- [ ] T013 Maintain offline continuity badge and cached hole data in `shared/state/OfflineStore.ts`.
+
+## Phase 3.4: Observability & Telemetry
+- [ ] T014 Emit required session metrics (session_count, session_duration, fps_avg, fps_p10, latency_ms_p50/p90, tracking_quality_p50, anchor_resets, thermal_warnings, fallback_events) in `shared/telemetry/metrics.ts`.
+- [ ] T015 [P] Add structured JSON logging with build_id/device_class in `shared/telemetry/logger.ts`.
+- [ ] T016 [P] Implement performance trace sampling (<=10% sessions) with opt-out controls in `shared/telemetry/tracing.ts`.
+- [ ] T017 [P] Expose telemetry dashboards or config in `docs/telemetry.md` referencing owners and alert thresholds.
+
+## Phase 3.5: Field Validation & Performance
+- [ ] T018 Execute device matrix tests (2 Android + 2 iOS reference devices) using `tests/device/run_matrix.md`, capturing fps, latency, jitter, drift, thermal, cold start, battery data.
+- [ ] T019 [P] Conduct field validation (tee, fairway walk, approach) with logs stored in `tests/field/2025-<date>-run.md` and attach telemetry exports.
+- [ ] T020 [P] Update golden screenshots for each font scale and compare with `tests/golden/hud_states/` baselines.
+- [ ] T021 [P] Document thermal warnings and battery deltas in `docs/perf/battery_thermal.md` (15-minute session evidence).
+
+## Phase 3.6: Compliance & Release
+- [ ] T022 Verify coverage >=85% lines (ios + android + shared) and archive reports under `artifacts/coverage/README.md`.
+- [ ] T023 [P] Run lint/format suites (SwiftLint, ktlint, eslint, etc.) enforcing zero errors and <=5 warnings, record results in `artifacts/lint/summary.md`.
+- [ ] T024 [P] Update license manifest `docs/licenses.md` ensuring no GPL-only packages and noting new dependencies.
+- [ ] T025 Prepare privacy review packet in `docs/privacy/review.md` showing on-device data handling and telemetry anonymization.
+- [ ] T026 Record PM + QA field checklist sign-off and release readiness in `docs/release-checklist.md` (include telemetry sampling verification).
+
 ## Dependencies
-- Tests (T004-T007) before implementation (T008-T014)
-- T008 blocks T009, T015
-- T016 blocks T018
-- Implementation before polish (T019-T025)
+- Tests (T004-T008) must precede implementation (T009-T013).
+- Telemetry instrumentation (T014-T017) must complete before field validation (T018-T021).
+- Field validation evidence (T018-T021) must exist before compliance tasks (T022-T026) close.
+
 ## Parallel Example
-# Launch T004-T007 together:
-Task: "Contract test POST /api/users in tests/contract/test_users_post.py"
-Task: "Contract test GET /api/users/{id} in tests/contract/test_users_get.py"
-Task: "Integration test registration in tests/integration/test_registration.py"
-Task: "Integration test auth in tests/integration/test_auth.py"
-## Notes
-- [P] tasks = different files, no dependencies
-- Verify tests fail before implementing
-- Commit after each task
-- Avoid: vague tasks, same file conflicts
-## Task Generation Rules
-*Applied during main() execution*
-1. **From Contracts**:
-   - Each contract file → contract test task [P]
-   - Each endpoint → implementation task
-   
-2. **From Data Model**:
-   - Each entity → model creation task [P]
-   - Relationships → service layer tasks
-3. **From User Stories**:
-   - Each story -> integration test [P]
-   - Quickstart scenarios -> validation tasks
+Task: "Add HUD math unit tests in ios/Tests/HUDMathTests.swift" (T004)  
+Task: "Mirror HUD math unit tests in android/app/src/test/java/[package]/HudMathTests.kt" (T005)  
+Task: "Create simulation suite for camera paths..." (T006)  
+Task: "Add battery and cold-start simulation harness..." (T007)
 
-4. **Operational Standards**:
-   - Include observability tasks for `/health`, Prometheus metrics, build info, and KPI telemetry.
-   - Include coverage and performance verification (backend >=70%, critical UI flows >=50%, backend API P95 <300 ms, mobile LCP <2.5 s, AR calibration <=8 s, re-centering <=2 s).
-   - Schedule security scans with bandit and pip-audit; block release on any HIGH findings.
-
-5. **Ordering**:
-   - Setup -> Tests -> Models -> Services -> Endpoints -> Polish
-   - Dependencies block parallel execution
 ## Validation Checklist
-*GATE: Checked by main() before returning*
-- [ ] All contracts have corresponding tests
-- [ ] All entities have model tasks
-- [ ] All tests come before implementation
-- [ ] Parallel tasks truly independent
-- [ ] Each task specifies exact file path
-- [ ] No task modifies same file as another [P] task
-- [ ] Observability tasks cover `/health`, Prometheus metrics, build info, and KPI telemetry
-- [ ] Coverage and performance tasks meet backend >=70%, critical UI flows >=50%, backend API P95 <300 ms, mobile LCP <2.5 s, AR calibration <=8 s, and re-centering <=2 s
-- [ ] Security tasks run bandit and pip-audit with zero HIGH findings
-
-
-
-
-
+- [ ] Every constitution principle has at least one task mapping to it (scope, performance, accuracy, reliability, UX, privacy, observability, quality gates, testing, interoperability, developer experience, release criteria, terminology).
+- [ ] Tests precede implementation and fail before code changes.
+- [ ] Telemetry tasks emit all required metrics, logs, and sampling controls.
+- [ ] Field validation covers device matrix and on-course scenarios with captured evidence.
+- [ ] Coverage >=85% and lint zero errors (<=5 warnings) with reports archived.
+- [ ] Golden screenshots and degraded-mode behaviour are validated and stored.
+- [ ] Privacy review, license manifest, and PM/QA sign-offs are tracked in docs.

@@ -49,8 +49,12 @@ When creating this spec from a user prompt:
    - Error handling behaviors
    - Integration requirements
    - Security/compliance needs
-   - Observability instrumentation (health endpoints, metrics, build info, KPI telemetry)
-   - Test coverage impact (backend >=70%, critical UI flows >=50%)
+   - Observability & telemetry metrics (session_count, fps_avg/p10, latency_ms_p50/p90, tracking_quality_p50, anchor_resets, thermal_warnings, fallback_events) plus log structure and trace sampling limits
+   - Performance SLOs (camera fps, HUD latency, jitter, drift, thermal limits, cold start, battery budget)
+   - Accessibility & safety guardrails (WCAG AA contrast, one-handed reach, font scaling, clear center FOV, periodic "Heads up" banner)
+   - Privacy posture (on-device frames/location, anonymized telemetry, permission timing)
+   - Testing obligations (unit/simulation/device/field coverage, golden screenshots)
+   - Quality gates (>=85% coverage, lint zero errors <=5 warnings, bundle size <=20 MB growth, deterministic builds, license manifest)
 
 ---
 
@@ -85,10 +89,14 @@ When creating this spec from a user prompt:
 - **[Entity 2]**: [What it represents, relationships to other entities]
 
 ## Non-Functional Targets *(mandatory for major features)*
-- **Quality**: Describe coverage expectations and how the change keeps backend >=70% and critical UI flows >=50%.
-- **Performance**: Document API latency budgets (P95 <300 ms), mobile LCP (<2.5 s), AR calibration (<=8 s), and re-centering (<=2 s).
-- **Security & Compliance**: Capture mitigations that keep bandit/pip-audit free of HIGH findings, protect secrets via environment variables or KeyVault, and keep logging GDPR-compliant (no PII).
-- **Observability**: Explain how `/health`, Prometheus metrics, build info, and KPI telemetry will expose the new capability.
+- **Performance & Latency**: Document how the change maintains >=30 fps camera preview (target 45), <=120 ms HUD update latency, <1.0 deg pose jitter over 3 seconds, <0.5 m drift over 30 seconds at 1.2 m/s, 15-minute thermal stability with logging, <=3.0 s cold start, and <=9% battery impact per 15-minute session at 75% brightness.
+- **Accuracy & Anchoring**: Explain how distance overlays remain within 2.0 m for 30-200 m ranges, 95% anchors stay within 0.5 m after 30 seconds, and wind hints remain qualitative tiers only.
+- **Reliability & Fallbacks**: Capture plans to uphold >=99.5% crash-free sessions across trailing 1,000 runs, enforce downgrade to 2D compass when tracking is poor >2 s, and preserve offline continuity plus offline badge behaviour.
+- **UX & Accessibility**: Detail WCAG AA contrast at 75% brightness, one-handed reach on 6.7 inch screens, font scaling to 130% without layout issues, a clear center 8% FOV, and the periodic "Heads up" safety banner.
+- **Security & Privacy**: Show how frames and location remain on-device absent consent, telemetry is anonymized without raw frames/PII, and permissions are requested only when the capability is needed.
+- **Observability & Telemetry**: State the metrics, structured JSON logs (build_id, device_class), and <=10% session sampling for detailed performance traces that will cover the new work.
+- **Quality Gates**: Explain how coverage stays >=85% lines in core modules, lint ends with zero errors and <=5 warnings, bundle growth stays <=20 MB per platform, builds remain deterministic with pinned toolchains, and the license manifest excludes GPL-only dependencies.
+- **Testing Strategy**: Align unit, simulation, device, field, and golden screenshot coverage with constitution expectations.
 
 
 ---
@@ -123,5 +131,7 @@ When creating this spec from a user prompt:
 - [ ] Review checklist passed
 
 ---
+
+
 
 

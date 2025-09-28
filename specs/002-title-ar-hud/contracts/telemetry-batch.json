@@ -1,0 +1,48 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "AR-HUD Telemetry Batch",
+  "type": "object",
+  "required": ["session_id", "device_class", "metrics", "logs", "sampled"],
+  "properties": {
+    "session_id": {
+      "type": "string",
+      "description": "UUID for the HUD session"
+    },
+    "device_class": {
+      "type": "string",
+      "enum": ["iphone14", "iphone15", "pixel7", "pixel8"],
+      "description": "Canonical device bucket"
+    },
+    "metrics": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name", "value"],
+        "properties": {
+          "name": { "type": "string" },
+          "value": { "type": "number" }
+        }
+      }
+    },
+    "logs": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["level", "message", "timestamp"],
+        "properties": {
+          "level": { "type": "string", "enum": ["INFO", "WARN", "ERROR"] },
+          "message": { "type": "string" },
+          "timestamp": { "type": "string", "format": "date-time" }
+        }
+      }
+    },
+    "sampled": {
+      "type": "boolean",
+      "description": "True when detailed trace captured (<=10% sessions)"
+    },
+    "offline_duration_ms": {
+      "type": "integer",
+      "minimum": 0
+    }
+  }
+}

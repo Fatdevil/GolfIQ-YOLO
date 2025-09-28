@@ -47,12 +47,19 @@
 ## Constitution Check
 *GATE: Must pass before Phase 0 research. Re-check after Phase 1 design.*
 
-- **Test & Quality Gates**: Plan enforces backend core coverage >=70%, UI-critical flows >=50%, lint and format jobs in CI, and an end-to-end happy-path test before merge.
-- **Performance & UX**: Work keeps backend P95 latency under 300 ms, mobile LCP under 2.5 s on primary views, and ensures AR calibration <=8 s with re-centering <=2 s.
-- **Security & Compliance**: Activities maintain zero HIGH findings in bandit/pip-audit before release, protect secrets via environment or KeyVault storage, and keep logging GDPR-compliant (no PII).
-- **Observability**: Deliverables preserve `/health`, Prometheus metrics, build metadata, and KPI telemetry for calibration time and P95 latency across environments.
-- **Spec-Driven Delivery**: Major features must progress through `/specify -> /plan -> /tasks`, with breaking-change migrations captured in `/plan` before implementation proceeds.
-
+- **Purpose & Scope**: Plan delivers only AR-HUD v1 supported capabilities (phone camera AR, ground plane detection, stable reticle, distance and layup markers, target line, qualitative wind hint, CaddieCore v1 club suggestion, sunlight-readable theme, tap/long-press/swipe gestures, offline continuity within the current hole) and explicitly defers out-of-scope features (multi-golfer sync, AR glasses, night mode, lidar elevation, live ball-flight tracking, 3D green contours, voice control, social overlays, live scoring).
+- **Performance & Latency**: Work sustains camera preview >=30 fps (target 45), HUD update latency <=120 ms, pose jitter <1.0 deg RMS over 3 seconds, world drift <0.5 m over 30 seconds at 1.2 m/s, thermal logging proves 15-minute sessions without shutdown, cold start <=3.0 s, and battery impact <=9% per 15-minute session at 75% brightness.
+- **Accuracy & Anchoring**: Design keeps distance overlays within 2.0 m for 30-200 m ranges, preserves 95% anchor persistence within 0.5 m after 30 seconds slow pan, and keeps wind hints qualitative only.
+- **Reliability & Fallbacks**: Plan maintains >=99.5% crash-free sessions across the trailing 1,000 runs, enforces downgrade to 2D compass view when tracking is poor >2 s with auto-recovery, and keeps offline continuity plus offline badge behaviour intact.
+- **UX & Accessibility**: HUD maintains WCAG AA contrast at 75% brightness, single-handed reach on 6.7 inch screens, font scaling to 130% without layout breakage, a clear center 8% FOV, and the periodic "Heads up" safety prompt.
+- **Security & Privacy**: Frames and location stay on-device unless consent is granted, telemetry is anonymized without raw frames/PII, and permissions are requested only when needed.
+- **Observability & Telemetry**: Plan captures metrics (session_count, session_duration, fps_avg, fps_p10, latency_ms_p50/p90, tracking_quality_p50, anchor_resets, thermal_warnings, fallback_events), structured JSON logs (build_id, device_class), and ensures detailed perf traces sample <=10% sessions.
+- **Quality Gates**: Implementation enforces >=85% line coverage, lint with zero errors and <=5 warnings, bundle growth <=20 MB per platform, deterministic builds via pinned toolchains, and a maintained license manifest with no GPL-only dependencies.
+- **Testing Strategy**: Tasks cover unit tests for transforms/projection/distance math, simulation suites for synthetic camera paths and drift/latency cases, device runs on 2 Android + 2 iOS reference devices, field validation (tee, fairway, approach) with all SLOs passing, and golden screenshots for main HUD states at three font scales.
+- **Interoperability**: Calls to CaddieCore v1 remain read-only with 200 ms timeouts and graceful degradation, and feature flags (`hud_wind_hint`, `hud_target_line`, `hud_battery_saver`) control optional experiences.
+- **Developer Experience**: Output keeps `make run-ios` and `make run-android` launching the demo hole, bundles offline example hole data, and retains the three-finger tap performance overlay.
+- **Release Criteria**: Plan records artifacts for SLO/accuracy compliance, zero open P0/P1 issues, PM and QA field checklist sign-off, and completed privacy review with telemetry sampling checks.
+- **Terminology & Clarity**: Deliverables use the shared definitions for HUD, anchors, and drift, documenting any additions or exceptions.
 ## Project Structure
 
 ### Documentation (this feature)
@@ -214,6 +221,7 @@ ios/ or android/
 
 ---
 *Based on Constitution v0.1.1 - See `.specify/memory/constitution.md`*
+
 
 
 

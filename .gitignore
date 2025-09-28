@@ -6,3 +6,10 @@ web/dist/
 .codex/log/
 .codex/sessions/
 .codex/log/
+
+# Codex & artifacts
+.codex/*
+!.codex/prompts/
+!.codex/README.md
+artifacts/
+.nvmrc
