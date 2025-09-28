@@ -11,17 +11,18 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from server.api.health import health as _health_handler
-from server.api.routers import calibrate as legacy_calibrate, metrics
+from server.api.routers import calibrate as legacy_calibrate
+from server.api.routers import metrics
 from server.api.routers.coach import router as coach_router
 from server.metrics import MetricsMiddleware, metrics_app
 from server.retention.sweeper import sweep_retention_once
 
+from .routes.caddie_recommend import router as caddie_router
+from .routes.calibrate import router as calibrate_router
 from .routes.cv_analyze import router as cv_analyze_router
 from .routes.cv_analyze_video import router as cv_analyze_video_router
 from .routes.cv_mock import router as cv_mock_router
 from .routes.runs import router as runs_router
-from .routes.calibrate import router as calibrate_router
-from .routes.caddie_recommend import router as caddie_router
 
 
 def _api_key_dependency():
