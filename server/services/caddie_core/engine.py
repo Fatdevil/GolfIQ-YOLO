@@ -2,12 +2,11 @@
 
 from __future__ import annotations
 
-from collections import defaultdict
-from datetime import datetime, UTC
-from typing import Iterable, Mapping
-
 import math
 import statistics
+from collections import defaultdict
+from datetime import UTC, datetime
+from typing import Iterable, Mapping
 
 from .models import Confidence, LieType
 

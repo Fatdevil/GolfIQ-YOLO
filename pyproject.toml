@@ -24,11 +24,12 @@ video = [
 [tool.setuptools.packages.find]
 include = ["server*", "cv_engine*"]
 
+
 [tool.black]
 line-length = 88
+target-version = ["py311"]
 
 [tool.isort]
 profile = "black"
-line_length = 88
 
  

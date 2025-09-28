@@ -1,6 +1,7 @@
+from math import hypot
+
 from fastapi import APIRouter
 from pydantic import BaseModel, Field
-from math import hypot
 
 router = APIRouter(prefix="/calibrate", tags=["calibration"])
 

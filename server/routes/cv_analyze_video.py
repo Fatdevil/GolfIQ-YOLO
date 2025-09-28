@@ -2,8 +2,11 @@ from __future__ import annotations
 
 from tempfile import SpooledTemporaryFile
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from pydantic import BaseModel, Field
+from starlette.status import (
+    HTTP_413_CONTENT_TOO_LARGE as HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+)
 
 from cv_engine.io.videoreader import fps_from_video, frames_from_video
 from cv_engine.metrics.kinematics import CalibrationParams
@@ -61,7 +64,7 @@ async def analyze_video(
         try:
             if int(header_len) > MAX_VIDEO_BYTES:
                 raise HTTPException(
-                    status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+                    status_code=HTTP_413_REQUEST_ENTITY_TOO_LARGE,
                     detail="Video too large",
                 )
         except ValueError:
@@ -77,7 +80,7 @@ async def analyze_video(
             total += len(chunk)
             if total > MAX_VIDEO_BYTES:
                 raise HTTPException(
-                    status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+                    status_code=HTTP_413_REQUEST_ENTITY_TOO_LARGE,
                     detail="Video too large",
                 )
             tmp.write(chunk)
