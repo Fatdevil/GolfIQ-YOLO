@@ -11,7 +11,9 @@ class PerformanceReport:
     thermal_warnings_logged: bool
 
 
-def estimate_performance_budget(device: str, config: dict[str, float]) -> PerformanceReport:
+def estimate_performance_budget(
+    device: str, config: dict[str, float]
+) -> PerformanceReport:
     if device.startswith("iphone"):
         report = PerformanceReport(
             fps_avg=46.0,

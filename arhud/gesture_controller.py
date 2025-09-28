@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from typing import Literal, Optional
 
-
 Gesture = Literal["tap", "long_press", "swipe_left", "swipe_right"]
 
 

@@ -21,8 +21,18 @@ class CaddieCoreClient:
             "hole_id": hole_id,
             "pin_gps": {"lat": 33.6405, "lon": -117.8443},
             "layups": [
-                {"id": "layup-200", "name": "Safe 200m", "lat": 33.6399, "lon": -117.8450},
-                {"id": "layup-150", "name": "Aggressive 150m", "lat": 33.6402, "lon": -117.8446},
+                {
+                    "id": "layup-200",
+                    "name": "Safe 200m",
+                    "lat": 33.6399,
+                    "lon": -117.8450,
+                },
+                {
+                    "id": "layup-150",
+                    "name": "Aggressive 150m",
+                    "lat": 33.6402,
+                    "lon": -117.8446,
+                },
             ],
         }
 

@@ -14,5 +14,10 @@ def test_hud_compositor_generates_overlays():
         }
     )
     kinds = {overlay.kind for overlay in state.overlays}
-    assert "reticle" in kinds and "target" in kinds and "wind_hint" in kinds and "offline_badge" in kinds
+    assert (
+        "reticle" in kinds
+        and "target" in kinds
+        and "wind_hint" in kinds
+        and "offline_badge" in kinds
+    )
     assert not state.warnings

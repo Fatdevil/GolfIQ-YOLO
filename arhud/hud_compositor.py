@@ -3,7 +3,6 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Dict, List
 
-
 SAFE_FOV_RATIO = 0.08
 
 
@@ -26,12 +25,16 @@ class HudCompositor:
     def compose(self, data: Dict[str, object]) -> HudState:
         overlays: List[Overlay] = []
         if data.get("reticle"):
-            overlays.append(Overlay(kind="reticle", payload={"position": data["reticle"]}))
+            overlays.append(
+                Overlay(kind="reticle", payload={"position": data["reticle"]})
+            )
         if targets := data.get("targets"):
             for target in targets:
                 overlays.append(Overlay(kind="target", payload=target))
         if data.get("wind_tier"):
-            overlays.append(Overlay(kind="wind_hint", payload={"tier": data["wind_tier"]}))
+            overlays.append(
+                Overlay(kind="wind_hint", payload={"tier": data["wind_tier"]})
+            )
         if data.get("offline"):
             overlays.append(Overlay(kind="offline_badge", payload={}))
         if data.get("fallback"):

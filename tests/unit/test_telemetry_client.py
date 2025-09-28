@@ -1,4 +1,9 @@
-from arhud.telemetry_client import METRIC_NAMES, StructuredLogger, TelemetryClient, TraceSampler
+from arhud.telemetry_client import (
+    METRIC_NAMES,
+    StructuredLogger,
+    TelemetryClient,
+    TraceSampler,
+)
 
 
 def test_metrics_emitter_records_required_fields():

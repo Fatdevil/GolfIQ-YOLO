@@ -10,7 +10,9 @@ class AnchorConfidenceParams:
     elapsed_since_reset: float
 
 
-def compute_anchor_confidence(variance: float, tracking_quality: float, elapsed_since_reset: float) -> float:
+def compute_anchor_confidence(
+    variance: float, tracking_quality: float, elapsed_since_reset: float
+) -> float:
     if variance < 0:
         raise ValueError("variance must be non-negative")
     variance_term = max(0.0, 1.0 - variance * 50.0)

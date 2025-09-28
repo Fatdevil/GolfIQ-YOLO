@@ -32,14 +32,25 @@ class TelemetryClient:
     def emit(self, name: str, value: float, device_class: str, sampled: bool) -> None:
         if name not in METRIC_NAMES:
             raise ValueError(f"Unknown metric: {name}")
-        self.records.append(MetricRecord(name=name, value=value, device_class=device_class, sampled=sampled))
+        self.records.append(
+            MetricRecord(
+                name=name, value=value, device_class=device_class, sampled=sampled
+            )
+        )
 
 
 class StructuredLogger:
     def __init__(self) -> None:
         self.entries: List[Dict[str, object]] = []
 
-    def log(self, level: str, message: str, build_id: str, device_class: str, data: Dict[str, object] | None = None) -> None:
+    def log(
+        self,
+        level: str,
+        message: str,
+        build_id: str,
+        device_class: str,
+        data: Dict[str, object] | None = None,
+    ) -> None:
         payload = {
             "level": level,
             "message": message,

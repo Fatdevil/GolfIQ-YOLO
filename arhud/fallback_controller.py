@@ -4,7 +4,6 @@ from dataclasses import dataclass
 
 from arhud.revalidation import should_revalidate
 
-
 default_threshold_quality = 0.6
 
 default_timeout = 2.0
@@ -17,7 +16,11 @@ class FallbackState:
 
 
 class FallbackController:
-    def __init__(self, degrade_threshold: float = default_threshold_quality, timeout: float = default_timeout) -> None:
+    def __init__(
+        self,
+        degrade_threshold: float = default_threshold_quality,
+        timeout: float = default_timeout,
+    ) -> None:
         self._threshold = degrade_threshold
         self._timeout = timeout
         self._state = FallbackState()

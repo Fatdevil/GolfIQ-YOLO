@@ -1,0 +1,30 @@
+[
+  {
+    "id": "iphone14",
+    "osVersion": "iOS 17",
+    "chipset": "A15 Bionic",
+    "thermalThresholds": {"warning": 42.0, "critical": 48.0},
+    "batteryCapacityMah": 3279
+  },
+  {
+    "id": "iphone15",
+    "osVersion": "iOS 17",
+    "chipset": "A16 Bionic",
+    "thermalThresholds": {"warning": 43.0, "critical": 49.0},
+    "batteryCapacityMah": 3349
+  },
+  {
+    "id": "pixel7",
+    "osVersion": "Android 14",
+    "chipset": "Tensor G2",
+    "thermalThresholds": {"warning": 44.0, "critical": 50.0},
+    "batteryCapacityMah": 4355
+  },
+  {
+    "id": "pixel8",
+    "osVersion": "Android 14",
+    "chipset": "Tensor G3",
+    "thermalThresholds": {"warning": 44.0, "critical": 51.0},
+    "batteryCapacityMah": 4575
+  }
+]

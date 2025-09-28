@@ -19,5 +19,9 @@ def test_stable_anchor_trace_written(tmp_path):
         duration_seconds=10,
         output_dir=tmp_path,
     )
-    assert (tmp_path / "steady_hold.json").exists(), "Simulation should export trace file"
-    assert traces.anchor_confidence >= 0.9, "Steady hold should maintain high anchor confidence"
+    assert (
+        tmp_path / "steady_hold.json"
+    ).exists(), "Simulation should export trace file"
+    assert (
+        traces.anchor_confidence >= 0.9
+    ), "Steady hold should maintain high anchor confidence"
