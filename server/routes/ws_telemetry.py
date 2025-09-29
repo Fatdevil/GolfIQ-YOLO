@@ -97,6 +97,7 @@ async def ingest_telemetry_batch(samples: List[TelemetrySample]) -> Dict[str, in
 
     accepted = len(samples)
     logger.info(
-        "telemetry batch delivered", extra={"accepted": accepted, "delivered": delivered}
+        "telemetry batch delivered",
+        extra={"accepted": accepted, "delivered": delivered},
     )
     return {"accepted": accepted, "delivered": delivered}
