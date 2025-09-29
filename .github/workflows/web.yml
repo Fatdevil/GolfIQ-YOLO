@@ -1,8 +1,14 @@
 name: web
 on:
   pull_request:
+    paths-ignore:
+      - 'android/**'
+      - 'ios/**'
   push:
     branches: [main]
+    paths-ignore:
+      - 'android/**'
+      - 'ios/**'
 jobs:
   build:
     runs-on: ubuntu-latest

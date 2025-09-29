@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Telemetry",
+  "type": "object",
+  "properties": {
+    "timestampMs": { "type": "integer" },
+    "club": { "type": ["string", "null"] },
+    "ballSpeed": { "type": ["number", "null"] },
+    "clubSpeed": { "type": ["number", "null"] },
+    "launchAngle": { "type": ["number", "null"] },
+    "spinRpm": { "type": ["integer", "null"] },
+    "carryMeters": { "type": ["number", "null"] }
+  },
+  "required": ["timestampMs"]
+}
