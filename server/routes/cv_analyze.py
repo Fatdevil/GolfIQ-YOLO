@@ -4,7 +4,16 @@ import io
 import os
 import zipfile
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from fastapi import (
+    APIRouter,
+    Depends,
+    File,
+    Form,
+    Header,
+    HTTPException,
+    Response,
+    UploadFile,
+)
 from pydantic import BaseModel, Field
 from starlette import status
 from starlette.status import (
@@ -23,6 +32,7 @@ from server.config import (
     MAX_ZIP_SIZE_BYTES,
 )
 from server.security import require_api_key
+from server.services.cv_mock import effective_mock
 from server.storage.runs import save_impact_frames, save_run
 
 router = APIRouter(prefix="/cv", tags=["cv"], dependencies=[Depends(require_api_key)])
@@ -36,6 +46,9 @@ class AnalyzeQuery(BaseModel):
     smoothing_window: int = 3
     persist: bool = False
     run_name: str | None = None
+    mock: bool | None = Field(
+        default=None, description="Optional override for CV mock backend"
+    )
 
 
 class AnalyzeResponse(BaseModel):
@@ -46,7 +59,14 @@ class AnalyzeResponse(BaseModel):
 
 @router.post("/analyze", response_model=AnalyzeResponse)
 async def analyze(
+    response: Response,
     query: AnalyzeQuery = Depends(),
+    mock_header: str | None = Header(default=None, alias="x-cv-mock"),
+    mock_form: bool | None = Form(
+        default=None,
+        alias="mock",
+        description="Optional override for CV mock backend",
+    ),
     frames_zip: UploadFile = File(..., description="ZIP med PNG/JPG eller .npy-filer"),
 ):
     data = await frames_zip.read(MAX_ZIP_SIZE_BYTES + 1)
@@ -101,10 +121,13 @@ async def analyze(
     calib = CalibrationParams.from_reference(
         query.ref_len_m, query.ref_len_px, query.fps
     )
+    use_mock = effective_mock(query.mock, mock_header, mock_form)
+    response.headers["x-cv-source"] = "mock" if use_mock else "real"
+
     result = analyze_frames(
         frames,
         calib,
-        mock=True,
+        mock=use_mock,
         smoothing_window=query.smoothing_window,
     )  # använder detektor + vår pipeline
     events = result["events"]
@@ -116,7 +139,7 @@ async def analyze(
         rec = save_run(
             source="zip",
             mode=getattr(query, "mode", "detector"),
-            params=query.model_dump(),
+            params=query.model_dump(exclude_none=True),
             metrics=dict(metrics),
             events=list(events),
         )

@@ -1,9 +1,18 @@
 from __future__ import annotations
 
-import os
 from tempfile import SpooledTemporaryFile
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from fastapi import (
+    APIRouter,
+    Depends,
+    File,
+    Form,
+    Header,
+    HTTPException,
+    Query,
+    Response,
+    UploadFile,
+)
 from pydantic import BaseModel, Field
 from starlette.status import (
     HTTP_413_CONTENT_TOO_LARGE as HTTP_413_REQUEST_ENTITY_TOO_LARGE,
@@ -19,6 +28,7 @@ from server.config import (
     MAX_VIDEO_BYTES,
 )
 from server.security import require_api_key
+from server.services.cv_mock import effective_mock
 from server.storage.runs import save_impact_frames, save_run
 
 router = APIRouter(
@@ -40,16 +50,16 @@ class AnalyzeResponse(BaseModel):
     events: list[int]
     metrics: dict
     run_id: str | None = None
-
-
-def _yolo_inference_enabled() -> bool:
-    """Return True when runtime YOLO inference should be used."""
-
-    return os.getenv("YOLO_INFERENCE", "false").lower() == "true"
-
-
 @router.post("/analyze/video", response_model=AnalyzeResponse)
 async def analyze_video(
+    response: Response,
+    mock: bool | None = Query(None, description="Optional override for CV mock backend"),
+    mock_header: str | None = Header(default=None, alias="x-cv-mock"),
+    mock_form: bool | None = Form(
+        default=None,
+        alias="mock",
+        description="Optional override for CV mock backend",
+    ),
     fps_fallback: float = Form(120, gt=0),
     ref_len_m: float = Form(1.0, gt=0),
     ref_len_px: float = Form(100.0, gt=0),
@@ -104,10 +114,13 @@ async def analyze_video(
 
     fps = fps_from_video(data) or float(query.fps_fallback)
     calib = CalibrationParams.from_reference(query.ref_len_m, query.ref_len_px, fps)
+    use_mock = effective_mock(mock, mock_header, mock_form)
+    response.headers["x-cv-source"] = "mock" if use_mock else "real"
+
     result = analyze_frames(
         frames,
         calib,
-        mock=not _yolo_inference_enabled(),
+        mock=use_mock,
         smoothing_window=query.smoothing_window,
     )
     events = result["events"]
@@ -119,7 +132,7 @@ async def analyze_video(
         rec = save_run(
             source="video",
             mode="detector",
-            params=query.model_dump(),
+            params=query.model_dump(exclude_none=True),
             metrics=dict(metrics),
             events=list(events),
         )
