@@ -1,4 +1,5 @@
 fastapi
+pydantic-settings
 numpy>=1.26
 python-dotenv
 python-multipart
