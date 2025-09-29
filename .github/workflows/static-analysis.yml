@@ -2,8 +2,14 @@ name: static-analysis
 
 on:
   pull_request:
+    paths-ignore:
+      - 'android/**'
+      - 'ios/**'
   push:
     branches: [main]
+    paths-ignore:
+      - 'android/**'
+      - 'ios/**'
 
 jobs:
   mypy:

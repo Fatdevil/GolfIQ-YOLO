@@ -13,3 +13,9 @@ web/dist/
 !.codex/README.md
 artifacts/
 .nvmrc
+
+# Mobile build artifacts
+android/.gradle/
+android/local.properties
+ios/DerivedData/
+ios/build/
