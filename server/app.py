@@ -23,6 +23,7 @@ from .routes.cv_analyze import router as cv_analyze_router
 from .routes.cv_analyze_video import router as cv_analyze_video_router
 from .routes.cv_mock import router as cv_mock_router
 from .routes.runs import router as runs_router
+from .routes.ws_telemetry import router as ws_telemetry_router
 
 
 def _api_key_dependency():
@@ -111,6 +112,7 @@ app.include_router(_metrics_router)
 app.include_router(cv_mock_router)
 app.include_router(cv_analyze_router)
 app.include_router(cv_analyze_video_router)
+app.include_router(ws_telemetry_router)
 app.include_router(runs_router)
 
 
