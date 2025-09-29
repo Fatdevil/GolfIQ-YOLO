@@ -3,36 +3,21 @@
 from __future__ import annotations
 
 import os
+from dataclasses import dataclass
 from functools import lru_cache
 from typing import Any
 
-try:  # Pydantic v2
-    from pydantic_settings import BaseSettings, SettingsConfigDict  # type: ignore
-except ImportError:  # pragma: no cover - fallback for pydantic v1
-    from pydantic import BaseSettings  # type: ignore
 
-    SettingsConfigDict = None  # type: ignore
-
-from pydantic import Field
-
-
-class _Settings(BaseSettings):
-    cv_mock: bool = Field(default=True, alias="CV_MOCK")
-
-    if SettingsConfigDict is not None:  # pragma: no branch
-        model_config = SettingsConfigDict(env_file=".env", extra="ignore")
-    else:  # pragma: no cover - executed on pydantic v1
-
-        class Config:
-            env_file = ".env"
-            case_sensitive = False
+@dataclass(frozen=True)
+class _Settings:
+    cv_mock: bool = True
 
 
 @lru_cache(maxsize=1)
 def get_settings() -> _Settings:
     """Return cached application settings."""
 
-    return _Settings()  # type: ignore[call-arg]
+    return _Settings(cv_mock=env_bool("CV_MOCK", True))
 
 
 def reset_settings_cache() -> None:

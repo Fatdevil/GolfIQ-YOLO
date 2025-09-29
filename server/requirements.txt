@@ -1,5 +1,4 @@
 fastapi
-pydantic-settings
 pyyaml
 httpx
 numpy>=1.26

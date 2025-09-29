@@ -50,10 +50,14 @@ class AnalyzeResponse(BaseModel):
     events: list[int]
     metrics: dict
     run_id: str | None = None
+
+
 @router.post("/analyze/video", response_model=AnalyzeResponse)
 async def analyze_video(
     response: Response,
-    mock: bool | None = Query(None, description="Optional override for CV mock backend"),
+    mock: bool | None = Query(
+        None, description="Optional override for CV mock backend"
+    ),
     mock_header: str | None = Header(default=None, alias="x-cv-mock"),
     mock_form: bool | None = Form(
         default=None,
