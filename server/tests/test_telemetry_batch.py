@@ -14,4 +14,4 @@ def test_batch_202_and_count() -> None:
 
     response = client.post("/telemetry/batch", json=samples)
     assert response.status_code == 202
-    assert response.json() == {"accepted": len(samples)}
+    assert response.json() == {"accepted": len(samples), "delivered": 0}

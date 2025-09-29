@@ -31,7 +31,7 @@ def test_ws_broadcast_from_batch() -> None:
 
         response = client.post("/telemetry/batch", json=[sample])
         assert response.status_code == 202
-        assert response.json() == {"accepted": 1}
+        assert response.json() == {"accepted": 1, "delivered": 2}
 
         received_one = ws_one.receive_json()
         received_two = ws_two.receive_json()

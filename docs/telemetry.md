@@ -67,14 +67,14 @@ Content-Type: application/json
 ]
 ```
 
-A successful ingest returns HTTP `202 Accepted` and the number of samples accepted for processing:
+A successful ingest returns HTTP `202 Accepted` along with the number of samples accepted and how many websocket deliveries were attempted:
 
 ```json
-{"accepted": 2}
+{"accepted": 2, "delivered": 0}
 ```
 
-> **Note:** The service fan-outs each accepted sample to every connected client in the given `session_id`. Delivery counts per
-> client are reflected in service logs but the HTTP response only reports the number of ingested samples.
+> **Note:** The service fan-outs each accepted sample to every connected client in the given `session_id`. The `delivered` field
+> reflects the number of websocket sends attempted across all connected clients.
 
 ## Telemetry sample schema
 
