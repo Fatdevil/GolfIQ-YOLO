@@ -4,7 +4,7 @@ import logging
 import os
 from collections import defaultdict
 from contextlib import nullcontext
-from typing import Dict, List, Set
+from typing import Any, Dict, List, Set
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect, status
 
@@ -18,7 +18,7 @@ _telemetry_ws_hub: Dict[str, Set[WebSocket]] = defaultdict(set)
 
 _OTEL_ENABLED = os.getenv("OPENTELEMETRY_ENABLED") == "1"
 _tracer = None
-if _OTEL_ENABLED:
+if _OTEL_ENABLED:  # pragma: no cover - optional instrumentation
     try:
         from opentelemetry import trace  # type: ignore
     except ImportError:  # pragma: no cover - optional dependency
@@ -27,15 +27,27 @@ if _OTEL_ENABLED:
         _tracer = trace.get_tracer(__name__)
 
 
+def _serialize_sample(sample: TelemetrySample) -> Dict[str, Any]:
+    dumper = getattr(sample, "model_dump", None)
+    if callable(dumper):
+        return dumper(exclude_none=True)
+    return sample.dict(exclude_none=True)
+
+
+def _remove_client(session_id: str, websocket: WebSocket) -> None:
+    clients = _telemetry_ws_hub.get(session_id)
+    if clients and websocket in clients:
+        clients.discard(websocket)
+        if not clients:
+            _telemetry_ws_hub.pop(session_id, None)
+
+
 async def _broadcast_to_clients(sample: TelemetrySample) -> int:
     clients = _telemetry_ws_hub.get(sample.session_id)
     if not clients:
         return 0
 
-    if hasattr(sample, "model_dump"):
-        payload = sample.model_dump(exclude_none=True)
-    else:
-        payload = sample.dict(exclude_none=True)
+    payload = _serialize_sample(sample)
     delivered = 0
     to_remove: Set[WebSocket] = set()
 
@@ -52,10 +64,7 @@ async def _broadcast_to_clients(sample: TelemetrySample) -> int:
                 to_remove.add(websocket)
 
     for websocket in to_remove:
-        clients.discard(websocket)
-
-    if not clients:
-        _telemetry_ws_hub.pop(sample.session_id, None)
+        _remove_client(sample.session_id, websocket)
 
     return delivered
 
@@ -79,11 +88,7 @@ async def telemetry_ws(websocket: WebSocket) -> None:
     except WebSocketDisconnect:
         pass
     finally:
-        clients = _telemetry_ws_hub.get(session_id)
-        if clients and websocket in clients:
-            clients.discard(websocket)
-            if not clients:
-                _telemetry_ws_hub.pop(session_id, None)
+        _remove_client(session_id, websocket)
         logger.info(
             "telemetry websocket disconnected", extra={"session_id": session_id}
         )
