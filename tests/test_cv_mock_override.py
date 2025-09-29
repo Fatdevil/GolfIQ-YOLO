@@ -37,9 +37,7 @@ def _patch_cv(monkeypatch: pytest.MonkeyPatch) -> list[bool]:
     monkeypatch.setattr(
         "server.routes.cv_analyze.frames_from_zip_bytes", fake_frames_from_zip
     )
-    monkeypatch.setattr(
-        "server.routes.cv_analyze.analyze_frames", fake_analyze_frames
-    )
+    monkeypatch.setattr("server.routes.cv_analyze.analyze_frames", fake_analyze_frames)
     return calls
 
 
@@ -132,6 +130,21 @@ def test_cv_analyze_body_override_when_env_false(
     calls = _patch_cv(monkeypatch)
 
     response = _post_analyze(client, data={"mock": "true"})
+
+    assert response.status_code == 200
+    assert calls == [True]
+    assert response.headers["x-cv-source"] == "mock"
+
+
+def test_cv_analyze_query_override_beats_yolo_flag(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("CV_MOCK", "true")
+    monkeypatch.setenv("YOLO_INFERENCE", "true")
+    reset_settings_cache()
+    calls = _patch_cv(monkeypatch)
+
+    response = _post_analyze(client, query={"mock": "true"})
 
     assert response.status_code == 200
     assert calls == [True]

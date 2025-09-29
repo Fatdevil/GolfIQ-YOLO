@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from server.config import coerce_boolish, get_settings
+from server.config import coerce_boolish, get_settings, yolo_inference_enabled
 
 
 def effective_mock(*candidates: Any) -> bool:
@@ -19,4 +19,6 @@ def effective_mock(*candidates: Any) -> bool:
         coerced = coerce_boolish(candidate)
         if coerced is not None:
             return coerced
+    if yolo_inference_enabled():
+        return False
     return get_settings().cv_mock

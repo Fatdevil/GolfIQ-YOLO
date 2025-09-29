@@ -22,6 +22,7 @@ class _Settings(BaseSettings):
     if SettingsConfigDict is not None:  # pragma: no branch
         model_config = SettingsConfigDict(env_file=".env", extra="ignore")
     else:  # pragma: no cover - executed on pydantic v1
+
         class Config:
             env_file = ".env"
             case_sensitive = False
@@ -45,6 +46,12 @@ def env_bool(name: str, default: bool = False) -> bool:
     if value is None:
         return default
     return value.strip().lower() in {"1", "true", "yes", "on"}
+
+
+def yolo_inference_enabled() -> bool:
+    """Return True when runtime YOLO inference should be used."""
+
+    return env_bool("YOLO_INFERENCE", False)
 
 
 def _int_env(name: str, default: int) -> int:
