@@ -1,7 +1,6 @@
 from __future__ import annotations
 
-import asyncio
-
+import anyio
 from fastapi.testclient import TestClient
 
 from server.app import app
@@ -29,7 +28,7 @@ def test_broadcast_drops_failed_clients() -> None:
     ws_telemetry.manager._connections.add(failing_ws)  # type: ignore[attr-defined]
 
     try:
-        delivered = asyncio.run(ws_telemetry.manager.broadcast({"ok": True}))
+        delivered = anyio.run(ws_telemetry.manager.broadcast, {"ok": True})
     finally:
         ws_telemetry.manager._connections.discard(failing_ws)  # type: ignore[attr-defined]
 
