@@ -1,108 +1,100 @@
 from __future__ import annotations
 
-import logging
 import os
-from collections import defaultdict
-from contextlib import nullcontext
-from typing import Any, Dict, List, Set
+from pathlib import Path
+from typing import Dict, List, Set
 
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect, status
+from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
-from server.schemas.telemetry import TelemetrySample
-
-logger = logging.getLogger(__name__)
+from server.flight_recorder import record, should_record
+from server.schemas.telemetry import Telemetry, TelemetrySample
 
 router = APIRouter()
 
-_telemetry_ws_hub: Dict[str, Set[WebSocket]] = defaultdict(set)
 
-_OTEL_ENABLED = os.getenv("OPENTELEMETRY_ENABLED") == "1"
-_tracer = None
-if _OTEL_ENABLED:  # pragma: no cover - optional instrumentation
-    try:
-        from opentelemetry import trace  # type: ignore
-    except ImportError:  # pragma: no cover - optional dependency
-        trace = None  # type: ignore
-    if "trace" in locals() and trace is not None:  # pragma: no branch
-        _tracer = trace.get_tracer(__name__)
+class ConnectionManager:
+    def __init__(self) -> None:
+        self._connections: Set[WebSocket] = set()
 
+    async def connect(self, websocket: WebSocket) -> None:
+        await websocket.accept()
+        self._connections.add(websocket)
 
-def _serialize_sample(sample: TelemetrySample) -> Dict[str, Any]:
-    dumper = getattr(sample, "model_dump", None)
-    if callable(dumper):
-        return dumper(exclude_none=True)
-    return sample.dict(exclude_none=True)
+    def disconnect(self, websocket: WebSocket) -> None:
+        self._connections.discard(websocket)
 
+    async def broadcast(self, message: Dict[str, object]) -> int:
+        delivered = 0
+        to_remove: Set[WebSocket] = set()
 
-def _remove_client(session_id: str, websocket: WebSocket) -> None:
-    clients = _telemetry_ws_hub.get(session_id)
-    if clients and websocket in clients:
-        clients.discard(websocket)
-        if not clients:
-            _telemetry_ws_hub.pop(session_id, None)
-
-
-async def _broadcast_to_clients(sample: TelemetrySample) -> int:
-    clients = _telemetry_ws_hub.get(sample.session_id)
-    if not clients:
-        return 0
-
-    payload = _serialize_sample(sample)
-    delivered = 0
-    to_remove: Set[WebSocket] = set()
-
-    span_cm = (
-        _tracer.start_as_current_span("ws.broadcast") if _tracer else nullcontext()
-    )
-
-    with span_cm:
-        for websocket in list(clients):
+        for websocket in list(self._connections):
             try:
-                await websocket.send_json(payload)
+                await websocket.send_json(message)
                 delivered += 1
             except Exception:
                 to_remove.add(websocket)
 
-    for websocket in to_remove:
-        _remove_client(sample.session_id, websocket)
+        for websocket in to_remove:
+            self.disconnect(websocket)
 
-    return delivered
+        return delivered
+
+    def __len__(self) -> int:  # pragma: no cover - convenience helper
+        return len(self._connections)
+
+
+manager = ConnectionManager()
+
+_DEFAULT_FLIGHT_DIR = Path(__file__).resolve().parents[1] / "var" / "flight"
+
+
+def _dump_model(model: Telemetry) -> Dict[str, object]:
+    dumper = getattr(model, "model_dump", None)
+    if callable(dumper):
+        return dumper(by_alias=True, exclude_none=False)
+    return model.dict(by_alias=True, exclude_none=False)  # type: ignore[call-arg]
+
+
+def _flight_recorder_pct() -> float:
+    value = os.getenv("FLIGHT_RECORDER_PCT", "5.0")
+    try:
+        return float(value)
+    except ValueError:
+        return 5.0
+
+
+def _flight_recorder_dir() -> Path:
+    override = os.getenv("FLIGHT_RECORDER_DIR")
+    if override:
+        return Path(override)
+    return _DEFAULT_FLIGHT_DIR
 
 
 @router.websocket("/ws/telemetry")
 async def telemetry_ws(websocket: WebSocket) -> None:
-    session_id = websocket.query_params.get("session_id")
-    if not session_id:
-        await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
-        return
-
-    await websocket.accept()
-    _telemetry_ws_hub[session_id].add(websocket)
-    logger.info("telemetry websocket connected", extra={"session_id": session_id})
-
-    await websocket.send_json({"type": "hello", "session_id": session_id})
-
+    await manager.connect(websocket)
     try:
         while True:
             await websocket.receive_text()
     except WebSocketDisconnect:
         pass
     finally:
-        _remove_client(session_id, websocket)
-        logger.info(
-            "telemetry websocket disconnected", extra={"session_id": session_id}
-        )
+        manager.disconnect(websocket)
 
 
-@router.post("/telemetry/batch", status_code=status.HTTP_202_ACCEPTED)
+@router.post("/telemetry")
+async def publish_telemetry(payload: Telemetry) -> Dict[str, object]:
+    message = _dump_model(payload)
+    delivered = await manager.broadcast(message)
+
+    recorded = False
+    if should_record(_flight_recorder_pct()):
+        record(message, _flight_recorder_dir())
+        recorded = True
+
+    return {"accepted": 1, "delivered": delivered, "recorded": recorded}
+
+
+@router.post("/telemetry/batch", status_code=202)
 async def ingest_telemetry_batch(samples: List[TelemetrySample]) -> Dict[str, int]:
-    delivered = 0
-    for sample in samples:
-        delivered += await _broadcast_to_clients(sample)
-
-    accepted = len(samples)
-    logger.info(
-        "telemetry batch delivered",
-        extra={"accepted": accepted, "delivered": delivered},
-    )
-    return {"accepted": accepted, "delivered": delivered}
+    return {"accepted": len(samples), "delivered": 0}

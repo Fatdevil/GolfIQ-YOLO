@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Telemetry Live View</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <style>
+      body {
+        font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        margin: 0;
+        padding: 2rem;
+        background: #f6f7fb;
+        color: #1f2933;
+      }
+      h1 {
+        margin-bottom: 1rem;
+        font-size: 1.75rem;
+      }
+      #status {
+        margin-bottom: 1.5rem;
+        font-size: 0.95rem;
+        color: #52606d;
+      }
+      .cards {
+        display: grid;
+        gap: 1rem;
+        grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+      }
+      .card {
+        background: white;
+        border-radius: 12px;
+        padding: 1.5rem;
+        box-shadow: 0 4px 12px rgba(31, 41, 51, 0.1);
+      }
+      .card h2 {
+        margin: 0;
+        font-size: 1rem;
+        color: #334155;
+        letter-spacing: 0.02em;
+        text-transform: uppercase;
+      }
+      .value {
+        display: block;
+        margin-top: 0.75rem;
+        font-size: 2.25rem;
+        font-weight: 600;
+        color: #0f172a;
+      }
+      .unit {
+        font-size: 0.875rem;
+        color: #64748b;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Live Telemetry</h1>
+    <div id="status">Connecting…</div>
+    <div class="cards">
+      <div class="card" data-field="ballSpeed">
+        <h2>Ball Speed</h2>
+        <span class="value">—</span>
+        <span class="unit">m/s</span>
+      </div>
+      <div class="card" data-field="clubSpeed">
+        <h2>Club Speed</h2>
+        <span class="value">—</span>
+        <span class="unit">m/s</span>
+      </div>
+      <div class="card" data-field="launchAngle">
+        <h2>Launch Angle</h2>
+        <span class="value">—</span>
+        <span class="unit">°</span>
+      </div>
+      <div class="card" data-field="carryMeters">
+        <h2>Carry</h2>
+        <span class="value">—</span>
+        <span class="unit">m</span>
+      </div>
+    </div>
+    <script>
+      const statusEl = document.getElementById("status");
+      const cards = Array.from(document.querySelectorAll(".card"));
+
+      function updateCards(data) {
+        cards.forEach((card) => {
+          const field = card.getAttribute("data-field");
+          const value = data[field];
+          const display = value === null || value === undefined ? "—" : value;
+          card.querySelector(".value").textContent = display;
+        });
+      }
+
+      function connect() {
+        const protocol = location.protocol === "https:" ? "wss" : "ws";
+        const socket = new WebSocket(`${protocol}://${location.host}/ws/telemetry`);
+
+        socket.addEventListener("open", () => {
+          statusEl.textContent = "Connected";
+        });
+
+        socket.addEventListener("close", () => {
+          statusEl.textContent = "Disconnected – retrying in 1s";
+          setTimeout(connect, 1000);
+        });
+
+        socket.addEventListener("error", () => {
+          statusEl.textContent = "Connection error";
+        });
+
+        socket.addEventListener("message", (event) => {
+          try {
+            const data = JSON.parse(event.data);
+            updateCards(data);
+          } catch (err) {
+            console.error("Failed to parse telemetry", err);
+          }
+        });
+      }
+
+      connect();
+    </script>
+  </body>
+</html>
