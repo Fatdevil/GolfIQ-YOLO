@@ -23,6 +23,7 @@ class TelemetrySample(BaseModel):
     if ConfigDict is not None:  # pragma: no branch
         model_config = ConfigDict(extra="allow")  # type: ignore[call-arg]
     else:  # pragma: no cover - legacy fallback
+
         class Config:
             extra = "allow"
 
@@ -41,5 +42,6 @@ class Telemetry(BaseModel):
     if ConfigDict is not None:  # pragma: no branch
         model_config = ConfigDict(extra="ignore")  # type: ignore[call-arg]
     else:  # pragma: no cover - legacy fallback
+
         class Config:
             extra = "ignore"
