@@ -7,7 +7,8 @@ import pytest
 from fastapi.testclient import TestClient
 
 from server.app import app
-from server.config import reset_settings_cache
+from server.config import coerce_boolish, reset_settings_cache
+from server.services.cv_mock import effective_mock
 
 
 @pytest.fixture()
@@ -149,3 +150,48 @@ def test_cv_analyze_query_override_beats_yolo_flag(
     assert response.status_code == 200
     assert calls == [True]
     assert response.headers["x-cv-source"] == "mock"
+
+
+def test_effective_mock_prefers_override_over_env(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("CV_MOCK", "true")
+    monkeypatch.delenv("YOLO_INFERENCE", raising=False)
+    reset_settings_cache()
+
+    result = effective_mock(None, "false")
+
+    assert result is False
+
+
+def test_effective_mock_disables_mock_when_yolo_enabled(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("CV_MOCK", "true")
+    monkeypatch.setenv("YOLO_INFERENCE", "true")
+    reset_settings_cache()
+
+    result = effective_mock(None)
+
+    assert result is False
+
+
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    [
+        (True, True),
+        (False, False),
+        (1, True),
+        (0, False),
+        ("yes", True),
+        ("no", False),
+        ("ON", True),
+        ("off", False),
+        ("maybe", None),
+        (object(), None),
+    ],
+)
+def test_coerce_boolish_handles_various_inputs(
+    value: object, expected: bool | None
+) -> None:
+    assert coerce_boolish(value) is expected
