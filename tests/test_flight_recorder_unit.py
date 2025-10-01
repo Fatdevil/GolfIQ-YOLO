@@ -51,4 +51,4 @@ def test_record_appends_json_lines(tmp_path: Path) -> None:
 
     assert path == second_path
     content = path.read_text(encoding="utf-8").splitlines()
-    assert content == ["{\"foo\":\"bar\"}", "{\"baz\":2}"]
+    assert content == ['{"foo":"bar"}', '{"baz":2}']
