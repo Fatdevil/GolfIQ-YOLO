@@ -1,8 +1,12 @@
 name: cv-engine-coverage
 on:
   pull_request:
+    paths-ignore:
+      - 'ios/**'
   push:
     branches: [main]
+    paths-ignore:
+      - 'ios/**'
 jobs:
   cvengine:
     runs-on: ubuntu-latest
