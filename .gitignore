@@ -17,5 +17,11 @@ artifacts/
 # Mobile build artifacts
 android/.gradle/
 android/local.properties
+android/bench/.cxx/
+android/bench/build/
+android/bench/src/main/assets/models/*
+!android/bench/src/main/assets/models/.gitkeep
+android/bench/src/main/assets/frames/*
+!android/bench/src/main/assets/frames/.gitkeep
 ios/DerivedData/
 ios/build/
