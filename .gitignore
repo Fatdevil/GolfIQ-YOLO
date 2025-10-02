@@ -19,3 +19,12 @@ android/.gradle/
 android/local.properties
 ios/DerivedData/
 ios/build/
+
+# Model weights and exports
+*.pt
+*.pth
+*.ckpt
+exports/
+!exports/
+!exports/**/*.json
+!exports/**/*.md

@@ -1,0 +1,35 @@
+name: Export pipeline dry run
+
+on:
+  push:
+    branches:
+      - feat/ml-export-pipeline
+  workflow_dispatch:
+
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install export dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install onnx onnxruntime tensorflow-cpu coremltools
+
+      - name: Run export pipeline (dummy)
+        env:
+          EXPORT_DUMMY: "true"
+          EXPORT_OUTPUT_DIR: exports
+        run: |
+          python scripts/export_models.py --int8 --model-name ci-dryrun
+
+      - name: Assert manifest exists
+        run: |
+          test -f exports/manifest.json
