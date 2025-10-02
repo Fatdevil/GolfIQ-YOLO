@@ -25,3 +25,13 @@ android/bench/src/main/assets/frames/*
 !android/bench/src/main/assets/frames/.gitkeep
 ios/DerivedData/
 ios/build/
+
+# Model weights and exports
+*.pt
+*.pth
+*.ckpt
+exports/
+!exports/
+!exports/**/*.json
+!exports/**/*.md
+!exports/.gitattributes

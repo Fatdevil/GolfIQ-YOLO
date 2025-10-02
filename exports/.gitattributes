@@ -1,0 +1,7 @@
+# Treat exported model artefacts as binary to avoid diff noise
+*.onnx binary
+*.tflite binary
+*.mlmodel binary
+*.mlpackage binary
+*.param binary
+*.bin binary
