@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Edge Benchboard</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <style>
+      :root {
+        color-scheme: light dark;
+        font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+          sans-serif;
+        background-color: #111;
+        color: #f0f0f0;
+      }
+      body {
+        margin: 0;
+        padding: 2rem;
+        background: linear-gradient(180deg, rgba(0, 0, 0, 0.85), #0f172a);
+        min-height: 100vh;
+      }
+      main {
+        max-width: 960px;
+        margin: 0 auto;
+        background: rgba(15, 23, 42, 0.7);
+        padding: 2rem;
+        border-radius: 1rem;
+        box-shadow: 0 20px 60px rgba(15, 23, 42, 0.6);
+      }
+      h1 {
+        margin-top: 0;
+        text-align: center;
+        letter-spacing: 0.04em;
+      }
+      .controls {
+        display: grid;
+        gap: 1rem;
+        grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+        margin-bottom: 2rem;
+      }
+      label {
+        display: flex;
+        flex-direction: column;
+        font-size: 0.85rem;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        color: #94a3b8;
+      }
+      input[type="text"] {
+        margin-top: 0.35rem;
+        padding: 0.6rem 0.8rem;
+        border-radius: 0.6rem;
+        border: 1px solid rgba(148, 163, 184, 0.3);
+        background: rgba(15, 23, 42, 0.6);
+        color: inherit;
+      }
+      button {
+        margin-top: 0.5rem;
+        align-self: flex-start;
+        padding: 0.55rem 1.4rem;
+        border-radius: 0.6rem;
+        border: none;
+        background: linear-gradient(135deg, #38bdf8, #0ea5e9);
+        color: #0f172a;
+        font-weight: 600;
+        cursor: pointer;
+        transition: transform 120ms ease, box-shadow 120ms ease;
+      }
+      button:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 12px 30px rgba(14, 165, 233, 0.25);
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        border-radius: 0.75rem;
+        overflow: hidden;
+        background: rgba(15, 23, 42, 0.75);
+      }
+      th,
+      td {
+        padding: 0.75rem 1rem;
+        border-bottom: 1px solid rgba(148, 163, 184, 0.15);
+        text-align: left;
+        white-space: nowrap;
+      }
+      th {
+        text-transform: uppercase;
+        font-size: 0.75rem;
+        letter-spacing: 0.05em;
+        color: #a5b4fc;
+        cursor: pointer;
+      }
+      tbody tr:nth-child(odd) {
+        background: rgba(30, 41, 59, 0.6);
+      }
+      #status {
+        margin-bottom: 1rem;
+        font-size: 0.9rem;
+        color: #38bdf8;
+        min-height: 1.2rem;
+      }
+      pre {
+        background: rgba(15, 23, 42, 0.65);
+        padding: 1rem;
+        border-radius: 0.75rem;
+        overflow-x: auto;
+      }
+      @media (max-width: 720px) {
+        table {
+          font-size: 0.85rem;
+        }
+        th,
+        td {
+          padding: 0.55rem 0.6rem;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Edge Benchboard</h1>
+      <p>
+        Point this page to a generated <code>edge_bench.csv</code> or
+        <code>edge_bench.md</code> and it will fetch and render the latest
+        numbers. Click a column header to sort the table.
+      </p>
+      <div class="controls">
+        <div>
+          <label>
+            CSV path
+            <input id="csvPath" type="text" value="edge_bench.csv" />
+          </label>
+          <button id="loadCsv">Load CSV</button>
+        </div>
+        <div>
+          <label>
+            Markdown path
+            <input id="mdPath" type="text" value="edge_bench.md" />
+          </label>
+          <button id="loadMd">Show Markdown</button>
+        </div>
+      </div>
+      <div id="status"></div>
+      <section>
+        <table id="scoreTable" aria-live="polite">
+          <thead></thead>
+          <tbody></tbody>
+        </table>
+      </section>
+      <section>
+        <h2>Markdown</h2>
+        <pre id="markdown"></pre>
+      </section>
+    </main>
+    <script>
+      const statusEl = document.getElementById("status");
+      const table = document.getElementById("scoreTable");
+      const thead = table.querySelector("thead");
+      const tbody = table.querySelector("tbody");
+      const markdownEl = document.getElementById("markdown");
+
+      let tableData = [];
+      let headers = [];
+      let sortState = { index: 0, direction: 1 };
+
+      function setStatus(message, isError = false) {
+        statusEl.textContent = message;
+        statusEl.style.color = isError ? "#f87171" : "#38bdf8";
+      }
+
+      function parseCSV(text) {
+        const rows = [];
+        let row = [];
+        let current = "";
+        let inQuotes = false;
+        for (let i = 0; i < text.length; i++) {
+          const char = text[i];
+          if (char === "\r") {
+            continue;
+          }
+          if (inQuotes) {
+            if (char === "\"") {
+              if (text[i + 1] === "\"") {
+                current += "\"";
+                i++;
+              } else {
+                inQuotes = false;
+              }
+            } else {
+              current += char;
+            }
+          } else if (char === "\"") {
+            inQuotes = true;
+          } else if (char === ",") {
+            row.push(current);
+            current = "";
+          } else if (char === "\n") {
+            row.push(current);
+            rows.push(row);
+            row = [];
+            current = "";
+          } else {
+            current += char;
+          }
+        }
+        if (current.length > 0 || row.length > 0) {
+          row.push(current);
+          rows.push(row);
+        }
+        return rows.filter((r) => r.some((value) => value.trim().length > 0));
+      }
+
+      function renderTable() {
+        thead.innerHTML = "";
+        tbody.innerHTML = "";
+        if (!headers.length || !tableData.length) {
+          return;
+        }
+        const headerRow = document.createElement("tr");
+        headers.forEach((header, index) => {
+          const th = document.createElement("th");
+          th.textContent = header;
+          th.addEventListener("click", () => {
+            if (sortState.index === index) {
+              sortState.direction *= -1;
+            } else {
+              sortState.index = index;
+              sortState.direction = 1;
+            }
+            sortTable();
+            renderTable();
+          });
+          headerRow.appendChild(th);
+        });
+        thead.appendChild(headerRow);
+
+        tableData.forEach((row) => {
+          const tr = document.createElement("tr");
+          row.forEach((cell) => {
+            const td = document.createElement("td");
+            td.textContent = cell;
+            tr.appendChild(td);
+          });
+          tbody.appendChild(tr);
+        });
+      }
+
+      function sortTable() {
+        if (!headers.length) {
+          return;
+        }
+        const index = sortState.index;
+        const direction = sortState.direction;
+        tableData.sort((a, b) => {
+          const rawA = a[index] ?? "";
+          const rawB = b[index] ?? "";
+          const numA = parseFloat(rawA.replace(/[^0-9.\-]/g, ""));
+          const numB = parseFloat(rawB.replace(/[^0-9.\-]/g, ""));
+          const bothNumbers = !Number.isNaN(numA) && !Number.isNaN(numB);
+          if (bothNumbers) {
+            return (numA - numB) * direction;
+          }
+          return rawA.localeCompare(rawB) * direction;
+        });
+      }
+
+      async function loadCSV() {
+        const path = document.getElementById("csvPath").value.trim();
+        if (!path) {
+          setStatus("Please provide a CSV path", true);
+          return;
+        }
+        setStatus(`Loading ${path} …`);
+        try {
+          const response = await fetch(path);
+          if (!response.ok) {
+            throw new Error(`HTTP ${response.status}`);
+          }
+          const text = await response.text();
+          const rows = parseCSV(text);
+          if (!rows.length) {
+            throw new Error("No rows found");
+          }
+          headers = rows[0];
+          tableData = rows.slice(1);
+          sortState = { index: 0, direction: 1 };
+          sortTable();
+          renderTable();
+          setStatus(`Loaded ${tableData.length} rows from ${path}`);
+        } catch (error) {
+          headers = [];
+          tableData = [];
+          renderTable();
+          setStatus(`Failed to load CSV: ${error.message}`, true);
+        }
+      }
+
+      async function loadMarkdown() {
+        const path = document.getElementById("mdPath").value.trim();
+        if (!path) {
+          setStatus("Please provide a Markdown path", true);
+          return;
+        }
+        try {
+          const response = await fetch(path);
+          if (!response.ok) {
+            throw new Error(`HTTP ${response.status}`);
+          }
+          const text = await response.text();
+          markdownEl.textContent = text;
+        } catch (error) {
+          markdownEl.textContent = `Failed to load markdown: ${error.message}`;
+        }
+      }
+
+      document.getElementById("loadCsv").addEventListener("click", loadCSV);
+      document.getElementById("loadMd").addEventListener("click", loadMarkdown);
+
+      if (new URLSearchParams(window.location.search).get("autoload") !== "0") {
+        loadCSV();
+        loadMarkdown();
+      }
+    </script>
+  </body>
+</html>
