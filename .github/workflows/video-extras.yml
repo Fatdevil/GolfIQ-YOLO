@@ -1,8 +1,12 @@
 name: video-extras
 on:
   pull_request:
+    paths-ignore:
+      - 'ios/**'
   push:
     branches: [main]
+    paths-ignore:
+      - 'ios/**'
 
 jobs:
   video:
