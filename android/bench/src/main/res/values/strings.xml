@@ -1,0 +1,6 @@
+<resources>
+    <string name="app_name">GolfIQ Bench</string>
+    <string name="bench_status_idle">Ready to run runtime benchmarks.</string>
+    <string name="bench_status_running">Running benchmarks…</string>
+    <string name="bench_status_done">Benchmarks complete.</string>
+</resources>

@@ -2,12 +2,12 @@ name: web
 on:
   pull_request:
     paths-ignore:
-      - 'android/**'
+      - 'android/**' # includes bench runtime harness
       - 'ios/**'
   push:
     branches: [main]
     paths-ignore:
-      - 'android/**'
+      - 'android/**' # includes bench runtime harness
       - 'ios/**'
 jobs:
   build:
