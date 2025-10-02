@@ -118,7 +118,9 @@ def load_events(directory: Path) -> Iterable[Mapping[str, object]]:
                     yield event
 
 
-def group_events(events: Iterable[Mapping[str, object]]) -> dict[GroupKey, MetricAccumulator]:
+def group_events(
+    events: Iterable[Mapping[str, object]],
+) -> dict[GroupKey, MetricAccumulator]:
     groups: dict[GroupKey, MetricAccumulator] = {}
     for event in events:
         if event.get("suite") != "edge-bench":
@@ -131,7 +133,7 @@ def group_events(events: Iterable[Mapping[str, object]]) -> dict[GroupKey, Metri
 
 
 def summarize_groups(
-    groups: Mapping[GroupKey, MetricAccumulator]
+    groups: Mapping[GroupKey, MetricAccumulator],
 ) -> list[dict[str, object]]:
     rows: list[dict[str, object]] = []
     for key, accumulator in groups.items():
@@ -169,15 +171,17 @@ def write_csv(rows: Sequence[Mapping[str, object]], output: Path) -> None:
         writer = csv.DictWriter(handle, fieldnames=fieldnames)
         writer.writeheader()
         for row in rows:
-            writer.writerow({
-                **{name: row[name] for name in GROUP_FIELDS},
-                "samples": row["samples"],
-                "fps_avg": format_float(row["fps_avg"]),
-                "latency_p50": format_float(row["latency_p50"]),
-                "latency_p95": format_float(row["latency_p95"]),
-                "cold_ms_avg": format_float(row["cold_ms_avg"]),
-                "battery_drop_15m_avg": format_float(row["battery_drop_15m_avg"]),
-            })
+            writer.writerow(
+                {
+                    **{name: row[name] for name in GROUP_FIELDS},
+                    "samples": row["samples"],
+                    "fps_avg": format_float(row["fps_avg"]),
+                    "latency_p50": format_float(row["latency_p50"]),
+                    "latency_p95": format_float(row["latency_p95"]),
+                    "cold_ms_avg": format_float(row["cold_ms_avg"]),
+                    "battery_drop_15m_avg": format_float(row["battery_drop_15m_avg"]),
+                }
+            )
 
 
 def write_markdown(rows: Sequence[Mapping[str, object]], output: Path) -> None:
@@ -211,11 +215,11 @@ def choose_winners(rows: Sequence[Mapping[str, object]]) -> list[Mapping[str, ob
         if (row["fps_avg"] or 0.0) > (candidate["fps_avg"] or 0.0):
             best_per_os[os_name] = row
         elif (row["fps_avg"] or 0.0) == (candidate["fps_avg"] or 0.0):
-            if (row["latency_p50"] or float("inf")) < (candidate["latency_p50"] or float("inf")):
+            if (row["latency_p50"] or float("inf")) < (
+                candidate["latency_p50"] or float("inf")
+            ):
                 best_per_os[os_name] = row
-    return sorted(
-        best_per_os.values(), key=lambda row: str(row["os"]).lower()
-    )
+    return sorted(best_per_os.values(), key=lambda row: str(row["os"]).lower())
 
 
 def write_markdown_table(handle: TextIO, rows: Sequence[Mapping[str, object]]) -> None:
