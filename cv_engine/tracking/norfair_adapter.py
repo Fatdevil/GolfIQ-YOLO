@@ -65,7 +65,10 @@ class NorfairAdapter(TrackerBase):
                 track_id=track_id,
                 label=box.label,
                 center=center,
-                covariance=min(best_dist if best_track else self.distance_threshold, self.distance_threshold),
+                covariance=min(
+                    best_dist if best_track else self.distance_threshold,
+                    self.distance_threshold,
+                ),
                 last_box=box,
                 age=0,
             )
