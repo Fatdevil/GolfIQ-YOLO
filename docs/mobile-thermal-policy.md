@@ -35,8 +35,8 @@ Telemetry samples are emitted every 60 seconds while monitoring is active. Each 
 ### iOS
 
 * Observes `ProcessInfo.thermalState` and `UIDevice.batteryLevel` via the `ThermalBatteryPolicy` service.
-* Sampling uses a `DispatchSourceTimer` on a serial queue; telemetry is appended to `TelemetryClient.policySamples` for upload.
-* A SwiftUI `ThermalProtectionBanner` mirrors the Android UX.
+* Sampling uses a `DispatchSourceTimer` on a serial queue; telemetry samples post immediately to `/telemetry` via `TelemetryClient.sendPolicySamples`.
+* A SwiftUI `ThermalProtectionBanner` surfaces inside `ContentView`, mirroring the Android UX with a "Try resume HUD" affordance.
 
 ## Tuning guidance
 

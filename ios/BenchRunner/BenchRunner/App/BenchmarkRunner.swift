@@ -7,6 +7,8 @@ import UIKit
 final class BenchmarkRunner: ObservableObject {
     @Published var statusMessage: String = "Idle"
     @Published var latestResult: BenchmarkResult?
+    @Published var protectionBannerVisible: Bool = false
+    @Published var protectionBannerMessage: String = "Battery/thermal protection: switched to 2D."
 
     private let config = BenchmarkConfig()
     private let telemetryClient = TelemetryClient()
@@ -14,17 +16,29 @@ final class BenchmarkRunner: ObservableObject {
     private lazy var frameProvider = FrameProvider(frameBudget: config.runLoopFrameBudget)
     private let queue = DispatchQueue(label: "com.golfiq.benchrunner")
     private var isRunning = false
+    private var statusBeforeMitigation: String?
+    private lazy var thermalPolicy: ThermalBatteryPolicy = {
+        let policy = ThermalBatteryPolicy { [weak self] sample in
+            self?.handlePolicyTelemetry(sample)
+        }
+        policy.delegate = self
+        return policy
+    }()
 
     func start() {
         guard !isRunning else { return }
         isRunning = true
         statusMessage = "Preparing benchmark…"
+        statusBeforeMitigation = nil
+        protectionBannerVisible = false
+        thermalPolicy.start()
         queue.async { [weak self] in
             self?.runBenchmark()
         }
     }
 
     private func runBenchmark() {
+        defer { thermalPolicy.stop() }
         do {
             if config.useTFLite, let tflite = TFLiteRunner() {
                 try run(using: tflite)
@@ -234,6 +248,7 @@ final class BenchmarkRunner: ObservableObject {
 
     private func updateStatus(_ message: String) {
         DispatchQueue.main.async { [weak self] in
+            self?.statusBeforeMitigation = nil
             self?.statusMessage = message
         }
     }
@@ -253,9 +268,55 @@ final class BenchmarkRunner: ObservableObject {
         print("Telemetry endpoint: \(result.telemetryEndpoint?.absoluteString ?? "n/a")")
         print("Latency samples: \(latencies.count)")
     }
+
+    private func handlePolicyTelemetry(_ sample: ThermalBatteryPolicy.TelemetrySample) {
+        telemetryClient.sendPolicySamples([sample], to: config.telemetryURL)
+    }
+
+    func requestPolicyResume() {
+        thermalPolicy.requestResumeFromFallback()
+    }
 }
 
-private extension ProcessInfo.ThermalState {
+extension BenchmarkRunner: ThermalBatteryPolicyDelegate {
+    func policyDidApply(action: ThermalBatteryPolicy.PolicyAction, trigger: ThermalBatteryPolicy.Trigger) {
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            switch action {
+            case .switchTo2D:
+                self.protectionBannerVisible = true
+                self.protectionBannerMessage = "Battery/thermal protection: switched to 2D."
+            case .reduceRefresh:
+                if self.statusBeforeMitigation == nil {
+                    self.statusBeforeMitigation = self.statusMessage
+                }
+                self.statusMessage = "Battery protection active — reducing HUD refresh rate."
+            case .pauseHeavyFeatures:
+                if self.statusBeforeMitigation == nil {
+                    self.statusBeforeMitigation = self.statusMessage
+                }
+                self.statusMessage = "Battery protection active — heavy HUD features paused."
+            case .resumeRequested, .none:
+                break
+            }
+        }
+    }
+
+    func policyDidClearMitigations() {
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            self.protectionBannerVisible = false
+            if let previous = self.statusBeforeMitigation {
+                self.statusMessage = previous
+            } else if self.latestResult == nil {
+                self.statusMessage = "Running measurement…"
+            }
+            self.statusBeforeMitigation = nil
+        }
+    }
+}
+
+extension ProcessInfo.ThermalState {
     var description: String {
         switch self {
         case .nominal: return "nominal"

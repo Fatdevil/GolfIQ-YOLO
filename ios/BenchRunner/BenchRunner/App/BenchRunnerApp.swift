@@ -27,6 +27,11 @@ struct ContentView: View {
                 .font(.body)
                 .multilineTextAlignment(.center)
                 .padding()
+            ThermalProtectionBanner(
+                isVisible: runner.protectionBannerVisible,
+                message: runner.protectionBannerMessage,
+                onResume: { runner.requestPolicyResume() }
+            )
             if let result = runner.latestResult {
                 MetricsView(result: result)
                     .padding()
