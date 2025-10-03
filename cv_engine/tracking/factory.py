@@ -1,15 +1,25 @@
-from typing import List, Tuple
+from __future__ import annotations
 
-from ..types import Box
+import os
+from typing import Dict
+
+from cv_engine.tracking.base import IdentityTracker, TrackerBase
+from cv_engine.tracking.bytetrack_adapter import ByteTrackAdapter
+from cv_engine.tracking.norfair_adapter import NorfairAdapter
+
+_TRACKERS: Dict[str, type[TrackerBase]] = {
+    "identity": IdentityTracker,
+    "bytetrack": ByteTrackAdapter,
+    "norfair": NorfairAdapter,
+}
 
 
-class _IdentityTracker:
-    """Minimal stub: ger stabila track-ids 1..N per frame."""
+def get_tracker(name: str | None = None, **kwargs) -> TrackerBase:
+    """Return tracker instance based on env or explicit name."""
 
-    def update(self, boxes: List[Box]) -> List[Tuple[int, Box]]:
-        return list(zip(range(1, len(boxes) + 1), boxes))
-
-
-def get_tracker(name: str = "stub", **kwargs) -> _IdentityTracker:
-    # framtida: byt till ByteTrack/DeepSort; nu: stub för tester
-    return _IdentityTracker()
+    if name is None:
+        name = os.getenv("GOLFIQ_TRACKER", "bytetrack").strip().lower()
+    tracker_cls = _TRACKERS.get(name)
+    if tracker_cls is None:
+        tracker_cls = _TRACKERS["bytetrack"]
+    return tracker_cls(**kwargs)

@@ -38,6 +38,29 @@ from server.storage.runs import save_impact_frames, save_run
 router = APIRouter(prefix="/cv", tags=["cv"], dependencies=[Depends(require_api_key)])
 
 
+class AnalyzeMetrics(BaseModel):
+    ball_speed_mps: float = 0.0
+    ball_speed_mph: float = 0.0
+    club_speed_mps: float = 0.0
+    club_speed_mph: float = 0.0
+    launch_deg: float = 0.0
+    carry_m: float = 0.0
+    metrics_version: int = 1
+    spin_rpm: float | None = None
+    spin_axis_deg: float | None = None
+    club_path_deg: float | None = None
+    confidence: float = 0.0
+    ballSpeedMps: float | None = None
+    clubSpeedMps: float | None = None
+    sideAngleDeg: float | None = None
+    vertLaunchDeg: float | None = None
+    carryEstM: float | None = None
+    quality: dict[str, str] | None = None
+
+    class Config:
+        extra = "allow"
+
+
 class AnalyzeQuery(BaseModel):
     fps: float = Field(120, gt=0)
     ref_len_m: float = Field(1.0, gt=0)
@@ -53,7 +76,7 @@ class AnalyzeQuery(BaseModel):
 
 class AnalyzeResponse(BaseModel):
     events: list[int]
-    metrics: dict
+    metrics: AnalyzeMetrics
     run_id: str | None = None
 
 
@@ -131,16 +154,17 @@ async def analyze(
         smoothing_window=query.smoothing_window,
     )  # använder detektor + vår pipeline
     events = result["events"]
-    metrics = result["metrics"]
-    if "confidence" not in metrics:
-        metrics["confidence"] = 0.0
+    metrics_dict = dict(result["metrics"])
+    if "confidence" not in metrics_dict:
+        metrics_dict["confidence"] = 0.0
+    metrics_model = AnalyzeMetrics(**metrics_dict)
     rec = None
     if query.persist:
         rec = save_run(
             source="zip",
             mode=getattr(query, "mode", "detector"),
             params=query.model_dump(exclude_none=True),
-            metrics=dict(metrics),
+            metrics=metrics_model.dict(),
             events=list(events),
         )
         impact_idx = events[0] if events else None
@@ -160,5 +184,5 @@ async def analyze(
                 except Exception:
                     pass
     return AnalyzeResponse(
-        events=events, metrics=metrics, run_id=rec.run_id if rec else None
+        events=events, metrics=metrics_model, run_id=rec.run_id if rec else None
     )
