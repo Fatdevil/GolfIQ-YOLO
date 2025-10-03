@@ -17,11 +17,17 @@ class TelemetryClient(context: Context) {
 
     suspend fun postBatch(payloads: List<TelemetryPayload>) {
         if (payloads.isEmpty()) return
+        postJsonArray(JSONArray().apply { payloads.forEach { put(it.toJson()) } })
+    }
+
+    suspend fun postPolicySamples(samples: List<ThermalBatterySample>) {
+        if (samples.isEmpty()) return
+        postJsonArray(JSONArray().apply { samples.forEach { put(it.toJson()) } })
+    }
+
+    private suspend fun postJsonArray(array: JSONArray) {
         withContext(Dispatchers.IO) {
-            val json = JSONArray().apply {
-                payloads.forEach { put(it.toJson()) }
-            }
-            val body = json.toString().toRequestBody(JSON.toMediaType())
+            val body = array.toString().toRequestBody(JSON.toMediaType())
             val request = Request.Builder().url(endpoint).post(body).build()
             runCatching { httpClient.newCall(request).execute() }
                 .onFailure { Log.e(TAG, "Telemetry POST failed", it) }

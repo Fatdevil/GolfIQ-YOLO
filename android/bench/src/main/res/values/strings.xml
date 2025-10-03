@@ -3,4 +3,8 @@
     <string name="bench_status_idle">Ready to run runtime benchmarks.</string>
     <string name="bench_status_running">Running benchmarks…</string>
     <string name="bench_status_done">Benchmarks complete.</string>
+    <string name="protection_banner_message">Battery/thermal protection: switched to 2D.</string>
+    <string name="protection_banner_resume">Try resume HUD</string>
+    <string name="protection_status_battery">Battery protection active — reducing HUD refresh rate.</string>
+    <string name="protection_status_heavy_features">Battery protection active — heavy HUD features paused.</string>
 </resources>

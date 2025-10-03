@@ -16,9 +16,19 @@ final class TelemetryClient {
         let activeRuntime: String
     }
 
+    struct PolicySample: Codable {
+        let timestamp: Date
+        let thermalState: String
+        let batteryPercent: Double?
+        let batteryDeltaPercent: Double?
+        let action: String
+        let trigger: String
+    }
+
     private(set) var metrics: [MetricRecord] = []
     private(set) var deviceProfiles: [DeviceProfilePayload] = []
     private(set) var impactTriggerCount: Int = 0
+    private(set) var policySamples: [PolicySample] = []
 
     func emit(name: String, value: Double, deviceClass: String, sampled: Bool) {
         metrics.append(MetricRecord(name: name, value: value, deviceClass: deviceClass, sampled: sampled))
@@ -39,5 +49,9 @@ final class TelemetryClient {
     func logImpactTriggerEvent(magnitudeDb: Double) {
         impactTriggerCount += 1
         emit(name: "impact_trigger", value: magnitudeDb, deviceClass: "audio", sampled: true)
+    }
+
+    func postPolicySample(_ sample: PolicySample) {
+        policySamples.append(sample)
     }
 }
