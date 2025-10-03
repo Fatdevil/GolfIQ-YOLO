@@ -3,7 +3,9 @@ import { Link, useParams } from "react-router-dom";
 import { getRun } from "../api";
 import TracerCanvas from "../components/TracerCanvas";
 import GhostFrames from "../components/GhostFrames";
-import { extractBackViewPayload } from "../lib/traceUtils";
+import ExportPanel from "../components/ExportPanel";
+import type { MetricOverlay } from "../lib/exportUtils";
+import { extractBackViewPayload, mphFromMps, yardsFromMeters } from "../lib/traceUtils";
 import { visualTracerEnabled } from "../config";
 
 interface RunDetailData {
@@ -17,6 +19,7 @@ export default function RunDetailPage() {
   const [data, setData] = useState<RunDetailData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [exportOpen, setExportOpen] = useState(false);
 
   const backView = useMemo(() => extractBackViewPayload(data), [data]);
   const qualityBadges = useMemo(() => {
@@ -50,6 +53,107 @@ export default function RunDetailPage() {
     return typeof meta === "string" ? meta : null;
   }, [data]);
   const pipelineSource = backView?.source ?? null;
+
+  const metricOverlays = useMemo<MetricOverlay[]>(() => {
+    if (!data) return [];
+    const sources: Record<string, unknown>[] = [];
+    const pushIfRecord = (value: unknown) => {
+      if (value && typeof value === "object") {
+        sources.push(value as Record<string, unknown>);
+      }
+    };
+
+    const root = data as Record<string, unknown>;
+    pushIfRecord(root);
+    pushIfRecord(root["metrics"]);
+    const analysis = root["analysis"];
+    if (analysis && typeof analysis === "object") {
+      const analysisRecord = analysis as Record<string, unknown>;
+      pushIfRecord(analysisRecord["metrics"]);
+    }
+    pushIfRecord(root["telemetry"]);
+    const payload = root["payload"];
+    if (payload && typeof payload === "object") {
+      const payloadRecord = payload as Record<string, unknown>;
+      pushIfRecord(payloadRecord["metrics"]);
+    }
+
+    const pickNumber = (value: unknown): number | undefined => {
+      if (typeof value === "number" && Number.isFinite(value)) return value;
+      if (typeof value === "string") {
+        const parsed = Number.parseFloat(value);
+        if (Number.isFinite(parsed)) return parsed;
+      }
+      return undefined;
+    };
+
+    const select = (keys: string[]): number | undefined => {
+      for (const source of sources) {
+        for (const key of keys) {
+          if (source[key] !== undefined) {
+            const value = pickNumber(source[key]);
+            if (value !== undefined) {
+              return value;
+            }
+          }
+        }
+      }
+      return undefined;
+    };
+
+    const ballSpeedMps = select(["ballSpeedMps", "ball_speed_mps", "ballSpeed", "ball_speed"]);
+    const clubSpeedMps = select(["clubSpeedMps", "club_speed_mps", "clubSpeed", "club_speed"]);
+    const carryMeters = select(["carry", "carry_m", "carryMeters", "carry_meters"]);
+    const sideAngle = select(["sideAngle", "side_angle", "side", "sideDeg", "side_deg"]);
+    const vertLaunch = select(["vertLaunch", "launchAngle", "vert_launch", "launch_deg", "launchAngleDeg"]);
+
+    const overlays: MetricOverlay[] = [];
+
+    if (ballSpeedMps !== undefined) {
+      const mph = mphFromMps(ballSpeedMps);
+      overlays.push({
+        label: "Ball Speed",
+        value: `${ballSpeedMps.toFixed(2)} m/s`,
+        secondary: mph !== undefined ? `${mph.toFixed(1)} mph` : undefined,
+      });
+    }
+
+    if (clubSpeedMps !== undefined) {
+      const mph = mphFromMps(clubSpeedMps);
+      overlays.push({
+        label: "Club Speed",
+        value: `${clubSpeedMps.toFixed(2)} m/s`,
+        secondary: mph !== undefined ? `${mph.toFixed(1)} mph` : undefined,
+      });
+    }
+
+    if (carryMeters !== undefined) {
+      const yards = yardsFromMeters(carryMeters);
+      overlays.push({
+        label: "Carry",
+        value: `${carryMeters.toFixed(2)} m`,
+        secondary: yards !== undefined ? `${yards.toFixed(1)} yd` : undefined,
+      });
+    }
+
+    if (sideAngle !== undefined) {
+      overlays.push({
+        label: "Side Angle",
+        value: `${sideAngle.toFixed(2)}°`,
+      });
+    }
+
+    if (vertLaunch !== undefined) {
+      overlays.push({
+        label: "Launch",
+        value: `${vertLaunch.toFixed(2)}°`,
+      });
+    }
+
+    return overlays;
+  }, [data]);
+
+  const canExport = visualTracerEnabled && !!backView?.videoUrl && !!backView.trace;
 
   useEffect(() => {
     if (!id) return;
@@ -96,6 +200,14 @@ export default function RunDetailPage() {
             title="Re-analyze coming soon"
           >
             Re-analyze
+          </button>
+          <button
+            type="button"
+            onClick={() => setExportOpen(true)}
+            disabled={!canExport}
+            className="rounded-md border border-sky-500/40 px-3 py-2 text-xs font-semibold text-sky-200 transition hover:bg-sky-500/20 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            Export Traced Video
           </button>
         </div>
       </div>
@@ -199,6 +311,15 @@ export default function RunDetailPage() {
           </pre>
         </div>
       )}
+
+      <ExportPanel
+        isOpen={exportOpen}
+        onClose={() => setExportOpen(false)}
+        runId={id ?? null}
+        videoUrl={backView?.videoUrl ?? null}
+        trace={backView?.trace ?? null}
+        metrics={metricOverlays}
+      />
     </section>
   );
 }
