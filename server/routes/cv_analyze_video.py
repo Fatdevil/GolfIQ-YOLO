@@ -21,6 +21,7 @@ from starlette.status import (
 from cv_engine.io.videoreader import fps_from_video, frames_from_video
 from cv_engine.metrics.kinematics import CalibrationParams
 from cv_engine.pipeline.analyze import analyze_frames
+from .cv_analyze import AnalyzeMetrics
 from server.config import (
     CAPTURE_IMPACT_FRAMES,
     IMPACT_CAPTURE_AFTER,
@@ -48,7 +49,7 @@ class AnalyzeVideoQuery(BaseModel):
 
 class AnalyzeResponse(BaseModel):
     events: list[int]
-    metrics: dict
+    metrics: AnalyzeMetrics
     run_id: str | None = None
 
 
@@ -128,16 +129,17 @@ async def analyze_video(
         smoothing_window=query.smoothing_window,
     )
     events = result["events"]
-    metrics = result["metrics"]
-    if "confidence" not in metrics:
-        metrics["confidence"] = 0.0
+    metrics_dict = dict(result["metrics"])
+    if "confidence" not in metrics_dict:
+        metrics_dict["confidence"] = 0.0
+    metrics_model = AnalyzeMetrics(**metrics_dict)
     rec = None
     if query.persist:
         rec = save_run(
             source="video",
             mode="detector",
             params=query.model_dump(exclude_none=True),
-            metrics=dict(metrics),
+            metrics=metrics_model.dict(),
             events=list(events),
         )
         impact_idx = events[0] if events else None
@@ -157,5 +159,5 @@ async def analyze_video(
                 except Exception:
                     pass
     return AnalyzeResponse(
-        events=events, metrics=metrics, run_id=rec.run_id if rec else None
+        events=events, metrics=metrics_model, run_id=rec.run_id if rec else None
     )
