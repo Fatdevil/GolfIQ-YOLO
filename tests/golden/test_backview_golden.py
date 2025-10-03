@@ -59,6 +59,9 @@ def test_backview_pipeline_golden_regression() -> None:
     side_angle_deg = _compute_side_angle_deg(frames)
     carry_est_m = metrics["carry_m"]
 
-    assert abs(ball_speed_mps - expected["ballSpeedMps"]) <= expected["ballSpeedMps"] * 0.03
+    assert (
+        abs(ball_speed_mps - expected["ballSpeedMps"])
+        <= expected["ballSpeedMps"] * 0.03
+    )
     assert abs(side_angle_deg - expected["sideAngleDeg"]) <= 1.5
     assert abs(carry_est_m - expected["carryEstM"]) <= 12.0
