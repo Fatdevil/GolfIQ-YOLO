@@ -88,7 +88,9 @@ def load_bundle(course_id: str) -> CourseBundle:
         with course_meta_path.open("r", encoding="utf-8") as fp:
             course_meta = json.load(fp)
 
-    hole_meta: Dict[str, Dict] = course_meta.get("holes", {}) if isinstance(course_meta, dict) else {}
+    hole_meta: Dict[str, Dict] = (
+        course_meta.get("holes", {}) if isinstance(course_meta, dict) else {}
+    )
 
     holes: List[Hole] = []
     for hole_file in sorted(course_dir.glob("hole_*.geojson")):

@@ -66,7 +66,9 @@ async def get_course_bundle(course_id: str, request: Request) -> Response:
 
 
 @router.get("/{course_id}/holes/{hole_number}")
-async def get_course_hole(course_id: str, hole_number: int, request: Request) -> Response:
+async def get_course_hole(
+    course_id: str, hole_number: int, request: Request
+) -> Response:
     try:
         bundle = load_bundle(course_id)
     except CourseBundleNotFoundError as exc:  # pragma: no cover - thin wrapper

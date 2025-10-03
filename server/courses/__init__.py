@@ -1,7 +1,7 @@
 """Course bundle domain models and services."""
 
 from .schema import CourseBundle, Feature, Hole
-from .service import DEFAULT_TTL_SECONDS, load_bundle
+from .service import CourseBundleNotFoundError, DEFAULT_TTL_SECONDS, load_bundle
 
 __all__ = [
     "CourseBundle",
@@ -9,4 +9,5 @@ __all__ = [
     "Hole",
     "DEFAULT_TTL_SECONDS",
     "load_bundle",
+    "CourseBundleNotFoundError",
 ]
