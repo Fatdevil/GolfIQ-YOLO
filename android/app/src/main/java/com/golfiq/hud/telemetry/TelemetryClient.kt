@@ -22,6 +22,7 @@ class TelemetryClient {
     private val metrics = mutableListOf<MetricRecord>()
     private val deviceProfiles = mutableListOf<DeviceProfilePayload>()
     private var impactTriggerCount: Int = 0
+    private val events = mutableListOf<Pair<String, Map<String, Any>>>()
 
     fun emit(name: String, value: Double, deviceClass: String, sampled: Boolean) {
         metrics += MetricRecord(name, value, deviceClass, sampled)
@@ -57,4 +58,21 @@ class TelemetryClient {
     fun all(): List<MetricRecord> = metrics.toList()
     fun postedProfiles(): List<DeviceProfilePayload> = deviceProfiles.toList()
     fun impactTriggerEvents(): Int = impactTriggerCount
+    fun sentEvents(): List<Pair<String, Map<String, Any>>> = events.toList()
+
+    fun send(event: String, payload: Map<String, Any>) {
+        events += event to payload
+    }
+
+    fun sendThermalBattery(thermal: String, batteryPct: Double, drop15m: Double, action: String) {
+        send(
+            event = "thermal_battery",
+            payload = mapOf(
+                "thermal" to thermal,
+                "battery_pct" to batteryPct,
+                "drop_15m_pct" to drop15m,
+                "action" to action,
+            ),
+        )
+    }
 }
