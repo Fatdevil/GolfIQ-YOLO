@@ -38,8 +38,6 @@ from server.storage.runs import save_impact_frames, save_run
 router = APIRouter(prefix="/cv", tags=["cv"], dependencies=[Depends(require_api_key)])
 
 
-
-
 class AnalyzeMetrics(BaseModel):
     ball_speed_mps: float = 0.0
     ball_speed_mph: float = 0.0
@@ -61,6 +59,7 @@ class AnalyzeMetrics(BaseModel):
 
     class Config:
         extra = "allow"
+
 
 class AnalyzeQuery(BaseModel):
     fps: float = Field(120, gt=0)
