@@ -1,6 +1,10 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { getRun } from "../api";
+import TracerCanvas from "../components/TracerCanvas";
+import GhostFrames from "../components/GhostFrames";
+import { extractBackViewPayload } from "../lib/traceUtils";
+import { visualTracerEnabled } from "../config";
 
 interface RunDetailData {
   run_id?: string;
@@ -13,6 +17,39 @@ export default function RunDetailPage() {
   const [data, setData] = useState<RunDetailData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  const backView = useMemo(() => extractBackViewPayload(data), [data]);
+  const qualityBadges = useMemo(() => {
+    const badges: Array<{ key: string; value?: string }> = [];
+    if (!backView?.quality) {
+      return badges;
+    }
+    Object.entries(backView.quality).forEach(([key, value]) => {
+      badges.push({ key, value: value ?? undefined });
+    });
+    return badges;
+  }, [backView]);
+  const headerSource = useMemo(() => {
+    if (!data || typeof data !== "object") return null;
+    const record = data as Record<string, unknown>;
+    const headers = record.headers as Record<string, unknown> | undefined;
+    if (headers) {
+      const raw =
+        headers["x-cv-source"] ??
+        headers["X-CV-Source"] ??
+        headers["x_cv_source"] ??
+        headers["cv_source"];
+      if (typeof raw === "string") {
+        return raw;
+      }
+    }
+    const meta =
+      record["cv_source"] ??
+      record["source"] ??
+      (record["metadata"] as Record<string, unknown> | undefined)?.cv_source;
+    return typeof meta === "string" ? meta : null;
+  }, [data]);
+  const pipelineSource = backView?.source ?? null;
 
   useEffect(() => {
     if (!id) return;
@@ -87,6 +124,68 @@ export default function RunDetailPage() {
             impact_preview.zip
           </a>
           .
+        </div>
+      )}
+
+      {!loading && visualTracerEnabled && backView && (
+        <div className="space-y-4 rounded-xl border border-slate-800 bg-slate-900/60 p-4 shadow-lg">
+          <div className="relative aspect-video w-full overflow-hidden rounded-lg border border-slate-800/60 bg-slate-950/60">
+            {backView.videoUrl ? (
+              <video
+                src={backView.videoUrl}
+                className="h-full w-full object-cover opacity-70"
+                controls
+                muted
+                loop
+                playsInline
+              />
+            ) : (
+              <div className="flex h-full items-center justify-center text-xs text-slate-500">
+                Back-view preview not available
+              </div>
+            )}
+            {backView.trace ? (
+              <TracerCanvas trace={backView.trace} className="absolute inset-0" />
+            ) : (
+              <div className="pointer-events-none absolute inset-0 flex items-center justify-center text-xs uppercase tracking-wide text-slate-500">
+                No tracer points provided
+              </div>
+            )}
+            {backView.ghostFrames && backView.ghostFrames.length > 0 && (
+              <GhostFrames frames={backView.ghostFrames} trace={backView.trace} className="absolute inset-0" />
+            )}
+          </div>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            {qualityBadges.length > 0 ? (
+              <div className="flex flex-wrap gap-2">
+                {qualityBadges.map((item) => (
+                  <span
+                    key={item.key}
+                    className="inline-flex items-center gap-1 rounded-full border border-emerald-500/40 bg-emerald-500/10 px-3 py-1 text-xs font-medium text-emerald-200"
+                  >
+                    <span className="uppercase tracking-wide text-[0.65rem] text-emerald-300/80">
+                      {item.key.replace(/[_-]/g, " ")}
+                    </span>
+                    {item.value && <span className="text-slate-200">{item.value}</span>}
+                  </span>
+                ))}
+              </div>
+            ) : (
+              <span className="text-xs text-slate-500">No quality flags reported.</span>
+            )}
+            <div className="flex flex-col gap-1 text-xs text-slate-400">
+              {pipelineSource && (
+                <span>
+                  Pipeline: <span className="font-mono text-slate-200">{pipelineSource}</span>
+                </span>
+              )}
+              {headerSource && headerSource !== pipelineSource && (
+                <span>
+                  x-cv-source: <span className="font-mono text-slate-200">{headerSource}</span>
+                </span>
+              )}
+            </div>
+          </div>
         </div>
       )}
 

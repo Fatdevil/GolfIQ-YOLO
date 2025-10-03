@@ -2,6 +2,11 @@ import { ChangeEvent, FormEvent, useMemo, useRef, useState } from "react";
 import { Upload, Video } from "lucide-react";
 import MetricCard from "../components/MetricCard";
 import { postVideoAnalyze, postZipAnalyze } from "../api";
+import TracerCanvas from "../components/TracerCanvas";
+import GhostFrames from "../components/GhostFrames";
+import LiveCards from "../components/LiveCards";
+import { extractBackViewPayload } from "../lib/traceUtils";
+import { visualTracerEnabled } from "../config";
 
 interface AnalyzeMetrics {
   ball_speed_mps?: number;
@@ -77,6 +82,8 @@ export default function AnalyzePage() {
   const { inputRef: videoRef, reset: resetVideo } = useFileInput();
 
   const metrics = useMemo<AnalyzeMetrics>(() => result?.metrics ?? {}, [result]);
+  const backView = useMemo(() => extractBackViewPayload(result), [result]);
+  const qualityFlags = useMemo(() => backView?.quality ?? null, [backView]);
 
   const [zipForm, setZipForm] = useState({
     file: null as File | null,
@@ -188,6 +195,25 @@ export default function AnalyzePage() {
       )}
     </div>
   );
+
+  const renderQualityBadges = () => {
+    if (!qualityFlags || Object.keys(qualityFlags).length === 0) {
+      return null;
+    }
+    return Object.entries(qualityFlags).map(([key, value]) => (
+      <span
+        key={key}
+        className="inline-flex items-center gap-1 rounded-full border border-emerald-500/40 bg-emerald-500/10 px-3 py-1 text-xs font-medium text-emerald-200"
+      >
+        <span className="uppercase tracking-wide text-[0.65rem] text-emerald-300/80">
+          {key.replace(/[_-]/g, " ")}
+        </span>
+        {value && <span className="text-slate-200">{value}</span>}
+      </span>
+    ));
+  };
+
+  const qualityBadgeItems = renderQualityBadges();
 
   return (
     <section className="space-y-6">
@@ -395,6 +421,48 @@ export default function AnalyzePage() {
 
       {result && (
         <div className="space-y-6">
+          {visualTracerEnabled && backView && (
+            <div className="space-y-4">
+              <div className="relative aspect-video w-full overflow-hidden rounded-xl border border-slate-800 bg-slate-950/60 shadow-inner">
+                {backView.videoUrl ? (
+                  <video
+                    src={backView.videoUrl}
+                    className="h-full w-full object-cover opacity-70"
+                    controls
+                    muted
+                    loop
+                    playsInline
+                  />
+                ) : (
+                  <div className="flex h-full items-center justify-center text-xs text-slate-500">
+                    Back-view preview not available
+                  </div>
+                )}
+                {backView.trace && (
+                  <TracerCanvas trace={backView.trace} className="absolute inset-0" />
+                )}
+                {backView.ghostFrames && backView.ghostFrames.length > 0 && (
+                  <GhostFrames
+                    frames={backView.ghostFrames}
+                    trace={backView.trace}
+                    className="absolute inset-0"
+                  />
+                )}
+              </div>
+              {((qualityBadgeItems && qualityBadgeItems.length > 0) || backView.source) && (
+                <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-slate-800 bg-slate-900/60 p-4">
+                  {qualityBadgeItems && qualityBadgeItems.length > 0 && (
+                    <div className="flex flex-wrap gap-2">{qualityBadgeItems}</div>
+                  )}
+                  {backView.source && (
+                    <span className="text-xs text-slate-400">
+                      Source: <span className="font-mono text-slate-200">{backView.source}</span>
+                    </span>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
           <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-6">
             <h2 className="text-lg font-semibold text-emerald-200">Result</h2>
             {result.run_id && (
@@ -404,6 +472,7 @@ export default function AnalyzePage() {
             )}
             {renderMetrics()}
           </div>
+          {visualTracerEnabled && <LiveCards />}
           {result.events && result.events.length > 0 && (
             <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-6">
               <h3 className="text-base font-semibold text-emerald-200">Events</h3>
