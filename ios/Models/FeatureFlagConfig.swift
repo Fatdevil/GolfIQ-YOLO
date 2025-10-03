@@ -7,16 +7,59 @@ struct FeatureFlagConfig: Codable {
         case override
     }
 
+    private enum CodingKeys: String, CodingKey {
+        case hudEnabled
+        case hudTracerEnabled
+        case hudWindHintEnabled
+        case hudTargetLineEnabled
+        case hudBatterySaverEnabled
+        case handsFreeImpactEnabled
+        case source
+    }
+
+    var hudEnabled: Bool
+    var hudTracerEnabled: Bool
     var hudWindHintEnabled: Bool
     var hudTargetLineEnabled: Bool
     var hudBatterySaverEnabled: Bool
     var handsFreeImpactEnabled: Bool
     var source: Source
 
+    init(
+        hudEnabled: Bool,
+        hudTracerEnabled: Bool,
+        hudWindHintEnabled: Bool,
+        hudTargetLineEnabled: Bool,
+        hudBatterySaverEnabled: Bool,
+        handsFreeImpactEnabled: Bool,
+        source: Source
+    ) {
+        self.hudEnabled = hudEnabled
+        self.hudTracerEnabled = hudTracerEnabled
+        self.hudWindHintEnabled = hudWindHintEnabled
+        self.hudTargetLineEnabled = hudTargetLineEnabled
+        self.hudBatterySaverEnabled = hudBatterySaverEnabled
+        self.handsFreeImpactEnabled = handsFreeImpactEnabled
+        self.source = source
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        hudEnabled = try container.decodeIfPresent(Bool.self, forKey: .hudEnabled) ?? false
+        hudTracerEnabled = try container.decodeIfPresent(Bool.self, forKey: .hudTracerEnabled) ?? false
+        hudWindHintEnabled = try container.decode(Bool.self, forKey: .hudWindHintEnabled)
+        hudTargetLineEnabled = try container.decode(Bool.self, forKey: .hudTargetLineEnabled)
+        hudBatterySaverEnabled = try container.decode(Bool.self, forKey: .hudBatterySaverEnabled)
+        handsFreeImpactEnabled = try container.decode(Bool.self, forKey: .handsFreeImpactEnabled)
+        source = try container.decodeIfPresent(Source.self, forKey: .source) ?? .default
+    }
+
     static func forTier(_ tier: DeviceProfile.Tier) -> FeatureFlagConfig {
         switch tier {
         case .a:
             return FeatureFlagConfig(
+                hudEnabled: false,
+                hudTracerEnabled: false,
                 hudWindHintEnabled: true,
                 hudTargetLineEnabled: true,
                 hudBatterySaverEnabled: false,
@@ -25,6 +68,8 @@ struct FeatureFlagConfig: Codable {
             )
         case .b:
             return FeatureFlagConfig(
+                hudEnabled: false,
+                hudTracerEnabled: false,
                 hudWindHintEnabled: true,
                 hudTargetLineEnabled: true,
                 hudBatterySaverEnabled: true,
@@ -33,6 +78,8 @@ struct FeatureFlagConfig: Codable {
             )
         case .c:
             return FeatureFlagConfig(
+                hudEnabled: false,
+                hudTracerEnabled: false,
                 hudWindHintEnabled: false,
                 hudTargetLineEnabled: false,
                 hudBatterySaverEnabled: true,
