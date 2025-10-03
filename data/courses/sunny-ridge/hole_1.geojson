@@ -1,0 +1,63 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "id": "sunny-ridge-1-pin",
+      "geometry": {"type": "Point", "coordinates": [-111.9102, 33.4304]},
+      "properties": {"kind": "pin", "hole": 1}
+    },
+    {
+      "type": "Feature",
+      "id": "sunny-ridge-1-green-front",
+      "geometry": {"type": "Point", "coordinates": [-111.9106, 33.4302]},
+      "properties": {"kind": "green", "position": "front", "hole": 1}
+    },
+    {
+      "type": "Feature",
+      "id": "sunny-ridge-1-green-center",
+      "geometry": {"type": "Point", "coordinates": [-111.9103, 33.4303]},
+      "properties": {"kind": "green", "position": "center", "hole": 1}
+    },
+    {
+      "type": "Feature",
+      "id": "sunny-ridge-1-green-back",
+      "geometry": {"type": "Point", "coordinates": [-111.9100, 33.4305]},
+      "properties": {"kind": "green", "position": "back", "hole": 1}
+    },
+    {
+      "type": "Feature",
+      "id": "sunny-ridge-1-bunker-guard",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [-111.9095, 33.4299],
+            [-111.9091, 33.4299],
+            [-111.9091, 33.4302],
+            [-111.9095, 33.4302],
+            [-111.9095, 33.4299]
+          ]
+        ]
+      },
+      "properties": {"kind": "bunker", "hole": 1, "name": "Guard Bunker"}
+    },
+    {
+      "type": "Feature",
+      "id": "sunny-ridge-1-water-canyon",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [-111.9108, 33.4298],
+            [-111.9103, 33.4296],
+            [-111.9100, 33.4299],
+            [-111.9105, 33.4301],
+            [-111.9108, 33.4298]
+          ]
+        ]
+      },
+      "properties": {"kind": "water", "hole": 1, "name": "Canyon Run"}
+    }
+  ]
+}

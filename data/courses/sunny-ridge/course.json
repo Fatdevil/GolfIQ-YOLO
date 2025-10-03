@@ -1,0 +1,8 @@
+{
+  "id": "sunny-ridge",
+  "name": "Sunny Ridge Practice",
+  "holes": {
+    "1": {"par": 5, "yardage": 525, "name": "Ridgeline"},
+    "2": {"par": 4, "yardage": 380, "name": "Sunset"}
+  }
+}

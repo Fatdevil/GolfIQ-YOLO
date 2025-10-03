@@ -19,6 +19,7 @@ from server.retention.sweeper import sweep_retention_once
 
 from .routes.caddie_recommend import router as caddie_router
 from .routes.calibrate import router as calibrate_router
+from .routes.course_bundle import router as course_bundle_router
 from .routes.cv_analyze import router as cv_analyze_router
 from .routes.cv_analyze_video import router as cv_analyze_video_router
 from .routes.cv_mock import router as cv_mock_router
@@ -89,6 +90,7 @@ app.include_router(coach_router)
 app.include_router(legacy_calibrate.router)
 app.include_router(calibrate_router)
 app.include_router(caddie_router)
+app.include_router(course_bundle_router)
 app.include_router(metrics.router)
 app.add_api_route(
     "/health",
