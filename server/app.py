@@ -14,6 +14,7 @@ from server.api.health import health as _health_handler
 from server.api.routers import calibrate as legacy_calibrate
 from server.api.routers import metrics
 from server.api.routers.coach import router as coach_router
+from server.api.routers.coach_feedback import router as coach_feedback_router
 from server.metrics import MetricsMiddleware, metrics_app
 from server.retention.sweeper import sweep_retention_once
 
@@ -87,6 +88,7 @@ app.add_middleware(MetricsMiddleware)
 api_dep = _api_key_dependency()
 
 app.include_router(coach_router)
+app.include_router(coach_feedback_router)
 app.include_router(legacy_calibrate.router)
 app.include_router(calibrate_router)
 app.include_router(caddie_router)
