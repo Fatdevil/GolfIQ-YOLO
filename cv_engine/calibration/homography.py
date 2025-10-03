@@ -32,9 +32,7 @@ def _normalize(points: Sequence[Point]) -> tuple[np.ndarray, np.ndarray]:
     return T, pts_h
 
 
-def estimate_homography(
-    src: Sequence[Point], dst: Sequence[Point]
-) -> HomographyResult:
+def estimate_homography(src: Sequence[Point], dst: Sequence[Point]) -> HomographyResult:
     """Estimate homography from >=2 point pairs using DLT with normalization."""
 
     if len(src) != len(dst):
