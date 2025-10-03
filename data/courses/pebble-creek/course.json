@@ -1,0 +1,8 @@
+{
+  "id": "pebble-creek",
+  "name": "Pebble Creek (Sample)",
+  "holes": {
+    "1": {"par": 4, "yardage": 412, "name": "Creekside"},
+    "2": {"par": 3, "yardage": 168, "name": "Overlook"}
+  }
+}

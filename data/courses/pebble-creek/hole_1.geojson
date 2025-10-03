@@ -1,0 +1,63 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "id": "pebble-creek-1-pin",
+      "geometry": {"type": "Point", "coordinates": [-122.4005, 37.7908]},
+      "properties": {"kind": "pin", "hole": 1}
+    },
+    {
+      "type": "Feature",
+      "id": "pebble-creek-1-green-front",
+      "geometry": {"type": "Point", "coordinates": [-122.4007, 37.7906]},
+      "properties": {"kind": "green", "position": "front", "hole": 1}
+    },
+    {
+      "type": "Feature",
+      "id": "pebble-creek-1-green-center",
+      "geometry": {"type": "Point", "coordinates": [-122.4005, 37.7907]},
+      "properties": {"kind": "green", "position": "center", "hole": 1}
+    },
+    {
+      "type": "Feature",
+      "id": "pebble-creek-1-green-back",
+      "geometry": {"type": "Point", "coordinates": [-122.4003, 37.7909]},
+      "properties": {"kind": "green", "position": "back", "hole": 1}
+    },
+    {
+      "type": "Feature",
+      "id": "pebble-creek-1-bunker-east",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [-122.3999, 37.7905],
+            [-122.3996, 37.7905],
+            [-122.3996, 37.7908],
+            [-122.3999, 37.7908],
+            [-122.3999, 37.7905]
+          ]
+        ]
+      },
+      "properties": {"kind": "bunker", "hole": 1, "name": "Right Bunker"}
+    },
+    {
+      "type": "Feature",
+      "id": "pebble-creek-1-water-creek",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [-122.4012, 37.7903],
+            [-122.4010, 37.7903],
+            [-122.4010, 37.7907],
+            [-122.4012, 37.7907],
+            [-122.4012, 37.7903]
+          ]
+        ]
+      },
+      "properties": {"kind": "water", "hole": 1, "name": "Creek"}
+    }
+  ]
+}

@@ -1,0 +1,63 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "id": "sunny-ridge-2-pin",
+      "geometry": {"type": "Point", "coordinates": [-111.9094, 33.4312]},
+      "properties": {"kind": "pin", "hole": 2}
+    },
+    {
+      "type": "Feature",
+      "id": "sunny-ridge-2-green-front",
+      "geometry": {"type": "Point", "coordinates": [-111.9098, 33.4310]},
+      "properties": {"kind": "green", "position": "front", "hole": 2}
+    },
+    {
+      "type": "Feature",
+      "id": "sunny-ridge-2-green-center",
+      "geometry": {"type": "Point", "coordinates": [-111.9095, 33.4311]},
+      "properties": {"kind": "green", "position": "center", "hole": 2}
+    },
+    {
+      "type": "Feature",
+      "id": "sunny-ridge-2-green-back",
+      "geometry": {"type": "Point", "coordinates": [-111.9092, 33.4313]},
+      "properties": {"kind": "green", "position": "back", "hole": 2}
+    },
+    {
+      "type": "Feature",
+      "id": "sunny-ridge-2-bunker-fairway",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [-111.9102, 33.4307],
+            [-111.9098, 33.4306],
+            [-111.9096, 33.4308],
+            [-111.9100, 33.4309],
+            [-111.9102, 33.4307]
+          ]
+        ]
+      },
+      "properties": {"kind": "bunker", "hole": 2, "name": "Fairway Trap"}
+    },
+    {
+      "type": "Feature",
+      "id": "sunny-ridge-2-water-stream",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [-111.9090, 33.4308],
+            [-111.9086, 33.4307],
+            [-111.9085, 33.4310],
+            [-111.9089, 33.4311],
+            [-111.9090, 33.4308]
+          ]
+        ]
+      },
+      "properties": {"kind": "water", "hole": 2, "name": "Stream"}
+    }
+  ]
+}
