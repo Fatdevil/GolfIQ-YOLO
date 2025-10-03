@@ -101,7 +101,6 @@ def _build_tracer() -> Any:
     from opentelemetry.sdk.trace import TracerProvider
     from opentelemetry.sdk.trace.export import (
         BatchSpanProcessor,
-        ConsoleSpanExporter,
         SimpleSpanProcessor,
     )
 
