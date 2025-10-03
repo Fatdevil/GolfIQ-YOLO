@@ -103,9 +103,7 @@ def analyze_frames(
 
         tracking_start = perf_counter()
         active_ids: Dict[str, int] = {"ball": -1, "club": -1}
-        with span(
-            "cv.pipeline.tracking", attributes={"cv.tracker": tracker_name}
-        ):
+        with span("cv.pipeline.tracking", attributes={"cv.tracker": tracker_name}):
             for boxes in boxes_per_frame:
                 tracked = tracker.update(boxes)
 
@@ -126,9 +124,7 @@ def analyze_frames(
                             chosen_box = box
                             break
                     if chosen_box is None:
-                        chosen_id, chosen_box = max(
-                            seq, key=lambda item: item[1].score
-                        )
+                        chosen_id, chosen_box = max(seq, key=lambda item: item[1].score)
                     if chosen_box is None:
                         continue
                     active_ids[label] = chosen_id
@@ -161,7 +157,9 @@ def analyze_frames(
         base_quality = {
             "fps": _quality_from_fps(calib.fps),
             "homography": "warn",
-            "lighting": _quality_from_lighting(frames_list[0]) if frames_list else "low",
+            "lighting": (
+                _quality_from_lighting(frames_list[0]) if frames_list else "low"
+            ),
         }
 
         if len(ball_track_px) < 2 or len(club_track_px) < 2:
@@ -229,13 +227,15 @@ def analyze_frames(
                         "confidence": confidence,
                         "ballSpeedMps": round(base_metrics.ball_speed_mps, 3),
                         "clubSpeedMps": round(base_metrics.club_speed_mps, 3),
-                        "sideAngleDeg": round(side_angle, 2)
-                        if side_angle is not None
-                        else None,
-                        "vertLaunchDeg": round(vert_launch, 2)
-                        if vert_launch is not None
-                        else None,
-                        "carryEstM": round(carry_est, 2) if carry_est is not None else 0.0,
+                        "sideAngleDeg": (
+                            round(side_angle, 2) if side_angle is not None else None
+                        ),
+                        "vertLaunchDeg": (
+                            round(vert_launch, 2) if vert_launch is not None else None
+                        ),
+                        "carryEstM": (
+                            round(carry_est, 2) if carry_est is not None else 0.0
+                        ),
                         "quality": base_quality,
                     }
                 )
