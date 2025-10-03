@@ -10,6 +10,11 @@ final class ARHUDViewController: UIViewController, ARSCNViewDelegate, CLLocation
     private let telemetry: TelemetryClient
     private let featureFlags: FeatureFlagsService
     private let courseId: String
+    private let thermalWatcher = ThermalWatcher()
+    private let batteryMonitor = BatteryMonitor()
+    private var fallbackTimer: Timer?
+    private let fallbackInterval: TimeInterval = 60
+    private var lastFallbackAction: FallbackAction = .none
 
     private let locationManager = CLLocationManager()
     private var currentCourse: ARHUDCourseBundle?
@@ -58,6 +63,7 @@ final class ARHUDViewController: UIViewController, ARSCNViewDelegate, CLLocation
     override func viewWillAppear(_ animated: Bool) {
         super.viewWillAppear(animated)
         overlayView.isHidden = !featureFlags.current().hudEnabled
+        startFallbackMonitoring()
         startSession()
     }
 
@@ -65,12 +71,14 @@ final class ARHUDViewController: UIViewController, ARSCNViewDelegate, CLLocation
         super.viewDidDisappear(animated)
         sceneView.session.pause()
         fpsDisplayLink?.invalidate()
+        stopFallbackMonitoring()
     }
 
     deinit {
         fpsDisplayLink?.invalidate()
         locationManager.stopUpdatingHeading()
         locationManager.stopUpdatingLocation()
+        stopFallbackMonitoring()
     }
 
     private func configureSceneView() {
@@ -115,6 +123,48 @@ final class ARHUDViewController: UIViewController, ARSCNViewDelegate, CLLocation
     private func configureDisplayLink() {
         fpsDisplayLink = CADisplayLink(target: self, selector: #selector(handleDisplayLink(_:)))
         fpsDisplayLink?.add(to: .main, forMode: .common)
+    }
+
+    private func startFallbackMonitoring() {
+        thermalWatcher.start()
+        batteryMonitor.start()
+
+        fallbackTimer?.invalidate()
+        let timer = Timer.scheduledTimer(withTimeInterval: fallbackInterval, repeats: true) { [weak self] _ in
+            self?.evaluateFallbackState()
+        }
+        timer.tolerance = 5
+        fallbackTimer = timer
+
+        evaluateFallbackState()
+    }
+
+    private func stopFallbackMonitoring() {
+        fallbackTimer?.invalidate()
+        fallbackTimer = nil
+        thermalWatcher.stop()
+        batteryMonitor.stop()
+        lastFallbackAction = .none
+    }
+
+    private func evaluateFallbackState() {
+        let thermalState = thermalWatcher.currentStateString()
+        let batteryDrop = batteryMonitor.dropLast15Minutes()
+        let batteryLevel = batteryMonitor.currentLevel()
+
+        let action = FallbackPolicy.evaluate(thermal: thermalState, drop15m: batteryDrop)
+        telemetry.sendThermalBattery(
+            thermal: thermalState,
+            batteryPct: batteryLevel,
+            drop15m: batteryDrop,
+            action: action.rawValue
+        )
+
+        if action == .switchTo2D, lastFallbackAction != .switchTo2D {
+            HUDRuntime.shared.switchTo2DCompass()
+        }
+
+        lastFallbackAction = action
     }
 
     private func startSession() {

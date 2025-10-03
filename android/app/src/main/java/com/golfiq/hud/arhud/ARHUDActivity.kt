@@ -10,6 +10,8 @@ import android.hardware.SensorEventListener
 import android.hardware.SensorManager
 import android.location.Location
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.view.Choreographer
 import android.view.Gravity
 import android.widget.FrameLayout
@@ -32,6 +34,11 @@ import com.google.ar.sceneform.rendering.MaterialFactory
 import com.google.ar.sceneform.rendering.ShapeFactory
 import com.google.ar.sceneform.ux.ArFragment
 import com.golfiq.hud.config.FeatureFlagsService
+import com.golfiq.hud.hud.HUDRuntime
+import com.golfiq.hud.runtime.BatteryMonitor
+import com.golfiq.hud.runtime.FallbackAction
+import com.golfiq.hud.runtime.FallbackPolicy
+import com.golfiq.hud.runtime.ThermalWatchdog
 import com.golfiq.hud.telemetry.TelemetryClient
 import java.net.URL
 import java.util.ArrayDeque
@@ -46,6 +53,18 @@ class ARHUDActivity : AppCompatActivity(), SensorEventListener {
     private lateinit var featureFlags: FeatureFlagsService
     private lateinit var telemetry: TelemetryClient
     private lateinit var courseRepository: CourseBundleRepository
+    private lateinit var thermalWatchdog: ThermalWatchdog
+    private lateinit var batteryMonitor: BatteryMonitor
+
+    private val fallbackHandler = Handler(Looper.getMainLooper())
+    private val fallbackIntervalMs = 60_000L
+    private val fallbackRunnable = object : Runnable {
+        override fun run() {
+            evaluateFallbackState()
+            fallbackHandler.postDelayed(this, fallbackIntervalMs)
+        }
+    }
+    private var lastFallbackAction: FallbackAction = FallbackAction.NONE
 
     private val executor = Executors.newSingleThreadExecutor()
     private val fusedLocationClient by lazy { LocationServices.getFusedLocationProviderClient(this) }
@@ -104,6 +123,8 @@ class ARHUDActivity : AppCompatActivity(), SensorEventListener {
 
         featureFlags = FeatureFlagsService()
         telemetry = TelemetryClient()
+        thermalWatchdog = ThermalWatchdog(this)
+        batteryMonitor = BatteryMonitor(this)
 
         if (!featureFlags.current().hudEnabled) {
             finish()
@@ -155,6 +176,7 @@ class ARHUDActivity : AppCompatActivity(), SensorEventListener {
             startLocationUpdates()
         }
         Choreographer.getInstance().postFrameCallback(frameCallback)
+        startFallbackMonitoring()
     }
 
     override fun onPause() {
@@ -162,6 +184,7 @@ class ARHUDActivity : AppCompatActivity(), SensorEventListener {
         sensorManager.unregisterListener(this)
         fusedLocationClient.removeLocationUpdates(locationCallback)
         Choreographer.getInstance().removeFrameCallback(frameCallback)
+        stopFallbackMonitoring()
     }
 
     override fun onDestroy() {
@@ -198,6 +221,41 @@ class ARHUDActivity : AppCompatActivity(), SensorEventListener {
             }
             else -> permissionsLauncher.launch(Manifest.permission.ACCESS_FINE_LOCATION)
         }
+    }
+
+    private fun startFallbackMonitoring() {
+        thermalWatchdog.start()
+        batteryMonitor.start()
+        evaluateFallbackState()
+        fallbackHandler.removeCallbacks(fallbackRunnable)
+        fallbackHandler.postDelayed(fallbackRunnable, fallbackIntervalMs)
+    }
+
+    private fun stopFallbackMonitoring() {
+        fallbackHandler.removeCallbacks(fallbackRunnable)
+        thermalWatchdog.stop()
+        batteryMonitor.stop()
+        lastFallbackAction = FallbackAction.NONE
+    }
+
+    private fun evaluateFallbackState() {
+        val thermalState = thermalWatchdog.currentState()
+        val batteryDrop = batteryMonitor.dropLast15Minutes()
+        val batteryLevel = batteryMonitor.currentLevel()
+
+        val action = FallbackPolicy.evaluate(thermalState, batteryDrop)
+        telemetry.sendThermalBattery(
+            thermal = thermalState,
+            batteryPct = batteryLevel,
+            drop15m = batteryDrop,
+            action = action.wireName,
+        )
+
+        if (action == FallbackAction.SWITCH_TO_2D && lastFallbackAction != FallbackAction.SWITCH_TO_2D) {
+            HUDRuntime.switchTo2DCompass()
+        }
+
+        lastFallbackAction = action
     }
 
     private fun startLocationUpdates() {

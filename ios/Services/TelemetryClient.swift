@@ -19,6 +19,7 @@ final class TelemetryClient {
     private(set) var metrics: [MetricRecord] = []
     private(set) var deviceProfiles: [DeviceProfilePayload] = []
     private(set) var impactTriggerCount: Int = 0
+    private(set) var events: [(name: String, payload: [String: Any])] = []
 
     func emit(name: String, value: Double, deviceClass: String, sampled: Bool) {
         metrics.append(MetricRecord(name: name, value: value, deviceClass: deviceClass, sampled: sampled))
@@ -51,5 +52,21 @@ final class TelemetryClient {
 
     func logHudFps(_ fps: Double) {
         emit(name: "arhud_fps", value: fps, deviceClass: "arhud", sampled: true)
+    }
+
+    func send(event: String, payload: [String: Any]) {
+        events.append((name: event, payload: payload))
+    }
+
+    func sendThermalBattery(thermal: String, batteryPct: Double, drop15m: Double, action: String) {
+        send(
+            event: "thermal_battery",
+            payload: [
+                "thermal": thermal,
+                "battery_pct": batteryPct,
+                "drop_15m_pct": drop15m,
+                "action": action
+            ]
+        )
     }
 }
