@@ -6,7 +6,12 @@ import os
 from contextlib import contextmanager
 from typing import Any, Dict, Iterator, Optional
 
-_OTEL_ENV_FLAG = os.getenv("OTEL_ENABLED", "false").lower() in {"1", "true", "yes", "on"}
+_OTEL_ENV_FLAG = os.getenv("OTEL_ENABLED", "false").lower() in {
+    "1",
+    "true",
+    "yes",
+    "on",
+}
 _tracer = None
 
 if _OTEL_ENV_FLAG:
@@ -39,4 +44,3 @@ def span(name: str, attributes: Optional[Dict[str, Any]] = None) -> Iterator[Any
             for key, value in attributes.items():
                 otel_span.set_attribute(key, value)
         yield otel_span
-
