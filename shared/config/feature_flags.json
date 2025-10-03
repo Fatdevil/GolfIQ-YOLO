@@ -1,5 +1,7 @@
 {
   "hud_wind_hint": true,
   "hud_target_line": true,
-  "hud_battery_saver": true
+  "hud_battery_saver": true,
+  "hudEnabled": false,
+  "hudTracerEnabled": false
 }

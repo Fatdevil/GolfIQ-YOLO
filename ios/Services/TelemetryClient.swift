@@ -40,4 +40,16 @@ final class TelemetryClient {
         impactTriggerCount += 1
         emit(name: "impact_trigger", value: magnitudeDb, deviceClass: "audio", sampled: true)
     }
+
+    func logHudCalibration() {
+        emit(name: "arhud_calibrate", value: 1.0, deviceClass: "arhud", sampled: false)
+    }
+
+    func logHudRecenter() {
+        emit(name: "arhud_recenter", value: 1.0, deviceClass: "arhud", sampled: false)
+    }
+
+    func logHudFps(_ fps: Double) {
+        emit(name: "arhud_fps", value: fps, deviceClass: "arhud", sampled: true)
+    }
 }

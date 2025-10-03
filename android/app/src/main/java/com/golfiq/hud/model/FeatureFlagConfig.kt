@@ -7,11 +7,13 @@ import com.golfiq.hud.model.DeviceProfile.Tier
  * explicit overrides from the Settings surface.
  */
 data class FeatureFlagConfig(
+    val hudEnabled: Boolean = false,
+    val hudTracerEnabled: Boolean = false,
     val hudWindHintEnabled: Boolean,
     val hudTargetLineEnabled: Boolean,
     val hudBatterySaverEnabled: Boolean,
     val handsFreeImpactEnabled: Boolean,
-    val source: Source,
+    val source: Source = Source.DEFAULT,
 ) {
     enum class Source { DEFAULT, FEATURE_SERVICE, OVERRIDE }
 
@@ -19,6 +21,8 @@ data class FeatureFlagConfig(
         fun forTier(tier: Tier): FeatureFlagConfig {
             return when (tier) {
                 Tier.A -> FeatureFlagConfig(
+                    hudEnabled = false,
+                    hudTracerEnabled = false,
                     hudWindHintEnabled = true,
                     hudTargetLineEnabled = true,
                     hudBatterySaverEnabled = false,
@@ -26,6 +30,8 @@ data class FeatureFlagConfig(
                     source = Source.DEFAULT,
                 )
                 Tier.B -> FeatureFlagConfig(
+                    hudEnabled = false,
+                    hudTracerEnabled = false,
                     hudWindHintEnabled = true,
                     hudTargetLineEnabled = true,
                     hudBatterySaverEnabled = true,
@@ -33,6 +39,8 @@ data class FeatureFlagConfig(
                     source = Source.DEFAULT,
                 )
                 Tier.C -> FeatureFlagConfig(
+                    hudEnabled = false,
+                    hudTracerEnabled = false,
                     hudWindHintEnabled = false,
                     hudTargetLineEnabled = false,
                     hudBatterySaverEnabled = true,

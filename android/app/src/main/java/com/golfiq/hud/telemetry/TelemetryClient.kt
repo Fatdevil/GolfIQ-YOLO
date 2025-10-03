@@ -42,6 +42,18 @@ class TelemetryClient {
         emit(name = "impact_trigger", value = magnitudeDb, deviceClass = "audio", sampled = true)
     }
 
+    fun logHudCalibration() {
+        emit(name = "arhud_calibrate", value = 1.0, deviceClass = "arhud", sampled = false)
+    }
+
+    fun logHudRecenter() {
+        emit(name = "arhud_recenter", value = 1.0, deviceClass = "arhud", sampled = false)
+    }
+
+    fun logHudFps(fps: Double) {
+        emit(name = "arhud_fps", value = fps, deviceClass = "arhud", sampled = true)
+    }
+
     fun all(): List<MetricRecord> = metrics.toList()
     fun postedProfiles(): List<DeviceProfilePayload> = deviceProfiles.toList()
     fun impactTriggerEvents(): Int = impactTriggerCount

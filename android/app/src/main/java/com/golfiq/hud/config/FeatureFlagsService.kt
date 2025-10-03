@@ -5,6 +5,8 @@ import com.golfiq.hud.model.FeatureFlagConfig
 
 class FeatureFlagsService(
     defaults: FeatureFlagConfig = FeatureFlagConfig(
+        hudEnabled = false,
+        hudTracerEnabled = false,
         hudWindHintEnabled = true,
         hudTargetLineEnabled = true,
         hudBatterySaverEnabled = false,
@@ -26,7 +28,23 @@ class FeatureFlagsService(
 
     fun setHandsFreeEnabled(enabled: Boolean) {
         config = config.copy(
+            hudEnabled = config.hudEnabled,
+            hudTracerEnabled = config.hudTracerEnabled,
             handsFreeImpactEnabled = enabled,
+            source = FeatureFlagConfig.Source.OVERRIDE,
+        )
+    }
+
+    fun setHudEnabled(enabled: Boolean) {
+        config = config.copy(
+            hudEnabled = enabled,
+            source = FeatureFlagConfig.Source.OVERRIDE,
+        )
+    }
+
+    fun setHudTracerEnabled(enabled: Boolean) {
+        config = config.copy(
+            hudTracerEnabled = enabled,
             source = FeatureFlagConfig.Source.OVERRIDE,
         )
     }
