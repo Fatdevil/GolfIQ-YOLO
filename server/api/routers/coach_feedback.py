@@ -51,7 +51,9 @@ def _rate_limit(ip: str) -> None:
 
 
 @router.post("/coach/feedback", response_model=CoachFeedbackResponse)
-async def coach_feedback(request: Request, body: CoachFeedbackRequest) -> CoachFeedbackResponse:
+async def coach_feedback(
+    request: Request, body: CoachFeedbackRequest
+) -> CoachFeedbackResponse:
     client = request.client.host if request.client else "unknown"
     _rate_limit(client)
 
@@ -59,12 +61,17 @@ async def coach_feedback(request: Request, body: CoachFeedbackRequest) -> CoachF
     if body.run_id:
         record = load_run(body.run_id)
         if record is None:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Run not found")
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="Run not found"
+            )
         if isinstance(record.metrics, dict):
             metrics = dict(record.metrics)
     if body.metrics:
         if not isinstance(body.metrics, dict):
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="metrics must be an object")
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="metrics must be an object",
+            )
         metrics.update(body.metrics)
 
     result = generate_feedback(metrics)

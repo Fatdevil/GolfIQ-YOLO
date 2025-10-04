@@ -36,7 +36,9 @@ def generate_feedback(
     start = time.perf_counter()
     try:
         text = active_provider.generate(metrics_dict)
-        provider_name = getattr(active_provider, "name", active_provider.__class__.__name__)
+        provider_name = getattr(
+            active_provider, "name", active_provider.__class__.__name__
+        )
         latency = int((time.perf_counter() - start) * 1000)
         return {"text": text, "provider": provider_name, "latency_ms": latency}
     except (CoachProviderTimeout, httpx.TimeoutException, TimeoutError):
