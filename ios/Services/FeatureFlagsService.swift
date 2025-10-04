@@ -11,6 +11,8 @@ final class FeatureFlagsService {
             hudTargetLineEnabled: true,
             hudBatterySaverEnabled: false,
             handsFreeImpactEnabled: false,
+            inputSize: 320,
+            reducedRate: false,
             source: .default
         )
     ) {
@@ -37,6 +39,8 @@ final class FeatureFlagsService {
             hudTargetLineEnabled: config.hudTargetLineEnabled,
             hudBatterySaverEnabled: config.hudBatterySaverEnabled,
             handsFreeImpactEnabled: enabled,
+            inputSize: config.inputSize,
+            reducedRate: config.reducedRate,
             source: .override
         )
     }
@@ -49,6 +53,8 @@ final class FeatureFlagsService {
             hudTargetLineEnabled: config.hudTargetLineEnabled,
             hudBatterySaverEnabled: config.hudBatterySaverEnabled,
             handsFreeImpactEnabled: config.handsFreeImpactEnabled,
+            inputSize: config.inputSize,
+            reducedRate: config.reducedRate,
             source: .override
         )
     }
@@ -61,6 +67,8 @@ final class FeatureFlagsService {
             hudTargetLineEnabled: config.hudTargetLineEnabled,
             hudBatterySaverEnabled: config.hudBatterySaverEnabled,
             handsFreeImpactEnabled: config.handsFreeImpactEnabled,
+            inputSize: config.inputSize,
+            reducedRate: config.reducedRate,
             source: .override
         )
     }

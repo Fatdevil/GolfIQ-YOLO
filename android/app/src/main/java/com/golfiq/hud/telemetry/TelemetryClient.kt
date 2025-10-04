@@ -75,4 +75,29 @@ class TelemetryClient {
             ),
         )
     }
+
+    fun logRemoteConfigActive(
+        hash: String,
+        profile: DeviceProfile,
+        runtime: Map<String, Any>,
+        inputSize: Int,
+        reducedRate: Boolean,
+    ) {
+        val payload = mutableMapOf<String, Any>(
+            "configHash" to hash,
+            "device" to mapOf(
+                "id" to profile.id,
+                "tier" to profile.tier.name,
+                "os" to profile.osVersion,
+                "estimatedFps" to profile.estimatedFps,
+            ),
+            "runtime" to runtime,
+            "inputSize" to inputSize,
+            "reducedRate" to reducedRate,
+        )
+        if (profile.estimatedFps > 0) {
+            payload["latencyMs"] = 1000.0 / profile.estimatedFps
+        }
+        send(event = "remote_config_active", payload = payload)
+    }
 }

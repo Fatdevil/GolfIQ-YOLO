@@ -13,9 +13,11 @@ data class FeatureFlagConfig(
     val hudTargetLineEnabled: Boolean,
     val hudBatterySaverEnabled: Boolean,
     val handsFreeImpactEnabled: Boolean,
+    val inputSize: Int,
+    val reducedRate: Boolean,
     val source: Source = Source.DEFAULT,
 ) {
-    enum class Source { DEFAULT, FEATURE_SERVICE, OVERRIDE }
+    enum class Source { DEFAULT, FEATURE_SERVICE, REMOTE_CONFIG, OVERRIDE }
 
     companion object {
         fun forTier(tier: Tier): FeatureFlagConfig {
@@ -27,6 +29,8 @@ data class FeatureFlagConfig(
                     hudTargetLineEnabled = true,
                     hudBatterySaverEnabled = false,
                     handsFreeImpactEnabled = true,
+                    inputSize = 320,
+                    reducedRate = false,
                     source = Source.DEFAULT,
                 )
                 Tier.B -> FeatureFlagConfig(
@@ -36,6 +40,8 @@ data class FeatureFlagConfig(
                     hudTargetLineEnabled = true,
                     hudBatterySaverEnabled = true,
                     handsFreeImpactEnabled = true,
+                    inputSize = 320,
+                    reducedRate = true,
                     source = Source.DEFAULT,
                 )
                 Tier.C -> FeatureFlagConfig(
@@ -45,6 +51,8 @@ data class FeatureFlagConfig(
                     hudTargetLineEnabled = false,
                     hudBatterySaverEnabled = true,
                     handsFreeImpactEnabled = false,
+                    inputSize = 224,
+                    reducedRate = true,
                     source = Source.DEFAULT,
                 )
             }

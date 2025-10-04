@@ -9,6 +9,7 @@ const links = [
   { to: "/calibration", label: "Calibration" },
   { to: "/mock", label: "Mock" },
   { to: "/runs", label: "Runs" },
+  { to: "/device-dashboard", label: "Devices" },
 ];
 
 export default function Nav() {

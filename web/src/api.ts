@@ -83,3 +83,59 @@ export const getRun = (id: string) =>
   axios.get(`${API}/runs/${id}`, { headers: withAuth() }).then((r) => r.data);
 export const deleteRun = (id: string) =>
   axios.delete(`${API}/runs/${id}`, { headers: withAuth() }).then((r) => r.data);
+
+export type TelemetryAggregate = {
+  generatedAt: string;
+  sampleSize: number;
+  tiers: { tier: string; count: number }[];
+  profiles: { model: string; os: string; count: number }[];
+  runtimeDistribution: { runtime: string; count: number }[];
+  latencyP95: { model: string; os: string; p95: number; samples: number }[];
+  configHashes: { hash: string; count: number }[];
+};
+
+export const fetchTelemetryAggregate = () =>
+  axios
+    .get<TelemetryAggregate>(`${API}/tools/telemetry/aggregate`, {
+      headers: withAuth(),
+    })
+    .then((r) => r.data);
+
+export type RemoteConfigTier = {
+  hudEnabled?: boolean;
+  inputSize?: number;
+  reducedRate?: boolean;
+  [key: string]: unknown;
+};
+
+export type RemoteConfigSnapshot = {
+  config: Record<string, RemoteConfigTier>;
+  etag: string;
+  updatedAt: string;
+};
+
+export const getRemoteConfig = (etag?: string) =>
+  axios
+    .get<RemoteConfigSnapshot>(`${API}/config/remote`, {
+      headers: withAuth(etag ? { "If-None-Match": etag } : {}),
+      validateStatus: (status) => status === 200 || status === 304,
+    })
+    .then((response) => {
+      if (response.status === 304) {
+        return null;
+      }
+      return response.data;
+    });
+
+export const postRemoteConfig = (
+  payload: Record<string, RemoteConfigTier>,
+  adminToken: string,
+) =>
+  axios
+    .post<RemoteConfigSnapshot>(`${API}/config/remote`, payload, {
+      headers: withAuth({
+        "Content-Type": "application/json",
+        "X-Admin-Token": adminToken,
+      }),
+    })
+    .then((r) => r.data);
