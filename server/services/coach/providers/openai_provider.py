@@ -22,11 +22,26 @@ _FUNCTION_DEFINITION = {
             "metrics": {
                 "type": "object",
                 "properties": {
-                    "ballSpeedMps": {"type": ["number", "null"], "description": "Ball speed in meters per second."},
-                    "clubSpeedMps": {"type": ["number", "null"], "description": "Club head speed in meters per second."},
-                    "sideAngleDeg": {"type": ["number", "null"], "description": "Side angle at launch in degrees."},
-                    "vertLaunchDeg": {"type": ["number", "null"], "description": "Vertical launch angle in degrees."},
-                    "carryEstM": {"type": ["number", "null"], "description": "Estimated carry distance in meters."},
+                    "ballSpeedMps": {
+                        "type": ["number", "null"],
+                        "description": "Ball speed in meters per second.",
+                    },
+                    "clubSpeedMps": {
+                        "type": ["number", "null"],
+                        "description": "Club head speed in meters per second.",
+                    },
+                    "sideAngleDeg": {
+                        "type": ["number", "null"],
+                        "description": "Side angle at launch in degrees.",
+                    },
+                    "vertLaunchDeg": {
+                        "type": ["number", "null"],
+                        "description": "Vertical launch angle in degrees.",
+                    },
+                    "carryEstM": {
+                        "type": ["number", "null"],
+                        "description": "Estimated carry distance in meters.",
+                    },
                     "quality": {
                         "type": ["object", "string", "null"],
                         "description": "Quality markers or tags returned by the analyzer.",
@@ -98,7 +113,8 @@ class OpenAICoachProvider(CoachProvider):
                     "role": "user",
                     "content": (
                         "Analyze the swing metrics below and produce feedback. "
-                        "Return friendly, specific coaching notes.\n\n" + json.dumps(dict(metrics), ensure_ascii=False)
+                        "Return friendly, specific coaching notes.\n\n"
+                        + json.dumps(dict(metrics), ensure_ascii=False)
                     ),
                 },
             ],
@@ -128,7 +144,9 @@ class OpenAICoachProvider(CoachProvider):
             try:
                 parsed = json.loads(arguments)
             except json.JSONDecodeError as exc:
-                raise CoachProviderError("Invalid JSON in OpenAI function arguments") from exc
+                raise CoachProviderError(
+                    "Invalid JSON in OpenAI function arguments"
+                ) from exc
             feedback = parsed.get("feedback")
             if isinstance(feedback, str) and feedback.strip():
                 return feedback.strip()
