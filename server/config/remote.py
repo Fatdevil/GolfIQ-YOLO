@@ -22,14 +22,18 @@ class RemoteConfigStore:
 
     def __init__(self, initial: Dict[str, Dict[str, Any]] | None = None) -> None:
         self._lock = threading.RLock()
-        self._config: Dict[str, Dict[str, Any]] = deepcopy(initial or DEFAULT_REMOTE_CONFIG)
+        self._config: Dict[str, Dict[str, Any]] = deepcopy(
+            initial or DEFAULT_REMOTE_CONFIG
+        )
         self._etag, self._updated_at = self._compute_metadata(self._config)
 
     def snapshot(self) -> Tuple[Dict[str, Dict[str, Any]], str, str]:
         with self._lock:
             return deepcopy(self._config), self._etag, self._updated_at
 
-    def update(self, new_config: Dict[str, Any]) -> Tuple[Dict[str, Dict[str, Any]], str, str]:
+    def update(
+        self, new_config: Dict[str, Any]
+    ) -> Tuple[Dict[str, Dict[str, Any]], str, str]:
         validated = self._validate(new_config)
         with self._lock:
             self._config = deepcopy(validated)
@@ -111,7 +115,9 @@ async def get_remote_config(request: Request) -> Response:
     config, etag, updated_at = _store.snapshot()
     if_none_match = request.headers.get("if-none-match")
     if if_none_match and if_none_match.strip('"') == etag:
-        return Response(status_code=status.HTTP_304_NOT_MODIFIED, headers={"ETag": etag})
+        return Response(
+            status_code=status.HTTP_304_NOT_MODIFIED, headers={"ETag": etag}
+        )
     payload = {"config": config, "etag": etag, "updatedAt": updated_at}
     body = json.dumps(payload)
     return Response(
