@@ -10,12 +10,16 @@ from .base import CoachProvider, CoachProviderError, CoachProviderTimeout
 
 _SYSTEM_PROMPT = (
     "You are an experienced PGA coach. Be brief, specific, and friendly. "
-    "Write 4-6 sentences, highlight one strength, one primary focus area, and share two actionable drills."
+    "Write 4-6 sentences, highlight one strength, one primary focus area, "
+    "and share two actionable drills."
 )
 
 _FUNCTION_DEFINITION = {
     "name": "analyze_swing",
-    "description": "Craft actionable golf swing feedback based on the supplied launch monitor metrics.",
+    "description": (
+        "Craft actionable golf swing feedback based on the supplied "
+        "launch monitor metrics."
+    ),
     "parameters": {
         "type": "object",
         "properties": {
