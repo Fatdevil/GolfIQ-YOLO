@@ -102,7 +102,9 @@ def test_update_remote_config_requires_admin_token():
         assert response.status_code == 503
 
 
-def test_update_remote_config_rejects_invalid_admin_token(monkeypatch: pytest.MonkeyPatch):
+def test_update_remote_config_rejects_invalid_admin_token(
+    monkeypatch: pytest.MonkeyPatch,
+):
     monkeypatch.setenv("ADMIN_TOKEN", "expected")
     with _client() as client:
         response = client.post(
