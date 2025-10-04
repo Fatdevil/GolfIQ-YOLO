@@ -205,7 +205,9 @@ def test_telemetry_aggregate_summarizes_payloads(flight_dir):
     assert profile_counts[("Galaxy Ultra", "Android 14")] == 1
     assert profile_counts[("Quest", "QuestOS 15")] == 1
 
-    runtimes = {entry["runtime"]: entry["count"] for entry in payload["runtimeDistribution"]}
+    runtimes = {
+        entry["runtime"]: entry["count"] for entry in payload["runtimeDistribution"]
+    }
     assert runtimes == {"immersive": 1, "mobile": 1, "sim": 1, "desktop": 1}
 
     latency_entries = {
