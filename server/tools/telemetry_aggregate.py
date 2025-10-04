@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Mapping
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, status
 
 _DEFAULT_FLIGHT_DIR = Path(__file__).resolve().parents[1] / "var" / "flight"
 router = APIRouter(prefix="/tools/telemetry", tags=["telemetry"])
@@ -60,10 +60,30 @@ def _extract_device(payload: Mapping[str, Any]) -> Dict[str, Any]:
         candidates = nested or []
     for candidate in candidates:
         return {
-            "id": str(candidate.get("id") or candidate.get("deviceId") or candidate.get("device_id") or ""),
-            "model": str(candidate.get("model") or candidate.get("name") or candidate.get("id") or "unknown"),
-            "os": str(candidate.get("os") or candidate.get("osVersion") or candidate.get("os_version") or "unknown"),
-            "tier": str(candidate.get("tier") or candidate.get("tierName") or payload.get("tier") or "unknown"),
+            "id": str(
+                candidate.get("id")
+                or candidate.get("deviceId")
+                or candidate.get("device_id")
+                or ""
+            ),
+            "model": str(
+                candidate.get("model")
+                or candidate.get("name")
+                or candidate.get("id")
+                or "unknown"
+            ),
+            "os": str(
+                candidate.get("os")
+                or candidate.get("osVersion")
+                or candidate.get("os_version")
+                or "unknown"
+            ),
+            "tier": str(
+                candidate.get("tier")
+                or candidate.get("tierName")
+                or payload.get("tier")
+                or "unknown"
+            ),
         }
     # fallback to payload-level hints
     return {
@@ -122,14 +142,20 @@ def _percentile(values: List[float], percentile: float) -> float:
     lower_index = int(rank)
     upper_index = min(lower_index + 1, len(sorted_values) - 1)
     weight = rank - lower_index
-    return sorted_values[lower_index] * (1 - weight) + sorted_values[upper_index] * weight
+    return (
+        sorted_values[lower_index] * (1 - weight) + sorted_values[upper_index] * weight
+    )
 
 
 @router.get("/aggregate")
-async def telemetry_aggregate(limit: int = Query(2000, ge=100, le=10000)) -> Dict[str, Any]:
+async def telemetry_aggregate(
+    limit: int = Query(2000, ge=100, le=10000)
+) -> Dict[str, Any]:
     events = _iter_events(limit)
     if not events:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="no telemetry captured yet")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="no telemetry captured yet"
+        )
 
     tier_devices: Dict[str, set[str]] = defaultdict(set)
     profile_counter: Counter[tuple[str, str]] = Counter()
@@ -183,7 +209,11 @@ async def telemetry_aggregate(limit: int = Query(2000, ge=100, le=10000)) -> Dic
             "p95": round(_percentile(samples, 95), 2),
             "samples": len(samples),
         }
-        for (model, os_version), samples in sorted(latency_samples.items(), key=lambda item: _percentile(item[1], 95), reverse=True)
+        for (model, os_version), samples in sorted(
+            latency_samples.items(),
+            key=lambda item: _percentile(item[1], 95),
+            reverse=True,
+        )
         if samples
     ][:15]
     config_summary = [

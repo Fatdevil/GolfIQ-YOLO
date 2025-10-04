@@ -261,7 +261,7 @@ export default function DeviceDashboardPage() {
               }
               rows={16}
               className="w-full rounded-xl border border-slate-800 bg-slate-950/80 p-3 font-mono text-xs text-slate-200 focus:border-emerald-400 focus:outline-none"
-              placeholder="{\n  \"tierA\": { … }\n}"
+              placeholder={`{\n  "tierA": { ... }\n}`}
             />
             {configError && <p className="text-sm text-red-300">{configError}</p>}
             <button
