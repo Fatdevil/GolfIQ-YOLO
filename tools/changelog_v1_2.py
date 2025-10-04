@@ -117,7 +117,10 @@ def fetch_pr(repo: str, token: Optional[str], number: int) -> Optional[PullReque
     url = f"https://api.github.com/repos/{repo}/pulls/{number}"
     response = requests.get(url, headers=headers, timeout=30)
     if response.status_code != 200:
-        print(f"warning: unable to fetch PR #{number} (status={response.status_code})", file=sys.stderr)
+        print(
+            f"warning: unable to fetch PR #{number} (status={response.status_code})",
+            file=sys.stderr,
+        )
         return None
     data = response.json()
     title = data.get("title", f"PR #{number}")
@@ -126,7 +129,14 @@ def fetch_pr(repo: str, token: Optional[str], number: int) -> Optional[PullReque
     author = user.get("login", "unknown")
     merged_at = data.get("merged_at")
     pr_type = normalize_type(title)
-    return PullRequest(number=number, title=title, url=html_url, author=author, merged_at=merged_at, pr_type=pr_type)
+    return PullRequest(
+        number=number,
+        title=title,
+        url=html_url,
+        author=author,
+        merged_at=merged_at,
+        pr_type=pr_type,
+    )
 
 
 def normalize_type(title: str) -> str:
@@ -149,7 +159,11 @@ def group_prs(prs: Iterable[PullRequest]) -> Dict[str, List[PullRequest]]:
     return grouped
 
 
-def build_release_notes(last_tag: Optional[str], grouped: Dict[str, List[PullRequest]], contributors: List[str]) -> str:
+def build_release_notes(
+    last_tag: Optional[str],
+    grouped: Dict[str, List[PullRequest]],
+    contributors: List[str],
+) -> str:
     lines: List[str] = []
     lines.append(f"# {RELEASE_TITLE}")
     lines.append("")
@@ -206,12 +220,17 @@ def main() -> int:
     output_file = dist_path / "RELEASE_NOTES_v1.2.md"
     output_file.write_text(notes, encoding="utf-8")
 
-    print(json.dumps({
-        "release": RELEASE_VERSION,
-        "title": RELEASE_TITLE,
-        "pr_count": len(prs),
-        "output": str(output_file.relative_to(repo_root)),
-    }, indent=2))
+    print(
+        json.dumps(
+            {
+                "release": RELEASE_VERSION,
+                "title": RELEASE_TITLE,
+                "pr_count": len(prs),
+                "output": str(output_file.relative_to(repo_root)),
+            },
+            indent=2,
+        )
+    )
     return 0
 
 
