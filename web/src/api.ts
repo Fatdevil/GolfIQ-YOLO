@@ -83,3 +83,19 @@ export const getRun = (id: string) =>
   axios.get(`${API}/runs/${id}`, { headers: withAuth() }).then((r) => r.data);
 export const deleteRun = (id: string) =>
   axios.delete(`${API}/runs/${id}`, { headers: withAuth() }).then((r) => r.data);
+
+export type CoachFeedbackResponse = {
+  text: string;
+  provider: string;
+  latency_ms: number;
+};
+
+export const postCoachFeedback = (body: {
+  run_id?: string;
+  metrics?: Record<string, unknown>;
+}) =>
+  axios
+    .post(`${API}/coach/feedback`, body, {
+      headers: withAuth({ "Content-Type": "application/json" }),
+    })
+    .then((r) => r.data as CoachFeedbackResponse);

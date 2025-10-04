@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { getRun } from "../api";
+import { getRun, postCoachFeedback, type CoachFeedbackResponse } from "../api";
 import TracerCanvas from "../components/TracerCanvas";
 import GhostFrames from "../components/GhostFrames";
 import ExportPanel from "../components/ExportPanel";
@@ -14,12 +14,48 @@ interface RunDetailData {
   [key: string]: unknown;
 }
 
+const renderCoachMarkdown = (text: string) => {
+  const blocks = text
+    .split(/\n{2,}/)
+    .map((block) => block.trim())
+    .filter((block) => block.length > 0);
+
+  return blocks.map((block, index) => {
+    const lines = block.split(/\n+/);
+    const allBullets = lines.every((line) => /^\s*-\s+/.test(line));
+
+    if (allBullets) {
+      return (
+        <ul
+          key={`coach-list-${index}`}
+          className="ml-4 list-disc space-y-1 text-sm text-emerald-100"
+        >
+          {lines.map((line, itemIndex) => (
+            <li key={`coach-list-${index}-${itemIndex}`}>
+              {line.replace(/^\s*-\s+/, "").trim()}
+            </li>
+          ))}
+        </ul>
+      );
+    }
+
+    return (
+      <p key={`coach-paragraph-${index}`} className="text-sm leading-relaxed text-emerald-50">
+        {block.replace(/\n+/g, " ")}
+      </p>
+    );
+  });
+};
+
 export default function RunDetailPage() {
   const { id } = useParams<{ id: string }>();
   const [data, setData] = useState<RunDetailData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [exportOpen, setExportOpen] = useState(false);
+  const [coachResult, setCoachResult] = useState<CoachFeedbackResponse | null>(null);
+  const [coachLoading, setCoachLoading] = useState(false);
+  const [coachError, setCoachError] = useState<string | null>(null);
 
   const backView = useMemo(() => extractBackViewPayload(data), [data]);
   const qualityBadges = useMemo(() => {
@@ -155,6 +191,28 @@ export default function RunDetailPage() {
 
   const canExport = visualTracerEnabled && !!backView?.videoUrl && !!backView.trace;
 
+  const handleCoachFeedback = useCallback(() => {
+    if (!id) return;
+    setCoachLoading(true);
+    setCoachError(null);
+    postCoachFeedback({ run_id: id })
+      .then((res) => {
+        setCoachResult(res);
+      })
+      .catch((err: unknown) => {
+        console.error(err);
+        const detail =
+          typeof err === "object" && err && "response" in err
+            ? (err as { response?: { data?: { detail?: unknown } } }).response?.data?.detail
+            : null;
+        const message = typeof detail === "string" ? detail : "Unable to fetch coach feedback.";
+        setCoachError(message);
+      })
+      .finally(() => {
+        setCoachLoading(false);
+      });
+  }, [id]);
+
   useEffect(() => {
     if (!id) return;
     let mounted = true;
@@ -175,6 +233,12 @@ export default function RunDetailPage() {
     return () => {
       mounted = false;
     };
+  }, [id]);
+
+  useEffect(() => {
+    setCoachResult(null);
+    setCoachError(null);
+    setCoachLoading(false);
   }, [id]);
 
   return (
@@ -203,6 +267,14 @@ export default function RunDetailPage() {
           </button>
           <button
             type="button"
+            onClick={handleCoachFeedback}
+            disabled={coachLoading || !id || loading}
+            className="rounded-md border border-emerald-500/40 px-3 py-2 text-xs font-semibold text-emerald-200 transition hover:bg-emerald-500/20 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {coachLoading ? "Getting Coach Feedback…" : "Get Coach Feedback"}
+          </button>
+          <button
+            type="button"
             onClick={() => setExportOpen(true)}
             disabled={!canExport}
             className="rounded-md border border-sky-500/40 px-3 py-2 text-xs font-semibold text-sky-200 transition hover:bg-sky-500/20 disabled:cursor-not-allowed disabled:opacity-60"
@@ -221,6 +293,35 @@ export default function RunDetailPage() {
       {error && (
         <div className="rounded-md border border-red-500/40 bg-red-500/10 px-4 py-3 text-sm text-red-200">
           {error}
+        </div>
+      )}
+
+      {coachError && (
+        <div className="rounded-md border border-red-500/40 bg-red-500/10 px-4 py-3 text-xs text-red-200">
+          {coachError}
+        </div>
+      )}
+
+      {coachLoading && !coachResult && (
+        <div className="rounded-md border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-xs text-emerald-100">
+          Requesting coach feedback…
+        </div>
+      )}
+
+      {coachResult && (
+        <div className="space-y-3 rounded-xl border border-emerald-500/40 bg-emerald-500/10 p-4 shadow-lg">
+          <div className="flex items-center justify-between text-xs uppercase tracking-wide text-emerald-300">
+            <span>Coach feedback</span>
+            <span className="font-mono text-emerald-200">
+              {coachResult.provider} · {coachResult.latency_ms} ms
+            </span>
+          </div>
+          {coachLoading && (
+            <div className="text-[0.65rem] uppercase tracking-wide text-emerald-300/70">
+              Refreshing…
+            </div>
+          )}
+          <div className="space-y-3">{renderCoachMarkdown(coachResult.text)}</div>
         </div>
       )}
 
