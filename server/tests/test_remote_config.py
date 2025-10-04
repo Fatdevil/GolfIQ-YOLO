@@ -61,14 +61,25 @@ def test_update_remote_config_validates_payload(monkeypatch: pytest.MonkeyPatch)
     headers = {"x-admin-token": "secret", "Origin": "http://testserver"}
 
     with _client() as client:
+        not_object = client.post("/config/remote", json=["nope"], headers=headers)
+        assert not_object.status_code == 422
+
         missing_tiers = client.post(
             "/config/remote", json={"tierA": {}}, headers=headers
         )
         assert missing_tiers.status_code == 422
 
+        not_dict = {
+            "tierA": {},
+            "tierB": [],
+            "tierC": {},
+        }
+        wrong_shape = client.post("/config/remote", json=not_dict, headers=headers)
+        assert wrong_shape.status_code == 422
+
         bad_types = {
-            "tierA": {"hudEnabled": "yes", "inputSize": 320},
-            "tierB": {"hudEnabled": True, "inputSize": "big", "reducedRate": True},
+            "tierA": {"hudEnabled": True, "inputSize": "big"},
+            "tierB": {"hudEnabled": True, "inputSize": 240, "reducedRate": "sure"},
             "tierC": {"hudEnabled": False},
         }
         invalid = client.post("/config/remote", json=bad_types, headers=headers)
@@ -80,3 +91,34 @@ def test_update_remote_config_validates_payload(monkeypatch: pytest.MonkeyPatch)
             headers={**headers, "Content-Type": "application/json"},
         )
         assert not_json.status_code == 400
+
+
+def test_update_remote_config_requires_admin_token():
+    with _client() as client:
+        response = client.post(
+            "/config/remote",
+            json=remote.DEFAULT_REMOTE_CONFIG,
+        )
+        assert response.status_code == 503
+
+
+def test_update_remote_config_rejects_invalid_admin_token(monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setenv("ADMIN_TOKEN", "expected")
+    with _client() as client:
+        response = client.post(
+            "/config/remote",
+            json=remote.DEFAULT_REMOTE_CONFIG,
+            headers={"x-admin-token": "wrong", "Origin": "http://testserver"},
+        )
+        assert response.status_code == 401
+
+
+def test_update_remote_config_blocks_cross_origin(monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setenv("ADMIN_TOKEN", "expected")
+    with _client() as client:
+        response = client.post(
+            "/config/remote",
+            json=remote.DEFAULT_REMOTE_CONFIG,
+            headers={"x-admin-token": "expected", "Origin": "https://evil.example"},
+        )
+        assert response.status_code == 403
