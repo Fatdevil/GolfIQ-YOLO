@@ -55,6 +55,17 @@ class TelemetryClient {
         emit(name = "arhud_fps", value = fps, deviceClass = "arhud", sampled = true)
     }
 
+    fun logBundleRefresh(status: String, etag: String?, ageDays: Int) {
+        val payload = mutableMapOf<String, Any>(
+            "status" to status,
+            "age_days" to ageDays,
+        )
+        if (!etag.isNullOrEmpty()) {
+            payload["etag"] = etag
+        }
+        send(event = "bundle_refresh", payload = payload)
+    }
+
     fun all(): List<MetricRecord> = metrics.toList()
     fun postedProfiles(): List<DeviceProfilePayload> = deviceProfiles.toList()
     fun impactTriggerEvents(): Int = impactTriggerCount

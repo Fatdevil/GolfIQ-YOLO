@@ -54,6 +54,17 @@ final class TelemetryClient {
         emit(name: "arhud_fps", value: fps, deviceClass: "arhud", sampled: true)
     }
 
+    func logBundleRefresh(status: String, etag: String?, ageDays: Int) {
+        var payload: [String: Any] = [
+            "status": status,
+            "age_days": ageDays
+        ]
+        if let etag = etag {
+            payload["etag"] = etag
+        }
+        send(event: "bundle_refresh", payload: payload)
+    }
+
     func send(event: String, payload: [String: Any]) {
         events.append((name: event, payload: payload))
     }
