@@ -25,6 +25,9 @@ import com.google.android.gms.location.LocationResult
 import com.google.android.gms.location.LocationServices
 import com.google.android.gms.location.Priority
 import com.google.ar.core.Anchor
+import com.google.ar.core.Config
+import com.google.ar.core.Earth
+import com.google.ar.core.TrackingState
 import com.google.ar.sceneform.AnchorNode
 import com.google.ar.sceneform.Node
 import com.google.ar.sceneform.math.Quaternion
@@ -55,6 +58,7 @@ class ARHUDActivity : AppCompatActivity(), SensorEventListener {
     private lateinit var courseRepository: CourseBundleRepository
     private lateinit var thermalWatchdog: ThermalWatchdog
     private lateinit var batteryMonitor: BatteryMonitor
+    private lateinit var courseId: String
 
     private val fallbackHandler = Handler(Looper.getMainLooper())
     private val fallbackIntervalMs = 60_000L
@@ -109,6 +113,11 @@ class ARHUDActivity : AppCompatActivity(), SensorEventListener {
     private var headingOffset: Double = 0.0
     private val fpsSamples = ArrayDeque<Long>()
     private var lastFpsEmission: Long = 0
+    private val geospatialAnchors = mutableListOf<Anchor>()
+    private var usingGeospatial: Boolean = false
+    private var lastCalibrationAltitude: Double? = null
+    private var refreshRegistration: (() -> Unit)? = null
+    private var geospatialSupported: Boolean = false
 
     private val permissionsLauncher = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         if (granted) {
@@ -131,13 +140,13 @@ class ARHUDActivity : AppCompatActivity(), SensorEventListener {
             return
         }
 
-        val courseId = intent.getStringExtra(EXTRA_COURSE_ID) ?: run {
+        courseId = intent.getStringExtra(EXTRA_COURSE_ID) ?: run {
             finish()
             return
         }
 
         val baseUrlString = intent.getStringExtra(EXTRA_BASE_URL) ?: DEFAULT_BASE_URL
-        courseRepository = CourseBundleRepository(URL(baseUrlString))
+        courseRepository = CourseBundleRepository(applicationContext, URL(baseUrlString), telemetry)
 
         val container = FrameLayout(this).apply { id = CONTAINER_ID }
         overlayView = ARHUDOverlayView(this)
@@ -159,9 +168,26 @@ class ARHUDActivity : AppCompatActivity(), SensorEventListener {
         }
 
         overlayView.updateStatus("Loading course…")
+        overlayView.updateModeBadge(ARHUDOverlayView.Mode.COMPASS)
         overlayView.alpha = if (featureFlags.current().hudEnabled) 1f else 0f
         overlayView.calibrateButton.setOnClickListener { calibrate() }
         overlayView.recenterButton.setOnClickListener { recenter() }
+
+        refreshRegistration = BundleRefreshBus.register {
+            runOnUiThread { loadCourse(courseId, forceRefresh = true) }
+        }
+
+        arFragment.setOnSessionConfigurationListener { session, config ->
+            if (session.isGeospatialModeSupported(Config.GeospatialMode.ENABLED)) {
+                config.geospatialMode = Config.GeospatialMode.ENABLED
+                geospatialSupported = true
+                overlayView.updateModeBadge(ARHUDOverlayView.Mode.GEOSPATIAL)
+            } else {
+                geospatialSupported = false
+                usingGeospatial = false
+                overlayView.updateModeBadge(ARHUDOverlayView.Mode.COMPASS)
+            }
+        }
 
         loadCourse(courseId)
         requestLocationPermission()
@@ -190,21 +216,40 @@ class ARHUDActivity : AppCompatActivity(), SensorEventListener {
     override fun onDestroy() {
         super.onDestroy()
         calibrationAnchor?.detach()
+        geospatialAnchors.forEach { it.detach() }
+        geospatialAnchors.clear()
+        refreshRegistration?.invoke()
         executor.shutdownNow()
     }
 
-    private fun loadCourse(courseId: String) {
+    private fun loadCourse(courseId: String, forceRefresh: Boolean = false) {
+        runOnUiThread {
+            overlayView.updateStatus(if (forceRefresh) "Refreshing course…" else "Loading course…")
+        }
         executor.execute {
-            try {
-                val bundle = courseRepository.fetch(courseId)
+            courseRepository.cached(courseId)?.let { cached ->
+                currentCourse = cached
                 runOnUiThread {
-                    currentCourse = bundle
+                    overlayView.updateStatus("Aim at pin and calibrate")
+                    updateDistances()
+                }
+            }
+
+            try {
+                val bundle = courseRepository.refresh(courseId, forceRefresh)
+                currentCourse = bundle
+                runOnUiThread {
+                    resetAnchors()
                     overlayView.updateStatus("Aim at pin and calibrate")
                     updateDistances()
                 }
             } catch (t: Throwable) {
                 runOnUiThread {
-                    overlayView.updateStatus("Failed to load course: ${t.message}")
+                    if (currentCourse == null) {
+                        overlayView.updateStatus("Failed to load course: ${t.message}")
+                    } else {
+                        overlayView.updateStatus("Offline – showing cached course")
+                    }
                 }
             }
         }
@@ -221,6 +266,28 @@ class ARHUDActivity : AppCompatActivity(), SensorEventListener {
             }
             else -> permissionsLauncher.launch(Manifest.permission.ACCESS_FINE_LOCATION)
         }
+    }
+
+    private fun resetAnchors() {
+        geospatialAnchors.forEach { it.detach() }
+        geospatialAnchors.clear()
+        calibrationAnchor?.detach()
+        calibrationAnchor = null
+        usingGeospatial = false
+        lastCalibrationAltitude = null
+        val scene = arFragment.arSceneView.scene
+        scene.children.filterIsInstance<AnchorNode>().forEach { node ->
+            node.anchor?.detach()
+            node.setParent(null)
+        }
+        overlayView.updateModeBadge(ARHUDOverlayView.Mode.COMPASS)
+    }
+
+    private fun clearGeospatialAnchors() {
+        geospatialAnchors.forEach { it.detach() }
+        geospatialAnchors.clear()
+        usingGeospatial = false
+        overlayView.updateModeBadge(ARHUDOverlayView.Mode.COMPASS)
     }
 
     private fun startFallbackMonitoring() {
@@ -279,6 +346,23 @@ class ARHUDActivity : AppCompatActivity(), SensorEventListener {
             return
         }
 
+        if (geospatialSupported) {
+            val earth = session.earth
+            if (earth != null && earth.trackingState == TrackingState.TRACKING) {
+                attachGeospatialAnchors(earth, bundle, latestLocation.altitude)
+                originLocation = latestLocation
+                updateDistances()
+                telemetry.logHudCalibration()
+                overlayView.updateStatus("Calibrated – geospatial anchors pinned")
+                overlayView.updateModeBadge(ARHUDOverlayView.Mode.GEOSPATIAL)
+                return
+            } else {
+                overlayView.updateStatus("Geospatial localization not ready, using compass fallback")
+                overlayView.updateModeBadge(ARHUDOverlayView.Mode.COMPASS)
+                clearGeospatialAnchors()
+            }
+        }
+
         originLocation = latestLocation
         headingOffset = (bearingBetween(latestLocation, bundle.pin.toLocation()) - deviceHeading + 360) % 360
 
@@ -290,13 +374,33 @@ class ARHUDActivity : AppCompatActivity(), SensorEventListener {
         updateDistances()
         telemetry.logHudCalibration()
         overlayView.updateStatus("Calibrated – markers pinned")
+        overlayView.updateModeBadge(ARHUDOverlayView.Mode.COMPASS)
     }
 
     private fun recenter() {
         val bundle = currentCourse
-        val origin = originLocation
         val session = arFragment.arSceneView.session
-        if (bundle == null || origin == null || session == null) {
+        if (bundle == null || session == null) {
+            overlayView.updateStatus("Calibrate first")
+            return
+        }
+
+        if (usingGeospatial && geospatialAnchors.isNotEmpty()) {
+            val earth = session.earth
+            val altitude = lastLocation?.altitude ?: lastCalibrationAltitude
+            if (earth != null && earth.trackingState == TrackingState.TRACKING && altitude != null) {
+                attachGeospatialAnchors(earth, bundle, altitude)
+                updateDistances()
+                telemetry.logHudRecenter()
+                overlayView.updateStatus("Re-centered geospatial anchors")
+                overlayView.updateModeBadge(ARHUDOverlayView.Mode.GEOSPATIAL)
+            } else {
+                overlayView.updateStatus("Geospatial localization not ready")
+            }
+            return
+        }
+
+        val origin = originLocation ?: run {
             overlayView.updateStatus("Calibrate first")
             return
         }
@@ -308,10 +412,12 @@ class ARHUDActivity : AppCompatActivity(), SensorEventListener {
         updateDistances()
         telemetry.logHudRecenter()
         overlayView.updateStatus("Re-centered scene")
+        overlayView.updateModeBadge(ARHUDOverlayView.Mode.COMPASS)
     }
 
     private fun placeMarkers(bundle: CourseBundle) {
         val scene = arFragment.arSceneView.scene
+        clearGeospatialAnchors()
         scene.children.filterIsInstance<AnchorNode>().forEach { node ->
             node.anchor?.detach()
             node.setParent(null)
@@ -345,6 +451,47 @@ class ARHUDActivity : AppCompatActivity(), SensorEventListener {
 
         if (featureFlags.current().hudTracerEnabled) {
             addTracer(parent, localPosition, color)
+        }
+    }
+
+    private fun attachGeospatialAnchors(earth: Earth, bundle: CourseBundle, altitude: Double) {
+        clearGeospatialAnchors()
+        calibrationAnchor?.detach()
+        calibrationAnchor = null
+        val scene = arFragment.arSceneView.scene
+        scene.children.filterIsInstance<AnchorNode>().forEach { node ->
+            node.anchor?.detach()
+            node.setParent(null)
+        }
+
+        val entries = listOf(
+            Triple(bundle.pin, "Pin", Color(1.0f, 0f, 0f)),
+            Triple(bundle.greenFront, "Front", Color(0f, 0.8f, 0f)),
+            Triple(bundle.greenCenter, "Center", Color(0f, 0.7f, 0.7f)),
+            Triple(bundle.greenBack, "Back", Color(0f, 0.4f, 1.0f)),
+        )
+
+        entries.forEach { (coordinate, label, color) ->
+            val anchor = earth.createAnchor(coordinate.latitude, coordinate.longitude, altitude, 0f)
+            geospatialAnchors += anchor
+            val node = AnchorNode(anchor).apply { setParent(scene) }
+            createGeospatialNode(node, label, color)
+        }
+
+        usingGeospatial = true
+        lastCalibrationAltitude = altitude
+    }
+
+    private fun createGeospatialNode(parent: AnchorNode, label: String, color: Color) {
+        val node = Node().apply {
+            setParent(parent)
+            localPosition = Vector3.zero()
+            name = label
+        }
+
+        MaterialFactory.makeOpaqueWithColor(this, color).thenAccept { material ->
+            val sphere = ShapeFactory.makeSphere(0.05f, Vector3.zero(), material)
+            node.renderable = sphere
         }
     }
 

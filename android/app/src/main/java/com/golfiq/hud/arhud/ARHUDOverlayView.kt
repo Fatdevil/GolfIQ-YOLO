@@ -1,6 +1,7 @@
 package com.golfiq.hud.arhud
 
 import android.content.Context
+import android.graphics.drawable.GradientDrawable
 import android.util.AttributeSet
 import android.view.Gravity
 import android.widget.Button
@@ -20,6 +21,12 @@ class ARHUDOverlayView @JvmOverloads constructor(
     private val frontLabel: TextView = TextView(context)
     private val centerLabel: TextView = TextView(context)
     private val backLabel: TextView = TextView(context)
+    private val modeBadge: TextView = TextView(context)
+
+    enum class Mode {
+        GEOSPATIAL,
+        COMPASS,
+    }
 
     init {
         setWillNotDraw(false)
@@ -30,6 +37,21 @@ class ARHUDOverlayView @JvmOverloads constructor(
             setTextColor(ContextCompat.getColor(context, android.R.color.white))
             textSize = 12f
             gravity = Gravity.CENTER
+        }
+
+        modeBadge.apply {
+            text = "Compass"
+            setTextColor(ContextCompat.getColor(context, android.R.color.black))
+            textSize = 12f
+            val density = resources.displayMetrics.density
+            val horizontal = (16 * density).toInt()
+            val vertical = (6 * density).toInt()
+            setPadding(horizontal, vertical, horizontal, vertical)
+            background = GradientDrawable().apply {
+                cornerRadius = 16 * density
+                setColor(ContextCompat.getColor(context, android.R.color.white))
+                alpha = (0.9f * 255).toInt()
+            }
         }
 
         val distanceContainer = LinearLayout(context).apply {
@@ -68,6 +90,12 @@ class ARHUDOverlayView @JvmOverloads constructor(
         addView(stack, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT).apply {
             gravity = Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL
         })
+        addView(modeBadge, LayoutParams(LayoutParams.WRAP_CONTENT, LayoutParams.WRAP_CONTENT).apply {
+            gravity = Gravity.TOP or Gravity.START
+            val density = resources.displayMetrics.density
+            val margin = (12 * density).toInt()
+            setMargins(margin, margin, margin, margin)
+        })
     }
 
     fun updateStatus(text: String) {
@@ -80,5 +108,13 @@ class ARHUDOverlayView @JvmOverloads constructor(
             centerLabel.text = "C: $center"
             backLabel.text = "B: $back"
         }
+    }
+
+    fun updateModeBadge(mode: Mode) {
+        val label = when (mode) {
+            Mode.GEOSPATIAL -> "Geospatial"
+            Mode.COMPASS -> "Compass"
+        }
+        post { modeBadge.text = label }
     }
 }

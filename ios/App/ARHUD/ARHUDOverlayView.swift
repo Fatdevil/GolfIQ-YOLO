@@ -8,6 +8,12 @@ final class ARHUDOverlayView: UIView {
     private let frontLabel: UILabel = UILabel()
     private let centerLabel: UILabel = UILabel()
     private let backLabel: UILabel = UILabel()
+    private let modeBadge: UILabel = UILabel()
+
+    enum Mode {
+        case geospatial
+        case compass
+    }
 
     override init(frame: CGRect) {
         super.init(frame: frame)
@@ -34,6 +40,16 @@ final class ARHUDOverlayView: UIView {
         statusLabel.textAlignment = .center
         statusLabel.text = "Align device to pin and calibrate"
 
+        modeBadge.font = UIFont.preferredFont(forTextStyle: .caption2)
+        modeBadge.textColor = .black
+        modeBadge.backgroundColor = UIColor.white.withAlphaComponent(0.85)
+        modeBadge.layer.cornerRadius = 8
+        modeBadge.layer.masksToBounds = true
+        modeBadge.textAlignment = .center
+        modeBadge.text = "Compass"
+        modeBadge.setContentHuggingPriority(.required, for: .horizontal)
+        modeBadge.setContentCompressionResistancePriority(.required, for: .horizontal)
+
         let distanceStack = UIStackView(arrangedSubviews: [frontLabel, centerLabel, backLabel])
         distanceStack.axis = .vertical
         distanceStack.spacing = 4
@@ -56,9 +72,11 @@ final class ARHUDOverlayView: UIView {
 
         addSubview(container)
         addSubview(statusLabel)
+        addSubview(modeBadge)
 
         container.translatesAutoresizingMaskIntoConstraints = false
         statusLabel.translatesAutoresizingMaskIntoConstraints = false
+        modeBadge.translatesAutoresizingMaskIntoConstraints = false
 
         NSLayoutConstraint.activate([
             container.leadingAnchor.constraint(equalTo: safeAreaLayoutGuide.leadingAnchor, constant: 16),
@@ -67,13 +85,28 @@ final class ARHUDOverlayView: UIView {
 
             statusLabel.leadingAnchor.constraint(equalTo: safeAreaLayoutGuide.leadingAnchor, constant: 16),
             statusLabel.trailingAnchor.constraint(equalTo: safeAreaLayoutGuide.trailingAnchor, constant: -16),
-            statusLabel.bottomAnchor.constraint(equalTo: container.topAnchor, constant: -12)
+            statusLabel.bottomAnchor.constraint(equalTo: container.topAnchor, constant: -12),
+
+            modeBadge.topAnchor.constraint(equalTo: safeAreaLayoutGuide.topAnchor, constant: 12),
+            modeBadge.leadingAnchor.constraint(equalTo: safeAreaLayoutGuide.leadingAnchor, constant: 16),
+            modeBadge.widthAnchor.constraint(greaterThanOrEqualToConstant: 88)
         ])
     }
 
     func updateStatus(_ text: String) {
         DispatchQueue.main.async {
             self.statusLabel.text = text
+        }
+    }
+
+    func updateModeBadge(_ mode: Mode) {
+        DispatchQueue.main.async {
+            switch mode {
+            case .geospatial:
+                self.modeBadge.text = " Geospatial "
+            case .compass:
+                self.modeBadge.text = " Compass "
+            }
         }
     }
 
