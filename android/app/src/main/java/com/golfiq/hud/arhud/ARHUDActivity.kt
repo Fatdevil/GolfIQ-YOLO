@@ -36,8 +36,11 @@ import com.google.ar.sceneform.rendering.Color
 import com.google.ar.sceneform.rendering.MaterialFactory
 import com.google.ar.sceneform.rendering.ShapeFactory
 import com.google.ar.sceneform.ux.ArFragment
+import com.golfiq.hud.config.DeviceProfileManager
 import com.golfiq.hud.config.FeatureFlagsService
+import com.golfiq.hud.config.RemoteConfigClient
 import com.golfiq.hud.hud.HUDRuntime
+import com.golfiq.hud.inference.RuntimeAdapter
 import com.golfiq.hud.runtime.BatteryMonitor
 import com.golfiq.hud.runtime.FallbackAction
 import com.golfiq.hud.runtime.FallbackPolicy
@@ -59,6 +62,9 @@ class ARHUDActivity : AppCompatActivity(), SensorEventListener {
     private lateinit var thermalWatchdog: ThermalWatchdog
     private lateinit var batteryMonitor: BatteryMonitor
     private lateinit var courseId: String
+    private lateinit var deviceProfileManager: DeviceProfileManager
+    private lateinit var runtimeAdapter: RuntimeAdapter
+    private var remoteConfigClient: RemoteConfigClient? = null
 
     private val fallbackHandler = Handler(Looper.getMainLooper())
     private val fallbackIntervalMs = 60_000L
@@ -135,6 +141,24 @@ class ARHUDActivity : AppCompatActivity(), SensorEventListener {
         thermalWatchdog = ThermalWatchdog(this)
         batteryMonitor = BatteryMonitor(this)
 
+        val profilePreferences = getSharedPreferences("device_profile", MODE_PRIVATE)
+        val microbench = DeviceProfileManager.Microbench { durationMillis ->
+            val iterations = (durationMillis / 16L).coerceAtLeast(1L)
+            MutableList(iterations.toInt()) { 33.0 }
+        }
+        deviceProfileManager = DeviceProfileManager(
+            context = this,
+            preferences = profilePreferences,
+            microbench = microbench,
+            telemetryClient = telemetry,
+        )
+        val deviceProfile = deviceProfileManager.ensureProfile()
+        runtimeAdapter = RuntimeAdapter(
+            getSharedPreferences("runtime_adapter", MODE_PRIVATE),
+            deviceProfileManager,
+        )
+        featureFlags.applyDeviceTier(deviceProfile)
+
         if (!featureFlags.current().hudEnabled) {
             finish()
             return
@@ -147,6 +171,14 @@ class ARHUDActivity : AppCompatActivity(), SensorEventListener {
 
         val baseUrlString = intent.getStringExtra(EXTRA_BASE_URL) ?: DEFAULT_BASE_URL
         courseRepository = CourseBundleRepository(applicationContext, URL(baseUrlString), telemetry)
+
+        remoteConfigClient = RemoteConfigClient(
+            baseUrl = URL(baseUrlString),
+            deviceProfiles = deviceProfileManager,
+            featureFlags = featureFlags,
+            telemetry = telemetry,
+            runtimeAdapter = runtimeAdapter,
+        ).also { it.start() }
 
         val container = FrameLayout(this).apply { id = CONTAINER_ID }
         overlayView = ARHUDOverlayView(this)
@@ -220,6 +252,7 @@ class ARHUDActivity : AppCompatActivity(), SensorEventListener {
         geospatialAnchors.clear()
         refreshRegistration?.invoke()
         executor.shutdownNow()
+        remoteConfigClient?.shutdown()
     }
 
     private fun loadCourse(courseId: String, forceRefresh: Boolean = false) {

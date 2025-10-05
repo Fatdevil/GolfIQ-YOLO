@@ -4,6 +4,7 @@ import CalibrationPage from "./pages/Calibration";
 import MockAnalyzePage from "./pages/MockAnalyze";
 import RunsPage from "./pages/Runs";
 import RunDetailPage from "./pages/RunDetail";
+import DeviceDashboardPage from "./pages/DeviceDashboard";
 import Nav from "./components/Nav";
 
 export default function App() {
@@ -17,6 +18,7 @@ export default function App() {
           <Route path="/mock" element={<MockAnalyzePage />} />
           <Route path="/runs" element={<RunsPage />} />
           <Route path="/runs/:id" element={<RunDetailPage />} />
+          <Route path="/device-dashboard" element={<DeviceDashboardPage />} />
         </Routes>
       </main>
     </div>

@@ -51,8 +51,18 @@ _DEFAULT_FLIGHT_DIR = Path(__file__).resolve().parents[1] / "var" / "flight"
 def _dump_model(model: Telemetry) -> Dict[str, object]:
     dumper = getattr(model, "model_dump", None)
     if callable(dumper):
-        return dumper(by_alias=True, exclude_none=False)
-    return model.dict(by_alias=True, exclude_none=False)  # type: ignore[call-arg]
+        data = dumper(by_alias=True, exclude_none=False)
+        fields_set = set(getattr(model, "model_fields_set", set()))
+    else:
+        data = model.dict(by_alias=True, exclude_none=False)  # type: ignore[call-arg]
+        fields_set = set(getattr(model, "__fields_set__", set()))
+
+    optional_keys = {"event", "configHash", "runtime", "device", "latencyMs"}
+    for key in optional_keys:
+        if key not in fields_set and data.get(key) is None:
+            data.pop(key, None)
+
+    return data
 
 
 def _flight_recorder_pct() -> float:

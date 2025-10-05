@@ -80,4 +80,29 @@ final class TelemetryClient {
             ]
         )
     }
+
+    func logRemoteConfigActive(
+        hash: String,
+        profile: DeviceProfile,
+        runtime: [String: Any],
+        inputSize: Int,
+        reducedRate: Bool
+    ) {
+        var payload: [String: Any] = [
+            "configHash": hash,
+            "device": [
+                "id": profile.id,
+                "tier": profile.tier.rawValue,
+                "os": profile.osVersion,
+                "estimatedFps": profile.estimatedFps
+            ],
+            "runtime": runtime,
+            "inputSize": inputSize,
+            "reducedRate": reducedRate
+        ]
+        if profile.estimatedFps > 0 {
+            payload["latencyMs"] = 1000.0 / profile.estimatedFps
+        }
+        send(event: "remote_config_active", payload: payload)
+    }
 }

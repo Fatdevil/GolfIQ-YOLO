@@ -83,3 +83,111 @@ export const getRun = (id: string) =>
   axios.get(`${API}/runs/${id}`, { headers: withAuth() }).then((r) => r.data);
 export const deleteRun = (id: string) =>
   axios.delete(`${API}/runs/${id}`, { headers: withAuth() }).then((r) => r.data);
+
+export type TelemetryAggregate = {
+  generatedAt: string;
+  sampleSize: number;
+  tiers: { tier: string; count: number }[];
+  profiles: { model: string; os: string; count: number }[];
+  runtimeDistribution: { runtime: string; count: number }[];
+  latencyP95: { model: string; os: string; p95: number; samples: number }[];
+  configHashes: { hash: string; count: number }[];
+};
+
+export const fetchTelemetryAggregate = () =>
+  axios
+    .get<TelemetryAggregate>(`${API}/tools/telemetry/aggregate`, {
+      headers: withAuth(),
+    })
+    .then((r) => r.data);
+
+export type RemoteConfigTier = {
+  hudEnabled?: boolean;
+  inputSize?: number;
+  reducedRate?: boolean;
+  [key: string]: unknown;
+};
+
+export type RemoteConfigSnapshot = {
+  config: Record<string, RemoteConfigTier>;
+  etag: string;
+  updatedAt: string;
+};
+
+export const getRemoteConfig = (etag?: string) =>
+  axios
+    .get<RemoteConfigSnapshot>(`${API}/config/remote`, {
+      headers: withAuth(etag ? { "If-None-Match": etag } : {}),
+      validateStatus: (status) => status === 200 || status === 304,
+    })
+    .then((response) => {
+      if (response.status === 304) {
+        return null;
+      }
+      return response.data;
+    });
+
+export const postRemoteConfig = (
+  payload: Record<string, RemoteConfigTier>,
+  adminToken: string,
+) =>
+  axios
+    .post<RemoteConfigSnapshot>(`${API}/config/remote`, payload, {
+      headers: withAuth({
+        "Content-Type": "application/json",
+        "X-Admin-Token": adminToken,
+      }),
+    })
+    .then((r) => r.data);
+
+/**
+ * ----------------------------
+ * Coach v1 – provider-backed feedback
+ * ----------------------------
+ * Server route: POST /coach/feedback
+ * Body: { runId?: string, metrics?: CoachFeedbackMetrics }
+ * Response: { text: string, provider: string, latency_ms: number }
+ */
+
+// Shape for optional "quality" field; keep flexible for future variants
+export type CoachFeedbackQuality =
+  | string
+  | null
+  | {
+      label?: string;
+      level?: string;
+      rating?: number;
+      summary?: string;
+      [key: string]: unknown;
+    };
+
+// Metrics we already expose from /cv/analyze responses
+export type CoachFeedbackMetrics = {
+  ballSpeedMps?: number | null;
+  clubSpeedMps?: number | null;
+  sideAngleDeg?: number | null;
+  vertLaunchDeg?: number | null;
+  carryEstM?: number | null;
+  quality?: CoachFeedbackQuality;
+  [key: string]: unknown;
+};
+
+export type CoachFeedbackRequest =
+  | { runId: string; metrics?: never }
+  | { runId?: undefined; metrics: CoachFeedbackMetrics };
+
+// Response payload
+export type CoachFeedbackResponse = {
+  text: string;
+  provider: string;
+  latency_ms: number;
+};
+
+// API call (prefers runId if present; else send metrics)
+export const postCoachFeedback = (req: CoachFeedbackRequest) =>
+  axios
+    .post<CoachFeedbackResponse>(`${API}/coach/feedback`, req, {
+      headers: withAuth({ "Content-Type": "application/json" }),
+      validateStatus: (s) => s === 200 || s === 429, // 429 rate-limit is handled by UI
+    })
+    .then((r) => r.data);

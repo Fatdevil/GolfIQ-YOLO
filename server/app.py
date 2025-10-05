@@ -14,6 +14,7 @@ from server.api.health import health as _health_handler
 from server.api.routers import calibrate as legacy_calibrate
 from server.api.routers import metrics
 from server.api.routers.coach import router as coach_router
+from server.api.routers.coach_feedback import router as coach_feedback_router
 from server.metrics import MetricsMiddleware, metrics_app
 from server.retention.sweeper import sweep_retention_once
 
@@ -24,6 +25,8 @@ from .routes.cv_analyze import router as cv_analyze_router
 from .routes.cv_analyze_video import router as cv_analyze_video_router
 from .routes.cv_mock import router as cv_mock_router
 from .routes.runs import router as runs_router
+from server.config.remote import router as remote_config_router
+from server.tools.telemetry_aggregate import router as telemetry_tools_router
 from .routes.ws_telemetry import router as ws_telemetry_router
 
 
@@ -87,6 +90,7 @@ app.add_middleware(MetricsMiddleware)
 api_dep = _api_key_dependency()
 
 app.include_router(coach_router)
+app.include_router(coach_feedback_router)
 app.include_router(legacy_calibrate.router)
 app.include_router(calibrate_router)
 app.include_router(caddie_router)
@@ -116,6 +120,8 @@ app.include_router(cv_analyze_router)
 app.include_router(cv_analyze_video_router)
 app.include_router(ws_telemetry_router)
 app.include_router(runs_router)
+app.include_router(remote_config_router)
+app.include_router(telemetry_tools_router)
 
 
 @app.get("/protected", dependencies=[Depends(api_dep)])
