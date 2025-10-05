@@ -12,6 +12,8 @@ struct FeatureFlagConfig: Codable {
         case hudEnabled
         case hudTracerEnabled
         case fieldTestModeEnabled
+        case analyticsEnabled
+        case crashEnabled
         case hudWindHintEnabled
         case hudTargetLineEnabled
         case hudBatterySaverEnabled
@@ -24,6 +26,8 @@ struct FeatureFlagConfig: Codable {
     var hudEnabled: Bool
     var hudTracerEnabled: Bool
     var fieldTestModeEnabled: Bool
+    var analyticsEnabled: Bool
+    var crashEnabled: Bool
     var hudWindHintEnabled: Bool
     var hudTargetLineEnabled: Bool
     var hudBatterySaverEnabled: Bool
@@ -36,6 +40,8 @@ struct FeatureFlagConfig: Codable {
         hudEnabled: Bool,
         hudTracerEnabled: Bool,
         fieldTestModeEnabled: Bool,
+        analyticsEnabled: Bool = false,
+        crashEnabled: Bool = false,
         hudWindHintEnabled: Bool,
         hudTargetLineEnabled: Bool,
         hudBatterySaverEnabled: Bool,
@@ -47,6 +53,8 @@ struct FeatureFlagConfig: Codable {
         self.hudEnabled = hudEnabled
         self.hudTracerEnabled = hudTracerEnabled
         self.fieldTestModeEnabled = fieldTestModeEnabled
+        self.analyticsEnabled = analyticsEnabled
+        self.crashEnabled = crashEnabled
         self.hudWindHintEnabled = hudWindHintEnabled
         self.hudTargetLineEnabled = hudTargetLineEnabled
         self.hudBatterySaverEnabled = hudBatterySaverEnabled
@@ -61,6 +69,8 @@ struct FeatureFlagConfig: Codable {
         hudEnabled = try container.decodeIfPresent(Bool.self, forKey: .hudEnabled) ?? false
         hudTracerEnabled = try container.decodeIfPresent(Bool.self, forKey: .hudTracerEnabled) ?? false
         fieldTestModeEnabled = try container.decodeIfPresent(Bool.self, forKey: .fieldTestModeEnabled) ?? false
+        analyticsEnabled = try container.decodeIfPresent(Bool.self, forKey: .analyticsEnabled) ?? false
+        crashEnabled = try container.decodeIfPresent(Bool.self, forKey: .crashEnabled) ?? false
         hudWindHintEnabled = try container.decode(Bool.self, forKey: .hudWindHintEnabled)
         hudTargetLineEnabled = try container.decode(Bool.self, forKey: .hudTargetLineEnabled)
         hudBatterySaverEnabled = try container.decode(Bool.self, forKey: .hudBatterySaverEnabled)

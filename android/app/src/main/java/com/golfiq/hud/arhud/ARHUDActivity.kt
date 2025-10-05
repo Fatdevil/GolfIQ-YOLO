@@ -37,6 +37,7 @@ import com.google.ar.sceneform.rendering.Color
 import com.google.ar.sceneform.rendering.MaterialFactory
 import com.google.ar.sceneform.rendering.ShapeFactory
 import com.google.ar.sceneform.ux.ArFragment
+import com.golfiq.hud.analytics.AnalyticsCoordinator
 import com.golfiq.hud.config.DeviceProfileManager
 import com.golfiq.hud.config.FeatureFlagsService
 import com.golfiq.hud.config.RemoteConfigClient
@@ -62,6 +63,7 @@ class ARHUDActivity : AppCompatActivity(), SensorEventListener {
     private lateinit var overlayView: ARHUDOverlayView
     private lateinit var featureFlags: FeatureFlagsService
     private lateinit var telemetry: TelemetryClient
+    private lateinit var analyticsCoordinator: AnalyticsCoordinator
     private lateinit var courseRepository: CourseBundleRepository
     private lateinit var thermalWatchdog: ThermalWatchdog
     private lateinit var batteryMonitor: BatteryMonitor
@@ -191,6 +193,20 @@ class ARHUDActivity : AppCompatActivity(), SensorEventListener {
         )
         featureFlags.applyDeviceTier(deviceProfile)
 
+        val baseUrlString = intent.getStringExtra(EXTRA_BASE_URL) ?: DEFAULT_BASE_URL
+        val baseUrl = URL(baseUrlString)
+
+        analyticsCoordinator = AnalyticsCoordinator(
+            context = applicationContext,
+            telemetryClient = telemetry,
+            baseUrl = baseUrl,
+            dsnProvider = { System.getenv("SENTRY_DSN_MOBILE") },
+        )
+        analyticsCoordinator.apply(
+            featureFlags.current(),
+            "tier-${deviceProfile.tier.name.lowercase()}",
+        )
+
         if (!featureFlags.current().hudEnabled) {
             finish()
             return
@@ -201,15 +217,15 @@ class ARHUDActivity : AppCompatActivity(), SensorEventListener {
             return
         }
 
-        val baseUrlString = intent.getStringExtra(EXTRA_BASE_URL) ?: DEFAULT_BASE_URL
-        courseRepository = CourseBundleRepository(applicationContext, URL(baseUrlString), telemetry)
+        courseRepository = CourseBundleRepository(applicationContext, baseUrl, telemetry)
 
         remoteConfigClient = RemoteConfigClient(
-            baseUrl = URL(baseUrlString),
+            baseUrl = baseUrl,
             deviceProfiles = deviceProfileManager,
             featureFlags = featureFlags,
             telemetry = telemetry,
             runtimeAdapter = runtimeAdapter,
+            onFlagsApplied = { flags, hash -> analyticsCoordinator.apply(flags, hash) },
         ).also { it.start() }
 
         val container = FrameLayout(this).apply { id = CONTAINER_ID }

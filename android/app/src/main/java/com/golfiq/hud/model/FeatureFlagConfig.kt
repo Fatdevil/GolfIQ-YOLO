@@ -10,6 +10,8 @@ data class FeatureFlagConfig(
     val hudEnabled: Boolean = false,
     val hudTracerEnabled: Boolean = false,
     val fieldTestModeEnabled: Boolean = false,
+    val analyticsEnabled: Boolean = false,
+    val crashEnabled: Boolean = false,
     val hudWindHintEnabled: Boolean,
     val hudTargetLineEnabled: Boolean,
     val hudBatterySaverEnabled: Boolean,

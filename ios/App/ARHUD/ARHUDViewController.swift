@@ -39,6 +39,7 @@ final class ARHUDViewController: UIViewController, ARSCNViewDelegate, CLLocation
     private var lastFpsOverlayUpdate: CFTimeInterval = 0
     private var lastEtagOverlayUpdate: CFTimeInterval = 0
     private var fieldRunSession: FieldRunSession?
+    private var analyticsCoordinator: AnalyticsCoordinator?
 
     init(
         courseId: String,
@@ -59,8 +60,23 @@ final class ARHUDViewController: UIViewController, ARSCNViewDelegate, CLLocation
         )
         self.runtimeDescriptor = runtimeDescriptor
         self.remoteConfigBaseURL = remoteConfigBaseURL ?? courseLoader.baseURL
-        self.fieldTestLatencyBucket = Self.computeLatencyBucket(for: self.profileProvider.deviceProfile().estimatedFps)
-        featureFlags.applyDeviceTier(profile: self.profileProvider.deviceProfile())
+        let profile = self.profileProvider.deviceProfile()
+        self.fieldTestLatencyBucket = Self.computeLatencyBucket(for: profile.estimatedFps)
+        featureFlags.applyDeviceTier(profile: profile)
+        if let analyticsBaseURL = self.remoteConfigBaseURL {
+            let coordinator = AnalyticsCoordinator(
+                telemetry: telemetry,
+                baseURL: analyticsBaseURL,
+                dsnProvider: { ProcessInfo.processInfo.environment["SENTRY_DSN_MOBILE"] }
+            )
+            coordinator.apply(
+                flags: featureFlags.current(),
+                configHash: "tier-\(profile.tier.rawValue.lowercased())"
+            )
+            self.analyticsCoordinator = coordinator
+        } else {
+            self.analyticsCoordinator = nil
+        }
         super.init(nibName: nil, bundle: nil)
 
         guard featureFlags.current().hudEnabled else {
@@ -110,7 +126,10 @@ final class ARHUDViewController: UIViewController, ARSCNViewDelegate, CLLocation
             profileProvider: profileProvider,
             featureFlags: featureFlags,
             telemetry: telemetry,
-            runtimeDescriptor: runtimeDescriptor
+            runtimeDescriptor: runtimeDescriptor,
+            onFlagsApplied: { [weak self] flags, hash in
+                self?.analyticsCoordinator?.apply(flags: flags, configHash: hash)
+            }
         )
         remoteConfigClient = client
         client.start()

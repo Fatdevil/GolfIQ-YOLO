@@ -16,9 +16,24 @@ primarily intended for internal experimentation across device performance tiers
 
 ```json
 {
-  "tierA": { "hudEnabled": true, "inputSize": 320 },
-  "tierB": { "hudEnabled": true, "inputSize": 320, "reducedRate": true },
-  "tierC": { "hudEnabled": false }
+  "tierA": {
+    "hudEnabled": true,
+    "inputSize": 320,
+    "analyticsEnabled": false,
+    "crashEnabled": false
+  },
+  "tierB": {
+    "hudEnabled": true,
+    "inputSize": 320,
+    "reducedRate": true,
+    "analyticsEnabled": false,
+    "crashEnabled": false
+  },
+  "tierC": {
+    "hudEnabled": false,
+    "analyticsEnabled": false,
+    "crashEnabled": false
+  }
 }
 ```
 
@@ -48,6 +63,8 @@ Successful updates echo the stored configuration and the fresh `ETag`.
    - `hudEnabled`
    - `inputSize`
    - `reducedRate`
+   - `analyticsEnabled`
+   - `crashEnabled`
 4. Log the active `ETag` (or hash) through telemetry for observability.
 5. Refresh periodically (clients poll every 12 hours).
 
