@@ -134,7 +134,9 @@ def list_courses() -> List[Dict[str, object]]:
     return courses
 
 
-def list_holes(course_id: str, *, bundle: CourseBundle | None = None) -> List[Dict[str, object]]:
+def list_holes(
+    course_id: str, *, bundle: CourseBundle | None = None
+) -> List[Dict[str, object]]:
     if bundle is None:
         bundle = load_bundle(course_id)
     holes: List[Dict[str, object]] = []

@@ -61,9 +61,11 @@ def build_config(args: argparse.Namespace) -> ImportConfig:
         green_kinds=_parse_kind_values(args.green),
         hazard_kinds=_parse_kind_values(args.hazards),
         hole_property=args.hole_property,
-        output_dir=Path(args.output_dir).expanduser().resolve()
-        if args.output_dir
-        else DATA_ROOT,
+        output_dir=(
+            Path(args.output_dir).expanduser().resolve()
+            if args.output_dir
+            else DATA_ROOT
+        ),
     )
 
 
@@ -121,7 +123,9 @@ def _dedupe_points(points: Iterable[Sequence[float]]) -> List[List[float]]:
     return deduped
 
 
-def _normalize_geometry(geometry: MutableMapping[str, object]) -> MutableMapping[str, object]:
+def _normalize_geometry(
+    geometry: MutableMapping[str, object],
+) -> MutableMapping[str, object]:
     geo_type = geometry.get("type")
     if geo_type == "Point":
         coords = geometry.get("coordinates")
@@ -249,7 +253,9 @@ def _normalise_feature(feature: Dict) -> Dict:
     return feature
 
 
-def _features_by_hole(features: Iterable[Dict], config: ImportConfig) -> Dict[int, List[Dict]]:
+def _features_by_hole(
+    features: Iterable[Dict], config: ImportConfig
+) -> Dict[int, List[Dict]]:
     grouped: Dict[int, List[Dict]] = defaultdict(list)
     for feature in features:
         hole = _hole_number(feature, config)
@@ -347,10 +353,16 @@ def _categorise_features(feature: Dict, config: ImportConfig) -> str:
 
 
 def _write_hole_feature_collection(
-    course_dir: Path, course_id: str, hole: int, features: List[Dict], config: ImportConfig
+    course_dir: Path,
+    course_id: str,
+    hole: int,
+    features: List[Dict],
+    config: ImportConfig,
 ) -> bool:
     ordered: List[Dict] = []
-    for index, feature in enumerate(sorted(features, key=lambda f: str(f.get("id", "")))):
+    for index, feature in enumerate(
+        sorted(features, key=lambda f: str(f.get("id", "")))
+    ):
         feature = dict(feature)
         feature["id"] = _ensure_feature_id(feature, course_id, hole, index)
         properties = feature.get("properties")

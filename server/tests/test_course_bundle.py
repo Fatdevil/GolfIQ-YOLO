@@ -113,7 +113,9 @@ def test_courses_listing() -> None:
     assert "courses" in payload
     course_ids = {course["id"] for course in payload["courses"]}
     assert "pebble-creek" in course_ids
-    sample = next(course for course in payload["courses"] if course["id"] == "pebble-creek")
+    sample = next(
+        course for course in payload["courses"] if course["id"] == "pebble-creek"
+    )
     assert sample["etag"]
     assert sample["updatedAt"]
 
