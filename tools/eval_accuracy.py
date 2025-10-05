@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import argparse
+import base64
+import binascii
 import json
 import math
 import sys
@@ -164,9 +166,6 @@ def _pick_number(source: Mapping[str, Any], keys: Iterable[str]) -> Optional[flo
 def _read_clip_bytes(file_path: Path) -> bytes:
     if file_path.suffix == ".b64":
         text = file_path.read_text().strip()
-        import base64
-        import binascii
-
         try:
             return base64.b64decode(text)
         except binascii.Error as exc:
