@@ -1,0 +1,59 @@
+name: release v1.2 automation
+
+on:
+  workflow_dispatch:
+
+jobs:
+  release:
+    name: Generate notes and release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      actions: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install requests
+
+      - name: Generate release notes
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: python tools/changelog_v1_2.py
+
+      - name: Upload release notes artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-notes-v1-2
+          path: dist/RELEASE_NOTES_v1.2.md
+
+      - name: Ensure tag v1.2 exists
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git fetch --tags
+          if git rev-parse v1.2 >/dev/null 2>&1; then
+            echo "Tag v1.2 already exists."
+          else
+            git tag -a v1.2 -m "back-view-v1.2"
+            git push origin v1.2
+          fi
+
+      - name: Publish GitHub Release
+        uses: ncipollo/release-action@v1
+        with:
+          tag: v1.2
+          name: "Back-view v1.2 – AR-HUD MVP"
+          bodyFile: dist/RELEASE_NOTES_v1.2.md
+          allowUpdates: true
+          token: ${{ secrets.GITHUB_TOKEN }}
