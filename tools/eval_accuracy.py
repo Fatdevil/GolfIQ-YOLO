@@ -12,12 +12,20 @@ from pathlib import Path
 from typing import Any, Dict, Iterable, List, Mapping, Optional
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-if str(REPO_ROOT) not in sys.path:
-    sys.path.append(str(REPO_ROOT))
 
-from cv_engine.io.framesource import frames_from_zip_bytes
-from cv_engine.metrics.kinematics import CalibrationParams
-from cv_engine.pipeline.analyze import analyze_frames
+
+def _import_cv_engine():
+    if str(REPO_ROOT) not in sys.path:
+        sys.path.append(str(REPO_ROOT))
+
+    from cv_engine.io.framesource import frames_from_zip_bytes as _frames_from_zip_bytes
+    from cv_engine.metrics.kinematics import CalibrationParams as _CalibrationParams
+    from cv_engine.pipeline.analyze import analyze_frames as _analyze_frames
+
+    return _frames_from_zip_bytes, _CalibrationParams, _analyze_frames
+
+
+frames_from_zip_bytes, CalibrationParams, analyze_frames = _import_cv_engine()
 
 MetricName = str
 
