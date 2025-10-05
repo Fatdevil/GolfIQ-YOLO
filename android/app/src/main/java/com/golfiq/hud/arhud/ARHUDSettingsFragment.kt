@@ -45,6 +45,14 @@ class ARHUDSettingsFragment : Fragment() {
             featureFlagsService.setHudTracerEnabled(enabled)
         })
 
+        root.addView(makeToggleRow(
+            title = "Field test mode",
+            subtitle = "Show QA overlay and field markers",
+            initial = featureFlagsService.current().fieldTestModeEnabled
+        ) { enabled ->
+            featureFlagsService.setFieldTestModeEnabled(enabled)
+        })
+
         val refreshButton = Button(requireContext()).apply {
             text = "Refresh bundle"
             setOnClickListener { BundleRefreshBus.requestRefresh() }

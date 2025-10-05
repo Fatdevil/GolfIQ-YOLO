@@ -2,6 +2,7 @@ import Foundation
 
 struct RemoteTierConfig: Codable {
     let hudEnabled: Bool?
+    let fieldTestMode: Bool?
     let inputSize: Int?
     let reducedRate: Bool?
 }
@@ -24,6 +25,8 @@ final class RemoteConfigClient {
 
     private var etag: String?
     private var timer: Timer?
+    private var lastAppliedAt: Date?
+    private var lastAppliedHash: String?
 
     init(
         baseURL: URL,
@@ -112,6 +115,7 @@ final class RemoteConfigClient {
         let overrides = FeatureFlagConfig(
             hudEnabled: tierConfig.hudEnabled ?? current.hudEnabled,
             hudTracerEnabled: current.hudTracerEnabled,
+            fieldTestModeEnabled: tierConfig.fieldTestMode ?? current.fieldTestModeEnabled,
             hudWindHintEnabled: current.hudWindHintEnabled,
             hudTargetLineEnabled: current.hudTargetLineEnabled,
             hudBatterySaverEnabled: current.hudBatterySaverEnabled,
@@ -123,12 +127,30 @@ final class RemoteConfigClient {
         featureFlags.applyRemote(overrides: overrides)
 
         let runtime = runtimeDescriptor()
+        let normalized = etag.replacingOccurrences(of: "\"", with: "")
         telemetry.logRemoteConfigActive(
-            hash: etag.replacingOccurrences(of: "\"", with: ""),
+            hash: normalized,
             profile: profile,
             runtime: runtime,
             inputSize: overrides.inputSize,
             reducedRate: overrides.reducedRate
         )
+        lastAppliedHash = normalized
+        lastAppliedAt = Date()
+    }
+
+    func etagAgeDays(now: Date = Date()) -> Int? {
+        guard let appliedAt = lastAppliedAt else {
+            return nil
+        }
+        let interval = now.timeIntervalSince(appliedAt)
+        if interval < 0 {
+            return 0
+        }
+        return Int(interval / (24 * 60 * 60))
+    }
+
+    func activeEtagHash() -> String? {
+        lastAppliedHash
     }
 }

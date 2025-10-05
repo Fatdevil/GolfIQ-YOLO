@@ -16,6 +16,7 @@ import android.view.Choreographer
 import android.view.Gravity
 import android.widget.FrameLayout
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
@@ -48,8 +49,11 @@ import com.golfiq.hud.runtime.ThermalWatchdog
 import com.golfiq.hud.telemetry.TelemetryClient
 import java.net.URL
 import java.util.ArrayDeque
+import java.util.Locale
 import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
 import kotlin.math.cos
+import kotlin.math.max
 import kotlin.math.sin
 
 class ARHUDActivity : AppCompatActivity(), SensorEventListener {
@@ -90,6 +94,9 @@ class ARHUDActivity : AppCompatActivity(), SensorEventListener {
 
     private val frameCallback = object : Choreographer.FrameCallback {
         override fun doFrame(frameTimeNanos: Long) {
+            if (fieldTestEnabled != featureFlags.current().fieldTestModeEnabled) {
+                updateFieldTestUi()
+            }
             fpsSamples.addLast(frameTimeNanos)
             while (fpsSamples.isNotEmpty() && frameTimeNanos - fpsSamples.first() > 1_000_000_000L) {
                 fpsSamples.removeFirst()
@@ -98,6 +105,15 @@ class ARHUDActivity : AppCompatActivity(), SensorEventListener {
             if (fpsSamples.size >= 2) {
                 val durationNs = (fpsSamples.last() - fpsSamples.first()).coerceAtLeast(1)
                 val fps = (fpsSamples.size - 1) * 1_000_000_000.0 / durationNs
+                if (fieldTestEnabled && frameTimeNanos - lastFpsOverlayUpdate > 500_000_000L) {
+                    overlayView.updateFieldTestFps(String.format(Locale.US, "%.1f", fps))
+                    recordFieldRunFps(fps)
+                    lastFpsOverlayUpdate = frameTimeNanos
+                }
+                if (fieldTestEnabled && frameTimeNanos - lastFieldTestEtagUpdate > TimeUnit.MINUTES.toNanos(1)) {
+                    overlayView.updateFieldTestEtagAge(remoteConfigClient?.etagAgeDays())
+                    lastFieldTestEtagUpdate = frameTimeNanos
+                }
                 if (frameTimeNanos - lastFpsEmission > 5_000_000_000L) {
                     telemetry.logHudFps(fps)
                     lastFpsEmission = frameTimeNanos
@@ -124,6 +140,21 @@ class ARHUDActivity : AppCompatActivity(), SensorEventListener {
     private var lastCalibrationAltitude: Double? = null
     private var refreshRegistration: (() -> Unit)? = null
     private var geospatialSupported: Boolean = false
+    private var fieldTestEnabled: Boolean = false
+    private var fieldTestLatencyBucket: String = "–"
+    private var lastFpsOverlayUpdate: Long = 0
+    private var lastFieldTestEtagUpdate: Long = 0
+    private var fieldRunSession: FieldRunSession? = null
+
+    private data class FieldRunSession(
+        var startedAtMillis: Long,
+        var currentHole: Int,
+        var holesCompleted: Int,
+        var recenterCount: Int,
+        var fpsSum: Double,
+        var fpsSamples: Int,
+        var startBattery: Double,
+    )
 
     private val permissionsLauncher = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         if (granted) {
@@ -153,6 +184,7 @@ class ARHUDActivity : AppCompatActivity(), SensorEventListener {
             telemetryClient = telemetry,
         )
         val deviceProfile = deviceProfileManager.ensureProfile()
+        fieldTestLatencyBucket = computeLatencyBucket(deviceProfile.estimatedFps)
         runtimeAdapter = RuntimeAdapter(
             getSharedPreferences("runtime_adapter", MODE_PRIVATE),
             deviceProfileManager,
@@ -201,11 +233,19 @@ class ARHUDActivity : AppCompatActivity(), SensorEventListener {
 
         overlayView.updateStatus("Loading course…")
         overlayView.updateModeBadge(ARHUDOverlayView.Mode.COMPASS)
+        updateFieldTestTrackingLabel()
         overlayView.alpha = if (featureFlags.current().hudEnabled) 1f else 0f
         overlayView.calibrateButton.setOnClickListener { calibrate() }
         overlayView.recenterButton.setOnClickListener { recenter() }
+        overlayView.markButton.setOnClickListener { showFieldMarkerSheet() }
+        overlayView.fieldRunStartButton.setOnClickListener { startFieldRun() }
+        overlayView.fieldRunNextButton.setOnClickListener { advanceFieldRun() }
+        overlayView.fieldRunEndButton.setOnClickListener { endFieldRun() }
+
+        updateFieldTestUi(force = true)
 
         refreshRegistration = BundleRefreshBus.register {
+            sendFieldMarker("bundle_refresh")
             runOnUiThread { loadCourse(courseId, forceRefresh = true) }
         }
 
@@ -214,10 +254,12 @@ class ARHUDActivity : AppCompatActivity(), SensorEventListener {
                 config.geospatialMode = Config.GeospatialMode.ENABLED
                 geospatialSupported = true
                 overlayView.updateModeBadge(ARHUDOverlayView.Mode.GEOSPATIAL)
+                updateFieldTestTrackingLabel()
             } else {
                 geospatialSupported = false
                 usingGeospatial = false
                 overlayView.updateModeBadge(ARHUDOverlayView.Mode.COMPASS)
+                updateFieldTestTrackingLabel()
             }
         }
 
@@ -235,6 +277,7 @@ class ARHUDActivity : AppCompatActivity(), SensorEventListener {
         }
         Choreographer.getInstance().postFrameCallback(frameCallback)
         startFallbackMonitoring()
+        updateFieldTestUi()
     }
 
     override fun onPause() {
@@ -253,6 +296,136 @@ class ARHUDActivity : AppCompatActivity(), SensorEventListener {
         refreshRegistration?.invoke()
         executor.shutdownNow()
         remoteConfigClient?.shutdown()
+    }
+
+    private fun computeLatencyBucket(estimatedFps: Double): String {
+        if (estimatedFps <= 0) {
+            return "unknown"
+        }
+        val latencyMs = 1000.0 / estimatedFps
+        return when {
+            latencyMs < 40 -> "<40ms"
+            latencyMs < 66 -> "40-65ms"
+            latencyMs < 100 -> "66-99ms"
+            else -> "≥100ms"
+        }
+    }
+
+    private fun updateFieldTestUi(force: Boolean = false) {
+        val enabled = featureFlags.current().fieldTestModeEnabled
+        if (enabled != fieldTestEnabled || force) {
+            fieldTestEnabled = enabled
+            overlayView.setFieldTestVisible(enabled)
+        }
+        if (!fieldTestEnabled) {
+            overlayView.updateFieldRunState(false, null, fieldRunSession?.recenterCount ?: 0)
+            return
+        }
+        overlayView.updateFieldTestLatency(fieldTestLatencyBucket)
+        overlayView.updateFieldTestTracking(if (usingGeospatial) "Geospatial" else "Compass")
+        overlayView.updateFieldTestEtagAge(remoteConfigClient?.etagAgeDays())
+        val session = fieldRunSession
+        overlayView.updateFieldRunState(session != null, session?.currentHole, session?.recenterCount ?: 0)
+    }
+
+    private fun updateFieldTestTrackingLabel() {
+        if (!fieldTestEnabled) {
+            return
+        }
+        overlayView.updateFieldTestTracking(if (usingGeospatial) "Geospatial" else "Compass")
+    }
+
+    private fun showFieldMarkerSheet() {
+        if (!fieldTestEnabled) {
+            return
+        }
+        val options = listOf(
+            "Tee" to "tee",
+            "Approach" to "approach",
+            "Putt" to "putt",
+            "Re-center" to "recenter",
+            "Bundle refresh" to "bundle_refresh",
+        )
+        AlertDialog.Builder(this)
+            .setTitle("Mark event")
+            .setItems(options.map { it.first }.toTypedArray()) { _, which ->
+                val selection = options.getOrNull(which) ?: return@setItems
+                if (selection.second == "recenter") {
+                    onFieldRunRecenter()
+                } else {
+                    sendFieldMarker(selection.second)
+                }
+            }
+            .setNegativeButton(android.R.string.cancel, null)
+            .show()
+    }
+
+    private fun sendFieldMarker(event: String) {
+        if (!fieldTestEnabled) {
+            return
+        }
+        val hole = fieldRunSession?.currentHole
+        telemetry.sendFieldMarker(event, hole, System.currentTimeMillis())
+    }
+
+    private fun startFieldRun() {
+        if (!fieldTestEnabled) {
+            return
+        }
+        val startBattery = batteryMonitor.currentLevel()
+        fieldRunSession = FieldRunSession(
+            startedAtMillis = System.currentTimeMillis(),
+            currentHole = 1,
+            holesCompleted = 0,
+            recenterCount = 0,
+            fpsSum = 0.0,
+            fpsSamples = 0,
+            startBattery = startBattery,
+        )
+        lastFpsOverlayUpdate = 0
+        overlayView.updateFieldRunState(true, 1, 0)
+        sendFieldMarker("run_start")
+    }
+
+    private fun advanceFieldRun() {
+        val session = fieldRunSession ?: return
+        session.holesCompleted = max(session.holesCompleted, session.currentHole)
+        if (session.currentHole < 9) {
+            session.currentHole += 1
+        }
+        overlayView.updateFieldRunState(true, session.currentHole, session.recenterCount)
+    }
+
+    private fun endFieldRun() {
+        val session = fieldRunSession ?: return
+        session.holesCompleted = max(session.holesCompleted, session.currentHole)
+        val avgFps = if (session.fpsSamples > 0) session.fpsSum / session.fpsSamples else 0.0
+        val batteryDelta = session.startBattery - batteryMonitor.currentLevel()
+        telemetry.sendFieldRunSummary(
+            holesPlayed = session.holesCompleted.coerceAtMost(9),
+            recenterCount = session.recenterCount,
+            averageFps = avgFps,
+            batteryDelta = batteryDelta,
+        )
+        fieldRunSession = null
+        overlayView.updateFieldRunState(false, null, 0)
+    }
+
+    private fun recordFieldRunFps(fps: Double) {
+        val session = fieldRunSession ?: return
+        session.fpsSum += fps
+        session.fpsSamples += 1
+    }
+
+    private fun onFieldRunRecenter() {
+        if (!fieldTestEnabled) {
+            return
+        }
+        sendFieldMarker("recenter")
+        fieldRunSession?.let { session ->
+            session.recenterCount += 1
+            overlayView.updateFieldRunState(true, session.currentHole, session.recenterCount)
+        }
     }
 
     private fun loadCourse(courseId: String, forceRefresh: Boolean = false) {
@@ -314,6 +487,7 @@ class ARHUDActivity : AppCompatActivity(), SensorEventListener {
             node.setParent(null)
         }
         overlayView.updateModeBadge(ARHUDOverlayView.Mode.COMPASS)
+        updateFieldTestTrackingLabel()
     }
 
     private fun clearGeospatialAnchors() {
@@ -321,6 +495,7 @@ class ARHUDActivity : AppCompatActivity(), SensorEventListener {
         geospatialAnchors.clear()
         usingGeospatial = false
         overlayView.updateModeBadge(ARHUDOverlayView.Mode.COMPASS)
+        updateFieldTestTrackingLabel()
     }
 
     private fun startFallbackMonitoring() {
@@ -388,10 +563,12 @@ class ARHUDActivity : AppCompatActivity(), SensorEventListener {
                 telemetry.logHudCalibration()
                 overlayView.updateStatus("Calibrated – geospatial anchors pinned")
                 overlayView.updateModeBadge(ARHUDOverlayView.Mode.GEOSPATIAL)
+                updateFieldTestTrackingLabel()
                 return
             } else {
                 overlayView.updateStatus("Geospatial localization not ready, using compass fallback")
                 overlayView.updateModeBadge(ARHUDOverlayView.Mode.COMPASS)
+                updateFieldTestTrackingLabel()
                 clearGeospatialAnchors()
             }
         }
@@ -408,6 +585,7 @@ class ARHUDActivity : AppCompatActivity(), SensorEventListener {
         telemetry.logHudCalibration()
         overlayView.updateStatus("Calibrated – markers pinned")
         overlayView.updateModeBadge(ARHUDOverlayView.Mode.COMPASS)
+        updateFieldTestTrackingLabel()
     }
 
     private fun recenter() {
@@ -427,6 +605,8 @@ class ARHUDActivity : AppCompatActivity(), SensorEventListener {
                 telemetry.logHudRecenter()
                 overlayView.updateStatus("Re-centered geospatial anchors")
                 overlayView.updateModeBadge(ARHUDOverlayView.Mode.GEOSPATIAL)
+                updateFieldTestTrackingLabel()
+                onFieldRunRecenter()
             } else {
                 overlayView.updateStatus("Geospatial localization not ready")
             }
@@ -446,6 +626,8 @@ class ARHUDActivity : AppCompatActivity(), SensorEventListener {
         telemetry.logHudRecenter()
         overlayView.updateStatus("Re-centered scene")
         overlayView.updateModeBadge(ARHUDOverlayView.Mode.COMPASS)
+        updateFieldTestTrackingLabel()
+        onFieldRunRecenter()
     }
 
     private fun placeMarkers(bundle: CourseBundle) {
@@ -513,6 +695,7 @@ class ARHUDActivity : AppCompatActivity(), SensorEventListener {
 
         usingGeospatial = true
         lastCalibrationAltitude = altitude
+        updateFieldTestTrackingLabel()
     }
 
     private fun createGeospatialNode(parent: AnchorNode, label: String, color: Color) {

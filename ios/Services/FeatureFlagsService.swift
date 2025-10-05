@@ -7,6 +7,7 @@ final class FeatureFlagsService {
         defaults: FeatureFlagConfig = FeatureFlagConfig(
             hudEnabled: false,
             hudTracerEnabled: false,
+            fieldTestModeEnabled: false,
             hudWindHintEnabled: true,
             hudTargetLineEnabled: true,
             hudBatterySaverEnabled: false,
@@ -35,6 +36,7 @@ final class FeatureFlagsService {
         config = FeatureFlagConfig(
             hudEnabled: config.hudEnabled,
             hudTracerEnabled: config.hudTracerEnabled,
+            fieldTestModeEnabled: config.fieldTestModeEnabled,
             hudWindHintEnabled: config.hudWindHintEnabled,
             hudTargetLineEnabled: config.hudTargetLineEnabled,
             hudBatterySaverEnabled: config.hudBatterySaverEnabled,
@@ -49,6 +51,7 @@ final class FeatureFlagsService {
         config = FeatureFlagConfig(
             hudEnabled: enabled,
             hudTracerEnabled: config.hudTracerEnabled,
+            fieldTestModeEnabled: config.fieldTestModeEnabled,
             hudWindHintEnabled: config.hudWindHintEnabled,
             hudTargetLineEnabled: config.hudTargetLineEnabled,
             hudBatterySaverEnabled: config.hudBatterySaverEnabled,
@@ -63,6 +66,22 @@ final class FeatureFlagsService {
         config = FeatureFlagConfig(
             hudEnabled: config.hudEnabled,
             hudTracerEnabled: enabled,
+            fieldTestModeEnabled: config.fieldTestModeEnabled,
+            hudWindHintEnabled: config.hudWindHintEnabled,
+            hudTargetLineEnabled: config.hudTargetLineEnabled,
+            hudBatterySaverEnabled: config.hudBatterySaverEnabled,
+            handsFreeImpactEnabled: config.handsFreeImpactEnabled,
+            inputSize: config.inputSize,
+            reducedRate: config.reducedRate,
+            source: .override
+        )
+    }
+
+    func setFieldTestModeEnabled(_ enabled: Bool) {
+        config = FeatureFlagConfig(
+            hudEnabled: config.hudEnabled,
+            hudTracerEnabled: config.hudTracerEnabled,
+            fieldTestModeEnabled: enabled,
             hudWindHintEnabled: config.hudWindHintEnabled,
             hudTargetLineEnabled: config.hudTargetLineEnabled,
             hudBatterySaverEnabled: config.hudBatterySaverEnabled,

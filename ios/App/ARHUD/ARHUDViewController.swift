@@ -34,6 +34,11 @@ final class ARHUDViewController: UIViewController, ARSCNViewDelegate, CLLocation
     private var geospatialAnchorMetadata: [UUID: (label: String, color: UIColor)] = [:]
     private var geospatialSessionActive = false
     private var refreshObserver: NSObjectProtocol?
+    private var fieldTestEnabled = false
+    private var fieldTestLatencyBucket: String = "–"
+    private var lastFpsOverlayUpdate: CFTimeInterval = 0
+    private var lastEtagOverlayUpdate: CFTimeInterval = 0
+    private var fieldRunSession: FieldRunSession?
 
     init(
         courseId: String,
@@ -54,6 +59,7 @@ final class ARHUDViewController: UIViewController, ARSCNViewDelegate, CLLocation
         )
         self.runtimeDescriptor = runtimeDescriptor
         self.remoteConfigBaseURL = remoteConfigBaseURL ?? courseLoader.baseURL
+        self.fieldTestLatencyBucket = Self.computeLatencyBucket(for: self.profileProvider.deviceProfile().estimatedFps)
         featureFlags.applyDeviceTier(profile: self.profileProvider.deviceProfile())
         super.init(nibName: nil, bundle: nil)
 
@@ -77,6 +83,7 @@ final class ARHUDViewController: UIViewController, ARSCNViewDelegate, CLLocation
         configureLocationServices()
         configureDisplayLink()
         overlayView.updateModeBadge(.compass)
+        updateFieldTestTrackingLabel()
         refreshObserver = NotificationCenter.default.addObserver(
             forName: .arhudBundleRefreshRequested,
             object: nil,
@@ -93,6 +100,7 @@ final class ARHUDViewController: UIViewController, ARSCNViewDelegate, CLLocation
         overlayView.isHidden = !featureFlags.current().hudEnabled
         startFallbackMonitoring()
         startSession()
+        updateFieldTestUi()
     }
 
     private func startRemoteConfig() {
@@ -153,6 +161,11 @@ final class ARHUDViewController: UIViewController, ARSCNViewDelegate, CLLocation
         overlayView.isHidden = !featureFlags.current().hudEnabled
         overlayView.calibrateButton.addTarget(self, action: #selector(handleCalibrateTapped), for: .touchUpInside)
         overlayView.recenterButton.addTarget(self, action: #selector(handleRecenterTapped), for: .touchUpInside)
+        overlayView.markButton.addTarget(self, action: #selector(handleMarkTapped), for: .touchUpInside)
+        overlayView.fieldRunStartButton.addTarget(self, action: #selector(handleFieldRunStart), for: .touchUpInside)
+        overlayView.fieldRunNextButton.addTarget(self, action: #selector(handleFieldRunNext), for: .touchUpInside)
+        overlayView.fieldRunEndButton.addTarget(self, action: #selector(handleFieldRunEnd), for: .touchUpInside)
+        updateFieldTestUi(force: true)
     }
 
     private func configureLocationServices() {
@@ -248,6 +261,7 @@ final class ARHUDViewController: UIViewController, ARSCNViewDelegate, CLLocation
         configuration.planeDetection = [.horizontal]
         sceneView.session.run(configuration, options: [.resetTracking, .removeExistingAnchors])
         overlayView.updateModeBadge(.compass)
+        updateFieldTestTrackingLabel()
     }
 
     @available(iOS 14.0, *)
@@ -264,6 +278,7 @@ final class ARHUDViewController: UIViewController, ARSCNViewDelegate, CLLocation
         }
         sceneView.session.run(configuration, options: [.resetTracking, .removeExistingAnchors])
         overlayView.updateModeBadge(.geospatial)
+        updateFieldTestTrackingLabel()
     }
 
     private func loadCourseBundle(forceRefresh: Bool = false) {
@@ -286,6 +301,7 @@ final class ARHUDViewController: UIViewController, ARSCNViewDelegate, CLLocation
 
     @objc
     private func handleManualBundleRefresh() {
+        sendFieldMarker("bundle_refresh")
         loadCourseBundle(forceRefresh: true)
     }
 
@@ -319,10 +335,12 @@ final class ARHUDViewController: UIViewController, ARSCNViewDelegate, CLLocation
             updateDistances(with: location)
             telemetry.logHudCalibration()
             overlayView.updateStatus("Calibrated – geospatial anchors pinned")
+            updateFieldTestTrackingLabel()
             return
         }
 
         overlayView.updateModeBadge(.compass)
+        updateFieldTestTrackingLabel()
         clearGeospatialAnchors()
 
         if let anchor = calibrationAnchor {
@@ -337,12 +355,34 @@ final class ARHUDViewController: UIViewController, ARSCNViewDelegate, CLLocation
         updateDistances(with: location)
         telemetry.logHudCalibration()
         overlayView.updateStatus("Calibrated – markers pinned")
+        updateFieldTestTrackingLabel()
+    }
+
+    @objc
+    private func handleMarkTapped() {
+        showFieldMarkerSheet()
+    }
+
+    @objc
+    private func handleFieldRunStart() {
+        startFieldRun()
+    }
+
+    @objc
+    private func handleFieldRunNext() {
+        advanceFieldRun()
+    }
+
+    @objc
+    private func handleFieldRunEnd() {
+        endFieldRun()
     }
 
     private func clearGeospatialAnchors() {
         geospatialAnchors.forEach { sceneView.session.remove(anchor: $0) }
         geospatialAnchors.removeAll()
         geospatialAnchorMetadata.removeAll()
+        updateFieldTestTrackingLabel()
     }
 
     @available(iOS 14.0, *)
@@ -383,6 +423,7 @@ final class ARHUDViewController: UIViewController, ARSCNViewDelegate, CLLocation
 
         calibrationAnchor = nil
         overlayView.updateModeBadge(.geospatial)
+        updateFieldTestTrackingLabel()
         return true
     }
 
@@ -409,6 +450,8 @@ final class ARHUDViewController: UIViewController, ARSCNViewDelegate, CLLocation
                 updateDistances(with: location)
                 telemetry.logHudRecenter()
                 overlayView.updateStatus("Re-centered geospatial anchors")
+                updateFieldTestTrackingLabel()
+                onFieldRunRecenter()
             }
             return
         }
@@ -430,6 +473,8 @@ final class ARHUDViewController: UIViewController, ARSCNViewDelegate, CLLocation
 
         telemetry.logHudRecenter()
         overlayView.updateStatus("Re-centered scene")
+        updateFieldTestTrackingLabel()
+        onFieldRunRecenter()
     }
 
     private func computeHeadingOffset(from location: CLLocation, to target: CLLocation) -> CLLocationDirection {
@@ -549,6 +594,9 @@ final class ARHUDViewController: UIViewController, ARSCNViewDelegate, CLLocation
 
     @objc
     private func handleDisplayLink(_ link: CADisplayLink) {
+        if fieldTestEnabled != featureFlags.current().fieldTestModeEnabled {
+            updateFieldTestUi()
+        }
         fpsSamples.append(link.timestamp)
 
         while let first = fpsSamples.first, link.timestamp - first > 1.0 {
@@ -560,6 +608,15 @@ final class ARHUDViewController: UIViewController, ARSCNViewDelegate, CLLocation
         }
 
         let fps = Double(fpsSamples.count - 1) / (link.timestamp - first)
+        if fieldTestEnabled && link.timestamp - lastFpsOverlayUpdate >= 0.5 {
+            overlayView.updateFieldTestFps(String(format: "%.1f", fps))
+            recordFieldRunFps(fps)
+            lastFpsOverlayUpdate = link.timestamp
+        }
+        if fieldTestEnabled && link.timestamp - lastEtagOverlayUpdate >= 60 {
+            overlayView.updateFieldTestEtagAge(remoteConfigClient?.etagAgeDays())
+            lastEtagOverlayUpdate = link.timestamp
+        }
         if link.timestamp - lastFpsEmission >= fpsEmissionInterval {
             telemetry.logHudFps(fps)
             lastFpsEmission = link.timestamp
@@ -585,6 +642,148 @@ private struct StaticMicrobench: InferenceMicrobench {
         let frames = max(1, Int(duration * 60.0 / 1000.0))
         return Array(repeating: 33.0, count: frames)
     }
+}
+
+private extension ARHUDViewController {
+    static func computeLatencyBucket(for estimatedFps: Double) -> String {
+        guard estimatedFps > 0 else { return "unknown" }
+        let latency = 1000.0 / estimatedFps
+        switch latency {
+        case ..<40: return "<40ms"
+        case ..<66: return "40-65ms"
+        case ..<100: return "66-99ms"
+        default: return "≥100ms"
+        }
+    }
+
+    func updateFieldTestUi(force: Bool = false) {
+        let enabled = featureFlags.current().fieldTestModeEnabled
+        if enabled != fieldTestEnabled || force {
+            fieldTestEnabled = enabled
+            overlayView.setFieldTestVisible(enabled)
+        }
+        guard fieldTestEnabled else {
+            overlayView.updateFieldRunState(active: false, currentHole: nil, recenterCount: 0)
+            return
+        }
+        overlayView.updateFieldTestLatency(fieldTestLatencyBucket)
+        overlayView.updateFieldTestTracking(geospatialSessionActive ? "Geospatial" : "Compass")
+        overlayView.updateFieldTestEtagAge(remoteConfigClient?.etagAgeDays())
+        updateFieldRunUi()
+    }
+
+    func updateFieldTestTrackingLabel() {
+        guard fieldTestEnabled else { return }
+        overlayView.updateFieldTestTracking(geospatialSessionActive ? "Geospatial" : "Compass")
+    }
+
+    func showFieldMarkerSheet() {
+        guard fieldTestEnabled else { return }
+        let options: [(String, String)] = [
+            ("Tee", "tee"),
+            ("Approach", "approach"),
+            ("Putt", "putt"),
+            ("Re-center", "recenter"),
+            ("Bundle refresh", "bundle_refresh")
+        ]
+        let alert = UIAlertController(title: "Mark event", message: nil, preferredStyle: .alert)
+        options.forEach { title, event in
+            alert.addAction(UIAlertAction(title: title, style: .default) { [weak self] _ in
+                guard let self else { return }
+                if event == "recenter" {
+                    self.onFieldRunRecenter()
+                } else {
+                    self.sendFieldMarker(event)
+                }
+            })
+        }
+        alert.addAction(UIAlertAction(title: "Cancel", style: .cancel, handler: nil))
+        present(alert, animated: true)
+    }
+
+    func sendFieldMarker(_ event: String) {
+        guard fieldTestEnabled else { return }
+        let hole = fieldRunSession?.currentHole
+        telemetry.sendFieldMarker(event: event, hole: hole, timestamp: Date().timeIntervalSince1970 * 1000)
+    }
+
+    func startFieldRun() {
+        guard fieldTestEnabled else { return }
+        let session = FieldRunSession(
+            startedAt: Date(),
+            currentHole: 1,
+            holesCompleted: 0,
+            recenterCount: 0,
+            fpsSum: 0,
+            fpsSamples: 0,
+            startBattery: batteryMonitor.currentLevel()
+        )
+        fieldRunSession = session
+        lastFpsOverlayUpdate = 0
+        updateFieldRunUi()
+        sendFieldMarker("run_start")
+    }
+
+    func advanceFieldRun() {
+        guard var session = fieldRunSession else { return }
+        session.holesCompleted = max(session.holesCompleted, session.currentHole)
+        if session.currentHole < 9 {
+            session.currentHole += 1
+        }
+        fieldRunSession = session
+        updateFieldRunUi()
+    }
+
+    func endFieldRun() {
+        guard let session = fieldRunSession else { return }
+        var completed = max(session.holesCompleted, session.currentHole)
+        completed = min(completed, 9)
+        let averageFps = session.fpsSamples > 0 ? session.fpsSum / Double(session.fpsSamples) : 0
+        let batteryDelta = session.startBattery - batteryMonitor.currentLevel()
+        telemetry.sendFieldRunSummary(
+            holesPlayed: completed,
+            recenterCount: session.recenterCount,
+            averageFps: averageFps,
+            batteryDelta: batteryDelta
+        )
+        fieldRunSession = nil
+        updateFieldRunUi()
+    }
+
+    func recordFieldRunFps(_ fps: Double) {
+        guard var session = fieldRunSession else { return }
+        session.fpsSum += fps
+        session.fpsSamples += 1
+        fieldRunSession = session
+    }
+
+    func onFieldRunRecenter() {
+        guard fieldTestEnabled else { return }
+        sendFieldMarker("recenter")
+        if var session = fieldRunSession {
+            session.recenterCount += 1
+            fieldRunSession = session
+        }
+        updateFieldRunUi()
+    }
+
+    func updateFieldRunUi() {
+        if let session = fieldRunSession {
+            overlayView.updateFieldRunState(active: true, currentHole: session.currentHole, recenterCount: session.recenterCount)
+        } else {
+            overlayView.updateFieldRunState(active: false, currentHole: nil, recenterCount: 0)
+        }
+    }
+}
+
+private struct FieldRunSession {
+    var startedAt: Date
+    var currentHole: Int
+    var holesCompleted: Int
+    var recenterCount: Int
+    var fpsSum: Double
+    var fpsSamples: Int
+    var startBattery: Double
 }
 
 private extension CLLocationDegrees {

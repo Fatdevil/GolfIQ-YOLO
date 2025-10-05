@@ -7,6 +7,7 @@ class FeatureFlagsService(
     defaults: FeatureFlagConfig = FeatureFlagConfig(
         hudEnabled = false,
         hudTracerEnabled = false,
+        fieldTestModeEnabled = false,
         hudWindHintEnabled = true,
         hudTargetLineEnabled = true,
         hudBatterySaverEnabled = false,
@@ -32,6 +33,7 @@ class FeatureFlagsService(
         config = config.copy(
             hudEnabled = config.hudEnabled,
             hudTracerEnabled = config.hudTracerEnabled,
+            fieldTestModeEnabled = config.fieldTestModeEnabled,
             handsFreeImpactEnabled = enabled,
             inputSize = config.inputSize,
             reducedRate = config.reducedRate,
@@ -42,6 +44,7 @@ class FeatureFlagsService(
     fun setHudEnabled(enabled: Boolean) {
         config = config.copy(
             hudEnabled = enabled,
+            fieldTestModeEnabled = config.fieldTestModeEnabled,
             inputSize = config.inputSize,
             reducedRate = config.reducedRate,
             source = FeatureFlagConfig.Source.OVERRIDE,
@@ -51,6 +54,18 @@ class FeatureFlagsService(
     fun setHudTracerEnabled(enabled: Boolean) {
         config = config.copy(
             hudTracerEnabled = enabled,
+            fieldTestModeEnabled = config.fieldTestModeEnabled,
+            inputSize = config.inputSize,
+            reducedRate = config.reducedRate,
+            source = FeatureFlagConfig.Source.OVERRIDE,
+        )
+    }
+
+    fun setFieldTestModeEnabled(enabled: Boolean) {
+        config = config.copy(
+            hudEnabled = config.hudEnabled,
+            hudTracerEnabled = config.hudTracerEnabled,
+            fieldTestModeEnabled = enabled,
             inputSize = config.inputSize,
             reducedRate = config.reducedRate,
             source = FeatureFlagConfig.Source.OVERRIDE,
