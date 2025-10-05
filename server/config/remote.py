@@ -11,9 +11,24 @@ from typing import Any, Dict, Tuple
 from fastapi import APIRouter, HTTPException, Request, Response, status
 
 DEFAULT_REMOTE_CONFIG: Dict[str, Dict[str, Any]] = {
-    "tierA": {"hudEnabled": True, "inputSize": 320},
-    "tierB": {"hudEnabled": True, "inputSize": 320, "reducedRate": True},
-    "tierC": {"hudEnabled": False},
+    "tierA": {
+        "hudEnabled": True,
+        "inputSize": 320,
+        "analyticsEnabled": True,
+        "crashEnabled": True,
+    },
+    "tierB": {
+        "hudEnabled": True,
+        "inputSize": 320,
+        "reducedRate": True,
+        "analyticsEnabled": True,
+        "crashEnabled": True,
+    },
+    "tierC": {
+        "hudEnabled": False,
+        "analyticsEnabled": True,
+        "crashEnabled": True,
+    },
 }
 
 
@@ -60,10 +75,13 @@ class RemoteConfigStore:
                     status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                     detail=f"{tier} overrides must be a JSON object",
                 )
-            validated[tier] = deepcopy(overrides)
+            merged = deepcopy(overrides)
+            merged.setdefault("analyticsEnabled", True)
+            merged.setdefault("crashEnabled", True)
+            validated[tier] = merged
         for tier, overrides in validated.items():
             for key, value in overrides.items():
-                if key in {"hudEnabled", "reducedRate"} and not isinstance(value, bool):
+                if key in {"hudEnabled", "reducedRate", "analyticsEnabled", "crashEnabled"} and not isinstance(value, bool):
                     raise HTTPException(
                         status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                         detail=f"{tier}.{key} must be a boolean",

@@ -11,6 +11,8 @@ class FeatureFlagsService(
         hudTargetLineEnabled = true,
         hudBatterySaverEnabled = false,
         handsFreeImpactEnabled = false,
+        analyticsEnabled = true,
+        crashEnabled = true,
         inputSize = 320,
         reducedRate = false,
         source = FeatureFlagConfig.Source.DEFAULT,
@@ -33,6 +35,8 @@ class FeatureFlagsService(
             hudEnabled = config.hudEnabled,
             hudTracerEnabled = config.hudTracerEnabled,
             handsFreeImpactEnabled = enabled,
+            analyticsEnabled = config.analyticsEnabled,
+            crashEnabled = config.crashEnabled,
             inputSize = config.inputSize,
             reducedRate = config.reducedRate,
             source = FeatureFlagConfig.Source.OVERRIDE,
@@ -42,6 +46,8 @@ class FeatureFlagsService(
     fun setHudEnabled(enabled: Boolean) {
         config = config.copy(
             hudEnabled = enabled,
+            analyticsEnabled = config.analyticsEnabled,
+            crashEnabled = config.crashEnabled,
             inputSize = config.inputSize,
             reducedRate = config.reducedRate,
             source = FeatureFlagConfig.Source.OVERRIDE,
@@ -51,6 +57,8 @@ class FeatureFlagsService(
     fun setHudTracerEnabled(enabled: Boolean) {
         config = config.copy(
             hudTracerEnabled = enabled,
+            analyticsEnabled = config.analyticsEnabled,
+            crashEnabled = config.crashEnabled,
             inputSize = config.inputSize,
             reducedRate = config.reducedRate,
             source = FeatureFlagConfig.Source.OVERRIDE,

@@ -4,6 +4,8 @@ struct RemoteTierConfig: Codable {
     let hudEnabled: Bool?
     let inputSize: Int?
     let reducedRate: Bool?
+    let analyticsEnabled: Bool?
+    let crashEnabled: Bool?
 }
 
 struct RemoteConfigEnvelope: Codable {
@@ -19,6 +21,7 @@ final class RemoteConfigClient {
     private let featureFlags: FeatureFlagsService
     private let telemetry: TelemetryClient
     private let runtimeDescriptor: () -> [String: Any]
+    private let analyticsObserver: ((FeatureFlagConfig) -> Void)?
     private let refreshInterval: TimeInterval = 12 * 60 * 60
     private let queue = DispatchQueue(label: "com.golfiq.remote-config")
 
@@ -31,7 +34,8 @@ final class RemoteConfigClient {
         profileProvider: DeviceProfileProviding,
         featureFlags: FeatureFlagsService,
         telemetry: TelemetryClient,
-        runtimeDescriptor: @escaping () -> [String: Any]
+        runtimeDescriptor: @escaping () -> [String: Any],
+        analyticsObserver: ((FeatureFlagConfig) -> Void)? = nil
     ) {
         self.baseURL = baseURL
         self.session = session
@@ -39,6 +43,7 @@ final class RemoteConfigClient {
         self.featureFlags = featureFlags
         self.telemetry = telemetry
         self.runtimeDescriptor = runtimeDescriptor
+        self.analyticsObserver = analyticsObserver
     }
 
     deinit {
@@ -116,11 +121,14 @@ final class RemoteConfigClient {
             hudTargetLineEnabled: current.hudTargetLineEnabled,
             hudBatterySaverEnabled: current.hudBatterySaverEnabled,
             handsFreeImpactEnabled: current.handsFreeImpactEnabled,
+            analyticsEnabled: tierConfig.analyticsEnabled ?? current.analyticsEnabled,
+            crashEnabled: tierConfig.crashEnabled ?? current.crashEnabled,
             inputSize: tierConfig.inputSize ?? current.inputSize,
             reducedRate: tierConfig.reducedRate ?? current.reducedRate,
             source: .remoteConfig
         )
         featureFlags.applyRemote(overrides: overrides)
+        analyticsObserver?(overrides)
 
         let runtime = runtimeDescriptor()
         telemetry.logRemoteConfigActive(
@@ -128,7 +136,9 @@ final class RemoteConfigClient {
             profile: profile,
             runtime: runtime,
             inputSize: overrides.inputSize,
-            reducedRate: overrides.reducedRate
+            reducedRate: overrides.reducedRate,
+            analyticsEnabled: overrides.analyticsEnabled,
+            crashEnabled: overrides.crashEnabled
         )
     }
 }

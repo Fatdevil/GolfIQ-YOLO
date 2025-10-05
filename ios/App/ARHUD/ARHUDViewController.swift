@@ -14,6 +14,7 @@ final class ARHUDViewController: UIViewController, ARSCNViewDelegate, CLLocation
     private let runtimeDescriptor: () -> [String: Any]
     private let remoteConfigBaseURL: URL?
     private var remoteConfigClient: RemoteConfigClient?
+    private let analyticsController: AnalyticsController
     private let thermalWatcher = ThermalWatcher()
     private let batteryMonitor = BatteryMonitor()
     private var fallbackTimer: Timer?
@@ -55,6 +56,8 @@ final class ARHUDViewController: UIViewController, ARSCNViewDelegate, CLLocation
         self.runtimeDescriptor = runtimeDescriptor
         self.remoteConfigBaseURL = remoteConfigBaseURL ?? courseLoader.baseURL
         featureFlags.applyDeviceTier(profile: self.profileProvider.deviceProfile())
+        self.analyticsController = AnalyticsController(baseURL: self.remoteConfigBaseURL ?? courseLoader.baseURL)
+        self.analyticsController.update(flags: featureFlags.current())
         super.init(nibName: nil, bundle: nil)
 
         guard featureFlags.current().hudEnabled else {
@@ -102,10 +105,14 @@ final class ARHUDViewController: UIViewController, ARSCNViewDelegate, CLLocation
             profileProvider: profileProvider,
             featureFlags: featureFlags,
             telemetry: telemetry,
-            runtimeDescriptor: runtimeDescriptor
+            runtimeDescriptor: runtimeDescriptor,
+            analyticsObserver: { [weak self] config in
+                self?.analyticsController.update(flags: config)
+            }
         )
         remoteConfigClient = client
         client.start()
+        analyticsController.update(flags: featureFlags.current())
     }
 
     override func viewDidDisappear(_ animated: Bool) {
@@ -123,6 +130,7 @@ final class ARHUDViewController: UIViewController, ARSCNViewDelegate, CLLocation
         if let refreshObserver {
             NotificationCenter.default.removeObserver(refreshObserver)
         }
+        analyticsController.shutdown()
     }
 
     private func configureSceneView() {

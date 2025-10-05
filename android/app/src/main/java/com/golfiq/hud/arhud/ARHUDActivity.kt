@@ -36,6 +36,7 @@ import com.google.ar.sceneform.rendering.Color
 import com.google.ar.sceneform.rendering.MaterialFactory
 import com.google.ar.sceneform.rendering.ShapeFactory
 import com.google.ar.sceneform.ux.ArFragment
+import com.golfiq.hud.analytics.AnalyticsController
 import com.golfiq.hud.config.DeviceProfileManager
 import com.golfiq.hud.config.FeatureFlagsService
 import com.golfiq.hud.config.RemoteConfigClient
@@ -58,6 +59,7 @@ class ARHUDActivity : AppCompatActivity(), SensorEventListener {
     private lateinit var overlayView: ARHUDOverlayView
     private lateinit var featureFlags: FeatureFlagsService
     private lateinit var telemetry: TelemetryClient
+    private lateinit var analyticsController: AnalyticsController
     private lateinit var courseRepository: CourseBundleRepository
     private lateinit var thermalWatchdog: ThermalWatchdog
     private lateinit var batteryMonitor: BatteryMonitor
@@ -170,14 +172,22 @@ class ARHUDActivity : AppCompatActivity(), SensorEventListener {
         }
 
         val baseUrlString = intent.getStringExtra(EXTRA_BASE_URL) ?: DEFAULT_BASE_URL
-        courseRepository = CourseBundleRepository(applicationContext, URL(baseUrlString), telemetry)
+        val baseUrl = URL(baseUrlString)
+        analyticsController = AnalyticsController(
+            context = this,
+            baseUrl = baseUrl,
+        ).also { controller ->
+            controller.update(featureFlags.current())
+        }
+        courseRepository = CourseBundleRepository(applicationContext, baseUrl, telemetry)
 
         remoteConfigClient = RemoteConfigClient(
-            baseUrl = URL(baseUrlString),
+            baseUrl = baseUrl,
             deviceProfiles = deviceProfileManager,
             featureFlags = featureFlags,
             telemetry = telemetry,
             runtimeAdapter = runtimeAdapter,
+            analyticsObserver = { config -> analyticsController.update(config) },
         ).also { it.start() }
 
         val container = FrameLayout(this).apply { id = CONTAINER_ID }
@@ -253,6 +263,9 @@ class ARHUDActivity : AppCompatActivity(), SensorEventListener {
         refreshRegistration?.invoke()
         executor.shutdownNow()
         remoteConfigClient?.shutdown()
+        if (::analyticsController.isInitialized) {
+            analyticsController.shutdown()
+        }
     }
 
     private fun loadCourse(courseId: String, forceRefresh: Boolean = false) {

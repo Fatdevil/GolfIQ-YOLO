@@ -86,7 +86,9 @@ final class TelemetryClient {
         profile: DeviceProfile,
         runtime: [String: Any],
         inputSize: Int,
-        reducedRate: Bool
+        reducedRate: Bool,
+        analyticsEnabled: Bool,
+        crashEnabled: Bool
     ) {
         var payload: [String: Any] = [
             "configHash": hash,
@@ -98,7 +100,9 @@ final class TelemetryClient {
             ],
             "runtime": runtime,
             "inputSize": inputSize,
-            "reducedRate": reducedRate
+            "reducedRate": reducedRate,
+            "analyticsEnabled": analyticsEnabled,
+            "crashEnabled": crashEnabled
         ]
         if profile.estimatedFps > 0 {
             payload["latencyMs"] = 1000.0 / profile.estimatedFps

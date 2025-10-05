@@ -93,6 +93,8 @@ class TelemetryClient {
         runtime: Map<String, Any>,
         inputSize: Int,
         reducedRate: Boolean,
+        analyticsEnabled: Boolean,
+        crashEnabled: Boolean,
     ) {
         val payload = mutableMapOf<String, Any>(
             "configHash" to hash,
@@ -105,6 +107,8 @@ class TelemetryClient {
             "runtime" to runtime,
             "inputSize" to inputSize,
             "reducedRate" to reducedRate,
+            "analyticsEnabled" to analyticsEnabled,
+            "crashEnabled" to crashEnabled,
         )
         if (profile.estimatedFps > 0) {
             payload["latencyMs"] = 1000.0 / profile.estimatedFps
