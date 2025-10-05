@@ -69,6 +69,27 @@ final class TelemetryClient {
         events.append((name: event, payload: payload))
     }
 
+    func sendFieldMarker(event: String, hole: Int?, timestamp: TimeInterval) {
+        var payload: [String: Any] = [
+            "event": event,
+            "timestamp": timestamp
+        ]
+        if let hole, hole > 0 {
+            payload["hole"] = hole
+        }
+        send(event: "field_marker", payload: payload)
+    }
+
+    func sendFieldRunSummary(holesPlayed: Int, recenterCount: Int, averageFps: Double, batteryDelta: Double) {
+        let payload: [String: Any] = [
+            "holes": holesPlayed,
+            "recenter_count": recenterCount,
+            "avg_fps": averageFps,
+            "battery_delta": batteryDelta
+        ]
+        send(event: "field_run_summary", payload: payload)
+    }
+
     func sendThermalBattery(thermal: String, batteryPct: Double, drop15m: Double, action: String) {
         send(
             event: "thermal_battery",

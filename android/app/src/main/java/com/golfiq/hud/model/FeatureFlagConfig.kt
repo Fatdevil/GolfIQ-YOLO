@@ -9,6 +9,7 @@ import com.golfiq.hud.model.DeviceProfile.Tier
 data class FeatureFlagConfig(
     val hudEnabled: Boolean = false,
     val hudTracerEnabled: Boolean = false,
+    val fieldTestModeEnabled: Boolean = false,
     val hudWindHintEnabled: Boolean,
     val hudTargetLineEnabled: Boolean,
     val hudBatterySaverEnabled: Boolean,
@@ -27,6 +28,7 @@ data class FeatureFlagConfig(
                 Tier.A -> FeatureFlagConfig(
                     hudEnabled = false,
                     hudTracerEnabled = false,
+                    fieldTestModeEnabled = false,
                     hudWindHintEnabled = true,
                     hudTargetLineEnabled = true,
                     hudBatterySaverEnabled = false,
@@ -40,6 +42,7 @@ data class FeatureFlagConfig(
                 Tier.B -> FeatureFlagConfig(
                     hudEnabled = false,
                     hudTracerEnabled = false,
+                    fieldTestModeEnabled = false,
                     hudWindHintEnabled = true,
                     hudTargetLineEnabled = true,
                     hudBatterySaverEnabled = true,
@@ -53,6 +56,7 @@ data class FeatureFlagConfig(
                 Tier.C -> FeatureFlagConfig(
                     hudEnabled = false,
                     hudTracerEnabled = false,
+                    fieldTestModeEnabled = false,
                     hudWindHintEnabled = false,
                     hudTargetLineEnabled = false,
                     hudBatterySaverEnabled = true,

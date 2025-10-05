@@ -75,6 +75,34 @@ class TelemetryClient {
         events += event to payload
     }
 
+    fun sendFieldMarker(event: String, hole: Int?, timestampMillis: Long) {
+        val payload = mutableMapOf<String, Any>(
+            "event" to event,
+            "timestamp" to timestampMillis,
+        )
+        if (hole != null && hole > 0) {
+            payload["hole"] = hole
+        }
+        send(event = "field_marker", payload = payload)
+    }
+
+    fun sendFieldRunSummary(
+        holesPlayed: Int,
+        recenterCount: Int,
+        averageFps: Double,
+        batteryDelta: Double,
+    ) {
+        send(
+            event = "field_run_summary",
+            payload = mapOf(
+                "holes" to holesPlayed,
+                "recenter_count" to recenterCount,
+                "avg_fps" to averageFps,
+                "battery_delta" to batteryDelta,
+            ),
+        )
+    }
+
     fun sendThermalBattery(thermal: String, batteryPct: Double, drop15m: Double, action: String) {
         send(
             event = "thermal_battery",

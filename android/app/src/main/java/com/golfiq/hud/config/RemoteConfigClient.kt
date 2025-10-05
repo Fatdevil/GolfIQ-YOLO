@@ -25,6 +25,10 @@ class RemoteConfigClient(
     private val executor = Executors.newSingleThreadScheduledExecutor()
     @Volatile
     private var etag: String? = null
+    @Volatile
+    private var lastAppliedAtMillis: Long = 0
+    @Volatile
+    private var lastAppliedHash: String? = null
 
     fun start() {
         executor.execute { fetch() }
@@ -72,6 +76,7 @@ class RemoteConfigClient(
         val current = featureFlags.current()
         val updated = current.copy(
             hudEnabled = overrides.optBoolean("hudEnabled", current.hudEnabled),
+            fieldTestModeEnabled = overrides.optBoolean("fieldTestMode", current.fieldTestModeEnabled),
             inputSize = if (overrides.has("inputSize")) overrides.optInt("inputSize") else current.inputSize,
             reducedRate = if (overrides.has("reducedRate")) overrides.optBoolean("reducedRate") else current.reducedRate,
             analyticsEnabled = overrides.optBoolean("analyticsEnabled", current.analyticsEnabled),
@@ -93,5 +98,21 @@ class RemoteConfigClient(
             crashEnabled = updated.crashEnabled,
         )
         etag = newEtag
+        lastAppliedHash = hash
+        lastAppliedAtMillis = System.currentTimeMillis()
     }
+
+    fun etagAgeDays(nowMillis: Long = System.currentTimeMillis()): Int? {
+        val appliedAt = lastAppliedAtMillis
+        if (appliedAt <= 0L) {
+            return null
+        }
+        val age = nowMillis - appliedAt
+        if (age < 0L) {
+            return 0
+        }
+        return (age / TimeUnit.DAYS.toMillis(1)).toInt()
+    }
+
+    fun activeEtag(): String? = lastAppliedHash
 }
