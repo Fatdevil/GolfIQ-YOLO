@@ -1,0 +1,60 @@
+name: Accuracy Gate
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'cv_engine/**'
+      - 'data/golden/**'
+      - 'tools/eval_accuracy.py'
+      - 'docs/accuracy-pack.md'
+      - '.github/workflows/accuracy-gate.yml'
+      - 'reports/**'
+      - 'web/src/pages/AccuracyBoard.tsx'
+      - 'web/src/App.tsx'
+      - 'web/src/components/Nav.tsx'
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install -r requirements-dev.txt
+
+      - name: Evaluate golden dataset (mock pipeline)
+        run: |
+          python tools/eval_accuracy.py \
+            --dataset data/golden \
+            --mock on \
+            --fail-on-missing \
+            --out reports/ci-mock.json
+
+      - name: Evaluate golden dataset (detector fallback)
+        env:
+          GOLFIQ_MOCK: "0"
+        run: |
+          python tools/eval_accuracy.py \
+            --dataset data/golden \
+            --mock off \
+            --fail-on-missing \
+            --out reports/ci-real.json
+
+      - name: Upload accuracy reports
+        uses: actions/upload-artifact@v4
+        with:
+          name: accuracy-reports
+          path: |
+            reports/ci-mock.json
+            reports/ci-real.json

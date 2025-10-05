@@ -1,0 +1,274 @@
+{
+  "version": "1.0.1",
+  "description": "Mocked golden swings generated with deterministic motions.",
+  "thresholds": {
+    "ballSpeed": {
+      "mae": 0.35,
+      "p95": 0.6,
+      "mape": 0.08
+    },
+    "sideAngle": {
+      "mae": 3.0,
+      "p95": 5.0
+    },
+    "carry": {
+      "mae": 0.4,
+      "p95": 0.6,
+      "mape": 0.12
+    }
+  },
+  "clips": [
+    {
+      "id": "swing-001",
+      "file": "swings/swing-001.zip.b64",
+      "calibration": {
+        "ref_len_m": 1.0,
+        "ref_len_px": 100.0,
+        "fps": 120.0
+      },
+      "mock": true,
+      "motion": {
+        "ball_dx": 2.0,
+        "ball_dy": -1.0,
+        "club_dx": 1.5,
+        "club_dy": 0.0
+      },
+      "expected": {
+        "ballSpeed": 2.781,
+        "sideAngle": 90.0,
+        "carry": 0.65
+      }
+    },
+    {
+      "id": "swing-002",
+      "file": "swings/swing-002.zip.b64",
+      "calibration": {
+        "ref_len_m": 1.0,
+        "ref_len_px": 95.0,
+        "fps": 110.0
+      },
+      "mock": true,
+      "motion": {
+        "ball_dx": 2.5,
+        "ball_dy": -1.2,
+        "club_dx": 1.7,
+        "club_dy": 0.0
+      },
+      "expected": {
+        "ballSpeed": 3.213,
+        "sideAngle": 90.0,
+        "carry": 0.85
+      }
+    },
+    {
+      "id": "swing-003",
+      "file": "swings/swing-003.zip.b64",
+      "calibration": {
+        "ref_len_m": 1.0,
+        "ref_len_px": 105.0,
+        "fps": 130.0
+      },
+      "mock": true,
+      "motion": {
+        "ball_dx": 3.0,
+        "ball_dy": -1.5,
+        "club_dx": 2.0,
+        "club_dy": 0.0
+      },
+      "expected": {
+        "ballSpeed": 4.182,
+        "sideAngle": 90.0,
+        "carry": 1.33
+      }
+    },
+    {
+      "id": "swing-004",
+      "file": "swings/swing-004.zip.b64",
+      "calibration": {
+        "ref_len_m": 1.05,
+        "ref_len_px": 100.0,
+        "fps": 125.0
+      },
+      "mock": true,
+      "motion": {
+        "ball_dx": 2.2,
+        "ball_dy": -0.8,
+        "club_dx": 1.6,
+        "club_dy": 0.0
+      },
+      "expected": {
+        "ballSpeed": 3.145,
+        "sideAngle": 90.0,
+        "carry": 0.69
+      }
+    },
+    {
+      "id": "swing-005",
+      "file": "swings/swing-005.zip.b64",
+      "calibration": {
+        "ref_len_m": 0.95,
+        "ref_len_px": 90.0,
+        "fps": 100.0
+      },
+      "mock": true,
+      "motion": {
+        "ball_dx": 1.8,
+        "ball_dy": -0.9,
+        "club_dx": 1.4,
+        "club_dy": 0.0
+      },
+      "expected": {
+        "ballSpeed": 2.19,
+        "sideAngle": 90.0,
+        "carry": 0.4
+      }
+    },
+    {
+      "id": "swing-006",
+      "file": "swings/swing-006.zip.b64",
+      "calibration": {
+        "ref_len_m": 1.1,
+        "ref_len_px": 110.0,
+        "fps": 140.0
+      },
+      "mock": true,
+      "motion": {
+        "ball_dx": 2.7,
+        "ball_dy": -1.1,
+        "club_dx": 1.9,
+        "club_dy": 0.0
+      },
+      "expected": {
+        "ballSpeed": 3.966,
+        "sideAngle": 90.0,
+        "carry": 1.08
+      }
+    },
+    {
+      "id": "swing-007",
+      "file": "swings/swing-007.zip.b64",
+      "calibration": {
+        "ref_len_m": 1.0,
+        "ref_len_px": 100.0,
+        "fps": 150.0
+      },
+      "mock": true,
+      "motion": {
+        "ball_dx": 3.2,
+        "ball_dy": -1.6,
+        "club_dx": 2.2,
+        "club_dy": 0.1
+      },
+      "expected": {
+        "ballSpeed": 5.442,
+        "sideAngle": 90.0,
+        "carry": 2.24
+      }
+    },
+    {
+      "id": "swing-008",
+      "file": "swings/swing-008.zip.b64",
+      "calibration": {
+        "ref_len_m": 1.02,
+        "ref_len_px": 102.0,
+        "fps": 118.0
+      },
+      "mock": true,
+      "motion": {
+        "ball_dx": 2.4,
+        "ball_dy": -1.3,
+        "club_dx": 1.8,
+        "club_dy": 0.0
+      },
+      "expected": {
+        "ballSpeed": 3.265,
+        "sideAngle": 90.0,
+        "carry": 0.88
+      }
+    },
+    {
+      "id": "swing-009",
+      "file": "swings/swing-009.zip.b64",
+      "calibration": {
+        "ref_len_m": 0.98,
+        "ref_len_px": 96.0,
+        "fps": 108.0
+      },
+      "mock": true,
+      "motion": {
+        "ball_dx": 1.9,
+        "ball_dy": -0.7,
+        "club_dx": 1.3,
+        "club_dy": 0.0
+      },
+      "expected": {
+        "ballSpeed": 2.174,
+        "sideAngle": 90.0,
+        "carry": 0.34
+      }
+    },
+    {
+      "id": "swing-010",
+      "file": "swings/swing-010.zip.b64",
+      "calibration": {
+        "ref_len_m": 1.08,
+        "ref_len_px": 108.0,
+        "fps": 132.0
+      },
+      "mock": true,
+      "motion": {
+        "ball_dx": 2.8,
+        "ball_dy": -1.4,
+        "club_dx": 2.1,
+        "club_dy": 0.0
+      },
+      "expected": {
+        "ballSpeed": 4.219,
+        "sideAngle": 90.0,
+        "carry": 1.4
+      }
+    },
+    {
+      "id": "swing-011",
+      "file": "swings/swing-011.zip.b64",
+      "calibration": {
+        "ref_len_m": 1.0,
+        "ref_len_px": 98.0,
+        "fps": 115.0
+      },
+      "mock": true,
+      "motion": {
+        "ball_dx": 2.1,
+        "ball_dy": -0.95,
+        "club_dx": 1.5,
+        "club_dy": 0.0
+      },
+      "expected": {
+        "ballSpeed": 2.614,
+        "sideAngle": 90.0,
+        "carry": 0.52
+      }
+    },
+    {
+      "id": "swing-012",
+      "file": "swings/swing-012.zip.b64",
+      "calibration": {
+        "ref_len_m": 1.12,
+        "ref_len_px": 112.0,
+        "fps": 145.0
+      },
+      "mock": true,
+      "motion": {
+        "ball_dx": 3.4,
+        "ball_dy": -1.7,
+        "club_dx": 2.3,
+        "club_dy": 0.1
+      },
+      "expected": {
+        "ballSpeed": 5.523,
+        "sideAngle": 90.0,
+        "carry": 2.23
+      }
+    }
+  ]
+}
