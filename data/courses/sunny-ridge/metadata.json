@@ -1,6 +1,7 @@
 {
   "id": "sunny-ridge",
   "name": "Sunny Ridge Practice",
+  "updatedAt": "2024-01-02T00:00:00Z",
   "holes": {
     "1": {"par": 5, "yardage": 525, "name": "Ridgeline"},
     "2": {"par": 4, "yardage": 380, "name": "Sunset"}
