@@ -96,12 +96,13 @@ export type CoachFeedbackQuality =
     };
 
 export type CoachFeedbackMetrics = {
-  ballSpeedMps: number | null;
-  clubSpeedMps: number | null;
-  sideAngleDeg: number | null;
-  vertLaunchDeg: number | null;
-  carryEstM: number | null;
-  quality: CoachFeedbackQuality;
+  ballSpeedMps?: number | null;
+  clubSpeedMps?: number | null;
+  sideAngleDeg?: number | null;
+  vertLaunchDeg?: number | null;
+  carryEstM?: number | null;
+  quality?: CoachFeedbackQuality;
+  [key: string]: unknown;
 };
 
 export type CoachFeedbackRequest = {
