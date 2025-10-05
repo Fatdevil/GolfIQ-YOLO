@@ -84,25 +84,13 @@ export const getRun = (id: string) =>
 export const deleteRun = (id: string) =>
   axios.delete(`${API}/runs/${id}`, { headers: withAuth() }).then((r) => r.data);
 
-export type CoachFeedbackQuality =
-  | string
-  | null
-  | {
-      label?: string;
-      level?: string;
-      rating?: number;
-      summary?: string;
-      [key: string]: unknown;
-    };
-
 export type CoachFeedbackMetrics = {
   ballSpeedMps?: number | null;
   clubSpeedMps?: number | null;
   sideAngleDeg?: number | null;
   vertLaunchDeg?: number | null;
   carryEstM?: number | null;
-  quality?: CoachFeedbackQuality;
-  [key: string]: unknown;
+  quality?: string | null;
 };
 
 export type CoachFeedbackRequest = {
