@@ -6,6 +6,7 @@ import RunsPage from "./pages/Runs";
 import RunDetailPage from "./pages/RunDetail";
 import DeviceDashboardPage from "./pages/DeviceDashboard";
 import FieldRunsPage from "./pages/FieldRuns";
+import AccuracyBoardPage from "./pages/AccuracyBoard";
 import Nav from "./components/Nav";
 
 export default function App() {
@@ -21,6 +22,7 @@ export default function App() {
           <Route path="/runs/:id" element={<RunDetailPage />} />
           <Route path="/field-runs" element={<FieldRunsPage />} />
           <Route path="/device-dashboard" element={<DeviceDashboardPage />} />
+          <Route path="/accuracy" element={<AccuracyBoardPage />} />
         </Routes>
       </main>
     </div>

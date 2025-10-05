@@ -1,0 +1,331 @@
+{
+  "dataset": "data/golden",
+  "version": "1.0.1",
+  "generatedAt": "2025-10-05T19:48:03.312438+00:00",
+  "thresholds": {
+    "ballSpeed": {
+      "mae": 0.35,
+      "p95": 0.6,
+      "mape": 0.08
+    },
+    "sideAngle": {
+      "mae": 3.0,
+      "p95": 5.0
+    },
+    "carry": {
+      "mae": 0.4,
+      "p95": 0.6,
+      "mape": 0.12
+    }
+  },
+  "metrics": {
+    "ballSpeed": {
+      "count": 12.0,
+      "missing": 0.0,
+      "mae": 0.0,
+      "mape": 0.0,
+      "p50": 0.0,
+      "p95": 0.0,
+      "max": 0.0,
+      "checks": {
+        "mae": {
+          "value": 0.0,
+          "limit": 0.35,
+          "pass": true
+        },
+        "p95": {
+          "value": 0.0,
+          "limit": 0.6,
+          "pass": true
+        },
+        "mape": {
+          "value": 0.0,
+          "limit": 0.08,
+          "pass": true
+        }
+      },
+      "pass": true
+    },
+    "sideAngle": {
+      "count": 12.0,
+      "missing": 0.0,
+      "mae": 0.0,
+      "mape": 0.0,
+      "p50": 0.0,
+      "p95": 0.0,
+      "max": 0.0,
+      "checks": {
+        "mae": {
+          "value": 0.0,
+          "limit": 3.0,
+          "pass": true
+        },
+        "p95": {
+          "value": 0.0,
+          "limit": 5.0,
+          "pass": true
+        }
+      },
+      "pass": true
+    },
+    "carry": {
+      "count": 12.0,
+      "missing": 0.0,
+      "mae": 0.0,
+      "mape": 0.0,
+      "p50": 0.0,
+      "p95": 0.0,
+      "max": 0.0,
+      "checks": {
+        "mae": {
+          "value": 0.0,
+          "limit": 0.4,
+          "pass": true
+        },
+        "p95": {
+          "value": 0.0,
+          "limit": 0.6,
+          "pass": true
+        },
+        "mape": {
+          "value": 0.0,
+          "limit": 0.12,
+          "pass": true
+        }
+      },
+      "pass": true
+    }
+  },
+  "clips": [
+    {
+      "id": "swing-001",
+      "file": "swings/swing-001.zip.b64",
+      "expected": {
+        "ballSpeed": 2.781,
+        "sideAngle": 90.0,
+        "carry": 0.65
+      },
+      "actual": {
+        "ballSpeed": 2.781,
+        "sideAngle": 90.0,
+        "carry": 0.65
+      },
+      "errors": {
+        "ballSpeed": 0.0,
+        "sideAngle": 0.0,
+        "carry": 0.0
+      }
+    },
+    {
+      "id": "swing-002",
+      "file": "swings/swing-002.zip.b64",
+      "expected": {
+        "ballSpeed": 3.213,
+        "sideAngle": 90.0,
+        "carry": 0.85
+      },
+      "actual": {
+        "ballSpeed": 3.213,
+        "sideAngle": 90.0,
+        "carry": 0.85
+      },
+      "errors": {
+        "ballSpeed": 0.0,
+        "sideAngle": 0.0,
+        "carry": 0.0
+      }
+    },
+    {
+      "id": "swing-003",
+      "file": "swings/swing-003.zip.b64",
+      "expected": {
+        "ballSpeed": 4.182,
+        "sideAngle": 90.0,
+        "carry": 1.33
+      },
+      "actual": {
+        "ballSpeed": 4.182,
+        "sideAngle": 90.0,
+        "carry": 1.33
+      },
+      "errors": {
+        "ballSpeed": 0.0,
+        "sideAngle": 0.0,
+        "carry": 0.0
+      }
+    },
+    {
+      "id": "swing-004",
+      "file": "swings/swing-004.zip.b64",
+      "expected": {
+        "ballSpeed": 3.145,
+        "sideAngle": 90.0,
+        "carry": 0.69
+      },
+      "actual": {
+        "ballSpeed": 3.145,
+        "sideAngle": 90.0,
+        "carry": 0.69
+      },
+      "errors": {
+        "ballSpeed": 0.0,
+        "sideAngle": 0.0,
+        "carry": 0.0
+      }
+    },
+    {
+      "id": "swing-005",
+      "file": "swings/swing-005.zip.b64",
+      "expected": {
+        "ballSpeed": 2.19,
+        "sideAngle": 90.0,
+        "carry": 0.4
+      },
+      "actual": {
+        "ballSpeed": 2.19,
+        "sideAngle": 90.0,
+        "carry": 0.4
+      },
+      "errors": {
+        "ballSpeed": 0.0,
+        "sideAngle": 0.0,
+        "carry": 0.0
+      }
+    },
+    {
+      "id": "swing-006",
+      "file": "swings/swing-006.zip.b64",
+      "expected": {
+        "ballSpeed": 3.966,
+        "sideAngle": 90.0,
+        "carry": 1.08
+      },
+      "actual": {
+        "ballSpeed": 3.966,
+        "sideAngle": 90.0,
+        "carry": 1.08
+      },
+      "errors": {
+        "ballSpeed": 0.0,
+        "sideAngle": 0.0,
+        "carry": 0.0
+      }
+    },
+    {
+      "id": "swing-007",
+      "file": "swings/swing-007.zip.b64",
+      "expected": {
+        "ballSpeed": 5.442,
+        "sideAngle": 90.0,
+        "carry": 2.24
+      },
+      "actual": {
+        "ballSpeed": 5.442,
+        "sideAngle": 90.0,
+        "carry": 2.24
+      },
+      "errors": {
+        "ballSpeed": 0.0,
+        "sideAngle": 0.0,
+        "carry": 0.0
+      }
+    },
+    {
+      "id": "swing-008",
+      "file": "swings/swing-008.zip.b64",
+      "expected": {
+        "ballSpeed": 3.265,
+        "sideAngle": 90.0,
+        "carry": 0.88
+      },
+      "actual": {
+        "ballSpeed": 3.265,
+        "sideAngle": 90.0,
+        "carry": 0.88
+      },
+      "errors": {
+        "ballSpeed": 0.0,
+        "sideAngle": 0.0,
+        "carry": 0.0
+      }
+    },
+    {
+      "id": "swing-009",
+      "file": "swings/swing-009.zip.b64",
+      "expected": {
+        "ballSpeed": 2.174,
+        "sideAngle": 90.0,
+        "carry": 0.34
+      },
+      "actual": {
+        "ballSpeed": 2.174,
+        "sideAngle": 90.0,
+        "carry": 0.34
+      },
+      "errors": {
+        "ballSpeed": 0.0,
+        "sideAngle": 0.0,
+        "carry": 0.0
+      }
+    },
+    {
+      "id": "swing-010",
+      "file": "swings/swing-010.zip.b64",
+      "expected": {
+        "ballSpeed": 4.219,
+        "sideAngle": 90.0,
+        "carry": 1.4
+      },
+      "actual": {
+        "ballSpeed": 4.219,
+        "sideAngle": 90.0,
+        "carry": 1.4
+      },
+      "errors": {
+        "ballSpeed": 0.0,
+        "sideAngle": 0.0,
+        "carry": 0.0
+      }
+    },
+    {
+      "id": "swing-011",
+      "file": "swings/swing-011.zip.b64",
+      "expected": {
+        "ballSpeed": 2.614,
+        "sideAngle": 90.0,
+        "carry": 0.52
+      },
+      "actual": {
+        "ballSpeed": 2.614,
+        "sideAngle": 90.0,
+        "carry": 0.52
+      },
+      "errors": {
+        "ballSpeed": 0.0,
+        "sideAngle": 0.0,
+        "carry": 0.0
+      }
+    },
+    {
+      "id": "swing-012",
+      "file": "swings/swing-012.zip.b64",
+      "expected": {
+        "ballSpeed": 5.523,
+        "sideAngle": 90.0,
+        "carry": 2.23
+      },
+      "actual": {
+        "ballSpeed": 5.523,
+        "sideAngle": 90.0,
+        "carry": 2.23
+      },
+      "errors": {
+        "ballSpeed": 0.0,
+        "sideAngle": 0.0,
+        "carry": 0.0
+      }
+    }
+  ],
+  "passed": true,
+  "missingValuesDetected": false
+}
