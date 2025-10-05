@@ -1,0 +1,52 @@
+require 'base64'
+
+fastlane_version '2.0.0'
+
+def release_notes_from_repo
+  env_notes = ENV.fetch('RELEASE_NOTES', nil)
+  return env_notes unless env_notes.to_s.strip.empty?
+
+  notes_path = File.expand_path('../../docs/RELEASE_NOTES_v1.2.md', __dir__)
+  return File.read(notes_path) if File.exist?(notes_path)
+
+  'Automated beta build – no release notes supplied.'
+end
+
+def decoded_private_key
+  raw_key = ENV.fetch('APP_STORE_PRIVATE_KEY')
+  begin
+    decoded = Base64.strict_decode64(raw_key)
+    return decoded if decoded.include?('PRIVATE KEY')
+  rescue ArgumentError
+    nil
+  end
+
+  raw_key
+end
+
+platform :ios do
+  desc 'Builds and uploads the latest iOS beta to TestFlight'
+  lane :beta do |options|
+    notes = options[:changelog] || release_notes_from_repo
+
+    api_key = app_store_connect_api_key(
+      issuer_id: ENV.fetch('APP_STORE_ISSUER_ID'),
+      key_id: ENV.fetch('APP_STORE_KEY_ID'),
+      key_content: decoded_private_key,
+      duration: (ENV['APP_STORE_KEY_DURATION'] || 1200).to_i,
+      in_house: false
+    )
+
+    build_app(
+      scheme: options[:scheme] || ENV['IOS_SCHEME'] || 'GolfIQ',
+      configuration: options[:configuration] || ENV['IOS_CONFIGURATION'] || 'Release'
+    )
+
+    upload_to_testflight(
+      api_key: api_key,
+      changelog: notes,
+      distribute_external: (ENV['TESTFLIGHT_EXTERNAL'] == 'true'),
+      skip_waiting_for_build_processing: (ENV['TESTFLIGHT_SKIP_WAIT'] == 'true')
+    )
+  end
+end
