@@ -90,7 +90,7 @@ export type CoachFeedbackMetrics = {
   sideAngleDeg: number | null;
   vertLaunchDeg: number | null;
   carryEstM: number | null;
-  quality: string | null;
+  quality: Record<string, unknown> | string | null;
 };
 
 export type CoachFeedbackRequest = {
