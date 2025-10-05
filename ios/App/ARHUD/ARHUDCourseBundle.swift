@@ -48,7 +48,7 @@ final class ARHUDCourseBundleLoader {
         case unexpectedResponse
     }
 
-    private let baseURL: URL
+    let baseURL: URL
     private let session: URLSession
 
     init(baseURL: URL, session: URLSession = .shared) {
