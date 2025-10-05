@@ -11,6 +11,8 @@ import {
   Legend,
 } from "recharts";
 
+type MetricKey = "ballSpeed" | "sideAngle" | "carry";
+
 interface MetricCheck {
   value: number | null;
   limit: number;
@@ -32,24 +34,25 @@ interface MetricSummary {
 interface ClipReport {
   id: string;
   file: string;
-  expected: Record<string, number | null>;
-  actual: Record<string, number | null>;
-  errors: Record<string, number | null>;
+  expected: Partial<Record<MetricKey, number | null>> & Record<string, number | null>;
+  actual: Partial<Record<MetricKey, number | null>> & Record<string, number | null>;
+  errors: Partial<Record<MetricKey, number | null>> & Record<string, number | null>;
 }
 
 interface AccuracyReport {
   dataset: string;
   version?: string;
   generatedAt?: string;
-  thresholds: Record<string, Record<string, number>>;
-  metrics: Record<string, MetricSummary>;
+  thresholds: Partial<Record<MetricKey, Record<string, number>>> &
+    Record<string, Record<string, number>>;
+  metrics: Partial<Record<MetricKey, MetricSummary>> & Record<string, MetricSummary>;
   clips: ClipReport[];
   passed: boolean;
   missingValuesDetected?: boolean;
 }
 
 interface MetricDescriptor {
-  key: keyof AccuracyReport["metrics"];
+  key: MetricKey;
   label: string;
   unit: string;
   description: string;
@@ -117,18 +120,6 @@ export default function AccuracyBoardPage() {
     };
   }, []);
 
-  const clipErrorMap = useMemo(() => {
-    if (!report) return [];
-    return report.clips.map((clip) => ({
-      clip: clip.id,
-      ...METRICS.reduce<Record<string, number | null>>((acc, metric) => {
-        const value = clip.errors?.[metric.key as string];
-        acc[metric.key as string] = value ?? null;
-        return acc;
-      }, {}),
-    }));
-  }, [report]);
-
   const generatedAt = useMemo(() => {
     if (!report?.generatedAt) return null;
     try {
@@ -175,16 +166,16 @@ export default function AccuracyBoardPage() {
         <div className="space-y-6">
           <div className="grid gap-4 md:grid-cols-3">
             {METRICS.map((metric) => {
-              const summary = report.metrics?.[metric.key as string];
-              const thresholds = report.thresholds?.[metric.key as string] ?? {};
-              const clipSeries = clipErrorMap.map((item) => ({
-                clip: item.clip,
-                error: item[metric.key as string] ?? 0,
+              const summary = report.metrics?.[metric.key];
+              const thresholds = report.thresholds?.[metric.key] ?? {};
+              const clipSeries = report.clips.map((clip) => ({
+                clip: clip.id,
+                error: clip.errors?.[metric.key] ?? 0,
               }));
               const passLabel = summary?.pass ? "Pass" : "Fail";
               return (
                 <div
-                  key={metric.key as string}
+                  key={metric.key}
                   className="flex flex-col gap-4 rounded-lg border border-slate-800 bg-slate-900/60 p-5"
                 >
                   <div className="flex items-start justify-between gap-3">
@@ -283,7 +274,7 @@ export default function AccuracyBoardPage() {
                   <tr>
                     <th className="py-2">Clip</th>
                     {METRICS.map((metric) => (
-                      <th key={metric.key as string} className="py-2">
+                      <th key={metric.key} className="py-2">
                         {metric.label} ({metric.unit})
                       </th>
                     ))}
@@ -294,8 +285,8 @@ export default function AccuracyBoardPage() {
                     <tr key={clip.id} className="hover:bg-slate-800/40">
                       <td className="py-2 font-mono text-xs text-slate-400">{clip.id}</td>
                       {METRICS.map((metric) => (
-                        <td key={metric.key as string} className="py-2 font-mono text-xs">
-                          {formatNumber(clip.errors?.[metric.key as string])}
+                        <td key={metric.key} className="py-2 font-mono text-xs">
+                          {formatNumber(clip.errors?.[metric.key])}
                         </td>
                       ))}
                     </tr>

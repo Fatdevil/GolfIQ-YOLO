@@ -118,8 +118,12 @@ def evaluate_clip(
     result = analyze_frames(frames, calib, mock=mock, motion=motion)
     metrics = result.get("metrics", {})
     actual_metrics = {
-        "ballSpeed": _pick_number(metrics, ["ballSpeedMps", "ball_speed_mps", "ballSpeed", "ball_speed"]),
-        "sideAngle": _pick_number(metrics, ["sideAngleDeg", "side_angle", "sideAngle", "side"]),
+        "ballSpeed": _pick_number(
+            metrics, ["ballSpeedMps", "ball_speed_mps", "ballSpeed", "ball_speed"]
+        ),
+        "sideAngle": _pick_number(
+            metrics, ["sideAngleDeg", "side_angle", "sideAngle", "side"]
+        ),
         "carry": _pick_number(metrics, ["carryEstM", "carry", "carry_m"]),
     }
 
@@ -132,7 +136,8 @@ def evaluate_clip(
         "errors": {
             metric: (
                 abs(actual_metrics[metric] - expected.get(metric))
-                if actual_metrics[metric] is not None and expected.get(metric) is not None
+                if actual_metrics[metric] is not None
+                and expected.get(metric) is not None
                 else None
             )
             for metric in actual_metrics
@@ -171,7 +176,9 @@ def _read_clip_bytes(file_path: Path) -> bytes:
     return file_path.read_bytes()
 
 
-def merge_thresholds(base: Mapping[str, Any], override: Optional[Mapping[str, Any]]) -> Dict[str, Dict[str, float]]:
+def merge_thresholds(
+    base: Mapping[str, Any], override: Optional[Mapping[str, Any]]
+) -> Dict[str, Dict[str, float]]:
     merged: Dict[str, Dict[str, float]] = {
         metric: {k: float(v) for k, v in values.items()}
         for metric, values in base.items()
@@ -185,9 +192,18 @@ def merge_thresholds(base: Mapping[str, Any], override: Optional[Mapping[str, An
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Evaluate analyzer accuracy against a golden dataset")
-    parser.add_argument("--dataset", type=Path, default=Path("data/golden"), help="Path to dataset root")
-    parser.add_argument("--out", type=Path, default=Path("reports/accuracy.json"), help="Path to write evaluation report")
+    parser = argparse.ArgumentParser(
+        description="Evaluate analyzer accuracy against a golden dataset"
+    )
+    parser.add_argument(
+        "--dataset", type=Path, default=Path("data/golden"), help="Path to dataset root"
+    )
+    parser.add_argument(
+        "--out",
+        type=Path,
+        default=Path("reports/accuracy.json"),
+        help="Path to write evaluation report",
+    )
     parser.add_argument(
         "--thresholds",
         type=Path,
