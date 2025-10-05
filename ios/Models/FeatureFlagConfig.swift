@@ -4,6 +4,7 @@ struct FeatureFlagConfig: Codable {
     enum Source: String, Codable {
         case `default`
         case featureService
+        case remoteConfig
         case override
     }
 
@@ -15,6 +16,8 @@ struct FeatureFlagConfig: Codable {
         case hudBatterySaverEnabled
         case handsFreeImpactEnabled
         case source
+        case inputSize
+        case reducedRate
     }
 
     var hudEnabled: Bool
@@ -23,6 +26,8 @@ struct FeatureFlagConfig: Codable {
     var hudTargetLineEnabled: Bool
     var hudBatterySaverEnabled: Bool
     var handsFreeImpactEnabled: Bool
+    var inputSize: Int
+    var reducedRate: Bool
     var source: Source
 
     init(
@@ -32,6 +37,8 @@ struct FeatureFlagConfig: Codable {
         hudTargetLineEnabled: Bool,
         hudBatterySaverEnabled: Bool,
         handsFreeImpactEnabled: Bool,
+        inputSize: Int,
+        reducedRate: Bool,
         source: Source
     ) {
         self.hudEnabled = hudEnabled
@@ -40,6 +47,8 @@ struct FeatureFlagConfig: Codable {
         self.hudTargetLineEnabled = hudTargetLineEnabled
         self.hudBatterySaverEnabled = hudBatterySaverEnabled
         self.handsFreeImpactEnabled = handsFreeImpactEnabled
+        self.inputSize = inputSize
+        self.reducedRate = reducedRate
         self.source = source
     }
 
@@ -51,6 +60,8 @@ struct FeatureFlagConfig: Codable {
         hudTargetLineEnabled = try container.decode(Bool.self, forKey: .hudTargetLineEnabled)
         hudBatterySaverEnabled = try container.decode(Bool.self, forKey: .hudBatterySaverEnabled)
         handsFreeImpactEnabled = try container.decode(Bool.self, forKey: .handsFreeImpactEnabled)
+        inputSize = try container.decodeIfPresent(Int.self, forKey: .inputSize) ?? 320
+        reducedRate = try container.decodeIfPresent(Bool.self, forKey: .reducedRate) ?? false
         source = try container.decodeIfPresent(Source.self, forKey: .source) ?? .default
     }
 
@@ -64,6 +75,8 @@ struct FeatureFlagConfig: Codable {
                 hudTargetLineEnabled: true,
                 hudBatterySaverEnabled: false,
                 handsFreeImpactEnabled: true,
+                inputSize: 320,
+                reducedRate: false,
                 source: .default
             )
         case .b:
@@ -74,6 +87,8 @@ struct FeatureFlagConfig: Codable {
                 hudTargetLineEnabled: true,
                 hudBatterySaverEnabled: true,
                 handsFreeImpactEnabled: true,
+                inputSize: 320,
+                reducedRate: true,
                 source: .default
             )
         case .c:
@@ -84,6 +99,8 @@ struct FeatureFlagConfig: Codable {
                 hudTargetLineEnabled: false,
                 hudBatterySaverEnabled: true,
                 handsFreeImpactEnabled: false,
+                inputSize: 224,
+                reducedRate: true,
                 source: .default
             )
         }

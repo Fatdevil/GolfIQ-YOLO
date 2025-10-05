@@ -38,6 +38,11 @@ class Telemetry(BaseModel):
     launchAngle: Optional[float] = None
     spinRpm: Optional[int] = None
     carryMeters: Optional[float] = None
+    event: Optional[str] = None
+    configHash: Optional[str] = None
+    runtime: Optional[Dict[str, Any]] = None
+    device: Optional[Dict[str, Any]] = None
+    latencyMs: Optional[float] = None
 
     if ConfigDict is not None:  # pragma: no branch
         model_config = ConfigDict(extra="ignore")  # type: ignore[call-arg]

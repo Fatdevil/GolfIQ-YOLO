@@ -10,6 +10,10 @@ final class ARHUDViewController: UIViewController, ARSCNViewDelegate, CLLocation
     private let telemetry: TelemetryClient
     private let featureFlags: FeatureFlagsService
     private let courseId: String
+    private let profileProvider: DeviceProfileProviding
+    private let runtimeDescriptor: () -> [String: Any]
+    private let remoteConfigBaseURL: URL?
+    private var remoteConfigClient: RemoteConfigClient?
     private let thermalWatcher = ThermalWatcher()
     private let batteryMonitor = BatteryMonitor()
     private var fallbackTimer: Timer?
@@ -30,12 +34,22 @@ final class ARHUDViewController: UIViewController, ARSCNViewDelegate, CLLocation
         courseId: String,
         courseLoader: ARHUDCourseBundleLoader,
         telemetry: TelemetryClient,
-        featureFlags: FeatureFlagsService
+        featureFlags: FeatureFlagsService,
+        profileProvider: DeviceProfileProviding? = nil,
+        runtimeDescriptor: @escaping () -> [String: Any] = { [:] },
+        remoteConfigBaseURL: URL? = nil
     ) {
         self.courseId = courseId
         self.courseLoader = courseLoader
         self.telemetry = telemetry
         self.featureFlags = featureFlags
+        self.profileProvider = profileProvider ?? DeviceProfileManager(
+            microbench: StaticMicrobench(),
+            telemetry: telemetry
+        )
+        self.runtimeDescriptor = runtimeDescriptor
+        self.remoteConfigBaseURL = remoteConfigBaseURL ?? courseLoader.baseURL
+        featureFlags.applyDeviceTier(profile: self.profileProvider.deviceProfile())
         super.init(nibName: nil, bundle: nil)
 
         guard featureFlags.current().hudEnabled else {
@@ -58,6 +72,7 @@ final class ARHUDViewController: UIViewController, ARSCNViewDelegate, CLLocation
         configureLocationServices()
         configureDisplayLink()
         loadCourseBundle()
+        startRemoteConfig()
     }
 
     override func viewWillAppear(_ animated: Bool) {
@@ -65,6 +80,19 @@ final class ARHUDViewController: UIViewController, ARSCNViewDelegate, CLLocation
         overlayView.isHidden = !featureFlags.current().hudEnabled
         startFallbackMonitoring()
         startSession()
+    }
+
+    private func startRemoteConfig() {
+        guard let baseURL = remoteConfigBaseURL else { return }
+        let client = RemoteConfigClient(
+            baseURL: baseURL,
+            profileProvider: profileProvider,
+            featureFlags: featureFlags,
+            telemetry: telemetry,
+            runtimeDescriptor: runtimeDescriptor
+        )
+        remoteConfigClient = client
+        client.start()
     }
 
     override func viewDidDisappear(_ animated: Bool) {
@@ -392,6 +420,13 @@ final class ARHUDViewController: UIViewController, ARSCNViewDelegate, CLLocation
         if status == .denied || status == .restricted {
             overlayView.updateStatus("Location permission required for HUD")
         }
+    }
+}
+
+private struct StaticMicrobench: InferenceMicrobench {
+    func sampleLatency(duration: TimeInterval) -> [Double] {
+        let frames = max(1, Int(duration * 60.0 / 1000.0))
+        return Array(repeating: 33.0, count: frames)
     }
 }
 
