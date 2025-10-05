@@ -140,6 +140,35 @@ export const postRemoteConfig = (
     })
     .then((r) => r.data);
 
+export type FieldRunMarker = {
+  event: string;
+  hole?: number;
+  timestamp: string | number;
+};
+
+export type FieldRunSummary = {
+  runId: string;
+  startedAt?: string;
+  holes: number;
+  recenterCount: number;
+  avgFps: number;
+  batteryDelta: number;
+  markers: FieldRunMarker[];
+};
+
+export const fetchFieldRuns = () =>
+  axios
+    .get<FieldRunSummary[]>(`${API}/tools/telemetry/field-runs`, {
+      headers: withAuth(),
+      validateStatus: (status) => [200, 404].includes(status),
+    })
+    .then((response) => {
+      if (response.status === 404) {
+        return [];
+      }
+      return response.data ?? [];
+    });
+
 /**
  * ----------------------------
  * Coach v1 – provider-backed feedback

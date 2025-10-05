@@ -9,6 +9,7 @@ const links = [
   { to: "/calibration", label: "Calibration" },
   { to: "/mock", label: "Mock" },
   { to: "/runs", label: "Runs" },
+  { to: "/field-runs", label: "Field runs" },
   { to: "/device-dashboard", label: "Devices" },
 ];
 

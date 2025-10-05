@@ -4,6 +4,7 @@ final class ARHUDSettingsViewController: UITableViewController {
     private enum Row: Int, CaseIterable {
         case hudEnabled
         case hudTracer
+        case fieldTestMode
         case refresh
 
         var title: String {
@@ -12,6 +13,8 @@ final class ARHUDSettingsViewController: UITableViewController {
                 return "Enable AR HUD"
             case .hudTracer:
                 return "Enable HUD tracer"
+            case .fieldTestMode:
+                return "Field test mode"
             case .refresh:
                 return "Refresh bundle"
             }
@@ -23,6 +26,8 @@ final class ARHUDSettingsViewController: UITableViewController {
                 return "Show Aim → Calibrate flow and AR overlay"
             case .hudTracer:
                 return "Render debug tracer lines for calibration"
+            case .fieldTestMode:
+                return "Show QA overlay and field markers"
             case .refresh:
                 return "Force re-download of course data"
             }
@@ -82,6 +87,12 @@ final class ARHUDSettingsViewController: UITableViewController {
             toggle.isOn = featureFlags.current().hudTracerEnabled
             toggle.addTarget(self, action: #selector(handleToggle(_:)), for: .valueChanged)
             cell.accessoryView = toggle
+        case .fieldTestMode:
+            let toggle = UISwitch()
+            toggle.tag = row.rawValue
+            toggle.isOn = featureFlags.current().fieldTestModeEnabled
+            toggle.addTarget(self, action: #selector(handleToggle(_:)), for: .valueChanged)
+            cell.accessoryView = toggle
         case .refresh:
             let button = UIButton(type: .system)
             button.setTitle("Refresh", for: .normal)
@@ -100,6 +111,8 @@ final class ARHUDSettingsViewController: UITableViewController {
             featureFlags.setHudEnabled(sender.isOn)
         case .hudTracer:
             featureFlags.setHudTracerEnabled(sender.isOn)
+        case .fieldTestMode:
+            featureFlags.setFieldTestModeEnabled(sender.isOn)
         case .refresh:
             break
         }

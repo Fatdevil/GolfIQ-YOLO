@@ -11,6 +11,7 @@ struct FeatureFlagConfig: Codable {
     private enum CodingKeys: String, CodingKey {
         case hudEnabled
         case hudTracerEnabled
+        case fieldTestModeEnabled
         case hudWindHintEnabled
         case hudTargetLineEnabled
         case hudBatterySaverEnabled
@@ -22,6 +23,7 @@ struct FeatureFlagConfig: Codable {
 
     var hudEnabled: Bool
     var hudTracerEnabled: Bool
+    var fieldTestModeEnabled: Bool
     var hudWindHintEnabled: Bool
     var hudTargetLineEnabled: Bool
     var hudBatterySaverEnabled: Bool
@@ -33,6 +35,7 @@ struct FeatureFlagConfig: Codable {
     init(
         hudEnabled: Bool,
         hudTracerEnabled: Bool,
+        fieldTestModeEnabled: Bool,
         hudWindHintEnabled: Bool,
         hudTargetLineEnabled: Bool,
         hudBatterySaverEnabled: Bool,
@@ -43,6 +46,7 @@ struct FeatureFlagConfig: Codable {
     ) {
         self.hudEnabled = hudEnabled
         self.hudTracerEnabled = hudTracerEnabled
+        self.fieldTestModeEnabled = fieldTestModeEnabled
         self.hudWindHintEnabled = hudWindHintEnabled
         self.hudTargetLineEnabled = hudTargetLineEnabled
         self.hudBatterySaverEnabled = hudBatterySaverEnabled
@@ -56,6 +60,7 @@ struct FeatureFlagConfig: Codable {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         hudEnabled = try container.decodeIfPresent(Bool.self, forKey: .hudEnabled) ?? false
         hudTracerEnabled = try container.decodeIfPresent(Bool.self, forKey: .hudTracerEnabled) ?? false
+        fieldTestModeEnabled = try container.decodeIfPresent(Bool.self, forKey: .fieldTestModeEnabled) ?? false
         hudWindHintEnabled = try container.decode(Bool.self, forKey: .hudWindHintEnabled)
         hudTargetLineEnabled = try container.decode(Bool.self, forKey: .hudTargetLineEnabled)
         hudBatterySaverEnabled = try container.decode(Bool.self, forKey: .hudBatterySaverEnabled)
@@ -71,6 +76,7 @@ struct FeatureFlagConfig: Codable {
             return FeatureFlagConfig(
                 hudEnabled: false,
                 hudTracerEnabled: false,
+                fieldTestModeEnabled: false,
                 hudWindHintEnabled: true,
                 hudTargetLineEnabled: true,
                 hudBatterySaverEnabled: false,
@@ -83,6 +89,7 @@ struct FeatureFlagConfig: Codable {
             return FeatureFlagConfig(
                 hudEnabled: false,
                 hudTracerEnabled: false,
+                fieldTestModeEnabled: false,
                 hudWindHintEnabled: true,
                 hudTargetLineEnabled: true,
                 hudBatterySaverEnabled: true,
@@ -95,6 +102,7 @@ struct FeatureFlagConfig: Codable {
             return FeatureFlagConfig(
                 hudEnabled: false,
                 hudTracerEnabled: false,
+                fieldTestModeEnabled: false,
                 hudWindHintEnabled: false,
                 hudTargetLineEnabled: false,
                 hudBatterySaverEnabled: true,
