@@ -11,9 +11,33 @@ from typing import Any, Dict, Tuple
 from fastapi import APIRouter, HTTPException, Request, Response, status
 
 DEFAULT_REMOTE_CONFIG: Dict[str, Dict[str, Any]] = {
-    "tierA": {"hudEnabled": True, "inputSize": 320},
-    "tierB": {"hudEnabled": True, "inputSize": 320, "reducedRate": True},
-    "tierC": {"hudEnabled": False},
+    "tierA": {
+        "hudEnabled": True,
+        "inputSize": 320,
+        "analyticsEnabled": False,
+        "crashEnabled": False,
+    },
+    "tierB": {
+        "hudEnabled": True,
+        "inputSize": 320,
+        "reducedRate": True,
+        "analyticsEnabled": False,
+        "crashEnabled": False,
+    },
+    "tierC": {
+        "hudEnabled": False,
+        "analyticsEnabled": False,
+        "crashEnabled": False,
+    },
+}
+
+BOOL_KEYS = {
+    "hudEnabled",
+    "hudTracerEnabled",
+    "fieldTestMode",
+    "reducedRate",
+    "analyticsEnabled",
+    "crashEnabled",
 }
 
 
@@ -60,10 +84,10 @@ class RemoteConfigStore:
                     status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                     detail=f"{tier} overrides must be a JSON object",
                 )
-            validated[tier] = deepcopy(overrides)
-        for tier, overrides in validated.items():
-            for key, value in overrides.items():
-                if key in {"hudEnabled", "reducedRate"} and not isinstance(value, bool):
+            sanitized = deepcopy(DEFAULT_REMOTE_CONFIG.get(tier, {}))
+            sanitized.update(overrides)
+            for key, value in sanitized.items():
+                if key in BOOL_KEYS and value is not None and not isinstance(value, bool):
                     raise HTTPException(
                         status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                         detail=f"{tier}.{key} must be a boolean",
@@ -73,6 +97,7 @@ class RemoteConfigStore:
                         status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                         detail=f"{tier}.inputSize must be an integer",
                     )
+            validated[tier] = sanitized
         return validated
 
     @staticmethod

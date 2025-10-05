@@ -20,6 +20,7 @@ final class TelemetryClient {
     private(set) var deviceProfiles: [DeviceProfilePayload] = []
     private(set) var impactTriggerCount: Int = 0
     private(set) var events: [(name: String, payload: [String: Any])] = []
+    private var analyticsConfigSignatures: Set<String> = []
 
     func emit(name: String, value: Double, deviceClass: String, sampled: Bool) {
         metrics.append(MetricRecord(name: name, value: value, deviceClass: deviceClass, sampled: sampled))
@@ -125,5 +126,26 @@ final class TelemetryClient {
             payload["latencyMs"] = 1000.0 / profile.estimatedFps
         }
         send(event: "remote_config_active", payload: payload)
+    }
+
+    func logAnalyticsConfig(
+        analyticsEnabled: Bool,
+        crashEnabled: Bool,
+        dsnPresent: Bool,
+        configHash: String
+    ) {
+        let signature = "\(configHash):\(analyticsEnabled):\(crashEnabled):\(dsnPresent)"
+        guard !analyticsConfigSignatures.contains(signature) else { return }
+        analyticsConfigSignatures.insert(signature)
+        send(
+            event: "analytics_cfg",
+            payload: [
+                "configHash": configHash,
+                "enabled": analyticsEnabled || crashEnabled,
+                "analyticsEnabled": analyticsEnabled,
+                "crashEnabled": crashEnabled,
+                "dsn_present": dsnPresent
+            ]
+        )
     }
 }

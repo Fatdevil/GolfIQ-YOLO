@@ -16,6 +16,7 @@ class RemoteConfigClient(
     private val featureFlags: FeatureFlagsService,
     private val telemetry: TelemetryClient,
     private val runtimeAdapter: RuntimeAdapter,
+    private val onFlagsApplied: ((FeatureFlagConfig, String?) -> Unit)? = null,
 ) {
     companion object {
         private const val REFRESH_HOURS = 12L
@@ -76,6 +77,8 @@ class RemoteConfigClient(
         val updated = current.copy(
             hudEnabled = overrides.optBoolean("hudEnabled", current.hudEnabled),
             fieldTestModeEnabled = overrides.optBoolean("fieldTestMode", current.fieldTestModeEnabled),
+            analyticsEnabled = overrides.optBoolean("analyticsEnabled", current.analyticsEnabled),
+            crashEnabled = overrides.optBoolean("crashEnabled", current.crashEnabled),
             inputSize = if (overrides.has("inputSize")) overrides.optInt("inputSize") else current.inputSize,
             reducedRate = if (overrides.has("reducedRate")) overrides.optBoolean("reducedRate") else current.reducedRate,
             source = FeatureFlagConfig.Source.REMOTE_CONFIG,
@@ -84,6 +87,7 @@ class RemoteConfigClient(
 
         val runtime = runtimeAdapter.describe()
         val hash = newEtag?.trim('"') ?: updated.source.name
+        onFlagsApplied?.invoke(updated, hash)
         telemetry.logRemoteConfigActive(
             hash = hash,
             profile = profile,

@@ -23,6 +23,7 @@ class TelemetryClient {
     private val deviceProfiles = mutableListOf<DeviceProfilePayload>()
     private var impactTriggerCount: Int = 0
     private val events = mutableListOf<Pair<String, Map<String, Any>>>()
+    private val analyticsConfigSignatures = mutableSetOf<String>()
 
     fun emit(name: String, value: Double, deviceClass: String, sampled: Boolean) {
         metrics += MetricRecord(name, value, deviceClass, sampled)
@@ -138,5 +139,27 @@ class TelemetryClient {
             payload["latencyMs"] = 1000.0 / profile.estimatedFps
         }
         send(event = "remote_config_active", payload = payload)
+    }
+
+    fun logAnalyticsConfig(
+        analyticsEnabled: Boolean,
+        crashEnabled: Boolean,
+        dsnPresent: Boolean,
+        configHash: String,
+    ) {
+        val signature = listOf(configHash, analyticsEnabled, crashEnabled, dsnPresent).joinToString(":")
+        if (!analyticsConfigSignatures.add(signature)) {
+            return
+        }
+        send(
+            event = "analytics_cfg",
+            payload = mapOf(
+                "configHash" to configHash,
+                "enabled" to (analyticsEnabled || crashEnabled),
+                "analyticsEnabled" to analyticsEnabled,
+                "crashEnabled" to crashEnabled,
+                "dsn_present" to dsnPresent,
+            ),
+        )
     }
 }

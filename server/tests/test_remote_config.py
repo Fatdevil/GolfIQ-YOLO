@@ -38,9 +38,19 @@ def test_update_remote_config_overrides_and_persists(monkeypatch: pytest.MonkeyP
     monkeypatch.setenv("ADMIN_TOKEN", "secret")
     overrides: Dict[str, Dict[str, object]] = {
         "tierA": {"hudEnabled": True, "inputSize": 640},
-        "tierB": {"hudEnabled": False, "inputSize": 240, "reducedRate": True},
+        "tierB": {
+            "hudEnabled": False,
+            "inputSize": 240,
+            "reducedRate": True,
+            "analyticsEnabled": True,
+        },
         "tierC": {"hudEnabled": False},
     }
+    expected: Dict[str, Dict[str, object]] = {}
+    for tier, defaults in remote.DEFAULT_REMOTE_CONFIG.items():
+        merged = dict(defaults)
+        merged.update(overrides[tier])
+        expected[tier] = merged
 
     headers = {"x-admin-token": "secret", "Origin": "http://testserver"}
 
@@ -48,12 +58,12 @@ def test_update_remote_config_overrides_and_persists(monkeypatch: pytest.MonkeyP
         update = client.post("/config/remote", json=overrides, headers=headers)
         assert update.status_code == 200
         updated = update.json()
-        assert updated["config"] == overrides
+        assert updated["config"] == expected
         assert update.headers["ETag"] == updated["etag"]
 
         fetched = client.get("/config/remote")
         assert fetched.status_code == 200
-        assert fetched.json()["config"] == overrides
+        assert fetched.json()["config"] == expected
 
 
 def test_update_remote_config_validates_payload(monkeypatch: pytest.MonkeyPatch):
