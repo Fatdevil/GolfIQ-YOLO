@@ -19,6 +19,7 @@ The AR HUD now attempts to anchor pins and green markers using platform geospati
 ## Cache & TTL Behaviour
 - Both platforms persist the last ETag, fetch timestamp, and server-provided `max-age` TTL.
 - On HUD start (or manual refresh) the client issues `HEAD /course/{id}` with `If-None-Match`. A `304` updates metadata without re-downloading, while `200` triggers a full `GET` to store the new payload.
+- If the cached bundle is still within its `max-age` TTL window, the HUD reuses it without hitting the network (emitting a `304` telemetry event) until the TTL expires or the golfer forces a refresh.
 - Network failures fall back to cached bundles when available; telemetry records these as `status: offline` along with the age in days.
 
 ## User Experience Cues

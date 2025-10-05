@@ -73,6 +73,12 @@ class CourseBundleRepository(
         val cachedBundle = cached(courseId)
         val metadata = cache.readMetadata()
 
+        if (!forceRefresh && metadata?.isFresh() == true && cachedBundle != null) {
+            val age = cache.ageDays()
+            telemetry.logBundleRefresh("304", metadata.etag, age)
+            return cachedBundle
+        }
+
         return if (forceRefresh) {
             performGet(courseId, cache, null, cachedBundle, null)
         } else {

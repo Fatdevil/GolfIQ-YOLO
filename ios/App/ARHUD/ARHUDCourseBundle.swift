@@ -71,14 +71,26 @@ final class ARHUDCourseBundleLoader {
         requestURL.appendPathComponent(courseId)
 
         let cache = RemoteBundleCache(courseId: courseId)
+        let metadata = cache.metadata
         let cachedData = cache.cachedData()
         let decoder = JSONDecoder()
         decoder.keyDecodingStrategy = .convertFromSnakeCase
 
         var deliveredCached = false
+        var cachedBundle: ARHUDCourseBundle?
         if let cachedData, let bundle = try? decoder.decode(ARHUDCourseBundle.self, from: cachedData) {
+            cachedBundle = bundle
             completion(.success(bundle))
             deliveredCached = true
+        }
+
+        if !forceRefresh,
+           let metadata,
+           metadata.isFresh(),
+           let cachedBundle {
+            let age = cache.ageInDays()
+            telemetry.logBundleRefresh(status: "304", etag: metadata.etag, ageDays: age)
+            return
         }
 
         if forceRefresh {

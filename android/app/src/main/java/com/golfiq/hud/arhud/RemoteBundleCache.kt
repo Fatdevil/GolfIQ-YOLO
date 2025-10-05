@@ -10,7 +10,16 @@ class RemoteBundleCache(context: Context, private val courseId: String) {
         val etag: String?,
         val fetchedAtMs: Long,
         val ttlSeconds: Long?,
-    )
+    ) {
+        fun isFresh(nowMs: Long = System.currentTimeMillis()): Boolean {
+            val ttl = ttlSeconds ?: return false
+            if (ttl <= 0) return false
+            val age = nowMs - fetchedAtMs
+            if (age <= 0) return true
+            val ttlMs = TimeUnit.SECONDS.toMillis(ttl)
+            return age < ttlMs
+        }
+    }
 
     private val appContext = context.applicationContext
     private val prefs = appContext.getSharedPreferences("arhud_bundle_cache", Context.MODE_PRIVATE)
