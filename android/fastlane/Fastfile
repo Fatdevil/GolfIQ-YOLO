@@ -1,0 +1,59 @@
+require 'base64'
+require 'json'
+
+fastlane_version '2.0.0'
+
+def release_notes_from_repo
+  env_notes = ENV.fetch('RELEASE_NOTES', nil)
+  return env_notes unless env_notes.to_s.strip.empty?
+
+  notes_path = File.expand_path('../../docs/RELEASE_NOTES_v1.2.md', __dir__)
+  return File.read(notes_path) if File.exist?(notes_path)
+
+  'Automated beta build – no release notes supplied.'
+end
+
+def service_account_json
+  raw = ENV.fetch('GOOGLE_PLAY_SERVICE_ACCOUNT_JSON') { ENV.fetch('ANDROID_SERVICE_ACCOUNT_JSON') }
+  begin
+    decoded = Base64.strict_decode64(raw)
+    return decoded if decoded.strip.start_with?('{')
+  rescue ArgumentError
+    nil
+  end
+
+  raw
+end
+
+platform :android do
+  desc 'Builds and uploads the latest Android beta to the Play internal track'
+  lane :beta_android do |options|
+    notes = options[:changelog] || release_notes_from_repo
+
+    gradle(
+      task: 'assemble',
+      build_type: options[:build_type] || ENV['ANDROID_BUILD_TYPE'] || 'Release',
+      project_dir: options[:project_dir] || '..'
+    )
+
+    apk_path = options[:apk_path] || ENV['ANDROID_APK_PATH'] || File.expand_path('../app/build/outputs/apk/release/app-release.apk', __dir__)
+
+    supply(
+      json_key_data: service_account_json,
+      package_name: options[:package_name] || ENV['ANDROID_PACKAGE_NAME'],
+      track: options[:track] || ENV['ANDROID_PLAY_TRACK'] || 'internal',
+      release_status: options[:release_status] || ENV['ANDROID_RELEASE_STATUS'] || 'completed',
+      skip_upload_images: true,
+      skip_upload_metadata: true,
+      skip_upload_changelogs: false,
+      rollout: options[:rollout] || ENV['ANDROID_ROLLOUT']&.to_f,
+      release_notes: [
+        {
+          locale: options[:locale] || ENV['ANDROID_DEFAULT_LOCALE'] || 'en-US',
+          text: notes
+        }
+      ],
+      apk: apk_path
+    )
+  end
+end
