@@ -78,6 +78,7 @@ class CourseBundle(BaseModel):
     holes: List[Hole] = Field(default_factory=list)
     etag: Optional[str] = None
     ttl_seconds: int = 0
+    updated_at: Optional[str] = None
 
     def to_feature_collection(self) -> Dict[str, Any]:
         course_properties: Dict[str, Any] = {
@@ -95,6 +96,7 @@ class CourseBundle(BaseModel):
                     }
                     for hole in self.holes
                 ],
+                "updatedAt": self.updated_at,
             }
         }
         features: List[Feature] = []

@@ -35,6 +35,7 @@ def test_course_bundle_cache_headers_and_304() -> None:
     payload = response.json()
     assert payload["type"] == "FeatureCollection"
     assert payload["properties"]["course"]["hole_count"] == 2
+    assert payload["properties"]["course"]["updatedAt"]
 
     second = client.get("/course/pebble-creek", headers={"If-None-Match": etag})
     assert second.status_code == 304
@@ -103,3 +104,26 @@ def test_apply_cache_headers_normalizes_etag() -> None:
     response = course_bundle._apply_cache_headers(course_bundle.Response(), "abc", 10)
     assert response.headers["ETag"] == '"abc"'
     assert response.headers["Cache-Control"] == "public, max-age=10"
+
+
+def test_courses_listing() -> None:
+    response = client.get("/courses")
+    assert response.status_code == 200
+    payload = response.json()
+    assert "courses" in payload
+    course_ids = {course["id"] for course in payload["courses"]}
+    assert "pebble-creek" in course_ids
+    sample = next(course for course in payload["courses"] if course["id"] == "pebble-creek")
+    assert sample["etag"]
+    assert sample["updatedAt"]
+
+
+def test_course_holes_listing() -> None:
+    response = client.get("/course/pebble-creek/holes")
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["course"]["id"] == "pebble-creek"
+    assert payload["course"]["etag"]
+    holes = payload["holes"]
+    assert len(holes) == 2
+    assert {hole["number"] for hole in holes} == {1, 2}

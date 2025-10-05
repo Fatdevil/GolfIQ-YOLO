@@ -8,10 +8,12 @@ from fastapi.responses import JSONResponse
 from server.courses.service import (
     CourseBundleNotFoundError,
     DEFAULT_TTL_SECONDS,
+    list_courses,
+    list_holes,
     load_bundle,
 )
 
-router = APIRouter(prefix="/course", tags=["course-bundle"])
+router = APIRouter(tags=["course-bundle"])
 
 
 def _normalize_etag(etag: Optional[str]) -> Optional[str]:
@@ -46,7 +48,13 @@ def _apply_cache_headers(response: Response, etag: Optional[str], ttl: int) -> R
     return response
 
 
-@router.get("/{course_id}")
+@router.get("/courses")
+async def get_courses() -> JSONResponse:
+    courses = list_courses()
+    return JSONResponse({"courses": courses})
+
+
+@router.get("/course/{course_id}")
 async def get_course_bundle(course_id: str, request: Request) -> Response:
     try:
         bundle = load_bundle(course_id)
@@ -65,7 +73,27 @@ async def get_course_bundle(course_id: str, request: Request) -> Response:
     return _apply_cache_headers(response, etag, ttl)
 
 
-@router.get("/{course_id}/holes/{hole_number}")
+@router.get("/course/{course_id}/holes")
+async def get_course_holes(course_id: str) -> JSONResponse:
+    try:
+        bundle = load_bundle(course_id)
+    except CourseBundleNotFoundError as exc:  # pragma: no cover - thin wrapper
+        raise HTTPException(status_code=404, detail="course bundle not found") from exc
+
+    holes = list_holes(course_id, bundle=bundle)
+    payload = {
+        "course": {
+            "id": bundle.id,
+            "name": bundle.name,
+            "updatedAt": bundle.updated_at,
+            "etag": bundle.etag,
+        },
+        "holes": holes,
+    }
+    return JSONResponse(payload)
+
+
+@router.get("/course/{course_id}/holes/{hole_number}")
 async def get_course_hole(
     course_id: str, hole_number: int, request: Request
 ) -> Response:

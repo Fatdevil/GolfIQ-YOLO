@@ -1,6 +1,7 @@
 {
   "id": "pebble-creek",
   "name": "Pebble Creek (Sample)",
+  "updatedAt": "2024-01-01T00:00:00Z",
   "holes": {
     "1": {"par": 4, "yardage": 412, "name": "Creekside"},
     "2": {"par": 3, "yardage": 168, "name": "Overlook"}

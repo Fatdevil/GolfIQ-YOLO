@@ -21,6 +21,17 @@ def _iter_course_files(course_dir: Path) -> Iterable[Path]:
             yield path
 
 
+def _load_course_metadata(course_dir: Path) -> Dict:
+    for filename in ("metadata.json", "course.json"):
+        candidate = course_dir / filename
+        if candidate.exists():
+            with candidate.open("r", encoding="utf-8") as handle:
+                data = json.load(handle)
+            if isinstance(data, dict):
+                return data
+    return {}
+
+
 def _compute_etag(course_dir: Path) -> str:
     hasher = hashlib.sha256()
     for file_path in _iter_course_files(course_dir):
@@ -82,12 +93,7 @@ def load_bundle(course_id: str) -> CourseBundle:
     if not course_dir.exists() or not course_dir.is_dir():
         raise CourseBundleNotFoundError(course_id)
 
-    course_meta_path = course_dir / "course.json"
-    course_meta: Dict = {}
-    if course_meta_path.exists():
-        with course_meta_path.open("r", encoding="utf-8") as fp:
-            course_meta = json.load(fp)
-
+    course_meta = _load_course_metadata(course_dir)
     hole_meta: Dict[str, Dict] = (
         course_meta.get("holes", {}) if isinstance(course_meta, dict) else {}
     )
@@ -102,5 +108,44 @@ def load_bundle(course_id: str) -> CourseBundle:
         holes=holes,
         ttl_seconds=DEFAULT_TTL_SECONDS,
         etag=_compute_etag(course_dir),
+        updated_at=course_meta.get("updatedAt"),
     )
     return bundle
+
+
+def list_courses() -> List[Dict[str, object]]:
+    if not DATA_ROOT.exists():
+        return []
+
+    courses: List[Dict[str, object]] = []
+    for course_dir in sorted(DATA_ROOT.iterdir()):
+        if not course_dir.is_dir():
+            continue
+        metadata = _load_course_metadata(course_dir)
+        bundle_id = metadata.get("id", course_dir.name)
+        course_info = {
+            "id": bundle_id,
+            "name": metadata.get("name"),
+            "updatedAt": metadata.get("updatedAt"),
+            "etag": _compute_etag(course_dir),
+            "holeCount": len(metadata.get("holes", {})),
+        }
+        courses.append(course_info)
+    return courses
+
+
+def list_holes(course_id: str, *, bundle: CourseBundle | None = None) -> List[Dict[str, object]]:
+    if bundle is None:
+        bundle = load_bundle(course_id)
+    holes: List[Dict[str, object]] = []
+    for hole in bundle.holes:
+        holes.append(
+            {
+                "number": hole.number,
+                "name": hole.name,
+                "par": hole.par,
+                "yardage": hole.yardage,
+                "featureCount": len(hole.features),
+            }
+        )
+    return holes
