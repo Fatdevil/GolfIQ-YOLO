@@ -4,6 +4,7 @@ final class ARHUDSettingsViewController: UITableViewController {
     private enum Row: Int, CaseIterable {
         case hudEnabled
         case hudTracer
+        case refresh
 
         var title: String {
             switch self {
@@ -11,6 +12,8 @@ final class ARHUDSettingsViewController: UITableViewController {
                 return "Enable AR HUD"
             case .hudTracer:
                 return "Enable HUD tracer"
+            case .refresh:
+                return "Refresh bundle"
             }
         }
 
@@ -20,6 +23,8 @@ final class ARHUDSettingsViewController: UITableViewController {
                 return "Show Aim → Calibrate flow and AR overlay"
             case .hudTracer:
                 return "Render debug tracer lines for calibration"
+            case .refresh:
+                return "Force re-download of course data"
             }
         }
     }
@@ -64,18 +69,26 @@ final class ARHUDSettingsViewController: UITableViewController {
         configuration.secondaryText = row.subtitle
         cell.contentConfiguration = configuration
 
-        let toggle = UISwitch()
-        toggle.tag = row.rawValue
-        toggle.addTarget(self, action: #selector(handleToggle(_:)), for: .valueChanged)
-
         switch row {
         case .hudEnabled:
+            let toggle = UISwitch()
+            toggle.tag = row.rawValue
             toggle.isOn = featureFlags.current().hudEnabled
+            toggle.addTarget(self, action: #selector(handleToggle(_:)), for: .valueChanged)
+            cell.accessoryView = toggle
         case .hudTracer:
+            let toggle = UISwitch()
+            toggle.tag = row.rawValue
             toggle.isOn = featureFlags.current().hudTracerEnabled
+            toggle.addTarget(self, action: #selector(handleToggle(_:)), for: .valueChanged)
+            cell.accessoryView = toggle
+        case .refresh:
+            let button = UIButton(type: .system)
+            button.setTitle("Refresh", for: .normal)
+            button.addTarget(self, action: #selector(handleRefreshTapped), for: .touchUpInside)
+            cell.accessoryView = button
         }
 
-        cell.accessoryView = toggle
         return cell
     }
 
@@ -87,6 +100,13 @@ final class ARHUDSettingsViewController: UITableViewController {
             featureFlags.setHudEnabled(sender.isOn)
         case .hudTracer:
             featureFlags.setHudTracerEnabled(sender.isOn)
+        case .refresh:
+            break
         }
+    }
+
+    @objc
+    private func handleRefreshTapped() {
+        NotificationCenter.default.post(name: .arhudBundleRefreshRequested, object: nil)
     }
 }

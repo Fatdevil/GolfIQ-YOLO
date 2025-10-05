@@ -24,11 +24,16 @@ final class ARHUDViewController: UIViewController, ARSCNViewDelegate, CLLocation
     private var currentCourse: ARHUDCourseBundle?
     private var calibrationAnchor: ARAnchor?
     private var originLocation: CLLocation?
+    private var lastCalibrationAltitude: CLLocationDistance?
     private var headingOffset: CLLocationDirection = 0
     private var fpsDisplayLink: CADisplayLink?
     private var fpsSamples: [CFTimeInterval] = []
     private var lastFpsEmission: CFTimeInterval = 0
     private let fpsEmissionInterval: CFTimeInterval = 5.0
+    private var geospatialAnchors: [ARAnchor] = []
+    private var geospatialAnchorMetadata: [UUID: (label: String, color: UIColor)] = [:]
+    private var geospatialSessionActive = false
+    private var refreshObserver: NSObjectProtocol?
 
     init(
         courseId: String,
@@ -71,6 +76,14 @@ final class ARHUDViewController: UIViewController, ARSCNViewDelegate, CLLocation
         configureOverlay()
         configureLocationServices()
         configureDisplayLink()
+        overlayView.updateModeBadge(.compass)
+        refreshObserver = NotificationCenter.default.addObserver(
+            forName: .arhudBundleRefreshRequested,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            self?.handleManualBundleRefresh()
+        }
         loadCourseBundle()
         startRemoteConfig()
     }
@@ -107,6 +120,9 @@ final class ARHUDViewController: UIViewController, ARSCNViewDelegate, CLLocation
         locationManager.stopUpdatingHeading()
         locationManager.stopUpdatingLocation()
         stopFallbackMonitoring()
+        if let refreshObserver {
+            NotificationCenter.default.removeObserver(refreshObserver)
+        }
     }
 
     private func configureSceneView() {
@@ -144,6 +160,12 @@ final class ARHUDViewController: UIViewController, ARSCNViewDelegate, CLLocation
         locationManager.desiredAccuracy = kCLLocationAccuracyBest
         locationManager.headingFilter = 1
         locationManager.requestWhenInUseAuthorization()
+        if #available(iOS 14.0, *) {
+            locationManager.desiredAccuracy = kCLLocationAccuracyBestForNavigation
+            if locationManager.accuracyAuthorization == .reducedAccuracy {
+                locationManager.requestTemporaryFullAccuracyAuthorization(withPurposeKey: "ARHUDGeo")
+            }
+        }
         locationManager.startUpdatingLocation()
         locationManager.startUpdatingHeading()
     }
@@ -201,19 +223,58 @@ final class ARHUDViewController: UIViewController, ARSCNViewDelegate, CLLocation
             return
         }
 
+        if #available(iOS 14.0, *), ARGeoTrackingConfiguration.isSupported {
+            ARGeoTrackingConfiguration.checkAvailability { [weak self] available, _ in
+                DispatchQueue.main.async {
+                    guard let self else { return }
+                    if available {
+                        self.runGeoTrackingSession()
+                    } else {
+                        self.runWorldTrackingSession()
+                    }
+                }
+            }
+        } else {
+            runWorldTrackingSession()
+        }
+    }
+
+    private func runWorldTrackingSession() {
+        geospatialSessionActive = false
+        geospatialAnchors.removeAll()
+        geospatialAnchorMetadata.removeAll()
         let configuration = ARWorldTrackingConfiguration()
         configuration.worldAlignment = .gravityAndHeading
         configuration.planeDetection = [.horizontal]
         sceneView.session.run(configuration, options: [.resetTracking, .removeExistingAnchors])
+        overlayView.updateModeBadge(.compass)
     }
 
-    private func loadCourseBundle() {
-        overlayView.updateStatus("Loading course bundle…")
-        courseLoader.load(courseId: courseId) { [weak self] result in
+    @available(iOS 14.0, *)
+    private func runGeoTrackingSession() {
+        geospatialSessionActive = true
+        geospatialAnchors.removeAll()
+        geospatialAnchorMetadata.removeAll()
+        let configuration = ARGeoTrackingConfiguration()
+        configuration.environmentTexturing = .automatic
+        configuration.planeDetection = []
+        configuration.worldAlignment = .gravity
+        if let location = locationManager.location {
+            configuration.initialLocation = location
+        }
+        sceneView.session.run(configuration, options: [.resetTracking, .removeExistingAnchors])
+        overlayView.updateModeBadge(.geospatial)
+    }
+
+    private func loadCourseBundle(forceRefresh: Bool = false) {
+        overlayView.updateStatus(forceRefresh ? "Refreshing course bundle…" : "Loading course bundle…")
+        courseLoader.load(courseId: courseId, forceRefresh: forceRefresh) { [weak self] result in
             DispatchQueue.main.async {
                 switch result {
                 case let .success(bundle):
                     self?.currentCourse = bundle
+                    self?.clearGeospatialAnchors()
+                    self?.sceneView.scene.rootNode.childNodes.forEach { $0.removeFromParentNode() }
                     self?.overlayView.updateStatus("Aim at pin and calibrate")
                     self?.updateDistances(with: self?.locationManager.location)
                 case let .failure(error):
@@ -221,6 +282,11 @@ final class ARHUDViewController: UIViewController, ARSCNViewDelegate, CLLocation
                 }
             }
         }
+    }
+
+    @objc
+    private func handleManualBundleRefresh() {
+        loadCourseBundle(forceRefresh: true)
     }
 
     @objc
@@ -248,6 +314,17 @@ final class ARHUDViewController: UIViewController, ARSCNViewDelegate, CLLocation
         originLocation = location
         headingOffset = computeHeadingOffset(from: location, to: course.pin.location)
 
+        if #available(iOS 14.0, *), geospatialSessionActive,
+           attemptGeospatialPlacement(course: course, frame: frame, location: location, showFallbackMessage: true) {
+            updateDistances(with: location)
+            telemetry.logHudCalibration()
+            overlayView.updateStatus("Calibrated – geospatial anchors pinned")
+            return
+        }
+
+        overlayView.updateModeBadge(.compass)
+        clearGeospatialAnchors()
+
         if let anchor = calibrationAnchor {
             sceneView.session.remove(anchor: anchor)
         }
@@ -262,8 +339,80 @@ final class ARHUDViewController: UIViewController, ARSCNViewDelegate, CLLocation
         overlayView.updateStatus("Calibrated – markers pinned")
     }
 
+    private func clearGeospatialAnchors() {
+        geospatialAnchors.forEach { sceneView.session.remove(anchor: $0) }
+        geospatialAnchors.removeAll()
+        geospatialAnchorMetadata.removeAll()
+    }
+
+    @available(iOS 14.0, *)
+    private func attemptGeospatialPlacement(
+        course: ARHUDCourseBundle,
+        frame: ARFrame,
+        location: CLLocation,
+        showFallbackMessage: Bool
+    ) -> Bool {
+        let status = frame.geoTrackingStatus
+        guard status.state == .localized, status.accuracy == .high else {
+            if showFallbackMessage {
+                overlayView.updateStatus("Geospatial alignment not ready, using compass fallback")
+            } else {
+                overlayView.updateStatus("Geospatial alignment not ready")
+            }
+            return false
+        }
+
+        let altitude = location.altitude
+        lastCalibrationAltitude = altitude
+        clearGeospatialAnchors()
+        sceneView.scene.rootNode.childNodes.forEach { $0.removeFromParentNode() }
+
+        let targets: [(CLLocationCoordinate2D, String, UIColor)] = [
+            (course.pin.location.coordinate, "Pin", .systemRed),
+            (course.greenFront.location.coordinate, "Front", .systemGreen),
+            (course.greenCenter.location.coordinate, "Center", .systemTeal),
+            (course.greenBack.location.coordinate, "Back", .systemBlue)
+        ]
+
+        targets.forEach { coordinate, label, color in
+            let anchor = ARGeoAnchor(coordinate: coordinate, altitude: altitude)
+            sceneView.session.add(anchor: anchor)
+            geospatialAnchors.append(anchor)
+            geospatialAnchorMetadata[anchor.identifier] = (label: label, color: color)
+        }
+
+        calibrationAnchor = nil
+        overlayView.updateModeBadge(.geospatial)
+        return true
+    }
+
     @objc
     private func handleRecenterTapped() {
+        if #available(iOS 14.0, *), geospatialSessionActive,
+           !geospatialAnchors.isEmpty,
+           let course = currentCourse {
+            guard let frame = sceneView.session.currentFrame else {
+                overlayView.updateStatus("No AR frame available")
+                return
+            }
+            guard let location = locationManager.location ?? originLocation else {
+                overlayView.updateStatus("Waiting for GPS lock…")
+                return
+            }
+
+            if attemptGeospatialPlacement(
+                course: course,
+                frame: frame,
+                location: location,
+                showFallbackMessage: false
+            ) {
+                updateDistances(with: location)
+                telemetry.logHudRecenter()
+                overlayView.updateStatus("Re-centered geospatial anchors")
+            }
+            return
+        }
+
         guard let configuration = sceneView.session.configuration else {
             startSession()
             return
@@ -366,6 +515,14 @@ final class ARHUDViewController: UIViewController, ARSCNViewDelegate, CLLocation
         container.addChildNode(textNode)
         container.addChildNode(sphereNode)
         return container
+    }
+
+    func renderer(_ renderer: SCNSceneRenderer, nodeFor anchor: ARAnchor) -> SCNNode? {
+        if #available(iOS 14.0, *), geospatialSessionActive,
+           let metadata = geospatialAnchorMetadata[anchor.identifier] {
+            return makeMarkerNode(text: metadata.label, color: metadata.color)
+        }
+        return nil
     }
 
     private func makeTracerNode(to position: SCNVector3) -> SCNNode {

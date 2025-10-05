@@ -1,6 +1,8 @@
 package com.golfiq.hud.arhud
 
 import android.location.Location
+import android.content.Context
+import com.golfiq.hud.telemetry.TelemetryClient
 import org.json.JSONObject
 import java.io.BufferedReader
 import java.io.InputStreamReader
@@ -52,36 +54,139 @@ data class GreenDistances(
 }
 
 class CourseBundleRepository(
+    context: Context,
     private val baseUrl: URL,
+    private val telemetry: TelemetryClient,
 ) {
     class NetworkException(message: String, cause: Throwable? = null) : Exception(message, cause)
 
-    fun fetch(courseId: String): CourseBundle {
-        val courseUrl = baseUrl.resolve("course/$courseId")
-        val connection = (courseUrl.openConnection() as HttpURLConnection).apply {
-            requestMethod = "GET"
-            connectTimeout = 5000
-            readTimeout = 5000
+    private val appContext = context.applicationContext
+
+    fun cached(courseId: String): CourseBundle? {
+        val cache = RemoteBundleCache(appContext, courseId)
+        val cached = cache.readData() ?: return null
+        return runCatching { parseBundle(JSONObject(cached)) }.getOrNull()
+    }
+
+    fun refresh(courseId: String, forceRefresh: Boolean = false): CourseBundle {
+        val cache = RemoteBundleCache(appContext, courseId)
+        val cachedBundle = cached(courseId)
+        val metadata = cache.readMetadata()
+
+        if (!forceRefresh && metadata?.isFresh() == true && cachedBundle != null) {
+            val age = cache.ageDays()
+            telemetry.logBundleRefresh("304", metadata.etag, age)
+            return cachedBundle
         }
 
-        try {
+        return if (forceRefresh) {
+            performGet(courseId, cache, null, cachedBundle, null)
+        } else {
+            performHead(courseId, cache, metadata, cachedBundle)
+        }
+    }
+
+    private fun performHead(
+        courseId: String,
+        cache: RemoteBundleCache,
+        metadata: RemoteBundleCache.Metadata?,
+        cachedBundle: CourseBundle?,
+    ): CourseBundle {
+        val connection = openConnection(courseId, "HEAD")
+        metadata?.etag?.let { connection.setRequestProperty("If-None-Match", it) }
+
+        return try {
             val responseCode = connection.responseCode
-            if (responseCode !in 200..299) {
-                throw NetworkException("Unexpected response: $responseCode")
-            }
-
-            val body = connection.inputStream.use { stream ->
-                BufferedReader(InputStreamReader(stream, StandardCharsets.UTF_8)).use { reader ->
-                    reader.readText()
+            val ttl = parseCacheControl(connection.getHeaderField("Cache-Control"))
+            when (responseCode) {
+                HttpURLConnection.HTTP_NOT_MODIFIED -> {
+                    val age = cache.ageDays()
+                    telemetry.logBundleRefresh("304", metadata?.etag, age)
+                    cache.writeMetadata(metadata?.etag, ttl)
+                    cachedBundle ?: performGet(courseId, cache, metadata?.etag, null, ttl)
                 }
+                in 200..299 -> {
+                    val etag = connection.getHeaderField("ETag") ?: metadata?.etag
+                    performGet(courseId, cache, etag, cachedBundle, ttl)
+                }
+                else -> offlineFallback(cache, cachedBundle, NetworkException("Unexpected response: $responseCode"))
             }
-
-            return parseBundle(JSONObject(body))
         } catch (t: Throwable) {
-            throw NetworkException("Failed to load course bundle", t)
+            offlineFallback(cache, cachedBundle, t)
         } finally {
             connection.disconnect()
         }
+    }
+
+    private fun performGet(
+        courseId: String,
+        cache: RemoteBundleCache,
+        ifNoneMatch: String?,
+        cachedBundle: CourseBundle?,
+        ttlHintSeconds: Long?,
+    ): CourseBundle {
+        val connection = openConnection(courseId, "GET")
+        ifNoneMatch?.let { connection.setRequestProperty("If-None-Match", it) }
+
+        return try {
+            val responseCode = connection.responseCode
+            val ttl = ttlHintSeconds ?: parseCacheControl(connection.getHeaderField("Cache-Control"))
+            when (responseCode) {
+                HttpURLConnection.HTTP_NOT_MODIFIED -> {
+                    val age = cache.ageDays()
+                    telemetry.logBundleRefresh("304", ifNoneMatch, age)
+                    cache.writeMetadata(ifNoneMatch, ttl)
+                    return cachedBundle ?: performGet(courseId, cache, null, null, ttl)
+                }
+                in 200..299 -> {
+                    val body = connection.inputStream.use { stream ->
+                        BufferedReader(InputStreamReader(stream, StandardCharsets.UTF_8)).use { reader ->
+                            reader.readText()
+                        }
+                    }
+                    cache.writeData(body)
+                    val etag = connection.getHeaderField("ETag")
+                    cache.writeMetadata(etag, ttl)
+                    telemetry.logBundleRefresh("200", etag, 0)
+                    parseBundle(JSONObject(body))
+                }
+                else -> offlineFallback(cache, cachedBundle, NetworkException("Unexpected response: $responseCode"))
+            }
+        } catch (t: Throwable) {
+            offlineFallback(cache, cachedBundle, t)
+        } finally {
+            connection.disconnect()
+        }
+    }
+
+    private fun offlineFallback(
+        cache: RemoteBundleCache,
+        cachedBundle: CourseBundle?,
+        cause: Throwable?,
+    ): CourseBundle {
+        val metadata = cache.readMetadata()
+        val age = cache.ageDays()
+        telemetry.logBundleRefresh("offline", metadata?.etag, age)
+        return cachedBundle ?: throw NetworkException("Failed to load course bundle", cause)
+    }
+
+    private fun openConnection(courseId: String, method: String): HttpURLConnection {
+        val courseUrl = baseUrl.resolve("course/$courseId")
+        return (courseUrl.openConnection() as HttpURLConnection).apply {
+            requestMethod = method
+            connectTimeout = 5000
+            readTimeout = 5000
+        }
+    }
+
+    private fun parseCacheControl(header: String?): Long? {
+        if (header.isNullOrBlank()) return null
+        return header.split(',')
+            .map { it.trim() }
+            .firstOrNull { it.startsWith("max-age", ignoreCase = true) }
+            ?.split('=')
+            ?.getOrNull(1)
+            ?.toLongOrNull()
     }
 
     private fun parseBundle(json: JSONObject): CourseBundle {
