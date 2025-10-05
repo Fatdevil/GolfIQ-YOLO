@@ -139,3 +139,55 @@ export const postRemoteConfig = (
       }),
     })
     .then((r) => r.data);
+
+/**
+ * ----------------------------
+ * Coach v1 – provider-backed feedback
+ * ----------------------------
+ * Server route: POST /coach/feedback
+ * Body: { runId?: string, metrics?: CoachFeedbackMetrics }
+ * Response: { text: string, provider: string, latency_ms: number }
+ */
+
+// Shape for optional "quality" field; keep flexible for future variants
+export type CoachFeedbackQuality =
+  | string
+  | null
+  | {
+      label?: string;
+      level?: string;
+      rating?: number;
+      summary?: string;
+      [key: string]: unknown;
+    };
+
+// Metrics we already expose from /cv/analyze responses
+export type CoachFeedbackMetrics = {
+  ballSpeedMps?: number | null;
+  clubSpeedMps?: number | null;
+  sideAngleDeg?: number | null;
+  vertLaunchDeg?: number | null;
+  carryEstM?: number | null;
+  quality?: CoachFeedbackQuality;
+  [key: string]: unknown;
+};
+
+export type CoachFeedbackRequest =
+  | { runId: string; metrics?: never }
+  | { runId?: undefined; metrics: CoachFeedbackMetrics };
+
+// Response payload
+export type CoachFeedbackResponse = {
+  text: string;
+  provider: string;
+  latency_ms: number;
+};
+
+// API call (prefers runId if present; else send metrics)
+export const postCoachFeedback = (req: CoachFeedbackRequest) =>
+  axios
+    .post<CoachFeedbackResponse>(`${API}/coach/feedback`, req, {
+      headers: withAuth({ "Content-Type": "application/json" }),
+      validateStatus: (s) => s === 200 || s === 429, // 429 rate-limit is handled by UI
+    })
+    .then((r) => r.data);
