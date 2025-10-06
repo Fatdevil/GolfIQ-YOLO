@@ -314,7 +314,11 @@ async def telemetry_feedback(
 
         feedback_entries.append(
             {
-                "id": str(payload.get("id") or payload.get("session_id") or f"{timestamp_iso}-{len(feedback_entries)}"),
+                "id": str(
+                    payload.get("id")
+                    or payload.get("session_id")
+                    or f"{timestamp_iso}-{len(feedback_entries)}"
+                ),
                 "timestamp": timestamp_iso,
                 "category": category,
                 "message": message,
