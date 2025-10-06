@@ -8,6 +8,27 @@ export type DetFrame = { t?:number; dets: Box[] };
 export type ImgFrame = { t?:number; image_b64: string };
 export type YoloConfig = { model_path:string; class_map?:Record<number,string>; conf?:number };
 export type CoachMode = 'short'|'detailed'|'drill';
+export type FeedbackCategory = 'bug'|'ui'|'accuracy';
+
+export type FeedbackSubmission = {
+  category: FeedbackCategory;
+  message: string;
+  qaSummary?: {
+    quality: string | null;
+    notes: string | null;
+    capturedAt: number;
+    metrics: Record<string, unknown> | null;
+  };
+  device: {
+    platform: string;
+    version: string;
+    tier?: string;
+  };
+  sink?: {
+    email?: string;
+    webhook?: string;
+  };
+};
 
 export async function calibrate(a4_width_px:number){
   const url = `${API_BASE}/calibrate?a4_width_px=${a4_width_px}`;
@@ -53,5 +74,31 @@ export async function metricsFaceOn(baseUrl: string, payload: {
     body: JSON.stringify(payload),
   });
   if (!r.ok) throw new Error("metricsFaceOn " + r.status);
+  return await r.json();
+}
+
+export async function submitFeedback(submission: FeedbackSubmission) {
+  const payload = {
+    timestampMs: Date.now(),
+    event: 'user_feedback',
+    device: submission.device,
+    feedback: {
+      category: submission.category,
+      message: submission.message,
+      qaSummary: submission.qaSummary ?? null,
+      sink: submission.sink ?? null,
+    },
+  };
+
+  const r = await fetch(`${API_BASE}/telemetry`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+
+  if (!r.ok) {
+    throw new Error(`Feedback failed (${r.status})`);
+  }
+
   return await r.json();
 }

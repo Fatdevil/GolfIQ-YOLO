@@ -7,6 +7,7 @@ import RunDetailPage from "./pages/RunDetail";
 import DeviceDashboardPage from "./pages/DeviceDashboard";
 import FieldRunsPage from "./pages/FieldRuns";
 import AccuracyBoardPage from "./pages/AccuracyBoard";
+import FeedbackAdminPage from "./pages/FeedbackAdmin";
 import Nav from "./components/Nav";
 
 export default function App() {
@@ -23,6 +24,7 @@ export default function App() {
           <Route path="/field-runs" element={<FieldRunsPage />} />
           <Route path="/device-dashboard" element={<DeviceDashboardPage />} />
           <Route path="/accuracy" element={<AccuracyBoardPage />} />
+          <Route path="/admin/feedback" element={<FeedbackAdminPage />} />
         </Routes>
       </main>
     </div>

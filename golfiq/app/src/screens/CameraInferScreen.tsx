@@ -8,6 +8,7 @@ import CalibrationOverlay from '../components/CalibrationOverlay';
 import QualityBanner from '../components/QualityBanner';
 import { useFps } from '../hooks/useFps';
 import { inferWithFrames, coachFeedback, Meta, API_BASE, metricsFaceOn } from '../lib/api';
+import { useQaSummary } from '../context/QaSummaryContext';
 
 export default function CameraInferScreen(){
   const cameraRef = useRef<Camera | null>(null);
@@ -21,6 +22,7 @@ export default function CameraInferScreen(){
   const [mode, setMode] = useState<'short'|'detailed'|'drill'>('short');
   const [coachText, setCoachText] = useState('');
   const [busy, setBusy] = useState(false);
+  const { setQaSummary } = useQaSummary();
 
   useEffect(()=>{
     if(!perm || !perm.granted) requestPerm();
@@ -38,13 +40,19 @@ export default function CameraInferScreen(){
   };
 
   const onAnalyze = async () => {
-    setBusy(true); setCoachText(''); setResult(null); setMetrics(undefined);
+    setBusy(true); setCoachText(''); setResult(null); setMetrics(undefined); setQaSummary(null);
     try{
       const frames = await captureBurst();
       const meta: Meta = { fps: parseFloat(fpsInput)||120, scale_m_per_px: parseFloat(scale)||0.002, calibrated:true, view:'DTL' };
       const yolo = { model_path: modelPath, class_map: {0:'ball',1:'club_head'}, conf:0.25 };
       const r = await inferWithFrames(meta, frames, yolo);
       setResult(r);
+      setQaSummary({
+        quality: r?.quality ?? null,
+        metrics: r?.metrics ?? null,
+        notes: typeof r?.qa_summary === 'string' ? r.qa_summary : null,
+        capturedAt: Date.now(),
+      });
       try {
         const m = await metricsFaceOn(API_BASE, {
           frame_w: r.frame_w, frame_h: r.frame_h,

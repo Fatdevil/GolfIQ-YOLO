@@ -12,6 +12,7 @@ const links = [
   { to: "/field-runs", label: "Field runs" },
   { to: "/accuracy", label: "Accuracy" },
   { to: "/device-dashboard", label: "Devices" },
+  { to: "/admin/feedback", label: "Feedback" },
 ];
 
 export default function Nav() {

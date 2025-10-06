@@ -220,3 +220,51 @@ def test_telemetry_aggregate_summarizes_payloads(flight_dir):
 
     config_hashes = {entry["hash"]: entry["count"] for entry in payload["configHashes"]}
     assert config_hashes == {"hash-1": 1, "hash-2": 1}
+
+
+def test_feedback_endpoint_filters_feedback(flight_dir):
+    flight_path = flight_dir / "flight-20240203.jsonl"
+    _write_jsonl(
+        flight_path,
+        [
+            {
+                "timestampMs": 1700000000000,
+                "event": "user_feedback",
+                "device": {
+                    "id": "device-1",
+                    "model": "VisionPro",
+                    "os": "visionOS 1.2",
+                    "tier": "tierA",
+                },
+                "feedback": {
+                    "category": "bug",
+                    "message": "UI froze on capture",
+                    "qaSummary": {"quality": "yellow", "capturedAt": 1699999999000},
+                    "sink": {"email": "ops@example.com", "webhook": ""},
+                },
+            },
+            {
+                "timestampMs": 1700000005000,
+                "event": "other_event",
+                "device": {"id": "device-2", "tier": "tierB"},
+            },
+        ],
+    )
+
+    client = TestClient(app)
+    response = client.get("/tools/telemetry/feedback?limit=5")
+    assert response.status_code == 200
+
+    payload = response.json()
+    assert payload["count"] == 1
+    assert len(payload["items"]) == 1
+
+    entry = payload["items"][0]
+    datetime.fromisoformat(entry["timestamp"])  # should not raise
+    assert entry["category"] == "bug"
+    assert entry["message"] == "UI froze on capture"
+    assert entry["tier"].upper() == "TIERA"
+    assert entry["device"]["model"] == "VisionPro"
+    assert entry["device"]["os"] == "visionOS 1.2"
+    assert entry["qaSummary"]["quality"] == "yellow"
+    assert entry["sink"] == {"email": "ops@example.com"}
