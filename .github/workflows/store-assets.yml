@@ -1,0 +1,53 @@
+name: Store Assets Automation
+
+on:
+  workflow_dispatch:
+    inputs:
+      base:
+        description: "Optional base URL (defaults to local preview)"
+        required: false
+
+jobs:
+  build-assets:
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ secrets.GH_TOKEN }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install tooling dependencies
+        run: npm install
+
+      - name: Install web dependencies
+        run: npm install
+        working-directory: web
+
+      - name: Generate privacy labels
+        run: npm run store:privacy
+
+      - name: Capture store screenshots
+        run: |
+          if [ -n "${{ github.event.inputs.base }}" ]; then
+            npm run store:screens -- --base "${{ github.event.inputs.base }}"
+          else
+            npm run store:screens
+          fi
+
+      - name: Build store ZIP
+        run: npm run store:zip
+
+      - name: Optionally attach to release v1.2
+        run: npm run store:attach
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: store_v1.2
+          path: dist/store_v1.2.zip
+          if-no-files-found: error
