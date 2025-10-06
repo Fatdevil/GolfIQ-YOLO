@@ -16,7 +16,7 @@ from server.api.routers import metrics
 from server.api.routers.coach import router as coach_router
 from server.api.routers.coach_feedback import router as coach_feedback_router
 from server.metrics import MetricsMiddleware, metrics_app
-from server.retention.sweeper import sweep_retention_once
+from server.retention.sweeper import sweep_retention_once, sweep_upload_retention
 
 from .routes.caddie_recommend import router as caddie_router
 from .routes.calibrate import router as calibrate_router
@@ -25,6 +25,7 @@ from .routes.cv_analyze import router as cv_analyze_router
 from .routes.cv_analyze_video import router as cv_analyze_video_router
 from .routes.cv_mock import router as cv_mock_router
 from .routes.runs import router as runs_router
+from .routes.runs_upload import router as runs_upload_router
 from server.config.remote import router as remote_config_router
 from server.tools.telemetry_aggregate import router as telemetry_tools_router
 from .routes.ws_telemetry import router as ws_telemetry_router
@@ -50,13 +51,18 @@ async def lifespan(app: FastAPI):
 
     dirs = [x.strip() for x in os.getenv("RETENTION_DIRS", "").split(",") if x.strip()]
     minutes = int(os.getenv("RETENTION_MINUTES", "15"))
+    upload_dir = os.getenv("RUNS_UPLOAD_DIR", "data/uploads")
+    upload_ttl_days = int(os.getenv("RUNS_TTL_DAYS", "30") or "30")
 
-    if dirs:
+    if dirs or upload_ttl_days > 0:
 
         async def _loop() -> None:
             while True:
                 try:
-                    sweep_retention_once(dirs, minutes)
+                    if dirs:
+                        sweep_retention_once(dirs, minutes)
+                    if upload_ttl_days > 0:
+                        sweep_upload_retention(upload_dir, upload_ttl_days)
                 finally:
                     await asyncio.sleep(300)  # every 5 min
 
@@ -119,6 +125,7 @@ app.include_router(cv_mock_router)
 app.include_router(cv_analyze_router)
 app.include_router(cv_analyze_video_router)
 app.include_router(ws_telemetry_router)
+app.include_router(runs_upload_router)
 app.include_router(runs_router)
 app.include_router(remote_config_router)
 app.include_router(telemetry_tools_router)

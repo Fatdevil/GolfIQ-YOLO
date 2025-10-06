@@ -5,3 +5,4 @@ python-multipart
 uvicorn
 prometheus-client
 trio
+boto3
