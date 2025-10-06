@@ -5,7 +5,7 @@ import os
 from collections import Counter, defaultdict
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Mapping
+from typing import Any, Dict, Iterable, List, Mapping, MutableMapping, Optional
 
 from fastapi import APIRouter, HTTPException, Query, status
 
@@ -44,6 +44,49 @@ def _iter_events(limit: int) -> List[Dict[str, Any]]:
         if len(events) >= limit:
             break
     return events
+
+
+def _merge_payload(event: Mapping[str, Any]) -> Dict[str, Any]:
+    merged: Dict[str, Any] = dict(event)
+    nested = event.get("payload")
+    if isinstance(nested, Mapping):
+        merged.update(nested)
+    return merged
+
+
+def _coerce_iso_timestamp(payload: Mapping[str, Any]) -> str:
+    candidate = payload.get("timestampMs") or payload.get("ts")
+    if isinstance(candidate, (int, float)):
+        dt = datetime.fromtimestamp(float(candidate) / 1000.0, timezone.utc)
+        return dt.isoformat()
+
+    raw = payload.get("timestamp")
+    if isinstance(raw, (int, float)):
+        dt = datetime.fromtimestamp(float(raw) / 1000.0, timezone.utc)
+        return dt.isoformat()
+    if isinstance(raw, str) and raw:
+        cleaned = raw
+        if cleaned.endswith("Z"):
+            cleaned = cleaned[:-1] + "+00:00"
+        try:
+            dt = datetime.fromisoformat(cleaned)
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=timezone.utc)
+            else:
+                dt = dt.astimezone(timezone.utc)
+            return dt.isoformat()
+        except ValueError:
+            try:
+                numeric = float(cleaned)
+            except ValueError:
+                pass
+            else:
+                if numeric > 1e12:
+                    numeric = numeric / 1000.0
+                dt = datetime.fromtimestamp(numeric, timezone.utc)
+                return dt.isoformat()
+
+    return datetime.now(timezone.utc).isoformat()
 
 
 def _extract_device(payload: Mapping[str, Any]) -> Dict[str, Any]:
@@ -164,13 +207,7 @@ async def telemetry_aggregate(
     config_hashes: Counter[str] = Counter()
 
     for raw_event in events:
-        payload: Dict[str, Any]
-        if isinstance(raw_event.get("payload"), Mapping):
-            merged: Dict[str, Any] = dict(raw_event)
-            merged.update(raw_event["payload"])  # type: ignore[index]
-            payload = merged
-        else:
-            payload = raw_event
+        payload = _merge_payload(raw_event)
 
         device = _extract_device(payload)
         tier = device.get("tier", "unknown") or "unknown"
@@ -229,4 +266,74 @@ async def telemetry_aggregate(
         "runtimeDistribution": runtimes_summary,
         "latencyP95": latency_summary,
         "configHashes": config_summary,
+    }
+
+
+@router.get("/feedback")
+async def telemetry_feedback(
+    limit: int = Query(100, ge=1, le=1000),
+) -> Dict[str, Any]:
+    events = _iter_events(limit * 5)
+    feedback_entries: List[Dict[str, Any]] = []
+
+    for raw_event in events:
+        payload = _merge_payload(raw_event)
+        if payload.get("event") != "user_feedback":
+            continue
+
+        feedback = payload.get("feedback")
+        if not isinstance(feedback, Mapping):
+            continue
+
+        message = str(feedback.get("message") or "").strip()
+        if not message:
+            continue
+
+        category = str(feedback.get("category") or "unknown").lower()
+        qa_summary = feedback.get("qaSummary")
+        if isinstance(qa_summary, Mapping):
+            qa_summary_payload: Optional[MutableMapping[str, Any]] = dict(qa_summary)
+        elif isinstance(qa_summary, str):
+            qa_summary_payload = {"text": qa_summary}
+        else:
+            qa_summary_payload = None
+
+        sink_raw = feedback.get("sink")
+        sink: Optional[Dict[str, str]] = None
+        if isinstance(sink_raw, Mapping):
+            filtered: Dict[str, str] = {}
+            for key in ("email", "webhook"):
+                value = sink_raw.get(key)
+                if isinstance(value, str) and value.strip():
+                    filtered[key] = value.strip()
+            if filtered:
+                sink = filtered
+
+        timestamp_iso = _coerce_iso_timestamp(payload)
+        device = _extract_device(payload)
+
+        feedback_entries.append(
+            {
+                "id": str(
+                    payload.get("id")
+                    or payload.get("session_id")
+                    or f"{timestamp_iso}-{len(feedback_entries)}"
+                ),
+                "timestamp": timestamp_iso,
+                "category": category,
+                "message": message,
+                "device": device,
+                "tier": device.get("tier", "unknown"),
+                "qaSummary": qa_summary_payload,
+                "sink": sink,
+            }
+        )
+
+    feedback_entries.sort(key=lambda item: item["timestamp"], reverse=True)
+    sliced = feedback_entries[:limit]
+
+    return {
+        "generatedAt": datetime.now(timezone.utc).isoformat(),
+        "count": len(sliced),
+        "items": sliced,
     }

@@ -57,7 +57,14 @@ def _dump_model(model: Telemetry) -> Dict[str, object]:
         data = model.dict(by_alias=True, exclude_none=False)  # type: ignore[call-arg]
         fields_set = set(getattr(model, "__fields_set__", set()))
 
-    optional_keys = {"event", "configHash", "runtime", "device", "latencyMs"}
+    optional_keys = {
+        "event",
+        "configHash",
+        "runtime",
+        "device",
+        "latencyMs",
+        "feedback",
+    }
     for key in optional_keys:
         if key not in fields_set and data.get(key) is None:
             data.pop(key, None)

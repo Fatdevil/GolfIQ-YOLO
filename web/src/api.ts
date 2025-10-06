@@ -101,6 +101,48 @@ export const fetchTelemetryAggregate = () =>
     })
     .then((r) => r.data);
 
+export type FeedbackSink = {
+  email?: string;
+  webhook?: string;
+};
+
+export type FeedbackQaSummary = Record<string, unknown> | null;
+
+export type FeedbackItem = {
+  id: string;
+  timestamp: string;
+  category: string;
+  message: string;
+  device: {
+    id: string;
+    model: string;
+    os: string;
+    tier: string;
+  };
+  tier: string;
+  qaSummary?: FeedbackQaSummary;
+  sink?: FeedbackSink | null;
+};
+
+export type FeedbackResponse = {
+  generatedAt: string;
+  count: number;
+  items: FeedbackItem[];
+};
+
+export const fetchFeedback = (limit = 100) =>
+  axios
+    .get<FeedbackResponse>(`${API}/tools/telemetry/feedback?limit=${limit}`, {
+      headers: withAuth(),
+      validateStatus: (status) => [200, 404].includes(status),
+    })
+    .then((response) => {
+      if (response.status === 404) {
+        return { generatedAt: new Date().toISOString(), count: 0, items: [] } as FeedbackResponse;
+      }
+      return response.data;
+    });
+
 export type RemoteConfigTier = {
   hudEnabled?: boolean;
   inputSize?: number;

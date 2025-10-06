@@ -4,20 +4,28 @@ import MetricCard from '../components/MetricCard';
 import QualityBadge from '../components/QualityBadge';
 import { mpsToMph, metersToYards } from '../lib/units';
 import { inferWithDetections, mockDetections, Meta, coachFeedback } from '../lib/api';
+import { useQaSummary } from '../context/QaSummaryContext';
 
 export default function RecordSwingScreen(){
   const [result, setResult] = useState<any>(null);
   const [loading, setLoading] = useState(false);
   const [coachText, setCoachText] = useState<string>('');
   const [mode, setMode] = useState<'short'|'detailed'|'drill'>('short');
+  const { setQaSummary } = useQaSummary();
 
   const onAnalyze = async () => {
-    setLoading(true); setCoachText('');
+    setLoading(true); setCoachText(''); setQaSummary(null);
     try{
       const meta: Meta = { fps:120, scale_m_per_px:0.002, calibrated:true, view:'DTL' };
       const detections = mockDetections();
       const r = await inferWithDetections(meta, detections);
       setResult(r);
+      setQaSummary({
+        quality: r?.quality ?? null,
+        metrics: r?.metrics ?? null,
+        notes: typeof r?.qa_summary === 'string' ? r.qa_summary : null,
+        capturedAt: Date.now(),
+      });
     } finally { setLoading(false); }
   };
 
