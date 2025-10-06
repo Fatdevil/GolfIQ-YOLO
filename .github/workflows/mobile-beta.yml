@@ -23,7 +23,7 @@ jobs:
       APP_STORE_KEY_DURATION: ${{ secrets.APP_STORE_KEY_DURATION }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Read release notes
         id: release_notes
@@ -79,7 +79,7 @@ jobs:
       ANDROID_ROLLOUT: ${{ secrets.ANDROID_ROLLOUT }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Set up JDK 17
         uses: actions/setup-java@v4
