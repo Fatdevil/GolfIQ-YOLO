@@ -13,7 +13,9 @@ from pydantic.config import ConfigDict
 from ..security import require_api_key
 from ..storage.s3signer import get_presigned_put
 
-router = APIRouter(prefix="/runs", tags=["runs"], dependencies=[Depends(require_api_key)])
+router = APIRouter(
+    prefix="/runs", tags=["runs"], dependencies=[Depends(require_api_key)]
+)
 
 
 class UploadUrlRequest(BaseModel):
@@ -70,7 +72,9 @@ async def create_upload_url(payload: UploadUrlRequest) -> Dict[str, Any]:
 
 
 @router.post("/upload")
-async def upload_run(key: str = Form(...), file: UploadFile = File(...)) -> Dict[str, Any]:
+async def upload_run(
+    key: str = Form(...), file: UploadFile = File(...)
+) -> Dict[str, Any]:
     backend = os.getenv("STORAGE_BACKEND", "fs").strip().lower() or "fs"
     if backend != "fs":
         raise HTTPException(status_code=400, detail="filesystem backend disabled")
