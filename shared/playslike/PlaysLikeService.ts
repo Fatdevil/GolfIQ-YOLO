@@ -107,11 +107,16 @@ const buildUrl = (
   params: Record<string, string | number | undefined>,
 ) => {
   const query = Object.entries(params)
-    .filter(([, value]) => value !== undefined && value !== null)
-    .map(
-      ([key, value]) =>
-        `${encodeURIComponent(key)}=${encodeURIComponent(typeof value === "number" ? String(value) : value)}`,
-    )
+    .filter(([, value]): value is string | number => value !== undefined && value !== null)
+    .map(([key, value]) => {
+      let stringValue: string;
+      if (typeof value === "number") {
+        stringValue = value.toString();
+      } else {
+        stringValue = value;
+      }
+      return `${encodeURIComponent(key)}=${encodeURIComponent(stringValue)}`;
+    })
     .join("&");
   return `${base}${path}${query ? `?${query}` : ""}`;
 };
