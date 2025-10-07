@@ -16,6 +16,7 @@ DEFAULT_REMOTE_CONFIG: Dict[str, Dict[str, Any]] = {
         "inputSize": 320,
         "analyticsEnabled": False,
         "crashEnabled": False,
+        "playsLikeEnabled": False,
     },
     "tierB": {
         "hudEnabled": True,
@@ -23,11 +24,13 @@ DEFAULT_REMOTE_CONFIG: Dict[str, Dict[str, Any]] = {
         "reducedRate": True,
         "analyticsEnabled": False,
         "crashEnabled": False,
+        "playsLikeEnabled": False,
     },
     "tierC": {
         "hudEnabled": False,
         "analyticsEnabled": False,
         "crashEnabled": False,
+        "playsLikeEnabled": False,
     },
 }
 
@@ -38,6 +41,7 @@ BOOL_KEYS = {
     "reducedRate",
     "analyticsEnabled",
     "crashEnabled",
+    "playsLikeEnabled",
 }
 
 

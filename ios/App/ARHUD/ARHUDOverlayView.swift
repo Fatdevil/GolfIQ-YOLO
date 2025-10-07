@@ -21,6 +21,13 @@ final class ARHUDOverlayView: UIView {
     private let qaEtagLabel: UILabel = UILabel()
     private let qaHoleLabel: UILabel = UILabel()
     private let qaRecenterLabel: UILabel = UILabel()
+    private let playsLikeContainer: UIStackView = UIStackView()
+    private let playsLikeHeadline: UILabel = UILabel()
+    private let playsLikeDeltaLabel: UILabel = UILabel()
+    private let playsLikeChipStack: UIStackView = UIStackView()
+    private let playsLikeSlopeChip: UILabel = UILabel()
+    private let playsLikeWindChip: UILabel = UILabel()
+    private let playsLikeQualityBadge: UILabel = UILabel()
 
     enum Mode {
         case geospatial
@@ -87,6 +94,8 @@ final class ARHUDOverlayView: UIView {
             label.text = "--"
         }
 
+        configurePlaysLikeSection(into: distanceStack)
+
         let controlsStack = UIStackView(arrangedSubviews: [calibrateButton, recenterButton])
         controlsStack.axis = .vertical
         controlsStack.spacing = 8
@@ -142,6 +151,92 @@ final class ARHUDOverlayView: UIView {
             self.frontLabel.text = "F: \(front)"
             self.centerLabel.text = "C: \(center)"
             self.backLabel.text = "B: \(back)"
+        }
+    }
+
+    func setPlaysLikeVisible(_ visible: Bool) {
+        DispatchQueue.main.async {
+            self.playsLikeContainer.isHidden = !visible
+        }
+    }
+
+    func updatePlaysLike(effective: Double, slope: Double, wind: Double, quality: String) {
+        DispatchQueue.main.async {
+            let total = slope + wind
+            self.playsLikeDeltaLabel.text = String(format: "Plays-like: %.1f m (Δ %+0.1f m)", effective, total)
+            self.playsLikeSlopeChip.text = String(format: " slope %+0.1f m ", slope)
+            self.playsLikeWindChip.text = String(format: " wind %+0.1f m ", wind)
+            self.updateQualityBadge(quality: quality)
+        }
+    }
+
+    private func configurePlaysLikeSection(into stack: UIStackView) {
+        playsLikeContainer.axis = .vertical
+        playsLikeContainer.spacing = 4
+        playsLikeContainer.isHidden = true
+
+        let header = UIStackView(arrangedSubviews: [playsLikeHeadline, playsLikeQualityBadge])
+        header.axis = .horizontal
+        header.spacing = 8
+        header.alignment = .center
+
+        playsLikeHeadline.text = "Plays-like"
+        playsLikeHeadline.font = UIFont.preferredFont(forTextStyle: .subheadline)
+        playsLikeHeadline.textColor = .white
+
+        playsLikeQualityBadge.font = UIFont.preferredFont(forTextStyle: .caption2)
+        playsLikeQualityBadge.textAlignment = .center
+        playsLikeQualityBadge.text = "--"
+        playsLikeQualityBadge.textColor = .black
+        playsLikeQualityBadge.backgroundColor = UIColor.white.withAlphaComponent(0.85)
+        playsLikeQualityBadge.layer.cornerRadius = 8
+        playsLikeQualityBadge.layer.masksToBounds = true
+        playsLikeQualityBadge.setContentHuggingPriority(.required, for: .horizontal)
+
+        playsLikeDeltaLabel.text = "Plays-like: --"
+        playsLikeDeltaLabel.font = UIFont.preferredFont(forTextStyle: .caption1)
+        playsLikeDeltaLabel.textColor = UIColor(white: 0.8, alpha: 1)
+        playsLikeDeltaLabel.textAlignment = .right
+
+        playsLikeChipStack.axis = .horizontal
+        playsLikeChipStack.spacing = 6
+
+        [playsLikeSlopeChip, playsLikeWindChip].forEach { label in
+            label.font = UIFont.preferredFont(forTextStyle: .caption2)
+            label.textColor = .white
+            label.textAlignment = .center
+            label.text = " -- "
+            label.backgroundColor = UIColor.white.withAlphaComponent(0.25)
+            label.layer.cornerRadius = 10
+            label.layer.masksToBounds = true
+            label.setContentHuggingPriority(.required, for: .horizontal)
+            label.setContentCompressionResistancePriority(.required, for: .horizontal)
+            label.translatesAutoresizingMaskIntoConstraints = false
+            label.heightAnchor.constraint(greaterThanOrEqualToConstant: 20).isActive = true
+        }
+
+        playsLikeChipStack.addArrangedSubview(playsLikeSlopeChip)
+        playsLikeChipStack.addArrangedSubview(playsLikeWindChip)
+
+        playsLikeContainer.addArrangedSubview(header)
+        playsLikeContainer.addArrangedSubview(playsLikeDeltaLabel)
+        playsLikeContainer.addArrangedSubview(playsLikeChipStack)
+
+        stack.addArrangedSubview(playsLikeContainer)
+    }
+
+    private func updateQualityBadge(quality: String) {
+        let normalized = quality.lowercased()
+        switch normalized {
+        case "good":
+            playsLikeQualityBadge.text = "GOOD"
+            playsLikeQualityBadge.backgroundColor = UIColor.systemGreen.withAlphaComponent(0.85)
+        case "warn":
+            playsLikeQualityBadge.text = "WARN"
+            playsLikeQualityBadge.backgroundColor = UIColor.systemOrange.withAlphaComponent(0.85)
+        default:
+            playsLikeQualityBadge.text = "LOW"
+            playsLikeQualityBadge.backgroundColor = UIColor.systemRed.withAlphaComponent(0.85)
         }
     }
 

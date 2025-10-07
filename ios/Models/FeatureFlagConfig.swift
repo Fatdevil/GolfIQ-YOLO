@@ -14,6 +14,7 @@ struct FeatureFlagConfig: Codable {
         case fieldTestModeEnabled
         case analyticsEnabled
         case crashEnabled
+        case playsLikeEnabled
         case hudWindHintEnabled
         case hudTargetLineEnabled
         case hudBatterySaverEnabled
@@ -28,6 +29,7 @@ struct FeatureFlagConfig: Codable {
     var fieldTestModeEnabled: Bool
     var analyticsEnabled: Bool
     var crashEnabled: Bool
+    var playsLikeEnabled: Bool
     var hudWindHintEnabled: Bool
     var hudTargetLineEnabled: Bool
     var hudBatterySaverEnabled: Bool
@@ -42,6 +44,7 @@ struct FeatureFlagConfig: Codable {
         fieldTestModeEnabled: Bool,
         analyticsEnabled: Bool = false,
         crashEnabled: Bool = false,
+        playsLikeEnabled: Bool = false,
         hudWindHintEnabled: Bool,
         hudTargetLineEnabled: Bool,
         hudBatterySaverEnabled: Bool,
@@ -55,6 +58,7 @@ struct FeatureFlagConfig: Codable {
         self.fieldTestModeEnabled = fieldTestModeEnabled
         self.analyticsEnabled = analyticsEnabled
         self.crashEnabled = crashEnabled
+        self.playsLikeEnabled = playsLikeEnabled
         self.hudWindHintEnabled = hudWindHintEnabled
         self.hudTargetLineEnabled = hudTargetLineEnabled
         self.hudBatterySaverEnabled = hudBatterySaverEnabled
@@ -71,6 +75,7 @@ struct FeatureFlagConfig: Codable {
         fieldTestModeEnabled = try container.decodeIfPresent(Bool.self, forKey: .fieldTestModeEnabled) ?? false
         analyticsEnabled = try container.decodeIfPresent(Bool.self, forKey: .analyticsEnabled) ?? false
         crashEnabled = try container.decodeIfPresent(Bool.self, forKey: .crashEnabled) ?? false
+        playsLikeEnabled = try container.decodeIfPresent(Bool.self, forKey: .playsLikeEnabled) ?? false
         hudWindHintEnabled = try container.decode(Bool.self, forKey: .hudWindHintEnabled)
         hudTargetLineEnabled = try container.decode(Bool.self, forKey: .hudTargetLineEnabled)
         hudBatterySaverEnabled = try container.decode(Bool.self, forKey: .hudBatterySaverEnabled)
@@ -87,6 +92,7 @@ struct FeatureFlagConfig: Codable {
                 hudEnabled: false,
                 hudTracerEnabled: false,
                 fieldTestModeEnabled: false,
+                playsLikeEnabled: false,
                 hudWindHintEnabled: true,
                 hudTargetLineEnabled: true,
                 hudBatterySaverEnabled: false,
@@ -100,6 +106,7 @@ struct FeatureFlagConfig: Codable {
                 hudEnabled: false,
                 hudTracerEnabled: false,
                 fieldTestModeEnabled: false,
+                playsLikeEnabled: false,
                 hudWindHintEnabled: true,
                 hudTargetLineEnabled: true,
                 hudBatterySaverEnabled: true,
@@ -113,6 +120,7 @@ struct FeatureFlagConfig: Codable {
                 hudEnabled: false,
                 hudTracerEnabled: false,
                 fieldTestModeEnabled: false,
+                playsLikeEnabled: false,
                 hudWindHintEnabled: false,
                 hudTargetLineEnabled: false,
                 hudBatterySaverEnabled: true,

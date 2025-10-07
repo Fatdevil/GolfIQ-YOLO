@@ -141,6 +141,27 @@ class TelemetryClient {
         send(event = "remote_config_active", payload = payload)
     }
 
+    fun logPlaysLikeEval(
+        D: Double,
+        deltaH: Double,
+        wParallel: Double,
+        eff: Double,
+        kS: Double,
+        kHW: Double,
+        quality: String,
+    ) {
+        val payload = mapOf(
+            "D" to D,
+            "deltaH" to deltaH,
+            "wParallel" to wParallel,
+            "eff" to eff,
+            "kS" to kS,
+            "kHW" to kHW,
+            "quality" to quality,
+        )
+        send(event = "plays_like_eval", payload = payload)
+    }
+
     fun logAnalyticsConfig(
         analyticsEnabled: Boolean,
         crashEnabled: Boolean,

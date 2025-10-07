@@ -128,6 +128,27 @@ final class TelemetryClient {
         send(event: "remote_config_active", payload: payload)
     }
 
+    func logPlaysLikeEval(
+        D: Double,
+        deltaH: Double,
+        wParallel: Double,
+        eff: Double,
+        kS: Double,
+        kHW: Double,
+        quality: String
+    ) {
+        let payload: [String: Any] = [
+            "D": D,
+            "deltaH": deltaH,
+            "wParallel": wParallel,
+            "eff": eff,
+            "kS": kS,
+            "kHW": kHW,
+            "quality": quality
+        ]
+        send(event: "plays_like_eval", payload: payload)
+    }
+
     func logAnalyticsConfig(
         analyticsEnabled: Bool,
         crashEnabled: Bool,

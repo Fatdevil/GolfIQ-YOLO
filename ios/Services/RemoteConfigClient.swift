@@ -7,6 +7,7 @@ struct RemoteTierConfig: Codable {
     let reducedRate: Bool?
     let analyticsEnabled: Bool?
     let crashEnabled: Bool?
+    let playsLikeEnabled: Bool?
 }
 
 struct RemoteConfigEnvelope: Codable {
@@ -123,6 +124,7 @@ final class RemoteConfigClient {
             fieldTestModeEnabled: tierConfig.fieldTestMode ?? current.fieldTestModeEnabled,
             analyticsEnabled: tierConfig.analyticsEnabled ?? current.analyticsEnabled,
             crashEnabled: tierConfig.crashEnabled ?? current.crashEnabled,
+            playsLikeEnabled: tierConfig.playsLikeEnabled ?? current.playsLikeEnabled,
             hudWindHintEnabled: current.hudWindHintEnabled,
             hudTargetLineEnabled: current.hudTargetLineEnabled,
             hudBatterySaverEnabled: current.hudBatterySaverEnabled,

@@ -64,6 +64,7 @@ def _dump_model(model: Telemetry) -> Dict[str, object]:
         "device",
         "latencyMs",
         "feedback",
+        "playsLike",
     }
     for key in optional_keys:
         if key not in fields_set and data.get(key) is None:
