@@ -24,6 +24,7 @@ from .routes.course_bundle import router as course_bundle_router
 from .routes.cv_analyze import router as cv_analyze_router
 from .routes.cv_analyze_video import router as cv_analyze_video_router
 from .routes.cv_mock import router as cv_mock_router
+from .routes.providers import router as providers_router
 from .routes.runs import router as runs_router
 from .routes.runs_upload import router as runs_upload_router
 from server.config.remote import router as remote_config_router
@@ -102,6 +103,7 @@ app.include_router(calibrate_router)
 app.include_router(caddie_router)
 app.include_router(course_bundle_router)
 app.include_router(metrics.router)
+app.include_router(providers_router)
 app.add_api_route(
     "/health",
     _health_handler,
