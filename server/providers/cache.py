@@ -59,7 +59,9 @@ class ProviderCache:
             etag = raw.get("etag")
             if etag is None:
                 continue
-            self._memory[key] = CacheEntry(value=value, etag=etag, expires_at=expires_at)
+            self._memory[key] = CacheEntry(
+                value=value, etag=etag, expires_at=expires_at
+            )
 
     def _flush_to_disk(self) -> None:
         serializable = {
@@ -93,7 +95,13 @@ class ProviderCache:
                 return None
             return entry
 
-    def set(self, key: str, value: Any, ttl: Optional[int] = None, etag: Optional[str] = None) -> CacheEntry:
+    def set(
+        self,
+        key: str,
+        value: Any,
+        ttl: Optional[int] = None,
+        etag: Optional[str] = None,
+    ) -> CacheEntry:
         ttl = ttl or self._default_ttl
         expires_at = time.time() + ttl
         etag_value = etag or _hash_value(value)
