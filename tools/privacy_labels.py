@@ -91,14 +91,23 @@ def build_payload() -> Dict[str, Dict]:
     sample_payload = extract_sample_payload(doc_text)
 
     activation_controls = [
-        "Remote config flags analyticsEnabled and crashEnabled default to false and must be explicitly set to true.",
-        "Sentry DSNs are required; without `SENTRY_DSN_MOBILE` or `VITE_SENTRY_DSN` the SDKs do not initialise.",
-        "Web clients also honour a runtime kill switch via window.__analyticsEnabled.",
+        (
+            "Remote config flags analyticsEnabled and crashEnabled default to false "
+            "and must be explicitly set to true."
+        ),
+        (
+            "Sentry DSNs are required; without `SENTRY_DSN_MOBILE` or "
+            "`VITE_SENTRY_DSN` the SDKs do not initialise."
+        ),
+        (
+            "Web clients also honour a runtime kill switch via "
+            "window.__analyticsEnabled."
+        ),
     ]
 
     telemetry_notes = (
-        "Crash handlers emit a minimal `app_crash` marker with platform, sampling flag, timestamp, and thermal/battery hints; "
-        "Sentry traces sample at 20%."
+        "Crash handlers emit a minimal `app_crash` marker with platform, sampling "
+        "flag, timestamp, and thermal/battery hints; Sentry traces sample at 20%."
     )
 
     apple_payload = {
@@ -125,7 +134,10 @@ def build_payload() -> Dict[str, Dict]:
                 "linked_to_user": False,
                 "used_for_tracking": False,
                 "retention": "sampled traces at 20% when enabled",
-                "notes": "Includes optional analytics breadcrumbs and performance traces when analyticsEnabled is true.",
+                "notes": (
+                    "Includes optional analytics breadcrumbs and performance traces "
+                    "when analyticsEnabled is true."
+                ),
             },
         ],
         "scrubbing": scrubbing_rules,
@@ -144,7 +156,10 @@ def build_payload() -> Dict[str, Dict]:
                 "optional": True,
                 "activation_controls": activation_controls,
                 "data_usage": [
-                    "Performance diagnostics sampled at 20% when analyticsEnabled is true.",
+                    (
+                        "Performance diagnostics sampled at 20% when analyticsEnabled "
+                        "is true."
+                    ),
                 ],
             },
             "crash_reporting": {
