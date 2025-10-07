@@ -1,5 +1,35 @@
 import Foundation
 
+public struct ElevationProviderData {
+    public let elevationM: Double
+    public let ttlSeconds: Int
+    public let etag: String?
+
+    public init(elevationM: Double, ttlSeconds: Int, etag: String?) {
+        self.elevationM = elevationM
+        self.ttlSeconds = max(0, ttlSeconds)
+        self.etag = etag
+    }
+}
+
+public struct WindProviderData {
+    public let speedMps: Double
+    public let dirFromDeg: Double
+    public let wParallel: Double?
+    public let wPerp: Double?
+    public let ttlSeconds: Int
+    public let etag: String?
+
+    public init(speedMps: Double, dirFromDeg: Double, wParallel: Double?, wPerp: Double?, ttlSeconds: Int, etag: String?) {
+        self.speedMps = speedMps
+        self.dirFromDeg = dirFromDeg
+        self.wParallel = wParallel
+        self.wPerp = wPerp
+        self.ttlSeconds = max(0, ttlSeconds)
+        self.etag = etag
+    }
+}
+
 public enum PlaysLikeQuality: String {
     case good
     case warn
@@ -32,6 +62,295 @@ public struct PlaysLikeOptions {
 }
 
 public enum PlaysLikeService {
+    private struct ElevationCacheValue {
+        var elevationM: Double
+        var ttlSeconds: Int
+    }
+
+    private struct WindCacheValue {
+        var speedMps: Double
+        var dirFromDeg: Double
+        var wParallel: Double?
+        var wPerp: Double?
+        var ttlSeconds: Int
+    }
+
+    private struct CacheEntry<T> {
+        var value: T
+        var etag: String?
+        var expiresAt: Date
+    }
+
+    private static var baseURLString: String?
+    private static let cacheQueue = DispatchQueue(label: "com.golfiq.playslike.providers", attributes: .concurrent)
+    private static var elevationCache: [String: CacheEntry<ElevationCacheValue>] = [:]
+    private static var windCache: [String: CacheEntry<WindCacheValue>] = [:]
+
+    public static func setProvidersBaseURL(_ url: URL?) {
+        baseURLString = url.map { sanitizeBaseURL($0) }
+    }
+
+    public static func getProvidersBaseURL() -> URL? {
+        guard let base = baseURLString else { return nil }
+        return URL(string: base)
+    }
+
+    public static func fetchElevation(lat: Double, lon: Double) async throws -> ElevationProviderData {
+        guard let base = baseURLString else {
+            return ElevationProviderData(elevationM: 0, ttlSeconds: 0, etag: nil)
+        }
+        let key = cacheKey(lat: lat, lon: lon)
+        let now = Date()
+        let cachedEntry = readElevationCache(key: key)
+        if let cached = cachedEntry, cached.expiresAt > now {
+            return ElevationProviderData(
+                elevationM: cached.value.elevationM,
+                ttlSeconds: cached.value.ttlSeconds,
+                etag: cached.etag
+            )
+        }
+
+        guard let url = buildURL(base: base, path: "/providers/elevation", queryItems: [
+            URLQueryItem(name: "lat", value: formatCoord(lat)),
+            URLQueryItem(name: "lon", value: formatCoord(lon)),
+        ]) else {
+            throw URLError(.badURL)
+        }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "GET"
+        if let etag = cachedEntry?.etag {
+            request.addValue(etag, forHTTPHeaderField: "If-None-Match")
+        }
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard let http = response as? HTTPURLResponse else {
+            throw URLError(.badServerResponse)
+        }
+
+        if http.statusCode == 304 {
+            guard var entry = cachedEntry ?? readElevationCache(key: key) else {
+                throw URLError(.badServerResponse)
+            }
+            let ttl = parseMaxAge(http.value(forHTTPHeaderField: "Cache-Control")) ?? entry.value.ttlSeconds
+            entry.value.ttlSeconds = max(0, ttl)
+            if let header = stripWeakEtag(http.value(forHTTPHeaderField: "ETag")) {
+                entry.etag = header
+            }
+            entry.expiresAt = now.addingTimeInterval(TimeInterval(entry.value.ttlSeconds))
+            writeElevationCache(key: key, entry: entry)
+            return ElevationProviderData(
+                elevationM: entry.value.elevationM,
+                ttlSeconds: entry.value.ttlSeconds,
+                etag: entry.etag
+            )
+        }
+
+        guard (200 ... 299).contains(http.statusCode) else {
+            throw URLError(.badServerResponse)
+        }
+
+        let jsonObject = try JSONSerialization.jsonObject(with: data, options: [])
+        guard let json = jsonObject as? [String: Any] else {
+            throw URLError(.cannotParseResponse)
+        }
+
+        let ttl = max(0, (json["ttl_s"] as? Int) ?? parseMaxAge(http.value(forHTTPHeaderField: "Cache-Control")) ?? 0)
+        let etag = (json["etag"] as? String) ?? stripWeakEtag(http.value(forHTTPHeaderField: "ETag"))
+        let elevation = (json["elevation_m"] as? NSNumber)?.doubleValue ?? 0
+        let value = ElevationCacheValue(elevationM: elevation, ttlSeconds: ttl)
+        let entry = CacheEntry(value: value, etag: etag, expiresAt: now.addingTimeInterval(TimeInterval(ttl)))
+        writeElevationCache(key: key, entry: entry)
+        return ElevationProviderData(elevationM: elevation, ttlSeconds: ttl, etag: etag)
+    }
+
+    public static func fetchWind(lat: Double, lon: Double, bearing: Double? = nil) async throws -> WindProviderData {
+        guard let base = baseURLString else {
+            return WindProviderData(speedMps: 0, dirFromDeg: 0, wParallel: 0, wPerp: 0, ttlSeconds: 0, etag: nil)
+        }
+        var key = cacheKey(lat: lat, lon: lon)
+        if let bearing = bearing {
+            key += String(format: "@%.2f", bearing)
+        }
+        let now = Date()
+        let cachedEntry = readWindCache(key: key)
+        if let cached = cachedEntry, cached.expiresAt > now {
+            return WindProviderData(
+                speedMps: cached.value.speedMps,
+                dirFromDeg: cached.value.dirFromDeg,
+                wParallel: cached.value.wParallel,
+                wPerp: cached.value.wPerp,
+                ttlSeconds: cached.value.ttlSeconds,
+                etag: cached.etag
+            )
+        }
+
+        var items = [
+            URLQueryItem(name: "lat", value: formatCoord(lat)),
+            URLQueryItem(name: "lon", value: formatCoord(lon)),
+        ]
+        if let bearing = bearing {
+            items.append(URLQueryItem(name: "bearing", value: String(format: "%.2f", bearing)))
+        }
+
+        guard let url = buildURL(base: base, path: "/providers/wind", queryItems: items) else {
+            throw URLError(.badURL)
+        }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "GET"
+        if let etag = cachedEntry?.etag {
+            request.addValue(etag, forHTTPHeaderField: "If-None-Match")
+        }
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard let http = response as? HTTPURLResponse else {
+            throw URLError(.badServerResponse)
+        }
+
+        if http.statusCode == 304 {
+            guard var entry = cachedEntry ?? readWindCache(key: key) else {
+                throw URLError(.badServerResponse)
+            }
+            let ttl = parseMaxAge(http.value(forHTTPHeaderField: "Cache-Control")) ?? entry.value.ttlSeconds
+            entry.value.ttlSeconds = max(0, ttl)
+            if let header = stripWeakEtag(http.value(forHTTPHeaderField: "ETag")) {
+                entry.etag = header
+            }
+            entry.expiresAt = now.addingTimeInterval(TimeInterval(entry.value.ttlSeconds))
+            writeWindCache(key: key, entry: entry)
+            return WindProviderData(
+                speedMps: entry.value.speedMps,
+                dirFromDeg: entry.value.dirFromDeg,
+                wParallel: entry.value.wParallel,
+                wPerp: entry.value.wPerp,
+                ttlSeconds: entry.value.ttlSeconds,
+                etag: entry.etag
+            )
+        }
+
+        guard (200 ... 299).contains(http.statusCode) else {
+            throw URLError(.badServerResponse)
+        }
+
+        let jsonObject = try JSONSerialization.jsonObject(with: data, options: [])
+        guard let json = jsonObject as? [String: Any] else {
+            throw URLError(.cannotParseResponse)
+        }
+
+        let ttl = max(0, (json["ttl_s"] as? Int) ?? parseMaxAge(http.value(forHTTPHeaderField: "Cache-Control")) ?? 0)
+        let etag = (json["etag"] as? String) ?? stripWeakEtag(http.value(forHTTPHeaderField: "ETag"))
+        let speed = (json["speed_mps"] as? NSNumber)?.doubleValue ?? 0
+        let direction = (json["dir_from_deg"] as? NSNumber)?.doubleValue ?? 0
+        let parallel = (json["w_parallel"] is NSNull) ? nil : (json["w_parallel"] as? NSNumber)?.doubleValue
+        let perp = (json["w_perp"] is NSNull) ? nil : (json["w_perp"] as? NSNumber)?.doubleValue
+        let value = WindCacheValue(
+            speedMps: speed,
+            dirFromDeg: direction,
+            wParallel: parallel,
+            wPerp: perp,
+            ttlSeconds: ttl
+        )
+        let entry = CacheEntry(value: value, etag: etag, expiresAt: now.addingTimeInterval(TimeInterval(ttl)))
+        writeWindCache(key: key, entry: entry)
+        return WindProviderData(
+            speedMps: speed,
+            dirFromDeg: direction,
+            wParallel: parallel,
+            wPerp: perp,
+            ttlSeconds: ttl,
+            etag: etag
+        )
+    }
+
+    private static func sanitizeBaseURL(_ url: URL) -> String {
+        var absolute = url.absoluteString
+        while absolute.count > 1, absolute.hasSuffix("/") {
+            absolute.removeLast()
+        }
+        return absolute
+    }
+
+    private static func cacheKey(lat: Double, lon: Double) -> String {
+        String(format: "%.5f,%.5f", lat, lon)
+    }
+
+    private static func formatCoord(_ value: Double) -> String {
+        String(format: "%.5f", value)
+    }
+
+    private static func buildURL(base: String, path: String, queryItems: [URLQueryItem]) -> URL? {
+        guard let baseURL = URL(string: base) else { return nil }
+        let resolved = URL(string: path, relativeTo: baseURL) ?? baseURL
+        guard var components = URLComponents(url: resolved, resolvingAgainstBaseURL: true) else { return nil }
+        components.queryItems = queryItems
+        return components.url
+    }
+
+    private static func parseMaxAge(_ header: String?) -> Int? {
+        guard let header = header, !header.isEmpty else { return nil }
+        for token in header.split(separator: ",") {
+            let trimmed = token.trimmingCharacters(in: .whitespaces)
+            if trimmed.lowercased().hasPrefix("max-age=") {
+                let value = String(trimmed.dropFirst(8))
+                if let parsed = Int(value), parsed >= 0 {
+                    return parsed
+                }
+            }
+        }
+        return nil
+    }
+
+    private static func stripWeakEtag(_ value: String?) -> String? {
+        guard var candidate = value?.trimmingCharacters(in: .whitespacesAndNewlines), !candidate.isEmpty else {
+            return nil
+        }
+        if candidate.uppercased().hasPrefix("W/") {
+            candidate = String(candidate.dropFirst(2)).trimmingCharacters(in: .whitespaces)
+        }
+        return candidate.trimmingCharacters(in: CharacterSet(charactersIn: "\""))
+    }
+
+    private static func readElevationCache(key: String) -> CacheEntry<ElevationCacheValue>? {
+        var entry: CacheEntry<ElevationCacheValue>?
+        cacheQueue.sync {
+            entry = elevationCache[key]
+        }
+        if let entry = entry, entry.expiresAt <= Date() {
+            cacheQueue.async(flags: .barrier) {
+                elevationCache.removeValue(forKey: key)
+            }
+            return nil
+        }
+        return entry
+    }
+
+    private static func writeElevationCache(key: String, entry: CacheEntry<ElevationCacheValue>) {
+        cacheQueue.async(flags: .barrier) {
+            elevationCache[key] = entry
+        }
+    }
+
+    private static func readWindCache(key: String) -> CacheEntry<WindCacheValue>? {
+        var entry: CacheEntry<WindCacheValue>?
+        cacheQueue.sync {
+            entry = windCache[key]
+        }
+        if let entry = entry, entry.expiresAt <= Date() {
+            cacheQueue.async(flags: .barrier) {
+                windCache.removeValue(forKey: key)
+            }
+            return nil
+        }
+        return entry
+    }
+
+    private static func writeWindCache(key: String, entry: CacheEntry<WindCacheValue>) {
+        cacheQueue.async(flags: .barrier) {
+            windCache[key] = entry
+        }
+    }
+
     public static func computeSlopeAdjust(D: Double, deltaH: Double, kS: Double = 1.0) -> Double {
         guard D.isFinite, D > 0, deltaH.isFinite else { return 0 }
         let clamped = max(0.2, min(kS, 3.0))
