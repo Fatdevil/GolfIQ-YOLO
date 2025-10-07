@@ -26,7 +26,9 @@ class _FakeClock:
         self._value += delta
 
 
-def _make_client_factory(handlers: Iterable[Callable[[httpx.Request], httpx.Response]]) -> Callable[..., httpx.Client]:
+def _make_client_factory(
+    handlers: Iterable[Callable[[httpx.Request], httpx.Response]],
+) -> Callable[..., httpx.Client]:
     handler_iter = iter(handlers)
 
     def factory(**kwargs) -> httpx.Client:
@@ -128,7 +130,9 @@ def test_get_elevation_fallback_and_refresh(monkeypatch, fake_clock):
         lambda request: httpx.Response(500, json={}),
         lambda request: httpx.Response(200, json={"results": [{"elevation": 123.4}]}),
     ]
-    monkeypatch.setattr(elevation, "_http_client_factory", _make_client_factory(handlers))
+    monkeypatch.setattr(
+        elevation, "_http_client_factory", _make_client_factory(handlers)
+    )
 
     result = elevation.get_elevation(1.0, 2.0)
     assert pytest.approx(result.elevation_m) == 123.4
@@ -151,7 +155,9 @@ def test_fetch_open_meteo_request_error(monkeypatch):
     def handler(request: httpx.Request) -> httpx.Response:
         raise httpx.ConnectError("boom", request=request)
 
-    monkeypatch.setattr(elevation, "_http_client_factory", _make_client_factory([handler]))
+    monkeypatch.setattr(
+        elevation, "_http_client_factory", _make_client_factory([handler])
+    )
     with pytest.raises(ProviderError, match="request failed"):
         elevation._fetch_open_meteo(1.0, 2.0)
 
@@ -168,7 +174,9 @@ def test_fetch_open_meteo_error_responses(monkeypatch, payload, status, message)
     def handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(status, json=payload)
 
-    monkeypatch.setattr(elevation, "_http_client_factory", _make_client_factory([handler]))
+    monkeypatch.setattr(
+        elevation, "_http_client_factory", _make_client_factory([handler])
+    )
     with pytest.raises(ProviderError, match=message):
         elevation._fetch_open_meteo(1.0, 2.0)
 
@@ -177,7 +185,9 @@ def test_fetch_opentopo_request_error(monkeypatch):
     def handler(request: httpx.Request) -> httpx.Response:
         raise httpx.ConnectError("oops", request=request)
 
-    monkeypatch.setattr(elevation, "_http_client_factory", _make_client_factory([handler]))
+    monkeypatch.setattr(
+        elevation, "_http_client_factory", _make_client_factory([handler])
+    )
     with pytest.raises(ProviderError, match="request failed"):
         elevation._fetch_opentopo(1.0, 2.0)
 
@@ -194,7 +204,9 @@ def test_fetch_opentopo_error_responses(monkeypatch, payload, status, message):
     def handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(status, json=payload)
 
-    monkeypatch.setattr(elevation, "_http_client_factory", _make_client_factory([handler]))
+    monkeypatch.setattr(
+        elevation, "_http_client_factory", _make_client_factory([handler])
+    )
     with pytest.raises(ProviderError, match=message):
         elevation._fetch_opentopo(1.0, 2.0)
 
@@ -212,7 +224,9 @@ def test_get_wind_caches_and_computes(monkeypatch, fake_clock):
         return httpx.Response(200, json=payload)
 
     monkeypatch.setattr(wind, "_http_client_factory", _make_client_factory([handler]))
-    monkeypatch.setattr(wind, "_now", lambda: datetime(2023, 1, 1, 0, tzinfo=timezone.utc))
+    monkeypatch.setattr(
+        wind, "_now", lambda: datetime(2023, 1, 1, 0, tzinfo=timezone.utc)
+    )
 
     result = wind.get_wind(4.0, 5.0)
     assert pytest.approx(result.speed_mps) == 8.0
@@ -247,7 +261,17 @@ def test_fetch_wind_request_error(monkeypatch):
     "payload, status, message",
     [
         ({"hourly": {}}, 200, "missing data"),
-        ({"hourly": {"time": ["2023"], "wind_speed_10m": ["bad"], "wind_direction_10m": [0]}}, 200, "invalid entry"),
+        (
+            {
+                "hourly": {
+                    "time": ["2023"],
+                    "wind_speed_10m": ["bad"],
+                    "wind_direction_10m": [0],
+                }
+            },
+            200,
+            "invalid entry",
+        ),
         ({"error": "bad"}, 503, "failed: 503"),
     ],
 )
@@ -262,7 +286,9 @@ def test_fetch_wind_error_responses(monkeypatch, payload, status, message):
 
 
 def test_select_hour_index_skips_invalid_entries(monkeypatch):
-    monkeypatch.setattr(wind, "_now", lambda: datetime(2023, 1, 1, 2, tzinfo=timezone.utc))
+    monkeypatch.setattr(
+        wind, "_now", lambda: datetime(2023, 1, 1, 2, tzinfo=timezone.utc)
+    )
     times = ["bad", "2023-01-01T01:00", "2023-01-01T02:00"]
     index = wind._select_hour_index(times, when=None)
     assert index == 2
@@ -279,15 +305,22 @@ def test_cache_key_and_normalize_when():
 def test_route_helper_if_none_match_variants(fake_clock):
     assert provider_routes._normalize_etag(None) is None
     assert provider_routes._if_none_match_matches(None, "abc") is False
-    assert provider_routes._if_none_match_matches("W/\"abc\"", "abc") is True
-    assert provider_routes._if_none_match_matches("*, \"zzz\"", "abc") is True
+    assert provider_routes._if_none_match_matches('W/"abc"', "abc") is True
+    assert provider_routes._if_none_match_matches('*, "zzz"', "abc") is True
     assert provider_routes._if_none_match_matches(" , ", "abc") is False
 
-    result = ElevationProviderResult(elevation_m=10.0, etag="tag", expires_at=fake_clock.time() + 30)
+    result = ElevationProviderResult(
+        elevation_m=10.0, etag="tag", expires_at=fake_clock.time() + 30
+    )
     payload = provider_routes._result_payload(result)
     assert payload["elevation_m"] == 10.0
 
-    wind_result = WindProviderResult(speed_mps=5.0, direction_from_deg=90.0, etag="w", expires_at=fake_clock.time() + 30)
+    wind_result = WindProviderResult(
+        speed_mps=5.0,
+        direction_from_deg=90.0,
+        etag="w",
+        expires_at=fake_clock.time() + 30,
+    )
     payload = provider_routes._result_payload(wind_result)
     assert payload["speed_mps"] == 5.0
     assert payload["dir_from_deg"] == 90.0

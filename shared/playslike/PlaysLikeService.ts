@@ -104,17 +104,16 @@ const updateEntryExpiry = <T extends CacheValueWithTtl>(
 const buildUrl = (
   base: string,
   path: string,
-  params: Record<string, string | number | undefined>,
+  params: Record<string, string | number | null | undefined>,
 ) => {
   const query = Object.entries(params)
-    .filter(([, value]): value is string | number => value !== undefined && value !== null)
+    .filter((entry): entry is [string, string | number] => {
+      const value = entry[1];
+      return value !== undefined && value !== null;
+    })
     .map(([key, value]) => {
-      let stringValue: string;
-      if (typeof value === "number") {
-        stringValue = value.toString();
-      } else {
-        stringValue = value;
-      }
+      const stringValue =
+        typeof value === "number" ? value.toString() : String(value);
       return `${encodeURIComponent(key)}=${encodeURIComponent(stringValue)}`;
     })
     .join("&");
