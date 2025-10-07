@@ -15,6 +15,7 @@ _OPENTOPO_URL = "https://api.opentopodata.org/v1/aster30m"
 
 _cache = ProviderCache("elevation", ELEVATION_CACHE_TTL)
 
+
 @dataclass
 class ElevationProviderResult:
     elevation_m: float
