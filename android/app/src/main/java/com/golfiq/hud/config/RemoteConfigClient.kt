@@ -79,6 +79,7 @@ class RemoteConfigClient(
             fieldTestModeEnabled = overrides.optBoolean("fieldTestMode", current.fieldTestModeEnabled),
             analyticsEnabled = overrides.optBoolean("analyticsEnabled", current.analyticsEnabled),
             crashEnabled = overrides.optBoolean("crashEnabled", current.crashEnabled),
+            playsLikeEnabled = overrides.optBoolean("playsLikeEnabled", current.playsLikeEnabled),
             inputSize = if (overrides.has("inputSize")) overrides.optInt("inputSize") else current.inputSize,
             reducedRate = if (overrides.has("reducedRate")) overrides.optBoolean("reducedRate") else current.reducedRate,
             source = FeatureFlagConfig.Source.REMOTE_CONFIG,

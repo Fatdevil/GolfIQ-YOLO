@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { getRun } from "../api";
 import TracerCanvas from "../components/TracerCanvas";
@@ -6,7 +6,8 @@ import GhostFrames from "../components/GhostFrames";
 import ExportPanel from "../components/ExportPanel";
 import type { MetricOverlay } from "../lib/exportUtils";
 import { extractBackViewPayload, mphFromMps, yardsFromMeters } from "../lib/traceUtils";
-import { visualTracerEnabled } from "../config";
+import { visualTracerEnabled, playsLikeEnabled } from "../config";
+import PlaysLikePanel from "../components/PlaysLikePanel";
 
 interface RunDetailData {
   run_id?: string;
@@ -54,8 +55,8 @@ export default function RunDetailPage() {
   }, [data]);
   const pipelineSource = backView?.source ?? null;
 
-  const metricOverlays = useMemo<MetricOverlay[]>(() => {
-    if (!data) return [];
+  const metricSources = useMemo(() => {
+    if (!data) return [] as Record<string, unknown>[];
     const sources: Record<string, unknown>[] = [];
     const pushIfRecord = (value: unknown) => {
       if (value && typeof value === "object") {
@@ -77,18 +78,20 @@ export default function RunDetailPage() {
       const payloadRecord = payload as Record<string, unknown>;
       pushIfRecord(payloadRecord["metrics"]);
     }
+    return sources;
+  }, [data]);
 
-    const pickNumber = (value: unknown): number | undefined => {
-      if (typeof value === "number" && Number.isFinite(value)) return value;
-      if (typeof value === "string") {
-        const parsed = Number.parseFloat(value);
-        if (Number.isFinite(parsed)) return parsed;
-      }
-      return undefined;
-    };
-
-    const select = (keys: string[]): number | undefined => {
-      for (const source of sources) {
+  const selectMetric = useCallback(
+    (keys: string[]): number | undefined => {
+      const pickNumber = (value: unknown): number | undefined => {
+        if (typeof value === "number" && Number.isFinite(value)) return value;
+        if (typeof value === "string") {
+          const parsed = Number.parseFloat(value);
+          if (Number.isFinite(parsed)) return parsed;
+        }
+        return undefined;
+      };
+      for (const source of metricSources) {
         for (const key of keys) {
           if (source[key] !== undefined) {
             const value = pickNumber(source[key]);
@@ -99,13 +102,18 @@ export default function RunDetailPage() {
         }
       }
       return undefined;
-    };
+    },
+    [metricSources]
+  );
 
-    const ballSpeedMps = select(["ballSpeedMps", "ball_speed_mps", "ballSpeed", "ball_speed"]);
-    const clubSpeedMps = select(["clubSpeedMps", "club_speed_mps", "clubSpeed", "club_speed"]);
-    const carryMeters = select(["carry", "carry_m", "carryMeters", "carry_meters"]);
-    const sideAngle = select(["sideAngle", "side_angle", "side", "sideDeg", "side_deg"]);
-    const vertLaunch = select(["vertLaunch", "launchAngle", "vert_launch", "launch_deg", "launchAngleDeg"]);
+  const metricOverlays = useMemo<MetricOverlay[]>(() => {
+    if (!data) return [];
+
+    const ballSpeedMps = selectMetric(["ballSpeedMps", "ball_speed_mps", "ballSpeed", "ball_speed"]);
+    const clubSpeedMps = selectMetric(["clubSpeedMps", "club_speed_mps", "clubSpeed", "club_speed"]);
+    const carryMeters = selectMetric(["carry", "carry_m", "carryMeters", "carry_meters"]);
+    const sideAngle = selectMetric(["sideAngle", "side_angle", "side", "sideDeg", "side_deg"]);
+    const vertLaunch = selectMetric(["vertLaunch", "launchAngle", "vert_launch", "launch_deg", "launchAngleDeg"]);
 
     const overlays: MetricOverlay[] = [];
 
@@ -151,7 +159,25 @@ export default function RunDetailPage() {
     }
 
     return overlays;
-  }, [data]);
+  }, [data, selectMetric]);
+
+  const playsLikeData = useMemo(() => {
+    if (!playsLikeEnabled) return null;
+    const distance = selectMetric([
+      "distanceMeters",
+      "distance_m",
+      "carry",
+      "carry_m",
+      "carryMeters",
+    ]);
+    const deltaH = selectMetric(["deltaH", "delta_h", "elevationDelta", "elevation_delta"]);
+    const wind = selectMetric(["windParallel", "wind_parallel", "windHead", "wind_head"]);
+    return {
+      distanceMeters: distance ?? undefined,
+      deltaHMeters: deltaH ?? undefined,
+      windParallel: wind ?? undefined,
+    };
+  }, [playsLikeEnabled, selectMetric]);
 
   const canExport = visualTracerEnabled && !!backView?.videoUrl && !!backView.trace;
 
@@ -211,6 +237,14 @@ export default function RunDetailPage() {
           </button>
         </div>
       </div>
+      {playsLikeEnabled ? (
+        <PlaysLikePanel
+          enabled={playsLikeEnabled}
+          distanceMeters={playsLikeData?.distanceMeters}
+          deltaHMeters={playsLikeData?.deltaHMeters}
+          windParallel={playsLikeData?.windParallel}
+        />
+      ) : null}
 
       {loading && (
         <div className="rounded-md border border-slate-800 bg-slate-900/60 px-4 py-6 text-sm text-slate-300">

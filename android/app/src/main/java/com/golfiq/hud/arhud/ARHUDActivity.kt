@@ -43,11 +43,15 @@ import com.golfiq.hud.config.FeatureFlagsService
 import com.golfiq.hud.config.RemoteConfigClient
 import com.golfiq.hud.hud.HUDRuntime
 import com.golfiq.hud.inference.RuntimeAdapter
+import com.golfiq.hud.model.FeatureFlagConfig
+import com.golfiq.hud.playslike.ElevationProvider
+import com.golfiq.hud.playslike.WindProvider
 import com.golfiq.hud.runtime.BatteryMonitor
 import com.golfiq.hud.runtime.FallbackAction
 import com.golfiq.hud.runtime.FallbackPolicy
 import com.golfiq.hud.runtime.ThermalWatchdog
 import com.golfiq.hud.telemetry.TelemetryClient
+import com.golfiq.shared.playslike.PlaysLikeService
 import java.net.URL
 import java.util.ArrayDeque
 import java.util.Locale
@@ -71,6 +75,9 @@ class ARHUDActivity : AppCompatActivity(), SensorEventListener {
     private lateinit var deviceProfileManager: DeviceProfileManager
     private lateinit var runtimeAdapter: RuntimeAdapter
     private var remoteConfigClient: RemoteConfigClient? = null
+    private val elevationProvider = ElevationProvider()
+    private val windProvider = WindProvider()
+    private val playsLikeOptions = PlaysLikeService.Options()
 
     private val fallbackHandler = Handler(Looper.getMainLooper())
     private val fallbackIntervalMs = 60_000L
@@ -225,11 +232,12 @@ class ARHUDActivity : AppCompatActivity(), SensorEventListener {
             featureFlags = featureFlags,
             telemetry = telemetry,
             runtimeAdapter = runtimeAdapter,
-            onFlagsApplied = { flags, hash -> analyticsCoordinator.apply(flags, hash) },
+            onFlagsApplied = { flags, hash -> handleRemoteFlags(flags, hash) },
         ).also { it.start() }
 
         val container = FrameLayout(this).apply { id = CONTAINER_ID }
         overlayView = ARHUDOverlayView(this)
+        overlayView.setPlaysLikeVisible(featureFlags.current().playsLikeEnabled)
 
         setContentView(FrameLayout(this).apply {
             addView(container, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
@@ -747,8 +755,78 @@ class ARHUDActivity : AppCompatActivity(), SensorEventListener {
     private fun updateDistances() {
         val bundle = currentCourse ?: return
         val location = lastLocation ?: return
-        val (front, center, back) = bundle.distancesFrom(location).formattedYards()
+        val distances = bundle.distancesFrom(location)
+        val (front, center, back) = distances.formattedYards()
         overlayView.updateDistances(front, center, back)
+        updatePlaysLike(distances.center.toDouble())
+    }
+
+    private fun updatePlaysLike(distanceOverride: Double? = null) {
+        val flags = featureFlags.current()
+        if (!flags.playsLikeEnabled) {
+            overlayView.setPlaysLikeVisible(false)
+            return
+        }
+
+        val bundle = currentCourse ?: run {
+            overlayView.setPlaysLikeVisible(false)
+            return
+        }
+        val location = lastLocation ?: run {
+            overlayView.setPlaysLikeVisible(false)
+            return
+        }
+
+        val distanceMeters = distanceOverride ?: location.distanceTo(bundle.greenCenter.toLocation()).toDouble()
+        if (!distanceMeters.isFinite() || distanceMeters <= 0.0) {
+            overlayView.setPlaysLikeVisible(false)
+            return
+        }
+
+        val playerElevation = elevationProvider.elevationMeters(
+            latitude = location.latitude,
+            longitude = location.longitude,
+            fallback = if (location.hasAltitude()) location.altitude else null,
+        )
+        val targetCoordinate = bundle.greenCenter
+        val targetElevation = elevationProvider.elevationMeters(
+            latitude = targetCoordinate.latitude,
+            longitude = targetCoordinate.longitude,
+            fallback = null,
+        )
+        val deltaH = targetElevation - playerElevation
+        val bearing = bearingBetween(location, targetCoordinate.toLocation())
+        val windVector = windProvider.current(location.latitude, location.longitude, bearing)
+        val result = PlaysLikeService.compute(distanceMeters, deltaH, windVector.parallel, playsLikeOptions)
+
+        overlayView.setPlaysLikeVisible(true)
+        overlayView.updatePlaysLike(
+            result.distanceEff,
+            result.components.slopeM,
+            result.components.windM,
+            result.quality.value,
+        )
+
+        telemetry.logPlaysLikeEval(
+            D = distanceMeters,
+            deltaH = deltaH,
+            wParallel = windVector.parallel,
+            eff = result.distanceEff,
+            kS = playsLikeOptions.kS,
+            kHW = playsLikeOptions.kHW,
+            quality = result.quality.value,
+        )
+    }
+
+    private fun handleRemoteFlags(flags: FeatureFlagConfig, hash: String?) {
+        analyticsCoordinator.apply(flags, hash)
+        runOnUiThread {
+            if (!flags.playsLikeEnabled || !flags.hudEnabled) {
+                overlayView.setPlaysLikeVisible(false)
+            } else {
+                updatePlaysLike()
+            }
+        }
     }
 
     private fun bearingBetween(start: Location, target: Location): Double {

@@ -44,6 +44,7 @@ class Telemetry(BaseModel):
     device: Optional[Dict[str, Any]] = None
     latencyMs: Optional[float] = None
     feedback: Optional[Dict[str, Any]] = None
+    playsLike: Optional[Dict[str, Any]] = None
 
     if ConfigDict is not None:  # pragma: no branch
         model_config = ConfigDict(extra="ignore")  # type: ignore[call-arg]

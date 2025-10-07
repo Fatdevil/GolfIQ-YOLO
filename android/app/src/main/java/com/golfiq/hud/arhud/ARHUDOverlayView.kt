@@ -10,6 +10,7 @@ import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.core.content.ContextCompat
+import java.util.Locale
 
 class ARHUDOverlayView @JvmOverloads constructor(
     context: Context,
@@ -34,6 +35,13 @@ class ARHUDOverlayView @JvmOverloads constructor(
     private val qaEtagLabel: TextView = TextView(context)
     private val qaHoleLabel: TextView = TextView(context)
     private val qaRecenterLabel: TextView = TextView(context)
+    private val playsLikeContainer: LinearLayout = LinearLayout(context)
+    private val playsLikeHeadline: TextView = TextView(context)
+    private val playsLikeDeltaLabel: TextView = TextView(context)
+    private val playsLikeChipRow: LinearLayout = LinearLayout(context)
+    private val playsLikeSlopeChip: TextView = TextView(context)
+    private val playsLikeWindChip: TextView = TextView(context)
+    private val playsLikeQualityBadge: TextView = TextView(context)
 
     enum class Mode {
         GEOSPATIAL,
@@ -79,6 +87,8 @@ class ARHUDOverlayView @JvmOverloads constructor(
             }
             distanceContainer.addView(label)
         }
+
+        configurePlaysLike(distanceContainer)
 
         val controls = LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL
@@ -130,6 +140,109 @@ class ARHUDOverlayView @JvmOverloads constructor(
             Mode.COMPASS -> "Compass"
         }
         post { modeBadge.text = label }
+    }
+
+    fun setPlaysLikeVisible(visible: Boolean) {
+        post { playsLikeContainer.visibility = if (visible) View.VISIBLE else View.GONE }
+    }
+
+    fun updatePlaysLike(distanceEff: Double, slope: Double, wind: Double, quality: String) {
+        post {
+            val total = slope + wind
+            playsLikeDeltaLabel.text = String.format(
+                Locale.US,
+                "Plays-like: %.1f m (Δ %+.1f m)",
+                distanceEff,
+                total,
+            )
+            playsLikeSlopeChip.text = String.format(Locale.US, "slope %+.1f m", slope)
+            playsLikeWindChip.text = String.format(Locale.US, "wind %+.1f m", wind)
+            updateQualityBadge(quality)
+        }
+    }
+
+    private fun configurePlaysLike(parent: LinearLayout) {
+        val density = resources.displayMetrics.density
+        playsLikeContainer.orientation = LinearLayout.VERTICAL
+        playsLikeContainer.visibility = View.GONE
+        playsLikeContainer.setPadding(0, (8 * density).toInt(), 0, 0)
+
+        playsLikeHeadline.apply {
+            text = "Plays-like"
+            setTextColor(ContextCompat.getColor(context, android.R.color.white))
+            textSize = 14f
+        }
+
+        playsLikeQualityBadge.apply {
+            text = "--"
+            textSize = 11f
+            setTextColor(ContextCompat.getColor(context, android.R.color.black))
+            val horizontal = (10 * density).toInt()
+            val vertical = (4 * density).toInt()
+            setPadding(horizontal, vertical, horizontal, vertical)
+            background = GradientDrawable().apply {
+                cornerRadius = 12 * density
+                setColor(ContextCompat.getColor(context, android.R.color.white))
+                alpha = (0.85f * 255).toInt()
+            }
+        }
+
+        playsLikeDeltaLabel.apply {
+            text = "Plays-like: --"
+            setTextColor(ContextCompat.getColor(context, android.R.color.darker_gray))
+            textSize = 12f
+        }
+
+        playsLikeChipRow.orientation = LinearLayout.HORIZONTAL
+        playsLikeChipRow.setPadding(0, (6 * density).toInt(), 0, 0)
+
+        listOf(playsLikeSlopeChip, playsLikeWindChip).forEach { chip ->
+            chip.text = "--"
+            chip.textSize = 11f
+            chip.setTextColor(ContextCompat.getColor(context, android.R.color.white))
+            val horizontal = (10 * density).toInt()
+            val vertical = (4 * density).toInt()
+            chip.setPadding(horizontal, vertical, horizontal, vertical)
+            chip.background = GradientDrawable().apply {
+                cornerRadius = 999f
+                setColor(ContextCompat.getColor(context, android.R.color.darker_gray))
+                alpha = (0.5f * 255).toInt()
+            }
+        }
+
+        playsLikeChipRow.addView(playsLikeSlopeChip)
+        playsLikeChipRow.addView(playsLikeWindChip)
+
+        val headerRow = LinearLayout(context).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.END or Gravity.CENTER_VERTICAL
+            addView(playsLikeHeadline)
+            addView(playsLikeQualityBadge, LayoutParams(LayoutParams.WRAP_CONTENT, LayoutParams.WRAP_CONTENT).apply {
+                leftMargin = (8 * density).toInt()
+            })
+        }
+
+        playsLikeContainer.addView(headerRow)
+        playsLikeContainer.addView(playsLikeDeltaLabel)
+        playsLikeContainer.addView(playsLikeChipRow)
+
+        parent.addView(playsLikeContainer)
+    }
+
+    private fun updateQualityBadge(quality: String) {
+        val normalized = quality.lowercase(Locale.US)
+        val (label, colorRes) = when (normalized) {
+            "good" -> "GOOD" to android.R.color.holo_green_light
+            "warn" -> "WARN" to android.R.color.holo_orange_light
+            else -> "LOW" to android.R.color.holo_red_light
+        }
+        playsLikeQualityBadge.text = label
+        val density = resources.displayMetrics.density
+        val drawable = playsLikeQualityBadge.background as? GradientDrawable
+            ?: GradientDrawable().apply { cornerRadius = 12 * density }
+        drawable.setColor(ContextCompat.getColor(context, colorRes))
+        drawable.alpha = (0.85f * 255).toInt()
+        playsLikeQualityBadge.background = drawable
     }
 
     private fun configureQaOverlay() {

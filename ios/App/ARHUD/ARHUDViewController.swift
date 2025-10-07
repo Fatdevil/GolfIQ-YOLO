@@ -40,6 +40,9 @@ final class ARHUDViewController: UIViewController, ARSCNViewDelegate, CLLocation
     private var lastEtagOverlayUpdate: CFTimeInterval = 0
     private var fieldRunSession: FieldRunSession?
     private var analyticsCoordinator: AnalyticsCoordinator?
+    private let elevationProvider = PlaysLikeElevationProvider()
+    private let windProvider = PlaysLikeWindProvider()
+    private let playsLikeOptions = PlaysLikeOptions()
 
     init(
         courseId: String,
@@ -128,7 +131,7 @@ final class ARHUDViewController: UIViewController, ARSCNViewDelegate, CLLocation
             telemetry: telemetry,
             runtimeDescriptor: runtimeDescriptor,
             onFlagsApplied: { [weak self] flags, hash in
-                self?.analyticsCoordinator?.apply(flags: flags, configHash: hash)
+                self?.handleRemoteFlags(flags: flags, hash: hash)
             }
         )
         remoteConfigClient = client
@@ -178,6 +181,7 @@ final class ARHUDViewController: UIViewController, ARSCNViewDelegate, CLLocation
         ])
 
         overlayView.isHidden = !featureFlags.current().hudEnabled
+        overlayView.setPlaysLikeVisible(featureFlags.current().playsLikeEnabled)
         overlayView.calibrateButton.addTarget(self, action: #selector(handleCalibrateTapped), for: .touchUpInside)
         overlayView.recenterButton.addTarget(self, action: #selector(handleRecenterTapped), for: .touchUpInside)
         overlayView.markButton.addTarget(self, action: #selector(handleMarkTapped), for: .touchUpInside)
@@ -603,12 +607,78 @@ final class ARHUDViewController: UIViewController, ARSCNViewDelegate, CLLocation
     private func updateDistances(with location: CLLocation?) {
         guard let location = location, let course = currentCourse else {
             overlayView.updateDistances(front: "--", center: "--", back: "--")
+            overlayView.setPlaysLikeVisible(false)
             return
         }
 
         let distances = course.distances(from: location)
         let formatted = distances.formattedYards()
         overlayView.updateDistances(front: formatted.front, center: formatted.center, back: formatted.back)
+        updatePlaysLike(distanceMeters: distances.center, location: location, course: course)
+    }
+
+    private func updatePlaysLike(distanceMeters: CLLocationDistance, location: CLLocation, course: ARHUDCourseBundle) {
+        let flags = featureFlags.current()
+        guard flags.playsLikeEnabled, distanceMeters.isFinite, distanceMeters > 0 else {
+            overlayView.setPlaysLikeVisible(false)
+            return
+        }
+
+        let fallbackAltitude: Double? = location.verticalAccuracy >= 0 ? location.altitude : nil
+
+        let playerElevation = elevationProvider.elevationMeters(
+            latitude: location.coordinate.latitude,
+            longitude: location.coordinate.longitude,
+            fallback: fallbackAltitude
+        )
+        let targetLocation = course.greenCenter.location
+        let targetElevation = elevationProvider.elevationMeters(
+            latitude: targetLocation.coordinate.latitude,
+            longitude: targetLocation.coordinate.longitude,
+            fallback: nil
+        )
+        let deltaH = targetElevation - playerElevation
+        let bearing = bearingBetween(start: location.coordinate, end: targetLocation.coordinate)
+        let wind = windProvider.current(latitude: location.coordinate.latitude, longitude: location.coordinate.longitude, bearingDegrees: bearing)
+        let result = PlaysLikeService.compute(
+            D: distanceMeters,
+            deltaH: deltaH,
+            wParallel: wind.parallel,
+            opts: playsLikeOptions
+        )
+        overlayView.setPlaysLikeVisible(true)
+        overlayView.updatePlaysLike(
+            effective: result.distanceEff,
+            slope: result.components.slopeM,
+            wind: result.components.windM,
+            quality: result.quality.rawValue
+        )
+        telemetry.logPlaysLikeEval(
+            D: distanceMeters,
+            deltaH: deltaH,
+            wParallel: wind.parallel,
+            eff: result.distanceEff,
+            kS: playsLikeOptions.kS,
+            kHW: playsLikeOptions.kHW,
+            quality: result.quality.rawValue
+        )
+    }
+
+    private func handleRemoteFlags(flags: FeatureFlagConfig, hash: String?) {
+        analyticsCoordinator?.apply(flags: flags, configHash: hash)
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            if !flags.playsLikeEnabled || !flags.hudEnabled {
+                self.overlayView.setPlaysLikeVisible(false)
+                return
+            }
+            guard let course = self.currentCourse, let location = self.locationManager.location else {
+                self.overlayView.setPlaysLikeVisible(false)
+                return
+            }
+            let distances = course.distances(from: location)
+            self.updatePlaysLike(distanceMeters: distances.center, location: location, course: course)
+        }
     }
 
     @objc
