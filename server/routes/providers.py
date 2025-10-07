@@ -49,7 +49,9 @@ def _apply_cache_headers(response: Response, etag: str | None, ttl: int) -> Resp
     return response
 
 
-def _result_payload(result: ElevationProviderResult | WindProviderResult) -> dict[str, float | str | int | None]:
+def _result_payload(
+    result: ElevationProviderResult | WindProviderResult,
+) -> dict[str, float | str | int | None]:
     ttl = result.ttl_seconds
     payload: dict[str, float | str | int | None]
     if isinstance(result, ElevationProviderResult):
@@ -69,7 +71,9 @@ def _result_payload(result: ElevationProviderResult | WindProviderResult) -> dic
 
 
 @router.get("/elevation")
-async def elevation_endpoint(request: Request, lat: float = Query(...), lon: float = Query(...)) -> Response:
+async def elevation_endpoint(
+    request: Request, lat: float = Query(...), lon: float = Query(...)
+) -> Response:
     try:
         result = await run_in_threadpool(lambda: get_elevation(lat, lon))
     except ProviderError as exc:  # pragma: no cover - handled in tests
