@@ -25,12 +25,16 @@ def _build_client(monkeypatch, elevation_transport, wind_transport, now_fn):
     monkeypatch.setattr(
         elevation_provider,
         "_http_client_factory",
-        lambda **kwargs: httpx.Client(transport=elevation_transport, timeout=kwargs.get("timeout", 10.0)),
+        lambda **kwargs: httpx.Client(
+            transport=elevation_transport, timeout=kwargs.get("timeout", 10.0)
+        ),
     )
     monkeypatch.setattr(
         wind_provider,
         "_http_client_factory",
-        lambda **kwargs: httpx.Client(transport=wind_transport, timeout=kwargs.get("timeout", 10.0)),
+        lambda **kwargs: httpx.Client(
+            transport=wind_transport, timeout=kwargs.get("timeout", 10.0)
+        ),
     )
     monkeypatch.setattr(wind_provider, "_now", now_fn)
 
@@ -56,7 +60,9 @@ def test_elevation_provider_caches_and_etag(monkeypatch):
         now_fn=lambda: datetime.now(timezone.utc),
     )
 
-    response = client.get("/providers/elevation", params={"lat": 1.234567, "lon": 2.345678})
+    response = client.get(
+        "/providers/elevation", params={"lat": 1.234567, "lon": 2.345678}
+    )
     assert response.status_code == 200
     payload = response.json()
     assert payload["elevation_m"] == 321.0
@@ -65,7 +71,9 @@ def test_elevation_provider_caches_and_etag(monkeypatch):
     assert etag
     assert calls and "open-meteo" in calls[0]
 
-    second = client.get("/providers/elevation", params={"lat": 1.234567, "lon": 2.345678})
+    second = client.get(
+        "/providers/elevation", params={"lat": 1.234567, "lon": 2.345678}
+    )
     assert second.status_code == 200
     assert second.json()["etag"] == etag
     assert len(calls) == 1
