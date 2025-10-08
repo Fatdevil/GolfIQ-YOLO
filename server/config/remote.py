@@ -142,11 +142,7 @@ class RemoteConfigStore:
                     continue
                 base[key] = value
         for key, value in list(base.items()):
-            if (
-                key in BOOL_KEYS
-                and value is not None
-                and not isinstance(value, bool)
-            ):
+            if key in BOOL_KEYS and value is not None and not isinstance(value, bool):
                 raise HTTPException(
                     status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                     detail=f"{tier}.{key} must be a boolean",
