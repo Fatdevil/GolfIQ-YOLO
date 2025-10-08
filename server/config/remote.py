@@ -10,28 +10,35 @@ from typing import Any, Dict, Tuple
 
 from fastapi import APIRouter, HTTPException, Request, Response, status
 
+DEFAULT_PLAYSLIKE_REMOTE_CFG: Dict[str, Any] = {
+    "windModel": "percent_v1",
+    "alphaHead_per_mph": 0.01,
+    "alphaTail_per_mph": 0.005,
+    "slopeFactor": 1.0,
+    "windCap_pctOfD": 0.20,
+    "taperStart_mph": 20,
+    "sidewindDistanceAdjust": False,
+}
+
+
+def _tier_defaults(**overrides: Any) -> Dict[str, Any]:
+    data: Dict[str, Any] = {
+        "hudEnabled": overrides.pop("hudEnabled", False),
+        "inputSize": overrides.pop("inputSize", 320),
+        "analyticsEnabled": overrides.pop("analyticsEnabled", False),
+        "crashEnabled": overrides.pop("crashEnabled", False),
+        "reducedRate": overrides.pop("reducedRate", False),
+        "playsLikeEnabled": overrides.pop("playsLikeEnabled", False),
+        "playsLike": deepcopy(DEFAULT_PLAYSLIKE_REMOTE_CFG),
+    }
+    data.update(overrides)
+    return data
+
+
 DEFAULT_REMOTE_CONFIG: Dict[str, Dict[str, Any]] = {
-    "tierA": {
-        "hudEnabled": True,
-        "inputSize": 320,
-        "analyticsEnabled": False,
-        "crashEnabled": False,
-        "playsLikeEnabled": False,
-    },
-    "tierB": {
-        "hudEnabled": True,
-        "inputSize": 320,
-        "reducedRate": True,
-        "analyticsEnabled": False,
-        "crashEnabled": False,
-        "playsLikeEnabled": False,
-    },
-    "tierC": {
-        "hudEnabled": False,
-        "analyticsEnabled": False,
-        "crashEnabled": False,
-        "playsLikeEnabled": False,
-    },
+    "tierA": _tier_defaults(hudEnabled=True, inputSize=320),
+    "tierB": _tier_defaults(hudEnabled=True, inputSize=320, reducedRate=True),
+    "tierC": _tier_defaults(hudEnabled=False),
 }
 
 BOOL_KEYS = {
@@ -62,50 +69,127 @@ class RemoteConfigStore:
     def update(
         self, new_config: Dict[str, Any]
     ) -> Tuple[Dict[str, Dict[str, Any]], str, str]:
-        validated = self._validate(new_config)
         with self._lock:
+            validated = self._validate(new_config, self._config)
             self._config = deepcopy(validated)
             self._etag, self._updated_at = self._compute_metadata(self._config)
             return deepcopy(self._config), self._etag, self._updated_at
 
     @staticmethod
-    def _validate(data: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
+    def _sanitize_plays_like(
+        overrides: Any, base: Dict[str, Any] | None = None
+    ) -> Dict[str, Any]:
+        sanitized: Dict[str, Any] = deepcopy(DEFAULT_PLAYSLIKE_REMOTE_CFG)
+        if isinstance(base, dict):
+            for key, value in base.items():
+                if value is not None and key in sanitized:
+                    sanitized[key] = value
+        if overrides is None:
+            return sanitized
+        if not isinstance(overrides, dict):
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="playsLike must be a JSON object",
+            )
+        for key, value in overrides.items():
+            if key == "windModel":
+                if not isinstance(value, str):
+                    raise HTTPException(
+                        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                        detail="playsLike.windModel must be a string",
+                    )
+                sanitized[key] = value
+            elif key == "sidewindDistanceAdjust":
+                if not isinstance(value, bool):
+                    raise HTTPException(
+                        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                        detail="playsLike.sidewindDistanceAdjust must be a boolean",
+                    )
+                sanitized[key] = value
+            elif key in sanitized:
+                if not isinstance(value, (int, float)):
+                    raise HTTPException(
+                        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                        detail=f"playsLike.{key} must be a number",
+                    )
+                sanitized[key] = float(value)
+            else:
+                sanitized[key] = value
+        return sanitized
+
+    @classmethod
+    def _merge_tier(
+        cls,
+        tier: str,
+        current: Dict[str, Any] | None,
+        overrides: Dict[str, Any] | None,
+    ) -> Dict[str, Any]:
+        base = deepcopy(DEFAULT_REMOTE_CONFIG.get(tier, {}))
+        plays_like_existing = current.get("playsLike") if current else None
+        base["playsLike"] = cls._sanitize_plays_like(None, plays_like_existing)
+        if current:
+            for key, value in current.items():
+                if key == "playsLike":
+                    continue
+                base[key] = value
+        plays_like_override = overrides.get("playsLike") if overrides else None
+        base["playsLike"] = cls._sanitize_plays_like(
+            plays_like_override, base.get("playsLike")
+        )
+        if overrides:
+            for key, value in overrides.items():
+                if key == "playsLike":
+                    continue
+                base[key] = value
+        for key, value in list(base.items()):
+            if (
+                key in BOOL_KEYS
+                and value is not None
+                and not isinstance(value, bool)
+            ):
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    detail=f"{tier}.{key} must be a boolean",
+                )
+            if key == "inputSize" and value is not None and not isinstance(value, int):
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    detail=f"{tier}.inputSize must be an integer",
+                )
+        return base
+
+    @classmethod
+    def _validate(
+        cls,
+        data: Dict[str, Any],
+        current: Dict[str, Dict[str, Any]] | None,
+    ) -> Dict[str, Dict[str, Any]]:
         if not isinstance(data, dict):
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                 detail="remote config must be a JSON object",
             )
+        allowed_tiers = {"tierA", "tierB", "tierC"}
+        unexpected = [tier for tier in data.keys() if tier not in allowed_tiers]
+        if unexpected:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=f"unsupported tier: {unexpected[0]}",
+            )
+        snapshot = deepcopy(current or DEFAULT_REMOTE_CONFIG)
         validated: Dict[str, Dict[str, Any]] = {}
-        for tier in ("tierA", "tierB", "tierC"):
-            overrides = data.get(tier)
-            if overrides is None:
-                raise HTTPException(
-                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                    detail=f"missing {tier} overrides",
-                )
-            if not isinstance(overrides, dict):
+        for tier in allowed_tiers:
+            tier_overrides = data.get(tier)
+            if tier_overrides is not None and not isinstance(tier_overrides, dict):
                 raise HTTPException(
                     status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                     detail=f"{tier} overrides must be a JSON object",
                 )
-            sanitized = deepcopy(DEFAULT_REMOTE_CONFIG.get(tier, {}))
-            sanitized.update(overrides)
-            for key, value in sanitized.items():
-                if (
-                    key in BOOL_KEYS
-                    and value is not None
-                    and not isinstance(value, bool)
-                ):
-                    raise HTTPException(
-                        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                        detail=f"{tier}.{key} must be a boolean",
-                    )
-                if key == "inputSize" and not isinstance(value, int):
-                    raise HTTPException(
-                        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                        detail=f"{tier}.inputSize must be an integer",
-                    )
-            validated[tier] = sanitized
+            validated[tier] = cls._merge_tier(
+                tier,
+                snapshot.get(tier),
+                tier_overrides,
+            )
         return validated
 
     @staticmethod

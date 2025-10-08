@@ -7,7 +7,8 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test:playslike": "vitest run src/__tests__/playslike.percent_v1.spec.ts"
   },
   "dependencies": {
     "@sentry/browser": "^7.119.0",
@@ -27,6 +28,7 @@
     "postcss": "^8.4.47",
     "tailwindcss": "^3.4.10",
     "typescript": "^5.6.2",
-    "vite": "^5.4.6"
+    "vite": "^5.4.6",
+    "vitest": "^2.1.4"
   }
 }

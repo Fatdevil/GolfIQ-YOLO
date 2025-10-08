@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { getRun } from "../api";
+import { getRemoteConfig, getRun } from "../api";
 import TracerCanvas from "../components/TracerCanvas";
 import GhostFrames from "../components/GhostFrames";
 import ExportPanel from "../components/ExportPanel";
@@ -8,6 +8,7 @@ import type { MetricOverlay } from "../lib/exportUtils";
 import { extractBackViewPayload, mphFromMps, yardsFromMeters } from "../lib/traceUtils";
 import { visualTracerEnabled, playsLikeEnabled } from "../config";
 import PlaysLikePanel from "../components/PlaysLikePanel";
+import { mergePlaysLikeCfg, type PlaysLikeCfg } from "@shared/playslike/PlaysLikeService";
 
 interface RunDetailData {
   run_id?: string;
@@ -21,6 +22,8 @@ export default function RunDetailPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [exportOpen, setExportOpen] = useState(false);
+  const [playsLikeCfg, setPlaysLikeCfg] = useState<PlaysLikeCfg>(() => mergePlaysLikeCfg());
+  const lastPlaysLikeTier = useRef<string | null>(null);
 
   const backView = useMemo(() => extractBackViewPayload(data), [data]);
   const qualityBadges = useMemo(() => {
@@ -81,6 +84,21 @@ export default function RunDetailPage() {
     return sources;
   }, [data]);
 
+  const selectString = useCallback(
+    (keys: string[]): string | undefined => {
+      for (const source of metricSources) {
+        for (const key of keys) {
+          const value = source[key];
+          if (typeof value === "string" && value.trim()) {
+            return value;
+          }
+        }
+      }
+      return undefined;
+    },
+    [metricSources],
+  );
+
   const selectMetric = useCallback(
     (keys: string[]): number | undefined => {
       const pickNumber = (value: unknown): number | undefined => {
@@ -105,6 +123,13 @@ export default function RunDetailPage() {
     },
     [metricSources]
   );
+
+  const remoteTier = selectString([
+    "tier",
+    "deviceTier",
+    "configTier",
+    "playsLikeTier",
+  ]);
 
   const metricOverlays = useMemo<MetricOverlay[]>(() => {
     if (!data) return [];
@@ -182,6 +207,33 @@ export default function RunDetailPage() {
   const canExport = visualTracerEnabled && !!backView?.videoUrl && !!backView.trace;
 
   useEffect(() => {
+    if (!playsLikeEnabled) return;
+    const targetTier = remoteTier ?? "tierA";
+    if (lastPlaysLikeTier.current === targetTier) {
+      return;
+    }
+    lastPlaysLikeTier.current = targetTier;
+    let cancelled = false;
+    getRemoteConfig()
+      .then((snapshot) => {
+        if (cancelled || !snapshot) return;
+        const tierConfig = snapshot.config[targetTier] ?? snapshot.config.tierA ?? {};
+        const cfg = tierConfig?.playsLike as Partial<PlaysLikeCfg> | undefined;
+        setPlaysLikeCfg(mergePlaysLikeCfg(cfg));
+      })
+      .catch((err) => {
+        console.warn("Failed to load remote plays-like config", err);
+        if (!cancelled) {
+          setPlaysLikeCfg(mergePlaysLikeCfg());
+          lastPlaysLikeTier.current = null;
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [remoteTier, playsLikeEnabled]);
+
+  useEffect(() => {
     if (!id) return;
     let mounted = true;
     setLoading(true);
@@ -243,6 +295,7 @@ export default function RunDetailPage() {
           distanceMeters={playsLikeData?.distanceMeters}
           deltaHMeters={playsLikeData?.deltaHMeters}
           windParallel={playsLikeData?.windParallel}
+          cfg={playsLikeCfg}
         />
       ) : null}
 

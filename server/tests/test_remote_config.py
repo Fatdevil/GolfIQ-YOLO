@@ -74,23 +74,22 @@ def test_update_remote_config_validates_payload(monkeypatch: pytest.MonkeyPatch)
         not_object = client.post("/config/remote", json=["nope"], headers=headers)
         assert not_object.status_code == 422
 
-        missing_tiers = client.post(
-            "/config/remote", json={"tierA": {}}, headers=headers
+        partial_update = client.post(
+            "/config/remote", json={"tierA": {"hudEnabled": True}}, headers=headers
         )
-        assert missing_tiers.status_code == 422
+        assert partial_update.status_code == 200
+        merged = partial_update.json()["config"]
+        assert merged["tierA"]["hudEnabled"] is True
+        assert merged["tierB"] == remote.DEFAULT_REMOTE_CONFIG["tierB"]
+        assert merged["tierC"] == remote.DEFAULT_REMOTE_CONFIG["tierC"]
 
-        not_dict = {
-            "tierA": {},
-            "tierB": [],
-            "tierC": {},
-        }
+        not_dict = {"tierB": []}
         wrong_shape = client.post("/config/remote", json=not_dict, headers=headers)
         assert wrong_shape.status_code == 422
 
         bad_types = {
             "tierA": {"hudEnabled": True, "inputSize": "big"},
-            "tierB": {"hudEnabled": True, "inputSize": 240, "reducedRate": "sure"},
-            "tierC": {"hudEnabled": False},
+            "tierB": {"playsLike": {"alphaHead_per_mph": "fast"}},
         }
         invalid = client.post("/config/remote", json=bad_types, headers=headers)
         assert invalid.status_code == 422

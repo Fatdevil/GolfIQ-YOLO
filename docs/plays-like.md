@@ -11,34 +11,35 @@ Given:
 - `D` — baseline target distance in metres.
 - `Δh` — elevation delta (target altitude minus player altitude) in metres.
 - `w‖` — wind component parallel to the target line in m/s (positive = headwind).
-- `kS` — slope gain (default `1.0`).
-- `kHW` — wind gain (default `2.5`).
 
-The adjustments are computed as:
+### Slope (all models)
 
-```
-slopeM = clamp(kS, 0.2, 3.0) * Δh
-windM  = clamp(kHW, 0.5, 6.0) * w‖
-playsLike = D + slopeM + windM
-```
+Slope keeps a 1:1 relationship with elevation: `slopeM = clamp(slopeFactor, 0.2, 3.0) * Δh`
+with `slopeFactor = 1.0` by default.
 
-All three platforms clamp gain values defensively to avoid extreme tuning.
+### Wind (percent_v1)
+
+The default wind model, `percent_v1`, converts the aligned wind speed to miles per
+hour and applies a percentage-based distance delta:
+
+1. Convert to mph: `W_mph = |w‖| * 2.237`.
+2. Headwinds use `alphaHead_per_mph = +0.01` (+1% distance per mph). Tailwinds use
+   `alphaTail_per_mph = +0.005` but subtract from the total (−0.5% per mph).
+3. Speeds above `taperStart_mph = 20` taper: the portion above the threshold is
+   multiplied by `0.8` before applying the percentage.
+4. The total percentage change is clamped to `±windCap_pctOfD = ±0.20` of `D`.
+5. The wind adjustment is `windM = D * pct` where `pct` is the signed percentage
+   after tapering and capping.
+
+The effective distance is `playsLike = D + slopeM + windM`.
 
 ## Quality bands
 
-A quality badge communicates confidence in the adjustment magnitude. The score is
-the sum of the absolute slope and wind adjustments relative to the baseline
-distance:
+Quality is derived from the raw inputs:
 
-```
-ratio = (|slopeM| + |windM|) / max(D, ε)
-```
-
-Quality thresholds:
-
-- `good` when `ratio ≤ 0.05`
-- `warn` when `0.05 < ratio ≤ 0.12`
-- `low` otherwise (or if `D ≤ 0`)
+- `low` if `D ≤ 0` or both `Δh` and `w‖` are missing.
+- `warn` when `|Δh| > 15 m` **or** `|W_mph| > 12` mph.
+- `good` otherwise.
 
 These thresholds map to green / amber / red badges in the HUD and web UI.
 
@@ -49,12 +50,21 @@ Every evaluation posts the following payload to `/telemetry` with event
 
 ```json
 {
+  "event": "plays_like_eval",
   "D": <baseline distance>,
   "deltaH": <Δh>,
-  "wParallel": <w‖>,
+  "wParallel_mps": <w‖>,
+  "model": "percent_v1",
+  "params": {
+    "alphaHead_per_mph": 0.01,
+    "alphaTail_per_mph": 0.005,
+    "slopeFactor": 1.0,
+    "windCap_pctOfD": 0.20,
+    "taperStart_mph": 20
+  },
   "eff": <playsLike>,
-  "kS": <kS>,
-  "kHW": <kHW>,
+  "slopeM": <slope adjustment>,
+  "windM": <wind adjustment>,
   "quality": "good|warn|low"
 }
 ```
@@ -63,5 +73,19 @@ No personally identifiable data is transmitted.
 
 ## Remote configuration
 
-The remote config surface now exposes `playsLikeEnabled` (default `false`) for all
-three tiers. Clients gate UI rendering and computations on this flag.
+Remote config exposes a `playsLike` block for each tier:
+
+```json
+"playsLike": {
+  "windModel": "percent_v1",
+  "alphaHead_per_mph": 0.01,
+  "alphaTail_per_mph": 0.005,
+  "slopeFactor": 1.0,
+  "windCap_pctOfD": 0.20,
+  "taperStart_mph": 20,
+  "sidewindDistanceAdjust": false
+}
+```
+
+`playsLikeEnabled` remains `false` by default. Clients merge the defaults with any
+per-tier overrides before computing plays-like distances.

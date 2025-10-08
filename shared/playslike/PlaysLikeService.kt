@@ -9,6 +9,8 @@ import java.util.Locale
 import java.util.concurrent.ConcurrentHashMap
 import kotlin.math.abs
 import kotlin.math.max
+import kotlin.math.pow
+import kotlin.math.round
 import org.json.JSONObject
 
 object PlaysLikeService {
@@ -38,6 +40,21 @@ object PlaysLikeService {
 
     private val elevationCache = ConcurrentHashMap<String, CacheEntry<ElevationProviderData>>()
     private val windCache = ConcurrentHashMap<String, CacheEntry<WindProviderData>>()
+    private const val MPS_TO_MPH = 2.237
+    private const val MPH_TO_MPS = 1.0 / 2.237
+
+    fun mpsToMph(value: Double): Double = value * MPS_TO_MPH
+
+    fun mphToMps(value: Double): Double = value * MPH_TO_MPS
+
+    private fun sanitizeDistance(value: Double): Double =
+        if (value.isFinite() && value > 0.0) value else 0.0
+
+    private fun roundTo(value: Double, decimals: Int): Double {
+        if (!value.isFinite()) return 0.0
+        val factor = 10.0.pow(decimals.coerceAtLeast(0))
+        return round(value * factor) / factor
+    }
 
     fun setProvidersBaseUrl(url: String?) {
         providersBaseUrl = url?.trimEnd('/')
@@ -243,6 +260,17 @@ object PlaysLikeService {
         val kHW: Double = 2.5,
         val warnThresholdRatio: Double = 0.05,
         val lowThresholdRatio: Double = 0.12,
+        val config: Config? = null,
+    )
+
+    data class Config(
+        val windModel: String = "percent_v1",
+        val alphaHeadPerMph: Double = 0.01,
+        val alphaTailPerMph: Double = 0.005,
+        val slopeFactor: Double = 1.0,
+        val windCapPctOfD: Double = 0.20,
+        val taperStartMph: Double = 20.0,
+        val sidewindDistanceAdjust: Boolean = false,
     )
 
     enum class Quality(val value: String) {
@@ -265,27 +293,90 @@ object PlaysLikeService {
         return wParallel * clamped
     }
 
+    fun computeWindAdjustPercentV1(
+        D: Double,
+        wParallel: Double,
+        config: Config = Config(),
+    ): Double {
+        val distance = sanitizeDistance(D)
+        if (distance <= 0.0) return 0.0
+        if (!wParallel.isFinite() || wParallel == 0.0) return 0.0
+        val windMph = abs(wParallel) * MPS_TO_MPH
+        if (windMph == 0.0) return 0.0
+        val taperStart = max(config.taperStartMph, 0.0)
+        val isHeadwind = wParallel >= 0.0
+        val alpha = max(if (isHeadwind) config.alphaHeadPerMph else config.alphaTailPerMph, 0.0)
+        val below = minOf(windMph, taperStart) * alpha
+        val above = max(windMph - taperStart, 0.0) * alpha * 0.8
+        var pct = below + above
+        if (!isHeadwind) {
+            pct = -pct
+        }
+        val cap = max(config.windCapPctOfD, 0.0)
+        pct = pct.coerceIn(-cap, cap)
+        return distance * pct
+    }
+
+    private fun computeQuality(distance: Double, deltaH: Double, wParallel: Double): Quality {
+        if (distance <= 0.0) return Quality.LOW
+        val hasSlope = deltaH.isFinite()
+        val hasWind = wParallel.isFinite()
+        if (!hasSlope && !hasWind) return Quality.LOW
+        val windMph = if (hasWind) abs(wParallel) * MPS_TO_MPH else 0.0
+        return if ((hasSlope && abs(deltaH) > 15.0) || windMph > 12.0) {
+            Quality.WARN
+        } else {
+            Quality.GOOD
+        }
+    }
+
+    fun computePlaysLike(
+        D: Double,
+        deltaH: Double,
+        wParallel: Double,
+        cfg: Config = Config(),
+    ): Result {
+        val distance = sanitizeDistance(D)
+        val slope = computeSlopeAdjust(distance, deltaH, cfg.slopeFactor)
+        val wind = if (cfg.windModel == "percent_v1") {
+            computeWindAdjustPercentV1(distance, wParallel, cfg)
+        } else {
+            0.0
+        }
+        val eff = distance + slope + wind
+        val quality = computeQuality(distance, deltaH, wParallel)
+        return Result(
+            distanceEff = roundTo(eff, 1),
+            components = Components(
+                slopeM = roundTo(slope, 1),
+                windM = roundTo(wind, 1),
+            ),
+            quality = quality,
+        )
+    }
+
     fun compute(
         D: Double,
         deltaH: Double,
         wParallel: Double,
         opts: Options = Options(),
     ): Result {
-        val distance = if (D.isFinite()) max(D, 0.0) else 0.0
-        val slopeM = computeSlopeAdjust(distance, deltaH, opts.kS)
-        val windM = computeWindAdjust(distance, wParallel, opts.kHW)
-        val eff = distance + slopeM + windM
-        val total = abs(slopeM) + abs(windM)
+        val baseConfig = opts.config ?: Config()
+        val resolved = baseConfig.copy(slopeFactor = opts.kS)
+        val result = computePlaysLike(D, deltaH, wParallel, resolved)
+        val distance = sanitizeDistance(D)
+        val total = abs(result.components.slopeM) + abs(result.components.windM)
         val ratio = if (distance > 0.0) total / distance else Double.POSITIVE_INFINITY
-        val quality = when {
-            ratio <= opts.warnThresholdRatio -> Quality.GOOD
-            ratio <= opts.lowThresholdRatio -> Quality.WARN
-            else -> Quality.LOW
+        return if (opts.warnThresholdRatio != 0.05 || opts.lowThresholdRatio != 0.12) {
+            val quality = when {
+                !ratio.isFinite() -> Quality.LOW
+                ratio <= opts.warnThresholdRatio -> Quality.GOOD
+                ratio <= opts.lowThresholdRatio -> Quality.WARN
+                else -> Quality.LOW
+            }
+            result.copy(quality = quality)
+        } else {
+            result
         }
-        return Result(
-            distanceEff = eff,
-            components = Components(slopeM = slopeM, windM = windM),
-            quality = quality,
-        )
     }
 }

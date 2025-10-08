@@ -1,5 +1,11 @@
-import { useMemo } from "react";
-import { compute, type PlaysLikeOptions } from "@shared/playslike/PlaysLikeService";
+import { useEffect, useMemo, useRef } from "react";
+import {
+  computePlaysLike,
+  mergePlaysLikeCfg,
+  type PlaysLikeCfg,
+  type PlaysLikeOptions,
+} from "@shared/playslike/PlaysLikeService";
+import { postTelemetryEvent } from "../api";
 
 interface PlaysLikePanelProps {
   enabled: boolean;
@@ -7,6 +13,7 @@ interface PlaysLikePanelProps {
   deltaHMeters?: number | null;
   windParallel?: number | null;
   options?: PlaysLikeOptions;
+  cfg?: Partial<PlaysLikeCfg>;
 }
 
 const formatDelta = (value: number) => `${value >= 0 ? "+" : ""}${value.toFixed(1)} m`;
@@ -23,8 +30,20 @@ export default function PlaysLikePanel({
   deltaHMeters,
   windParallel,
   options,
+  cfg,
 }: PlaysLikePanelProps) {
-  const result = useMemo(() => {
+  const resolvedCfg = useMemo(() => {
+    const overrides: Partial<PlaysLikeCfg> = {};
+    if (options?.kS !== undefined) {
+      overrides.slopeFactor = options.kS;
+    }
+    if (options?.config) {
+      Object.assign(overrides, options.config);
+    }
+    return mergePlaysLikeCfg({ ...(cfg ?? {}), ...overrides });
+  }, [cfg, options]);
+
+  const inputs = useMemo(() => {
     if (!enabled) return null;
     if (
       distanceMeters === undefined ||
@@ -36,8 +55,58 @@ export default function PlaysLikePanel({
     }
     const delta = Number.isFinite(deltaHMeters ?? NaN) ? (deltaHMeters as number) : 0;
     const wind = Number.isFinite(windParallel ?? NaN) ? (windParallel as number) : 0;
-    return compute(distanceMeters, delta, wind, options);
-  }, [enabled, distanceMeters, deltaHMeters, windParallel, options]);
+    return { distance: distanceMeters, delta, wind };
+  }, [enabled, distanceMeters, deltaHMeters, windParallel]);
+
+  const result = useMemo(() => {
+    if (!inputs) return null;
+    return computePlaysLike(inputs.distance, inputs.delta, inputs.wind, resolvedCfg);
+  }, [inputs, resolvedCfg]);
+
+  const lastSignatureRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!enabled || !inputs || !result) return;
+    const signature = [
+      inputs.distance,
+      inputs.delta,
+      inputs.wind,
+      resolvedCfg.windModel,
+      resolvedCfg.alphaHead_per_mph,
+      resolvedCfg.alphaTail_per_mph,
+      resolvedCfg.slopeFactor,
+      resolvedCfg.windCap_pctOfD,
+      resolvedCfg.taperStart_mph,
+    ]
+      .map((value) =>
+        typeof value === "number" ? value.toFixed(3) : String(value ?? "null"),
+      )
+      .join("|");
+    if (lastSignatureRef.current === signature) {
+      return;
+    }
+    lastSignatureRef.current = signature;
+    postTelemetryEvent({
+      event: "plays_like_eval",
+      D: inputs.distance,
+      deltaH: inputs.delta,
+      wParallel_mps: inputs.wind,
+      model: resolvedCfg.windModel,
+      params: {
+        alphaHead_per_mph: resolvedCfg.alphaHead_per_mph,
+        alphaTail_per_mph: resolvedCfg.alphaTail_per_mph,
+        slopeFactor: resolvedCfg.slopeFactor,
+        windCap_pctOfD: resolvedCfg.windCap_pctOfD,
+        taperStart_mph: resolvedCfg.taperStart_mph,
+      },
+      eff: result.distanceEff,
+      slopeM: result.components.slopeM,
+      windM: result.components.windM,
+      quality: result.quality,
+    }).catch((error) => {
+      console.warn("Failed to emit plays_like_eval telemetry", error);
+    });
+  }, [enabled, inputs, result, resolvedCfg]);
 
   if (!enabled) {
     return null;

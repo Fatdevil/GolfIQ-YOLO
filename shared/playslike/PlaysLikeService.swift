@@ -52,13 +52,51 @@ public struct PlaysLikeOptions {
     public let kHW: Double
     public let warnThresholdRatio: Double
     public let lowThresholdRatio: Double
+    public let config: PlaysLikeConfig?
 
-    public init(kS: Double = 1.0, kHW: Double = 2.5, warnThresholdRatio: Double = 0.05, lowThresholdRatio: Double = 0.12) {
+    public init(
+        kS: Double = 1.0,
+        kHW: Double = 2.5,
+        warnThresholdRatio: Double = 0.05,
+        lowThresholdRatio: Double = 0.12,
+        config: PlaysLikeConfig? = nil
+    ) {
         self.kS = max(0.2, min(kS, 3.0))
         self.kHW = max(0.5, min(kHW, 6.0))
         self.warnThresholdRatio = warnThresholdRatio
         self.lowThresholdRatio = max(lowThresholdRatio, warnThresholdRatio)
+        self.config = config
     }
+}
+
+public struct PlaysLikeConfig {
+    public var windModel: String
+    public var alphaHeadPerMph: Double
+    public var alphaTailPerMph: Double
+    public var slopeFactor: Double
+    public var windCapPctOfD: Double
+    public var taperStartMph: Double
+    public var sidewindDistanceAdjust: Bool
+
+    public init(
+        windModel: String = "percent_v1",
+        alphaHeadPerMph: Double = 0.01,
+        alphaTailPerMph: Double = 0.005,
+        slopeFactor: Double = 1.0,
+        windCapPctOfD: Double = 0.20,
+        taperStartMph: Double = 20,
+        sidewindDistanceAdjust: Bool = false
+    ) {
+        self.windModel = windModel
+        self.alphaHeadPerMph = alphaHeadPerMph
+        self.alphaTailPerMph = alphaTailPerMph
+        self.slopeFactor = slopeFactor
+        self.windCapPctOfD = windCapPctOfD
+        self.taperStartMph = taperStartMph
+        self.sidewindDistanceAdjust = sidewindDistanceAdjust
+    }
+
+    public static let `default` = PlaysLikeConfig()
 }
 
 public enum PlaysLikeService {
@@ -85,6 +123,8 @@ public enum PlaysLikeService {
     private static let cacheQueue = DispatchQueue(label: "com.golfiq.playslike.providers", attributes: .concurrent)
     private static var elevationCache: [String: CacheEntry<ElevationCacheValue>] = [:]
     private static var windCache: [String: CacheEntry<WindCacheValue>] = [:]
+    private static let mpsToMph: Double = 2.237
+    private static let mphToMps: Double = 1.0 / 2.237
 
     public static func setProvidersBaseURL(_ url: URL?) {
         baseURLString = url.map { sanitizeBaseURL($0) }
@@ -351,9 +391,32 @@ public enum PlaysLikeService {
         }
     }
 
-    public static func computeSlopeAdjust(D: Double, deltaH: Double, kS: Double = 1.0) -> Double {
+    public static func mpsToMph(_ value: Double) -> Double {
+        return value * mpsToMph
+    }
+
+    public static func mphToMps(_ value: Double) -> Double {
+        return value * mphToMps
+    }
+
+    private static func sanitizeDistance(_ value: Double) -> Double {
+        guard value.isFinite, value > 0 else { return 0 }
+        return value
+    }
+
+    private static func round(_ value: Double, decimals: Int) -> Double {
+        guard value.isFinite else { return 0 }
+        let factor = pow(10.0, Double(max(0, decimals)))
+        return (value * factor).rounded() / factor
+    }
+
+    public static func computeSlopeAdjust(
+        D: Double,
+        deltaH: Double,
+        kS slopeFactor: Double = 1.0
+    ) -> Double {
         guard D.isFinite, D > 0, deltaH.isFinite else { return 0 }
-        let clamped = max(0.2, min(kS, 3.0))
+        let clamped = max(0.2, min(slopeFactor, 3.0))
         return deltaH * clamped
     }
 
@@ -363,25 +426,93 @@ public enum PlaysLikeService {
         return wParallel * clamped
     }
 
-    public static func compute(D: Double, deltaH: Double, wParallel: Double, opts: PlaysLikeOptions = PlaysLikeOptions()) -> PlaysLikeResult {
-        let distance = D.isFinite ? max(D, 0) : 0
-        let slope = computeSlopeAdjust(D: distance, deltaH: deltaH, kS: opts.kS)
-        let wind = computeWindAdjust(D: distance, wParallel: wParallel, kHW: opts.kHW)
-        let eff = distance + slope + wind
-        let total = abs(slope) + abs(wind)
-        let ratio = distance > 0 ? total / distance : Double.infinity
-        let quality: PlaysLikeQuality
-        if ratio <= opts.warnThresholdRatio {
-            quality = .good
-        } else if ratio <= opts.lowThresholdRatio {
-            quality = .warn
-        } else {
-            quality = .low
+    public static func computeWindAdjustPercentV1(
+        D: Double,
+        wParallel: Double,
+        config: PlaysLikeConfig = .default
+    ) -> Double {
+        let distance = sanitizeDistance(D)
+        guard distance > 0, wParallel.isFinite, wParallel != 0 else { return 0 }
+        let windMph = abs(wParallel) * mpsToMph
+        guard windMph > 0 else { return 0 }
+        let taperStart = max(config.taperStartMph, 0)
+        let isHeadwind = wParallel >= 0
+        let alpha = max(isHeadwind ? config.alphaHeadPerMph : config.alphaTailPerMph, 0)
+        let below = min(windMph, taperStart) * alpha
+        let above = max(windMph - taperStart, 0) * alpha * 0.8
+        var pct = below + above
+        if !isHeadwind {
+            pct = -pct
         }
+        let cap = max(config.windCapPctOfD, 0)
+        pct = max(-cap, min(pct, cap))
+        return distance * pct
+    }
+
+    private static func computeQuality(distance: Double, deltaH: Double, wParallel: Double) -> PlaysLikeQuality {
+        guard distance > 0 else { return .low }
+        let hasSlope = deltaH.isFinite
+        let hasWind = wParallel.isFinite
+        if !hasSlope && !hasWind { return .low }
+        let windMph = hasWind ? abs(wParallel) * mpsToMph : 0
+        if (hasSlope && abs(deltaH) > 15) || windMph > 12 {
+            return .warn
+        }
+        return .good
+    }
+
+    public static func computePlaysLike(
+        D: Double,
+        deltaH: Double,
+        wParallel: Double,
+        cfg: PlaysLikeConfig = .default
+    ) -> PlaysLikeResult {
+        let distance = sanitizeDistance(D)
+        let slope = computeSlopeAdjust(D: distance, deltaH: deltaH, kS: cfg.slopeFactor)
+        let wind: Double
+        if cfg.windModel == "percent_v1" {
+            wind = computeWindAdjustPercentV1(D: distance, wParallel: wParallel, config: cfg)
+        } else {
+            wind = 0
+        }
+        let eff = distance + slope + wind
+        let quality = computeQuality(distance: distance, deltaH: deltaH, wParallel: wParallel)
         return PlaysLikeResult(
-            distanceEff: eff,
-            components: PlaysLikeComponents(slopeM: slope, windM: wind),
+            distanceEff: round(eff, decimals: 1),
+            components: PlaysLikeComponents(
+                slopeM: round(slope, decimals: 1),
+                windM: round(wind, decimals: 1)
+            ),
             quality: quality
         )
+    }
+
+    public static func compute(D: Double, deltaH: Double, wParallel: Double, opts: PlaysLikeOptions = PlaysLikeOptions()) -> PlaysLikeResult {
+        var overrides = opts.config ?? PlaysLikeConfig.default
+        overrides.slopeFactor = opts.kS
+        let result = computePlaysLike(D: D, deltaH: deltaH, wParallel: wParallel, cfg: overrides)
+        let distance = sanitizeDistance(D)
+        let total = abs(result.components.slopeM) + abs(result.components.windM)
+        let ratio = distance > 0 ? total / distance : Double.infinity
+        if opts.warnThresholdRatio != 0.05 || opts.lowThresholdRatio != 0.12 {
+            let warn = opts.warnThresholdRatio
+            let low = opts.lowThresholdRatio
+            let quality: PlaysLikeQuality
+            if !ratio.isFinite {
+                quality = .low
+            } else if ratio <= warn {
+                quality = .good
+            } else if ratio <= low {
+                quality = .warn
+            } else {
+                quality = .low
+            }
+            return PlaysLikeResult(
+                distanceEff: result.distanceEff,
+                components: result.components,
+                quality: quality
+            )
+        }
+        return result
     }
 }
