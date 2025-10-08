@@ -143,10 +143,23 @@ export const fetchFeedback = (limit = 100) =>
       return response.data;
     });
 
+export type PlaysLikeRemoteConfig = {
+  windModel?: string;
+  alphaHead_per_mph?: number;
+  alphaTail_per_mph?: number;
+  slopeFactor?: number;
+  windCap_pctOfD?: number;
+  taperStart_mph?: number;
+  sidewindDistanceAdjust?: boolean;
+  [key: string]: unknown;
+};
+
 export type RemoteConfigTier = {
   hudEnabled?: boolean;
   inputSize?: number;
   reducedRate?: boolean;
+  playsLikeEnabled?: boolean;
+  playsLike?: PlaysLikeRemoteConfig;
   [key: string]: unknown;
 };
 
@@ -179,6 +192,18 @@ export const postRemoteConfig = (
         "Content-Type": "application/json",
         "X-Admin-Token": adminToken,
       }),
+    })
+    .then((r) => r.data);
+
+export type TelemetryEventPayload = {
+  event: string;
+  [key: string]: unknown;
+};
+
+export const postTelemetryEvent = (payload: TelemetryEventPayload) =>
+  axios
+    .post(`${API}/telemetry`, payload, {
+      headers: withAuth({ "Content-Type": "application/json" }),
     })
     .then((r) => r.data);
 

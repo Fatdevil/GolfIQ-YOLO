@@ -66,6 +66,53 @@ def test_update_remote_config_overrides_and_persists(monkeypatch: pytest.MonkeyP
         assert fetched.json()["config"] == expected
 
 
+def test_update_remote_config_merges_plays_like_overrides(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    monkeypatch.setenv("ADMIN_TOKEN", "secret")
+    headers = {"x-admin-token": "secret", "Origin": "http://testserver"}
+
+    plays_like_override = {
+        "windModel": "percent_v1",
+        "alphaHead_per_mph": 0.02,
+        "alphaTail_per_mph": 0.0075,
+        "slopeFactor": 1.5,
+        "windCap_pctOfD": 0.15,
+        "taperStart_mph": 18,
+        "sidewindDistanceAdjust": True,
+    }
+
+    with _client() as client:
+        first_update = client.post(
+            "/config/remote",
+            json={"tierA": {"playsLike": plays_like_override}},
+            headers=headers,
+        )
+        assert first_update.status_code == 200
+        payload = first_update.json()["config"]
+        tier_a = payload["tierA"]["playsLike"]
+        for key, value in plays_like_override.items():
+            if key == "windModel":
+                assert tier_a[key] == value
+            elif key == "sidewindDistanceAdjust":
+                assert tier_a[key] is True
+            else:
+                assert tier_a[key] == pytest.approx(float(value))
+
+        partial_override = {"slopeFactor": 1.25}
+        second_update = client.post(
+            "/config/remote",
+            json={"tierA": {"playsLike": partial_override}},
+            headers=headers,
+        )
+        assert second_update.status_code == 200
+        tier_a_after = second_update.json()["config"]["tierA"]["playsLike"]
+        assert tier_a_after["slopeFactor"] == pytest.approx(1.25)
+        # Values not provided in the partial override should retain their previous overrides.
+        assert tier_a_after["alphaHead_per_mph"] == pytest.approx(0.02)
+        assert tier_a_after["sidewindDistanceAdjust"] is True
+
+
 def test_update_remote_config_validates_payload(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setenv("ADMIN_TOKEN", "secret")
     headers = {"x-admin-token": "secret", "Origin": "http://testserver"}
@@ -74,23 +121,22 @@ def test_update_remote_config_validates_payload(monkeypatch: pytest.MonkeyPatch)
         not_object = client.post("/config/remote", json=["nope"], headers=headers)
         assert not_object.status_code == 422
 
-        missing_tiers = client.post(
-            "/config/remote", json={"tierA": {}}, headers=headers
+        partial_update = client.post(
+            "/config/remote", json={"tierA": {"hudEnabled": True}}, headers=headers
         )
-        assert missing_tiers.status_code == 422
+        assert partial_update.status_code == 200
+        merged = partial_update.json()["config"]
+        assert merged["tierA"]["hudEnabled"] is True
+        assert merged["tierB"] == remote.DEFAULT_REMOTE_CONFIG["tierB"]
+        assert merged["tierC"] == remote.DEFAULT_REMOTE_CONFIG["tierC"]
 
-        not_dict = {
-            "tierA": {},
-            "tierB": [],
-            "tierC": {},
-        }
+        not_dict = {"tierB": []}
         wrong_shape = client.post("/config/remote", json=not_dict, headers=headers)
         assert wrong_shape.status_code == 422
 
         bad_types = {
             "tierA": {"hudEnabled": True, "inputSize": "big"},
-            "tierB": {"hudEnabled": True, "inputSize": 240, "reducedRate": "sure"},
-            "tierC": {"hudEnabled": False},
+            "tierB": {"playsLike": {"alphaHead_per_mph": "fast"}},
         }
         invalid = client.post("/config/remote", json=bad_types, headers=headers)
         assert invalid.status_code == 422

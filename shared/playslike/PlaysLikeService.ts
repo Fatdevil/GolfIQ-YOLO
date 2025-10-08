@@ -16,6 +16,7 @@ export interface PlaysLikeOptions {
   kHW?: number;
   warnThresholdRatio?: number;
   lowThresholdRatio?: number;
+  config?: Partial<PlaysLikeCfg>;
 }
 
 interface CacheValueWithTtl {
@@ -258,10 +259,139 @@ export const fetchWind = async (
 const clamp = (value: number, min: number, max: number) =>
   Math.min(Math.max(value, min), max);
 
-export const computeSlopeAdjust = (D: number, deltaH: number, kS = 1.0): number => {
+const MPS_TO_MPH = 2.237;
+const MPH_TO_MPS = 1 / MPS_TO_MPH;
+
+export const mpsToMph = (value: number) => value * MPS_TO_MPH;
+export const mphToMps = (value: number) => value * MPH_TO_MPS;
+
+export const DEFAULT_PLAYSLIKE_CFG = {
+  windModel: "percent_v1" as const,
+  alphaHead_per_mph: 0.01,
+  alphaTail_per_mph: 0.005,
+  slopeFactor: 1.0,
+  windCap_pctOfD: 0.2,
+  taperStart_mph: 20,
+  sidewindDistanceAdjust: false,
+};
+
+export type PlaysLikeCfg = typeof DEFAULT_PLAYSLIKE_CFG;
+
+const roundTo = (value: number, decimals: number) => {
+  if (!Number.isFinite(value)) return 0;
+  const factor = 10 ** Math.max(0, decimals);
+  return Math.round(value * factor) / factor;
+};
+
+const sanitizeDistance = (value: number) =>
+  Number.isFinite(value) && value > 0 ? value : 0;
+
+const resolveCfg = (cfg?: Partial<PlaysLikeCfg>): PlaysLikeCfg => {
+  const merged: PlaysLikeCfg = { ...DEFAULT_PLAYSLIKE_CFG };
+  if (!cfg) {
+    return merged;
+  }
+  for (const [key, value] of Object.entries(cfg) as [keyof PlaysLikeCfg, unknown][]) {
+    if (value !== undefined) {
+      (merged as Record<string, unknown>)[key] = value;
+    }
+  }
+  return merged;
+};
+
+export const computeSlopeAdjust = (
+  D: number,
+  deltaH: number,
+  slopeFactor = DEFAULT_PLAYSLIKE_CFG.slopeFactor,
+): number => {
   if (!Number.isFinite(D) || D <= 0 || !Number.isFinite(deltaH)) return 0;
-  const gain = clamp(kS, 0.2, 3.0);
+  const gain = clamp(slopeFactor, 0.2, 3.0);
   return deltaH * gain;
+};
+
+type PercentV1Options = Pick<
+  PlaysLikeCfg,
+  "alphaHead_per_mph" | "alphaTail_per_mph" | "windCap_pctOfD" | "taperStart_mph"
+>;
+
+export const computeWindAdjustPercentV1 = (
+  D: number,
+  wParallel_mps: number,
+  opts?: Partial<PercentV1Options>,
+): number => {
+  const distance = sanitizeDistance(D);
+  if (distance <= 0 || !Number.isFinite(wParallel_mps) || wParallel_mps === 0) {
+    return 0;
+  }
+  const alphaHead = Math.max(
+    opts?.alphaHead_per_mph ?? DEFAULT_PLAYSLIKE_CFG.alphaHead_per_mph,
+    0,
+  );
+  const alphaTail = Math.max(
+    opts?.alphaTail_per_mph ?? DEFAULT_PLAYSLIKE_CFG.alphaTail_per_mph,
+    0,
+  );
+  const windCap = Math.max(
+    opts?.windCap_pctOfD ?? DEFAULT_PLAYSLIKE_CFG.windCap_pctOfD,
+    0,
+  );
+  const taperStart = Math.max(
+    opts?.taperStart_mph ?? DEFAULT_PLAYSLIKE_CFG.taperStart_mph,
+    0,
+  );
+  const windMph = Math.abs(wParallel_mps) * MPS_TO_MPH;
+  if (windMph === 0) return 0;
+  const isHeadwind = wParallel_mps >= 0;
+  const alpha = isHeadwind ? alphaHead : alphaTail;
+  const below = Math.min(windMph, taperStart) * alpha;
+  const above = Math.max(windMph - taperStart, 0) * alpha * 0.8;
+  let pct = below + above;
+  if (!isHeadwind) {
+    pct = -pct;
+  }
+  const cappedPct = clamp(pct, -windCap, windCap);
+  return distance * cappedPct;
+};
+
+const computeQualityFromInputs = (
+  distance: number,
+  deltaH: number,
+  wParallel_mps: number,
+): PlaysLikeQuality => {
+  if (distance <= 0) return "low";
+  const hasSlope = Number.isFinite(deltaH);
+  const hasWind = Number.isFinite(wParallel_mps);
+  if (!hasSlope && !hasWind) return "low";
+  const windMph = hasWind ? Math.abs(wParallel_mps) * MPS_TO_MPH : 0;
+  if ((hasSlope && Math.abs(deltaH) > 15) || windMph > 12) {
+    return "warn";
+  }
+  return "good";
+};
+
+export const computePlaysLike = (
+  D: number,
+  deltaH: number,
+  wParallel_mps: number,
+  cfg: Partial<PlaysLikeCfg> = {},
+): PlaysLikeResult => {
+  const distance = sanitizeDistance(D);
+  const resolved = resolveCfg(cfg);
+  const slope = computeSlopeAdjust(distance, deltaH, resolved.slopeFactor);
+  const wind =
+    resolved.windModel === "percent_v1"
+      ? computeWindAdjustPercentV1(distance, wParallel_mps, resolved)
+      : 0;
+  const eff = distance + slope + wind;
+  const quality = computeQualityFromInputs(distance, deltaH, wParallel_mps);
+  return {
+    distanceEff: roundTo(eff, 1),
+    components: {
+      slopeM: roundTo(slope, 1),
+      windM: roundTo(wind, 1),
+    },
+    quality,
+  };
 };
 
 export const computeWindAdjust = (D: number, wParallel: number, kHW = 2.5): number => {
@@ -274,31 +404,38 @@ export const compute = (
   D: number,
   deltaH: number,
   wParallel: number,
-  opts: PlaysLikeOptions = {}
+  opts: PlaysLikeOptions = {},
 ): PlaysLikeResult => {
-  const options = {
-    kS: clamp(opts.kS ?? 1.0, 0.2, 3.0),
-    kHW: clamp(opts.kHW ?? 2.5, 0.5, 6.0),
-    warnThresholdRatio: opts.warnThresholdRatio ?? 0.05,
-    lowThresholdRatio: opts.lowThresholdRatio ?? 0.12,
-  };
-  const distance = Number.isFinite(D) ? Math.max(D, 0) : 0;
-  const slopeM = computeSlopeAdjust(distance, deltaH, options.kS);
-  const windM = computeWindAdjust(distance, wParallel, options.kHW);
-  const eff = distance + slopeM + windM;
-  const total = Math.abs(slopeM) + Math.abs(windM);
-  const ratio = distance > 0 ? total / distance : Number.POSITIVE_INFINITY;
-  let quality: PlaysLikeQuality;
-  if (ratio <= options.warnThresholdRatio) {
-    quality = "good";
-  } else if (ratio <= options.lowThresholdRatio) {
-    quality = "warn";
-  } else {
-    quality = "low";
+  const overrides: Partial<PlaysLikeCfg> = { ...(opts.config ?? {}) };
+  if (opts.kS !== undefined) {
+    overrides.slopeFactor = opts.kS;
   }
-  return {
-    distanceEff: eff,
-    components: { slopeM, windM },
-    quality,
-  };
+  const result = computePlaysLike(D, deltaH, wParallel, overrides);
+  const distance = sanitizeDistance(D);
+  const total = Math.abs(result.components.slopeM) + Math.abs(result.components.windM);
+  const ratio = distance > 0 ? total / distance : Number.POSITIVE_INFINITY;
+  const warnThreshold = opts.warnThresholdRatio;
+  const lowThreshold = opts.lowThresholdRatio;
+  if (warnThreshold !== undefined || lowThreshold !== undefined) {
+    const warn = warnThreshold ?? 0.05;
+    const low = lowThreshold ?? 0.12;
+    let quality: PlaysLikeQuality;
+    if (!Number.isFinite(ratio)) {
+      quality = "low";
+    } else if (ratio <= warn) {
+      quality = "good";
+    } else if (ratio <= low) {
+      quality = "warn";
+    } else {
+      quality = "low";
+    }
+    return {
+      ...result,
+      quality,
+    };
+  }
+  return result;
 };
+
+export const mergePlaysLikeCfg = (cfg?: Partial<PlaysLikeCfg>): PlaysLikeCfg =>
+  resolveCfg(cfg);
