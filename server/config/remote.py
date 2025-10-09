@@ -18,7 +18,18 @@ DEFAULT_PLAYSLIKE_REMOTE_CFG: Dict[str, Any] = {
     "windCap_pctOfD": 0.20,
     "taperStart_mph": 20,
     "sidewindDistanceAdjust": False,
+    "byClub": {
+        "driver": {"scaleHead": 0.9, "scaleTail": 0.9},
+        "midIron": {"scaleHead": 1.0, "scaleTail": 1.0},
+        "wedge": {"scaleHead": 1.1, "scaleTail": 1.0},
+    },
+    "byPlayerType": {
+        "tour": {"scaleHead": 0.95, "scaleTail": 0.95},
+        "amateur": {"scaleHead": 1.05, "scaleTail": 1.0},
+    },
 }
+
+DEFAULT_PLAYSLIKE_PROFILE = "literature_v1"
 
 
 def _tier_defaults(**overrides: Any) -> Dict[str, Any]:
@@ -29,6 +40,11 @@ def _tier_defaults(**overrides: Any) -> Dict[str, Any]:
         "crashEnabled": overrides.pop("crashEnabled", False),
         "reducedRate": overrides.pop("reducedRate", False),
         "playsLikeEnabled": overrides.pop("playsLikeEnabled", False),
+        "playsLikeProfile": overrides.pop("playsLikeProfile", DEFAULT_PLAYSLIKE_PROFILE),
+        "playsLikeProfileSelection": overrides.pop(
+            "playsLikeProfileSelection",
+            {"playerType": None, "clubClass": None},
+        ),
         "playsLike": deepcopy(DEFAULT_PLAYSLIKE_REMOTE_CFG),
     }
     data.update(overrides)
@@ -76,6 +92,34 @@ class RemoteConfigStore:
             return deepcopy(self._config), self._etag, self._updated_at
 
     @staticmethod
+    def _sanitize_profile_selection(
+        overrides: Any, base: Dict[str, Any] | None = None
+    ) -> Dict[str, Any]:
+        sanitized = {"playerType": None, "clubClass": None}
+        if isinstance(base, dict):
+            for key in sanitized:
+                value = base.get(key)
+                if value is None or isinstance(value, str):
+                    sanitized[key] = value
+        if overrides is None:
+            return sanitized
+        if not isinstance(overrides, dict):
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="playsLikeProfileSelection must be a JSON object",
+            )
+        for key, value in overrides.items():
+            if key not in sanitized:
+                continue
+            if value is not None and not isinstance(value, str):
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    detail=f"playsLikeProfileSelection.{key} must be a string or null",
+                )
+            sanitized[key] = value
+        return sanitized
+
+    @staticmethod
     def _sanitize_plays_like(
         overrides: Any, base: Dict[str, Any] | None = None
     ) -> Dict[str, Any]:
@@ -106,6 +150,39 @@ class RemoteConfigStore:
                         detail="playsLike.sidewindDistanceAdjust must be a boolean",
                     )
                 sanitized[key] = value
+            elif key in {"byClub", "byPlayerType"}:
+                if value is None:
+                    sanitized[key] = None
+                    continue
+                if not isinstance(value, dict):
+                    raise HTTPException(
+                        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                        detail=f"playsLike.{key} must be a JSON object",
+                    )
+                sanitized_map: Dict[str, Dict[str, float]] = {}
+                for entry, scales in value.items():
+                    if not isinstance(scales, dict):
+                        raise HTTPException(
+                            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                            detail=f"playsLike.{key}.{entry} must be a JSON object",
+                        )
+                    sanitized_entry: Dict[str, float] = {}
+                    for scale_key, scale_value in scales.items():
+                        if scale_key not in {"scaleHead", "scaleTail"}:
+                            continue
+                        if scale_value is None:
+                            continue
+                        if not isinstance(scale_value, (int, float)):
+                            raise HTTPException(
+                                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                                detail=(
+                                    f"playsLike.{key}.{entry}.{scale_key} must be a number"
+                                ),
+                            )
+                        sanitized_entry[scale_key] = float(scale_value)
+                    if sanitized_entry:
+                        sanitized_map[entry] = sanitized_entry
+                sanitized[key] = sanitized_map
             elif key in sanitized:
                 if not isinstance(value, (int, float)):
                     raise HTTPException(
@@ -127,10 +204,23 @@ class RemoteConfigStore:
         base = deepcopy(DEFAULT_REMOTE_CONFIG.get(tier, {}))
         plays_like_existing = current.get("playsLike") if current else None
         base["playsLike"] = cls._sanitize_plays_like(None, plays_like_existing)
+        base["playsLikeProfileSelection"] = cls._sanitize_profile_selection(
+            None, base.get("playsLikeProfileSelection")
+        )
         if current:
             for key, value in current.items():
                 if key == "playsLike":
                     continue
+                if key == "playsLikeProfileSelection":
+                    base[key] = cls._sanitize_profile_selection(
+                        value, base.get("playsLikeProfileSelection")
+                    )
+                    continue
+                if key == "playsLikeProfile" and value is not None and not isinstance(value, str):
+                    raise HTTPException(
+                        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                        detail=f"{tier}.playsLikeProfile must be a string",
+                    )
                 base[key] = value
         plays_like_override = overrides.get("playsLike") if overrides else None
         base["playsLike"] = cls._sanitize_plays_like(
@@ -139,6 +229,19 @@ class RemoteConfigStore:
         if overrides:
             for key, value in overrides.items():
                 if key == "playsLike":
+                    continue
+                if key == "playsLikeProfile":
+                    if value is not None and not isinstance(value, str):
+                        raise HTTPException(
+                            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                            detail=f"{tier}.playsLikeProfile must be a string",
+                        )
+                    base[key] = value
+                    continue
+                if key == "playsLikeProfileSelection":
+                    base[key] = cls._sanitize_profile_selection(
+                        value, base.get("playsLikeProfileSelection")
+                    )
                     continue
                 base[key] = value
         for key, value in list(base.items()):
