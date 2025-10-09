@@ -1,10 +1,14 @@
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass
-from typing import Any, Dict, Iterable, Tuple
+from dataclasses import dataclass, field
+from typing import Any, Dict, Iterable, Sequence, Tuple
 
-from cv_engine.metrics.kinematics import CalibrationParams, velocity_avg
+from cv_engine.metrics.kinematics import (
+    CalibrationParams,
+    sliding_speed_series,
+    velocity_avg,
+)
 
 
 @dataclass
@@ -15,6 +19,9 @@ class KinematicMetrics:
     club_speed_mph: float
     launch_deg: float
     carry_m: float
+    ball_speed_window_mps: Tuple[float, ...] = field(default_factory=tuple)
+    club_speed_window_mps: Tuple[float, ...] = field(default_factory=tuple)
+    club_speed_trend_pct: float = 0.0
 
 
 def _velocity(
@@ -24,6 +31,16 @@ def _velocity(
     return velocity_avg(track, calib.fps, calib.m_per_px)
 
 
+def _trend_percent(series: Sequence[float]) -> float:
+    if len(series) < 2:
+        return 0.0
+    start = series[0]
+    end = series[-1]
+    if abs(start) < 1e-6:
+        return 0.0
+    return (end - start) / start * 100.0
+
+
 def measure_from_tracks(ball, club, calib: CalibrationParams) -> KinematicMetrics:
     """Measure simple kinematic metrics from ball and club tracks."""
     ball_track = list(ball)
@@ -31,6 +48,13 @@ def measure_from_tracks(ball, club, calib: CalibrationParams) -> KinematicMetric
 
     ball_vx, ball_vy_avg = _velocity(ball_track, calib)
     club_vx, club_vy = _velocity(club_track, calib)
+
+    ball_speed_samples = tuple(
+        sliding_speed_series(ball_track, calib.fps, calib.m_per_px, window=3)
+    )
+    club_speed_samples = tuple(
+        sliding_speed_series(club_track, calib.fps, calib.m_per_px, window=3)
+    )
 
     g = 9.81
     ball_steps = max(len(ball_track) - 1, 0)
@@ -50,6 +74,9 @@ def measure_from_tracks(ball, club, calib: CalibrationParams) -> KinematicMetric
         club_speed_mph=club_speed * 2.23694,
         launch_deg=launch_deg,
         carry_m=carry,
+        ball_speed_window_mps=ball_speed_samples,
+        club_speed_window_mps=club_speed_samples,
+        club_speed_trend_pct=_trend_percent(club_speed_samples),
     )
 
 
