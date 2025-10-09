@@ -111,4 +111,9 @@ def sliding_speed_series(
 ) -> List[float]:
     """Compute smoothed speed magnitudes for monitoring."""
 
-    return [math.hypot(vx, vy) for vx, vy in sliding_window_velocity(positions_px, fps, m_per_px, window=window)]
+    return [
+        math.hypot(vx, vy)
+        for vx, vy in sliding_window_velocity(
+            positions_px, fps, m_per_px, window=window
+        )
+    ]
