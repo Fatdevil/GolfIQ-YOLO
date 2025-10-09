@@ -21,13 +21,6 @@ class TrackerBase(ABC):
         return None
 
 
-class IdentityTracker(TrackerBase):
-    """Deterministic tracker assigning ids sequentially per frame."""
-
-    def update(self, boxes: Sequence[Box]) -> List[TrackUpdate]:
-        return [(i + 1, box) for i, box in enumerate(boxes)]
-
-
 class CompositeTracker(TrackerBase):
     """Utility tracker chaining multiple trackers (first write wins)."""
 

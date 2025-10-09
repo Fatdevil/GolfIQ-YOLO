@@ -8,7 +8,7 @@ import numpy as np
 
 from cv_engine.types import Box
 
-from .base import TrackerBase, TrackUpdate
+from .base import TrackUpdate, TrackerBase
 
 
 @dataclass
@@ -21,7 +21,7 @@ class _TrackState:
     age: int = 0
 
 
-class NorfairAdapter(TrackerBase):
+class NorfairTracker(TrackerBase):
     """Simplified Norfair-like tracker using distance based assignment."""
 
     def __init__(self, distance_threshold: float = 80.0):

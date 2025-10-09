@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from cv_engine.tracking.bytetrack_adapter import ByteTrackAdapter
+from cv_engine.tracking.bytetrack import ByteTrackTracker
 from cv_engine.tracking.factory import get_tracker
-from cv_engine.tracking.norfair_adapter import NorfairAdapter
+from cv_engine.tracking.norfair import NorfairTracker
 from cv_engine.types import Box
 
 
@@ -25,7 +25,7 @@ def _collect_ids(tracker, sequence):
 
 
 def test_bytetrack_consistent_ids():
-    tracker = ByteTrackAdapter()
+    tracker = ByteTrackTracker()
     seq = list(_generate_sequence())
     ids = _collect_ids(tracker, seq)
     assert len(set(ids["ball"])) == 1
@@ -33,7 +33,7 @@ def test_bytetrack_consistent_ids():
 
 
 def test_norfair_consistent_ids():
-    tracker = NorfairAdapter(distance_threshold=100.0)
+    tracker = NorfairTracker(distance_threshold=100.0)
     seq = list(_generate_sequence())
     ids = _collect_ids(tracker, seq)
     assert len(set(ids["ball"])) == 1
