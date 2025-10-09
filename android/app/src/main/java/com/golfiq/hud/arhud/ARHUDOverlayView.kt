@@ -155,9 +155,9 @@ class ARHUDOverlayView @JvmOverloads constructor(
         post { playsLikeContainer.visibility = if (visible) View.VISIBLE else View.GONE }
     }
 
-    fun updatePlaysLike(distanceEff: Double, slope: Double, wind: Double, quality: String) {
+    fun updatePlaysLike(distanceEff: Double, slope: Double, wind: Double, temp: Double, alt: Double, quality: String) {
         post {
-            val total = slope + wind
+            val total = slope + wind + temp + alt
             playsLikeDeltaLabel.text = String.format(
                 Locale.US,
                 "Plays-like: %.1f m (Δ %+.1f m)",

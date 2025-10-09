@@ -169,9 +169,9 @@ final class ARHUDOverlayView: UIView {
         }
     }
 
-    func updatePlaysLike(effective: Double, slope: Double, wind: Double, quality: String) {
+    func updatePlaysLike(effective: Double, slope: Double, wind: Double, temp: Double, alt: Double, quality: String) {
         DispatchQueue.main.async {
-            let total = slope + wind
+            let total = slope + wind + temp + alt
             self.playsLikeDeltaLabel.text = String(format: "Plays-like: %.1f m (Δ %+0.1f m)", effective, total)
             self.playsLikeSlopeChip.text = String(format: " slope %+0.1f m ", slope)
             self.playsLikeWindChip.text = String(format: " wind %+0.1f m ", wind)

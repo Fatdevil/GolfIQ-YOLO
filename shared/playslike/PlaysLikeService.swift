@@ -39,6 +39,8 @@ public enum PlaysLikeQuality: String {
 public struct PlaysLikeComponents {
     public let slopeM: Double
     public let windM: Double
+    public let tempM: Double
+    public let altM: Double
 }
 
 public struct PlaysLikeResult {
@@ -53,19 +55,25 @@ public struct PlaysLikeOptions {
     public let warnThresholdRatio: Double
     public let lowThresholdRatio: Double
     public let config: PlaysLikeConfig?
+    public let temperatureC: Double?
+    public let altitudeAslM: Double?
 
     public init(
         kS: Double = 1.0,
         kHW: Double = 2.5,
         warnThresholdRatio: Double = 0.05,
         lowThresholdRatio: Double = 0.12,
-        config: PlaysLikeConfig? = nil
+        config: PlaysLikeConfig? = nil,
+        temperatureC: Double? = nil,
+        altitudeAslM: Double? = nil
     ) {
         self.kS = max(0.2, min(kS, 3.0))
         self.kHW = max(0.5, min(kHW, 6.0))
         self.warnThresholdRatio = warnThresholdRatio
         self.lowThresholdRatio = max(lowThresholdRatio, warnThresholdRatio)
         self.config = config
+        self.temperatureC = temperatureC
+        self.altitudeAslM = altitudeAslM
     }
 }
 
@@ -77,6 +85,10 @@ public struct PlaysLikeConfig {
     public var windCapPctOfD: Double
     public var taperStartMph: Double
     public var sidewindDistanceAdjust: Bool
+    public var temperatureEnabled: Bool
+    public var betaTempPerC: Double
+    public var altitudeEnabled: Bool
+    public var gammaAltPer100m: Double
 
     public init(
         windModel: String = "percent_v1",
@@ -85,7 +97,11 @@ public struct PlaysLikeConfig {
         slopeFactor: Double = 1.0,
         windCapPctOfD: Double = 0.20,
         taperStartMph: Double = 20,
-        sidewindDistanceAdjust: Bool = false
+        sidewindDistanceAdjust: Bool = false,
+        temperatureEnabled: Bool = false,
+        betaTempPerC: Double = 0.0018,
+        altitudeEnabled: Bool = false,
+        gammaAltPer100m: Double = 0.0065
     ) {
         self.windModel = windModel
         self.alphaHeadPerMph = alphaHeadPerMph
@@ -94,6 +110,10 @@ public struct PlaysLikeConfig {
         self.windCapPctOfD = windCapPctOfD
         self.taperStartMph = taperStartMph
         self.sidewindDistanceAdjust = sidewindDistanceAdjust
+        self.temperatureEnabled = temperatureEnabled
+        self.betaTempPerC = betaTempPerC
+        self.altitudeEnabled = altitudeEnabled
+        self.gammaAltPer100m = gammaAltPer100m
     }
 
     public static let `default` = PlaysLikeConfig()
@@ -449,6 +469,32 @@ public enum PlaysLikeService {
         return distance * pct
     }
 
+    public static func computeTempAdjust(
+        D: Double,
+        temperatureC: Double,
+        beta: Double = 0.0018
+    ) -> Double {
+        let distance = sanitizeDistance(D)
+        guard distance > 0, temperatureC.isFinite else { return 0 }
+        let betaEffective = beta.isFinite ? beta : 0.0018
+        let delta = distance * betaEffective * (20 - temperatureC)
+        let cap = distance * 0.05
+        return max(-cap, min(delta, cap))
+    }
+
+    public static func computeAltitudeAdjust(
+        D: Double,
+        altitudeAslM: Double,
+        gammaPer100m: Double = 0.0065
+    ) -> Double {
+        let distance = sanitizeDistance(D)
+        guard distance > 0, altitudeAslM.isFinite else { return 0 }
+        let gamma = gammaPer100m.isFinite ? gammaPer100m : 0.0065
+        let delta = distance * gamma * (altitudeAslM / 100)
+        let cap = distance * 0.15
+        return max(-cap, min(delta, cap))
+    }
+
     private static func computeQuality(distance: Double, deltaH: Double, wParallel: Double) -> PlaysLikeQuality {
         guard distance > 0 else { return .low }
         let hasSlope = deltaH.isFinite
@@ -465,6 +511,8 @@ public enum PlaysLikeService {
         D: Double,
         deltaH: Double,
         wParallel: Double,
+        temperatureC: Double? = nil,
+        altitudeAslM: Double? = nil,
         cfg: PlaysLikeConfig = .default
     ) -> PlaysLikeResult {
         let distance = sanitizeDistance(D)
@@ -475,13 +523,27 @@ public enum PlaysLikeService {
         } else {
             wind = 0
         }
-        let eff = distance + slope + wind
+        let tempAdjust: Double
+        if cfg.temperatureEnabled, let temp = temperatureC, temp.isFinite {
+            tempAdjust = computeTempAdjust(D: distance, temperatureC: temp, beta: cfg.betaTempPerC)
+        } else {
+            tempAdjust = 0
+        }
+        let altAdjust: Double
+        if cfg.altitudeEnabled, let altitude = altitudeAslM, altitude.isFinite {
+            altAdjust = computeAltitudeAdjust(D: distance, altitudeAslM: altitude, gammaPer100m: cfg.gammaAltPer100m)
+        } else {
+            altAdjust = 0
+        }
+        let eff = distance + slope + wind + tempAdjust + altAdjust
         let quality = computeQuality(distance: distance, deltaH: deltaH, wParallel: wParallel)
         return PlaysLikeResult(
             distanceEff: round(eff, decimals: 1),
             components: PlaysLikeComponents(
                 slopeM: round(slope, decimals: 1),
-                windM: round(wind, decimals: 1)
+                windM: round(wind, decimals: 1),
+                tempM: round(tempAdjust, decimals: 1),
+                altM: round(altAdjust, decimals: 1)
             ),
             quality: quality
         )
@@ -490,9 +552,20 @@ public enum PlaysLikeService {
     public static func compute(D: Double, deltaH: Double, wParallel: Double, opts: PlaysLikeOptions = PlaysLikeOptions()) -> PlaysLikeResult {
         var overrides = opts.config ?? PlaysLikeConfig.default
         overrides.slopeFactor = opts.kS
-        let result = computePlaysLike(D: D, deltaH: deltaH, wParallel: wParallel, cfg: overrides)
+        let result = computePlaysLike(
+            D: D,
+            deltaH: deltaH,
+            wParallel: wParallel,
+            temperatureC: opts.temperatureC,
+            altitudeAslM: opts.altitudeAslM,
+            cfg: overrides
+        )
         let distance = sanitizeDistance(D)
-        let total = abs(result.components.slopeM) + abs(result.components.windM)
+        let total =
+            abs(result.components.slopeM) +
+            abs(result.components.windM) +
+            abs(result.components.tempM) +
+            abs(result.components.altM)
         let ratio = distance > 0 ? total / distance : Double.infinity
         if opts.warnThresholdRatio != 0.05 || opts.lowThresholdRatio != 0.12 {
             let warn = opts.warnThresholdRatio
