@@ -14,7 +14,9 @@ from server.providers.wind import WIND_CACHE_TTL
 from server.routes.providers import router as providers_router
 
 
-def _make_client_factory(handler: Callable[[httpx.Request], httpx.Response]) -> Callable[..., httpx.Client]:
+def _make_client_factory(
+    handler: Callable[[httpx.Request], httpx.Response],
+) -> Callable[..., httpx.Client]:
     """Return a factory that yields an httpx client using the provided handler."""
 
     def factory(**kwargs: Any) -> httpx.Client:
@@ -51,9 +53,13 @@ def test_elevation_endpoint_caches_and_sets_headers(monkeypatch, client):
         assert request.url.params.get("longitude") == "-2.34567"
         return httpx.Response(200, json={"elevation": [321.0]})
 
-    monkeypatch.setattr(elevation, "_http_client_factory", _make_client_factory(handler))
+    monkeypatch.setattr(
+        elevation, "_http_client_factory", _make_client_factory(handler)
+    )
 
-    response = client.get("/providers/elevation", params={"lat": 1.23456, "lon": -2.34567})
+    response = client.get(
+        "/providers/elevation", params={"lat": 1.23456, "lon": -2.34567}
+    )
     assert response.status_code == 200
     data = response.json()
     assert data["elevation_m"] == pytest.approx(321.0)
@@ -64,7 +70,9 @@ def test_elevation_endpoint_caches_and_sets_headers(monkeypatch, client):
     assert response.headers["Cache-Control"].startswith("public, max-age=")
     assert calls == 1
 
-    cached = client.get("/providers/elevation", params={"lat": 1.23456, "lon": -2.34567})
+    cached = client.get(
+        "/providers/elevation", params={"lat": 1.23456, "lon": -2.34567}
+    )
     assert cached.status_code == 200
     cached_data = cached.json()
     assert cached_data["elevation_m"] == pytest.approx(321.0)
