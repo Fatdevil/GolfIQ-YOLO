@@ -1,5 +1,29 @@
 import Foundation
 
+struct RemoteUiConfig: Codable {
+    let playsLikeVariant: String?
+}
+
+struct RemotePlaysLikeConfig: Codable {
+    let windModel: String?
+    let alphaHeadPerMph: Double?
+    let alphaTailPerMph: Double?
+    let slopeFactor: Double?
+    let windCapPctOfD: Double?
+    let taperStartMph: Double?
+    let sidewindDistanceAdjust: Bool?
+
+    private enum CodingKeys: String, CodingKey {
+        case windModel
+        case alphaHeadPerMph = "alphaHead_per_mph"
+        case alphaTailPerMph = "alphaTail_per_mph"
+        case slopeFactor
+        case windCapPctOfD = "windCap_pctOfD"
+        case taperStartMph = "taperStart_mph"
+        case sidewindDistanceAdjust
+    }
+}
+
 struct RemoteTierConfig: Codable {
     let hudEnabled: Bool?
     let fieldTestMode: Bool?
@@ -8,6 +32,8 @@ struct RemoteTierConfig: Codable {
     let analyticsEnabled: Bool?
     let crashEnabled: Bool?
     let playsLikeEnabled: Bool?
+    let ui: RemoteUiConfig?
+    let playsLike: RemotePlaysLikeConfig?
 }
 
 struct RemoteConfigEnvelope: Codable {
@@ -23,7 +49,7 @@ final class RemoteConfigClient {
     private let featureFlags: FeatureFlagsService
     private let telemetry: TelemetryClient
     private let runtimeDescriptor: () -> [String: Any]
-    private let onFlagsApplied: ((FeatureFlagConfig, String?) -> Void)?
+    private let onFlagsApplied: ((FeatureFlagConfig, String?, RemotePlaysLikeConfig?) -> Void)?
     private let refreshInterval: TimeInterval = 12 * 60 * 60
     private let queue = DispatchQueue(label: "com.golfiq.remote-config")
 
@@ -39,7 +65,7 @@ final class RemoteConfigClient {
         featureFlags: FeatureFlagsService,
         telemetry: TelemetryClient,
         runtimeDescriptor: @escaping () -> [String: Any],
-        onFlagsApplied: ((FeatureFlagConfig, String?) -> Void)? = nil
+        onFlagsApplied: ((FeatureFlagConfig, String?, RemotePlaysLikeConfig?) -> Void)? = nil
     ) {
         self.baseURL = baseURL
         self.session = session
@@ -118,6 +144,9 @@ final class RemoteConfigClient {
         self.etag = etag
 
         let current = featureFlags.current()
+        let variantString = tierConfig.ui?.playsLikeVariant
+        let variant = FeatureFlagConfig.PlaysLikeVariant(rawValue: variantString ?? current.playsLikeVariant.rawValue) ?? current.playsLikeVariant
+
         let overrides = FeatureFlagConfig(
             hudEnabled: tierConfig.hudEnabled ?? current.hudEnabled,
             hudTracerEnabled: current.hudTracerEnabled,
@@ -125,6 +154,7 @@ final class RemoteConfigClient {
             analyticsEnabled: tierConfig.analyticsEnabled ?? current.analyticsEnabled,
             crashEnabled: tierConfig.crashEnabled ?? current.crashEnabled,
             playsLikeEnabled: tierConfig.playsLikeEnabled ?? current.playsLikeEnabled,
+            playsLikeVariant: variant,
             hudWindHintEnabled: current.hudWindHintEnabled,
             hudTargetLineEnabled: current.hudTargetLineEnabled,
             hudBatterySaverEnabled: current.hudBatterySaverEnabled,
@@ -137,7 +167,7 @@ final class RemoteConfigClient {
 
         let runtime = runtimeDescriptor()
         let normalized = etag.replacingOccurrences(of: "\"", with: "")
-        onFlagsApplied?(overrides, normalized)
+        onFlagsApplied?(overrides, normalized, tierConfig.playsLike)
         telemetry.logRemoteConfigActive(
             hash: normalized,
             profile: profile,

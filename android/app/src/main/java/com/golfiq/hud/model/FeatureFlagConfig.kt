@@ -13,6 +13,7 @@ data class FeatureFlagConfig(
     val analyticsEnabled: Boolean = false,
     val crashEnabled: Boolean = false,
     val playsLikeEnabled: Boolean = false,
+    val playsLikeVariant: PlaysLikeVariant = PlaysLikeVariant.OFF,
     val hudWindHintEnabled: Boolean,
     val hudTargetLineEnabled: Boolean,
     val hudBatterySaverEnabled: Boolean,
@@ -22,6 +23,18 @@ data class FeatureFlagConfig(
     val source: Source = Source.DEFAULT,
 ) {
     enum class Source { DEFAULT, FEATURE_SERVICE, REMOTE_CONFIG, OVERRIDE }
+
+    enum class PlaysLikeVariant(val storageValue: String) {
+        OFF("off"),
+        V1("v1");
+
+        companion object {
+            fun fromStorage(value: String?): PlaysLikeVariant {
+                if (value == null) return OFF
+                return values().firstOrNull { it.storageValue.equals(value, ignoreCase = true) } ?: OFF
+            }
+        }
+    }
 
     companion object {
         fun forTier(tier: Tier): FeatureFlagConfig {
