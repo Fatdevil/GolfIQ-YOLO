@@ -8,7 +8,7 @@ import numpy as np
 
 from cv_engine.types import Box
 
-from .base import TrackerBase, TrackUpdate
+from .base import TrackUpdate, TrackerBase
 
 
 @dataclass
@@ -21,7 +21,7 @@ class _TrackState:
     age: int = 0
 
 
-class ByteTrackAdapter(TrackerBase):
+class ByteTrackTracker(TrackerBase):
     """Lightweight approximation of ByteTrack assignment using IoU cost."""
 
     def __init__(self, iou_threshold: float = 0.3):
@@ -46,7 +46,7 @@ class ByteTrackAdapter(TrackerBase):
         inter_w = max(0.0, inter_x2 - inter_x1)
         inter_h = max(0.0, inter_y2 - inter_y1)
         inter_area = inter_w * inter_h
-        if inter_area == 0:
+        if inter_area == 0.0:
             return 0.0
         area_a = (ax2 - ax1) * (ay2 - ay1)
         area_b = (bx2 - bx1) * (by2 - by1)
@@ -86,7 +86,6 @@ class ByteTrackAdapter(TrackerBase):
             )
             updates.append((best_track_id, box))
 
-        # Age unmatched tracks (decay)
         for track_id, state in list(self._tracks.items()):
             if track_id not in taken:
                 state.age += 1

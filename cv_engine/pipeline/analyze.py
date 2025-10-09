@@ -16,6 +16,7 @@ from cv_engine.metrics.launch_mono import estimate_vertical_launch
 from cv_engine.pose.adapter import PoseAdapter
 from cv_engine.tracking.factory import get_tracker
 from observability.otel import span
+from server.telemetry import record_pose_metrics, record_stage_latency
 from .inference.yolo8 import YoloV8Detector
 from .impact.detector import ImpactDetector
 from .metrics.kinematics import CalibrationParams
@@ -92,18 +93,22 @@ def analyze_frames(
     with span("cv.pipeline.analyze", attributes=span_attributes) as pipeline_span:
         detection_total = 0
         detection_start = perf_counter()
-        with span("cv.pipeline.detection") as detection_span:
+        with span("cv.stage.detect") as detection_span:
             for fr in frames_list:
                 boxes = det.run(fr)
                 boxes_per_frame.append(list(boxes))
                 detection_total += len(boxes)
-        timings["detection_ms"] = (perf_counter() - detection_start) * 1000.0
+        detection_ms = (perf_counter() - detection_start) * 1000.0
+        timings["detect_ms"] = detection_ms
+        record_stage_latency("detect", detection_ms)
         if detection_span is not None:
             detection_span.set_attribute("cv.detections_total", detection_total)
 
         tracking_start = perf_counter()
         active_ids: Dict[str, int] = {"ball": -1, "club": -1}
-        with span("cv.pipeline.tracking", attributes={"cv.tracker": tracker_name}):
+        with span(
+            "cv.stage.track", attributes={"cv.tracker": tracker_name}
+        ) as track_span:
             for boxes in boxes_per_frame:
                 tracked = tracker.update(boxes)
 
@@ -132,7 +137,11 @@ def analyze_frames(
                         ball_track_px.append(chosen_box.center())
                     elif label == "club":
                         club_track_px.append(chosen_box.center())
-        timings["tracking_ms"] = (perf_counter() - tracking_start) * 1000.0
+            if track_span is not None:
+                track_span.set_attribute("cv.track.frames", len(boxes_per_frame))
+        tracking_ms = (perf_counter() - tracking_start) * 1000.0
+        timings["track_ms"] = tracking_ms
+        record_stage_latency("track", tracking_ms)
 
         pose_start = perf_counter()
         with span(
@@ -163,7 +172,7 @@ def analyze_frames(
         }
 
         if len(ball_track_px) < 2 or len(club_track_px) < 2:
-            with span("cv.pipeline.kinematics"):
+            with span("cv.stage.kinematics"):
                 pass
             metrics = {
                 "ball_speed_mps": 0.0,
@@ -184,9 +193,11 @@ def analyze_frames(
                 "carryEstM": 0.0,
                 "quality": base_quality | {"homography": "low"},
             }
-            timings["kinematics_ms"] = (perf_counter() - kin_start) * 1000.0
+            kin_ms = (perf_counter() - kin_start) * 1000.0
+            timings["kinematics_ms"] = kin_ms
+            record_stage_latency("kinematics", kin_ms)
         else:
-            with span("cv.pipeline.kinematics"):
+            with span("cv.stage.kinematics"):
                 base_metrics = measure_from_tracks(ball_track_px, club_track_px, calib)
                 metrics = as_dict(base_metrics, include_spin_placeholders=True)
 
@@ -205,7 +216,9 @@ def analyze_frames(
                     base_metrics.ball_speed_mps,
                     base_metrics.launch_deg,
                 )
-            timings["kinematics_ms"] = (perf_counter() - kin_start) * 1000.0
+            kin_ms = (perf_counter() - kin_start) * 1000.0
+            timings["kinematics_ms"] = kin_ms
+            record_stage_latency("kinematics", kin_ms)
 
         impact_start = perf_counter()
         with span("cv.pipeline.impact"):
@@ -217,7 +230,7 @@ def analyze_frames(
         confidence = max((e.confidence for e in impact_events), default=0.0)
 
         postproc_start = perf_counter()
-        with span("cv.pipeline.postproc"):
+        with span("cv.stage.persist"):
             if len(ball_track_px) < 2 or len(club_track_px) < 2:
                 metrics["confidence"] = confidence
             else:
@@ -239,12 +252,22 @@ def analyze_frames(
                         "quality": base_quality,
                     }
                 )
-        timings["postproc_ms"] = (perf_counter() - postproc_start) * 1000.0
+        persist_ms = (perf_counter() - postproc_start) * 1000.0
+        timings["persist_ms"] = persist_ms
+        record_stage_latency("persist", persist_ms)
+
+        internal_pose_metrics = pose_adapter.get_internal_metrics()
+        record_pose_metrics(internal_pose_metrics)
 
         if pipeline_span is not None:
             for key, value in timings.items():
                 pipeline_span.set_attribute(f"cv.timings.{key}", round(value, 3))
             pipeline_span.set_attribute("cv.events.total", len(events))
             pipeline_span.set_attribute("cv.metrics.confidence", confidence)
+            for metric_name, metric_value in internal_pose_metrics.items():
+                if metric_value is not None:
+                    pipeline_span.set_attribute(
+                        f"cv.pose.{metric_name}", float(metric_value)
+                    )
 
     return {"events": events, "metrics": metrics}
