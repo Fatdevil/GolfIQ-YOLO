@@ -11,7 +11,7 @@ export interface PlaysLikeResult {
   quality: PlaysLikeQuality;
 }
 
-import literatureProfile from "../../tools/playslike/literature_v1.json";
+import literatureProfileRaw from "../../tools/playslike/literature_v1.json";
 
 export interface PlaysLikeOptions {
   kS?: number;
@@ -269,7 +269,13 @@ const MPH_TO_MPS = 1 / MPS_TO_MPH;
 export const mpsToMph = (value: number) => value * MPS_TO_MPH;
 export const mphToMps = (value: number) => value * MPH_TO_MPS;
 
-type LiteratureProfile = typeof literatureProfile;
+type PlaysLikeGlobals = {
+  alphaHead_per_mph: number;
+  alphaTail_per_mph: number;
+  slopeFactor: number;
+  windCap_pctOfD: number;
+  taperStart_mph: number;
+};
 
 type PlaysLikeScale = {
   scaleHead?: number;
@@ -277,6 +283,16 @@ type PlaysLikeScale = {
 };
 
 type PlaysLikeScaleMap = Record<string, PlaysLikeScale | undefined> | null | undefined;
+
+type LiteratureProfile = {
+  model: "percent_v1";
+  note?: string;
+  globals: PlaysLikeGlobals;
+  byClub?: Record<string, PlaysLikeScale | undefined>;
+  byPlayerType?: Record<string, PlaysLikeScale | undefined>;
+};
+
+const literatureProfile: LiteratureProfile = literatureProfileRaw as LiteratureProfile;
 
 export interface PlaysLikeCfg {
   windModel: "percent_v1";
@@ -300,8 +316,8 @@ export const DEFAULT_PLAYSLIKE_CFG: PlaysLikeCfg = {
   taperStart_mph: 20,
   sidewindDistanceAdjust: false,
   playsLikeProfile: "literature_v1",
-  byClub: (literatureProfile as LiteratureProfile).byClub,
-  byPlayerType: (literatureProfile as LiteratureProfile).byPlayerType,
+  byClub: literatureProfile.byClub,
+  byPlayerType: literatureProfile.byPlayerType,
 };
 
 const roundTo = (value: number, decimals: number) => {
@@ -318,12 +334,14 @@ const resolveCfg = (cfg?: Partial<PlaysLikeCfg>): PlaysLikeCfg => {
   if (!cfg) {
     return merged;
   }
-  for (const [key, value] of Object.entries(cfg) as [keyof PlaysLikeCfg, unknown][]) {
-    if (value !== undefined) {
-      (merged as Record<string, unknown>)[key] = value;
-    }
+  const definedEntries = Object.entries(cfg).filter(([, value]) => value !== undefined);
+  if (definedEntries.length === 0) {
+    return merged;
   }
-  return merged;
+  return {
+    ...merged,
+    ...(Object.fromEntries(definedEntries) as Partial<PlaysLikeCfg>),
+  };
 };
 
 type WindAlphas = Pick<PlaysLikeCfg, "alphaHead_per_mph" | "alphaTail_per_mph">;

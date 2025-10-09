@@ -64,8 +64,12 @@ def load_scenarios(base_path: Path) -> List[Scenario]:
                 w_parallel_mps=float(entry.get("W_parallel_mps", 0)),
                 club=entry.get("club"),
                 player_type=entry.get("playerType"),
-                expect_eff=tuple(entry["expectEff"]) if entry.get("expectEff") else None,
-                expect_pct=tuple(entry["expectPct"]) if entry.get("expectPct") else None,
+                expect_eff=(
+                    tuple(entry["expectEff"]) if entry.get("expectEff") else None
+                ),
+                expect_pct=(
+                    tuple(entry["expectPct"]) if entry.get("expectPct") else None
+                ),
             )
         )
     return parsed

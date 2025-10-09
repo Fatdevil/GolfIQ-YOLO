@@ -40,7 +40,9 @@ def _tier_defaults(**overrides: Any) -> Dict[str, Any]:
         "crashEnabled": overrides.pop("crashEnabled", False),
         "reducedRate": overrides.pop("reducedRate", False),
         "playsLikeEnabled": overrides.pop("playsLikeEnabled", False),
-        "playsLikeProfile": overrides.pop("playsLikeProfile", DEFAULT_PLAYSLIKE_PROFILE),
+        "playsLikeProfile": overrides.pop(
+            "playsLikeProfile", DEFAULT_PLAYSLIKE_PROFILE
+        ),
         "playsLikeProfileSelection": overrides.pop(
             "playsLikeProfileSelection",
             {"playerType": None, "clubClass": None},
@@ -216,7 +218,11 @@ class RemoteConfigStore:
                         value, base.get("playsLikeProfileSelection")
                     )
                     continue
-                if key == "playsLikeProfile" and value is not None and not isinstance(value, str):
+                if (
+                    key == "playsLikeProfile"
+                    and value is not None
+                    and not isinstance(value, str)
+                ):
                     raise HTTPException(
                         status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                         detail=f"{tier}.playsLikeProfile must be a string",
