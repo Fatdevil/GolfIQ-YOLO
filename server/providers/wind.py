@@ -21,6 +21,7 @@ _cache = ProviderCache("wind", WIND_CACHE_TTL)
 class WindProviderResult:
     speed_mps: float
     direction_from_deg: float
+    temperature_c: float | None
     etag: str
     expires_at: float
 
@@ -37,9 +38,17 @@ def _http_client_factory(**kwargs: Any) -> httpx.Client:
 
 def _cache_entry_to_result(entry: CacheEntry) -> WindProviderResult:
     data = entry.value
+    temp_raw = data.get("temperature_c") if isinstance(data, dict) else None
+    temperature = None
+    if temp_raw is not None:
+        try:
+            temperature = float(temp_raw)
+        except (TypeError, ValueError):
+            temperature = None
     return WindProviderResult(
         speed_mps=float(data["speed_mps"]),
         direction_from_deg=float(data["dir_from_deg"]),
+        temperature_c=temperature,
         etag=entry.etag,
         expires_at=entry.expires_at,
     )
@@ -108,7 +117,7 @@ def _fetch_wind(lat: float, lon: float, when: Optional[datetime]) -> Dict[str, f
     params = {
         "latitude": lat,
         "longitude": lon,
-        "hourly": "wind_speed_10m,wind_direction_10m",
+        "hourly": "wind_speed_10m,wind_direction_10m,temperature_2m",
         "windspeed_unit": "ms",
         "timezone": "UTC",
         "past_days": 1,
@@ -126,17 +135,27 @@ def _fetch_wind(lat: float, lon: float, when: Optional[datetime]) -> Dict[str, f
     times = hourly.get("time") or []
     speeds = hourly.get("wind_speed_10m") or []
     directions = hourly.get("wind_direction_10m") or []
-    if not (times and len(times) == len(speeds) == len(directions)):
+    temperatures = hourly.get("temperature_2m") or []
+    if not (
+        times
+        and len(times) == len(speeds) == len(directions)
+        and len(times) == len(temperatures)
+    ):
         raise ProviderError("open-meteo hourly wind missing data")
 
     index = _select_hour_index(times, when)
     try:
         speed = float(speeds[index])
         direction = float(directions[index])
+        temperature = float(temperatures[index])
     except (IndexError, ValueError, TypeError) as exc:
         raise ProviderError("open-meteo hourly wind invalid entry") from exc
 
-    return {"speed_mps": speed, "dir_from_deg": direction}
+    return {
+        "speed_mps": speed,
+        "dir_from_deg": direction,
+        "temperature_c": temperature,
+    }
 
 
 def _select_hour_index(times: Any, when: Optional[datetime]) -> int:

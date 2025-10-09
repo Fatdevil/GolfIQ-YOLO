@@ -202,10 +202,26 @@ export default function RunDetailPage() {
     ]);
     const deltaH = selectMetric(["deltaH", "delta_h", "elevationDelta", "elevation_delta"]);
     const wind = selectMetric(["windParallel", "wind_parallel", "windHead", "wind_head"]);
+    const temperature = selectMetric([
+      "temperatureC",
+      "temperature_c",
+      "temperature_C",
+      "tempC",
+      "temp_c",
+    ]);
+    const altitude = selectMetric([
+      "h_asl_m",
+      "altitudeAsl_m",
+      "altitude_asl_m",
+      "altitudeM",
+      "altitude_m",
+    ]);
     return {
       distanceMeters: distance ?? undefined,
       deltaHMeters: deltaH ?? undefined,
       windParallel: wind ?? undefined,
+      temperatureC: temperature ?? undefined,
+      altitudeAsl_m: altitude ?? undefined,
     };
   }, [playsLikeUiEnabled, selectMetric]);
 
@@ -335,6 +351,8 @@ export default function RunDetailPage() {
           distanceMeters={playsLikeData?.distanceMeters}
           deltaHMeters={playsLikeData?.deltaHMeters}
           windParallel={playsLikeData?.windParallel}
+          temperatureC={playsLikeData?.temperatureC}
+          altitudeAsl_m={playsLikeData?.altitudeAsl_m}
           cfg={playsLikeCfg}
         />
       ) : null}

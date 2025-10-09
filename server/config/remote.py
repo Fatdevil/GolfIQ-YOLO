@@ -18,6 +18,10 @@ DEFAULT_PLAYSLIKE_REMOTE_CFG: Dict[str, Any] = {
     "windCap_pctOfD": 0.20,
     "taperStart_mph": 20,
     "sidewindDistanceAdjust": False,
+    "temperatureEnabled": False,
+    "betaTemp_per_C": 0.0018,
+    "altitudeEnabled": False,
+    "gammaAlt_per_100m": 0.0065,
     "byClub": {
         "driver": {"scaleHead": 0.9, "scaleTail": 0.9},
         "midIron": {"scaleHead": 1.0, "scaleTail": 1.0},
@@ -188,6 +192,13 @@ class RemoteConfigStore:
                     raise HTTPException(
                         status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                         detail="playsLike.sidewindDistanceAdjust must be a boolean",
+                    )
+                sanitized[key] = value
+            elif key in {"temperatureEnabled", "altitudeEnabled"}:
+                if not isinstance(value, bool):
+                    raise HTTPException(
+                        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                        detail=f"playsLike.{key} must be a boolean",
                     )
                 sanitized[key] = value
             elif key in {"byClub", "byPlayerType"}:

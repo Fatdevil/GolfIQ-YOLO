@@ -14,6 +14,8 @@ describe("percent_v1 plays-like model (literature_v1)", () => {
     expect(result.components.slopeM).toBeGreaterThanOrEqual(4.9);
     expect(result.components.slopeM).toBeLessThanOrEqual(5.1);
     expect(Math.abs(result.components.windM)).toBeLessThanOrEqual(0.1);
+    expect(Math.abs(result.components.tempM)).toBeLessThanOrEqual(0.1);
+    expect(Math.abs(result.components.altM)).toBeLessThanOrEqual(0.1);
   });
 
   it("applies +1% per mph headwind for mid irons", () => {
