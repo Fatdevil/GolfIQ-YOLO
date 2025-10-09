@@ -30,6 +30,43 @@ DEFAULT_PLAYSLIKE_REMOTE_CFG: Dict[str, Any] = {
 }
 
 DEFAULT_PLAYSLIKE_PROFILE = "literature_v1"
+DEFAULT_UI_CONFIG: Dict[str, str] = {"playsLikeVariant": "off"}
+
+
+def _sanitize_ui(
+    overrides: Any,
+    base: Dict[str, Any] | None = None,
+) -> Dict[str, Any]:
+    sanitized: Dict[str, Any] = deepcopy(DEFAULT_UI_CONFIG)
+    if isinstance(base, dict):
+        variant = base.get("playsLikeVariant")
+        if isinstance(variant, str):
+            normalized = variant.lower()
+            if normalized in {"off", "v1"}:
+                sanitized["playsLikeVariant"] = normalized
+    if overrides is None:
+        return sanitized
+    if not isinstance(overrides, dict):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="ui must be a JSON object",
+        )
+    for key, value in overrides.items():
+        if key != "playsLikeVariant":
+            continue
+        if not isinstance(value, str):
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="ui.playsLikeVariant must be a string",
+            )
+        normalized = value.lower()
+        if normalized not in {"off", "v1"}:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="ui.playsLikeVariant must be one of ['off', 'v1']",
+            )
+        sanitized["playsLikeVariant"] = normalized
+    return sanitized
 
 
 def _tier_defaults(**overrides: Any) -> Dict[str, Any]:
@@ -40,7 +77,7 @@ def _tier_defaults(**overrides: Any) -> Dict[str, Any]:
         "crashEnabled": overrides.pop("crashEnabled", False),
         "reducedRate": overrides.pop("reducedRate", False),
         "playsLikeEnabled": overrides.pop("playsLikeEnabled", False),
-        "ui": deepcopy(overrides.pop("ui", {"playsLikeVariant": "off"})),
+        "ui": _sanitize_ui(overrides.pop("ui", None)),
         "playsLikeProfile": overrides.pop(
             "playsLikeProfile", DEFAULT_PLAYSLIKE_PROFILE
         ),
@@ -210,6 +247,7 @@ class RemoteConfigStore:
         base["playsLikeProfileSelection"] = cls._sanitize_profile_selection(
             None, base.get("playsLikeProfileSelection")
         )
+        base["ui"] = _sanitize_ui(None, current.get("ui") if current else None)
         if current:
             for key, value in current.items():
                 if key == "playsLike":
@@ -228,6 +266,9 @@ class RemoteConfigStore:
                         status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                         detail=f"{tier}.playsLikeProfile must be a string",
                     )
+                if key == "ui":
+                    base[key] = _sanitize_ui(value, base.get("ui"))
+                    continue
                 base[key] = value
         plays_like_override = overrides.get("playsLike") if overrides else None
         base["playsLike"] = cls._sanitize_plays_like(
@@ -249,6 +290,9 @@ class RemoteConfigStore:
                     base[key] = cls._sanitize_profile_selection(
                         value, base.get("playsLikeProfileSelection")
                     )
+                    continue
+                if key == "ui":
+                    base[key] = _sanitize_ui(value, base.get("ui"))
                     continue
                 base[key] = value
         for key, value in list(base.items()):
