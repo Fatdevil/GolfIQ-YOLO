@@ -1,35 +1,52 @@
 # Plays-Like Provider Proxies
 
-These proxy endpoints fan out to the Open-Meteo APIs (and OpenTopoData fallback for elevation)
-to provide normalized data for the "plays like" feature across clients. Responses are cached in-memory and
-on-disk to reduce quota impact and to allow lightweight revalidation with `ETag`.
+These provider proxies expose cached, quota-friendly endpoints that our clients
+can call for "plays like" computations without hitting third-party APIs
+directly. Both proxies sit behind `/providers/*` routes in the FastAPI app.
 
-## Endpoints
+## Elevation
 
-| Route | Purpose | TTL | Notes |
-| --- | --- | --- | --- |
-| `GET /providers/elevation?lat=&lon=` | Elevation in meters for a tee/green coordinate. | 7 days | Primary source is Open-Meteo Elevation, fallback to OpenTopoData ASTER30m. |
-| `GET /providers/wind?lat=&lon=&bearing=` | 10m wind speed/direction and optional projection onto a shot bearing. | 15 minutes | Backed by Open-Meteo forecast (UTC hourly grid). Bearing is optional; when omitted the projection fields are `null`. |
+- **Endpoint:** `GET /providers/elevation?lat=…&lon=…`
+- **Upstream:** [Open-Meteo Elevation API](https://open-meteo.com/en/docs/elevation-api)
+- **Response:**
+  - `elevation_m` – surface elevation in metres above sea level.
+  - `etag` – stable content hash derived from the cached payload.
+  - `ttl_s` – seconds remaining before the cache entry expires.
+- **Caching:**
+  - Shared memory + file-backed cache (`~/.golfiq/providers/elevation.json`).
+  - Entries live for **7 days** (604 800 seconds).
+  - Requests with `If-None-Match` matching the cached ETag return **304 Not Modified** and extend the TTL.
+- **Quotas & Reliability:**
+  - Open-Meteo allows generous unauthenticated usage (≈10k calls/day per IP).
+  - The 7-day TTL keeps us comfortably within limits even for dense course maps.
+  - Elevation data is derived from ASTER GDEM (≈30 m resolution); expect ±10 m noise in steep terrain.
 
-Responses include `ttl_s` (seconds remaining on the cached record) and `etag`. The server also emits
-`Cache-Control: public, max-age=<ttl>` and `ETag` headers; clients should re-use cached responses until
-`ttl_s` expires, then revalidate with `If-None-Match` to avoid duplicate upstream calls. A `304 Not Modified`
-extends the cached entry for another TTL window.
+## Wind
 
-## Provider Quotas & Reliability
+- **Endpoint:** `GET /providers/wind?lat=…&lon=…[&bearing=…]`
+- **Upstream:** [Open-Meteo Forecast API](https://open-meteo.com/en/docs)
+  - Uses the hourly `wind_speed_10m` and `wind_direction_10m` series.
+- **Response:**
+  - `speed_mps` – wind speed at 10 m above ground (metres per second).
+  - `dir_from_deg` – degrees wind is coming **from** (0° = north).
+  - `w_parallel` / `w_perp` – components parallel and perpendicular to the shot
+    bearing (set to `null` if `bearing` query param is omitted).
+  - `etag`, `ttl_s` analogous to the elevation endpoint.
+- **Caching:**
+  - Memory + disk cache (`~/.golfiq/providers/wind.json`).
+  - Entries live for **15 minutes** (900 seconds) and are keyed by
+    `(lat, lon, hour)` to avoid thrashing.
+  - Conditional requests with matching `If-None-Match` return **304** and bump the TTL.
+- **Quotas & Quality:**
+  - Open-Meteo limits anonymous clients to ≈10k calls/day; our cache keeps us
+    well under this ceiling even with frequent club selection requests.
+  - Forecast wind uses the ECMWF/NOAA blended model; expect ±2 m/s variance in
+    gusty conditions and check timestamps when debugging field reports.
 
-- **Open-Meteo**: currently unrestricted for light use but we should stay under ~10k requests/day to be good citizens.
-  The proxy cache keys coordinates to 5 decimal places (~1 m precision), so repeated lookups for the same hole reuse
-  the cached value automatically.
-- **OpenTopoData** (fallback for elevation): limited to ~1 request/sec. We only hit it when Open-Meteo fails.
-- Both upstream APIs can occasionally return gaps (e.g., missing hourly points). The proxy normalizes errors into HTTP
-  `502` responses so clients can fallback to heuristics if needed.
+## Operational Notes
 
-## Data Quality Notes
-
-- Elevation data is approximate and may differ by ±3 m depending on the DEM source; cache TTL is long (7 days) because
-  terrain rarely changes and to limit load on providers.
-- Wind speed is sampled at 10 m above ground; gusts are not exposed by this proxy. We reproject the vector relative to
-the requested bearing so clients can plug the parallel/perpendicular components directly into plays-like formulas.
-- When no providers base URL is configured on a client, the shared PlaysLikeService returns stubbed values (`0`) so
-  the apps can continue to operate offline or in local development.
+- File caches are safe to share across processes; they use atomic replace writes.
+- Set `GOLFIQ_PROVIDER_CACHE_DIR` to override the default cache directory when
+  running in ephemeral containers or tests.
+- Treat provider data as **advisory** – always display the TTL to users so they
+  know when values were last refreshed.
