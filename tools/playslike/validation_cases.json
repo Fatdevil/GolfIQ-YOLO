@@ -1,0 +1,6 @@
+[
+  {"D": 150, "deltaH": 5, "W_parallel_mps": 0, "expectEff": [154.0, 156.0]},
+  {"D": 150, "deltaH": 0, "W_parallel_mps": 5.0, "club": "midIron", "expectPct": [10.5, 12.5]},
+  {"D": 150, "deltaH": 0, "W_parallel_mps": -5.0, "club": "midIron", "expectPct": [-6.5, -4.5]},
+  {"D": 150, "deltaH": -8, "W_parallel_mps": 3.0, "club": "driver", "expectEff": [150.0, 154.0]}
+]

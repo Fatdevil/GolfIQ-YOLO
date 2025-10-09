@@ -113,6 +113,84 @@ def test_update_remote_config_merges_plays_like_overrides(
         assert tier_a_after["sidewindDistanceAdjust"] is True
 
 
+def test_update_remote_config_sanitizes_profile_selection_and_scaling(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    monkeypatch.setenv("ADMIN_TOKEN", "secret")
+    headers = {"x-admin-token": "secret", "Origin": "http://testserver"}
+
+    payload = {
+        "tierC": {
+            "playsLikeProfileSelection": {"playerType": "amateur"},
+            "playsLike": {
+                "byClub": {
+                    "wedge": {
+                        "scaleHead": 1.2,
+                        "scaleTail": 1.1,
+                        "ignored": "skip",
+                    }
+                },
+                "byPlayerType": None,
+                "windCap_pctOfD": 0.18,
+            },
+        }
+    }
+
+    with _client() as client:
+        response = client.post("/config/remote", json=payload, headers=headers)
+        assert response.status_code == 200
+        tier_c = response.json()["config"]["tierC"]
+        assert tier_c["playsLikeProfileSelection"] == {
+            "playerType": "amateur",
+            "clubClass": None,
+        }
+        plays_like = tier_c["playsLike"]
+        assert plays_like["windCap_pctOfD"] == pytest.approx(0.18)
+        assert plays_like["byPlayerType"] is None
+        wedge = plays_like["byClub"]["wedge"]
+        assert wedge["scaleHead"] == pytest.approx(1.2)
+        assert wedge["scaleTail"] == pytest.approx(1.1)
+        assert "ignored" not in wedge
+
+
+def test_update_remote_config_validates_profile_selection(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    monkeypatch.setenv("ADMIN_TOKEN", "secret")
+    headers = {"x-admin-token": "secret", "Origin": "http://testserver"}
+
+    with _client() as client:
+        bad_shape = client.post(
+            "/config/remote",
+            json={"tierA": {"playsLikeProfileSelection": ["tour"]}},
+            headers=headers,
+        )
+        assert bad_shape.status_code == 422
+
+        bad_value = client.post(
+            "/config/remote",
+            json={"tierA": {"playsLikeProfileSelection": {"playerType": 123}}},
+            headers=headers,
+        )
+        assert bad_value.status_code == 422
+
+        bad_profile = client.post(
+            "/config/remote",
+            json={"tierB": {"playsLikeProfile": 42}},
+            headers=headers,
+        )
+        assert bad_profile.status_code == 422
+
+        bad_scale = client.post(
+            "/config/remote",
+            json={
+                "tierB": {"playsLike": {"byClub": {"driver": {"scaleHead": "fast"}}}}
+            },
+            headers=headers,
+        )
+        assert bad_scale.status_code == 422
+
+
 def test_update_remote_config_validates_payload(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setenv("ADMIN_TOKEN", "secret")
     headers = {"x-admin-token": "secret", "Origin": "http://testserver"}

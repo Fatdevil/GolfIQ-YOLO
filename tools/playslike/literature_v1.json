@@ -1,0 +1,20 @@
+{
+  "model": "percent_v1",
+  "note": "Headwind +1%/mph, Tailwind -0.5%/mph, Slope 1:1 m↔m; cap ±20%; taper above 20 mph",
+  "globals": {
+    "alphaHead_per_mph": 0.01,
+    "alphaTail_per_mph": 0.005,
+    "slopeFactor": 1.0,
+    "windCap_pctOfD": 0.20,
+    "taperStart_mph": 20
+  },
+  "byClub": {
+    "driver":  { "scaleHead": 0.9, "scaleTail": 0.9 },
+    "midIron": { "scaleHead": 1.0, "scaleTail": 1.0 },
+    "wedge":   { "scaleHead": 1.1, "scaleTail": 1.0 }
+  },
+  "byPlayerType": {
+    "tour":    { "scaleHead": 0.95, "scaleTail": 0.95 },
+    "amateur": { "scaleHead": 1.05, "scaleTail": 1.0 }
+  }
+}

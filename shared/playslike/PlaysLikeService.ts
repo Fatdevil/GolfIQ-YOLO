@@ -11,12 +11,16 @@ export interface PlaysLikeResult {
   quality: PlaysLikeQuality;
 }
 
+import literatureProfileRaw from "../../tools/playslike/literature_v1.json";
+
 export interface PlaysLikeOptions {
   kS?: number;
   kHW?: number;
   warnThresholdRatio?: number;
   lowThresholdRatio?: number;
   config?: Partial<PlaysLikeCfg>;
+  clubClass?: string | null;
+  playerType?: string | null;
 }
 
 interface CacheValueWithTtl {
@@ -265,17 +269,56 @@ const MPH_TO_MPS = 1 / MPS_TO_MPH;
 export const mpsToMph = (value: number) => value * MPS_TO_MPH;
 export const mphToMps = (value: number) => value * MPH_TO_MPS;
 
-export const DEFAULT_PLAYSLIKE_CFG = {
-  windModel: "percent_v1" as const,
+type PlaysLikeGlobals = {
+  alphaHead_per_mph: number;
+  alphaTail_per_mph: number;
+  slopeFactor: number;
+  windCap_pctOfD: number;
+  taperStart_mph: number;
+};
+
+type PlaysLikeScale = {
+  scaleHead?: number;
+  scaleTail?: number;
+};
+
+type PlaysLikeScaleMap = Record<string, PlaysLikeScale | undefined> | null | undefined;
+
+type LiteratureProfile = {
+  model: "percent_v1";
+  note?: string;
+  globals: PlaysLikeGlobals;
+  byClub?: Record<string, PlaysLikeScale | undefined>;
+  byPlayerType?: Record<string, PlaysLikeScale | undefined>;
+};
+
+const literatureProfile: LiteratureProfile = literatureProfileRaw as LiteratureProfile;
+
+export interface PlaysLikeCfg {
+  windModel: "percent_v1";
+  alphaHead_per_mph: number;
+  alphaTail_per_mph: number;
+  slopeFactor: number;
+  windCap_pctOfD: number;
+  taperStart_mph: number;
+  sidewindDistanceAdjust: boolean;
+  playsLikeProfile?: string;
+  byClub?: PlaysLikeScaleMap;
+  byPlayerType?: PlaysLikeScaleMap;
+}
+
+export const DEFAULT_PLAYSLIKE_CFG: PlaysLikeCfg = {
+  windModel: "percent_v1",
   alphaHead_per_mph: 0.01,
   alphaTail_per_mph: 0.005,
   slopeFactor: 1.0,
   windCap_pctOfD: 0.2,
   taperStart_mph: 20,
   sidewindDistanceAdjust: false,
+  playsLikeProfile: "literature_v1",
+  byClub: literatureProfile.byClub,
+  byPlayerType: literatureProfile.byPlayerType,
 };
-
-export type PlaysLikeCfg = typeof DEFAULT_PLAYSLIKE_CFG;
 
 const roundTo = (value: number, decimals: number) => {
   if (!Number.isFinite(value)) return 0;
@@ -291,13 +334,61 @@ const resolveCfg = (cfg?: Partial<PlaysLikeCfg>): PlaysLikeCfg => {
   if (!cfg) {
     return merged;
   }
-  for (const [key, value] of Object.entries(cfg) as [keyof PlaysLikeCfg, unknown][]) {
-    if (value !== undefined) {
-      (merged as Record<string, unknown>)[key] = value;
-    }
+  const definedEntries = Object.entries(cfg).filter(([, value]) => value !== undefined);
+  if (definedEntries.length === 0) {
+    return merged;
   }
-  return merged;
+  return {
+    ...merged,
+    ...(Object.fromEntries(definedEntries) as Partial<PlaysLikeCfg>),
+  };
 };
+
+type WindAlphas = Pick<PlaysLikeCfg, "alphaHead_per_mph" | "alphaTail_per_mph">;
+
+const pickScale = (
+  source: PlaysLikeScale | undefined,
+): { head: number; tail: number } => ({
+  head: source?.scaleHead ?? 1,
+  tail: source?.scaleTail ?? 1,
+});
+
+export const applyLiteratureScaling = (
+  clubClass: string | null | undefined,
+  playerType: string | null | undefined,
+  baseAlphas: WindAlphas,
+  overrides?: { byClub?: PlaysLikeScaleMap; byPlayerType?: PlaysLikeScaleMap },
+): WindAlphas => {
+  const defaults: LiteratureProfile = literatureProfile;
+  const clubMap = overrides?.byClub ?? defaults.byClub;
+  const playerMap = overrides?.byPlayerType ?? defaults.byPlayerType;
+
+  let scaleHead = 1;
+  let scaleTail = 1;
+
+  if (clubClass) {
+    const scale = pickScale(clubMap?.[clubClass]);
+    scaleHead *= scale.head;
+    scaleTail *= scale.tail;
+  }
+
+  if (playerType) {
+    const scale = pickScale(playerMap?.[playerType]);
+    scaleHead *= scale.head;
+    scaleTail *= scale.tail;
+  }
+
+  return {
+    alphaHead_per_mph: baseAlphas.alphaHead_per_mph * scaleHead,
+    alphaTail_per_mph: baseAlphas.alphaTail_per_mph * scaleTail,
+  };
+};
+
+interface ComputePlaysLikeOptions {
+  cfg?: Partial<PlaysLikeCfg>;
+  clubClass?: string | null;
+  playerType?: string | null;
+}
 
 export const computeSlopeAdjust = (
   D: number,
@@ -369,18 +460,46 @@ const computeQualityFromInputs = (
   return "good";
 };
 
+const toComputeOptions = (
+  value?: Partial<PlaysLikeCfg> | ComputePlaysLikeOptions,
+): ComputePlaysLikeOptions => {
+  if (!value) return {};
+  if (
+    typeof value === "object" &&
+    ("cfg" in value || "clubClass" in value || "playerType" in value)
+  ) {
+    return value as ComputePlaysLikeOptions;
+  }
+  return { cfg: value as Partial<PlaysLikeCfg> };
+};
+
 export const computePlaysLike = (
   D: number,
   deltaH: number,
   wParallel_mps: number,
-  cfg: Partial<PlaysLikeCfg> = {},
+  options?: Partial<PlaysLikeCfg> | ComputePlaysLikeOptions,
 ): PlaysLikeResult => {
   const distance = sanitizeDistance(D);
+  const { cfg, clubClass, playerType } = toComputeOptions(options);
   const resolved = resolveCfg(cfg);
   const slope = computeSlopeAdjust(distance, deltaH, resolved.slopeFactor);
+  const baseAlphas: WindAlphas = {
+    alphaHead_per_mph: resolved.alphaHead_per_mph,
+    alphaTail_per_mph: resolved.alphaTail_per_mph,
+  };
+  const scaledAlphas =
+    resolved.playsLikeProfile === "literature_v1"
+      ? applyLiteratureScaling(clubClass, playerType, baseAlphas, {
+          byClub: resolved.byClub,
+          byPlayerType: resolved.byPlayerType,
+        })
+      : baseAlphas;
   const wind =
     resolved.windModel === "percent_v1"
-      ? computeWindAdjustPercentV1(distance, wParallel_mps, resolved)
+      ? computeWindAdjustPercentV1(distance, wParallel_mps, {
+          ...resolved,
+          ...scaledAlphas,
+        })
       : 0;
   const eff = distance + slope + wind;
   const quality = computeQualityFromInputs(distance, deltaH, wParallel_mps);
@@ -410,7 +529,11 @@ export const compute = (
   if (opts.kS !== undefined) {
     overrides.slopeFactor = opts.kS;
   }
-  const result = computePlaysLike(D, deltaH, wParallel, overrides);
+  const result = computePlaysLike(D, deltaH, wParallel, {
+    cfg: overrides,
+    clubClass: opts.clubClass,
+    playerType: opts.playerType,
+  });
   const distance = sanitizeDistance(D);
   const total = Math.abs(result.components.slopeM) + Math.abs(result.components.windM);
   const ratio = distance > 0 ? total / distance : Number.POSITIVE_INFINITY;
