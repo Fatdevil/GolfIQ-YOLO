@@ -77,7 +77,9 @@ class AimCalibrateFlow:
             return self.snapshot()
 
         if self._phase == AimCalibratePhase.AIMING:
-            within_threshold = abs(alignment_error_degrees) <= self.alignment_threshold_degrees
+            within_threshold = (
+                abs(alignment_error_degrees) <= self.alignment_threshold_degrees
+            )
             self._hold_timer.update(within_threshold, dt)
             if self._hold_timer.is_complete:
                 self._phase = AimCalibratePhase.CALIBRATING
@@ -87,7 +89,10 @@ class AimCalibrateFlow:
             self._calibration_timer.tick(dt)
             if calibration_signal:
                 self._calibration_complete = True
-            if self._calibration_timer.elapsed >= self.calibration_duration or self._calibration_complete:
+            if (
+                self._calibration_timer.elapsed >= self.calibration_duration
+                or self._calibration_complete
+            ):
                 self._phase = AimCalibratePhase.READY
 
         return self.snapshot()
@@ -103,7 +108,9 @@ class AimCalibrateFlow:
             calibration_ratio = 0.0
         elif self._phase == AimCalibratePhase.CALIBRATING:
             hold_ratio = 1.0
-            calibration_ratio = min(1.0, self._calibration_timer.elapsed / self.calibration_duration)
+            calibration_ratio = min(
+                1.0, self._calibration_timer.elapsed / self.calibration_duration
+            )
         elif self._phase == AimCalibratePhase.READY:
             hold_ratio = 1.0
             calibration_ratio = 1.0

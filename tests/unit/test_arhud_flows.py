@@ -45,13 +45,17 @@ class TestAimCalibrateFlow:
         )
         flow.start()
         flow.update(alignment_error_degrees=0.1, dt=0.2)
-        snapshot = flow.update(alignment_error_degrees=0.1, dt=0.1, calibration_signal=True)
+        snapshot = flow.update(
+            alignment_error_degrees=0.1, dt=0.1, calibration_signal=True
+        )
         assert snapshot.phase == AimCalibratePhase.READY
 
 
 class TestRecenterFlow:
     def test_recenter_success_before_timeout(self) -> None:
-        flow = RecenterFlow(stability_threshold_meters=0.2, stability_duration=0.5, timeout_seconds=2.0)
+        flow = RecenterFlow(
+            stability_threshold_meters=0.2, stability_duration=0.5, timeout_seconds=2.0
+        )
 
         snapshot = flow.request()
         assert snapshot.state == RecenterState.RECENTERING
@@ -67,7 +71,9 @@ class TestRecenterFlow:
         assert snapshot.state == RecenterState.IDLE
 
     def test_recenter_timeout_failure(self) -> None:
-        flow = RecenterFlow(stability_threshold_meters=0.1, stability_duration=0.4, timeout_seconds=1.0)
+        flow = RecenterFlow(
+            stability_threshold_meters=0.1, stability_duration=0.4, timeout_seconds=1.0
+        )
         flow.request()
 
         flow.update(offset_meters=0.5, dt=0.5)
