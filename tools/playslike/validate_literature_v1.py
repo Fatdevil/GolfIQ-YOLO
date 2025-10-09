@@ -191,8 +191,12 @@ def write_report(
     ]
     for idx, (scenario, result) in enumerate(zip(scenarios, evaluations), start=1):
         checks = "<br/>".join(result["checks"]) if result["checks"] else "–"
+        row_template = (
+            "| {idx} | {D:.1f} | {dH:.1f} | {wind:.1f} | "
+            "{club} | {player} | {eff:.1f} | {pct:.2f}% | {checks} |"
+        )
         lines.append(
-            "| {idx} | {D:.1f} | {dH:.1f} | {wind:.1f} | {club} | {player} | {eff:.1f} | {pct:.2f}% | {checks} |".format(
+            row_template.format(
                 idx=idx,
                 D=scenario.distance,
                 dH=scenario.delta_h,
