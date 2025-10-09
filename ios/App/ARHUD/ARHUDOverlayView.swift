@@ -21,6 +21,15 @@ final class ARHUDOverlayView: UIView {
     private let qaEtagLabel: UILabel = UILabel()
     private let qaHoleLabel: UILabel = UILabel()
     private let qaRecenterLabel: UILabel = UILabel()
+    private let qaPlaysLikeHeader: UILabel = UILabel()
+    private let qaPlaysLikeDistanceLabel: UILabel = UILabel()
+    private let qaPlaysLikeDeltaHLabel: UILabel = UILabel()
+    private let qaPlaysLikeWindLabel: UILabel = UILabel()
+    private let qaPlaysLikeKsLabel: UILabel = UILabel()
+    private let qaPlaysLikeAlphaHeadLabel: UILabel = UILabel()
+    private let qaPlaysLikeAlphaTailLabel: UILabel = UILabel()
+    private let qaPlaysLikeEffLabel: UILabel = UILabel()
+    private let qaPlaysLikeQualityLabel: UILabel = UILabel()
     private let playsLikeContainer: UIStackView = UIStackView()
     private let playsLikeHeadline: UILabel = UILabel()
     private let playsLikeDeltaLabel: UILabel = UILabel()
@@ -170,6 +179,28 @@ final class ARHUDOverlayView: UIView {
         }
     }
 
+    func updatePlaysLikeQA(
+        distance: Double,
+        deltaH: Double,
+        windParallel: Double,
+        kS: Double,
+        alphaHead: Double,
+        alphaTail: Double,
+        eff: Double,
+        quality: String
+    ) {
+        DispatchQueue.main.async {
+            self.qaPlaysLikeDistanceLabel.text = String(format: "D: %.1f m", distance)
+            self.qaPlaysLikeDeltaHLabel.text = String(format: "Δh: %+0.1f m", deltaH)
+            self.qaPlaysLikeWindLabel.text = String(format: "W∥: %+0.1f m/s", windParallel)
+            self.qaPlaysLikeKsLabel.text = String(format: "kS: %.2f", kS)
+            self.qaPlaysLikeAlphaHeadLabel.text = String(format: "α_head: %.3f /mph", alphaHead)
+            self.qaPlaysLikeAlphaTailLabel.text = String(format: "α_tail: %.3f /mph", alphaTail)
+            self.qaPlaysLikeEffLabel.text = String(format: "Eff: %.1f m", eff)
+            self.qaPlaysLikeQualityLabel.text = "Quality: \(quality.uppercased())"
+        }
+    }
+
     private func configurePlaysLikeSection(into stack: UIStackView) {
         playsLikeContainer.axis = .vertical
         playsLikeContainer.spacing = 4
@@ -261,12 +292,36 @@ final class ARHUDOverlayView: UIView {
             label.font = UIFont.preferredFont(forTextStyle: .caption2)
             label.textColor = .white
         }
+        [
+            qaPlaysLikeHeader,
+            qaPlaysLikeDistanceLabel,
+            qaPlaysLikeDeltaHLabel,
+            qaPlaysLikeWindLabel,
+            qaPlaysLikeKsLabel,
+            qaPlaysLikeAlphaHeadLabel,
+            qaPlaysLikeAlphaTailLabel,
+            qaPlaysLikeEffLabel,
+            qaPlaysLikeQualityLabel
+        ].forEach { label in
+            label.font = UIFont.preferredFont(forTextStyle: .caption2)
+            label.textColor = .white
+        }
         qaFpsLabel.text = "FPS: --"
         qaLatencyLabel.text = "Latency: --"
         qaTrackingLabel.text = "Tracking: --"
         qaEtagLabel.text = "ETag age: --"
         qaHoleLabel.text = "Hole: –"
         qaRecenterLabel.text = "Recenter marks: 0"
+        qaPlaysLikeHeader.text = "Plays-like QA"
+        qaPlaysLikeHeader.font = UIFont.preferredFont(forTextStyle: .caption1)
+        qaPlaysLikeDistanceLabel.text = "D: --"
+        qaPlaysLikeDeltaHLabel.text = "Δh: --"
+        qaPlaysLikeWindLabel.text = "W∥: --"
+        qaPlaysLikeKsLabel.text = "kS: --"
+        qaPlaysLikeAlphaHeadLabel.text = "α_head: --"
+        qaPlaysLikeAlphaTailLabel.text = "α_tail: --"
+        qaPlaysLikeEffLabel.text = "Eff: --"
+        qaPlaysLikeQualityLabel.text = "Quality: --"
 
         let markStack = UIStackView(arrangedSubviews: [markButton])
         markStack.axis = .vertical
@@ -283,6 +338,15 @@ final class ARHUDOverlayView: UIView {
         qaStack.addArrangedSubview(qaEtagLabel)
         qaStack.addArrangedSubview(qaHoleLabel)
         qaStack.addArrangedSubview(qaRecenterLabel)
+        qaStack.addArrangedSubview(qaPlaysLikeHeader)
+        qaStack.addArrangedSubview(qaPlaysLikeDistanceLabel)
+        qaStack.addArrangedSubview(qaPlaysLikeDeltaHLabel)
+        qaStack.addArrangedSubview(qaPlaysLikeWindLabel)
+        qaStack.addArrangedSubview(qaPlaysLikeKsLabel)
+        qaStack.addArrangedSubview(qaPlaysLikeAlphaHeadLabel)
+        qaStack.addArrangedSubview(qaPlaysLikeAlphaTailLabel)
+        qaStack.addArrangedSubview(qaPlaysLikeEffLabel)
+        qaStack.addArrangedSubview(qaPlaysLikeQualityLabel)
         qaStack.addArrangedSubview(markStack)
         qaStack.addArrangedSubview(runButtons)
 

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   computePlaysLike,
   mergePlaysLikeCfg,
@@ -64,6 +64,8 @@ export default function PlaysLikePanel({
   }, [inputs, resolvedCfg]);
 
   const lastSignatureRef = useRef<string | null>(null);
+  const [qaOpen, setQaOpen] = useState(false);
+  const qaOpenedAtRef = useRef<number | null>(null);
 
   useEffect(() => {
     if (!enabled || !inputs || !result) return;
@@ -108,6 +110,54 @@ export default function PlaysLikePanel({
     });
   }, [enabled, inputs, result, resolvedCfg]);
 
+  useEffect(() => {
+    if (!enabled) {
+      setQaOpen(false);
+      qaOpenedAtRef.current = null;
+    }
+  }, [enabled]);
+
+  const qaValues = useMemo(() => {
+    if (!inputs || !result) return null;
+    return {
+      distance: inputs.distance,
+      delta: inputs.delta,
+      wind: inputs.wind,
+      kS: resolvedCfg.slopeFactor,
+      alphaHead: resolvedCfg.alphaHead_per_mph,
+      alphaTail: resolvedCfg.alphaTail_per_mph,
+      eff: result.distanceEff,
+      quality: result.quality,
+    };
+  }, [inputs, resolvedCfg, result]);
+
+  const toggleQa = () => {
+    if (!enabled) return;
+    if (qaOpen) {
+      const openedAt = qaOpenedAtRef.current;
+      const duration = openedAt ? Math.max(0, Date.now() - openedAt) : 0;
+      postTelemetryEvent({
+        event: "plays_like_ui",
+        action: "drawer_close",
+        dt_ms: duration,
+      }).catch((error) => {
+        console.warn("Failed to emit plays_like_ui telemetry", error);
+      });
+      setQaOpen(false);
+      qaOpenedAtRef.current = null;
+    } else {
+      qaOpenedAtRef.current = Date.now();
+      postTelemetryEvent({
+        event: "plays_like_ui",
+        action: "drawer_open",
+        dt_ms: 0,
+      }).catch((error) => {
+        console.warn("Failed to emit plays_like_ui telemetry", error);
+      });
+      setQaOpen(true);
+    }
+  };
+
   if (!enabled) {
     return null;
   }
@@ -147,6 +197,57 @@ export default function PlaysLikePanel({
           </span>
         </div>
       ) : null}
+      <div className="mt-4">
+        <button
+          type="button"
+          onClick={toggleQa}
+          className="text-xs font-semibold text-sky-300 transition hover:text-sky-200"
+        >
+          {qaOpen ? "Hide" : "Show"} QA inputs
+        </button>
+        {qaOpen && (
+          <div className="mt-2 rounded-md border border-slate-700/70 bg-slate-900/80 p-3 text-xs text-slate-200">
+            {qaValues ? (
+              <dl className="space-y-1">
+                <div className="flex justify-between">
+                  <dt>D</dt>
+                  <dd>{qaValues.distance.toFixed(1)} m</dd>
+                </div>
+                <div className="flex justify-between">
+                  <dt>Δh</dt>
+                  <dd>{qaValues.delta >= 0 ? "+" : ""}{qaValues.delta.toFixed(1)} m</dd>
+                </div>
+                <div className="flex justify-between">
+                  <dt>W∥</dt>
+                  <dd>{qaValues.wind >= 0 ? "+" : ""}{qaValues.wind.toFixed(1)} m/s</dd>
+                </div>
+                <div className="flex justify-between">
+                  <dt>kS</dt>
+                  <dd>{qaValues.kS.toFixed(2)}</dd>
+                </div>
+                <div className="flex justify-between">
+                  <dt>α_head</dt>
+                  <dd>{qaValues.alphaHead.toFixed(3)} /mph</dd>
+                </div>
+                <div className="flex justify-between">
+                  <dt>α_tail</dt>
+                  <dd>{qaValues.alphaTail.toFixed(3)} /mph</dd>
+                </div>
+                <div className="flex justify-between">
+                  <dt>Eff</dt>
+                  <dd>{qaValues.eff.toFixed(1)} m</dd>
+                </div>
+                <div className="flex justify-between">
+                  <dt>Quality</dt>
+                  <dd>{qaValues.quality.toUpperCase()}</dd>
+                </div>
+              </dl>
+            ) : (
+              <p className="text-slate-400">Not enough data.</p>
+            )}
+          </div>
+        )}
+      </div>
     </div>
   );
 }

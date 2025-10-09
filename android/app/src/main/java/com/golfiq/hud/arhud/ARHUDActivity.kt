@@ -43,6 +43,7 @@ import com.golfiq.hud.config.FeatureFlagsService
 import com.golfiq.hud.config.RemoteConfigClient
 import com.golfiq.hud.hud.HUDRuntime
 import com.golfiq.hud.inference.RuntimeAdapter
+import com.golfiq.hud.model.DeviceProfile
 import com.golfiq.hud.model.FeatureFlagConfig
 import com.golfiq.hud.playslike.ElevationProvider
 import com.golfiq.hud.playslike.WindProvider
@@ -52,6 +53,7 @@ import com.golfiq.hud.runtime.FallbackPolicy
 import com.golfiq.hud.runtime.ThermalWatchdog
 import com.golfiq.hud.telemetry.TelemetryClient
 import com.golfiq.shared.playslike.PlaysLikeService
+import org.json.JSONObject
 import java.net.URL
 import java.util.ArrayDeque
 import java.util.Locale
@@ -72,12 +74,13 @@ class ARHUDActivity : AppCompatActivity(), SensorEventListener {
     private lateinit var thermalWatchdog: ThermalWatchdog
     private lateinit var batteryMonitor: BatteryMonitor
     private lateinit var courseId: String
+    private lateinit var deviceProfile: DeviceProfile
     private lateinit var deviceProfileManager: DeviceProfileManager
     private lateinit var runtimeAdapter: RuntimeAdapter
     private var remoteConfigClient: RemoteConfigClient? = null
     private val elevationProvider = ElevationProvider()
     private val windProvider = WindProvider()
-    private val playsLikeOptions = PlaysLikeService.Options()
+    private var playsLikeOptions = PlaysLikeService.Options()
 
     private val fallbackHandler = Handler(Looper.getMainLooper())
     private val fallbackIntervalMs = 60_000L
@@ -88,6 +91,7 @@ class ARHUDActivity : AppCompatActivity(), SensorEventListener {
         }
     }
     private var lastFallbackAction: FallbackAction = FallbackAction.NONE
+    private var playsLikeDrawerOpenedAtMillis: Long? = null
 
     private val executor = Executors.newSingleThreadExecutor()
     private val fusedLocationClient by lazy { LocationServices.getFusedLocationProviderClient(this) }
@@ -192,7 +196,7 @@ class ARHUDActivity : AppCompatActivity(), SensorEventListener {
             microbench = microbench,
             telemetryClient = telemetry,
         )
-        val deviceProfile = deviceProfileManager.ensureProfile()
+        deviceProfile = deviceProfileManager.ensureProfile()
         fieldTestLatencyBucket = computeLatencyBucket(deviceProfile.estimatedFps)
         runtimeAdapter = RuntimeAdapter(
             getSharedPreferences("runtime_adapter", MODE_PRIVATE),
@@ -232,12 +236,12 @@ class ARHUDActivity : AppCompatActivity(), SensorEventListener {
             featureFlags = featureFlags,
             telemetry = telemetry,
             runtimeAdapter = runtimeAdapter,
-            onFlagsApplied = { flags, hash -> handleRemoteFlags(flags, hash) },
+            onFlagsApplied = { flags, hash, playsLike -> handleRemoteFlags(flags, hash, playsLike) },
         ).also { it.start() }
 
         val container = FrameLayout(this).apply { id = CONTAINER_ID }
         overlayView = ARHUDOverlayView(this)
-        overlayView.setPlaysLikeVisible(featureFlags.current().playsLikeEnabled)
+        overlayView.setPlaysLikeVisible(isPlaysLikeUiEnabled(featureFlags.current()))
 
         setContentView(FrameLayout(this).apply {
             addView(container, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
@@ -337,8 +341,11 @@ class ARHUDActivity : AppCompatActivity(), SensorEventListener {
 
     private fun updateFieldTestUi(force: Boolean = false) {
         val enabled = featureFlags.current().fieldTestModeEnabled
-        if (enabled != fieldTestEnabled || force) {
+        if (enabled != fieldTestEnabled) {
             fieldTestEnabled = enabled
+            overlayView.setFieldTestVisible(enabled)
+            trackPlaysLikeDrawerToggle(enabled)
+        } else if (force) {
             overlayView.setFieldTestVisible(enabled)
         }
         if (!fieldTestEnabled) {
@@ -763,7 +770,7 @@ class ARHUDActivity : AppCompatActivity(), SensorEventListener {
 
     private fun updatePlaysLike(distanceOverride: Double? = null) {
         val flags = featureFlags.current()
-        if (!flags.playsLikeEnabled) {
+        if (!isPlaysLikeUiEnabled(flags)) {
             overlayView.setPlaysLikeVisible(false)
             return
         }
@@ -807,6 +814,18 @@ class ARHUDActivity : AppCompatActivity(), SensorEventListener {
             result.quality.value,
         )
 
+        val config = playsLikeOptions.config ?: PlaysLikeService.Config()
+        overlayView.updatePlaysLikeQa(
+            distanceMeters = distanceMeters,
+            deltaHMeters = deltaH,
+            windParallel = windVector.parallel,
+            kS = playsLikeOptions.kS,
+            alphaHead = config.alphaHeadPerMph,
+            alphaTail = config.alphaTailPerMph,
+            eff = result.distanceEff,
+            quality = result.quality.value,
+        )
+
         telemetry.logPlaysLikeEval(
             D = distanceMeters,
             deltaH = deltaH,
@@ -818,15 +837,64 @@ class ARHUDActivity : AppCompatActivity(), SensorEventListener {
         )
     }
 
-    private fun handleRemoteFlags(flags: FeatureFlagConfig, hash: String?) {
+    private fun handleRemoteFlags(flags: FeatureFlagConfig, hash: String?, playsLikeConfig: JSONObject?) {
         analyticsCoordinator.apply(flags, hash)
+        parsePlaysLikeConfig(playsLikeConfig)?.let { config ->
+            playsLikeOptions = playsLikeOptions.copy(
+                kS = config.slopeFactor,
+                config = config,
+            )
+        }
+        val effectiveConfig = playsLikeOptions.config ?: PlaysLikeService.Config()
+        telemetry.logPlaysLikeAssign(
+            variant = flags.playsLikeVariant.storageValue,
+            tier = deviceProfile.tier.name,
+            kS = playsLikeOptions.kS,
+            alphaHead = effectiveConfig.alphaHeadPerMph,
+            alphaTail = effectiveConfig.alphaTailPerMph,
+        )
         runOnUiThread {
-            if (!flags.playsLikeEnabled || !flags.hudEnabled) {
+            if (!isPlaysLikeUiEnabled(flags) || !flags.hudEnabled) {
                 overlayView.setPlaysLikeVisible(false)
             } else {
                 updatePlaysLike()
             }
         }
+    }
+
+    private fun trackPlaysLikeDrawerToggle(visible: Boolean) {
+        val now = System.currentTimeMillis()
+        if (!isPlaysLikeUiEnabled(featureFlags.current())) {
+            playsLikeDrawerOpenedAtMillis = if (visible) now else null
+            return
+        }
+        if (visible) {
+            playsLikeDrawerOpenedAtMillis = now
+            telemetry.logPlaysLikeUi(action = "drawer_open", dtMs = 0)
+        } else {
+            val openedAt = playsLikeDrawerOpenedAtMillis
+            val duration = if (openedAt != null && now >= openedAt) now - openedAt else 0L
+            telemetry.logPlaysLikeUi(action = "drawer_close", dtMs = duration)
+            playsLikeDrawerOpenedAtMillis = null
+        }
+    }
+
+    private fun isPlaysLikeUiEnabled(flags: FeatureFlagConfig): Boolean {
+        return flags.playsLikeEnabled && flags.playsLikeVariant == FeatureFlagConfig.PlaysLikeVariant.V1
+    }
+
+    private fun parsePlaysLikeConfig(json: JSONObject?): PlaysLikeService.Config? {
+        json ?: return null
+        val defaults = PlaysLikeService.Config()
+        return PlaysLikeService.Config(
+            windModel = json.optString("windModel", defaults.windModel),
+            alphaHeadPerMph = json.optDouble("alphaHead_per_mph", defaults.alphaHeadPerMph),
+            alphaTailPerMph = json.optDouble("alphaTail_per_mph", defaults.alphaTailPerMph),
+            slopeFactor = json.optDouble("slopeFactor", defaults.slopeFactor),
+            windCapPctOfD = json.optDouble("windCap_pctOfD", defaults.windCapPctOfD),
+            taperStartMph = json.optDouble("taperStart_mph", defaults.taperStartMph),
+            sidewindDistanceAdjust = json.optBoolean("sidewindDistanceAdjust", defaults.sidewindDistanceAdjust),
+        )
     }
 
     private fun bearingBetween(start: Location, target: Location): Double {

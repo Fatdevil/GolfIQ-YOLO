@@ -162,6 +162,35 @@ class TelemetryClient {
         send(event = "plays_like_eval", payload = payload)
     }
 
+    fun logPlaysLikeAssign(
+        variant: String,
+        tier: String,
+        kS: Double,
+        alphaHead: Double,
+        alphaTail: Double,
+    ) {
+        send(
+            event = "plays_like_assign",
+            payload = mapOf(
+                "variant" to variant,
+                "tier" to tier,
+                "kS" to kS,
+                "alphaHead" to alphaHead,
+                "alphaTail" to alphaTail,
+            ),
+        )
+    }
+
+    fun logPlaysLikeUi(action: String, dtMs: Long) {
+        send(
+            event = "plays_like_ui",
+            payload = mapOf(
+                "action" to action,
+                "dt_ms" to dtMs,
+            ),
+        )
+    }
+
     fun logAnalyticsConfig(
         analyticsEnabled: Boolean,
         crashEnabled: Boolean,
