@@ -135,11 +135,10 @@ def _fetch_wind(lat: float, lon: float, when: Optional[datetime]) -> Dict[str, f
     times = hourly.get("time") or []
     speeds = hourly.get("wind_speed_10m") or []
     directions = hourly.get("wind_direction_10m") or []
-    temperatures = hourly.get("temperature_2m") or []
+    temperatures = hourly.get("temperature_2m")
     if not (
         times
         and len(times) == len(speeds) == len(directions)
-        and len(times) == len(temperatures)
     ):
         raise ProviderError("open-meteo hourly wind missing data")
 
@@ -147,9 +146,15 @@ def _fetch_wind(lat: float, lon: float, when: Optional[datetime]) -> Dict[str, f
     try:
         speed = float(speeds[index])
         direction = float(directions[index])
-        temperature = float(temperatures[index])
     except (IndexError, ValueError, TypeError) as exc:
         raise ProviderError("open-meteo hourly wind invalid entry") from exc
+
+    temperature: float | None = None
+    if isinstance(temperatures, list):
+        try:
+            temperature = float(temperatures[index])
+        except (IndexError, ValueError, TypeError):
+            temperature = None
 
     return {
         "speed_mps": speed,
