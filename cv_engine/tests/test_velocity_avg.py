@@ -89,4 +89,7 @@ def test_sliding_series_exposed_in_metrics_dataclass():
     assert metrics.ball_speed_window_mps == tuple(ball_series)
     assert metrics.club_speed_window_mps == tuple(club_series)
     if club_series:
-        assert metrics.club_speed_trend_pct == (club_series[-1] - club_series[0]) / club_series[0] * 100.0
+        assert (
+            metrics.club_speed_trend_pct
+            == (club_series[-1] - club_series[0]) / club_series[0] * 100.0
+        )
