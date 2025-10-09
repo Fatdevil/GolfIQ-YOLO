@@ -153,7 +153,9 @@ def test_update_remote_config_sanitizes_profile_selection_and_scaling(
         assert "ignored" not in wedge
 
 
-def test_update_remote_config_validates_profile_selection(monkeypatch: pytest.MonkeyPatch):
+def test_update_remote_config_validates_profile_selection(
+    monkeypatch: pytest.MonkeyPatch,
+):
     monkeypatch.setenv("ADMIN_TOKEN", "secret")
     headers = {"x-admin-token": "secret", "Origin": "http://testserver"}
 
@@ -182,9 +184,7 @@ def test_update_remote_config_validates_profile_selection(monkeypatch: pytest.Mo
         bad_scale = client.post(
             "/config/remote",
             json={
-                "tierB": {
-                    "playsLike": {"byClub": {"driver": {"scaleHead": "fast"}}}
-                }
+                "tierB": {"playsLike": {"byClub": {"driver": {"scaleHead": "fast"}}}}
             },
             headers=headers,
         )

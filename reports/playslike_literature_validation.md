@@ -1,6 +1,6 @@
 # Plays-Like Literature Profile Validation
 
-Generated: 2025-10-09 11:47:05Z
+Generated: 2025-10-09 12:01:19Z
 
 Profile note: Headwind +1%/mph, Tailwind -0.5%/mph, Slope 1:1 m↔m; cap ±20%; taper above 20 mph
 
