@@ -40,6 +40,7 @@ def _tier_defaults(**overrides: Any) -> Dict[str, Any]:
         "crashEnabled": overrides.pop("crashEnabled", False),
         "reducedRate": overrides.pop("reducedRate", False),
         "playsLikeEnabled": overrides.pop("playsLikeEnabled", False),
+        "ui": deepcopy(overrides.pop("ui", {"playsLikeVariant": "off"})),
         "playsLikeProfile": overrides.pop(
             "playsLikeProfile", DEFAULT_PLAYSLIKE_PROFILE
         ),

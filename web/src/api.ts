@@ -160,6 +160,10 @@ export type RemoteConfigTier = {
   reducedRate?: boolean;
   playsLikeEnabled?: boolean;
   playsLike?: PlaysLikeRemoteConfig;
+  ui?: {
+    playsLikeVariant?: string;
+    [key: string]: unknown;
+  };
   [key: string]: unknown;
 };
 

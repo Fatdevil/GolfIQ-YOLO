@@ -42,7 +42,9 @@ final class ARHUDViewController: UIViewController, ARSCNViewDelegate, CLLocation
     private var analyticsCoordinator: AnalyticsCoordinator?
     private let elevationProvider = PlaysLikeElevationProvider()
     private let windProvider = PlaysLikeWindProvider()
-    private let playsLikeOptions = PlaysLikeOptions()
+    private let deviceProfile: DeviceProfile
+    private var playsLikeOptions = PlaysLikeOptions()
+    private var playsLikeDrawerOpenedAt: Date?
 
     init(
         courseId: String,
@@ -64,6 +66,7 @@ final class ARHUDViewController: UIViewController, ARSCNViewDelegate, CLLocation
         self.runtimeDescriptor = runtimeDescriptor
         self.remoteConfigBaseURL = remoteConfigBaseURL ?? courseLoader.baseURL
         let profile = self.profileProvider.deviceProfile()
+        self.deviceProfile = profile
         self.fieldTestLatencyBucket = Self.computeLatencyBucket(for: profile.estimatedFps)
         featureFlags.applyDeviceTier(profile: profile)
         if let analyticsBaseURL = self.remoteConfigBaseURL {
@@ -130,8 +133,8 @@ final class ARHUDViewController: UIViewController, ARSCNViewDelegate, CLLocation
             featureFlags: featureFlags,
             telemetry: telemetry,
             runtimeDescriptor: runtimeDescriptor,
-            onFlagsApplied: { [weak self] flags, hash in
-                self?.handleRemoteFlags(flags: flags, hash: hash)
+            onFlagsApplied: { [weak self] flags, hash, config in
+                self?.handleRemoteFlags(flags: flags, hash: hash, playsLikeConfig: config)
             }
         )
         remoteConfigClient = client
@@ -181,7 +184,7 @@ final class ARHUDViewController: UIViewController, ARSCNViewDelegate, CLLocation
         ])
 
         overlayView.isHidden = !featureFlags.current().hudEnabled
-        overlayView.setPlaysLikeVisible(featureFlags.current().playsLikeEnabled)
+        overlayView.setPlaysLikeVisible(isPlaysLikeUiEnabled(featureFlags.current()))
         overlayView.calibrateButton.addTarget(self, action: #selector(handleCalibrateTapped), for: .touchUpInside)
         overlayView.recenterButton.addTarget(self, action: #selector(handleRecenterTapped), for: .touchUpInside)
         overlayView.markButton.addTarget(self, action: #selector(handleMarkTapped), for: .touchUpInside)
@@ -619,7 +622,7 @@ final class ARHUDViewController: UIViewController, ARSCNViewDelegate, CLLocation
 
     private func updatePlaysLike(distanceMeters: CLLocationDistance, location: CLLocation, course: ARHUDCourseBundle) {
         let flags = featureFlags.current()
-        guard flags.playsLikeEnabled, distanceMeters.isFinite, distanceMeters > 0 else {
+        guard isPlaysLikeUiEnabled(flags), distanceMeters.isFinite, distanceMeters > 0 else {
             overlayView.setPlaysLikeVisible(false)
             return
         }
@@ -653,6 +656,17 @@ final class ARHUDViewController: UIViewController, ARSCNViewDelegate, CLLocation
             wind: result.components.windM,
             quality: result.quality.rawValue
         )
+        let config = playsLikeOptions.config ?? PlaysLikeConfig.default
+        overlayView.updatePlaysLikeQA(
+            distance: distanceMeters,
+            deltaH: deltaH,
+            windParallel: wind.parallel,
+            kS: playsLikeOptions.kS,
+            alphaHead: config.alphaHeadPerMph,
+            alphaTail: config.alphaTailPerMph,
+            eff: result.distanceEff,
+            quality: result.quality.rawValue
+        )
         telemetry.logPlaysLikeEval(
             D: distanceMeters,
             deltaH: deltaH,
@@ -664,11 +678,28 @@ final class ARHUDViewController: UIViewController, ARSCNViewDelegate, CLLocation
         )
     }
 
-    private func handleRemoteFlags(flags: FeatureFlagConfig, hash: String?) {
+    private func handleRemoteFlags(flags: FeatureFlagConfig, hash: String?, playsLikeConfig: RemotePlaysLikeConfig?) {
         analyticsCoordinator?.apply(flags: flags, configHash: hash)
+        if let config = parsePlaysLikeConfig(playsLikeConfig) {
+            playsLikeOptions = PlaysLikeOptions(
+                kS: config.slopeFactor,
+                kHW: playsLikeOptions.kHW,
+                warnThresholdRatio: playsLikeOptions.warnThresholdRatio,
+                lowThresholdRatio: playsLikeOptions.lowThresholdRatio,
+                config: config
+            )
+        }
+        let effectiveConfig = playsLikeOptions.config ?? PlaysLikeConfig.default
+        telemetry.logPlaysLikeAssign(
+            variant: flags.playsLikeVariant.rawValue,
+            tier: deviceProfile.tier.rawValue,
+            kS: playsLikeOptions.kS,
+            alphaHead: effectiveConfig.alphaHeadPerMph,
+            alphaTail: effectiveConfig.alphaTailPerMph
+        )
         DispatchQueue.main.async { [weak self] in
             guard let self else { return }
-            if !flags.playsLikeEnabled || !flags.hudEnabled {
+            if !self.isPlaysLikeUiEnabled(flags) || !flags.hudEnabled {
                 self.overlayView.setPlaysLikeVisible(false)
                 return
             }
@@ -747,8 +778,11 @@ private extension ARHUDViewController {
 
     func updateFieldTestUi(force: Bool = false) {
         let enabled = featureFlags.current().fieldTestModeEnabled
-        if enabled != fieldTestEnabled || force {
+        if enabled != fieldTestEnabled {
             fieldTestEnabled = enabled
+            overlayView.setFieldTestVisible(enabled)
+            trackPlaysLikeDrawerToggle(visible: enabled)
+        } else if force {
             overlayView.setFieldTestVisible(enabled)
         }
         guard fieldTestEnabled else {
@@ -794,6 +828,57 @@ private extension ARHUDViewController {
         guard fieldTestEnabled else { return }
         let hole = fieldRunSession?.currentHole
         telemetry.sendFieldMarker(event: event, hole: hole, timestamp: Date().timeIntervalSince1970 * 1000)
+    }
+
+    func trackPlaysLikeDrawerToggle(visible: Bool) {
+        guard isPlaysLikeUiEnabled(featureFlags.current()) else {
+            playsLikeDrawerOpenedAt = visible ? Date() : nil
+            return
+        }
+        if visible {
+            playsLikeDrawerOpenedAt = Date()
+            telemetry.logPlaysLikeUi(action: "drawer_open", dtMs: 0)
+        } else {
+            let durationMs: Double
+            if let openedAt = playsLikeDrawerOpenedAt {
+                durationMs = max(0, Date().timeIntervalSince(openedAt) * 1000)
+            } else {
+                durationMs = 0
+            }
+            telemetry.logPlaysLikeUi(action: "drawer_close", dtMs: durationMs)
+            playsLikeDrawerOpenedAt = nil
+        }
+    }
+
+    func isPlaysLikeUiEnabled(_ flags: FeatureFlagConfig) -> Bool {
+        flags.playsLikeEnabled && flags.playsLikeVariant == .v1
+    }
+
+    func parsePlaysLikeConfig(_ config: RemotePlaysLikeConfig?) -> PlaysLikeConfig? {
+        guard let config else { return nil }
+        var resolved = PlaysLikeConfig.default
+        if let windModel = config.windModel {
+            resolved.windModel = windModel
+        }
+        if let alphaHead = config.alphaHeadPerMph {
+            resolved.alphaHeadPerMph = alphaHead
+        }
+        if let alphaTail = config.alphaTailPerMph {
+            resolved.alphaTailPerMph = alphaTail
+        }
+        if let slopeFactor = config.slopeFactor {
+            resolved.slopeFactor = slopeFactor
+        }
+        if let windCap = config.windCapPctOfD {
+            resolved.windCapPctOfD = windCap
+        }
+        if let taper = config.taperStartMph {
+            resolved.taperStartMph = taper
+        }
+        if let adjust = config.sidewindDistanceAdjust {
+            resolved.sidewindDistanceAdjust = adjust
+        }
+        return resolved
     }
 
     func startFieldRun() {

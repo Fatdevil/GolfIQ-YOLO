@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { getRemoteConfig, getRun } from "../api";
+import { getRemoteConfig, getRun, postTelemetryEvent } from "../api";
 import TracerCanvas from "../components/TracerCanvas";
 import GhostFrames from "../components/GhostFrames";
 import ExportPanel from "../components/ExportPanel";
@@ -23,7 +23,10 @@ export default function RunDetailPage() {
   const [error, setError] = useState<string | null>(null);
   const [exportOpen, setExportOpen] = useState(false);
   const [playsLikeCfg, setPlaysLikeCfg] = useState<PlaysLikeCfg>(() => mergePlaysLikeCfg());
+  const [rcPlaysLikeEnabled, setRcPlaysLikeEnabled] = useState(false);
+  const [playsLikeVariant, setPlaysLikeVariant] = useState<"off" | "v1">("off");
   const lastPlaysLikeTier = useRef<string | null>(null);
+  const lastAssignSignature = useRef<string | null>(null);
 
   const backView = useMemo(() => extractBackViewPayload(data), [data]);
   const qualityBadges = useMemo(() => {
@@ -186,8 +189,10 @@ export default function RunDetailPage() {
     return overlays;
   }, [data, selectMetric]);
 
+  const playsLikeUiEnabled = playsLikeEnabled && rcPlaysLikeEnabled && playsLikeVariant === "v1";
+
   const playsLikeData = useMemo(() => {
-    if (!playsLikeEnabled) return null;
+    if (!playsLikeUiEnabled) return null;
     const distance = selectMetric([
       "distanceMeters",
       "distance_m",
@@ -202,12 +207,17 @@ export default function RunDetailPage() {
       deltaHMeters: deltaH ?? undefined,
       windParallel: wind ?? undefined,
     };
-  }, [playsLikeEnabled, selectMetric]);
+  }, [playsLikeUiEnabled, selectMetric]);
 
   const canExport = visualTracerEnabled && !!backView?.videoUrl && !!backView.trace;
 
   useEffect(() => {
-    if (!playsLikeEnabled) return;
+    if (!playsLikeEnabled) {
+      setRcPlaysLikeEnabled(false);
+      setPlaysLikeVariant("off");
+      lastAssignSignature.current = null;
+      return;
+    }
     const targetTier = remoteTier ?? "tierA";
     if (lastPlaysLikeTier.current === targetTier) {
       return;
@@ -219,12 +229,42 @@ export default function RunDetailPage() {
         if (cancelled || !snapshot) return;
         const tierConfig = snapshot.config[targetTier] ?? snapshot.config.tierA ?? {};
         const cfg = tierConfig?.playsLike as Partial<PlaysLikeCfg> | undefined;
-        setPlaysLikeCfg(mergePlaysLikeCfg(cfg));
+        const merged = mergePlaysLikeCfg(cfg);
+        setPlaysLikeCfg(merged);
+        const enabled = Boolean(tierConfig?.playsLikeEnabled);
+        setRcPlaysLikeEnabled(enabled);
+        const variantRaw = String(tierConfig?.ui?.playsLikeVariant ?? "off").toLowerCase();
+        const normalizedVariant = variantRaw === "v1" ? "v1" : "off";
+        setPlaysLikeVariant(normalizedVariant as "off" | "v1");
+        const signature = [
+          targetTier,
+          enabled ? "1" : "0",
+          normalizedVariant,
+          merged.slopeFactor.toFixed(3),
+          merged.alphaHead_per_mph.toFixed(4),
+          merged.alphaTail_per_mph.toFixed(4),
+        ].join("|");
+        if (lastAssignSignature.current !== signature) {
+          lastAssignSignature.current = signature;
+          postTelemetryEvent({
+            event: "plays_like_assign",
+            variant: normalizedVariant,
+            tier: targetTier,
+            kS: merged.slopeFactor,
+            alphaHead: merged.alphaHead_per_mph,
+            alphaTail: merged.alphaTail_per_mph,
+          }).catch((err) => {
+            console.warn("Failed to emit plays_like_assign", err);
+          });
+        }
       })
       .catch((err) => {
         console.warn("Failed to load remote plays-like config", err);
         if (!cancelled) {
           setPlaysLikeCfg(mergePlaysLikeCfg());
+          setRcPlaysLikeEnabled(false);
+          setPlaysLikeVariant("off");
+          lastAssignSignature.current = null;
           lastPlaysLikeTier.current = null;
         }
       });
@@ -289,9 +329,9 @@ export default function RunDetailPage() {
           </button>
         </div>
       </div>
-      {playsLikeEnabled ? (
+      {playsLikeUiEnabled ? (
         <PlaysLikePanel
-          enabled={playsLikeEnabled}
+          enabled={playsLikeUiEnabled}
           distanceMeters={playsLikeData?.distanceMeters}
           deltaHMeters={playsLikeData?.deltaHMeters}
           windParallel={playsLikeData?.windParallel}
