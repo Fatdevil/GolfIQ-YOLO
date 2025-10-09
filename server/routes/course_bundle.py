@@ -54,6 +54,40 @@ async def get_courses() -> JSONResponse:
     return JSONResponse({"courses": courses})
 
 
+@router.get("/bundle/course/{course_id}")
+async def get_offline_course_bundle(course_id: str, request: Request) -> Response:
+    try:
+        bundle = load_bundle(course_id)
+    except CourseBundleNotFoundError as exc:  # pragma: no cover - thin wrapper
+        raise HTTPException(status_code=404, detail="course bundle not found") from exc
+
+    ttl = bundle.ttl_seconds or DEFAULT_TTL_SECONDS
+    if _if_none_match_matches(request.headers.get("if-none-match"), bundle.etag):
+        response = Response(status_code=304)
+        return _apply_cache_headers(response, bundle.etag, ttl)
+
+    payload = {
+        "course": {
+            "id": bundle.id,
+            "name": bundle.name,
+            "updatedAt": bundle.updated_at,
+            "ttlSeconds": ttl,
+            "etag": bundle.etag,
+        },
+        "layers": {
+            "fairways": [],
+            "greens": [],
+            "bunkers": [],
+            "hazards": [],
+        },
+        "metadata": {
+            "holeCount": len(bundle.holes),
+        },
+    }
+    response = JSONResponse(payload)
+    return _apply_cache_headers(response, bundle.etag, ttl)
+
+
 @router.get("/course/{course_id}")
 async def get_course_bundle(course_id: str, request: Request) -> Response:
     try:

@@ -1,0 +1,91 @@
+name: ios-ci
+
+on:
+  pull_request:
+    paths:
+      - 'ios/**'
+      - '.github/workflows/ios-ci.yml'
+      - 'docs/RUNBOOK_mobile.md'
+  push:
+    branches: [main]
+    paths:
+      - 'ios/**'
+      - '.github/workflows/ios-ci.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: macos-latest
+    strategy:
+      fail-fast: false
+    steps:
+      - uses: actions/checkout@v5
+      - name: Install CocoaPods
+        run: brew install cocoapods
+      - name: Install pods
+        working-directory: ios
+        run: |
+          if [ -f Podfile ]; then
+            pod install
+          else
+            echo "No Podfile found in ios/; skipping pod install"
+          fi
+      - name: Resolve build target
+        id: resolve
+        shell: bash
+        run: |
+          set -euo pipefail
+          workspace="${IOS_WORKSPACE:-}"
+          scheme="${IOS_SCHEME:-}"
+          mode="workspace"
+          if [ -z "$workspace" ]; then
+            workspace=$(find ios -maxdepth 4 -name '*.xcworkspace' | head -n1 || true)
+          fi
+          if [ -z "$workspace" ]; then
+            workspace=$(find ios -maxdepth 4 -name '*.xcodeproj' | head -n1 || true)
+            mode="project"
+          fi
+          if [ -z "$scheme" ] && [ -n "$workspace" ]; then
+            base=$(basename "$workspace")
+            if [ "$mode" = "workspace" ]; then
+              scheme="${base%.xcworkspace}"
+            else
+              scheme="${base%.xcodeproj}"
+            fi
+          fi
+          echo "mode=$mode" >> "$GITHUB_OUTPUT"
+          echo "workspace=$workspace" >> "$GITHUB_OUTPUT"
+          echo "scheme=$scheme" >> "$GITHUB_OUTPUT"
+      - name: Build (xcodebuild)
+        shell: bash
+        run: |
+          set -euo pipefail
+          MODE="${{ steps.resolve.outputs.mode }}"
+          TARGET="${{ steps.resolve.outputs.workspace }}"
+          SCHEME="${{ steps.resolve.outputs.scheme }}"
+          LOG_PATH="xcodebuild.log"
+          if [ -z "$TARGET" ]; then
+            echo "::warning::No Xcode workspace or project found; skipping build" | tee "$LOG_PATH"
+          elif [ "$MODE" = "workspace" ]; then
+            xcodebuild \
+              -workspace "$TARGET" \
+              -scheme "$SCHEME" \
+              -sdk iphonesimulator \
+              -configuration Debug \
+              -showBuildSettings | tee "$LOG_PATH"
+          else
+            xcodebuild \
+              -project "$TARGET" \
+              -scheme "$SCHEME" \
+              -sdk iphonesimulator \
+              -configuration Debug \
+              -showBuildSettings | tee "$LOG_PATH"
+          fi
+      - name: Upload xcodebuild logs
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-xcodebuild
+          path: xcodebuild.log
+          if-no-files-found: warn
