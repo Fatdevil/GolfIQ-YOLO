@@ -72,6 +72,7 @@ def test_sliding_window_velocity_improves_noise_resilience():
 
     assert len(speeds) == frames - 4
     assert all(abs(speed - vx_true) < 1.5 for speed in speeds)
+    assert all(abs(vy - vy_true) < 1.5 for _, vy in velocities)
 
 
 def test_sliding_series_exposed_in_metrics_dataclass():
