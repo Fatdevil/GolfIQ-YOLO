@@ -528,6 +528,10 @@ def run_sanity_checks(
 
     reference_logits = _run_reference_numpy(dummy_input, weights)
     ref_err = float(np.max(np.abs(reference_logits - onnx_logits)))
+    if ref_err > tolerance:
+        raise RuntimeError(
+            f"reference-numpy output deviates from ONNX reference (max err {ref_err:.4f})"
+        )
     results.append(
         SanityResult("reference-numpy", "PASS", tuple(reference_logits.shape), ref_err, "vs onnx")
     )
@@ -593,6 +597,10 @@ def run_sanity_checks(
 
     ncnn_logits = reference_logits
     ncnn_err = float(np.max(np.abs(ncnn_logits - onnx_logits)))
+    if ncnn_err > tolerance:
+        raise RuntimeError(
+            f"ncnn output deviates from ONNX reference (max err {ncnn_err:.4f})"
+        )
     results.append(
         SanityResult("ncnn", "PASS", tuple(ncnn_logits.shape), ncnn_err, "shares numpy reference")
     )
