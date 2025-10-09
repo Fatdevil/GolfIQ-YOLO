@@ -8,6 +8,11 @@ struct FeatureFlagConfig: Codable {
         case override
     }
 
+    enum PlaysLikeVariant: String, Codable {
+        case off
+        case v1
+    }
+
     private enum CodingKeys: String, CodingKey {
         case hudEnabled
         case hudTracerEnabled
@@ -15,6 +20,7 @@ struct FeatureFlagConfig: Codable {
         case analyticsEnabled
         case crashEnabled
         case playsLikeEnabled
+        case playsLikeVariant
         case hudWindHintEnabled
         case hudTargetLineEnabled
         case hudBatterySaverEnabled
@@ -30,6 +36,7 @@ struct FeatureFlagConfig: Codable {
     var analyticsEnabled: Bool
     var crashEnabled: Bool
     var playsLikeEnabled: Bool
+    var playsLikeVariant: PlaysLikeVariant
     var hudWindHintEnabled: Bool
     var hudTargetLineEnabled: Bool
     var hudBatterySaverEnabled: Bool
@@ -45,6 +52,7 @@ struct FeatureFlagConfig: Codable {
         analyticsEnabled: Bool = false,
         crashEnabled: Bool = false,
         playsLikeEnabled: Bool = false,
+        playsLikeVariant: PlaysLikeVariant = .off,
         hudWindHintEnabled: Bool,
         hudTargetLineEnabled: Bool,
         hudBatterySaverEnabled: Bool,
@@ -59,6 +67,7 @@ struct FeatureFlagConfig: Codable {
         self.analyticsEnabled = analyticsEnabled
         self.crashEnabled = crashEnabled
         self.playsLikeEnabled = playsLikeEnabled
+        self.playsLikeVariant = playsLikeVariant
         self.hudWindHintEnabled = hudWindHintEnabled
         self.hudTargetLineEnabled = hudTargetLineEnabled
         self.hudBatterySaverEnabled = hudBatterySaverEnabled
@@ -76,6 +85,7 @@ struct FeatureFlagConfig: Codable {
         analyticsEnabled = try container.decodeIfPresent(Bool.self, forKey: .analyticsEnabled) ?? false
         crashEnabled = try container.decodeIfPresent(Bool.self, forKey: .crashEnabled) ?? false
         playsLikeEnabled = try container.decodeIfPresent(Bool.self, forKey: .playsLikeEnabled) ?? false
+        playsLikeVariant = try container.decodeIfPresent(PlaysLikeVariant.self, forKey: .playsLikeVariant) ?? .off
         hudWindHintEnabled = try container.decode(Bool.self, forKey: .hudWindHintEnabled)
         hudTargetLineEnabled = try container.decode(Bool.self, forKey: .hudTargetLineEnabled)
         hudBatterySaverEnabled = try container.decode(Bool.self, forKey: .hudBatterySaverEnabled)
@@ -93,6 +103,7 @@ struct FeatureFlagConfig: Codable {
                 hudTracerEnabled: false,
                 fieldTestModeEnabled: false,
                 playsLikeEnabled: false,
+                playsLikeVariant: .off,
                 hudWindHintEnabled: true,
                 hudTargetLineEnabled: true,
                 hudBatterySaverEnabled: false,
@@ -107,6 +118,7 @@ struct FeatureFlagConfig: Codable {
                 hudTracerEnabled: false,
                 fieldTestModeEnabled: false,
                 playsLikeEnabled: false,
+                playsLikeVariant: .off,
                 hudWindHintEnabled: true,
                 hudTargetLineEnabled: true,
                 hudBatterySaverEnabled: true,
@@ -121,6 +133,7 @@ struct FeatureFlagConfig: Codable {
                 hudTracerEnabled: false,
                 fieldTestModeEnabled: false,
                 playsLikeEnabled: false,
+                playsLikeVariant: .off,
                 hudWindHintEnabled: false,
                 hudTargetLineEnabled: false,
                 hudBatterySaverEnabled: true,

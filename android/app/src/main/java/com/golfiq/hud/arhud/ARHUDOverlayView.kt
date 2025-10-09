@@ -35,6 +35,15 @@ class ARHUDOverlayView @JvmOverloads constructor(
     private val qaEtagLabel: TextView = TextView(context)
     private val qaHoleLabel: TextView = TextView(context)
     private val qaRecenterLabel: TextView = TextView(context)
+    private val qaPlaysLikeHeader: TextView = TextView(context)
+    private val qaPlaysLikeDistanceLabel: TextView = TextView(context)
+    private val qaPlaysLikeDeltaHLabel: TextView = TextView(context)
+    private val qaPlaysLikeWindLabel: TextView = TextView(context)
+    private val qaPlaysLikeKsLabel: TextView = TextView(context)
+    private val qaPlaysLikeAlphaHeadLabel: TextView = TextView(context)
+    private val qaPlaysLikeAlphaTailLabel: TextView = TextView(context)
+    private val qaPlaysLikeEffLabel: TextView = TextView(context)
+    private val qaPlaysLikeQualityLabel: TextView = TextView(context)
     private val playsLikeContainer: LinearLayout = LinearLayout(context)
     private val playsLikeHeadline: TextView = TextView(context)
     private val playsLikeDeltaLabel: TextView = TextView(context)
@@ -161,6 +170,32 @@ class ARHUDOverlayView @JvmOverloads constructor(
         }
     }
 
+    fun updatePlaysLikeQa(
+        distanceMeters: Double,
+        deltaHMeters: Double,
+        windParallel: Double,
+        kS: Double,
+        alphaHead: Double,
+        alphaTail: Double,
+        eff: Double,
+        quality: String,
+    ) {
+        post {
+            qaPlaysLikeDistanceLabel.text = String.format(Locale.US, "D: %.1f m", distanceMeters)
+            qaPlaysLikeDeltaHLabel.text = String.format(Locale.US, "Δh: %+0.1f m", deltaHMeters)
+            qaPlaysLikeWindLabel.text = String.format(Locale.US, "W∥: %+0.1f m/s", windParallel)
+            qaPlaysLikeKsLabel.text = String.format(Locale.US, "kS: %.2f", kS)
+            qaPlaysLikeAlphaHeadLabel.text = String.format(Locale.US, "α_head: %.3f /mph", alphaHead)
+            qaPlaysLikeAlphaTailLabel.text = String.format(Locale.US, "α_tail: %.3f /mph", alphaTail)
+            qaPlaysLikeEffLabel.text = String.format(Locale.US, "Eff: %.1f m", eff)
+            qaPlaysLikeQualityLabel.text = String.format(
+                Locale.US,
+                "Quality: %s",
+                quality.uppercase(Locale.US),
+            )
+        }
+    }
+
     private fun configurePlaysLike(parent: LinearLayout) {
         val density = resources.displayMetrics.density
         playsLikeContainer.orientation = LinearLayout.VERTICAL
@@ -273,6 +308,15 @@ class ARHUDOverlayView @JvmOverloads constructor(
             qaEtagLabel,
             qaHoleLabel,
             qaRecenterLabel,
+            qaPlaysLikeHeader,
+            qaPlaysLikeDistanceLabel,
+            qaPlaysLikeDeltaHLabel,
+            qaPlaysLikeWindLabel,
+            qaPlaysLikeKsLabel,
+            qaPlaysLikeAlphaHeadLabel,
+            qaPlaysLikeAlphaTailLabel,
+            qaPlaysLikeEffLabel,
+            qaPlaysLikeQualityLabel,
         ).forEach { label ->
             label.setTextColor(ContextCompat.getColor(context, android.R.color.white))
             label.textSize = 12f
@@ -284,6 +328,20 @@ class ARHUDOverlayView @JvmOverloads constructor(
         qaEtagLabel.text = "ETag age: --"
         qaHoleLabel.text = "Hole: –"
         qaRecenterLabel.text = "Recenter marks: 0"
+        qaPlaysLikeHeader.apply {
+            text = "Plays-like QA"
+            textSize = 13f
+            val topPadding = (8 * density).toInt()
+            setPadding(0, topPadding, 0, 0)
+        }
+        qaPlaysLikeDistanceLabel.text = "D: --"
+        qaPlaysLikeDeltaHLabel.text = "Δh: --"
+        qaPlaysLikeWindLabel.text = "W∥: --"
+        qaPlaysLikeKsLabel.text = "kS: --"
+        qaPlaysLikeAlphaHeadLabel.text = "α_head: --"
+        qaPlaysLikeAlphaTailLabel.text = "α_tail: --"
+        qaPlaysLikeEffLabel.text = "Eff: --"
+        qaPlaysLikeQualityLabel.text = "Quality: --"
 
         val markRow = LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL
@@ -314,6 +372,15 @@ class ARHUDOverlayView @JvmOverloads constructor(
         qaContainer.addView(qaEtagLabel)
         qaContainer.addView(qaHoleLabel)
         qaContainer.addView(qaRecenterLabel)
+        qaContainer.addView(qaPlaysLikeHeader)
+        qaContainer.addView(qaPlaysLikeDistanceLabel)
+        qaContainer.addView(qaPlaysLikeDeltaHLabel)
+        qaContainer.addView(qaPlaysLikeWindLabel)
+        qaContainer.addView(qaPlaysLikeKsLabel)
+        qaContainer.addView(qaPlaysLikeAlphaHeadLabel)
+        qaContainer.addView(qaPlaysLikeAlphaTailLabel)
+        qaContainer.addView(qaPlaysLikeEffLabel)
+        qaContainer.addView(qaPlaysLikeQualityLabel)
         qaContainer.addView(markRow)
         qaContainer.addView(runButtons)
 

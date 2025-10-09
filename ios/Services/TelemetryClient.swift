@@ -149,6 +149,25 @@ final class TelemetryClient {
         send(event: "plays_like_eval", payload: payload)
     }
 
+    func logPlaysLikeAssign(variant: String, tier: String, kS: Double, alphaHead: Double, alphaTail: Double) {
+        let payload: [String: Any] = [
+            "variant": variant,
+            "tier": tier,
+            "kS": kS,
+            "alphaHead": alphaHead,
+            "alphaTail": alphaTail
+        ]
+        send(event: "plays_like_assign", payload: payload)
+    }
+
+    func logPlaysLikeUi(action: String, dtMs: Double) {
+        let payload: [String: Any] = [
+            "action": action,
+            "dt_ms": dtMs
+        ]
+        send(event: "plays_like_ui", payload: payload)
+    }
+
     func logAnalyticsConfig(
         analyticsEnabled: Bool,
         crashEnabled: Bool,
