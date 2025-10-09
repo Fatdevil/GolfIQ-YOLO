@@ -106,7 +106,9 @@ def analyze_frames(
 
         tracking_start = perf_counter()
         active_ids: Dict[str, int] = {"ball": -1, "club": -1}
-        with span("cv.stage.track", attributes={"cv.tracker": tracker_name}) as track_span:
+        with span(
+            "cv.stage.track", attributes={"cv.tracker": tracker_name}
+        ) as track_span:
             for boxes in boxes_per_frame:
                 tracked = tracker.update(boxes)
 
