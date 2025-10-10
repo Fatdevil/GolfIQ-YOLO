@@ -795,8 +795,9 @@ def write_report(
     for result in sanity_results:
         shape_val = str(result.shape) if result.shape is not None else "-"
         err_val = f"{result.max_error:.6f}" if result.max_error is not None else "-"
+        note_val = result.note or ""
         lines.append(
-            f"| {result.backend} | {result.status} | {shape_val} | {err_val} | {result.note or ''} |"
+            f"| {result.backend} | {result.status} | {shape_val} | {err_val} | {note_val} |"
         )
     lines.append("")
 
@@ -903,7 +904,9 @@ def main() -> None:
 
     bench = run_micro_bench(dummy_input, onnx_path, cfg.frames)
     _log(
-        f"Benchmark {bench.backend} frames={bench.frames} avg_ms={bench.avg_ms:.4f} total_ms={bench.total_ms:.4f}"
+        "Benchmark "
+        f"{bench.backend} frames={bench.frames} avg_ms={bench.avg_ms:.4f} "
+        f"total_ms={bench.total_ms:.4f}"
     )
 
     report_path = write_report(cfg, env_info, artifacts, sanity_results, bench)
