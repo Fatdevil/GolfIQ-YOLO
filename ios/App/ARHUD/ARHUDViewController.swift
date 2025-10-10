@@ -654,6 +654,8 @@ final class ARHUDViewController: UIViewController, ARSCNViewDelegate, CLLocation
             effective: result.distanceEff,
             slope: result.components.slopeM,
             wind: result.components.windM,
+            temp: result.components.tempM,
+            alt: result.components.altM,
             quality: result.quality.rawValue
         )
         let config = playsLikeOptions.config ?? PlaysLikeConfig.default
@@ -686,7 +688,9 @@ final class ARHUDViewController: UIViewController, ARSCNViewDelegate, CLLocation
                 kHW: playsLikeOptions.kHW,
                 warnThresholdRatio: playsLikeOptions.warnThresholdRatio,
                 lowThresholdRatio: playsLikeOptions.lowThresholdRatio,
-                config: config
+                config: config,
+                temperatureC: playsLikeOptions.temperatureC,
+                altitudeAslM: playsLikeOptions.altitudeAslM
             )
         }
         let effectiveConfig = playsLikeOptions.config ?? PlaysLikeConfig.default
@@ -877,6 +881,18 @@ private extension ARHUDViewController {
         }
         if let adjust = config.sidewindDistanceAdjust {
             resolved.sidewindDistanceAdjust = adjust
+        }
+        if let enabled = config.temperatureEnabled {
+            resolved.temperatureEnabled = enabled
+        }
+        if let beta = config.betaTempPerC {
+            resolved.betaTempPerC = beta
+        }
+        if let enabled = config.altitudeEnabled {
+            resolved.altitudeEnabled = enabled
+        }
+        if let gamma = config.gammaAltPer100m {
+            resolved.gammaAltPer100m = gamma
         }
         return resolved
     }

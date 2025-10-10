@@ -8,7 +8,7 @@
     "build": "vite build",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
-    "test:playslike": "vitest run src/__tests__/playslike.percent_v1.spec.ts"
+    "test:playslike": "vitest run src/__tests__/playslike.percent_v1.spec.ts src/__tests__/playslike.temp_alt.spec.ts"
   },
   "dependencies": {
     "@sentry/browser": "^7.119.0",

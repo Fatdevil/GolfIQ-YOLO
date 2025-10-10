@@ -12,6 +12,10 @@ struct RemotePlaysLikeConfig: Codable {
     let windCapPctOfD: Double?
     let taperStartMph: Double?
     let sidewindDistanceAdjust: Bool?
+    let temperatureEnabled: Bool?
+    let betaTempPerC: Double?
+    let altitudeEnabled: Bool?
+    let gammaAltPer100m: Double?
 
     private enum CodingKeys: String, CodingKey {
         case windModel
@@ -21,6 +25,10 @@ struct RemotePlaysLikeConfig: Codable {
         case windCapPctOfD = "windCap_pctOfD"
         case taperStartMph = "taperStart_mph"
         case sidewindDistanceAdjust
+        case temperatureEnabled
+        case betaTempPerC = "betaTemp_per_C"
+        case altitudeEnabled
+        case gammaAltPer100m = "gammaAlt_per_100m"
     }
 }
 

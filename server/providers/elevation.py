@@ -19,6 +19,7 @@ _cache = ProviderCache("elevation", ELEVATION_CACHE_TTL)
 @dataclass
 class ElevationProviderResult:
     elevation_m: float
+    h_asl_m: float
     etag: str
     expires_at: float
 
@@ -35,8 +36,11 @@ def _http_client_factory(**kwargs: Any) -> httpx.Client:
 
 def _cache_entry_to_result(entry: CacheEntry) -> ElevationProviderResult:
     elevation_m = float(entry.value["elevation_m"])
+    h_asl_raw = entry.value.get("h_asl_m") if isinstance(entry.value, dict) else None
+    h_asl_m = float(h_asl_raw) if h_asl_raw is not None else elevation_m
     return ElevationProviderResult(
         elevation_m=elevation_m,
+        h_asl_m=h_asl_m,
         etag=entry.etag,
         expires_at=entry.expires_at,
     )
@@ -66,7 +70,7 @@ def _fetch_elevation(lat: float, lon: float) -> Dict[str, float]:
         value = _fetch_open_meteo(lat, lon)
     except ProviderError:
         value = _fetch_opentopo(lat, lon)
-    return {"elevation_m": value}
+    return {"elevation_m": value, "h_asl_m": value}
 
 
 def _fetch_open_meteo(lat: float, lon: float) -> float:

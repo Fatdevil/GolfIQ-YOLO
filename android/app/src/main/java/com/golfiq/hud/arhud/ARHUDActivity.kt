@@ -811,6 +811,8 @@ class ARHUDActivity : AppCompatActivity(), SensorEventListener {
             result.distanceEff,
             result.components.slopeM,
             result.components.windM,
+            result.components.tempM,
+            result.components.altM,
             result.quality.value,
         )
 
@@ -843,6 +845,8 @@ class ARHUDActivity : AppCompatActivity(), SensorEventListener {
             playsLikeOptions = playsLikeOptions.copy(
                 kS = config.slopeFactor,
                 config = config,
+                temperatureC = playsLikeOptions.temperatureC,
+                altitudeAslM = playsLikeOptions.altitudeAslM,
             )
         }
         val effectiveConfig = playsLikeOptions.config ?: PlaysLikeService.Config()
@@ -894,6 +898,10 @@ class ARHUDActivity : AppCompatActivity(), SensorEventListener {
             windCapPctOfD = json.optDouble("windCap_pctOfD", defaults.windCapPctOfD),
             taperStartMph = json.optDouble("taperStart_mph", defaults.taperStartMph),
             sidewindDistanceAdjust = json.optBoolean("sidewindDistanceAdjust", defaults.sidewindDistanceAdjust),
+            temperatureEnabled = json.optBoolean("temperatureEnabled", defaults.temperatureEnabled),
+            betaTempPerC = json.optDouble("betaTemp_per_C", defaults.betaTempPerC),
+            altitudeEnabled = json.optBoolean("altitudeEnabled", defaults.altitudeEnabled),
+            gammaAltPer100m = json.optDouble("gammaAlt_per_100m", defaults.gammaAltPer100m),
         )
     }
 

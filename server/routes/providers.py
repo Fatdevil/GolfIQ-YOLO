@@ -57,11 +57,13 @@ def _result_payload(
     if isinstance(result, ElevationProviderResult):
         payload = {
             "elevation_m": result.elevation_m,
+            "h_asl_m": result.h_asl_m,
         }
     elif isinstance(result, WindProviderResult):
         payload = {
             "speed_mps": result.speed_mps,
             "dir_from_deg": result.direction_from_deg,
+            "temperature_c": result.temperature_c,
         }
     else:  # pragma: no cover - defensive
         payload = {}

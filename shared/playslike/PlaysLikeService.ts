@@ -3,6 +3,8 @@ export type PlaysLikeQuality = "good" | "warn" | "low";
 export interface PlaysLikeComponents {
   slopeM: number;
   windM: number;
+  tempM: number;
+  altM: number;
 }
 
 export interface PlaysLikeResult {
@@ -21,6 +23,8 @@ export interface PlaysLikeOptions {
   config?: Partial<PlaysLikeCfg>;
   clubClass?: string | null;
   playerType?: string | null;
+  temperatureC?: number | null;
+  altitudeAsl_m?: number | null;
 }
 
 interface CacheValueWithTtl {
@@ -35,6 +39,7 @@ type CacheEntry<T extends CacheValueWithTtl> = {
 
 export interface ElevationProviderData extends CacheValueWithTtl {
   elevationM: number;
+  hAslM: number;
   etag?: string;
 }
 
@@ -43,6 +48,7 @@ export interface WindProviderData extends CacheValueWithTtl {
   dirFromDeg: number;
   wParallel: number | null;
   wPerp: number | null;
+  temperatureC: number | null;
   etag?: string;
 }
 
@@ -51,6 +57,7 @@ const windCache = new Map<string, CacheEntry<WindProviderData>>();
 
 const STUB_ELEVATION: ElevationProviderData = {
   elevationM: 0,
+  hAslM: 0,
   ttlSeconds: 0,
 };
 
@@ -59,6 +66,7 @@ const STUB_WIND: WindProviderData = {
   dirFromDeg: 0,
   wParallel: 0,
   wPerp: 0,
+  temperatureC: null,
   ttlSeconds: 0,
 };
 
@@ -189,6 +197,9 @@ export const fetchElevation = async (
   const entry: CacheEntry<ElevationProviderData> = {
     value: {
       elevationM: Number(payload.elevation_m ?? 0),
+      hAslM: Number(
+        payload.h_asl_m === undefined ? payload.elevation_m ?? 0 : payload.h_asl_m,
+      ),
       ttlSeconds: ttl,
     },
     etag: payload.etag ?? stripWeakEtag(response.headers.get("etag")),
@@ -249,6 +260,10 @@ export const fetchWind = async (
         : Number(payload.w_parallel),
     wPerp:
       payload.w_perp === null || payload.w_perp === undefined ? null : Number(payload.w_perp),
+    temperatureC:
+      payload.temperature_c === null || payload.temperature_c === undefined
+        ? null
+        : Number(payload.temperature_c),
     ttlSeconds: ttl,
   };
   const entry: CacheEntry<WindProviderData> = {
@@ -305,6 +320,10 @@ export interface PlaysLikeCfg {
   playsLikeProfile?: string;
   byClub?: PlaysLikeScaleMap;
   byPlayerType?: PlaysLikeScaleMap;
+  temperatureEnabled: boolean;
+  betaTemp_per_C: number;
+  altitudeEnabled: boolean;
+  gammaAlt_per_100m: number;
 }
 
 export const DEFAULT_PLAYSLIKE_CFG: PlaysLikeCfg = {
@@ -318,6 +337,10 @@ export const DEFAULT_PLAYSLIKE_CFG: PlaysLikeCfg = {
   playsLikeProfile: "literature_v1",
   byClub: literatureProfile.byClub,
   byPlayerType: literatureProfile.byPlayerType,
+  temperatureEnabled: false,
+  betaTemp_per_C: 0.0018,
+  altitudeEnabled: false,
+  gammaAlt_per_100m: 0.0065,
 };
 
 const roundTo = (value: number, decimals: number) => {
@@ -388,6 +411,8 @@ interface ComputePlaysLikeOptions {
   cfg?: Partial<PlaysLikeCfg>;
   clubClass?: string | null;
   playerType?: string | null;
+  temperatureC?: number | null;
+  altitudeAsl_m?: number | null;
 }
 
 export const computeSlopeAdjust = (
@@ -466,11 +491,45 @@ const toComputeOptions = (
   if (!value) return {};
   if (
     typeof value === "object" &&
-    ("cfg" in value || "clubClass" in value || "playerType" in value)
+    ("cfg" in value ||
+      "clubClass" in value ||
+      "playerType" in value ||
+      "temperatureC" in value ||
+      "altitudeAsl_m" in value)
   ) {
     return value as ComputePlaysLikeOptions;
   }
   return { cfg: value as Partial<PlaysLikeCfg> };
+};
+
+export const computeTempAdjust = (
+  D: number,
+  T_C: number,
+  betaTemp = 0.0018,
+): number => {
+  const distance = sanitizeDistance(D);
+  if (distance <= 0 || !Number.isFinite(T_C)) {
+    return 0;
+  }
+  const beta = Number.isFinite(betaTemp) ? betaTemp : 0.0018;
+  const delta = distance * beta * (20 - T_C);
+  const cap = distance * 0.05;
+  return clamp(delta, -cap, cap);
+};
+
+export const computeAltitudeAdjust = (
+  D: number,
+  h_asl_m: number,
+  gammaPer100m = 0.0065,
+): number => {
+  const distance = sanitizeDistance(D);
+  if (distance <= 0 || !Number.isFinite(h_asl_m)) {
+    return 0;
+  }
+  const gamma = Number.isFinite(gammaPer100m) ? gammaPer100m : 0.0065;
+  const delta = distance * gamma * (h_asl_m / 100);
+  const cap = distance * 0.15;
+  return clamp(delta, -cap, cap);
 };
 
 export const computePlaysLike = (
@@ -480,7 +539,8 @@ export const computePlaysLike = (
   options?: Partial<PlaysLikeCfg> | ComputePlaysLikeOptions,
 ): PlaysLikeResult => {
   const distance = sanitizeDistance(D);
-  const { cfg, clubClass, playerType } = toComputeOptions(options);
+  const { cfg, clubClass, playerType, temperatureC, altitudeAsl_m } =
+    toComputeOptions(options);
   const resolved = resolveCfg(cfg);
   const slope = computeSlopeAdjust(distance, deltaH, resolved.slopeFactor);
   const baseAlphas: WindAlphas = {
@@ -501,13 +561,27 @@ export const computePlaysLike = (
           ...scaledAlphas,
         })
       : 0;
-  const eff = distance + slope + wind;
+  const tempAdjust =
+    resolved.temperatureEnabled && Number.isFinite(temperatureC ?? NaN)
+      ? computeTempAdjust(distance, Number(temperatureC), resolved.betaTemp_per_C)
+      : 0;
+  const altAdjust =
+    resolved.altitudeEnabled && Number.isFinite(altitudeAsl_m ?? NaN)
+      ? computeAltitudeAdjust(
+          distance,
+          Number(altitudeAsl_m),
+          resolved.gammaAlt_per_100m,
+        )
+      : 0;
+  const eff = distance + slope + wind + tempAdjust + altAdjust;
   const quality = computeQualityFromInputs(distance, deltaH, wParallel_mps);
   return {
     distanceEff: roundTo(eff, 1),
     components: {
       slopeM: roundTo(slope, 1),
       windM: roundTo(wind, 1),
+      tempM: roundTo(tempAdjust, 1),
+      altM: roundTo(altAdjust, 1),
     },
     quality,
   };
@@ -533,9 +607,15 @@ export const compute = (
     cfg: overrides,
     clubClass: opts.clubClass,
     playerType: opts.playerType,
+    temperatureC: opts.temperatureC,
+    altitudeAsl_m: opts.altitudeAsl_m,
   });
   const distance = sanitizeDistance(D);
-  const total = Math.abs(result.components.slopeM) + Math.abs(result.components.windM);
+  const total =
+    Math.abs(result.components.slopeM) +
+    Math.abs(result.components.windM) +
+    Math.abs(result.components.tempM) +
+    Math.abs(result.components.altM);
   const ratio = distance > 0 ? total / distance : Number.POSITIVE_INFINITY;
   const warnThreshold = opts.warnThresholdRatio;
   const lowThreshold = opts.lowThresholdRatio;

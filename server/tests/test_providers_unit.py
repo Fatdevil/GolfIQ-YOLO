@@ -310,20 +310,26 @@ def test_route_helper_if_none_match_variants(fake_clock):
     assert provider_routes._if_none_match_matches(" , ", "abc") is False
 
     result = ElevationProviderResult(
-        elevation_m=10.0, etag="tag", expires_at=fake_clock.time() + 30
+        elevation_m=10.0,
+        h_asl_m=10.0,
+        etag="tag",
+        expires_at=fake_clock.time() + 30,
     )
     payload = provider_routes._result_payload(result)
     assert payload["elevation_m"] == 10.0
+    assert payload["h_asl_m"] == 10.0
 
     wind_result = WindProviderResult(
         speed_mps=5.0,
         direction_from_deg=90.0,
+        temperature_c=12.0,
         etag="w",
         expires_at=fake_clock.time() + 30,
     )
     payload = provider_routes._result_payload(wind_result)
     assert payload["speed_mps"] == 5.0
     assert payload["dir_from_deg"] == 90.0
+    assert payload["temperature_c"] == 12.0
 
     response = provider_routes._apply_cache_headers(Response(), "tag", 42)
     assert response.headers["ETag"] == '"tag"'

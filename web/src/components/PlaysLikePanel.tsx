@@ -12,6 +12,8 @@ interface PlaysLikePanelProps {
   distanceMeters?: number | null;
   deltaHMeters?: number | null;
   windParallel?: number | null;
+  temperatureC?: number | null;
+  altitudeAsl_m?: number | null;
   options?: PlaysLikeOptions;
   cfg?: Partial<PlaysLikeCfg>;
 }
@@ -29,6 +31,8 @@ export default function PlaysLikePanel({
   distanceMeters,
   deltaHMeters,
   windParallel,
+  temperatureC,
+  altitudeAsl_m,
   options,
   cfg,
 }: PlaysLikePanelProps) {
@@ -55,12 +59,29 @@ export default function PlaysLikePanel({
     }
     const delta = Number.isFinite(deltaHMeters ?? NaN) ? (deltaHMeters as number) : 0;
     const wind = Number.isFinite(windParallel ?? NaN) ? (windParallel as number) : 0;
-    return { distance: distanceMeters, delta, wind };
-  }, [enabled, distanceMeters, deltaHMeters, windParallel]);
+    const temperature = Number.isFinite(temperatureC ?? NaN)
+      ? (temperatureC as number)
+      : undefined;
+    const altitude = Number.isFinite(altitudeAsl_m ?? NaN)
+      ? (altitudeAsl_m as number)
+      : undefined;
+    return { distance: distanceMeters, delta, wind, temperature, altitude };
+  }, [
+    enabled,
+    distanceMeters,
+    deltaHMeters,
+    windParallel,
+    temperatureC,
+    altitudeAsl_m,
+  ]);
 
   const result = useMemo(() => {
     if (!inputs) return null;
-    return computePlaysLike(inputs.distance, inputs.delta, inputs.wind, resolvedCfg);
+    return computePlaysLike(inputs.distance, inputs.delta, inputs.wind, {
+      cfg: resolvedCfg,
+      temperatureC: inputs.temperature ?? null,
+      altitudeAsl_m: inputs.altitude ?? null,
+    });
   }, [inputs, resolvedCfg]);
 
   const lastSignatureRef = useRef<string | null>(null);
@@ -79,6 +100,8 @@ export default function PlaysLikePanel({
       resolvedCfg.slopeFactor,
       resolvedCfg.windCap_pctOfD,
       resolvedCfg.taperStart_mph,
+      resolvedCfg.temperatureEnabled ? inputs.temperature ?? "" : "",
+      resolvedCfg.altitudeEnabled ? inputs.altitude ?? "" : "",
     ]
       .map((value) =>
         typeof value === "number" ? value.toFixed(3) : String(value ?? "null"),
@@ -104,6 +127,10 @@ export default function PlaysLikePanel({
       eff: result.distanceEff,
       slopeM: result.components.slopeM,
       windM: result.components.windM,
+      T_C: inputs.temperature ?? null,
+      h_asl_m: inputs.altitude ?? null,
+      deltaTempM: result.components.tempM,
+      deltaAltM: result.components.altM,
       quality: result.quality,
     }).catch((error) => {
       console.warn("Failed to emit plays_like_eval telemetry", error);
@@ -128,6 +155,12 @@ export default function PlaysLikePanel({
       alphaTail: resolvedCfg.alphaTail_per_mph,
       eff: result.distanceEff,
       quality: result.quality,
+      temperatureEnabled: resolvedCfg.temperatureEnabled,
+      temperature: inputs.temperature ?? null,
+      deltaTempM: result.components.tempM,
+      altitudeEnabled: resolvedCfg.altitudeEnabled,
+      altitude: inputs.altitude ?? null,
+      deltaAltM: result.components.altM,
     };
   }, [inputs, resolvedCfg, result]);
 
@@ -162,6 +195,8 @@ export default function PlaysLikePanel({
     return null;
   }
 
+  const deltaDisplay = result && inputs ? result.distanceEff - inputs.distance : 0;
+
   return (
     <div className="rounded-lg border border-slate-800/80 bg-slate-900/80 p-4 shadow-inner">
       <div className="flex items-center justify-between gap-3">
@@ -169,9 +204,7 @@ export default function PlaysLikePanel({
           <p className="text-sm font-semibold text-slate-100">Plays-like distance</p>
           {result ? (
             <p className="text-xs text-slate-400">
-              Plays-like {result.distanceEff.toFixed(1)} m (Δ {formatDelta(
-                result.components.slopeM + result.components.windM
-              )})
+              Plays-like {result.distanceEff.toFixed(1)} m (Δ {formatDelta(deltaDisplay)})
             </p>
           ) : (
             <p className="text-xs text-slate-500">Not enough data to compute adjustments.</p>
@@ -237,6 +270,26 @@ export default function PlaysLikePanel({
                   <dt>Eff</dt>
                   <dd>{qaValues.eff.toFixed(1)} m</dd>
                 </div>
+                {qaValues.temperatureEnabled ? (
+                  <div className="flex justify-between">
+                    <dt>Temp</dt>
+                    <dd>
+                      {qaValues.temperature !== null && qaValues.temperature !== undefined
+                        ? `${qaValues.temperature.toFixed(1)} °C | Δ ${formatDelta(qaValues.deltaTempM)}`
+                        : "—"}
+                    </dd>
+                  </div>
+                ) : null}
+                {qaValues.altitudeEnabled ? (
+                  <div className="flex justify-between">
+                    <dt>Alt</dt>
+                    <dd>
+                      {qaValues.altitude !== null && qaValues.altitude !== undefined
+                        ? `${qaValues.altitude.toFixed(0)} m | Δ ${formatDelta(qaValues.deltaAltM)}`
+                        : "—"}
+                    </dd>
+                  </div>
+                ) : null}
                 <div className="flex justify-between">
                   <dt>Quality</dt>
                   <dd>{qaValues.quality.toUpperCase()}</dd>

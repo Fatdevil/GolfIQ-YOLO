@@ -247,6 +247,8 @@ object PlaysLikeService {
     data class Components(
         val slopeM: Double,
         val windM: Double,
+        val tempM: Double,
+        val altM: Double,
     )
 
     data class Result(
@@ -261,6 +263,8 @@ object PlaysLikeService {
         val warnThresholdRatio: Double = 0.05,
         val lowThresholdRatio: Double = 0.12,
         val config: Config? = null,
+        val temperatureC: Double? = null,
+        val altitudeAslM: Double? = null,
     )
 
     data class Config(
@@ -271,6 +275,10 @@ object PlaysLikeService {
         val windCapPctOfD: Double = 0.20,
         val taperStartMph: Double = 20.0,
         val sidewindDistanceAdjust: Boolean = false,
+        val temperatureEnabled: Boolean = false,
+        val betaTempPerC: Double = 0.0018,
+        val altitudeEnabled: Boolean = false,
+        val gammaAltPer100m: Double = 0.0065,
     )
 
     enum class Quality(val value: String) {
@@ -317,6 +325,32 @@ object PlaysLikeService {
         return distance * pct
     }
 
+    fun computeTempAdjust(
+        D: Double,
+        temperatureC: Double,
+        betaTemp: Double = 0.0018,
+    ): Double {
+        val distance = sanitizeDistance(D)
+        if (distance <= 0.0 || !temperatureC.isFinite()) return 0.0
+        val beta = if (betaTemp.isFinite()) betaTemp else 0.0018
+        val delta = distance * beta * (20 - temperatureC)
+        val cap = distance * 0.05
+        return delta.coerceIn(-cap, cap)
+    }
+
+    fun computeAltitudeAdjust(
+        D: Double,
+        altitudeAslM: Double,
+        gammaPer100m: Double = 0.0065,
+    ): Double {
+        val distance = sanitizeDistance(D)
+        if (distance <= 0.0 || !altitudeAslM.isFinite()) return 0.0
+        val gamma = if (gammaPer100m.isFinite()) gammaPer100m else 0.0065
+        val delta = distance * gamma * (altitudeAslM / 100.0)
+        val cap = distance * 0.15
+        return delta.coerceIn(-cap, cap)
+    }
+
     private fun computeQuality(distance: Double, deltaH: Double, wParallel: Double): Quality {
         if (distance <= 0.0) return Quality.LOW
         val hasSlope = deltaH.isFinite()
@@ -334,6 +368,8 @@ object PlaysLikeService {
         D: Double,
         deltaH: Double,
         wParallel: Double,
+        temperatureC: Double? = null,
+        altitudeAslM: Double? = null,
         cfg: Config = Config(),
     ): Result {
         val distance = sanitizeDistance(D)
@@ -343,13 +379,25 @@ object PlaysLikeService {
         } else {
             0.0
         }
-        val eff = distance + slope + wind
+        val temp = if (cfg.temperatureEnabled && temperatureC?.isFinite() == true) {
+            computeTempAdjust(distance, temperatureC, cfg.betaTempPerC)
+        } else {
+            0.0
+        }
+        val alt = if (cfg.altitudeEnabled && altitudeAslM?.isFinite() == true) {
+            computeAltitudeAdjust(distance, altitudeAslM, cfg.gammaAltPer100m)
+        } else {
+            0.0
+        }
+        val eff = distance + slope + wind + temp + alt
         val quality = computeQuality(distance, deltaH, wParallel)
         return Result(
             distanceEff = roundTo(eff, 1),
             components = Components(
                 slopeM = roundTo(slope, 1),
                 windM = roundTo(wind, 1),
+                tempM = roundTo(temp, 1),
+                altM = roundTo(alt, 1),
             ),
             quality = quality,
         )
@@ -363,9 +411,20 @@ object PlaysLikeService {
     ): Result {
         val baseConfig = opts.config ?: Config()
         val resolved = baseConfig.copy(slopeFactor = opts.kS)
-        val result = computePlaysLike(D, deltaH, wParallel, resolved)
+        val result = computePlaysLike(
+            D,
+            deltaH,
+            wParallel,
+            opts.temperatureC,
+            opts.altitudeAslM,
+            resolved,
+        )
         val distance = sanitizeDistance(D)
-        val total = abs(result.components.slopeM) + abs(result.components.windM)
+        val total =
+            abs(result.components.slopeM) +
+            abs(result.components.windM) +
+            abs(result.components.tempM) +
+            abs(result.components.altM)
         val ratio = if (distance > 0.0) total / distance else Double.POSITIVE_INFINITY
         return if (opts.warnThresholdRatio != 0.05 || opts.lowThresholdRatio != 0.12) {
             val quality = when {
