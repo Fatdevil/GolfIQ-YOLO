@@ -21,7 +21,7 @@ class TelemetryClient(context: Context) {
             val json = JSONArray().apply {
                 payloads.forEach { put(it.toJson()) }
             }
-            val body = json.toString().toRequestBody(JSON.toMediaType())
+            val body = json.toString().toRequestBody(JSON_MEDIA_TYPE)
             val request = Request.Builder().url(endpoint).post(body).build()
             runCatching { httpClient.newCall(request).execute() }
                 .onFailure { Log.e(TAG, "Telemetry POST failed", it) }
@@ -37,7 +37,7 @@ class TelemetryClient(context: Context) {
     }
 
     companion object {
-        private val JSON = "application/json; charset=utf-8".toMediaType()
+        private val JSON_MEDIA_TYPE = "application/json; charset=utf-8".toMediaType()
         private const val TAG = "TelemetryClient"
     }
 }
