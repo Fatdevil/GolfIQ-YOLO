@@ -45,5 +45,3 @@ def test_export_script_emits_metadata(tmp_path):
     assert "## Sanity Checks" in report_text
     assert "reference-numpy" in report_text
     assert "Micro-benchmark" in report_text
-
-

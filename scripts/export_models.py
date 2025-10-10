@@ -92,8 +92,12 @@ class ExportConfig:
 
     @classmethod
     def from_args(cls) -> "ExportConfig":
-        parser = argparse.ArgumentParser(description="Export GolfIQ models to edge runtimes")
-        parser.add_argument("--model-name", default=os.getenv("EXPORT_MODEL_NAME", DEFAULT_MODEL_NAME))
+        parser = argparse.ArgumentParser(
+            description="Export GolfIQ models to edge runtimes"
+        )
+        parser.add_argument(
+            "--model-name", default=os.getenv("EXPORT_MODEL_NAME", DEFAULT_MODEL_NAME)
+        )
         parser.add_argument("--weights", default=os.getenv("EXPORT_WEIGHTS_PATH"))
         parser.add_argument(
             "--input-size",
@@ -127,7 +131,8 @@ class ExportConfig:
         parser.add_argument(
             "--dry-run",
             action="store_true",
-            default=os.getenv("EXPORT_DRY_RUN", "false").lower() in {"1", "true", "yes"},
+            default=os.getenv("EXPORT_DRY_RUN", "false").lower()
+            in {"1", "true", "yes"},
             help="Remove generated binaries after validation",
         )
         parser.add_argument(
@@ -189,7 +194,9 @@ def _ensure_output_dir(path: Path) -> Path:
 
 def _resolve_weights(path: Optional[Path], dummy: bool) -> Dict[str, np.ndarray]:
     rng = np.random.default_rng(seed=42)
-    weight = rng.standard_normal((DEFAULT_OUT_FEATURES, DEFAULT_INT_FEATURES), dtype=np.float32)
+    weight = rng.standard_normal(
+        (DEFAULT_OUT_FEATURES, DEFAULT_INT_FEATURES), dtype=np.float32
+    )
     bias = rng.standard_normal((DEFAULT_OUT_FEATURES,), dtype=np.float32)
 
     if not path or dummy:
@@ -209,7 +216,9 @@ def _resolve_weights(path: Optional[Path], dummy: bool) -> Dict[str, np.ndarray]
             bias = data["bias"].astype(np.float32)
         elif suffix in {".pt", ".pth"}:
             if not _TORCH_AVAILABLE:
-                raise RuntimeError("PyTorch is required to read .pt/.pth files but is not installed")
+                raise RuntimeError(
+                    "PyTorch is required to read .pt/.pth files but is not installed"
+                )
             checkpoint = torch.load(path, map_location="cpu")
             if isinstance(checkpoint, dict):
                 if "weight" in checkpoint and "bias" in checkpoint:
@@ -220,7 +229,9 @@ def _resolve_weights(path: Optional[Path], dummy: bool) -> Dict[str, np.ndarray]
                     weight = state.get("linear.weight", state.get("fc.weight"))
                     bias = state.get("linear.bias", state.get("fc.bias"))
                     if weight is None or bias is None:
-                        raise KeyError("Unable to locate weight/bias tensors in checkpoint")
+                        raise KeyError(
+                            "Unable to locate weight/bias tensors in checkpoint"
+                        )
                     weight = weight.cpu().numpy().astype(np.float32)
                     bias = bias.cpu().numpy().astype(np.float32)
                 else:
@@ -255,11 +266,14 @@ def _create_dummy_input(input_size: int) -> np.ndarray:
     return dummy
 
 
-def export_to_onnx(cfg: ExportConfig, weights: Dict[str, np.ndarray], dummy_input: np.ndarray) -> Path:
+def export_to_onnx(
+    cfg: ExportConfig, weights: Dict[str, np.ndarray], dummy_input: np.ndarray
+) -> Path:
     output_path = cfg.output_dir / f"{cfg.model_name}.onnx"
     _log(f"Exporting ONNX model → {output_path}")
 
     if _TORCH_AVAILABLE and not cfg.dummy:
+
         class LiteHead(nn.Module):
             def __init__(self, w: np.ndarray, b: np.ndarray) -> None:
                 super().__init__()
@@ -301,7 +315,9 @@ def export_to_onnx(cfg: ExportConfig, weights: Dict[str, np.ndarray], dummy_inpu
         "logits", TensorProto.FLOAT, [1, DEFAULT_OUT_FEATURES]
     )
 
-    avg_node = helper.make_node("GlobalAveragePool", inputs=["input"], outputs=["pooled"])
+    avg_node = helper.make_node(
+        "GlobalAveragePool", inputs=["input"], outputs=["pooled"]
+    )
 
     reshape_shape = numpy_helper.from_array(
         np.array([1, DEFAULT_INT_FEATURES], dtype=np.int64), name="reshape_shape"
@@ -310,11 +326,19 @@ def export_to_onnx(cfg: ExportConfig, weights: Dict[str, np.ndarray], dummy_inpu
         "Reshape", inputs=["pooled", "reshape_shape"], outputs=["flat"]
     )
 
-    weight_initializer = numpy_helper.from_array(weight.T.astype(np.float32), name="linear_weight")
-    matmul_node = helper.make_node("MatMul", inputs=["flat", "linear_weight"], outputs=["matmul_out"])
+    weight_initializer = numpy_helper.from_array(
+        weight.T.astype(np.float32), name="linear_weight"
+    )
+    matmul_node = helper.make_node(
+        "MatMul", inputs=["flat", "linear_weight"], outputs=["matmul_out"]
+    )
 
-    bias_initializer = numpy_helper.from_array(bias.astype(np.float32), name="linear_bias")
-    add_node = helper.make_node("Add", inputs=["matmul_out", "linear_bias"], outputs=["logits"])
+    bias_initializer = numpy_helper.from_array(
+        bias.astype(np.float32), name="linear_bias"
+    )
+    add_node = helper.make_node(
+        "Add", inputs=["matmul_out", "linear_bias"], outputs=["logits"]
+    )
 
     graph = helper.make_graph(
         [avg_node, reshape_node, matmul_node, add_node],
@@ -323,7 +347,14 @@ def export_to_onnx(cfg: ExportConfig, weights: Dict[str, np.ndarray], dummy_inpu
         outputs=[output_tensor],
         initializer=[reshape_shape, weight_initializer, bias_initializer],
     )
-    model = helper.make_model(graph, producer_name="golfiq-export")
+    opset_imports = [helper.make_opsetid("", 13)]
+    model = helper.make_model(
+        graph, producer_name="golfiq-export", opset_imports=opset_imports
+    )
+    # Older onnxruntime builds bundled with CI images only support IR <= 11. Keep the
+    # manually-crafted model within that envelope so inference can run everywhere.
+    if model.ir_version and model.ir_version > 8:
+        model.ir_version = 8
     onnx.save(model, output_path)
     return output_path
 
@@ -381,7 +412,9 @@ def export_to_tflite(
             for _ in range(10):
                 yield [
                     dummy_input
-                    + np.random.normal(scale=1e-3, size=dummy_input.shape).astype(np.float32)
+                    + np.random.normal(scale=1e-3, size=dummy_input.shape).astype(
+                        np.float32
+                    )
                 ]
 
         converter_int8.representative_dataset = representative_dataset
@@ -400,7 +433,9 @@ def export_to_tflite(
     return outputs, reasons
 
 
-def export_to_coreml(cfg: ExportConfig, onnx_path: Path) -> Tuple[Optional[Path], Optional[str]]:
+def export_to_coreml(
+    cfg: ExportConfig, onnx_path: Path
+) -> Tuple[Optional[Path], Optional[str]]:
     if not _COREML_AVAILABLE:
         reason = "coremltools not installed"
         _log(f"Skipping CoreML export: {reason}")
@@ -414,7 +449,9 @@ def export_to_coreml(cfg: ExportConfig, onnx_path: Path) -> Tuple[Optional[Path]
             mlmodel_fp16 = ct.models.neural_network.quantization_utils.quantize_weights(
                 mlmodel, nbits=16
             )
-        except Exception as quant_exc:  # pragma: no cover - depends on coremltools install
+        except (
+            Exception
+        ) as quant_exc:  # pragma: no cover - depends on coremltools install
             quant_note = f"fp16 quantization skipped: {quant_exc}"[:200]
             _log(f"CoreML FP16 quantization unavailable: {quant_exc}")
             mlmodel_fp16 = mlmodel
@@ -427,7 +464,9 @@ def export_to_coreml(cfg: ExportConfig, onnx_path: Path) -> Tuple[Optional[Path]
         return None, reason
 
 
-def export_to_ncnn(cfg: ExportConfig, weights: Dict[str, np.ndarray]) -> Dict[str, Path]:
+def export_to_ncnn(
+    cfg: ExportConfig, weights: Dict[str, np.ndarray]
+) -> Dict[str, Path]:
     ncnn_dir = cfg.output_dir / "ncnn"
     ncnn_dir.mkdir(parents=True, exist_ok=True)
     param_path = ncnn_dir / f"{cfg.model_name}.param"
@@ -445,7 +484,10 @@ def export_to_ncnn(cfg: ExportConfig, weights: Dict[str, np.ndarray]) -> Dict[st
     param_path.write_text("\n".join(param_lines) + "\n")
 
     weights_concat = np.concatenate(
-        [weights["weight"].astype(np.float32).ravel(), weights["bias"].astype(np.float32).ravel()]
+        [
+            weights["weight"].astype(np.float32).ravel(),
+            weights["bias"].astype(np.float32).ravel(),
+        ]
     )
     weights_concat.astype(np.float32).tofile(bin_path)
     return {"param": param_path, "bin": bin_path}
@@ -475,7 +517,11 @@ def _run_tflite(dummy_input: np.ndarray, tflite_path: Path) -> np.ndarray:
     output_data = interpreter.get_tensor(output_details["index"])
 
     quantization = output_details.get("quantization_parameters", {})
-    if quantization and quantization.get("scales") is not None and quantization["scales"].size:
+    if (
+        quantization
+        and quantization.get("scales") is not None
+        and quantization["scales"].size
+    ):
         scale = quantization["scales"][0]
         zero_point = quantization["zero_points"][0]
         output_data = (output_data.astype(np.float32) - zero_point) * scale
@@ -488,22 +534,36 @@ def _run_coreml(dummy_input: np.ndarray, coreml_path: Path) -> np.ndarray:
 
     try:
         mlmodel = ct.models.MLModel(str(coreml_path))
-    except (NotImplementedError, OSError, ValueError) as exc:  # pragma: no cover - platform specific
+    except (
+        NotImplementedError,
+        OSError,
+        ValueError,
+    ) as exc:  # pragma: no cover - platform specific
         raise CoreMLRuntimeUnavailable(str(exc)) from exc
     except Exception as exc:  # pragma: no cover - platform specific
         message = str(exc)
-        if "Binary files are not supported" in message or "not supported on this platform" in message:
+        if (
+            "Binary files are not supported" in message
+            or "not supported on this platform" in message
+        ):
             raise CoreMLRuntimeUnavailable(message) from exc
         raise
 
     input_name = list(mlmodel.input_description._featureNames)[0]
     try:
         result = mlmodel.predict({input_name: dummy_input})
-    except (NotImplementedError, OSError, ValueError) as exc:  # pragma: no cover - platform specific
+    except (
+        NotImplementedError,
+        OSError,
+        ValueError,
+    ) as exc:  # pragma: no cover - platform specific
         raise CoreMLRuntimeUnavailable(str(exc)) from exc
     except Exception as exc:  # pragma: no cover - platform specific
         message = str(exc)
-        if "Binary files are not supported" in message or "not supported on this platform" in message:
+        if (
+            "Binary files are not supported" in message
+            or "not supported on this platform" in message
+        ):
             raise CoreMLRuntimeUnavailable(message) from exc
         raise
 
@@ -511,7 +571,9 @@ def _run_coreml(dummy_input: np.ndarray, coreml_path: Path) -> np.ndarray:
     return result[output_name]
 
 
-def _run_reference_numpy(dummy_input: np.ndarray, weights: Dict[str, np.ndarray]) -> np.ndarray:
+def _run_reference_numpy(
+    dummy_input: np.ndarray, weights: Dict[str, np.ndarray]
+) -> np.ndarray:
     pooled = dummy_input.mean(axis=(2, 3))
     logits = pooled @ weights["weight"].T + weights["bias"]
     return logits
@@ -531,7 +593,9 @@ def run_sanity_checks(
     tolerance = 1e-2
 
     onnx_logits = _run_onnx(dummy_input, onnx_path)
-    results.append(SanityResult("onnx", "PASS", tuple(onnx_logits.shape), 0.0, "baseline"))
+    results.append(
+        SanityResult("onnx", "PASS", tuple(onnx_logits.shape), 0.0, "baseline")
+    )
     _log(f"Sanity onnx PASS shape={onnx_logits.shape} max|Δ|=0.000000")
 
     reference_logits = _run_reference_numpy(dummy_input, weights)
@@ -541,9 +605,13 @@ def run_sanity_checks(
             f"reference-numpy output deviates from ONNX reference (max err {ref_err:.4f})"
         )
     results.append(
-        SanityResult("reference-numpy", "PASS", tuple(reference_logits.shape), ref_err, "vs onnx")
+        SanityResult(
+            "reference-numpy", "PASS", tuple(reference_logits.shape), ref_err, "vs onnx"
+        )
     )
-    _log(f"Sanity reference-numpy PASS shape={reference_logits.shape} max|Δ|={ref_err:.6f}")
+    _log(
+        f"Sanity reference-numpy PASS shape={reference_logits.shape} max|Δ|={ref_err:.6f}"
+    )
 
     variants: List[str] = ["fp32"]
     if cfg.int8:
@@ -572,7 +640,9 @@ def run_sanity_checks(
             raise RuntimeError(
                 f"{name} output deviates from ONNX reference (max err {max_err:.4f})"
             )
-        results.append(SanityResult(name, "PASS", tuple(observed.shape), max_err, "vs onnx"))
+        results.append(
+            SanityResult(name, "PASS", tuple(observed.shape), max_err, "vs onnx")
+        )
         _log(f"Sanity {name} PASS shape={observed.shape} max|Δ|={max_err:.6f}")
 
     if coreml_path is None:
@@ -600,7 +670,11 @@ def run_sanity_checks(
                 raise RuntimeError(
                     f"coreml output deviates from ONNX reference (max err {max_err:.4f})"
                 )
-            results.append(SanityResult("coreml", "PASS", tuple(observed.shape), max_err, "vs onnx"))
+            results.append(
+                SanityResult(
+                    "coreml", "PASS", tuple(observed.shape), max_err, "vs onnx"
+                )
+            )
             _log(f"Sanity coreml PASS shape={observed.shape} max|Δ|={max_err:.6f}")
 
     ncnn_logits = reference_logits
@@ -610,7 +684,9 @@ def run_sanity_checks(
             f"ncnn output deviates from ONNX reference (max err {ncnn_err:.4f})"
         )
     results.append(
-        SanityResult("ncnn", "PASS", tuple(ncnn_logits.shape), ncnn_err, "shares numpy reference")
+        SanityResult(
+            "ncnn", "PASS", tuple(ncnn_logits.shape), ncnn_err, "shares numpy reference"
+        )
     )
     _log(f"Sanity ncnn PASS shape={ncnn_logits.shape} max|Δ|={ncnn_err:.6f}")
 
@@ -663,7 +739,9 @@ def collect_environment_info() -> Dict[str, str]:
     return info
 
 
-def describe_artifact(name: str, path: Optional[Path], note: str = "", status: Optional[str] = None) -> ArtifactRecord:
+def describe_artifact(
+    name: str, path: Optional[Path], note: str = "", status: Optional[str] = None
+) -> ArtifactRecord:
     if path and path.exists():
         return ArtifactRecord(
             name=name,
@@ -673,7 +751,9 @@ def describe_artifact(name: str, path: Optional[Path], note: str = "", status: O
             sha256=_hash_path(path),
             note=note,
         )
-    return ArtifactRecord(name=name, path=None, status=status or "skipped", note=note or "not generated")
+    return ArtifactRecord(
+        name=name, path=None, status=status or "skipped", note=note or "not generated"
+    )
 
 
 def write_report(
@@ -734,7 +814,9 @@ def write_report(
     return cfg.report_path
 
 
-def cleanup_artifacts(artifacts: Sequence[ArtifactRecord], preserve: Sequence[Path]) -> None:
+def cleanup_artifacts(
+    artifacts: Sequence[ArtifactRecord], preserve: Sequence[Path]
+) -> None:
     preserve_resolved = {p.resolve() for p in preserve if p.exists()}
     for record in artifacts:
         if record.path is None:
@@ -754,7 +836,9 @@ def cleanup_artifacts(artifacts: Sequence[ArtifactRecord], preserve: Sequence[Pa
             shutil.rmtree(record.path, ignore_errors=True)
 
 
-def run_micro_bench(dummy_input: np.ndarray, onnx_path: Path, frames: int) -> BenchmarkResult:
+def run_micro_bench(
+    dummy_input: np.ndarray, onnx_path: Path, frames: int
+) -> BenchmarkResult:
     session = ort.InferenceSession(str(onnx_path), providers=["CPUExecutionProvider"])
     input_name = session.get_inputs()[0].name
     start = time.perf_counter()
@@ -794,15 +878,15 @@ def main() -> None:
         note = tflite_reasons.get(variant, "")
         artifacts.append(describe_artifact(f"tflite-{variant}", path, note=note))
 
-    artifacts.append(describe_artifact("coreml-fp16", coreml_path, note=coreml_reason or ""))
+    artifacts.append(
+        describe_artifact("coreml-fp16", coreml_path, note=coreml_reason or "")
+    )
     artifacts.append(describe_artifact("ncnn-param", ncnn_paths.get("param")))
     artifacts.append(describe_artifact("ncnn-bin", ncnn_paths.get("bin")))
 
     for record in artifacts:
         if record.path:
-            _log(
-                f"Artifact {record.name} bytes={record.bytes} sha256={record.sha256}"
-            )
+            _log(f"Artifact {record.name} bytes={record.bytes} sha256={record.sha256}")
         else:
             _log(f"Artifact {record.name} {record.status}: {record.note}")
 
