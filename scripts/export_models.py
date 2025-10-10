@@ -409,10 +409,18 @@ def export_to_coreml(cfg: ExportConfig, onnx_path: Path) -> Tuple[Optional[Path]
     try:
         _log("Converting ONNX → CoreML FP16")
         mlmodel = ct.converters.onnx.convert(model=str(onnx_path))
-        mlmodel_fp16 = ct.models.neural_network.quantization_utils.quantize_weights(mlmodel, nbits=16)
+        quant_note: Optional[str] = None
+        try:
+            mlmodel_fp16 = ct.models.neural_network.quantization_utils.quantize_weights(
+                mlmodel, nbits=16
+            )
+        except Exception as quant_exc:  # pragma: no cover - depends on coremltools install
+            quant_note = f"fp16 quantization skipped: {quant_exc}"[:200]
+            _log(f"CoreML FP16 quantization unavailable: {quant_exc}")
+            mlmodel_fp16 = mlmodel
         output_path = cfg.output_dir / f"{cfg.model_name}.mlmodel"
         mlmodel_fp16.save(str(output_path))
-        return output_path, None
+        return output_path, quant_note
     except Exception as exc:  # pragma: no cover - depends on coremltools install
         reason = f"conversion failed: {exc}"[:200]
         _log(f"CoreML export failed: {exc}")
