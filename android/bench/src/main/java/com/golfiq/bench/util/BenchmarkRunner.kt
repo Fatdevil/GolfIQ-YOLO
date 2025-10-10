@@ -113,8 +113,8 @@ private class MetricCollector(private val runtime: RuntimeKind) {
         runtime = runtime.wireName,
         metrics = TelemetryPayload.Metrics(
             fpsAvg = timedFps.averageOrZero(),
-            fpsMin = timedFps.minOrNull() ?: 0.0,
-            fpsMax = timedFps.maxOrNull() ?: 0.0,
+            fpsMin = timedFps.minOrNull()?.toDouble() ?: 0.0,
+            fpsMax = timedFps.maxOrNull()?.toDouble() ?: 0.0,
             latencyP50Ms = timedLatencies.percentile(0.5),
             latencyP95Ms = timedLatencies.percentile(0.95),
             coldStartMs = coldStartMs,

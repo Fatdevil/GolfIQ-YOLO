@@ -8,6 +8,7 @@ import android.graphics.Paint
 import android.graphics.Rect
 import android.util.Log
 import com.golfiq.bench.runtime.model.InferenceFrame
+import kotlin.io.use
 import kotlin.math.min
 
 class FrameRepository(private val context: Context) {
@@ -18,17 +19,17 @@ class FrameRepository(private val context: Context) {
         val targetSize = 640
         for (name in names) {
             try {
-                assetManager.open("frames/$name").use { input ->
-                    val bitmap = android.graphics.BitmapFactory.decodeStream(input) ?: continue
-                    val letterboxed = letterbox(bitmap, targetSize, targetSize)
-                    frames += InferenceFrame(
-                        normalized = normalize(letterboxed),
-                        width = targetSize,
-                        height = targetSize,
-                    )
-                    bitmap.recycle()
-                    letterboxed.recycle()
-                }
+                val bitmap = assetManager.open("frames/$name").use { input ->
+                    android.graphics.BitmapFactory.decodeStream(input)
+                } ?: continue
+                val letterboxed = letterbox(bitmap, targetSize, targetSize)
+                frames += InferenceFrame(
+                    normalized = normalize(letterboxed),
+                    width = targetSize,
+                    height = targetSize,
+                )
+                bitmap.recycle()
+                letterboxed.recycle()
             } catch (t: Throwable) {
                 Log.e(TAG, "Failed to load frame $name", t)
             }
