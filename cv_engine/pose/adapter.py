@@ -88,7 +88,14 @@ class PoseAdapter:
         dy = ly - ry  # invert image axis: smaller y means higher point
         if dx == 0 and dy == 0:
             return 0.0
-        return float(math.degrees(math.atan2(dy, dx)))
+        angle = math.degrees(math.atan2(dy, dx))
+        # Clamp to a readable posture range ([-90°, 90°]) to avoid flipping when
+        # the points are reported in reverse order by the backend.
+        if angle > 90.0:
+            angle = 180.0 - angle
+        elif angle < -90.0:
+            angle = -180.0 - angle
+        return float(angle)
 
     def _tempo_ratio(self, history: Sequence[PoseResult]) -> Optional[float]:
         if len(history) < 3:

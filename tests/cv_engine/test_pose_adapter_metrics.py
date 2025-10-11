@@ -31,3 +31,22 @@ def test_pose_adapter_history_reset() -> None:
     adapter.reset()
     metrics = adapter.get_internal_metrics()
     assert all(value is None for value in metrics.values())
+
+
+def test_pose_adapter_handles_reversed_points_without_flipping() -> None:
+    adapter = PoseAdapter(backend_name="none")
+    angle = adapter._tilt_deg(  # type: ignore[attr-defined]
+        (10.0, 0.0, 0.9),
+        (0.0, 10.0, 0.9),
+    )
+    assert math.isclose(angle, -45.0, rel_tol=1e-2)
+
+
+def test_pose_adapter_empty_history_metrics_are_none() -> None:
+    adapter = PoseAdapter(backend_name="none")
+    metrics = adapter.derive_metrics([])
+    assert metrics == {
+        "shoulder_tilt_deg": None,
+        "hip_tilt_deg": None,
+        "tempo_ratio": None,
+    }
