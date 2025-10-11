@@ -1,4 +1,5 @@
-import os, re, io
+import os
+import re
 
 
 def test_report_exists():

@@ -1,6 +1,14 @@
 #!/usr/bin/env python3
-# Lightweight export + micro-bench. Works even without torch by building a tiny ONNX graph programmatically.
-import argparse, os, time, sys, platform, json, hashlib, datetime
+# Lightweight export + micro-bench. Works even without torch by building
+# a tiny ONNX graph programmatically.
+import argparse
+import datetime
+import hashlib
+import json
+import os
+import platform
+import time
+
 import numpy as np
 
 REPORT_PATH_DEFAULT = "models/EXPORT_REPORT.md"
@@ -137,10 +145,17 @@ def export_onnx(dummy_shape=(1, 3, 320, 320), iters=25, lines=None):
         "exporter": used,
     }
     if lines is not None:
-        log_and_capture(
-            lines,
-            f"Target: ONNX | opset={ONNX_OPSET} | input={dummy_shape} | exporter={used} | file={onnx_path} ({size_mb:.2f} MB) | avg_latency={avg_ms:.2f} ms",
+        summary = " ".join(
+            [
+                "Target: ONNX |",
+                f"opset={ONNX_OPSET} |",
+                f"input={dummy_shape} |",
+                f"exporter={used} |",
+                f"file={onnx_path} ({size_mb:.2f} MB) |",
+                f"avg_latency={avg_ms:.2f} ms",
+            ]
         )
+        log_and_capture(lines, summary)
     return meta
 
 
@@ -161,8 +176,13 @@ def main():
     lines = []
     ensure_dir(args.report)
 
-    hdr = f"# Edge Export Report\nGenerated: {datetime.datetime.utcnow().isoformat()}Z\nHost: {platform.platform()} Py{platform.python_version()}\n\n"
-    lines.append(hdr.strip())
+    hdr_lines = [
+        "# Edge Export Report",
+        f"Generated: {datetime.datetime.utcnow().isoformat()}Z",
+        f"Host: {platform.platform()} Py{platform.python_version()}",
+        "",
+    ]
+    lines.append("\n".join(hdr_lines).strip())
 
     results = []
     targets = [t.strip().lower() for t in args.targets.split(",") if t.strip()]
