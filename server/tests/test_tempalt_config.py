@@ -1,0 +1,93 @@
+from __future__ import annotations
+
+from typing import Mapping, Optional
+
+import pytest
+from starlette.requests import Request
+
+from server.config.playslike_config import Measurement, TempAltConfig, resolveTempAltConfig
+
+
+async def _empty_receive() -> dict[str, object]:
+    return {"type": "http.request"}
+
+
+def make_request(
+    headers: Optional[Mapping[str, str]] = None,
+    query: Optional[Mapping[str, str]] = None,
+) -> Request:
+    raw_headers = []
+    if headers:
+        raw_headers = [
+            (key.lower().encode("latin-1"), value.encode("latin-1"))
+            for key, value in headers.items()
+        ]
+    query_string = ""
+    if query:
+        query_string = "&".join(
+            f"{key}={value}"
+            for key, value in query.items()
+        )
+    scope = {
+        "type": "http",
+        "method": "GET",
+        "path": "/",
+        "headers": raw_headers,
+        "query_string": query_string.encode("latin-1"),
+    }
+    return Request(scope, _empty_receive)
+
+
+def test_resolve_tempalt_config_headers_override_rc(monkeypatch: pytest.MonkeyPatch) -> None:
+    req = make_request(
+        headers={
+            "x-pl-tempalt": "on",
+            "x-pl-temp": "10C",
+            "x-pl-alt": "500ft",
+        }
+    )
+    req.state.playslike_config = {"tempAlt": {"enabled": False, "betaPerC": 0.0021}}
+
+    cfg = resolveTempAltConfig(req)
+
+    assert isinstance(cfg, TempAltConfig)
+    assert cfg.enable is True
+    assert cfg.temperature == Measurement(10.0, "C")
+    assert cfg.altitudeASL == Measurement(500.0, "ft")
+    assert cfg.betaPerC == pytest.approx(0.0021)
+
+
+def test_resolve_tempalt_config_user_overrides_rc_and_course(monkeypatch: pytest.MonkeyPatch) -> None:
+    req = make_request()
+    req.state.remote_config = {
+        "playsLike": {"tempAlt": {"enabled": True, "gammaPer100m": 0.0078}}
+    }
+    course = {"playsLike": {"tempAlt": {"altitudeASL": {"value": 900, "unit": "ft"}}}}
+    user = {"tempAlt": {"enabled": False, "temperature": {"value": 12, "unit": "C"}}}
+
+    cfg = resolveTempAltConfig(req, course=course, user=user)
+
+    assert cfg.enable is False
+    assert cfg.temperature == Measurement(12.0, "C")
+    assert cfg.altitudeASL == Measurement(900.0, "ft")
+    assert cfg.gammaPer100m == pytest.approx(0.0078)
+
+
+def test_resolve_tempalt_config_query_overrides_and_defaults(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("PLAYS_LIKE_TEMPALT_CAP_PER_COMPONENT", raising=False)
+    monkeypatch.delenv("PLAYS_LIKE_TEMPALT_CAP_TOTAL", raising=False)
+    req = make_request(
+        query={
+            "pl_temp": "50F",
+            "pl_alt": "150m",
+            "pl_tempalt": "off",
+        }
+    )
+
+    cfg = resolveTempAltConfig(req)
+
+    assert cfg.enable is False
+    assert cfg.temperature == Measurement(50.0, "F")
+    assert cfg.altitudeASL == Measurement(150.0, "m")
+    assert cfg.caps["perComponent"] == pytest.approx(0.10)
+    assert cfg.caps["total"] == pytest.approx(0.20)

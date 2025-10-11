@@ -1,0 +1,1 @@
+150m baseline: temp +2.7/-2.7 m, 1000 ft alt +3.0 m; extreme case capped at 22.5 m (caps hit yes).

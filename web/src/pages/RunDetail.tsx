@@ -9,6 +9,7 @@ import { extractBackViewPayload, mphFromMps, yardsFromMeters } from "../lib/trac
 import { visualTracerEnabled, playsLikeEnabled } from "../config";
 import PlaysLikePanel from "../components/PlaysLikePanel";
 import { mergePlaysLikeCfg, type PlaysLikeCfg } from "@shared/playslike/PlaysLikeService";
+import type { TempAltOverrides } from "@shared/playslike";
 
 interface RunDetailData {
   run_id?: string;
@@ -25,6 +26,7 @@ export default function RunDetailPage() {
   const [playsLikeCfg, setPlaysLikeCfg] = useState<PlaysLikeCfg>(() => mergePlaysLikeCfg());
   const [rcPlaysLikeEnabled, setRcPlaysLikeEnabled] = useState(false);
   const [playsLikeVariant, setPlaysLikeVariant] = useState<"off" | "v1">("off");
+  const [tempAltSettings, setTempAltSettings] = useState<TempAltOverrides | null>(null);
   const lastPlaysLikeTier = useRef<string | null>(null);
   const lastAssignSignature = useRef<string | null>(null);
 
@@ -202,12 +204,68 @@ export default function RunDetailPage() {
     ]);
     const deltaH = selectMetric(["deltaH", "delta_h", "elevationDelta", "elevation_delta"]);
     const wind = selectMetric(["windParallel", "wind_parallel", "windHead", "wind_head"]);
+    const temperatureC = selectMetric([
+      "temperatureC",
+      "temperature_c",
+      "ambientTempC",
+      "ambient_temp_c",
+      "weatherTemperatureC",
+      "weather_temp_c",
+    ]);
+    const temperatureF = selectMetric([
+      "temperatureF",
+      "temperature_f",
+      "ambientTempF",
+      "ambient_temp_f",
+      "weatherTemperatureF",
+      "weather_temp_f",
+    ]);
+    const altitudeM = selectMetric([
+      "altitudeMeters",
+      "altitude_m",
+      "courseAltitudeM",
+      "course_altitude_m",
+      "elevationAslM",
+      "asl_m",
+    ]);
+    const altitudeFt = selectMetric([
+      "altitudeFeet",
+      "altitude_ft",
+      "courseAltitudeFt",
+      "course_altitude_ft",
+      "elevationAslFt",
+      "asl_ft",
+    ]);
     return {
       distanceMeters: distance ?? undefined,
       deltaHMeters: deltaH ?? undefined,
       windParallel: wind ?? undefined,
+      temperature:
+        temperatureC !== undefined
+          ? { value: temperatureC, unit: "C" as const }
+          : temperatureF !== undefined
+            ? { value: temperatureF, unit: "F" as const }
+            : null,
+      altitude:
+        altitudeM !== undefined
+          ? { value: altitudeM, unit: "m" as const }
+          : altitudeFt !== undefined
+            ? { value: altitudeFt, unit: "ft" as const }
+            : null,
     };
   }, [playsLikeUiEnabled, selectMetric]);
+
+  const temperatureMeasurement = playsLikeData?.temperature ?? null;
+  const altitudeMeasurement = playsLikeData?.altitude ?? null;
+
+  const resolvedTempAlt = useMemo<TempAltOverrides | null>(() => {
+    if (!tempAltSettings) return null;
+    return {
+      ...tempAltSettings,
+      temperature: temperatureMeasurement,
+      altitudeASL: altitudeMeasurement,
+    };
+  }, [altitudeMeasurement, tempAltSettings, temperatureMeasurement]);
 
   const canExport = visualTracerEnabled && !!backView?.videoUrl && !!backView.trace;
 
@@ -216,6 +274,7 @@ export default function RunDetailPage() {
       setRcPlaysLikeEnabled(false);
       setPlaysLikeVariant("off");
       lastAssignSignature.current = null;
+      setTempAltSettings(null);
       return;
     }
     const targetTier = remoteTier ?? "tierA";
@@ -228,7 +287,8 @@ export default function RunDetailPage() {
       .then((snapshot) => {
         if (cancelled || !snapshot) return;
         const tierConfig = snapshot.config[targetTier] ?? snapshot.config.tierA ?? {};
-        const cfg = tierConfig?.playsLike as Partial<PlaysLikeCfg> | undefined;
+        const playsLikeBlock = tierConfig?.playsLike as Record<string, unknown> | undefined;
+        const cfg = playsLikeBlock as Partial<PlaysLikeCfg> | undefined;
         const merged = mergePlaysLikeCfg(cfg);
         setPlaysLikeCfg(merged);
         const enabled = Boolean(tierConfig?.playsLikeEnabled);
@@ -236,6 +296,36 @@ export default function RunDetailPage() {
         const variantRaw = String(tierConfig?.ui?.playsLikeVariant ?? "off").toLowerCase();
         const normalizedVariant = variantRaw === "v1" ? "v1" : "off";
         setPlaysLikeVariant(normalizedVariant as "off" | "v1");
+        const tempAltRaw =
+          playsLikeBlock && typeof playsLikeBlock === "object"
+            ? (playsLikeBlock["tempAlt"] as Record<string, unknown> | undefined)
+            : undefined;
+        const parseNumber = (value: unknown): number | undefined => {
+          if (typeof value === "number" && Number.isFinite(value)) return value;
+          if (typeof value === "string") {
+            const parsed = Number.parseFloat(value);
+            if (Number.isFinite(parsed)) return parsed;
+          }
+          return undefined;
+        };
+        const resolvedTempAlt: TempAltOverrides | null = tempAltRaw
+          ? {
+              enable: Boolean(tempAltRaw?.["enabled"]),
+              betaPerC: parseNumber(tempAltRaw?.["betaPerC"]),
+              gammaPer100m: parseNumber(tempAltRaw?.["gammaPer100m"]),
+              caps: tempAltRaw?.["caps"] && typeof tempAltRaw.caps === "object"
+                ? {
+                    perComponent: parseNumber(
+                      (tempAltRaw.caps as Record<string, unknown>)["perComponent"],
+                    ),
+                    total: parseNumber(
+                      (tempAltRaw.caps as Record<string, unknown>)["total"],
+                    ),
+                  }
+                : undefined,
+            }
+          : null;
+        setTempAltSettings(resolvedTempAlt);
         const signature = [
           targetTier,
           enabled ? "1" : "0",
@@ -266,6 +356,7 @@ export default function RunDetailPage() {
           setPlaysLikeVariant("off");
           lastAssignSignature.current = null;
           lastPlaysLikeTier.current = null;
+          setTempAltSettings(null);
         }
       });
     return () => {
@@ -336,6 +427,7 @@ export default function RunDetailPage() {
           deltaHMeters={playsLikeData?.deltaHMeters}
           windParallel={playsLikeData?.windParallel}
           cfg={playsLikeCfg}
+          tempAlt={resolvedTempAlt}
         />
       ) : null}
 

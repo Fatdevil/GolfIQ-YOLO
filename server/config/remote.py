@@ -10,6 +10,93 @@ from typing import Any, Dict, Tuple
 
 from fastapi import APIRouter, HTTPException, Request, Response, status
 
+DEFAULT_TEMP_ALT_CFG: Dict[str, Any] = {
+    "enabled": False,
+    "betaPerC": 0.0018,
+    "gammaPer100m": 0.0065,
+    "caps": {"perComponent": 0.10, "total": 0.20},
+}
+
+
+def _sanitize_temp_alt(
+    overrides: Any, base: Dict[str, Any] | None = None
+) -> Dict[str, Any]:
+    sanitized: Dict[str, Any] = deepcopy(DEFAULT_TEMP_ALT_CFG)
+    if isinstance(base, dict):
+        enabled = base.get("enabled")
+        if isinstance(enabled, bool):
+            sanitized["enabled"] = enabled
+        beta = base.get("betaPerC")
+        if isinstance(beta, (int, float)):
+            sanitized["betaPerC"] = float(beta)
+        gamma = base.get("gammaPer100m")
+        if isinstance(gamma, (int, float)):
+            sanitized["gammaPer100m"] = float(gamma)
+        caps_base = base.get("caps")
+        if isinstance(caps_base, dict):
+            per_component = caps_base.get("perComponent")
+            total = caps_base.get("total")
+            if isinstance(per_component, (int, float)):
+                sanitized["caps"]["perComponent"] = float(per_component)
+            if isinstance(total, (int, float)):
+                sanitized["caps"]["total"] = float(total)
+    if overrides is None:
+        return sanitized
+    if not isinstance(overrides, dict):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="playsLike.tempAlt must be a JSON object",
+        )
+    for key, value in overrides.items():
+        if key == "enabled":
+            if not isinstance(value, bool):
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    detail="playsLike.tempAlt.enabled must be a boolean",
+                )
+            sanitized["enabled"] = value
+        elif key == "betaPerC":
+            if not isinstance(value, (int, float)):
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    detail="playsLike.tempAlt.betaPerC must be a number",
+                )
+            sanitized["betaPerC"] = float(value)
+        elif key == "gammaPer100m":
+            if not isinstance(value, (int, float)):
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    detail="playsLike.tempAlt.gammaPer100m must be a number",
+                )
+            sanitized["gammaPer100m"] = float(value)
+        elif key == "caps":
+            if value is None:
+                sanitized["caps"] = deepcopy(DEFAULT_TEMP_ALT_CFG["caps"])
+                continue
+            if not isinstance(value, dict):
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    detail="playsLike.tempAlt.caps must be a JSON object",
+                )
+            per_component = value.get("perComponent")
+            if per_component is not None:
+                if not isinstance(per_component, (int, float)):
+                    raise HTTPException(
+                        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                        detail="playsLike.tempAlt.caps.perComponent must be a number",
+                    )
+                sanitized["caps"]["perComponent"] = float(per_component)
+            total = value.get("total")
+            if total is not None:
+                if not isinstance(total, (int, float)):
+                    raise HTTPException(
+                        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                        detail="playsLike.tempAlt.caps.total must be a number",
+                    )
+                sanitized["caps"]["total"] = float(total)
+    return sanitized
+
+
 DEFAULT_PLAYSLIKE_REMOTE_CFG: Dict[str, Any] = {
     "windModel": "percent_v1",
     "alphaHead_per_mph": 0.01,
@@ -27,6 +114,7 @@ DEFAULT_PLAYSLIKE_REMOTE_CFG: Dict[str, Any] = {
         "tour": {"scaleHead": 0.95, "scaleTail": 0.95},
         "amateur": {"scaleHead": 1.05, "scaleTail": 1.0},
     },
+    "tempAlt": deepcopy(DEFAULT_TEMP_ALT_CFG),
 }
 
 DEFAULT_PLAYSLIKE_PROFILE = "literature_v1"
@@ -223,6 +311,8 @@ class RemoteConfigStore:
                     if sanitized_entry:
                         sanitized_map[entry] = sanitized_entry
                 sanitized[key] = sanitized_map
+            elif key == "tempAlt":
+                sanitized[key] = _sanitize_temp_alt(value, sanitized.get("tempAlt"))
             elif key in sanitized:
                 if not isinstance(value, (int, float)):
                     raise HTTPException(

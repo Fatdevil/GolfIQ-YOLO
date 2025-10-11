@@ -5,6 +5,11 @@ import {
   type PlaysLikeCfg,
   type PlaysLikeOptions,
 } from "@shared/playslike/PlaysLikeService";
+import {
+  applyPlaysLikeAdjustments,
+  type PlaysLikeAugmentedResult,
+  type TempAltOverrides,
+} from "@shared/playslike";
 import { postTelemetryEvent } from "../api";
 
 interface PlaysLikePanelProps {
@@ -14,6 +19,7 @@ interface PlaysLikePanelProps {
   windParallel?: number | null;
   options?: PlaysLikeOptions;
   cfg?: Partial<PlaysLikeCfg>;
+  tempAlt?: TempAltOverrides | null;
 }
 
 const formatDelta = (value: number) => `${value >= 0 ? "+" : ""}${value.toFixed(1)} m`;
@@ -31,6 +37,7 @@ export default function PlaysLikePanel({
   windParallel,
   options,
   cfg,
+  tempAlt,
 }: PlaysLikePanelProps) {
   const resolvedCfg = useMemo(() => {
     const overrides: Partial<PlaysLikeCfg> = {};
@@ -58,10 +65,19 @@ export default function PlaysLikePanel({
     return { distance: distanceMeters, delta, wind };
   }, [enabled, distanceMeters, deltaHMeters, windParallel]);
 
-  const result = useMemo(() => {
+  const baseResult = useMemo(() => {
     if (!inputs) return null;
     return computePlaysLike(inputs.distance, inputs.delta, inputs.wind, resolvedCfg);
   }, [inputs, resolvedCfg]);
+
+  const result = useMemo<PlaysLikeAugmentedResult | null>(() => {
+    if (!inputs || !baseResult) return null;
+    return applyPlaysLikeAdjustments({
+      baseDistance_m: inputs.distance,
+      baseResult,
+      tempAlt: tempAlt ?? null,
+    });
+  }, [baseResult, inputs, tempAlt]);
 
   const lastSignatureRef = useRef<string | null>(null);
   const [qaOpen, setQaOpen] = useState(false);
@@ -104,6 +120,15 @@ export default function PlaysLikePanel({
       eff: result.distanceEff,
       slopeM: result.components.slopeM,
       windM: result.components.windM,
+      tempAlt: tempAlt
+        ? {
+            enabled: Boolean(tempAlt.enable),
+            deltaTemp_m: result.tempAltDelta.deltaTemp_m,
+            deltaAlt_m: result.tempAltDelta.deltaAlt_m,
+            deltaTotal_m: result.tempAltDelta.deltaTotal_m,
+            notes: result.tempAltDelta.notes ?? undefined,
+          }
+        : undefined,
       quality: result.quality,
     }).catch((error) => {
       console.warn("Failed to emit plays_like_eval telemetry", error);
@@ -128,8 +153,15 @@ export default function PlaysLikePanel({
       alphaTail: resolvedCfg.alphaTail_per_mph,
       eff: result.distanceEff,
       quality: result.quality,
+      tempAlt: {
+        temp: result.components.tempM,
+        alt: result.components.altM,
+        total: result.components.tempAltTotalM,
+        notes: result.tempAltDelta.notes ?? [],
+        enabled: Boolean(tempAlt?.enable),
+      },
     };
-  }, [inputs, resolvedCfg, result]);
+  }, [inputs, resolvedCfg, result, tempAlt?.enable]);
 
   const toggleQa = () => {
     if (!enabled) return;
@@ -170,7 +202,7 @@ export default function PlaysLikePanel({
           {result ? (
             <p className="text-xs text-slate-400">
               Plays-like {result.distanceEff.toFixed(1)} m (Δ {formatDelta(
-                result.components.slopeM + result.components.windM
+                result.totalDelta_m
               )})
             </p>
           ) : (
@@ -208,10 +240,23 @@ export default function PlaysLikePanel({
         {qaOpen && (
           <div className="mt-2 rounded-md border border-slate-700/70 bg-slate-900/80 p-3 text-xs text-slate-200">
             {qaValues ? (
-              <dl className="space-y-1">
-                <div className="flex justify-between">
-                  <dt>D</dt>
-                  <dd>{qaValues.distance.toFixed(1)} m</dd>
+              <>
+                {(qaValues.tempAlt.enabled ||
+                  qaValues.tempAlt.temp !== 0 ||
+                  qaValues.tempAlt.alt !== 0) && (
+                  <div className="mb-2 flex flex-wrap gap-2">
+                    <span className="rounded-full bg-slate-800/60 px-2 py-0.5 text-[10px] uppercase tracking-wide text-slate-200">
+                      temp {formatDelta(qaValues.tempAlt.temp)}
+                    </span>
+                    <span className="rounded-full bg-slate-800/60 px-2 py-0.5 text-[10px] uppercase tracking-wide text-slate-200">
+                      alt {formatDelta(qaValues.tempAlt.alt)}
+                    </span>
+                  </div>
+                )}
+                <dl className="space-y-1">
+                  <div className="flex justify-between">
+                    <dt>D</dt>
+                    <dd>{qaValues.distance.toFixed(1)} m</dd>
                 </div>
                 <div className="flex justify-between">
                   <dt>Δh</dt>
@@ -241,7 +286,20 @@ export default function PlaysLikePanel({
                   <dt>Quality</dt>
                   <dd>{qaValues.quality.toUpperCase()}</dd>
                 </div>
+                {qaValues.tempAlt.notes.length > 0 && (
+                  <div className="flex flex-wrap gap-1 pt-1 text-[10px] uppercase tracking-wide text-slate-400">
+                    {qaValues.tempAlt.notes.map((note) => (
+                      <span
+                        key={note}
+                        className="rounded bg-slate-800/80 px-2 py-0.5"
+                      >
+                        {note.replace(/_/g, " ")}
+                      </span>
+                    ))}
+                  </div>
+                )}
               </dl>
+              </>
             ) : (
               <p className="text-slate-400">Not enough data.</p>
             )}
