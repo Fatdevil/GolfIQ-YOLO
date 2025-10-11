@@ -176,17 +176,19 @@ def test_tempalt_helpers_guard_invalid_inputs() -> None:
     assert module._float("not-a-number") is None  # type: ignore[attr-defined]
     assert module._float(float("nan")) is None  # type: ignore[attr-defined]
 
-    assert module._parse_measurement({"value": "bad", "unit": "C"}, {"C", "F"}) is None  # type: ignore[attr-defined]
-    assert module._parse_measurement("42yd", {"m", "ft"}) is None  # type: ignore[attr-defined]
-    assert module._parse_measurement({"value": 200, "unit": "yd"}, {"m", "ft"}) is None  # type: ignore[attr-defined]
-    assert module._parse_measurement({"value": 10, "unit": "yd"}, {"yd"}) is None  # type: ignore[attr-defined]
-    assert module._parse_measurement("42ft", {"m"}) is None  # type: ignore[attr-defined]
-    assert module._parse_measurement("50F", {"C", "F"}) == Measurement(50.0, "F")  # type: ignore[attr-defined]
+    parse = module._parse_measurement  # type: ignore[attr-defined]
+    assert parse({"value": "bad", "unit": "C"}, {"C", "F"}) is None
+    assert parse("42yd", {"m", "ft"}) is None
+    assert parse({"value": 200, "unit": "yd"}, {"m", "ft"}) is None
+    assert parse({"value": 10, "unit": "yd"}, {"yd"}) is None
+    assert parse("42ft", {"m"}) is None
+    assert parse("50F", {"C", "F"}) == Measurement(50.0, "F")
 
+    extract = module._extract_temp_alt_mapping  # type: ignore[attr-defined]
     nested = {"playsLike": {"tempAlt": {"enabled": True}}}
-    assert module._extract_temp_alt_mapping(nested) == nested["playsLike"]["tempAlt"]  # type: ignore[attr-defined]
-    assert module._extract_temp_alt_mapping({"tempAlt": {"enabled": False}}) == {"enabled": False}  # type: ignore[attr-defined]
-    assert module._extract_temp_alt_mapping({"other": {}}) is None  # type: ignore[attr-defined]
+    assert extract(nested) == nested["playsLike"]["tempAlt"]
+    assert extract({"tempAlt": {"enabled": False}}) == {"enabled": False}
+    assert extract({"other": {}}) is None
 
 
 def test_resolve_tempalt_config_rejects_invalid_query_and_headers(
