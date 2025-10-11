@@ -258,3 +258,91 @@ def test_update_remote_config_blocks_cross_origin(monkeypatch: pytest.MonkeyPatc
             headers={"x-admin-token": "expected", "Origin": "https://evil.example"},
         )
         assert response.status_code == 403
+
+
+def test_sanitize_temp_alt_merges_base_and_overrides() -> None:
+    base = {
+        "enabled": True,
+        "betaPerC": 0.002,
+        "gammaPer100m": 0.008,
+        "caps": {"perComponent": 0.15, "total": 0.22},
+    }
+    overrides = {"enabled": False, "gammaPer100m": 0.009, "caps": {"total": 0.3}}
+
+    result = remote._sanitize_temp_alt(overrides, base)
+
+    assert result["enabled"] is False
+    assert result["betaPerC"] == pytest.approx(0.002)
+    assert result["gammaPer100m"] == pytest.approx(0.009)
+    assert result["caps"]["perComponent"] == pytest.approx(0.15)
+    assert result["caps"]["total"] == pytest.approx(0.3)
+
+
+def test_sanitize_temp_alt_caps_reset_to_defaults() -> None:
+    base = {
+        "enabled": False,
+        "caps": {"perComponent": 0.11, "total": 0.19},
+    }
+
+    result = remote._sanitize_temp_alt({"caps": None}, base)
+
+    assert result["caps"] == remote.DEFAULT_TEMP_ALT_CFG["caps"]
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        {"enabled": "yes"},
+        {"betaPerC": "fast"},
+        {"gammaPer100m": "slow"},
+        {"caps": "oops"},
+        {"caps": {"perComponent": "invalid"}},
+        {"caps": {"total": "invalid"}},
+    ],
+)
+def test_sanitize_temp_alt_rejects_invalid_overrides(
+    payload: Dict[str, object],
+) -> None:
+    with pytest.raises(remote.HTTPException):  # type: ignore[attr-defined]
+        remote._sanitize_temp_alt(payload)
+
+
+def test_update_remote_config_handles_temp_alt_overrides(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("ADMIN_TOKEN", "secret")
+    headers = {"x-admin-token": "secret", "Origin": "http://testserver"}
+    payload = {
+        "tierA": {
+            "playsLike": {
+                "tempAlt": {
+                    "enabled": True,
+                    "betaPerC": 0.003,
+                    "gammaPer100m": 0.007,
+                    "caps": {"perComponent": 0.2, "total": 0.25},
+                }
+            }
+        }
+    }
+
+    with _client() as client:
+        response = client.post("/config/remote", json=payload, headers=headers)
+        assert response.status_code == 200
+        tier_a = response.json()["config"]["tierA"]["playsLike"]["tempAlt"]
+        assert tier_a["enabled"] is True
+        assert tier_a["betaPerC"] == pytest.approx(0.003)
+        assert tier_a["gammaPer100m"] == pytest.approx(0.007)
+        assert tier_a["caps"]["perComponent"] == pytest.approx(0.2)
+        assert tier_a["caps"]["total"] == pytest.approx(0.25)
+
+
+def test_update_remote_config_rejects_bad_temp_alt(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("ADMIN_TOKEN", "secret")
+    headers = {"x-admin-token": "secret", "Origin": "http://testserver"}
+    payload = {"tierB": {"playsLike": {"tempAlt": {"betaPerC": "oops"}}}}
+
+    with _client() as client:
+        response = client.post("/config/remote", json=payload, headers=headers)
+        assert response.status_code == 422

@@ -100,7 +100,9 @@ def test_resolve_tempalt_config_query_overrides_and_defaults(
     assert cfg.caps["total"] == pytest.approx(0.20)
 
 
-def test_resolve_tempalt_config_environment_fallback(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_resolve_tempalt_config_environment_fallback(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     monkeypatch.setenv("PLAYS_LIKE_TEMPALT_ENABLED", "true")
     monkeypatch.setenv("PLAYS_LIKE_TEMPALT_BETA_PER_C", "0.0030")
     monkeypatch.setenv("PLAYS_LIKE_TEMPALT_GAMMA_PER_100M", "0.0091")
@@ -166,3 +168,50 @@ def test_resolve_tempalt_config_aliases_and_invalids() -> None:
     assert cfg.altitudeASL == Measurement(328.0, "ft")
     assert cfg.caps["perComponent"] == pytest.approx(0.2)
     assert cfg.caps["total"] == pytest.approx(0.3)
+
+
+def test_tempalt_helpers_guard_invalid_inputs() -> None:
+    from server.config import playslike_config as module
+
+    assert module._float("not-a-number") is None  # type: ignore[attr-defined]
+    assert module._float(float("nan")) is None  # type: ignore[attr-defined]
+
+    assert module._parse_measurement({"value": "bad", "unit": "C"}, {"C", "F"}) is None  # type: ignore[attr-defined]
+    assert module._parse_measurement("42yd", {"m", "ft"}) is None  # type: ignore[attr-defined]
+    assert module._parse_measurement({"value": 200, "unit": "yd"}, {"m", "ft"}) is None  # type: ignore[attr-defined]
+    assert module._parse_measurement({"value": 10, "unit": "yd"}, {"yd"}) is None  # type: ignore[attr-defined]
+    assert module._parse_measurement("42ft", {"m"}) is None  # type: ignore[attr-defined]
+    assert module._parse_measurement("50F", {"C", "F"}) == Measurement(50.0, "F")  # type: ignore[attr-defined]
+
+    nested = {"playsLike": {"tempAlt": {"enabled": True}}}
+    assert module._extract_temp_alt_mapping(nested) == nested["playsLike"]["tempAlt"]  # type: ignore[attr-defined]
+    assert module._extract_temp_alt_mapping({"tempAlt": {"enabled": False}}) == {"enabled": False}  # type: ignore[attr-defined]
+    assert module._extract_temp_alt_mapping({"other": {}}) is None  # type: ignore[attr-defined]
+
+
+def test_resolve_tempalt_config_rejects_invalid_query_and_headers(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    req = make_request(
+        headers={
+            "x-pl-temp": "bogus",
+            "x-pl-alt": "badunit",
+            "x-pl-tempalt": "not-sure",
+        },
+        query={"pl_temp": "??", "pl_alt": "??", "pl_tempalt": "idk"},
+    )
+
+    req.state.remote_config = {
+        "playsLike": {
+            "tempAlt": {
+                "temperature": {"value": "nan", "unit": "C"},
+                "altitudeASL": {"value": "nan", "unit": "m"},
+            }
+        }
+    }
+
+    cfg = resolveTempAltConfig(req)
+
+    assert cfg.temperature is None
+    assert cfg.altitudeASL is None
+    assert cfg.enable is False
