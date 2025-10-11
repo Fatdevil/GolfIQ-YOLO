@@ -33,6 +33,54 @@ hour and applies a percentage-based distance delta:
 
 The effective distance is `playsLike = D + slopeM + windM`.
 
+## Temperature & Altitude
+
+### Heuristics
+
+- Reference temperature is 20 °C. The temperature adjustment follows `ΔD_temp = D × β_T × (20 − T_C)`
+  where `β_T = 0.0018 / °C` (≈ ±1% per 10 °F). Colder air (`T < 20 °C`) increases carry
+  distance, warmer air reduces it.
+- Altitude uses absolute elevation above sea level only (independent of local slope):
+  `ΔD_alt = D × γ_alt × (alt_m / 100)` with `γ_alt = 0.0065` (≈ +2% carry per 1000 ft).
+- Each component is clamped to ±10 % of baseline distance by default; the combined
+  temperature+altitude delta is capped at ±20 %.
+- Missing or malformed measurements resolve to zero contribution.
+
+Example adjustments (baseline 150 m, defaults):
+
+- Ambient 10 °C (`≈ 50 °F`): `ΔD_temp ≈ +2.7 m`.
+- Ambient 30 °C (`≈ 86 °F`): `ΔD_temp ≈ −2.7 m`.
+- Altitude 1000 ft (`≈ 305 m`): `ΔD_alt ≈ +3.0 m`.
+
+### Configuration & precedence
+
+Remote config exposes `playsLike.tempAlt`:
+
+```json
+"tempAlt": {
+  "enabled": false,
+  "betaPerC": 0.0018,
+  "gammaPer100m": 0.0065,
+  "caps": {
+    "perComponent": 0.10,
+    "total": 0.20
+  }
+}
+```
+
+Precedence (highest first): request overrides → user/session metadata → course/hole
+metadata → remote config → environment variables → code defaults. Environment overrides
+follow the prefix `PLAYS_LIKE_TEMPALT_*` (e.g. `PLAYS_LIKE_TEMPALT_GAMMA_PER_100M`).
+
+Request override headers:
+
+- `x-pl-temp`: temperature `10C`, `50F`, etc.
+- `x-pl-alt`: altitude `150m`, `500ft`, etc.
+- `x-pl-tempalt`: `on|off|true|false|1|0` master switch.
+
+Equivalent query parameters are supported via `pl_temp`, `pl_alt`, and `pl_tempalt` for
+instrumentation/QA tooling.
+
 ## Quality bands
 
 Quality is derived from the raw inputs:

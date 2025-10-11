@@ -14,4 +14,10 @@ export default defineConfig({
       allow: [".."],
     },
   },
+  test: {
+    include: [
+      "src/__tests__/**/*.spec.ts",
+      "../shared/playslike/__tests__/**/*.spec.ts",
+    ],
+  },
 });

@@ -15,10 +15,12 @@
     "isolatedModules": true,
     "noEmit": true,
     "jsx": "react-jsx",
-    "types": ["vite/client"],
+    "types": ["vite/client", "vitest"],
     "baseUrl": ".",
     "paths": {
-      "@shared/*": ["../shared/*"]
+      "@shared/*": ["../shared/*"],
+      "vitest": ["./node_modules/vitest"],
+      "vitest/*": ["./node_modules/vitest/*"]
     }
   },
   "include": ["src", "../shared/**/*.ts"],

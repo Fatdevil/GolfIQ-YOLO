@@ -143,6 +143,18 @@ export const fetchFeedback = (limit = 100) =>
       return response.data;
     });
 
+export type PlaysLikeTempAltRemoteConfig = {
+  enabled?: boolean;
+  betaPerC?: number;
+  gammaPer100m?: number;
+  caps?: {
+    perComponent?: number;
+    total?: number;
+    [key: string]: unknown;
+  };
+  [key: string]: unknown;
+};
+
 export type PlaysLikeRemoteConfig = {
   windModel?: string;
   alphaHead_per_mph?: number;
@@ -151,6 +163,7 @@ export type PlaysLikeRemoteConfig = {
   windCap_pctOfD?: number;
   taperStart_mph?: number;
   sidewindDistanceAdjust?: boolean;
+  tempAlt?: PlaysLikeTempAltRemoteConfig;
   [key: string]: unknown;
 };
 
