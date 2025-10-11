@@ -85,7 +85,7 @@ export default function PlaysLikePanel({
 
   useEffect(() => {
     if (!enabled || !inputs || !result) return;
-    const signature = [
+    const signatureParts: Array<string | number | boolean | null | undefined> = [
       inputs.distance,
       inputs.delta,
       inputs.wind,
@@ -95,9 +95,49 @@ export default function PlaysLikePanel({
       resolvedCfg.slopeFactor,
       resolvedCfg.windCap_pctOfD,
       resolvedCfg.taperStart_mph,
-    ]
+    ];
+
+    if (tempAlt) {
+      const temp = tempAlt.temperature;
+      const alt = tempAlt.altitudeASL;
+      const caps = tempAlt.caps ?? null;
+      signatureParts.push(Boolean(tempAlt.enable));
+      signatureParts.push(
+        temp
+          ? `temp:${Number.isFinite(temp.value) ? temp.value.toFixed(3) : "nan"}:${temp.unit}`
+          : "temp:none",
+      );
+      signatureParts.push(
+        alt
+          ? `alt:${Number.isFinite(alt.value) ? alt.value.toFixed(3) : "nan"}:${alt.unit}`
+          : "alt:none",
+      );
+      signatureParts.push(
+        Number.isFinite(tempAlt.betaPerC ?? NaN) ? (tempAlt.betaPerC as number) : "beta:default",
+      );
+      signatureParts.push(
+        Number.isFinite(tempAlt.gammaPer100m ?? NaN)
+          ? (tempAlt.gammaPer100m as number)
+          : "gamma:default",
+      );
+      signatureParts.push(
+        caps
+          ? `caps:${Number.isFinite(caps.perComponent ?? NaN) ? caps.perComponent : "default"}/${
+              Number.isFinite(caps.total ?? NaN) ? caps.total : "default"
+            }`
+          : "caps:none",
+      );
+    } else {
+      signatureParts.push("tempAlt:none");
+    }
+
+    const signature = signatureParts
       .map((value) =>
-        typeof value === "number" ? value.toFixed(3) : String(value ?? "null"),
+        typeof value === "number"
+          ? value.toFixed(3)
+          : typeof value === "boolean"
+            ? value ? "true" : "false"
+            : String(value ?? "null"),
       )
       .join("|");
     if (lastSignatureRef.current === signature) {
@@ -123,6 +163,11 @@ export default function PlaysLikePanel({
       tempAlt: tempAlt
         ? {
             enabled: Boolean(tempAlt.enable),
+            temperatureInput: tempAlt.temperature ?? undefined,
+            altitudeInput: tempAlt.altitudeASL ?? undefined,
+            betaPerC: tempAlt.betaPerC ?? undefined,
+            gammaPer100m: tempAlt.gammaPer100m ?? undefined,
+            caps: tempAlt.caps ?? undefined,
             deltaTemp_m: result.tempAltDelta.deltaTemp_m,
             deltaAlt_m: result.tempAltDelta.deltaAlt_m,
             deltaTotal_m: result.tempAltDelta.deltaTotal_m,
@@ -133,7 +178,7 @@ export default function PlaysLikePanel({
     }).catch((error) => {
       console.warn("Failed to emit plays_like_eval telemetry", error);
     });
-  }, [enabled, inputs, result, resolvedCfg]);
+  }, [enabled, inputs, result, resolvedCfg, tempAlt]);
 
   useEffect(() => {
     if (!enabled) {

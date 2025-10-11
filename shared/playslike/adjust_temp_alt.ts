@@ -42,7 +42,7 @@ const clampAbs = (value: number, limit: number): number => {
 };
 
 const sanitizeFraction = (value: number | undefined, fallback: number): number => {
-  if (!Number.isFinite(value)) {
+  if (value === undefined || !Number.isFinite(value)) {
     return fallback;
   }
   if (value <= 0) {
@@ -52,7 +52,7 @@ const sanitizeFraction = (value: number | undefined, fallback: number): number =
 };
 
 const sanitizeCoefficient = (value: number | undefined, fallback: number): number => {
-  if (!Number.isFinite(value)) {
+  if (value === undefined || !Number.isFinite(value)) {
     return fallback;
   }
   return value;

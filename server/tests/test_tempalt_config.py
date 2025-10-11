@@ -5,7 +5,11 @@ from typing import Mapping, Optional
 import pytest
 from starlette.requests import Request
 
-from server.config.playslike_config import Measurement, TempAltConfig, resolveTempAltConfig
+from server.config.playslike_config import (
+    Measurement,
+    TempAltConfig,
+    resolveTempAltConfig,
+)
 
 
 async def _empty_receive() -> dict[str, object]:
@@ -24,10 +28,7 @@ def make_request(
         ]
     query_string = ""
     if query:
-        query_string = "&".join(
-            f"{key}={value}"
-            for key, value in query.items()
-        )
+        query_string = "&".join(f"{key}={value}" for key, value in query.items())
     scope = {
         "type": "http",
         "method": "GET",
@@ -38,7 +39,9 @@ def make_request(
     return Request(scope, _empty_receive)
 
 
-def test_resolve_tempalt_config_headers_override_rc(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_resolve_tempalt_config_headers_override_rc(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     req = make_request(
         headers={
             "x-pl-tempalt": "on",
@@ -57,7 +60,9 @@ def test_resolve_tempalt_config_headers_override_rc(monkeypatch: pytest.MonkeyPa
     assert cfg.betaPerC == pytest.approx(0.0021)
 
 
-def test_resolve_tempalt_config_user_overrides_rc_and_course(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_resolve_tempalt_config_user_overrides_rc_and_course(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     req = make_request()
     req.state.remote_config = {
         "playsLike": {"tempAlt": {"enabled": True, "gammaPer100m": 0.0078}}
@@ -73,7 +78,9 @@ def test_resolve_tempalt_config_user_overrides_rc_and_course(monkeypatch: pytest
     assert cfg.gammaPer100m == pytest.approx(0.0078)
 
 
-def test_resolve_tempalt_config_query_overrides_and_defaults(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_resolve_tempalt_config_query_overrides_and_defaults(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     monkeypatch.delenv("PLAYS_LIKE_TEMPALT_CAP_PER_COMPONENT", raising=False)
     monkeypatch.delenv("PLAYS_LIKE_TEMPALT_CAP_TOTAL", raising=False)
     req = make_request(

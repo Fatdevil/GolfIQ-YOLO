@@ -92,9 +92,10 @@ describe("computeTempAltDelta", () => {
     expect(result.deltaAlt_m).toBeGreaterThan(11);
     expect(result.deltaAlt_m).toBeLessThan(11.3);
     expect(result.deltaTotal_m).toBeCloseTo(22.5, 1);
-    expect(result.notes).toContain("temp_component_capped");
-    expect(result.notes).toContain("alt_component_capped");
-    expect(result.notes).toContain("total_capped");
+    const notes = result.notes ?? [];
+    expect(notes).toContain("temp_component_capped");
+    expect(notes).toContain("alt_component_capped");
+    expect(notes).toContain("total_capped");
   });
 
   it("respects master disable switch", () => {

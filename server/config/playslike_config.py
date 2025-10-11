@@ -97,7 +97,9 @@ def _extract_temp_alt_mapping(source: Any) -> Optional[Mapping[str, Any]]:
     return None
 
 
-def _merge_from_mapping(config: MutableMapping[str, Any], mapping: Optional[Mapping[str, Any]]) -> None:
+def _merge_from_mapping(
+    config: MutableMapping[str, Any], mapping: Optional[Mapping[str, Any]]
+) -> None:
     if not mapping:
         return
     enabled = mapping.get("enabled")
@@ -146,7 +148,9 @@ def _apply_environment(config: MutableMapping[str, Any]) -> None:
         config["caps"]["total"] = cap_total
 
 
-def _apply_request_overrides(config: MutableMapping[str, Any], request: Request) -> None:
+def _apply_request_overrides(
+    config: MutableMapping[str, Any], request: Request
+) -> None:
     headers = request.headers
     temp_header = headers.get("x-pl-temp") or headers.get("X-PL-TEMP")
     measurement = _parse_measurement(temp_header, {"C", "F"}) if temp_header else None
@@ -162,17 +166,29 @@ def _apply_request_overrides(config: MutableMapping[str, Any], request: Request)
         config["enable"] = header_toggle
 
     queries = request.query_params
-    temp_query = next((queries[key] for key in ("pl_temp", "pl-temp", "plTemp") if key in queries), None)
+    temp_query = next(
+        (queries[key] for key in ("pl_temp", "pl-temp", "plTemp") if key in queries),
+        None,
+    )
     if temp_query:
         measurement = _parse_measurement(temp_query, {"C", "F"})
         if measurement is not None:
             config["temperature"] = measurement
-    alt_query = next((queries[key] for key in ("pl_alt", "pl-alt", "plAlt") if key in queries), None)
+    alt_query = next(
+        (queries[key] for key in ("pl_alt", "pl-alt", "plAlt") if key in queries), None
+    )
     if alt_query:
         altitude = _parse_measurement(alt_query, {"m", "ft"})
         if altitude is not None:
             config["altitudeASL"] = altitude
-    enable_query = next((queries[key] for key in ("pl_tempalt", "pl-tempalt", "plTempAlt") if key in queries), None)
+    enable_query = next(
+        (
+            queries[key]
+            for key in ("pl_tempalt", "pl-tempalt", "plTempAlt")
+            if key in queries
+        ),
+        None,
+    )
     if enable_query is not None:
         query_toggle = coerce_boolish(enable_query)
         if query_toggle is not None:
@@ -190,7 +206,10 @@ def resolveTempAltConfig(
         "altitudeASL": None,
         "betaPerC": _DEFAULT_BETA,
         "gammaPer100m": _DEFAULT_GAMMA,
-        "caps": {"perComponent": _DEFAULT_CAPS["perComponent"], "total": _DEFAULT_CAPS["total"]},
+        "caps": {
+            "perComponent": _DEFAULT_CAPS["perComponent"],
+            "total": _DEFAULT_CAPS["total"],
+        },
     }
 
     _apply_environment(config)

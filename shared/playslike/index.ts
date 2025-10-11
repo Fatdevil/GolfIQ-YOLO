@@ -85,4 +85,3 @@ export const applyPlaysLikeAdjustments = (
 export type { TempAltDelta } from "./adjust_temp_alt";
 export { computeTempAltDelta, type TempAltInput } from "./adjust_temp_alt";
 export { toMeters, toCelsius, toFeet, toYards } from "./units";
-export type { TempAltOverrides };
