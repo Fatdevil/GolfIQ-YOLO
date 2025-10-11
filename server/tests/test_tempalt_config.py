@@ -98,3 +98,71 @@ def test_resolve_tempalt_config_query_overrides_and_defaults(
     assert cfg.altitudeASL == Measurement(150.0, "m")
     assert cfg.caps["perComponent"] == pytest.approx(0.10)
     assert cfg.caps["total"] == pytest.approx(0.20)
+
+
+def test_resolve_tempalt_config_environment_fallback(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("PLAYS_LIKE_TEMPALT_ENABLED", "true")
+    monkeypatch.setenv("PLAYS_LIKE_TEMPALT_BETA_PER_C", "0.0030")
+    monkeypatch.setenv("PLAYS_LIKE_TEMPALT_GAMMA_PER_100M", "0.0091")
+    monkeypatch.setenv("PLAYS_LIKE_TEMPALT_CAP_PER_COMPONENT", "0.15")
+    monkeypatch.setenv("PLAYS_LIKE_TEMPALT_CAP_TOTAL", "0.25")
+
+    req = make_request()
+
+    cfg = resolveTempAltConfig(req)
+
+    assert cfg.enable is True
+    assert cfg.betaPerC == pytest.approx(0.0030)
+    assert cfg.gammaPer100m == pytest.approx(0.0091)
+    assert cfg.caps["perComponent"] == pytest.approx(0.15)
+    assert cfg.caps["total"] == pytest.approx(0.25)
+
+
+def test_resolve_tempalt_config_state_precedence() -> None:
+    req = make_request()
+    req.state.playslike_tempalt = {
+        "enabled": True,
+        "temperature": {"value": 14, "unit": "C"},
+    }
+    req.state.playslike_config = {
+        "tempAlt": {"enabled": False, "temperature": {"value": -5, "unit": "C"}}
+    }
+    req.state.remote_config = {
+        "playsLike": {
+            "tempAlt": {
+                "enabled": False,
+                "temperature": {"value": 40, "unit": "F"},
+                "caps": {"perComponent": 0.05, "total": 0.07},
+            }
+        }
+    }
+
+    cfg = resolveTempAltConfig(req)
+
+    assert cfg.enable is True
+    assert cfg.temperature == Measurement(14.0, "C")
+    assert cfg.caps["perComponent"] == pytest.approx(0.10)
+    assert cfg.caps["total"] == pytest.approx(0.20)
+
+
+def test_resolve_tempalt_config_aliases_and_invalids() -> None:
+    req = make_request(
+        headers={"x-pl-temp": " 72 f ", "x-pl-tempalt": "nope"},
+        query={"pl-alt": "328ft", "plTempAlt": "1"},
+    )
+    course = {
+        "playsLike": {
+            "tempAlt": {
+                "altitude": {"value": 250, "unit": "m"},
+                "caps": {"perComponent": "0.2", "total": "0.3"},
+            }
+        }
+    }
+
+    cfg = resolveTempAltConfig(req, course=course)
+
+    assert cfg.enable is True
+    assert cfg.temperature == Measurement(72.0, "F")
+    assert cfg.altitudeASL == Measurement(328.0, "ft")
+    assert cfg.caps["perComponent"] == pytest.approx(0.2)
+    assert cfg.caps["total"] == pytest.approx(0.3)
