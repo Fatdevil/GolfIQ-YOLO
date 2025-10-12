@@ -82,3 +82,43 @@ Values are numeric, deviceClass is `arhud`, and no PII is collected.
 ```
 
 The overlay floats above the AR scene and remains readable in bright sunlight by using high-contrast typography.
+
+## Scaffolding SLOs & State Machine (MVP Library)
+
+| Metric | Target |
+| --- | --- |
+| Frame rate | ≥ 30 FPS |
+| HUD latency | ≤ 120 ms end-to-end |
+| Re-center recovery | ≤ 2 s |
+| Heading stability | RMS error ≤ 1° |
+
+These constants ship in `shared/arhud/constants.ts` so native + web clients can share thresholds.
+
+### Library State Machine
+
+```
+AIM --(aimAcquired)--> CALIBRATE --(calibrated)--> TRACK
+TRACK --(recenterRequested)--> RECENTER --(recentered)--> TRACK
+TRACK --(trackingLost)--> CALIBRATE --(trackingLost)--> AIM
+```
+
+* Illegal transitions are ignored to keep downstream systems tolerant to out-of-order telemetry.
+* `reset()` snaps back to `AIM` for fresh sessions.
+* RECENTER is optional and can be RC/flag gated before wiring into UI.
+
+### Heading Smoothing
+
+We expose `createHeadingSmoother(opts)` which blends exponential smoothing (α≈0.2) with a rolling RMS window (default 20 samples). Headings are converted to unit vectors to handle the 0°/360° wrap without spikes toward 180°.
+
+```ts
+const smoother = createHeadingSmoother();
+const readings = [358, 359, 1, 3];
+const smoothed = readings.map((r) => smoother.next(r));
+// smoothed ≈ [358, 358.4, 0.6, 1.4]
+
+if (smoother.rms() > HEADING_RMS_MAX_DEG) {
+  console.warn("Heading noise outside tolerance");
+}
+```
+
+The RMS helper lets us compare real-time stability back to the 1° budget before surfacing HUD overlays.
