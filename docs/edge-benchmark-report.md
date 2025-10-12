@@ -1,5 +1,5 @@
-# Edge Benchmark Report Harness
+# Edge Benchmark Report Stub
 
-This repository includes a lightweight export harness that generates a tiny ONNX model and benchmarks it on CPU. For every pull request touching the harness, CI uploads the generated report and model artifact for inspection.
+This document tracks the lightweight export + CPU micro-benchmark harness used in CI. The generated summary lives in `models/EXPORT_REPORT.md` and is uploaded as a PR artifact (`edge-bench-report`).
 
-The latest run artifacts are attached to the PR under the `edge-bench-report` bundle.
+For historical snapshots download the artifact from the GitHub Actions run of the **edge-bench** workflow.
