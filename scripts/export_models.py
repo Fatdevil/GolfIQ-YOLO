@@ -3,7 +3,6 @@
 # a tiny ONNX graph programmatically.
 import argparse
 import datetime
-import hashlib
 import json
 import os
 import platform
@@ -13,14 +12,6 @@ import numpy as np
 
 REPORT_PATH_DEFAULT = "models/EXPORT_REPORT.md"
 ONNX_OPSET = 11
-
-
-def sha8(b: bytes) -> str:
-    import hashlib
-
-    return hashlib.sha256(b).hexdigest()[:8]
-
-
 def ensure_dir(p):
     directory = os.path.dirname(p)
     if directory:
