@@ -7,6 +7,9 @@ web/dist/
 .codex/sessions/
 .codex/log/
 
+# Local web configuration (should remain untracked)
+web/config/*.json
+
 # Codex & artifacts
 .codex/*
 !.codex/prompts/
@@ -35,3 +38,23 @@ exports/
 !exports/**/*.json
 !exports/**/*.md
 !exports/.gitattributes
+
+# Mobile/build artefacts
+android/**/build/
+ios/Pods/
+.gradle/
+.cxx/
+**/.DS_Store
+
+# Packages & archives
+*.apk
+*.aab
+*.ipa
+*.xcarchive
+*.zip
+*.7z
+
+# Media dumps
+*.mp4
+*.mov
+*.avi
