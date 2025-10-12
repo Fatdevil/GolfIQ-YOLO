@@ -73,7 +73,6 @@ def export_onnx(dummy_shape=(1, 3, 320, 320), iters=25, lines=None):
         downgrade_ir(onnx_path)
     except Exception:
         used = "programmatic"
-        import onnx
         from onnx import helper, TensorProto
 
         N, C, H, W = dummy_shape
@@ -118,8 +117,6 @@ def export_onnx(dummy_shape=(1, 3, 320, 320), iters=25, lines=None):
             model.ir_version = 8
         onnx.save(model, onnx_path)
 
-    import onnxruntime as ort
-
     sess = ort.InferenceSession(onnx_path, providers=["CPUExecutionProvider"])
     x = np.random.randn(*dummy_shape).astype(np.float32)
     # Warmup
@@ -143,10 +140,12 @@ def export_onnx(dummy_shape=(1, 3, 320, 320), iters=25, lines=None):
         "exporter": used,
     }
     if lines is not None:
-        log_and_capture(
-            lines,
-            f"Target: ONNX | opset=12 | input={dummy_shape} | exporter={used} | file={onnx_path} ({size_mb:.2f} MB) | avg_latency={avg_ms:.2f} ms",
+        log_line = (
+            "Target: ONNX | opset=12 | "
+            f"input={dummy_shape} | exporter={used} | "
+            f"file={onnx_path} ({size_mb:.2f} MB) | avg_latency={avg_ms:.2f} ms"
         )
+        log_and_capture(lines, log_line)
     return meta
 
 
@@ -167,8 +166,13 @@ def main():
     lines = []
     ensure_dir(args.report)
 
-    hdr = f"# Edge Export Report\nGenerated: {datetime.datetime.utcnow().isoformat()}Z\nHost: {platform.platform()} Py{platform.python_version()}\n\n"
-    lines.append(hdr.strip())
+    hdr_lines = [
+        "# Edge Export Report",
+        f"Generated: {datetime.datetime.utcnow().isoformat()}Z",
+        f"Host: {platform.platform()} Py{platform.python_version()}",
+        "",
+    ]
+    lines.append("\n".join(hdr_lines).strip())
 
     results = []
     targets = [t.strip().lower() for t in args.targets.split(",") if t.strip()]
@@ -184,7 +188,15 @@ def main():
             results.append(s)
             log_and_capture(lines, f"Target: {t.upper()} | SKIPPED (dry-run)")
 
-    lines.append("\n## JSON\n```json\n" + json.dumps(results, indent=2) + "\n```\n")
+    json_block = "\n".join([
+        "",
+        "## JSON",
+        "```json",
+        json.dumps(results, indent=2),
+        "```",
+        "",
+    ])
+    lines.append(json_block)
     with open(args.report, "w", encoding="utf-8") as f:
         f.write("\n".join(lines))
 
