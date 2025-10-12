@@ -1,8 +1,10 @@
 import os
 import re
 
+
 def test_report_exists():
     assert os.path.exists("models/EXPORT_REPORT.md")
+
 
 def test_report_has_onnx_line():
     with open("models/EXPORT_REPORT.md", "r", encoding="utf-8") as f:
