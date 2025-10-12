@@ -34,10 +34,17 @@ def log_and_capture(lines, s):
 
 def export_onnx(dummy_shape=(1, 3, 320, 320), iters=25, lines=None):
     try:
-        import onnx, onnxruntime as ort
+        import onnx
     except Exception as e:
         if lines is not None:
             log_and_capture(lines, f"ONNX: unavailable: {e}")
+        return {"target": "ONNX", "status": "unavailable", "reason": str(e)}
+
+    try:
+        import onnxruntime as ort
+    except Exception as e:
+        if lines is not None:
+            log_and_capture(lines, f"ONNX Runtime: unavailable: {e}")
         return {"target": "ONNX", "status": "unavailable", "reason": str(e)}
 
     onnx_path = "models/tmp_tiny.onnx"
@@ -46,7 +53,8 @@ def export_onnx(dummy_shape=(1, 3, 320, 320), iters=25, lines=None):
     # Try PyTorch tiny model first; if torch missing, fall back to programmatic ONNX graph.
     used = "torch"
     try:
-        import torch, torch.nn as nn
+        import torch
+        import torch.nn as nn
 
         class Tiny(nn.Module):
             def __init__(self):
@@ -74,8 +82,8 @@ def export_onnx(dummy_shape=(1, 3, 320, 320), iters=25, lines=None):
         )
     except Exception:
         used = "programmatic"
-        import onnx
-        from onnx import helper, TensorProto
+        helper = onnx.helper
+        TensorProto = onnx.TensorProto
 
         N, C, H, W = dummy_shape
         X = helper.make_tensor_value_info("images", TensorProto.FLOAT, [None, 3, H, W])
