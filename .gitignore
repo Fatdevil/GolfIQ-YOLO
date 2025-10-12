@@ -35,3 +35,23 @@ exports/
 !exports/**/*.json
 !exports/**/*.md
 !exports/.gitattributes
+
+# Mobile/build artefacts
+android/**/build/
+ios/Pods/
+.gradle/
+.cxx/
+**/.DS_Store
+
+# Packages & archives
+*.apk
+*.aab
+*.ipa
+*.xcarchive
+*.zip
+*.7z
+
+# Media dumps
+*.mp4
+*.mov
+*.avi
