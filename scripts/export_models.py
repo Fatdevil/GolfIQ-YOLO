@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-# Lightweight export + micro-bench. Works even without torch by building a tiny ONNX graph programmatically.
+# Lightweight export + micro-bench.
+# Works even without torch by building a tiny ONNX graph programmatically.
 import argparse
 import datetime
 import json
