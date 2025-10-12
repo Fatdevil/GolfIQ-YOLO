@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 from pathlib import Path
 from typing import Any, Dict, List
 
@@ -21,8 +22,23 @@ def _course_data_root() -> Path:
     return Path(__file__).resolve().parents[2] / "data" / "courses"
 
 
+_COURSE_ID_PATTERN = re.compile(r"^[A-Za-z0-9_-]+$")
+
+
+def _sanitize_course_id(course_id: str) -> str:
+    """Ensure course identifiers cannot escape the bundle data root."""
+
+    if not _COURSE_ID_PATTERN.fullmatch(course_id):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="invalid course id",
+        )
+    return course_id
+
+
 def _resolve_course_path(course_id: str) -> Path:
-    return _course_data_root() / f"{course_id}.json"
+    safe_id = _sanitize_course_id(course_id)
+    return _course_data_root() / f"{safe_id}.json"
 
 
 def _coerce_feature_payload(payload: Any) -> List[Any]:
@@ -66,7 +82,9 @@ def _hash_payload(payload: Dict[str, Any]) -> str:
 @router.get("/course/{course_id}")
 async def get_bundle(course_id: str) -> JSONResponse:
     if not bundle_config.bundle_enabled():
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="bundle disabled")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="bundle disabled"
+        )
 
     ttl = max(0, bundle_config.get_bundle_ttl())
     features = _load_features(course_id)

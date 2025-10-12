@@ -3,9 +3,11 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from server.config import bundle_config
 from server.config import remote as remote_config
 from server.routes import bundle as bundle_route
 
@@ -52,6 +54,14 @@ def test_bundle_etag_stable_across_calls(tmp_path, monkeypatch):
     assert first.headers["ETag"] == second.headers["ETag"]
 
 
+def test_bundle_rejects_invalid_identifier():
+    with pytest.raises(bundle_route.HTTPException) as excinfo:
+        bundle_route._sanitize_course_id("../etc/passwd")
+
+    assert excinfo.value.status_code == 400
+    assert excinfo.value.detail == "invalid course id"
+
+
 def test_bundle_ttl_uses_remote_config(tmp_path, monkeypatch):
     monkeypatch.delenv("BUNDLE_TTL_SECONDS", raising=False)
     monkeypatch.setenv("BUNDLE_DATA_DIR", str(tmp_path))
@@ -69,3 +79,72 @@ def test_bundle_ttl_uses_remote_config(tmp_path, monkeypatch):
 
     assert response.status_code == 200
     assert response.json()["ttlSec"] == 456
+
+
+def test_bundle_disabled(monkeypatch):
+    monkeypatch.setenv("BUNDLE_ENABLED", "false")
+    client = _make_client()
+
+    response = client.get("/bundle/course/any")
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "bundle disabled"
+
+
+@pytest.mark.parametrize(
+    "payload,expected",
+    [
+        ({"features": [{"id": 1}]}, [{"id": 1}]),
+        (
+            {"fairways": [1], "hazards": [2]},
+            [
+                {"type": "fairways", "features": [1]},
+                {"type": "hazards", "features": [2]},
+            ],
+        ),
+        ([], []),
+        ({"features": "oops"}, []),
+    ],
+)
+def test_feature_loading_variants(payload, expected, tmp_path, monkeypatch):
+    monkeypatch.setenv("BUNDLE_DATA_DIR", str(tmp_path))
+    course_id = "variant"
+    Path(tmp_path / f"{course_id}.json").write_text(json.dumps(payload))
+
+    client = _make_client()
+    response = client.get(f"/bundle/course/{course_id}")
+
+    assert response.status_code == 200
+    assert response.json()["features"] == expected
+
+
+def test_invalid_json_returns_empty_features(tmp_path, monkeypatch):
+    monkeypatch.setenv("BUNDLE_DATA_DIR", str(tmp_path))
+    Path(tmp_path / "broken.json").write_text("{not json}")
+
+    client = _make_client()
+    response = client.get("/bundle/course/broken")
+
+    assert response.status_code == 200
+    assert response.json()["features"] == []
+
+
+def test_missing_file_returns_empty_features(tmp_path, monkeypatch):
+    monkeypatch.setenv("BUNDLE_DATA_DIR", str(tmp_path))
+    client = _make_client()
+
+    response = client.get("/bundle/course/missing")
+
+    assert response.status_code == 200
+    assert response.json()["features"] == []
+
+
+def test_ttl_floor_at_zero(monkeypatch):
+    monkeypatch.setenv("BUNDLE_TTL_SECONDS", "-1")
+    monkeypatch.setattr(bundle_config, "get_bundle_ttl", lambda: -10)
+
+    client = _make_client()
+    response = client.get("/bundle/course/foo")
+
+    assert response.status_code == 200
+    assert response.json()["ttlSec"] == 0
