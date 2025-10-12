@@ -188,14 +188,16 @@ def main():
             results.append(s)
             log_and_capture(lines, f"Target: {t.upper()} | SKIPPED (dry-run)")
 
-    json_block = "\n".join([
-        "",
-        "## JSON",
-        "```json",
-        json.dumps(results, indent=2),
-        "```",
-        "",
-    ])
+    json_block = "\n".join(
+        [
+            "",
+            "## JSON",
+            "```json",
+            json.dumps(results, indent=2),
+            "```",
+            "",
+        ]
+    )
     lines.append(json_block)
     with open(args.report, "w", encoding="utf-8") as f:
         f.write("\n".join(lines))
