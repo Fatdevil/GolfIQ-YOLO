@@ -3,6 +3,11 @@ repos:
     rev: 24.8.0
     hooks:
       - id: black
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.6.9
+    hooks:
+      - id: ruff
+        args: ["--fix"]
   - repo: https://github.com/pycqa/isort
     rev: 5.13.2
     hooks:
@@ -11,3 +16,10 @@ repos:
     rev: 7.1.1
     hooks:
       - id: flake8
+  - repo: local
+    hooks:
+      - id: npm-lint-types
+        name: TypeScript type check
+        entry: npm run lint:types
+        language: system
+        pass_filenames: false

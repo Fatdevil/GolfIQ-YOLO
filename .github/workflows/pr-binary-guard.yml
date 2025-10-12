@@ -1,0 +1,29 @@
+name: pr-binary-guard
+
+on: [pull_request]
+
+jobs:
+  guard:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check for forbidden binaries
+        run: |
+          set -euo pipefail
+          forbidden='(\.apk$|\.aab$|\.ipa$|\.xcarchive$|\.zip$|\.7z$|\.mp4$|\.mov$|\.avi$|\.png$|\.jpg$|\.jpeg$|\.gif$|(^|/)Pods/|(^|/)node_modules/|(^|/)build/|(^|/)\.gradle/|(^|/)\.cxx/|gradle/wrapper/gradle-wrapper\.jar$)'
+          allowed='(\.ts$|\.tsx$|\.js$|\.jsx$|\.py$|\.java$|\.kt$|\.kts$|\.gradle$|\.properties$|\.yml$|\.yaml$|\.toml$|\.md$|\.json$|\.xml$|\.txt$)'
+
+          violations=0
+          while IFS= read -r -d '' f; do
+            [[ "$f" =~ $allowed ]] && continue
+            if [[ "$f" =~ $forbidden ]]; then
+              echo "Forbidden file: $f"
+              violations=$((violations+1))
+            fi
+          done < <(git ls-files -z)
+
+          if (( violations > 0 )); then
+            echo "::error::Forbidden files detected ($violations)."
+            exit 1
+          fi
+          echo "Binary guard passed."

@@ -1,0 +1,6 @@
+{
+  "state": "primary",
+  "matchScore": 1.0,
+  "widgets": ["ballSpeed", "carryEst", "sideAngle"],
+  "scales": [1.0, 1.2, 1.3]
+}

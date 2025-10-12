@@ -82,3 +82,9 @@ Values are numeric, deviceClass is `arhud`, and no PII is collected.
 ```
 
 The overlay floats above the AR scene and remains readable in bright sunlight by using high-contrast typography.
+
+## Calibration SLOs & smoothing quick-reference
+- **Aim stability**: require pose variance ≤ `0.0125°²` before entering CALIBRATE.
+- **Calibration quality**: heading RMS must land ≤ `1.75°` to accept calibration.
+- **Tracking guardrails**: enforce ≤ `2.5°` RMS while rendering overlays; recenter after `15s` without a refresh.
+- **Heading smoothing**: EMA operates on unwrapped headings to avoid wrap spikes (e.g. `359° → 2°`), with a rolling RMS window (default 20 samples) to decide when TRACK can continue or must recenter.
