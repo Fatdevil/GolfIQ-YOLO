@@ -12,6 +12,8 @@ import numpy as np
 
 REPORT_PATH_DEFAULT = "models/EXPORT_REPORT.md"
 ONNX_OPSET = 11
+
+
 def ensure_dir(p):
     directory = os.path.dirname(p)
     if directory:
