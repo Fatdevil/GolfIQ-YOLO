@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
-# Lightweight export + micro-bench. Works even without torch by building
-# a tiny ONNX graph programmatically.
+# Lightweight export + micro-bench.
+# Works even without torch by building a tiny ONNX graph programmatically.
 import argparse
 import datetime
 import json
@@ -11,13 +11,10 @@ import time
 import numpy as np
 
 REPORT_PATH_DEFAULT = "models/EXPORT_REPORT.md"
-ONNX_OPSET = 11
 
 
 def ensure_dir(p):
-    directory = os.path.dirname(p)
-    if directory:
-        os.makedirs(directory, exist_ok=True)
+    os.makedirs(os.path.dirname(p), exist_ok=True)
 
 
 def log_and_capture(lines, s):
@@ -25,19 +22,22 @@ def log_and_capture(lines, s):
     lines.append(s)
 
 
+def downgrade_ir(path: str, max_ir: int = 8):
+    import onnx
+
+    model = onnx.load(path)
+    if getattr(model, "ir_version", 0) > max_ir:
+        model.ir_version = max_ir
+        onnx.save(model, path)
+
+
 def export_onnx(dummy_shape=(1, 3, 320, 320), iters=25, lines=None):
     try:
         import onnx
-    except Exception as e:
-        if lines is not None:
-            log_and_capture(lines, f"ONNX: unavailable: {e}")
-        return {"target": "ONNX", "status": "unavailable", "reason": str(e)}
-
-    try:
         import onnxruntime as ort
     except Exception as e:
         if lines is not None:
-            log_and_capture(lines, f"ONNX Runtime: unavailable: {e}")
+            log_and_capture(lines, f"ONNX: unavailable: {e}")
         return {"target": "ONNX", "status": "unavailable", "reason": str(e)}
 
     onnx_path = "models/tmp_tiny.onnx"
@@ -70,13 +70,13 @@ def export_onnx(dummy_shape=(1, 3, 320, 320), iters=25, lines=None):
             onnx_path,
             input_names=["images"],
             output_names=["logits"],
-            opset_version=ONNX_OPSET,
+            opset_version=12,
             dynamic_axes={"images": {0: "N"}, "logits": {0: "N"}},
         )
+        downgrade_ir(onnx_path)
     except Exception:
         used = "programmatic"
-        helper = onnx.helper
-        TensorProto = onnx.TensorProto
+        from onnx import helper, TensorProto
 
         N, C, H, W = dummy_shape
         X = helper.make_tensor_value_info("images", TensorProto.FLOAT, [None, 3, H, W])
@@ -115,10 +115,9 @@ def export_onnx(dummy_shape=(1, 3, 320, 320), iters=25, lines=None):
             [helper.make_tensor_value_info("logits", TensorProto.FLOAT, [None, 4])],
             [conv_w, conv_b, shape, W2t, b2t],
         )
-        model = helper.make_model(
-            graph, opset_imports=[helper.make_opsetid("", ONNX_OPSET)]
-        )
-        model.ir_version = 7
+        model = helper.make_model(graph, opset_imports=[helper.make_opsetid("", 12)])
+        if getattr(model, "ir_version", 0) > 8:
+            model.ir_version = 8
         onnx.save(model, onnx_path)
 
     sess = ort.InferenceSession(onnx_path, providers=["CPUExecutionProvider"])
@@ -136,7 +135,7 @@ def export_onnx(dummy_shape=(1, 3, 320, 320), iters=25, lines=None):
     meta = {
         "target": "ONNX",
         "status": "ok",
-        "opset": ONNX_OPSET,
+        "opset": 12,
         "input_shape": dummy_shape,
         "avg_latency_ms": round(avg_ms, 2),
         "file": onnx_path,
@@ -144,17 +143,12 @@ def export_onnx(dummy_shape=(1, 3, 320, 320), iters=25, lines=None):
         "exporter": used,
     }
     if lines is not None:
-        summary = " ".join(
-            [
-                "Target: ONNX |",
-                f"opset={ONNX_OPSET} |",
-                f"input={dummy_shape} |",
-                f"exporter={used} |",
-                f"file={onnx_path} ({size_mb:.2f} MB) |",
-                f"avg_latency={avg_ms:.2f} ms",
-            ]
+        log_line = (
+            "Target: ONNX | opset=12 | "
+            f"input={dummy_shape} | exporter={used} | "
+            f"file={onnx_path} ({size_mb:.2f} MB) | avg_latency={avg_ms:.2f} ms"
         )
-        log_and_capture(lines, summary)
+        log_and_capture(lines, log_line)
     return meta
 
 
@@ -197,7 +191,17 @@ def main():
             results.append(s)
             log_and_capture(lines, f"Target: {t.upper()} | SKIPPED (dry-run)")
 
-    lines.append("\n## JSON\n```json\n" + json.dumps(results, indent=2) + "\n```\n")
+    json_block = "\n".join(
+        [
+            "",
+            "## JSON",
+            "```json",
+            json.dumps(results, indent=2),
+            "```",
+            "",
+        ]
+    )
+    lines.append(json_block)
     with open(args.report, "w", encoding="utf-8") as f:
         f.write("\n".join(lines))
 

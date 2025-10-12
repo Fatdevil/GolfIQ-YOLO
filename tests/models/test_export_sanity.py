@@ -7,6 +7,7 @@ def test_report_exists():
 
 
 def test_report_has_onnx_line():
-    txt = open("models/EXPORT_REPORT.md", "r", encoding="utf-8").read()
+    with open("models/EXPORT_REPORT.md", "r", encoding="utf-8") as f:
+        txt = f.read()
     assert "Target: ONNX" in txt
     assert re.search(r"avg_latency=\d+\.\d+ ms", txt)
