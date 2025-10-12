@@ -1,15 +1,15 @@
 #!/usr/bin/env python3
 # Lightweight export + micro-bench. Works even without torch by building a tiny ONNX graph programmatically.
-import argparse, os, time, sys, platform, json, hashlib, datetime
+import argparse
+import datetime
+import json
+import os
+import platform
+import time
+
 import numpy as np
 
 REPORT_PATH_DEFAULT = "models/EXPORT_REPORT.md"
-
-
-def sha8(b: bytes) -> str:
-    import hashlib
-
-    return hashlib.sha256(b).hexdigest()[:8]
 
 
 def ensure_dir(p):
@@ -32,7 +32,8 @@ def downgrade_ir(path: str, max_ir: int = 8):
 
 def export_onnx(dummy_shape=(1, 3, 320, 320), iters=25, lines=None):
     try:
-        import onnx, onnxruntime as ort
+        import onnx
+        import onnxruntime as ort
     except Exception as e:
         if lines is not None:
             log_and_capture(lines, f"ONNX: unavailable: {e}")
@@ -44,7 +45,8 @@ def export_onnx(dummy_shape=(1, 3, 320, 320), iters=25, lines=None):
     # Try PyTorch tiny model first; if torch missing, fall back to programmatic ONNX graph.
     used = "torch"
     try:
-        import torch, torch.nn as nn
+        import torch
+        import torch.nn as nn
 
         class Tiny(nn.Module):
             def __init__(self):
