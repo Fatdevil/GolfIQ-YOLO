@@ -1,0 +1,18 @@
+name: pr-binary-guard
+
+on: [pull_request]
+
+jobs:
+  guard:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check for forbidden binaries
+        run: |
+          set -e
+          forbidden='(\.apk|\.aab|\.ipa|\.xcarchive|\.png|\.jpg|\.zip|\.mp4|\.aar|\.so|\.dylib|\.o|\.a|Pods/|node_modules/|gradle/wrapper/gradle-wrapper\.jar)'
+          if git ls-files -z | xargs -0 -I{} bash -lc '[[ "{}" =~ $forbidden ]] && echo "{}"' | grep .
+          then
+            echo "Forbidden binary files detected. Remove them from the PR."
+            exit 1
+          fi

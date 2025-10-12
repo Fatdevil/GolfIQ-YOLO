@@ -1,5 +1,7 @@
 **/__pycache__/
 golfiq-v0.9-*.zip
+# Dependency directories
+node_modules/
 web/node_modules/
 web/dist/
 .codex/sessions/
@@ -23,8 +25,26 @@ android/bench/src/main/assets/models/*
 !android/bench/src/main/assets/models/.gitkeep
 android/bench/src/main/assets/frames/*
 !android/bench/src/main/assets/frames/.gitkeep
+android/**/build/
+ios/Pods/
 ios/DerivedData/
 ios/build/
+
+# Binary and media outputs (blocked in CI)
+*.apk
+*.aab
+*.ipa
+*.xcarchive
+*.png
+*.jpg
+*.zip
+*.mp4
+*.aar
+*.so
+*.dylib
+*.o
+*.a
+.xcworkspace/xcuserdata/
 
 # Model weights and exports
 *.pt

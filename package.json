@@ -7,7 +7,9 @@
     "store:screens": "tsx --tsconfig tsconfig.tools.json tools/store_screenshots.ts",
     "store:privacy": "python3 tools/privacy_labels.py",
     "store:zip": "bash scripts/make_store_zip.sh",
-    "store:attach": "tsx --tsconfig tsconfig.tools.json tools/attach_to_release.ts"
+    "store:attach": "tsx --tsconfig tsconfig.tools.json tools/attach_to_release.ts",
+    "lint:types": "tsc --noEmit --project tsconfig.shared.json",
+    "test:arhud": "vitest run"
   },
   "dependencies": {
     "@octokit/rest": "^20.1.1",
@@ -15,6 +17,7 @@
   },
   "devDependencies": {
     "tsx": "^4.19.0",
-    "typescript": "^5.6.2"
+    "typescript": "^5.6.2",
+    "vitest": "^2.1.4"
   }
 }
