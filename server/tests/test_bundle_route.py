@@ -9,6 +9,9 @@ from server.app import app
 from server.routes import bundle as bundle_module
 
 
+NEW_CONTRACT_HEADERS = {"accept": "application/vnd.golfiq.bundle+json"}
+
+
 def _make_client(monkeypatch, tmp_path: Path) -> TestClient:
     monkeypatch.setattr(bundle_module, "COURSE_BUNDLE_DIR", tmp_path)
     return TestClient(app)
@@ -24,7 +27,7 @@ def test_bundle_returns_payload_with_headers(monkeypatch, tmp_path):
     (course_dir / "demo.json").write_text(json.dumps(data))
 
     client = _make_client(monkeypatch, course_dir)
-    response = client.get("/bundle/course/demo")
+    response = client.get("/bundle/course/demo", headers=NEW_CONTRACT_HEADERS)
 
     assert response.status_code == 200
     body = response.json()
@@ -41,8 +44,8 @@ def test_etag_is_stable(monkeypatch, tmp_path):
     (tmp_path / "course-a.json").write_text(json.dumps(payload))
     client = _make_client(monkeypatch, tmp_path)
 
-    first = client.get("/bundle/course/course-a")
-    second = client.get("/bundle/course/course-a")
+    first = client.get("/bundle/course/course-a", headers=NEW_CONTRACT_HEADERS)
+    second = client.get("/bundle/course/course-a", headers=NEW_CONTRACT_HEADERS)
     assert first.status_code == 200
     assert second.status_code == 200
     assert first.headers["ETag"] == second.headers["ETag"]
@@ -53,6 +56,6 @@ def test_ttl_falls_back_to_default(monkeypatch, tmp_path):
     monkeypatch.setenv("BUNDLE_ENABLED", "1")
     client = _make_client(monkeypatch, tmp_path)
 
-    response = client.get("/bundle/course/unknown")
+    response = client.get("/bundle/course/unknown", headers=NEW_CONTRACT_HEADERS)
     assert response.status_code == 200
     assert response.json()["ttlSec"] == bundle_module.get_bundle_ttl(None)
