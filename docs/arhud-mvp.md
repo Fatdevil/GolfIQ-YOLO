@@ -1,84 +1,44 @@
-# AR HUD MVP
+# AR-HUD MVP Scaffolding
 
-The mobile AR heads-up display (HUD) enables golfers to align with the target pin, calibrate device heading, and surface green front/center/back (F/C/B) distances on top of the real world without leaving the tee box.
+The MVP scaffolding introduces a head-up display control loop that is still flag-gated from production UI entry points. The focus is on laying down shared logic and instrumentation SLOs without wiring any visible changes.
 
-## Feature flags
+## Operating SLOs
 
-Two feature toggles control availability:
+The shared library exports conservative latency and accuracy targets that other clients can import while the HUD matures:
 
-- `hudEnabled` *(default: false)* – master switch that enables the Aim → Calibrate and AR overlay surfaces.
-- `hudTracerEnabled` *(default: false)* – renders tracer lines from the calibration origin to each marker to assist with debugging alignment.
+- **FPS_MIN = 30** — the capture pipeline should never dip below 30 FPS while rendering the HUD overlay.
+- **HUD_LATENCY_MAX_MS = 120** — end-to-end render latency target across sensor fusion, network, and draw stacks.
+- **RECENTER_MAX_S = 2** — maximum time budget for user-triggered recentering loops.
+- **HEADING_RMS_MAX_DEG = 1.0** — sustained heading jitter budget after smoothing.
 
-Both flags live in the shared configuration bundle and can be overridden from the in-app HUD settings surfaces on iOS and Android.
+## Finite State Machine
 
-## Core flows
+The state machine models the early HUD lifecycle and escape hatches.
 
-### Aim → Calibrate
-
-1. Load `/course/{id}` bundle (pin + green F/C/B coordinates).
-2. Prompt the player to aim the device toward the pin, then tap **Aim → Calibrate**.
-3. Capture the current device heading & location, compute the offset to the pin, and store an AR anchor.
-4. Place pin + F/C/B markers relative to the anchor and emit `arhud_calibrate` telemetry.
-
-### Re-center
-
-1. When drift occurs, tap **Re-center**.
-2. Reset AR world tracking, reapply the stored calibration anchor, and re-render markers.
-3. Emit `arhud_recenter` telemetry.
-
-## HUD overlay
-
-- Persistent pin marker plus smaller markers for green front, center, and back, rendered in AR space.
-- Overlay layer displays formatted yards for F/C/B along with contextual status copy.
-- FPS sampling runs every ~5 seconds and emits `arhud_fps` to `/telemetry` (sampled).
-
-## Platform implementations
-
-### iOS (ARKit + SceneKit)
-
-- `ARHUDViewController` owns an `ARSCNView`, overlay layer, CoreLocation updates, and telemetry hooks.
-- `ARHUDCourseBundleLoader` fetches `/course/{id}` bundles, normalizing snake_case keys.
-- Calibration stores heading offset + AR anchor, and positions nodes using a local ENU projection aligned to the user’s heading.
-- `ARHUDSettingsViewController` provides toggles for `hudEnabled` and `hudTracerEnabled` inside the app settings surface.
-
-### Android (ARCore + Sceneform)
-
-- `ARHUDActivity` hosts an `ArFragment`, manages fused location updates, rotation vector heading, and telemetry.
-- `CourseBundleRepository` loads bundles via `HttpURLConnection` and parses JSON using `JSONObject` to keep dependencies light.
-- Calibration flow mirrors iOS: anchors to the camera pose, computes heading offset, and renders markers/tracers with `ShapeFactory`.
-- `ARHUDSettingsFragment` exposes runtime toggles for `hudEnabled` / `hudTracerEnabled`.
-
-## Telemetry
-
-All calibrate, recenter, and FPS events post to the existing `/telemetry` client. Metric names:
-
-- `arhud_calibrate`
-- `arhud_recenter`
-- `arhud_fps`
-
-Values are numeric, deviceClass is `arhud`, and no PII is collected.
-
-## Limitations & roadmap notes
-
-- Geospatial anchors are optional and not enabled; calibration relies on world tracking + compass heading, so drift may occur on long sessions.
-- No persistence of calibration between holes/rounds.
-- Course bundle schema assumes pin + green F/C/B coordinates; hazards and elevation are out of scope for MVP.
-- Error handling surfaces inline status copy only—future work could add retry UI and offline caching.
-
-## UX sketch (textual)
-
-```
-+------------------------------------------+
-|      [ Camera feed / AR world ]          |
-|                                          |
-|           (Pin marker ⚑)                 |
-|         (F)  (C)   (B) markers           |
-|                                          |
-|   Status: "Aim at pin and calibrate"     |
-|   [ Aim → Calibrate ]                    |
-|   [ Re-center ]                          |
-|   F: 145 yd  C: 160 yd  B: 172 yd        |
-+------------------------------------------+
+```text
+AIM --(aimAcquired)--> CALIBRATE --(calibrated)--> TRACK
+TRACK --(recenterRequested)--> RECENTER --(recentered)--> TRACK
 ```
 
-The overlay floats above the AR scene and remains readable in bright sunlight by using high-contrast typography.
+Additional protections:
+
+- `trackingLost` immediately forces a return to `AIM` from any state so that reacquisition flows are deterministic.
+- Illegal events are ignored and leave the machine in-place (no implicit transitions).
+- `reset()` always jumps back to `AIM` to allow consumers to start fresh after teardown.
+
+## Heading Smoothing Strategy
+
+Heading smoothing uses a circular-aware exponential moving average (`α ≈ 0.2` by default). The smoother normalizes headings into the `[0°, 360°)` domain, computes the shortest signed delta, and advances the smoothed heading by `α · Δ`. This prevents sudden jumps when raw bearings cross the `0°/360°` boundary.
+
+To keep numerical stability, the smoother tracks a configurable sliding window of residual errors and exposes a running RMS check. Consumers can assert against `HEADING_RMS_MAX_DEG` to ensure jitter stays inside the budget. Example:
+
+```ts
+const smoother = createHeadingSmoother();
+const samples = [358, 2, 4];
+const outputs = samples.map((deg) => smoother.next(deg));
+// outputs ≈ [358, 0, 2]
+const rms = smoother.rms();
+// rms <= HEADING_RMS_MAX_DEG
+```
+
+Resetting the smoother clears its state and RMS window so HUD sessions can be isolated between shots.
