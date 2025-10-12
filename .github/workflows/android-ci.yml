@@ -21,19 +21,35 @@ jobs:
         uses: android-actions/setup-android@v3
       - name: Accept licenses
         run: yes | sdkmanager --licenses
+      - name: Create local.properties
+        working-directory: android
+        run: |
+          echo "sdk.dir=$ANDROID_SDK_ROOT" > local.properties
+          cat local.properties
       - name: Build with Gradle (no wrapper)
         uses: gradle/gradle-build-action@v3
         with:
           gradle-version: "8.7"
           arguments: |
-            :app:assembleDebug -x lint
-            :app:lint
-            :app:test
-      - name: Upload reports (text only)
+            build -x lint --stacktrace
+      - name: Unit tests
+        uses: gradle/gradle-build-action@v3
+        with:
+          gradle-version: "8.7"
+          arguments: |
+            test --stacktrace
+      - name: Lint
+        uses: gradle/gradle-build-action@v3
+        with:
+          gradle-version: "8.7"
+          arguments: |
+            lint --stacktrace
+      - name: Upload reports (text/HTML only)
         uses: actions/upload-artifact@v4
         with:
           name: android-reports
           path: |
-            **/build/reports/**/*.xml
-            **/build/reports/**/*.html
+            **/build/reports/**/*
+            !**/*.apk
+            !**/*.aab
           if-no-files-found: ignore

@@ -34,10 +34,13 @@ def test_bundle_route_serves_payload_with_overrides(tmp_path, monkeypatch) -> No
     response = client.get(f"/bundle/course/{course_id}")
     assert response.status_code == 200
     payload = response.json()
-    assert payload["courseId"] == course_id
+    course_id_value = payload.get("courseId")
+    assert course_id_value is not None and isinstance(course_id_value, str)
+    assert course_id_value == course_id
     assert payload["features"] == overrides["features"]
     assert payload["notes"] == overrides["notes"]
-    assert payload["ttlSec"] == 4321
+    ttl_value = payload.get("ttlSec")
+    assert ttl_value == 4321
     assert response.headers["Cache-Control"] == "public, max-age=4321"
     assert response.headers["ETag"].startswith('W/"')
 
@@ -64,6 +67,8 @@ def test_default_features_applied(monkeypatch) -> None:
     response = client.get("/bundle/course/abc")
     assert response.status_code == 200
     payload = response.json()
-    assert payload["features"] == ["aim", "calibrate", "track"]
-    assert payload["ttlSec"] == 120
+    features = payload.get("features")
+    assert features == ["aim", "calibrate", "track"]
+    ttl_value = payload.get("ttlSec")
+    assert ttl_value == 120
     assert response.headers["Cache-Control"] == "public, max-age=120"

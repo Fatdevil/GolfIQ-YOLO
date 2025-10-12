@@ -9,10 +9,29 @@ jobs:
       - uses: actions/checkout@v4
       - name: Check for forbidden binaries
         run: |
-          set -e
-          forbidden='(\.apk|\.aab|\.ipa|\.xcarchive|\.png|\.jpg|\.zip|\.mp4|\.aar|\.so|\.dylib|\.o|\.a|Pods/|node_modules/|gradle/wrapper/gradle-wrapper\.jar)'
-          if git ls-files -z | xargs -0 -I{} bash -lc '[[ "{}" =~ $forbidden ]] && echo "{}"' | grep .
-          then
-            echo "Forbidden binary files detected. Remove them from the PR."
+          set -euo pipefail
+          # forbid only real binaries/derived dirs
+          forbidden='(\.apk$|\.aab$|\.ipa$|\.xcarchive$|\.zip$|\.7z$|\.mp4$|\.mov$|\.avi$|\.png$|\.jpg$|\.jpeg$|\.gif$|(^|/)Pods/|(^|/)node_modules/|(^|/)build/|(^|/)\.gradle/|(^|/)\.cxx/|gradle/wrapper/gradle-wrapper\.jar$)'
+
+          # allow-list of common source/config extensions (explicitly OK)
+          allowed='(\.ts$|\.tsx$|\.js$|\.jsx$|\.py$|\.java$|\.kt$|\.kts$|\.gradle$|\.properties$|\.yml$|\.yaml$|\.toml$|\.md$|\.json$|\.xml$|\.txt$)'
+
+          violations=0
+          while IFS= read -r -d '' f; do
+            # if file matches allowed → skip
+            if [[ "$f" =~ $allowed ]]; then
+              continue
+            fi
+            # if file matches forbidden → count as violation
+            if [[ "$f" =~ $forbidden ]]; then
+              echo "Forbidden binary/derived file tracked: $f"
+              violations=$((violations+1))
+            fi
+          done < <(git ls-files -z)
+
+          if (( violations > 0 )); then
+            echo "::error::Forbidden files detected ($violations). Remove them from the PR."
             exit 1
+          else
+            echo "Binary guard passed."
           fi
