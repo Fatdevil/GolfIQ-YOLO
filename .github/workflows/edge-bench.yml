@@ -1,43 +1,33 @@
-name: Edge Export & Micro Bench
-
+name: edge-bench
 on:
   pull_request:
+    paths:
+      - "scripts/export_models.py"
+      - "models/**"
+      - "tests/models/**"
+      - ".github/workflows/edge-bench.yml"
 
 jobs:
-  edge-bench:
+  onnx-bench:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Python
-        uses: actions/setup-python@v5
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-
-      - name: Install base dependencies
+      - name: Install deps
         run: |
           python -m pip install --upgrade pip
-          python -m pip install numpy onnx onnxruntime
-
-      - name: Install optional edge deps
-        shell: bash
+          pip install numpy onnx onnxruntime pytest
+      - name: Run export script (ONNX)
         run: |
-          set -e
-          python -m pip install coremltools || echo "coremltools unavailable"
-          python -m pip install tflite-runtime || echo "tflite-runtime unavailable"
-
-      - name: Run export harness (dry-run)
-        shell: bash
-        run: |
-          set -euxo pipefail
-          mkdir -p logs
-          python scripts/export_models.py --output-dir exports/ci --report models/EXPORT_REPORT.md --frames 16 --dry-run | tee logs/export.log
-
-      - name: Upload export reports
+          python scripts/export_models.py --targets onnx --image-size 320 --iters 25 --report models/EXPORT_REPORT.md
+      - name: Run tests
+        run: pytest -q tests/models/test_export_sanity.py
+      - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: edge-export-report
+          name: edge-bench-report
           path: |
             models/EXPORT_REPORT.md
-            logs/
+            models/tmp_tiny.onnx
