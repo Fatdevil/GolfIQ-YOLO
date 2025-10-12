@@ -121,8 +121,6 @@ def export_onnx(dummy_shape=(1, 3, 320, 320), iters=25, lines=None):
         model.ir_version = 7
         onnx.save(model, onnx_path)
 
-    import onnxruntime as ort
-
     sess = ort.InferenceSession(onnx_path, providers=["CPUExecutionProvider"])
     x = np.random.randn(*dummy_shape).astype(np.float32)
     # Warmup
