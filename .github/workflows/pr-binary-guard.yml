@@ -9,8 +9,25 @@ jobs:
         run: |
           set -e
           forbidden='(\.apk$|\.aab$|\.ipa$|\.xcarchive$|\.zip$|\.7z$|\.mp4$|\.mov$|\.avi$|(^|/)Pods/|(^|/)node_modules/|(^|/)build/|(^|/)\.gradle/|(^|/)\.cxx/|gradle/wrapper/gradle-wrapper\.jar$)'
-          if git ls-files -z | xargs -0 -I{} bash -lc '[[ "{}" =~ $forbidden ]] && echo "{}"' | grep .
-          then
-            echo "Forbidden binary/derived files are tracked. Remove them from the PR."
-            exit 1
-          fi
+          export FORBIDDEN_REGEX="$forbidden"
+          git ls-files -z | python - <<'PY'
+            import os
+            import re
+            import sys
+
+            pattern = os.environ["FORBIDDEN_REGEX"]
+            regex = re.compile(pattern)
+            violations = []
+
+            for raw_path in sys.stdin.buffer.read().split(b"\0"):
+                if not raw_path:
+                    continue
+                path = raw_path.decode("utf-8", "surrogateescape")
+                if regex.search(path):
+                    violations.append(path)
+
+            if violations:
+                print("\n".join(violations))
+                print("Forbidden binary/derived files are tracked. Remove them from the PR.", file=sys.stderr)
+                sys.exit(1)
+          PY
