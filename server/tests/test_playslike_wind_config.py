@@ -5,6 +5,9 @@ from typing import Mapping, Optional
 import pytest
 from fastapi import Request
 
+import math
+
+import server.config.playslike_wind_config as wind_module
 from server.config.playslike_wind_config import (
     WindSlopeCoefficients,
     WindSlopeConfig,
@@ -336,3 +339,133 @@ def test_compute_wind_slope_delta_disabled() -> None:
     )
     delta = compute_wind_slope_delta(150.0, cfg)
     assert delta.delta_total_m == pytest.approx(0.0)
+
+
+def test_float_and_mapping_helpers_cover_edge_cases() -> None:
+    assert wind_module._float("bogus") is None
+    assert wind_module._float(" nan ") is None
+    assert wind_module._float(12) == pytest.approx(12.0)
+
+    # _parse_kv_string trims keys, ignores bare tokens, and lowercases names
+    mapping = wind_module._coerce_mapping(" speed=5;foo;FROM = 90 ")
+    assert mapping == {"speed": "5", "from": "90"}
+    kv_pairs = wind_module._parse_kv_string(" speed = 5 ; = 1 ; target = 90 ")
+    assert kv_pairs == {"speed": "5", "target": "90"}
+
+    # blank strings and malformed JSON short-circuit to None
+    assert wind_module._coerce_mapping("   ") is None
+    assert wind_module._coerce_mapping('{"speed":5') is None
+
+    # _first_present skips missing/None values before returning the first match
+    result = wind_module._first_present({"speed": None, "from": 45}, ("speed", "from"))
+    assert result == 45
+
+
+def test_parse_delta_height_variants() -> None:
+    # mapping recursion through "dh" payloads
+    payload = {"deltaHeight_m": None, "dh": {"value": "12", "unit": "ft"}}
+    parsed = wind_module._parse_delta_height(payload)
+    assert parsed == pytest.approx(12 * 0.3048)
+
+    # strings that do not match the regex produce None
+    assert wind_module._parse_delta_height(" uphill") is None
+    assert wind_module._parse_delta_height({"value": "oops"}) is None
+
+    # feet suffix converts to metres while numeric literals pass through
+    assert wind_module._parse_delta_height("-5 ft") == pytest.approx(-5 * 0.3048)
+    assert wind_module._parse_delta_height(-3.5) == pytest.approx(-3.5)
+
+
+def test_parse_wind_and_merge_coefficients_helpers() -> None:
+    # parse_wind rejects payloads without a direction component
+    assert wind_module._parse_wind({"speed": 5}) is None
+
+    config: dict[str, object] = {
+        "coeff": {
+            "head_per_mps": 0.01,
+            "slope_per_m": 0.8,
+            "cross_aim_deg_per_mps": 0.25,
+            "cap_per_component": 0.1,
+            "cap_total": 0.2,
+        }
+    }
+    wind_module._merge_coefficients(
+        config,
+        {
+            "coeff": {"headPerMps": "0.02"},
+            "caps": {"per_component": "0.05", "total": "-0.1"},
+            "cap_total": 0.15,
+        },
+    )
+    coeff = config["coeff"]
+    assert math.isclose(coeff["head_per_mps"], 0.02)
+    assert math.isclose(coeff["cap_per_component"], 0.05)
+    assert math.isclose(coeff["cap_total"], 0.15)
+
+
+def test_extract_wind_mapping_and_merge_from_mapping() -> None:
+    nested = {
+        "playsLike": {
+            "wind": {
+                "enabled": True,
+                "wind": {"speed_mps": 3, "direction_deg_from": 180},
+                "slope": {"deltaHeight_m": 4},
+            }
+        }
+    }
+    extracted = wind_module._extract_wind_mapping(nested)
+    assert extracted is not None
+
+    config: dict[str, object] = {
+        "enable": False,
+        "wind": None,
+        "slope": None,
+        "coeff": {
+            "head_per_mps": 0.015,
+            "slope_per_m": 0.9,
+            "cross_aim_deg_per_mps": 0.35,
+            "cap_per_component": 0.15,
+            "cap_total": 0.25,
+        },
+    }
+
+    wind_module._merge_from_mapping(config, extracted)
+
+    assert config["enable"] is True
+    assert isinstance(config["wind"], dict) and config["wind"]["direction_deg_from"] == 180
+    assert config["slope"] == {"deltaHeight_m": 4}
+
+    # unrelated mappings return None
+    assert wind_module._extract_wind_mapping({"foo": 1}) is None
+
+
+def test_apply_request_overrides_and_clamp_helper() -> None:
+    config: dict[str, object] = {
+        "enable": True,
+        "wind": None,
+        "slope": None,
+        "coeff": {
+            "head_per_mps": 0.015,
+            "slope_per_m": 0.9,
+            "cross_aim_deg_per_mps": 0.35,
+            "cap_per_component": 0.15,
+            "cap_total": 0.25,
+        },
+    }
+    req = make_request(
+        query={
+            "pl_wind_slope": "false",
+            "pl_wind": "speed=7;from=90",
+            "pl_slope": "dh=2",
+        }
+    )
+    wind_module._apply_request_overrides(config, req)
+    assert config["enable"] is False
+    assert config["wind"] is not None
+    assert config["slope"] == {"deltaHeight_m": pytest.approx(2.0)}
+
+    notes: list[str] = []
+    assert wind_module._clamp_with_note(float("inf"), 10.0, notes, "note") == 0.0
+    assert wind_module._clamp_with_note(5.0, 0.0, notes, "note") == 0.0
+    assert wind_module._clamp_with_note(5.0, 4.0, notes, "cap") == pytest.approx(4.0)
+    assert "cap" in notes
