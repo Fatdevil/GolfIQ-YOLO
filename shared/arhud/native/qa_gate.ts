@@ -39,8 +39,11 @@ function readDevFlag(flag: boolean | undefined): boolean {
   if (typeof flag === "boolean") {
     return flag;
   }
-  if (typeof __DEV__ !== "undefined") {
-    return Boolean(__DEV__);
+  if (typeof globalThis !== "undefined") {
+    const maybeDev = (globalThis as Record<string, unknown>).__DEV__;
+    if (typeof maybeDev === "boolean") {
+      return maybeDev;
+    }
   }
   return false;
 }
@@ -53,10 +56,13 @@ function getGlobalRc(): RcRecord {
 }
 
 function getProcessEnv(): EnvRecord | undefined {
-  if (typeof process !== "undefined" && process.env) {
-    return process.env as EnvRecord;
+  if (typeof globalThis === "undefined") {
+    return undefined;
   }
-  return undefined;
+  const maybeProcess = (globalThis as Record<string, unknown>).process as
+    | { env?: EnvRecord }
+    | undefined;
+  return maybeProcess?.env;
 }
 
 export function shouldEnableQaHud(overrides: QaGateOverrides = {}): boolean {

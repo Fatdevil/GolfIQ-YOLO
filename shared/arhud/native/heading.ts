@@ -2,6 +2,17 @@ declare const require: undefined | ((name: string) => unknown);
 
 const TARGET_INTERVAL_MS = 1000 / 30;
 
+type MagnetometerEvent = { x: number; y: number; z: number };
+
+type MagnetometerSubscription = {
+  remove?: () => void;
+};
+
+type MagnetometerModule = {
+  setUpdateInterval?: (ms: number) => void;
+  addListener: (listener: (event: MagnetometerEvent) => void) => MagnetometerSubscription;
+};
+
 type HeadingCallback = (headingDeg: number) => void;
 
 type HeadingSource = (cb: HeadingCallback) => () => void;
@@ -28,7 +39,10 @@ function magnetometerSource(): HeadingSource | null {
   }
   try {
     // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const sensors = require("expo-sensors");
+    const sensors = require("expo-sensors") as
+      | { Magnetometer?: MagnetometerModule }
+      | undefined
+      | null;
     const magnetometer = sensors?.Magnetometer;
     if (!magnetometer) {
       return null;
@@ -39,7 +53,7 @@ function magnetometerSource(): HeadingSource | null {
 
     return (cb: HeadingCallback) => {
       let lastEmit = 0;
-      const subscription = magnetometer.addListener((event: { x: number; y: number; z: number }) => {
+      const subscription = magnetometer.addListener((event: MagnetometerEvent) => {
         const nowTs = Date.now();
         if (nowTs - lastEmit < TARGET_INTERVAL_MS * 0.75) {
           return;
