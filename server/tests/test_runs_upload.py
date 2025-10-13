@@ -2,6 +2,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
+from fastapi import HTTPException
 from fastapi.testclient import TestClient
 
 from server.app import app
@@ -65,3 +68,25 @@ def test_runs_upload_url_s3(monkeypatch):
 
     assert captured["ttl"] == 5
     assert captured["key"].startswith("field-run/")
+
+
+def test_resolve_path_rejects_directory_escape(tmp_path, monkeypatch):
+    from server.routes import runs_upload as runs_upload_module
+
+    monkeypatch.setenv("RUNS_UPLOAD_DIR", str(tmp_path))
+    with pytest.raises(HTTPException) as excinfo:
+        runs_upload_module._resolve_path("../escape.zip")
+    assert excinfo.value.status_code == 400
+
+
+def test_upload_run_rejects_non_fs_backend(tmp_path, monkeypatch):
+    monkeypatch.setenv("RUNS_UPLOAD_DIR", str(tmp_path))
+    monkeypatch.setenv("STORAGE_BACKEND", "s3")
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/runs/upload",
+            data={"key": "demo.zip"},
+            files={"file": ("run.zip", b"zip-bytes", "application/zip")},
+        )
+        assert response.status_code == 400

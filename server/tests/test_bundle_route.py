@@ -40,3 +40,28 @@ def test_bundle_route_etag_stable(monkeypatch, tmp_path) -> None:
     first = client.get("/bundle/course/demo")
     second = client.get("/bundle/course/demo")
     assert first.headers["ETag"] == second.headers["ETag"]
+
+
+def test_load_features_missing_course_returns_empty(monkeypatch, tmp_path) -> None:
+    monkeypatch.setattr(bundle, "COURSES_DIR", tmp_path)
+    assert bundle._load_features("missing") == []
+
+
+def test_load_features_handles_invalid_json(monkeypatch, tmp_path) -> None:
+    monkeypatch.setattr(bundle, "COURSES_DIR", tmp_path)
+    (tmp_path / "demo.json").write_text("{")
+    assert bundle._load_features("demo") == []
+
+
+def test_load_features_rejects_non_list_features(monkeypatch, tmp_path) -> None:
+    monkeypatch.setattr(bundle, "COURSES_DIR", tmp_path)
+    (tmp_path / "demo.json").write_text(json.dumps({"features": {"id": "f1"}}))
+    assert bundle._load_features("demo") == []
+
+
+def test_bundle_route_returns_404_when_disabled(monkeypatch, tmp_path) -> None:
+    monkeypatch.setenv("BUNDLE_ENABLED", "false")
+    monkeypatch.setattr(bundle, "COURSES_DIR", tmp_path)
+    client = TestClient(app)
+    response = client.get("/bundle/course/demo")
+    assert response.status_code == 404

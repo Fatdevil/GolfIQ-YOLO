@@ -109,3 +109,20 @@ def test_presign_requires_bucket(monkeypatch):
 
     with pytest.raises(RuntimeError):
         s3signer.get_presigned_put("runs/missing.zip", ttl_days=1)
+
+
+def test_client_double_check_lock_returns_cached(monkeypatch):
+    monkeypatch.setattr(s3signer, "_CLIENT", None)
+
+    class DummyLock:
+        def __enter__(self):
+            s3signer._CLIENT = "cached"
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            s3signer._CLIENT = "cached"
+            return False
+
+    monkeypatch.setattr(s3signer, "_CLIENT_LOCK", DummyLock())
+    result = s3signer._client()
+    assert result == "cached"
