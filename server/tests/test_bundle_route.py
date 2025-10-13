@@ -40,6 +40,7 @@ def test_bundle_route_serves_payload_with_overrides(tmp_path, monkeypatch) -> No
     assert payload["features"] == overrides["features"]
     assert payload["notes"] == overrides["notes"]
     ttl_value = payload.get("ttlSec")
+    assert isinstance(ttl_value, int)
     assert ttl_value == 4321
     assert response.headers["Cache-Control"] == "public, max-age=4321"
     assert response.headers["ETag"].startswith('W/"')
@@ -70,5 +71,6 @@ def test_default_features_applied(monkeypatch) -> None:
     features = payload.get("features")
     assert features == ["aim", "calibrate", "track"]
     ttl_value = payload.get("ttlSec")
+    assert isinstance(ttl_value, int)
     assert ttl_value == 120
     assert response.headers["Cache-Control"] == "public, max-age=120"
