@@ -81,6 +81,57 @@ Request override headers:
 Equivalent query parameters are supported via `pl_temp`, `pl_alt`, and `pl_tempalt` for
 instrumentation/QA tooling.
 
+## Wind & Slope
+
+The wind & slope helper exposes a lightweight calculator for QA tooling. It uses the
+following model (angles in degrees, wind speed in m/s, distances in metres):
+
+- Resolve the relative wind bearing `θ = direction_from − targetAzimuth`. Meteorological
+  "from" directions are used, so `0°` means a headwind when aiming north.
+- Project the wind into head/tail (`V_h = speed × cos θ`) and cross components
+  (`V_x = speed × sin θ`).
+- Head/tail distance adjustment: `ΔD_head = − D × head_per_mps × V_h`. Positive values
+  increase carry (tailwind), negative values reduce carry (headwind).
+- Slope distance adjustment uses the relative height delta only (absolute altitude is
+  handled by the temperature/altitude module): `ΔD_slope = − slope_per_m × Δh`. Uphill
+  lies (`Δh > 0`) reduce carry, downhill lies increase it.
+- Crosswind aim recommendation: `aim_deg = cross_aim_deg_per_mps × V_x`. Positive values
+  suggest aiming left of target, negative values aim right. Aim adjustments do not modify
+  carry distance.
+- Each component is capped at `± cap_per_component × D` and the combined delta is capped
+  at `± cap_total × D`. Caps default to 15% per component and 25% combined.
+
+Configuration keys (remote config → `playsLike.wind`, environment variables via
+`PLAYS_LIKE_WIND_*`):
+
+```json
+"wind": {
+  "enabled": false,
+  "head_per_mps": 0.015,
+  "slope_per_m": 0.90,
+  "cross_aim_deg_per_mps": 0.35,
+  "caps": {
+    "perComponent": 0.15,
+    "total": 0.25
+  }
+}
+```
+
+Request overrides for QA:
+
+- `x-pl-wind-slope`: `on|off` master toggle.
+- `x-pl-wind`: `speed=5;from=45;target=90` (semicolon-separated) or JSON
+  `{ "speed_mps": 5, "direction_deg_from": 45, "targetAzimuth_deg": 90 }`.
+- `x-pl-slope`: `dh=+10m`, `dh=-30ft`, or JSON `{ "deltaHeight_m": 4 }`.
+- `x-pl-distance`: baseline carry distance (e.g. `150` or `150m`) used when computing
+  QA deltas.
+
+Matching query parameters (`pl_wind_slope`, `pl_wind`, `pl_slope`, `pl_distance`) are also
+available.
+Slope inputs always represent the relative height difference between player and target;
+absolute altitude (ASL) remains exclusive to the temperature/altitude module to avoid
+double-counting.
+
 ## Quality bands
 
 Quality is derived from the raw inputs:

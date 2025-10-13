@@ -34,6 +34,21 @@ def test_get_remote_config_returns_defaults_and_etag():
         assert cached.headers["ETag"] == etag
 
 
+def test_get_remote_config_includes_wind_debug():
+    with _client() as client:
+        response = client.get(
+            "/config/remote?pl_distance=150",
+            headers={
+                "x-pl-wind-slope": "on",
+                "x-pl-wind": "speed=5;from=0",
+            },
+        )
+        assert response.status_code == 200
+        debug = response.json().get("debug", {}).get("playsLike", {}).get("windSlope")
+        assert debug is not None
+        assert debug["deltaHead_m"] == pytest.approx(-11.25, rel=1e-3)
+
+
 def test_update_remote_config_overrides_and_persists(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setenv("ADMIN_TOKEN", "secret")
     overrides: Dict[str, Dict[str, object]] = {
@@ -151,6 +166,40 @@ def test_update_remote_config_sanitizes_profile_selection_and_scaling(
         assert wedge["scaleHead"] == pytest.approx(1.2)
         assert wedge["scaleTail"] == pytest.approx(1.1)
         assert "ignored" not in wedge
+        wind_cfg = plays_like["wind"]
+        assert wind_cfg["caps"]["perComponent"] == pytest.approx(0.15)
+        assert wind_cfg["caps"]["total"] == pytest.approx(0.25)
+        assert wind_cfg["enabled"] is False
+
+
+def test_update_remote_config_allows_wind_overrides(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("ADMIN_TOKEN", "secret")
+    headers = {"x-admin-token": "secret", "Origin": "http://testserver"}
+
+    payload = {
+        "tierA": {
+            "playsLike": {
+                "wind": {
+                    "enabled": True,
+                    "head_per_mps": 0.02,
+                    "slope_per_m": 0.8,
+                    "caps": {"perComponent": 0.2, "total": 0.3},
+                }
+            }
+        }
+    }
+
+    with _client() as client:
+        response = client.post("/config/remote", json=payload, headers=headers)
+        assert response.status_code == 200
+        wind_cfg = response.json()["config"]["tierA"]["playsLike"]["wind"]
+        assert wind_cfg["enabled"] is True
+        assert wind_cfg["head_per_mps"] == pytest.approx(0.02)
+        assert wind_cfg["slope_per_m"] == pytest.approx(0.8)
+        assert wind_cfg["caps"]["perComponent"] == pytest.approx(0.2)
+        assert wind_cfg["caps"]["total"] == pytest.approx(0.3)
 
 
 def test_update_remote_config_validates_profile_selection(
@@ -342,6 +391,19 @@ def test_update_remote_config_rejects_bad_temp_alt(
     monkeypatch.setenv("ADMIN_TOKEN", "secret")
     headers = {"x-admin-token": "secret", "Origin": "http://testserver"}
     payload = {"tierB": {"playsLike": {"tempAlt": {"betaPerC": "oops"}}}}
+
+    with _client() as client:
+        response = client.post("/config/remote", json=payload, headers=headers)
+        assert response.status_code == 422
+
+
+def test_update_remote_config_rejects_bad_wind(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("ADMIN_TOKEN", "secret")
+    headers = {"x-admin-token": "secret", "Origin": "http://testserver"}
+
+    payload = {"tierB": {"playsLike": {"wind": "not-json"}}}
 
     with _client() as client:
         response = client.post("/config/remote", json=payload, headers=headers)
