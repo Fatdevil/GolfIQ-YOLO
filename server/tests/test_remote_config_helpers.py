@@ -35,7 +35,9 @@ def test_sanitize_ui_handles_base_and_valid_overrides() -> None:
     assert result["playsLikeVariant"] == "off"
 
 
-@pytest.mark.parametrize("payload", ["invalid", {"playsLikeVariant": 123}, {"playsLikeVariant": "beta"}])
+@pytest.mark.parametrize(
+    "payload", ["invalid", {"playsLikeVariant": 123}, {"playsLikeVariant": "beta"}]
+)
 def test_sanitize_ui_rejects_invalid_payloads(payload) -> None:
     with pytest.raises(remote.HTTPException):  # type: ignore[attr-defined]
         remote._sanitize_ui(payload)

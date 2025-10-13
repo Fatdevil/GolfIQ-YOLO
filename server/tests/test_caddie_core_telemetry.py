@@ -3,7 +3,9 @@ from __future__ import annotations
 from server.services.caddie_core import telemetry
 
 
-def test_build_structured_log_payload_includes_duration_when_present(monkeypatch) -> None:
+def test_build_structured_log_payload_includes_duration_when_present(
+    monkeypatch,
+) -> None:
     monkeypatch.setenv("BUILD_VERSION", "1.2.3")
     monkeypatch.setenv("GIT_SHA", "abc123")
     payload = telemetry.build_structured_log_payload(

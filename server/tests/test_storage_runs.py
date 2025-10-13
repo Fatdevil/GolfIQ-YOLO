@@ -23,7 +23,9 @@ def test_save_and_load_run_round_trip(runs_module, monkeypatch):
             self.hex = value
 
     monkeypatch.setattr(runs_module.time, "time", lambda: 1_700_000_000.0)
-    monkeypatch.setattr(runs_module.uuid, "uuid4", lambda: DummyUUID("abcd1234efgh5678"))
+    monkeypatch.setattr(
+        runs_module.uuid, "uuid4", lambda: DummyUUID("abcd1234efgh5678")
+    )
 
     record = runs_module.save_run(
         source="app",
