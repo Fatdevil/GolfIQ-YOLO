@@ -118,7 +118,9 @@ def test_resolve_wind_slope_state_and_course_precedence() -> None:
         "playsLike": {"wind": {"enabled": False, "slope_per_m": 0.5}}
     }
     course = {"playsLike": {"wind": {"slope": {"deltaHeight_m": 12}}}}
-    user = {"playsLike": {"wind": {"wind": {"speed_mps": 3, "direction_deg_from": 270}}}}
+    user = {
+        "playsLike": {"wind": {"wind": {"speed_mps": 3, "direction_deg_from": 270}}}
+    }
 
     cfg = resolveWindSlopeConfig(req, course=course, user=user)
 
@@ -132,12 +134,40 @@ def test_resolve_wind_slope_state_and_course_precedence() -> None:
     assert cfg.wind.direction_deg_from == pytest.approx(270.0)
 
 
+def test_resolve_wind_slope_nested_coeff_caps() -> None:
+    req = make_request()
+    req.state.remote_config = {
+        "playsLike": {
+            "wind": {
+                "coeff": {
+                    "head_per_mps": "0.021",
+                    "caps": {"perComponent": "0.05", "total": "-0.1"},
+                }
+            }
+        }
+    }
+    req.state.playslike_wind_slope = {
+        "coeff": {
+            "crossAimDegPerMps": "0.45",
+            "cap_total": "0.3",
+        }
+    }
+
+    cfg = resolveWindSlopeConfig(req)
+
+    assert cfg.coeff.head_per_mps == pytest.approx(0.021)
+    assert cfg.coeff.cross_aim_deg_per_mps == pytest.approx(0.45)
+    assert cfg.coeff.cap_per_component == pytest.approx(0.05)
+    # nested caps clamp negative values before later overrides are applied
+    assert cfg.coeff.cap_total == pytest.approx(0.3)
+
+
 def test_resolve_wind_slope_query_overrides(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("PLAYS_LIKE_WIND_ENABLED", "false")
     req = make_request(
         query={
             "pl_wind_slope": "1",
-            "pl_wind": "{\"speed_mps\":8,\"direction_deg_from\":0}",
+            "pl_wind": '{"speed_mps":8,"direction_deg_from":0}',
             "pl_slope": "dh=5m",
         },
     )
@@ -150,6 +180,25 @@ def test_resolve_wind_slope_query_overrides(monkeypatch: pytest.MonkeyPatch) -> 
     assert cfg.wind.direction_deg_from == pytest.approx(0.0)
     assert cfg.slope is not None
     assert cfg.slope.delta_height_m == pytest.approx(5.0)
+
+
+def test_resolve_wind_slope_hyphenated_query_keys() -> None:
+    req = make_request(
+        query={
+            "pl-wind-slope": "true",
+            "pl-wind": "speed=4;from=180",
+            "pl-slope": "dh=-6",
+        }
+    )
+
+    cfg = resolveWindSlopeConfig(req)
+
+    assert cfg.enable is True
+    assert cfg.wind is not None
+    assert cfg.wind.speed_mps == pytest.approx(4.0)
+    assert cfg.wind.direction_deg_from == pytest.approx(180.0)
+    assert cfg.slope is not None
+    assert cfg.slope.delta_height_m == pytest.approx(-6.0)
 
 
 def test_resolve_wind_slope_header_disable_overrides_rc() -> None:
@@ -182,7 +231,9 @@ def test_compute_wind_slope_delta_head_tail() -> None:
 
     tail_cfg = cfg.__class__(
         enable=True,
-        wind=WindVector(speed_mps=5.0, direction_deg_from=180.0, target_azimuth_deg=0.0),
+        wind=WindVector(
+            speed_mps=5.0, direction_deg_from=180.0, target_azimuth_deg=0.0
+        ),
         slope=None,
         coeff=cfg.coeff,
     )
@@ -245,6 +296,28 @@ def test_compute_wind_slope_delta_caps() -> None:
     )
     delta = compute_wind_slope_delta(200.0, cfg)
     assert abs(delta.delta_total_m) == pytest.approx(20.0, rel=1e-3)
+    assert "total_capped" in delta.notes
+
+
+def test_compute_wind_slope_delta_cap_total_zero() -> None:
+    cfg = WindSlopeConfig(
+        enable=True,
+        wind=WindVector(speed_mps=10.0, direction_deg_from=0.0, target_azimuth_deg=0.0),
+        slope=SlopeSetting(delta_height_m=10.0),
+        coeff=WindSlopeCoefficients(
+            head_per_mps=0.015,
+            slope_per_m=0.9,
+            cross_aim_deg_per_mps=0.35,
+            cap_per_component=0.2,
+            cap_total=0.0,
+        ),
+    )
+
+    delta = compute_wind_slope_delta(150.0, cfg)
+
+    assert delta.delta_head_m == pytest.approx(0.0)
+    assert delta.delta_slope_m == pytest.approx(0.0)
+    assert delta.delta_total_m == pytest.approx(0.0)
     assert "total_capped" in delta.notes
 
 

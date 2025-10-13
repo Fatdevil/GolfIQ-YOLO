@@ -149,7 +149,9 @@ def _parse_delta_height(value: Any) -> Optional[float]:
         mapping = _coerce_mapping(value)
         if mapping:
             return _parse_delta_height(mapping)
-        match = re.match(r"^\s*([-+]?\d+(?:\.\d+)?)\s*(m|ft)?\s*$", value, re.IGNORECASE)
+        match = re.match(
+            r"^\s*([-+]?\d+(?:\.\d+)?)\s*(m|ft)?\s*$", value, re.IGNORECASE
+        )
         if not match:
             return None
         magnitude = float(match.group(1))
@@ -164,9 +166,7 @@ def _parse_wind(value: Any) -> Optional[dict[str, float]]:
     mapping = _coerce_mapping(value)
     if mapping is None:
         return None
-    speed = _float(
-        _first_present(mapping, ("speed_mps", "speed", "speedmps", "v"))
-    )
+    speed = _float(_first_present(mapping, ("speed_mps", "speed", "speedmps", "v")))
     direction = _float(
         _first_present(mapping, ("direction_deg_from", "direction", "from", "heading"))
     )
@@ -180,7 +180,9 @@ def _parse_wind(value: Any) -> Optional[dict[str, float]]:
     }
 
 
-def _merge_coefficients(config: MutableMapping[str, Any], source: Mapping[str, Any]) -> None:
+def _merge_coefficients(
+    config: MutableMapping[str, Any], source: Mapping[str, Any]
+) -> None:
     coeff = config["coeff"]
     direct_sources = source
     nested = source.get("coeff") if isinstance(source.get("coeff"), Mapping) else None
@@ -233,17 +235,26 @@ def _extract_wind_mapping(source: Any) -> Optional[Mapping[str, Any]]:
     return None
 
 
-def _merge_from_mapping(config: MutableMapping[str, Any], mapping: Optional[Mapping[str, Any]]) -> None:
+def _merge_from_mapping(
+    config: MutableMapping[str, Any], mapping: Optional[Mapping[str, Any]]
+) -> None:
     if not mapping:
         return
     enable = mapping.get("enabled")
     if isinstance(enable, bool):
         config["enable"] = enable
     wind = _parse_wind(mapping.get("wind") or mapping)
-    if wind is not None and (wind["speed_mps"] > 0 or wind["direction_deg_from"] == wind["direction_deg_from"]):
+    if wind is not None and (
+        wind["speed_mps"] > 0
+        or wind["direction_deg_from"] == wind["direction_deg_from"]
+    ):
         config["wind"] = wind
-    slope_value = mapping.get("slope") if isinstance(mapping.get("slope"), Mapping) else None
-    delta_height = _parse_delta_height(slope_value if slope_value is not None else mapping.get("deltaHeight_m"))
+    slope_value = (
+        mapping.get("slope") if isinstance(mapping.get("slope"), Mapping) else None
+    )
+    delta_height = _parse_delta_height(
+        slope_value if slope_value is not None else mapping.get("deltaHeight_m")
+    )
     if delta_height is None:
         delta_height = _parse_delta_height(mapping.get("slope"))
     if delta_height is not None:
@@ -279,7 +290,9 @@ def _parse_override(value: Any, parser) -> Optional[Any]:
     return None
 
 
-def _apply_request_overrides(config: MutableMapping[str, Any], request: Request) -> None:
+def _apply_request_overrides(
+    config: MutableMapping[str, Any], request: Request
+) -> None:
     headers = request.headers
     enable_header = headers.get("x-pl-wind-slope") or headers.get("X-PL-WIND-SLOPE")
     toggle = coerce_boolish(enable_header) if enable_header is not None else None
@@ -362,7 +375,9 @@ def compute_wind_slope_delta(
         head_component = speed * math.cos(theta)
         cross_component = speed * math.sin(theta)
         raw_head = -base_distance * coeff.head_per_mps * head_component
-        delta_head = _clamp_with_note(raw_head, cap_per_component, notes, "head_component_capped")
+        delta_head = _clamp_with_note(
+            raw_head, cap_per_component, notes, "head_component_capped"
+        )
         aim_raw = coeff.cross_aim_deg_per_mps * cross_component
         if math.isfinite(aim_raw) and aim_raw != 0.0:
             aim_adjust = aim_raw
@@ -371,7 +386,9 @@ def compute_wind_slope_delta(
     slope = config.slope
     if slope:
         raw_slope = -coeff.slope_per_m * slope.delta_height_m
-        delta_slope = _clamp_with_note(raw_slope, cap_per_component, notes, "slope_component_capped")
+        delta_slope = _clamp_with_note(
+            raw_slope, cap_per_component, notes, "slope_component_capped"
+        )
 
     delta_total = delta_head + delta_slope
 
@@ -440,7 +457,11 @@ def resolveWindSlopeConfig(
         direction = _float(wind_data.get("direction_deg_from"))
         if direction is not None:
             target = _float(wind_data.get("targetAzimuth_deg"))
-            wind = WindVector(speed_mps=max(speed, 0.0), direction_deg_from=direction % 360, target_azimuth_deg=(target % 360) if target is not None else None)
+            wind = WindVector(
+                speed_mps=max(speed, 0.0),
+                direction_deg_from=direction % 360,
+                target_azimuth_deg=(target % 360) if target is not None else None,
+            )
 
     slope_data = config.get("slope")
     slope_setting = None
@@ -458,7 +479,9 @@ def resolveWindSlopeConfig(
         cap_total=max(float(coeff["cap_total"]), 0.0),
     )
 
-    return WindSlopeConfig(enable=bool(config["enable"]), wind=wind, slope=slope_setting, coeff=coeffs)
+    return WindSlopeConfig(
+        enable=bool(config["enable"]), wind=wind, slope=slope_setting, coeff=coeffs
+    )
 
 
 __all__ = [
