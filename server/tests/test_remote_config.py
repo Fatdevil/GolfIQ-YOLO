@@ -49,6 +49,36 @@ def test_get_remote_config_includes_wind_debug():
         assert debug["deltaHead_m"] == pytest.approx(-11.25, rel=1e-3)
 
 
+def test_get_remote_config_debug_includes_target_and_slope_inputs():
+    with _client() as client:
+        response = client.get(
+            "/config/remote",
+            headers={
+                "x-pl-wind-slope": "true",
+                "x-pl-distance": "175",
+                "x-pl-wind": "speed=4;from=270;target=180",
+                "x-pl-slope": "dh=+12ft",
+            },
+        )
+
+        assert response.status_code == 200
+        debug = response.json().get("debug", {}).get("playsLike", {}).get("windSlope")
+        assert debug is not None
+        assert debug["baseDistance_m"] == pytest.approx(175.0)
+
+        wind_input = debug["inputs"]["wind"]
+        assert wind_input is not None
+        assert wind_input["direction_deg_from"] == pytest.approx(270.0)
+        assert wind_input["targetAzimuth_deg"] == pytest.approx(180.0)
+
+        slope_input = debug["inputs"]["slope"]
+        assert slope_input is not None
+        assert slope_input["deltaHeight_m"] == pytest.approx(12 * 0.3048)
+
+        # Crosswind with a target azimuth should yield a non-zero aim recommendation.
+        assert debug["aimAdjust_deg"] is not None
+
+
 def test_update_remote_config_overrides_and_persists(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setenv("ADMIN_TOKEN", "secret")
     overrides: Dict[str, Dict[str, object]] = {
