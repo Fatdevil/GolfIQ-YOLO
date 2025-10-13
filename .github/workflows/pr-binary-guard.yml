@@ -6,28 +6,19 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Check for forbidden binaries
+        shell: bash
         run: |
-          set -e
+          set -euo pipefail
           forbidden='(\.apk$|\.aab$|\.ipa$|\.xcarchive$|\.zip$|\.7z$|\.mp4$|\.mov$|\.avi$|(^|/)Pods/|(^|/)node_modules/|(^|/)build/|(^|/)\.gradle/|(^|/)\.cxx/|gradle/wrapper/gradle-wrapper\.jar$)'
-          export FORBIDDEN_REGEX="$forbidden"
-          git ls-files -z | python - <<'PY'
-import os
-import re
-import sys
-
-pattern = os.environ["FORBIDDEN_REGEX"]
-regex = re.compile(pattern)
-violations = []
-
-for raw_path in sys.stdin.buffer.read().split(b"\0"):
-    if not raw_path:
-        continue
-    path = raw_path.decode("utf-8", "surrogateescape")
-    if regex.search(path):
-        violations.append(path)
-
-if violations:
-    print("\n".join(violations))
-    print("Forbidden binary/derived files are tracked. Remove them from the PR.", file=sys.stderr)
-    sys.exit(1)
-          PY
+          allowed='(\.ts$|\.tsx$|\.js$|\.jsx$|\.py$|\.java$|\.kt$|\.kts$|\.gradle$|\.properties$|\.yml$|\.yaml$|\.toml$|\.md$|\.json$|\.xml$|\.txt$)'
+          violations=0
+          while IFS= read -r -d '' f; do
+            [[ "$f" =~ $allowed ]] && continue
+            if [[ "$f" =~ $forbidden ]]; then
+              echo "Forbidden file: $f"; violations=$((violations+1))
+            fi
+          done < <(git ls-files -z)
+          if (( violations > 0 )); then
+            echo "::error::Forbidden files detected ($violations)."; exit 1
+          fi
+          echo "Binary guard passed."

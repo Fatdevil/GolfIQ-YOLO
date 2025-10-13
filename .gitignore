@@ -58,3 +58,6 @@ ios/Pods/
 *.mp4
 *.mov
 *.avi
+
+# AR-HUD assets
+tests/golden/hud_states/*.png

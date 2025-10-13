@@ -1,57 +1,39 @@
-from __future__ import annotations
-
+import json
 from fastapi.testclient import TestClient
 
-from server.courses.schema import CourseBundle, Hole
-from server.routes import course_bundle
+from server.config.bundle_config import DEFAULT_BUNDLE_TTL_SECONDS
+from server.routes import bundle
 from server_app import app
 
 
-def _build_bundle(ttl: int) -> CourseBundle:
-    return CourseBundle(
-        id="oakmont",
-        name="Oakmont",
-        holes=[Hole(number=1)],
-        etag="etag123",
-        ttl_seconds=ttl,
-        updated_at="2024-01-01T00:00:00Z",
+def test_bundle_contract(monkeypatch, tmp_path) -> None:
+    monkeypatch.setattr(bundle, "COURSES_DIR", tmp_path)
+    (tmp_path / "oakmont.json").write_text(
+        json.dumps({"features": [{"id": "pin", "type": "Point"}]})
+    )
+
+    client = TestClient(app)
+    response = client.get("/bundle/course/oakmont")
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["courseId"] == "oakmont"
+    assert payload["version"] == 1
+    assert payload["ttlSec"] == DEFAULT_BUNDLE_TTL_SECONDS
+    assert payload["features"] == [{"id": "pin", "type": "Point"}]
+    assert response.headers["ETag"].startswith('W/"')
+    assert response.headers["Cache-Control"] == (
+        f"public, max-age={DEFAULT_BUNDLE_TTL_SECONDS}"
     )
 
 
-def test_offline_bundle_contract(monkeypatch) -> None:
-    bundle = _build_bundle(ttl=900)
-
-    def _fake_load(_: str) -> CourseBundle:
-        return bundle
-
-    monkeypatch.setattr(course_bundle, "load_bundle", _fake_load)
+def test_bundle_ttl_env_override(monkeypatch, tmp_path) -> None:
+    monkeypatch.setattr(bundle, "COURSES_DIR", tmp_path)
+    (tmp_path / "oakmont.json").write_text(json.dumps({"features": []}))
+    monkeypatch.setenv("BUNDLE_TTL_SECONDS", "900")
 
     client = TestClient(app)
     response = client.get("/bundle/course/oakmont")
     assert response.status_code == 200
     payload = response.json()
-
-    assert payload["course"] == {
-        "id": "oakmont",
-        "name": "Oakmont",
-        "updatedAt": "2024-01-01T00:00:00Z",
-        "ttlSeconds": 900,
-        "etag": "etag123",
-    }
-    assert set(payload["layers"].keys()) == {"fairways", "greens", "bunkers", "hazards"}
-    assert payload["metadata"]["holeCount"] == 1
-
-
-def test_offline_bundle_ttl_fallback(monkeypatch) -> None:
-    bundle = _build_bundle(ttl=0)
-
-    def _fake_load(_: str) -> CourseBundle:
-        return bundle
-
-    monkeypatch.setattr(course_bundle, "load_bundle", _fake_load)
-
-    client = TestClient(app)
-    response = client.get("/bundle/course/oakmont")
-    assert response.status_code == 200
-    payload = response.json()
-    assert payload["course"]["ttlSeconds"] == course_bundle.DEFAULT_TTL_SECONDS
+    assert payload["ttlSec"] == 900
+    assert response.headers["Cache-Control"] == "public, max-age=900"

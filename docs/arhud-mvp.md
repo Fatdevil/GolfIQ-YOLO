@@ -1,84 +1,26 @@
-# AR HUD MVP
+# AR-HUD MVP Control Surfaces
 
-The mobile AR heads-up display (HUD) enables golfers to align with the target pin, calibrate device heading, and surface green front/center/back (F/C/B) distances on top of the real world without leaving the tee box.
+## State Machine
 
-## Feature flags
+The shared `arhud` module exposes a deterministic finite state machine that tracks HUD readiness:
 
-Two feature toggles control availability:
+- `AIM` → `CALIBRATE` → `TRACK` is the primary progression.
+- `TRACK` can request `RECENTER` and returns to `TRACK` once complete.
+- `trackingLost` resets the HUD to `AIM` from any active state.
 
-- `hudEnabled` *(default: false)* – master switch that enables the Aim → Calibrate and AR overlay surfaces.
-- `hudTracerEnabled` *(default: false)* – renders tracer lines from the calibration origin to each marker to assist with debugging alignment.
+The machine guards against illegal transitions and can be reset to its initial state for reuse.
 
-Both flags live in the shared configuration bundle and can be overridden from the in-app HUD settings surfaces on iOS and Android.
+## Heading Smoothing
 
-## Core flows
+Heading updates use an exponential moving average with wrap-around handling so headings near `0°/360°` stay continuous. The smoother tracks a running RMS error budget to ensure steady inputs remain within `≤ 1°` noise.
 
-### Aim → Calibrate
+- Default smoothing factor (`alpha`) is `0.2`.
+- RMS is computed over a small sliding window and exposed for monitoring.
+- Resets clear history for fast recalibration.
 
-1. Load `/course/{id}` bundle (pin + green F/C/B coordinates).
-2. Prompt the player to aim the device toward the pin, then tap **Aim → Calibrate**.
-3. Capture the current device heading & location, compute the offset to the pin, and store an AR anchor.
-4. Place pin + F/C/B markers relative to the anchor and emit `arhud_calibrate` telemetry.
+## Service-Level Objectives
 
-### Re-center
-
-1. When drift occurs, tap **Re-center**.
-2. Reset AR world tracking, reapply the stored calibration anchor, and re-render markers.
-3. Emit `arhud_recenter` telemetry.
-
-## HUD overlay
-
-- Persistent pin marker plus smaller markers for green front, center, and back, rendered in AR space.
-- Overlay layer displays formatted yards for F/C/B along with contextual status copy.
-- FPS sampling runs every ~5 seconds and emits `arhud_fps` to `/telemetry` (sampled).
-
-## Platform implementations
-
-### iOS (ARKit + SceneKit)
-
-- `ARHUDViewController` owns an `ARSCNView`, overlay layer, CoreLocation updates, and telemetry hooks.
-- `ARHUDCourseBundleLoader` fetches `/course/{id}` bundles, normalizing snake_case keys.
-- Calibration stores heading offset + AR anchor, and positions nodes using a local ENU projection aligned to the user’s heading.
-- `ARHUDSettingsViewController` provides toggles for `hudEnabled` and `hudTracerEnabled` inside the app settings surface.
-
-### Android (ARCore + Sceneform)
-
-- `ARHUDActivity` hosts an `ArFragment`, manages fused location updates, rotation vector heading, and telemetry.
-- `CourseBundleRepository` loads bundles via `HttpURLConnection` and parses JSON using `JSONObject` to keep dependencies light.
-- Calibration flow mirrors iOS: anchors to the camera pose, computes heading offset, and renders markers/tracers with `ShapeFactory`.
-- `ARHUDSettingsFragment` exposes runtime toggles for `hudEnabled` / `hudTracerEnabled`.
-
-## Telemetry
-
-All calibrate, recenter, and FPS events post to the existing `/telemetry` client. Metric names:
-
-- `arhud_calibrate`
-- `arhud_recenter`
-- `arhud_fps`
-
-Values are numeric, deviceClass is `arhud`, and no PII is collected.
-
-## Limitations & roadmap notes
-
-- Geospatial anchors are optional and not enabled; calibration relies on world tracking + compass heading, so drift may occur on long sessions.
-- No persistence of calibration between holes/rounds.
-- Course bundle schema assumes pin + green F/C/B coordinates; hazards and elevation are out of scope for MVP.
-- Error handling surfaces inline status copy only—future work could add retry UI and offline caching.
-
-## UX sketch (textual)
-
-```
-+------------------------------------------+
-|      [ Camera feed / AR world ]          |
-|                                          |
-|           (Pin marker ⚑)                 |
-|         (F)  (C)   (B) markers           |
-|                                          |
-|   Status: "Aim at pin and calibrate"     |
-|   [ Aim → Calibrate ]                    |
-|   [ Re-center ]                          |
-|   F: 145 yd  C: 160 yd  B: 172 yd        |
-+------------------------------------------+
-```
-
-The overlay floats above the AR scene and remains readable in bright sunlight by using high-contrast typography.
+- **Update cadence:** ≥ 30 FPS minimum (`FPS_MIN`).
+- **Latency envelope:** ≤ 120 ms HUD rendering latency (`HUD_LATENCY_MAX_MS`).
+- **Recentering:** Complete within 2 seconds (`RECENTER_MAX_S`).
+- **Heading stability:** RMS error ≤ 1° during steady motion (`HEADING_RMS_MAX_DEG`).
