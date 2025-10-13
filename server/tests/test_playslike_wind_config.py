@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Mapping, Optional
+from typing import Mapping, MutableMapping, Optional
 
 import pytest
 from fastapi import Request
@@ -402,6 +402,18 @@ def test_parse_wind_and_merge_coefficients_helpers() -> None:
     assert math.isclose(coeff["cap_per_component"], 0.05)
     assert math.isclose(coeff["cap_total"], 0.15)
 
+    # invalid cap payloads are ignored without raising
+    wind_module._merge_coefficients(
+        config,
+        {
+            "caps": {"perComponent": "bogus"},
+            "coeff": {"cap_total": "nan"},
+        },
+    )
+    coeff = config["coeff"]
+    assert math.isclose(coeff["cap_per_component"], 0.05)
+    assert math.isclose(coeff["cap_total"], 0.15)
+
 
 def test_extract_wind_mapping_and_merge_from_mapping() -> None:
     nested = {
@@ -432,11 +444,18 @@ def test_extract_wind_mapping_and_merge_from_mapping() -> None:
     wind_module._merge_from_mapping(config, extracted)
 
     assert config["enable"] is True
-    assert isinstance(config["wind"], dict) and config["wind"]["direction_deg_from"] == 180
+    assert (
+        isinstance(config["wind"], dict) and config["wind"]["direction_deg_from"] == 180
+    )
     assert config["slope"] == {"deltaHeight_m": 4}
 
     # unrelated mappings return None
     assert wind_module._extract_wind_mapping({"foo": 1}) is None
+
+    # nested playsLike containers without wind data fall back to top-level keys
+    fallback = {"playsLike": {}, "wind": {"direction_deg_from": 90}}
+    extracted_fallback = wind_module._extract_wind_mapping(fallback)
+    assert extracted_fallback is fallback["wind"]
 
 
 def test_apply_request_overrides_and_clamp_helper() -> None:
@@ -469,3 +488,82 @@ def test_apply_request_overrides_and_clamp_helper() -> None:
     assert wind_module._clamp_with_note(5.0, 0.0, notes, "note") == 0.0
     assert wind_module._clamp_with_note(5.0, 4.0, notes, "cap") == pytest.approx(4.0)
     assert "cap" in notes
+    # duplicate notes are suppressed when the same cap triggers twice
+    assert wind_module._clamp_with_note(6.0, 4.0, notes, "cap") == pytest.approx(4.0)
+    assert notes.count("cap") == 1
+
+
+def test_apply_request_overrides_ignores_invalid_toggle() -> None:
+    config: dict[str, object] = {
+        "enable": True,
+        "wind": None,
+        "slope": None,
+        "coeff": {},
+    }
+    req = make_request(query={"pl_wind_slope": "maybe"})
+    wind_module._apply_request_overrides(config, req)
+    assert config["enable"] is True
+
+
+def test_compute_wind_slope_delta_ignores_nonfinite_wind_direction() -> None:
+    cfg = WindSlopeConfig(
+        enable=True,
+        wind=WindVector(
+            speed_mps=5.0, direction_deg_from=float("nan"), target_azimuth_deg=0.0
+        ),
+        slope=None,
+        coeff=WindSlopeCoefficients(
+            head_per_mps=0.015,
+            slope_per_m=0.9,
+            cross_aim_deg_per_mps=0.35,
+            cap_per_component=0.15,
+            cap_total=0.25,
+        ),
+    )
+
+    delta = compute_wind_slope_delta(150.0, cfg)
+    assert delta.delta_head_m == pytest.approx(0.0)
+    assert delta.aim_adjust_deg is None
+
+
+def test_compute_wind_slope_delta_cap_total_zero_without_adjustments() -> None:
+    cfg = WindSlopeConfig(
+        enable=True,
+        wind=None,
+        slope=None,
+        coeff=WindSlopeCoefficients(
+            head_per_mps=0.015,
+            slope_per_m=0.9,
+            cross_aim_deg_per_mps=0.35,
+            cap_per_component=0.2,
+            cap_total=0.0,
+        ),
+    )
+
+    delta = compute_wind_slope_delta(200.0, cfg)
+    assert delta.delta_total_m == pytest.approx(0.0)
+    assert "total_capped" not in delta.notes
+
+
+def test_resolve_wind_slope_ignores_incomplete_wind_and_slope(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    req = make_request()
+
+    original_merge = wind_module._merge_from_mapping
+
+    def fake_merge(
+        config: MutableMapping[str, object], mapping: Mapping[str, object]
+    ) -> None:
+        original_merge(config, mapping)
+        config["wind"] = {"speed_mps": 2.0, "direction_deg_from": None}
+        config["slope"] = {"deltaHeight_m": "nan"}
+
+    monkeypatch.setattr(wind_module, "_merge_from_mapping", fake_merge)
+
+    cfg = resolveWindSlopeConfig(req)
+
+    # No direction value ⇒ wind vector is suppressed
+    assert cfg.wind is None
+    # Non-numeric slope values are ignored
+    assert cfg.slope is None
