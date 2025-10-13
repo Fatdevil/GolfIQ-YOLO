@@ -9,3 +9,9 @@
 - Added shared AR-HUD state machine, heading smoother, and guardrails with unit coverage.
 - Documented AR-HUD SLOs alongside offline bundle contract and cache headers.
 - Delivered FastAPI bundle endpoint with weak ETag + TTL config support and CI hardening for mobile/binary safety.
+
+## M4 QA-HUD wired to telemetry
+- Added a QA-gated HUD screen that streams the shared AR-HUD state, heading smoother,
+  and synthetic camera feed directly inside the Expo QA shell.
+- Persisted HUD telemetry to `hud_run.json`, mirrored events to the flight-recorder
+  channel, and exposed an export path through the existing `/runs` API.
