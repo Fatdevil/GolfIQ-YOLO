@@ -20,7 +20,15 @@ def test_coerce_iso_timestamp_handles_numeric_string():
 
 def test_coerce_iso_timestamp_falls_back_to_now(monkeypatch):
     fixed = datetime(2024, 1, 1, tzinfo=timezone.utc)
-    monkeypatch.setattr(telemetry, "datetime", SimpleNamespace(now=lambda tz: fixed, fromtimestamp=datetime.fromtimestamp, timezone=timezone))
+    monkeypatch.setattr(
+        telemetry,
+        "datetime",
+        SimpleNamespace(
+            now=lambda tz: fixed,
+            fromtimestamp=datetime.fromtimestamp,
+            timezone=timezone,
+        ),
+    )
     result = telemetry._coerce_iso_timestamp({})
     assert result == fixed.isoformat()
 
