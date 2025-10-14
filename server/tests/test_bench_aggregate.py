@@ -10,7 +10,9 @@ from scripts.edge_recommend import (
     _score_key,
     compute_recommendations,
     load_recent_runs,
+    main,
     recommend_defaults,
+    _parse_args,
 )
 
 
@@ -271,3 +273,46 @@ def test_helper_utilities_cover_edge_cases(tmp_path: Path):
     loaded = load_recent_runs(runs_file, limit=5)
     assert len(loaded) == 1
     assert loaded[0].platform == "ios"
+
+
+def test_parse_args_uses_defaults(tmp_path: Path, monkeypatch):
+    # ensure environment defaults don't leak from the real repo
+    monkeypatch.chdir(tmp_path)
+
+    args = _parse_args([])
+    # when invoked with no overrides the defaults should point to the repo constants
+    # (they resolve relative to the script location, not cwd)
+    assert args.recent > 0
+    assert args.runs.name == "edge_runs.jsonl"
+    assert args.output.name == "edge_defaults.json"
+
+
+def test_main_cli_flow(tmp_path: Path, capsys):
+    runs_path = tmp_path / "edge_runs.jsonl"
+    output_path = tmp_path / "edge_defaults.json"
+
+    payload = {
+        "platform": "android",
+        "runtime": "tflite",
+        "inputSize": 320,
+        "quant": "int8",
+        "threads": 4,
+        "delegate": "nnapi",
+        "fps": 30.0,
+        "p95": 50.0,
+    }
+    runs_path.write_text(json.dumps(payload) + "\n", encoding="utf-8")
+
+    main([
+        "--runs",
+        str(runs_path),
+        "--output",
+        str(output_path),
+        "--recent",
+        "5",
+    ])
+
+    assert output_path.exists()
+    written = json.loads(output_path.read_text(encoding="utf-8"))
+    captured = capsys.readouterr().out.strip()
+    assert json.loads(captured) == written
