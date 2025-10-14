@@ -28,6 +28,8 @@ class EdgeRun:
     @staticmethod
     def from_json(data: Dict[str, object]) -> "EdgeRun | None":
         try:
+            if _is_truthy(data.get("dryRun")):
+                return None
             platform = str(data.get("platform", "")).strip().lower()
             runtime = str(data.get("runtime", "")).strip().lower()
             quant = str(data.get("quant", "")).strip().lower()
@@ -66,7 +68,20 @@ def _coerce_float(value: object | None) -> Optional[float]:
         return None
 
 
-def load_recent_runs(path: Path = DEFAULT_RUNS_PATH, limit: int = DEFAULT_RECENT) -> List[EdgeRun]:
+def _is_truthy(value: object | None) -> bool:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return value != 0
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        return normalized in {"1", "true", "yes", "y"}
+    return False
+
+
+def load_recent_runs(
+    path: Path = DEFAULT_RUNS_PATH, limit: int = DEFAULT_RECENT
+) -> List[EdgeRun]:
     if limit <= 0:
         limit = DEFAULT_RECENT
 
@@ -131,7 +146,9 @@ def _score_key(
 
 
 def compute_recommendations(runs: Iterable[EdgeRun]) -> Dict[str, Dict[str, object]]:
-    grouped: Dict[str, Dict[Tuple[str, int, str, int, Optional[str]], Dict[str, List[float]]]] = {}
+    grouped: Dict[
+        str, Dict[Tuple[str, int, str, int, Optional[str]], Dict[str, List[float]]]
+    ] = {}
 
     for run in runs:
         if run.platform not in {"android", "ios"}:
@@ -154,7 +171,13 @@ def compute_recommendations(runs: Iterable[EdgeRun]) -> Dict[str, Dict[str, obje
         best_choice: Tuple[float, float, float, str, int, str, int, str] | None = None
         best_config: Dict[str, object] | None = None
 
-        for (runtime, input_size, quant, threads, delegate), stats in platform_bucket.items():
+        for (
+            runtime,
+            input_size,
+            quant,
+            threads,
+            delegate,
+        ), stats in platform_bucket.items():
             if not stats["p95"] or not stats["fps"]:
                 continue
             p95_value = _median(stats["p95"])
@@ -188,7 +211,9 @@ def compute_recommendations(runs: Iterable[EdgeRun]) -> Dict[str, Dict[str, obje
     return recommendations
 
 
-def write_defaults(defaults: Dict[str, Dict[str, object]], dest: Path = DEFAULT_OUTPUT_PATH) -> None:
+def write_defaults(
+    defaults: Dict[str, Dict[str, object]], dest: Path = DEFAULT_OUTPUT_PATH
+) -> None:
     dest.parent.mkdir(parents=True, exist_ok=True)
     with dest.open("w", encoding="utf-8") as handle:
         json.dump(defaults, handle, indent=2, sort_keys=True)
@@ -207,7 +232,9 @@ def recommend_defaults(
 
 
 def _parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Aggregate edge bench runs and recommend defaults")
+    parser = argparse.ArgumentParser(
+        description="Aggregate edge bench runs and recommend defaults"
+    )
     parser.add_argument(
         "--runs",
         type=Path,

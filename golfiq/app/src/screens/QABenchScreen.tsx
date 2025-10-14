@@ -107,6 +107,20 @@ const INITIAL_DEVICE: DeviceInfo = {
   appVersion: 'dev',
 };
 
+type ExpoFileSystemModule = {
+  documentDirectory?: string | null;
+  writeAsStringAsync(path: string, contents: string): Promise<void>;
+};
+
+async function loadExpoFileSystem(): Promise<ExpoFileSystemModule | null> {
+  try {
+    const mod = (await import('expo-file-system')) as ExpoFileSystemModule;
+    return mod ?? null;
+  } catch (error) {
+    return null;
+  }
+}
+
 function toRuntime(value: string | undefined): EdgeRuntime | null {
   if (!value) {
     return null;
@@ -280,6 +294,7 @@ function buildPayload(
     quant: config.quant,
     threads: config.threads,
     delegate: config.delegate,
+    dryRun,
     fpsAvg: metrics.fpsAvg,
     p50: metrics.p50,
     p95: metrics.p95,
@@ -508,9 +523,9 @@ const QABenchScreen: React.FC = () => {
 
       const { payload, ts } = buildPayload(config, deviceInfo, metrics, dryRun);
 
-      const FileSystem = await import('expo-file-system');
-      const directory = FileSystem.documentDirectory;
-      if (!directory) {
+      const FileSystem = await loadExpoFileSystem();
+      const directory = FileSystem?.documentDirectory ?? null;
+      if (!FileSystem || !directory) {
         throw new Error('document directory unavailable');
       }
       const path = directory + 'bench_run.json';

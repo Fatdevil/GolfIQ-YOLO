@@ -13,7 +13,23 @@ export type EdgeDefaultsConfig = {
 
 export type EdgeDefaultsMap = Partial<Record<EdgePlatform, EdgeDefaultsConfig>>;
 
+type ExpoFileSystemModule = {
+  documentDirectory?: string | null;
+  getInfoAsync(path: string): Promise<{ exists: boolean; isFile: boolean }>;
+  readAsStringAsync(path: string): Promise<string>;
+  writeAsStringAsync(path: string, contents: string): Promise<void>;
+};
+
 let embeddedCache: EdgeDefaultsMap | null | undefined;
+
+async function loadExpoFileSystem(): Promise<ExpoFileSystemModule | null> {
+  try {
+    const mod = (await import('expo-file-system')) as ExpoFileSystemModule;
+    return mod ?? null;
+  } catch (error) {
+    return null;
+  }
+}
 
 function isEdgeDefaultsConfig(value: unknown): value is EdgeDefaultsConfig {
   if (!value || typeof value !== 'object') {
@@ -99,29 +115,24 @@ export function getEmbeddedEdgeDefaults(): EdgeDefaultsMap | null {
 }
 
 export async function readEdgeDefaults(): Promise<EdgeDefaultsMap | null> {
-  try {
-    const FileSystem = await import('expo-file-system');
-    const directory = FileSystem.documentDirectory;
-    if (directory) {
-      const path = directory + 'edge_defaults.json';
-      try {
-        const info = await FileSystem.getInfoAsync(path);
-        if (info.exists && info.isFile) {
-          const contents = await FileSystem.readAsStringAsync(path);
-          const parsed = JSON.parse(contents) as unknown;
-          if (parsed && typeof parsed === 'object') {
-            const normalized = cloneDefaults(parsed as EdgeDefaultsMap);
-            return normalized && Object.keys(normalized).length > 0
-              ? normalized
-              : getEmbeddedEdgeDefaults();
-          }
+  const FileSystem = await loadExpoFileSystem();
+  if (FileSystem?.documentDirectory) {
+    const path = FileSystem.documentDirectory + 'edge_defaults.json';
+    try {
+      const info = await FileSystem.getInfoAsync(path);
+      if (info.exists && info.isFile) {
+        const contents = await FileSystem.readAsStringAsync(path);
+        const parsed = JSON.parse(contents) as unknown;
+        if (parsed && typeof parsed === 'object') {
+          const normalized = cloneDefaults(parsed as EdgeDefaultsMap);
+          return normalized && Object.keys(normalized).length > 0
+            ? normalized
+            : getEmbeddedEdgeDefaults();
         }
-      } catch (error) {
-        // fall back to embedded defaults
       }
+    } catch (error) {
+      // fall back to embedded defaults
     }
-  } catch (error) {
-    // ignore – likely not running inside Expo context
   }
   return getEmbeddedEdgeDefaults();
 }

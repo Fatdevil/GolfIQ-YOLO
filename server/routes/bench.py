@@ -15,8 +15,12 @@ from scripts.edge_recommend import recommend_defaults
 
 ROUTER_TAGS = ["bench"]
 
-RUNS_PATH = Path(os.getenv("EDGE_BENCH_RUNS_PATH", "data/bench/edge_runs.jsonl")).resolve()
-DEFAULTS_PATH = Path(os.getenv("EDGE_DEFAULTS_PATH", "models/edge_defaults.json")).resolve()
+RUNS_PATH = Path(
+    os.getenv("EDGE_BENCH_RUNS_PATH", "data/bench/edge_runs.jsonl")
+).resolve()
+DEFAULTS_PATH = Path(
+    os.getenv("EDGE_DEFAULTS_PATH", "models/edge_defaults.json")
+).resolve()
 RECENT = int(os.getenv("EDGE_BENCH_RECENT", "200") or "200")
 
 router = APIRouter(prefix="", tags=ROUTER_TAGS, dependencies=[Depends(require_api_key)])
@@ -34,6 +38,7 @@ class EdgeBenchRun(BaseModel):
     quant: str = Field(...)
     threads: int = Field(..., ge=1, le=32)
     delegate: Optional[str] = Field(default=None)
+    dryRun: bool = Field(default=False)
     fps: float = Field(..., gt=0, validation_alias=AliasChoices("fpsAvg", "fps"))
     p50: Optional[float] = Field(
         default=None,
@@ -103,6 +108,7 @@ async def submit_edge_bench(payload: EdgeBenchRun) -> Dict[str, object]:
     record = payload.model_dump(by_alias=True)
     ts = payload.ts.isoformat()
     record["ts"] = ts
+    record["dryRun"] = bool(payload.dryRun)
     record["receivedAt"] = datetime.now(timezone.utc).isoformat()
     try:
         _append_run(record)

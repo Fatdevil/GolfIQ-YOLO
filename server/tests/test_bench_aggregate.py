@@ -159,3 +159,52 @@ def test_recommend_defaults_writes_output(tmp_path: Path):
             "delegate": "nnapi",
         }
     }
+
+
+def test_skips_dry_runs(tmp_path: Path):
+    runs_path = tmp_path / "edge_runs.jsonl"
+    output_path = tmp_path / "edge_defaults.json"
+
+    dry_payload = {
+        "device": "Pixel QA",
+        "os": "Android",
+        "appVersion": "0.1.0",
+        "platform": "android",
+        "runtime": "tflite",
+        "inputSize": 320,
+        "quant": "int8",
+        "threads": 4,
+        "delegate": "nnapi",
+        "fps": 100.0,
+        "p95": 1.0,
+        "dryRun": True,
+    }
+    real_payload = {
+        "device": "Pixel QA",
+        "os": "Android",
+        "appVersion": "0.1.0",
+        "platform": "android",
+        "runtime": "coreml",
+        "inputSize": 384,
+        "quant": "fp16",
+        "threads": 2,
+        "delegate": "gpu",
+        "fps": 45.0,
+        "p95": 30.0,
+    }
+
+    with runs_path.open("w", encoding="utf-8") as handle:
+        handle.write(json.dumps(dry_payload) + "\n")
+        handle.write(json.dumps(real_payload) + "\n")
+
+    defaults = recommend_defaults(runs_path, output_path, recent=10)
+
+    assert defaults == {
+        "android": {
+            "runtime": "coreml",
+            "inputSize": 384,
+            "quant": "fp16",
+            "threads": 2,
+            "delegate": "gpu",
+        }
+    }
