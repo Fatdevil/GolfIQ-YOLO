@@ -119,6 +119,8 @@ Configuration keys (remote config → `playsLike.wind`, environment variables vi
 
 Request overrides for QA:
 
+- Add `x-pl-qa: on` (or query `pl_qa=1`) to surface diagnostic outputs in the remote
+  config response. Without the QA flag the wind/slope deltas remain internal.
 - `x-pl-wind-slope`: `on|off` master toggle.
 - `x-pl-wind`: `speed=5;from=45;target=90` (semicolon-separated) or JSON
   `{ "speed_mps": 5, "direction_deg_from": 45, "targetAzimuth_deg": 90 }`.
