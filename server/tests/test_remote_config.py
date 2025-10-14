@@ -43,12 +43,27 @@ def test_get_remote_config_includes_wind_debug():
             headers={
                 "x-pl-wind-slope": "on",
                 "x-pl-wind": "speed=5;from=0",
+                "x-pl-qa": "true",
             },
         )
         assert response.status_code == 200
         debug = response.json().get("debug", {}).get("playsLike", {}).get("windSlope")
         assert debug is not None
         assert debug["deltaHead_m"] == pytest.approx(-11.25, rel=1e-3)
+
+
+def test_get_remote_config_omits_debug_without_qa_flag():
+    with _client() as client:
+        response = client.get(
+            "/config/remote?pl_distance=150",
+            headers={
+                "x-pl-wind-slope": "on",
+                "x-pl-wind": "speed=5;from=0",
+            },
+        )
+        assert response.status_code == 200
+        debug = response.json().get("debug", {}).get("playsLike", {}).get("windSlope")
+        assert debug is None
 
 
 def test_get_remote_config_debug_includes_target_and_slope_inputs():
@@ -60,6 +75,7 @@ def test_get_remote_config_debug_includes_target_and_slope_inputs():
                 "x-pl-distance": "175",
                 "x-pl-wind": "speed=4;from=270;target=180",
                 "x-pl-slope": "dh=+12ft",
+                "x-pl-qa": "1",
             },
         )
 

@@ -11,6 +11,7 @@ from typing import Any, Dict, Tuple
 
 from fastapi import APIRouter, HTTPException, Request, Response, status
 
+from . import coerce_boolish
 from .playslike_wind_config import compute_wind_slope_delta, resolveWindSlopeConfig
 
 DEFAULT_TEMP_ALT_CFG: Dict[str, Any] = {
@@ -201,6 +202,31 @@ def _parse_distance_token(value: Any) -> float | None:
     if not math.isfinite(parsed) or parsed <= 0:
         return None
     return parsed
+
+
+def _is_playslike_qa_enabled(request: Request) -> bool:
+    """Return True when the caller explicitly requests QA diagnostics."""
+
+    header = request.headers.get("x-pl-qa") or request.headers.get("X-PL-QA")
+    toggle = coerce_boolish(header) if header is not None else None
+    if toggle is not None:
+        return toggle
+
+    for key in ("pl_qa", "pl-qa", "qa"):
+        if key in request.query_params:
+            candidate = coerce_boolish(request.query_params[key])
+            if candidate is not None:
+                return candidate
+
+    state = getattr(request, "state", None)
+    if state is not None:
+        state_toggle = getattr(state, "playslike_qa", None)
+        if state_toggle is not None:
+            coerced = coerce_boolish(state_toggle)
+            if coerced is not None:
+                return coerced
+
+    return False
 
 
 DEFAULT_PLAYSLIKE_REMOTE_CFG: Dict[str, Any] = {
@@ -581,7 +607,7 @@ async def get_remote_config(request: Request) -> Response:
     config, etag, updated_at = _store.snapshot()
     wind_cfg = resolveWindSlopeConfig(request)
     debug_payload: Dict[str, Any] | None = None
-    if wind_cfg.enable:
+    if wind_cfg.enable and _is_playslike_qa_enabled(request):
         header_distance = _parse_distance_token(
             request.headers.get("x-pl-distance") or request.headers.get("X-PL-DISTANCE")
         )
