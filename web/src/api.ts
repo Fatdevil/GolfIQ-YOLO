@@ -155,6 +155,19 @@ export type PlaysLikeTempAltRemoteConfig = {
   [key: string]: unknown;
 };
 
+export type PlaysLikeWindRemoteConfig = {
+  enabled?: boolean;
+  head_per_mps?: number;
+  slope_per_m?: number;
+  cross_aim_deg_per_mps?: number;
+  caps?: {
+    perComponent?: number;
+    total?: number;
+    [key: string]: unknown;
+  };
+  [key: string]: unknown;
+};
+
 export type PlaysLikeRemoteConfig = {
   windModel?: string;
   alphaHead_per_mph?: number;
@@ -164,6 +177,7 @@ export type PlaysLikeRemoteConfig = {
   taperStart_mph?: number;
   sidewindDistanceAdjust?: boolean;
   tempAlt?: PlaysLikeTempAltRemoteConfig;
+  wind?: PlaysLikeWindRemoteConfig;
   [key: string]: unknown;
 };
 

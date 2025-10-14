@@ -84,4 +84,9 @@ export const applyPlaysLikeAdjustments = (
 
 export type { TempAltDelta } from "./adjust_temp_alt";
 export { computeTempAltDelta, type TempAltInput } from "./adjust_temp_alt";
+export {
+  computeWindSlopeDelta,
+  type WindSlopeDelta,
+  type WindSlopeInput,
+} from "./wind_slope";
 export { toMeters, toCelsius, toFeet, toYards } from "./units";

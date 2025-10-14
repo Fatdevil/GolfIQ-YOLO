@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import os
 import threading
 from copy import deepcopy
@@ -10,11 +11,21 @@ from typing import Any, Dict, Tuple
 
 from fastapi import APIRouter, HTTPException, Request, Response, status
 
+from .playslike_wind_config import compute_wind_slope_delta, resolveWindSlopeConfig
+
 DEFAULT_TEMP_ALT_CFG: Dict[str, Any] = {
     "enabled": False,
     "betaPerC": 0.0018,
     "gammaPer100m": 0.0065,
     "caps": {"perComponent": 0.10, "total": 0.20},
+}
+
+DEFAULT_WIND_SLOPE_CFG: Dict[str, Any] = {
+    "enabled": False,
+    "head_per_mps": 0.015,
+    "slope_per_m": 0.90,
+    "cross_aim_deg_per_mps": 0.35,
+    "caps": {"perComponent": 0.15, "total": 0.25},
 }
 
 
@@ -97,6 +108,101 @@ def _sanitize_temp_alt(
     return sanitized
 
 
+def _sanitize_wind(
+    overrides: Any, base: Dict[str, Any] | None = None
+) -> Dict[str, Any]:
+    sanitized: Dict[str, Any] = deepcopy(DEFAULT_WIND_SLOPE_CFG)
+    if isinstance(base, dict):
+        enabled = base.get("enabled")
+        if isinstance(enabled, bool):
+            sanitized["enabled"] = enabled
+        for key in ("head_per_mps", "slope_per_m", "cross_aim_deg_per_mps"):
+            value = base.get(key)
+            if isinstance(value, (int, float)):
+                sanitized[key] = float(value)
+        caps_base = base.get("caps")
+        if isinstance(caps_base, dict):
+            per_component = caps_base.get("perComponent")
+            total = caps_base.get("total")
+            if isinstance(per_component, (int, float)):
+                sanitized["caps"]["perComponent"] = float(per_component)
+            if isinstance(total, (int, float)):
+                sanitized["caps"]["total"] = float(total)
+    if overrides is None:
+        return sanitized
+    if not isinstance(overrides, dict):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="playsLike.wind must be a JSON object",
+        )
+    for key, value in overrides.items():
+        if key == "enabled":
+            if not isinstance(value, bool):
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    detail="playsLike.wind.enabled must be a boolean",
+                )
+            sanitized["enabled"] = value
+        elif key in {"head_per_mps", "slope_per_m", "cross_aim_deg_per_mps"}:
+            if not isinstance(value, (int, float)):
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    detail=f"playsLike.wind.{key} must be a number",
+                )
+            sanitized[key] = float(value)
+        elif key == "caps":
+            if value is None:
+                sanitized["caps"] = deepcopy(DEFAULT_WIND_SLOPE_CFG["caps"])
+                continue
+            if not isinstance(value, dict):
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    detail="playsLike.wind.caps must be a JSON object",
+                )
+            per_component = value.get("perComponent")
+            if per_component is not None:
+                if not isinstance(per_component, (int, float)):
+                    raise HTTPException(
+                        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                        detail="playsLike.wind.caps.perComponent must be a number",
+                    )
+                sanitized["caps"]["perComponent"] = float(per_component)
+            total = value.get("total")
+            if total is not None:
+                if not isinstance(total, (int, float)):
+                    raise HTTPException(
+                        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                        detail="playsLike.wind.caps.total must be a number",
+                    )
+                sanitized["caps"]["total"] = float(total)
+        else:
+            sanitized[key] = value
+    return sanitized
+
+
+def _parse_distance_token(value: Any) -> float | None:
+    if value is None:
+        return None
+    if isinstance(value, (int, float)):
+        parsed = float(value)
+    elif isinstance(value, str):
+        stripped = value.strip()
+        if not stripped:
+            return None
+        lowered = stripped.lower()
+        if lowered.endswith("m"):
+            lowered = lowered[:-1]
+        try:
+            parsed = float(lowered)
+        except ValueError:
+            return None
+    else:
+        return None
+    if not math.isfinite(parsed) or parsed <= 0:
+        return None
+    return parsed
+
+
 DEFAULT_PLAYSLIKE_REMOTE_CFG: Dict[str, Any] = {
     "windModel": "percent_v1",
     "alphaHead_per_mph": 0.01,
@@ -114,6 +220,7 @@ DEFAULT_PLAYSLIKE_REMOTE_CFG: Dict[str, Any] = {
         "tour": {"scaleHead": 0.95, "scaleTail": 0.95},
         "amateur": {"scaleHead": 1.05, "scaleTail": 1.0},
     },
+    "wind": deepcopy(DEFAULT_WIND_SLOPE_CFG),
     "tempAlt": deepcopy(DEFAULT_TEMP_ALT_CFG),
 }
 
@@ -313,6 +420,8 @@ class RemoteConfigStore:
                 sanitized[key] = sanitized_map
             elif key == "tempAlt":
                 sanitized[key] = _sanitize_temp_alt(value, sanitized.get("tempAlt"))
+            elif key == "wind":
+                sanitized[key] = _sanitize_wind(value, sanitized.get("wind"))
             elif key in sanitized:
                 if not isinstance(value, (int, float)):
                     raise HTTPException(
@@ -470,12 +579,63 @@ def _require_admin(request: Request) -> None:
 @router.get("/remote")
 async def get_remote_config(request: Request) -> Response:
     config, etag, updated_at = _store.snapshot()
+    wind_cfg = resolveWindSlopeConfig(request)
+    debug_payload: Dict[str, Any] | None = None
+    if wind_cfg.enable:
+        header_distance = _parse_distance_token(
+            request.headers.get("x-pl-distance") or request.headers.get("X-PL-DISTANCE")
+        )
+        query_distance = None
+        for key in ("pl_distance", "pl-base-distance", "pl_base_distance"):
+            if key in request.query_params:
+                query_distance = _parse_distance_token(request.query_params.get(key))
+                if query_distance is not None:
+                    break
+        base_distance = header_distance or query_distance
+        if base_distance is not None:
+            delta = compute_wind_slope_delta(base_distance, wind_cfg)
+            wind_input = None
+            if wind_cfg.wind:
+                wind_input = {
+                    "speed_mps": wind_cfg.wind.speed_mps,
+                    "direction_deg_from": wind_cfg.wind.direction_deg_from,
+                }
+                if wind_cfg.wind.target_azimuth_deg is not None:
+                    wind_input["targetAzimuth_deg"] = wind_cfg.wind.target_azimuth_deg
+            slope_input = None
+            if wind_cfg.slope:
+                slope_input = {"deltaHeight_m": wind_cfg.slope.delta_height_m}
+            debug_payload = {
+                "playsLike": {
+                    "windSlope": {
+                        "baseDistance_m": base_distance,
+                        "deltaHead_m": delta.delta_head_m,
+                        "deltaSlope_m": delta.delta_slope_m,
+                        "deltaTotal_m": delta.delta_total_m,
+                        "aimAdjust_deg": delta.aim_adjust_deg,
+                        "notes": list(delta.notes),
+                        "inputs": {
+                            "wind": wind_input,
+                            "slope": slope_input,
+                            "coeff": {
+                                "head_per_mps": wind_cfg.coeff.head_per_mps,
+                                "slope_per_m": wind_cfg.coeff.slope_per_m,
+                                "cross_aim_deg_per_mps": wind_cfg.coeff.cross_aim_deg_per_mps,
+                                "cap_per_component": wind_cfg.coeff.cap_per_component,
+                                "cap_total": wind_cfg.coeff.cap_total,
+                            },
+                        },
+                    }
+                }
+            }
     if_none_match = request.headers.get("if-none-match")
     if if_none_match and if_none_match.strip('"') == etag:
         return Response(
             status_code=status.HTTP_304_NOT_MODIFIED, headers={"ETag": etag}
         )
-    payload = {"config": config, "etag": etag, "updatedAt": updated_at}
+    payload: Dict[str, Any] = {"config": config, "etag": etag, "updatedAt": updated_at}
+    if debug_payload:
+        payload["debug"] = debug_payload
     body = json.dumps(payload)
     return Response(
         content=body,
