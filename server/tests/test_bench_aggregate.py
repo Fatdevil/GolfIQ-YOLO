@@ -3,7 +3,15 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from scripts.edge_recommend import EdgeRun, compute_recommendations, recommend_defaults
+from scripts.edge_recommend import (
+    EdgeRun,
+    _coerce_float,
+    _is_truthy,
+    _score_key,
+    compute_recommendations,
+    load_recent_runs,
+    recommend_defaults,
+)
 
 
 def _run(
@@ -208,3 +216,58 @@ def test_skips_dry_runs(tmp_path: Path):
             "delegate": "gpu",
         }
     }
+
+
+def test_helper_utilities_cover_edge_cases(tmp_path: Path):
+    truthy_inputs = [True, 1, 2.0, "true", " Yes "]
+    falsy_inputs = [False, 0, 0.0, "", "no", None]
+
+    for value in truthy_inputs:
+        assert _is_truthy(value)
+
+    for value in falsy_inputs:
+        assert not _is_truthy(value)
+
+    assert _coerce_float("3.14") == 3.14
+    assert _coerce_float("not-a-number") is None
+
+    key_with_missing_metrics = _score_key(
+        runtime="tflite",
+        input_size=416,
+        quant="int8",
+        threads=4,
+        delegate=None,
+        p95=None,
+        fps=None,
+        battery=None,
+    )
+    assert key_with_missing_metrics[0] == float("inf")
+    assert key_with_missing_metrics[1] == -0.0
+    assert key_with_missing_metrics[2] == float("inf")
+
+    runs_file = tmp_path / "runs.jsonl"
+    runs_file.write_text(
+        "\n".join(
+            [
+                "",  # blank line should be skipped
+                "{",  # invalid JSON should be ignored
+                json.dumps({"dryRun": True}),  # dry run ignored
+                json.dumps(
+                    {
+                        "platform": "ios",
+                        "runtime": "coreml",
+                        "inputSize": 384,
+                        "quant": "fp16",
+                        "threads": 2,
+                        "fps": 58.0,
+                        "p95": 27.0,
+                    }
+                ),
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    loaded = load_recent_runs(runs_file, limit=5)
+    assert len(loaded) == 1
+    assert loaded[0].platform == "ios"

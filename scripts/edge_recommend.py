@@ -126,7 +126,6 @@ def _score_key(
     battery: Optional[float],
 ) -> Tuple[float, float, float, str, int, str, int, str]:
     worst_latency = float("inf")
-    worst_fps = -float("inf")
     worst_battery = float("inf")
 
     latency_score = p95 if p95 is not None else worst_latency
