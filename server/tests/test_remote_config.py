@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import math
+from types import SimpleNamespace
 from typing import Dict
 
 import pytest
@@ -438,3 +440,152 @@ def test_update_remote_config_rejects_bad_wind(
     with _client() as client:
         response = client.post("/config/remote", json=payload, headers=headers)
         assert response.status_code == 422
+
+
+def test_sanitize_temp_alt_returns_base_without_overrides() -> None:
+    base = {
+        "enabled": True,
+        "betaPerC": 0.002,
+        "gammaPer100m": 0.007,
+        "caps": {"perComponent": 0.2, "total": 0.25},
+    }
+    sanitized = remote._sanitize_temp_alt(None, base)
+    assert sanitized["enabled"] is True
+    assert sanitized["betaPerC"] == pytest.approx(0.002)
+    assert sanitized["caps"]["perComponent"] == pytest.approx(0.2)
+
+
+def test_sanitize_temp_alt_rejects_non_mapping() -> None:
+    with pytest.raises(remote.HTTPException):  # type: ignore[attr-defined]
+        remote._sanitize_temp_alt("invalid")
+
+
+def test_sanitize_wind_handles_base_and_unknown_keys() -> None:
+    base = {
+        "enabled": True,
+        "head_per_mps": 0.02,
+        "cross_aim_deg_per_mps": 0.4,
+        "caps": {"perComponent": 0.2, "total": 0.3},
+    }
+    sanitized = remote._sanitize_wind(None, base)
+    assert sanitized["enabled"] is True
+    assert sanitized["head_per_mps"] == pytest.approx(0.02)
+    assert sanitized["caps"]["total"] == pytest.approx(0.3)
+
+    overrides = {"caps": None, "custom": "value"}
+    merged = remote._sanitize_wind(overrides, base)
+    assert merged["caps"] == remote.DEFAULT_WIND_SLOPE_CFG["caps"]
+    assert merged["custom"] == "value"
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        {"enabled": "yes"},
+        {"head_per_mps": "fast"},
+        {"slope_per_m": "slow"},
+        {"caps": "oops"},
+        {"caps": {"perComponent": "bad"}},
+        {"caps": {"total": "bad"}},
+    ],
+)
+def test_sanitize_wind_rejects_invalid_payloads(payload) -> None:
+    with pytest.raises(remote.HTTPException):  # type: ignore[attr-defined]
+        remote._sanitize_wind(payload)
+
+
+def test_parse_distance_token_variants() -> None:
+    assert remote._parse_distance_token(150) == pytest.approx(150.0)
+    assert remote._parse_distance_token("200m") == pytest.approx(200.0)
+    assert remote._parse_distance_token(" 175.5 ") == pytest.approx(175.5)
+    assert remote._parse_distance_token("0") is None
+    assert remote._parse_distance_token("-12") is None
+    assert remote._parse_distance_token("abc") is None
+    assert remote._parse_distance_token("") is None
+    assert remote._parse_distance_token(["nope"]) is None
+    assert remote._parse_distance_token(math.inf) is None
+    assert remote._parse_distance_token(None) is None
+
+
+def test_sanitize_ui_validations() -> None:
+    assert remote._sanitize_ui({"other": "ignored"}) == remote.DEFAULT_UI_CONFIG
+    with pytest.raises(remote.HTTPException):  # type: ignore[attr-defined]
+        remote._sanitize_ui("invalid")
+    with pytest.raises(remote.HTTPException):  # type: ignore[attr-defined]
+        remote._sanitize_ui({"playsLikeVariant": 123})
+    with pytest.raises(remote.HTTPException):  # type: ignore[attr-defined]
+        remote._sanitize_ui({"playsLikeVariant": "beta"})
+
+
+def test_profile_selection_skips_unknown_keys() -> None:
+    base = {"playerType": None, "clubClass": None}
+    overrides = {"playerType": "tour", "extra": "ignored"}
+    result = remote.RemoteConfigStore._sanitize_profile_selection(overrides, base)
+    assert result == {"playerType": "tour", "clubClass": None}
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        "invalid",
+        {"windModel": 123},
+        {"sidewindDistanceAdjust": "true"},
+        {"byClub": "bad"},
+        {"byClub": {"driver": "bad"}},
+    ],
+)
+def test_sanitize_plays_like_rejects_bad_payloads(payload) -> None:
+    with pytest.raises(remote.HTTPException):  # type: ignore[attr-defined]
+        remote.RemoteConfigStore._sanitize_plays_like(payload)
+
+
+def test_sanitize_plays_like_handles_none_scales_and_custom_keys() -> None:
+    overrides = {
+        "byClub": {"driver": {"scaleHead": None, "scaleTail": 1.15}},
+        "custom": "value",
+    }
+    result = remote.RemoteConfigStore._sanitize_plays_like(overrides)
+    driver = result["byClub"]["driver"]
+    assert "scaleHead" not in driver
+    assert driver["scaleTail"] == pytest.approx(1.15)
+    assert result["custom"] == "value"
+
+
+def test_merge_tier_validates_current_profile_type() -> None:
+    current = {"playsLikeProfile": 123}
+    with pytest.raises(remote.HTTPException):  # type: ignore[attr-defined]
+        remote.RemoteConfigStore._merge_tier("tierA", current, None)
+
+
+def test_merge_tier_applies_profile_and_ui_overrides() -> None:
+    overrides = {
+        "playsLikeProfile": "custom_profile",
+        "ui": {"playsLikeVariant": "v1"},
+    }
+    result = remote.RemoteConfigStore._merge_tier("tierA", {}, overrides)
+    assert result["playsLikeProfile"] == "custom_profile"
+    assert result["ui"]["playsLikeVariant"] == "v1"
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [{"hudEnabled": "yes"}, {"inputSize": "large"}],
+)
+def test_merge_tier_rejects_invalid_types(payload) -> None:
+    with pytest.raises(remote.HTTPException):  # type: ignore[attr-defined]
+        remote.RemoteConfigStore._merge_tier("tierA", {}, payload)
+
+
+def test_validate_rejects_unsupported_tier() -> None:
+    with pytest.raises(remote.HTTPException):  # type: ignore[attr-defined]
+        remote.RemoteConfigStore._validate({"tierX": {}}, remote.DEFAULT_REMOTE_CONFIG)
+
+
+def test_require_admin_with_mismatched_origin(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("ADMIN_TOKEN", "secret")
+    request = SimpleNamespace(
+        headers={"x-admin-token": "secret", "origin": "https://evil.example"},
+        url=SimpleNamespace(scheme="https", netloc="golfiq.local"),
+    )
+    with pytest.raises(remote.HTTPException):  # type: ignore[attr-defined]
+        remote._require_admin(request)
