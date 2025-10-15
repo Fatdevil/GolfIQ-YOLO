@@ -139,7 +139,7 @@ export function parseHudRun(input: string | unknown[]): ParsedHudRun {
     throw new Error("hud_run.json did not contain any telemetry events");
   }
 
-  const sorted = [...events].sort((a, b) => getEventTimeMs(a) - getEventTimeMs(b));
+  const sorted = [...events].sort(compareEventTime);
 
   const sessionStart = sorted.find((event) => event.event === "hud.session.start");
   let sessionEnd: HudTelemetryEvent | undefined;
@@ -274,6 +274,21 @@ function getEventTimeMs(event: HudTelemetryEvent | undefined): number | null {
     return event.timestampMs;
   }
   return null;
+}
+
+function compareEventTime(a: HudTelemetryEvent, b: HudTelemetryEvent): number {
+  const timeA = getEventTimeMs(a);
+  const timeB = getEventTimeMs(b);
+  if (timeA === null && timeB === null) {
+    return 0;
+  }
+  if (timeA === null) {
+    return -1;
+  }
+  if (timeB === null) {
+    return 1;
+  }
+  return timeA - timeB;
 }
 
 function buildTimeline(frames: HudRunFrame[], originMs: number): HudTimelineSegment[] {
