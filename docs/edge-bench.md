@@ -55,3 +55,16 @@ text file).
 Mobile shared code provides a helper to read `models/edge_defaults.json`. When the file is present (for example after
 running the aggregator) the QA bench screen pre-fills the selectors with the recommended defaults for the current
 platform. Production initialisation paths remain untouched.
+
+## Applying defaults in app
+
+The QA apps now call `GET /bench/summary` via `shared/edge/defaults.ts`. The helper fetches the summary, stores it under
+`edge.defaults.v1` in AsyncStorage (with an in-memory cache) and returns per-platform defaults with sensible fallbacks if
+the server cannot be reached.
+
+`QABenchScreen` reads those cached values on mount to prefill runtime, input size, quantisation, thread and delegate
+selectors. When the fetch completes the selectors update again with the latest recommendation, while still allowing QA
+engineers to override any field.
+
+An optional remote-config flag (`edge.defaults.enforce`) can call the same helper during runtime initialisation. The
+flag is disabled by default, keeping production behaviour unchanged until the gate is explicitly enabled.

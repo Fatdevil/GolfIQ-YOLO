@@ -15,10 +15,15 @@ import {
 
 import { API_BASE } from '../lib/api';
 
+import type { Platform as EdgeDefaultsPlatform } from '../../../../shared/edge/defaults';
+import {
+  fetchEdgeDefaults as fetchSharedEdgeDefaults,
+  getCachedEdgeDefaults as getSharedCachedEdgeDefaults,
+} from '../../../../shared/edge/defaults';
+
 import {
   EdgeDelegate,
   EdgeDefaultsConfig,
-  EdgeDefaultsMap,
   EdgePlatform,
   EdgeQuant,
   EdgeRuntime,
@@ -330,6 +335,42 @@ const QABenchScreen: React.FC = () => {
   const [uploading, setUploading] = useState(false);
   const [uploadStatus, setUploadStatus] = useState<string | null>(null);
 
+  const applyEdgeDefaults = useCallback(
+    (
+      candidate:
+        | {
+            runtime?: string;
+            inputSize?: number;
+            quant?: string;
+            threads?: number | null | undefined;
+            delegate?: string | null | undefined;
+          }
+        | null
+        | undefined,
+    ) => {
+      if (!candidate) {
+        return;
+      }
+      setConfig((prev) => ({
+        runtime: toRuntime(candidate.runtime) ?? prev.runtime,
+        inputSize:
+          typeof candidate.inputSize === 'number'
+            ? clampInputSize(candidate.inputSize)
+            : prev.inputSize,
+        quant: toQuant(candidate.quant) ?? prev.quant,
+        threads:
+          typeof candidate.threads === 'number'
+            ? clampThreads(candidate.threads)
+            : prev.threads,
+        delegate:
+          candidate.delegate !== undefined && candidate.delegate !== null
+            ? toDelegate(candidate.delegate, delegates)
+            : prev.delegate,
+      }));
+    },
+    [delegates],
+  );
+
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -370,23 +411,29 @@ const QABenchScreen: React.FC = () => {
   useEffect(() => {
     let cancelled = false;
     (async () => {
+      const sharedPlatform = platformKey as EdgeDefaultsPlatform;
+      try {
+        const cached = await getSharedCachedEdgeDefaults(sharedPlatform);
+        if (!cancelled) {
+          applyEdgeDefaults(cached);
+        }
+      } catch (error) {
+        // ignore
+      }
       try {
         const defaults = await readEdgeDefaults();
+        if (!cancelled && defaults) {
+          applyEdgeDefaults(pickDefaultsForPlatform(defaults, platformKey));
+        }
+      } catch (error) {
+        // ignore
+      }
+      try {
+        const remote = await fetchSharedEdgeDefaults({ platform: sharedPlatform });
         if (cancelled) {
           return;
         }
-        if (defaults) {
-          const next = pickDefaultsForPlatform(defaults, platformKey);
-          if (next) {
-            setConfig((prev) => ({
-              runtime: toRuntime(next.runtime) ?? prev.runtime,
-              inputSize: clampInputSize(next.inputSize),
-              quant: toQuant(next.quant) ?? prev.quant,
-              threads: clampThreads(next.threads),
-              delegate: toDelegate(next.delegate, delegates),
-            }));
-          }
-        }
+        applyEdgeDefaults(remote[platformKey]);
       } catch (error) {
         // ignore
       }
@@ -394,7 +441,7 @@ const QABenchScreen: React.FC = () => {
     return () => {
       cancelled = true;
     };
-  }, [delegates]);
+  }, [applyEdgeDefaults]);
 
   useEffect(() => {
     let cancelled = false;
