@@ -14,9 +14,7 @@ _CACHE_CONTROL_HEADER = "public, max-age=3600"
 
 
 def _default_manifest_path() -> Path:
-    return (
-        Path(__file__).resolve().parent.parent.parent / "models" / "manifest.json"
-    )
+    return Path(__file__).resolve().parent.parent.parent / "models" / "manifest.json"
 
 
 def _manifest_path() -> Path:
