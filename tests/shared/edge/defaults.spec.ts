@@ -1,6 +1,17 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
+declare module '@react-native-async-storage/async-storage' {
+  interface AsyncStorageLike {
+    getItem(key: string): Promise<string | null>;
+    setItem(key: string, value: string): Promise<void>;
+    removeItem?(key: string): Promise<void>;
+  }
+
+  const AsyncStorage: AsyncStorageLike;
+  export default AsyncStorage;
+}
+
 import {
   __resetEdgeDefaultsCacheForTests,
   fetchEdgeDefaults,
