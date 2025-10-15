@@ -84,6 +84,9 @@ export const getRun = (id: string) =>
 export const deleteRun = (id: string) =>
   axios.delete(`${API}/runs/${id}`, { headers: withAuth() }).then((r) => r.data);
 
+export const fetchBenchSummary = () =>
+  axios.get(`${API}/bench/summary`, { headers: withAuth() }).then((r) => r.data);
+
 export type TelemetryAggregate = {
   generatedAt: string;
   sampleSize: number;

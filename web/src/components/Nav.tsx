@@ -3,17 +3,7 @@ import { Menu } from "lucide-react";
 import { useState } from "react";
 
 import { useCalibration } from "../hooks/useCalibration";
-
-const links = [
-  { to: "/", label: "Analyze" },
-  { to: "/calibration", label: "Calibration" },
-  { to: "/mock", label: "Mock" },
-  { to: "/runs", label: "Runs" },
-  { to: "/field-runs", label: "Field runs" },
-  { to: "/accuracy", label: "Accuracy" },
-  { to: "/device-dashboard", label: "Devices" },
-  { to: "/admin/feedback", label: "Feedback" },
-];
+import { qaReplayEnabled } from "../config";
 
 export default function Nav() {
   const [open, setOpen] = useState(false);
@@ -33,7 +23,7 @@ export default function Nav() {
           )}
         </div>
         <nav className="hidden gap-6 text-sm font-medium text-slate-300 sm:flex">
-          {links.map((link) => (
+          {getLinks().map((link) => (
             <NavLink
               key={link.to}
               to={link.to}
@@ -63,7 +53,7 @@ export default function Nav() {
             </div>
           )}
           <nav className="flex flex-col gap-3 text-sm font-medium text-slate-300">
-            {links.map((link) => (
+            {getLinks().map((link) => (
               <NavLink
                 key={link.to}
                 to={link.to}
@@ -82,4 +72,23 @@ export default function Nav() {
       )}
     </header>
   );
+}
+
+type LinkItem = { to: string; label: string };
+
+function getLinks(): LinkItem[] {
+  const base: LinkItem[] = [
+    { to: "/", label: "Analyze" },
+    { to: "/calibration", label: "Calibration" },
+    { to: "/mock", label: "Mock" },
+    { to: "/runs", label: "Runs" },
+    { to: "/field-runs", label: "Field runs" },
+    { to: "/accuracy", label: "Accuracy" },
+    { to: "/device-dashboard", label: "Devices" },
+    { to: "/admin/feedback", label: "Feedback" },
+  ];
+  if (qaReplayEnabled) {
+    base.splice(base.length - 1, 0, { to: "/qa/replay", label: "Replay QA" });
+  }
+  return base;
 }
