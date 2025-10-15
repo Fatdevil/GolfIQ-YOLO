@@ -1,17 +1,11 @@
 ## Summary
-<!-- Kort beskrivning av ändringen. Varför behövs den? -->
+<!-- What changed? Why? Link to Jira/Linear if applicable. -->
 
-## Changes
-- [ ] ...
-
-## How to test
-1. ...
-2. ...
-
-## Screenshots / Logs
-<!-- Valfritt -->
+## QA notes
+<!-- List devices, links to Bench/HUD/Replays, manual steps, etc. -->
 
 ## Checklist
-- [ ] PR:en bygger lokalt
-- [ ] CI är grön
-- [ ] Inga breaking changes utan uppdaterad README/dokumentation
+- [ ] CI green
+- [ ] no binaries
+- [ ] updated docs if UI/QA changes
+- [ ] tests added
