@@ -18,6 +18,7 @@ from server.api.routers.coach_feedback import router as coach_feedback_router
 from server.metrics import MetricsMiddleware, metrics_app
 from server.retention.sweeper import sweep_retention_once, sweep_upload_retention
 
+from .routes.bench import router as bench_router
 from .routes.bundle import router as bundle_router
 from .routes.caddie_recommend import router as caddie_router
 from .routes.calibrate import router as calibrate_router
@@ -103,6 +104,7 @@ app.include_router(legacy_calibrate.router)
 app.include_router(calibrate_router)
 app.include_router(caddie_router)
 app.include_router(bundle_router)
+app.include_router(bench_router)
 app.include_router(course_bundle_router)
 app.include_router(metrics.router)
 app.include_router(providers_router)

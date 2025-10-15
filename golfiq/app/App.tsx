@@ -6,9 +6,10 @@ import CameraInferScreen from './src/screens/CameraInferScreen';
 import FeedbackModal from './src/components/FeedbackModal';
 import { QaSummaryProvider } from './src/context/QaSummaryContext';
 import QAArHudScreen from './src/screens/QAArHudScreen';
+import QABenchScreen from './src/screens/QABenchScreen';
 import { qaHudEnabled } from '../../shared/arhud/native/qa_gate';
 
-type TabKey = 'cal' | 'rec' | 'cam' | 'qa';
+type TabKey = 'cal' | 'rec' | 'cam' | 'qaHud' | 'qaBench';
 
 export default function App(){
   const qaEnabled = qaHudEnabled();
@@ -16,10 +17,34 @@ export default function App(){
   const [feedbackOpen, setFeedbackOpen] = useState(false);
 
   useEffect(() => {
-    if (!qaEnabled && tab === 'qa') {
+    if (!qaEnabled && (tab === 'qaHud' || tab === 'qaBench')) {
       setTab('cal');
     }
   }, [qaEnabled, tab]);
+
+  const qaTabs: { key: TabKey; label: string }[] = qaEnabled
+    ? [
+        { key: 'qaHud', label: 'QA HUD' },
+        { key: 'qaBench', label: 'QA Bench' },
+      ]
+    : [];
+
+  const renderTab = () => {
+    switch (tab) {
+      case 'cal':
+        return <CalibrateScreen/>;
+      case 'rec':
+        return <RecordSwingScreen/>;
+      case 'cam':
+        return <CameraInferScreen/>;
+      case 'qaHud':
+        return <QAArHudScreen/>;
+      case 'qaBench':
+        return <QABenchScreen/>;
+      default:
+        return <CalibrateScreen/>;
+    }
+  };
 
   return (
     <QaSummaryProvider>
@@ -35,26 +60,22 @@ export default function App(){
             <TouchableOpacity onPress={()=>setTab('cam')} style={[styles.tab, tab==='cam' && styles.tabActive]}>
               <Text style={styles.tabText}>Kamera</Text>
             </TouchableOpacity>
-            {qaEnabled && (
-              <TouchableOpacity onPress={()=>setTab('qa')} style={[styles.tab, tab==='qa' && styles.tabActive]}>
-                <Text style={styles.tabText}>QA HUD</Text>
+            {qaTabs.map(({ key, label }) => (
+              <TouchableOpacity
+                key={key}
+                onPress={() => setTab(key)}
+                style={[styles.tab, tab===key && styles.tabActive]}
+              >
+                <Text style={styles.tabText}>{label}</Text>
               </TouchableOpacity>
-            )}
+            ))}
           </View>
           <TouchableOpacity style={styles.feedbackButton} onPress={()=>setFeedbackOpen(true)}>
             <Text style={styles.feedbackText}>Feedback</Text>
           </TouchableOpacity>
         </View>
         <ScrollView contentContainerStyle={{padding:16}}>
-          {tab==='cal' ? (
-            <CalibrateScreen/>
-          ) : tab==='rec' ? (
-            <RecordSwingScreen/>
-          ) : tab==='cam' ? (
-            <CameraInferScreen/>
-          ) : (
-            <QAArHudScreen/>
-          )}
+          {renderTab()}
         </ScrollView>
         <FeedbackModal visible={feedbackOpen} onClose={()=>setFeedbackOpen(false)} />
       </SafeAreaView>

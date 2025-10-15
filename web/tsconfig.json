@@ -23,6 +23,6 @@
       "vitest/*": ["./node_modules/vitest/*"]
     }
   },
-  "include": ["src", "../shared/**/*.ts"],
+  "include": ["src", "../shared/**/*.ts", "../shared/**/*.d.ts"],
   "references": [{ "path": "./tsconfig.node.json" }]
 }
