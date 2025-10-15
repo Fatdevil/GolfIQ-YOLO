@@ -111,7 +111,9 @@ def _build_entry(platform: str, file_path: Path, base_url: str) -> ModelEntry:
     )
 
 
-def build_manifest(root: Path, base_url: str, version: int, recommended: dict[str, str]) -> dict:
+def build_manifest(
+    root: Path, base_url: str, version: int, recommended: dict[str, str]
+) -> dict:
     entries: dict[str, list[ModelEntry]] = {"android": [], "ios": []}
     for platform, file_path in _iter_model_files(root):
         entry = _build_entry(platform, file_path, base_url)
@@ -162,10 +164,18 @@ def parse_recommended(values: list[str]) -> dict[str, str]:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="Generate edge model manifest metadata")
-    parser.add_argument("root", type=Path, help="Directory containing platform model files")
-    parser.add_argument("--base-url", required=True, help="Public base URL where models are hosted")
-    parser.add_argument("--version", type=int, default=1, help="Manifest version (default: 1)")
+    parser = argparse.ArgumentParser(
+        description="Generate edge model manifest metadata"
+    )
+    parser.add_argument(
+        "root", type=Path, help="Directory containing platform model files"
+    )
+    parser.add_argument(
+        "--base-url", required=True, help="Public base URL where models are hosted"
+    )
+    parser.add_argument(
+        "--version", type=int, default=1, help="Manifest version (default: 1)"
+    )
     parser.add_argument(
         "--recommended",
         action="append",
@@ -185,7 +195,9 @@ def main(argv: list[str] | None = None) -> int:
 
     try:
         recommended = parse_recommended(args.recommended)
-        manifest = build_manifest(root, args.base_url.strip(), args.version, recommended)
+        manifest = build_manifest(
+            root, args.base_url.strip(), args.version, recommended
+        )
     except ManifestError as error:
         parser.error(str(error))
         return 2  # pragma: no cover

@@ -101,11 +101,11 @@ function toHex(input: ArrayBuffer | Uint8Array): string {
 
 async function computeSha256(data: Uint8Array): Promise<string> {
   if (typeof crypto !== 'undefined' && crypto.subtle && crypto.subtle.digest) {
-    const buffer =
+    const view =
       data.byteOffset === 0 && data.byteLength === data.buffer.byteLength
-        ? data.buffer
-        : data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength);
-    const digest = await crypto.subtle.digest('SHA-256', buffer);
+        ? data
+        : data.slice();
+    const digest = await crypto.subtle.digest('SHA-256', view);
     return toHex(digest);
   }
   if (typeof process !== 'undefined' && process.versions?.node) {
