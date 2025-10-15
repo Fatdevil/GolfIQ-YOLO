@@ -26,6 +26,7 @@ from .routes.course_bundle import router as course_bundle_router
 from .routes.cv_analyze import router as cv_analyze_router
 from .routes.cv_analyze_video import router as cv_analyze_video_router
 from .routes.cv_mock import router as cv_mock_router
+from .routes.models import router as models_router
 from .routes.providers import router as providers_router
 from .routes.runs import router as runs_router
 from .routes.runs_upload import router as runs_upload_router
@@ -130,6 +131,7 @@ app.include_router(_metrics_router)
 app.include_router(cv_mock_router)
 app.include_router(cv_analyze_router)
 app.include_router(cv_analyze_video_router)
+app.include_router(models_router)
 app.include_router(ws_telemetry_router)
 app.include_router(runs_upload_router)
 app.include_router(runs_router)
