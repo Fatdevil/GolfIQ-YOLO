@@ -303,14 +303,16 @@ def test_main_cli_flow(tmp_path: Path, capsys):
     }
     runs_path.write_text(json.dumps(payload) + "\n", encoding="utf-8")
 
-    main([
-        "--runs",
-        str(runs_path),
-        "--output",
-        str(output_path),
-        "--recent",
-        "5",
-    ])
+    main(
+        [
+            "--runs",
+            str(runs_path),
+            "--output",
+            str(output_path),
+            "--recent",
+            "5",
+        ]
+    )
 
     assert output_path.exists()
     written = json.loads(output_path.read_text(encoding="utf-8"))
