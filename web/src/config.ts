@@ -3,3 +3,6 @@ export const visualTracerEnabled =
 
 export const playsLikeEnabled =
   (import.meta.env.VITE_PLAYS_LIKE_ENABLED ?? "false") === "true";
+
+export const qaReplayEnabled =
+  import.meta.env.DEV || (import.meta.env.VITE_QA_MODE ?? "false") === "true";
