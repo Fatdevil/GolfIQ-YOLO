@@ -61,3 +61,8 @@ ios/Pods/
 
 # AR-HUD assets
 tests/golden/hud_states/*.png
+
+# Raw geodata sources (never commit)
+data/sources/**
+# Large exports/tiles
+data/tiles/**

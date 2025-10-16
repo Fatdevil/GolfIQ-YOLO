@@ -1,0 +1,32 @@
+name: bundle-validate
+
+on:
+  push:
+    paths:
+      - "scripts/**"
+      - "data/courses/**"
+      - "server/routes/bundle*.py"
+      - ".github/workflows/bundle-validate.yml"
+  pull_request:
+    paths:
+      - "scripts/**"
+      - "data/courses/**"
+      - "server/routes/bundle*.py"
+      - ".github/workflows/bundle-validate.yml"
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-dev.txt
+      - name: Validate course bundles
+        run: python scripts/validate_course_bundle.py data/courses/*.json --max-kb 200
+      - name: Run targeted tests
+        run: pytest server/tests/test_bundle_route.py server/tests/test_bundle_index.py tests/scripts -q
