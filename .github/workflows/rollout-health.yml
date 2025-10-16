@@ -1,0 +1,99 @@
+name: Rollout health report
+
+on:
+  schedule:
+    - cron: '0 6 * * *'
+
+jobs:
+  report:
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+    steps:
+      - name: Fetch rollout health snapshot
+        id: fetch
+        env:
+          DEFAULT_URL: http://localhost:8000/rollout/health?since=24h
+          ROLLOUT_HEALTH_URL_SECRET: ${{ secrets.ROLLOUT_HEALTH_URL }}
+          ROLLOUT_HEALTH_URL_VAR: ${{ vars.ROLLOUT_HEALTH_URL }}
+        run: |
+          set -euo pipefail
+          url="${ROLLOUT_HEALTH_URL_SECRET}"
+          if [ -z "$url" ]; then
+            url="${ROLLOUT_HEALTH_URL_VAR}"
+          fi
+          if [ -z "$url" ]; then
+            url="${DEFAULT_URL}"
+          fi
+          echo "Fetching rollout health from configured endpoint."
+          response=$(curl --fail --silent --show-error "$url")
+          echo "$response"
+          {
+            echo "json<<'EOF'"
+            echo "$response"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+      - name: Update Edge rollout health issue
+        uses: actions/github-script@v7
+        env:
+          ROLLOUT_HEALTH_JSON: ${{ steps.fetch.outputs.json }}
+        with:
+          script: |
+            if (!process.env.ROLLOUT_HEALTH_JSON) {
+              core.setFailed('Missing rollout health payload');
+              return;
+            }
+            const payload = JSON.parse(process.env.ROLLOUT_HEALTH_JSON);
+            const since = payload.since || 'unknown';
+            const platforms = ['android', 'ios'];
+            const toFixed = (value) => {
+              const num = Number(value);
+              return Number.isFinite(num) ? num.toFixed(2) : '0.00';
+            };
+            const rows = platforms.map((platform) => {
+              const entry = payload[platform] || {};
+              const control = entry.control || {};
+              const enforced = entry.enforced || {};
+              const breach = entry.breach ? '🚨 YES' : '✅ NO';
+              return `| ${platform} | ${toFixed(control.p95Latency)} | ${toFixed(control.fpsAvg)} | ${toFixed(enforced.p95Latency)} | ${toFixed(enforced.fpsAvg)} | ${breach} |`;
+            }).join('\n');
+            const header = '| Platform | Control P95 (ms) | Control FPS | Enforced P95 (ms) | Enforced FPS | Breach |\n| --- | --- | --- | --- | --- | --- |';
+            const breachDetected = platforms.some((platform) => {
+              const entry = payload[platform];
+              return entry && entry.breach;
+            });
+            const commentBody = [
+              `### Rollout health report (${new Date().toISOString()})`,
+              `Since threshold: ${since}`,
+              '',
+              header,
+              rows,
+              '',
+              breachDetected
+                ? '🚨 **BREACH DETECTED** – investigate before increasing rollout.'
+                : '✅ Guardrails within thresholds.',
+            ].join('\n');
+            const issueTitle = 'Edge rollout health';
+            const { owner, repo } = context.repo;
+            const issues = await github.paginate(github.rest.issues.listForRepo, {
+              owner,
+              repo,
+              state: 'open',
+              per_page: 100,
+            });
+            let issue = issues.find((item) => item.title === issueTitle);
+            if (!issue) {
+              await github.rest.issues.create({
+                owner,
+                repo,
+                title: issueTitle,
+                body: commentBody,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner,
+                repo,
+                issue_number: issue.number,
+                body: commentBody,
+              });
+            }
