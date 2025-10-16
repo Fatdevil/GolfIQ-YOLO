@@ -1,0 +1,14 @@
+{
+  "approx": {
+    "bunkers": 1,
+    "cartpaths": 1,
+    "fairways": 1,
+    "greens": 1
+  },
+  "areaSqM": 12500.0,
+  "bbox": [-122.401400, 37.787900, -122.400500, 37.789050],
+  "courseId": "demo_sunrise",
+  "featureCount": 4,
+  "name": "Demo Sunrise",
+  "updatedAt": "2025-02-01T00:00:00Z"
+}
