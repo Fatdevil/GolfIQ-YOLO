@@ -12,7 +12,9 @@ def _make_args(tmp_path: Path) -> SimpleNamespace:
 
 
 def test_extract_kind_prefers_kind_map() -> None:
-    kind = generator._extract_kind({"kind": "PuttingSurface"}, {"puttingsurface": "green"})
+    kind = generator._extract_kind(
+        {"kind": "PuttingSurface"}, {"puttingsurface": "green"}
+    )
     assert kind == "green"
 
 
@@ -91,4 +93,3 @@ def test_process_file_generates_bundle_and_metadata(tmp_path: Path) -> None:
     assert metadata["areaSqM"] > 1.0
     assert metadata["bbox"] == [0.0, 0.0, 0.00003, 0.00003]
     assert metadata["updatedAt"].endswith("Z")
-

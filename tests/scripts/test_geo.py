@@ -42,4 +42,3 @@ def test_linestring_length_and_quantisation() -> None:
         for value in (lon, lat):
             steps = round(value / 1e-5)
             assert math.isclose(value, steps * 1e-5, rel_tol=0.0, abs_tol=1e-9)
-
