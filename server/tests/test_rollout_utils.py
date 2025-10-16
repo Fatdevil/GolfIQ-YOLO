@@ -30,6 +30,25 @@ def test_parse_since_invalid_defaults_to_24h():
     assert 23.9 <= _approx_hours(after - dt) <= 24.1
 
 
+def test_parse_since_defaults_when_missing_or_blank():
+    _, dt_none = rollout._parse_since(None)
+    _, dt_blank = rollout._parse_since("   ")
+    now = datetime.now(timezone.utc)
+    for candidate in (dt_none, dt_blank):
+        assert now - timedelta(hours=24.1) <= candidate <= now
+
+
+def test_parse_since_rejects_bad_hour_suffix_and_naive_iso():
+    _, dt = rollout._parse_since("bad-hourh")
+    now = datetime.now(timezone.utc)
+    assert now - timedelta(hours=24.1) <= dt <= now
+
+    naive_iso = "2025-01-02T03:04:05"
+    _, naive_dt = rollout._parse_since(naive_iso)
+    assert naive_dt.tzinfo is not None
+    assert naive_dt.utcoffset() == timedelta(0)
+
+
 @pytest.mark.parametrize(
     "value,expected",
     [
@@ -43,6 +62,10 @@ def test_parse_since_invalid_defaults_to_24h():
 )
 def test_normalize_platform(value, expected):
     assert rollout._normalize_platform(value) == expected
+
+
+def test_normalize_platform_returns_none_for_blank():
+    assert rollout._normalize_platform("   ") is None
 
 
 def test_extract_platform_from_nested_payload():
@@ -59,6 +82,15 @@ def test_extract_platform_from_nested_payload():
     assert rollout._extract_platform(payload) == "ios"
 
     payload = {"platform": "unknown"}
+    assert rollout._extract_platform(payload) is None
+
+    payload = {"deviceProfile": {"os": "iPad"}}
+    assert rollout._extract_platform(payload) == "ios"
+
+    payload = {"deviceProfile": {"platform": "unknown", "os": "android"}}
+    assert rollout._extract_platform(payload) == "android"
+
+    payload = {"deviceProfile": 123}
     assert rollout._extract_platform(payload) is None
 
 
@@ -93,6 +125,13 @@ def test_extract_metrics_prefers_top_level(monkeypatch):
     payload = {}
     monkeypatch.setattr(rollout.agg, "_extract_latency", lambda _: 77)
     assert rollout._extract_p95_latency(payload) == 77
+
+    monkeypatch.setattr(rollout.agg, "_extract_latency", lambda _: None)
+    assert rollout._extract_p95_latency({"metrics": {}}) is None
+
+    assert rollout._extract_fps({}) is None
+    assert rollout._extract_fps({"metrics": {"fpsAvg": "fast"}}) is None
+    assert rollout._extract_fps({"device": {"fps": "fast"}}) is None
 
 
 def test_guard_thresholds_env_overrides(monkeypatch):
@@ -135,20 +174,34 @@ def test_aggregate_events_and_summarize(monkeypatch):
             "timestamp": (now - timedelta(hours=1)).isoformat(),
             "payload": {"rollout": {"enforced": False}},
         },
+        {
+            "timestamp": (now - timedelta(minutes=10)).isoformat(),
+            "rollout": {"enforced": True},
+            "platform": "android",
+            "metrics": {"fpsAvg": 27},
+        },
+        {
+            "timestamp": (now - timedelta(minutes=9)).isoformat(),
+            "rollout": {"enforced": True},
+            "platform": "ios",
+            "metrics": {"latencyP95Ms": 85},
+        },
     ]
 
     monkeypatch.setattr(rollout.agg, "_iter_events", lambda limit=None: events)
     monkeypatch.setattr(rollout.agg, "_merge_payload", lambda event: event)
-    monkeypatch.setattr(rollout.agg, "_coerce_iso_timestamp", lambda payload: payload["timestamp"])
+    monkeypatch.setattr(
+        rollout.agg, "_coerce_iso_timestamp", lambda payload: payload["timestamp"]
+    )
 
     since_dt = now - timedelta(hours=4)
     buckets = rollout._aggregate_events(since_dt)
 
     assert buckets["android"]["enforced"]["latencies"] == [160.0]
-    assert buckets["android"]["enforced"]["fps"] == [22.0]
+    assert buckets["android"]["enforced"]["fps"] == [22.0, 27.0]
     assert buckets["android"]["control"]["latencies"] == [120.0]
     assert buckets["android"]["control"]["fps"] == [33.0]
-    assert buckets["ios"]["enforced"]["latencies"] == [90.0]
+    assert buckets["ios"]["enforced"]["latencies"] == [90.0, 85.0]
 
     summary = rollout._summarize(buckets, {"p95_latency_ms": 150.0, "fps_min": 25.0})
     assert summary["android"]["enforced"]["p95Latency"] == 160.0
@@ -156,3 +209,48 @@ def test_aggregate_events_and_summarize(monkeypatch):
     assert summary["ios"]["breach"] is False
 
 
+def test_coerce_datetime_handles_invalid_iso():
+    now = datetime.now(timezone.utc)
+    result = rollout._coerce_datetime("not-a-date")
+    assert now <= result <= datetime.now(timezone.utc)
+
+
+def test_coerce_datetime_normalizes_tz():
+    aware = rollout._coerce_datetime("2025-05-06T12:00:00+02:00")
+    assert aware.tzinfo is not None
+    assert aware.utcoffset() == timedelta(0)
+
+
+def test_coerce_datetime_applies_utc_to_naive():
+    naive = rollout._coerce_datetime("2025-05-06T12:00:00")
+    assert naive.tzinfo is not None
+    assert naive.utcoffset() == timedelta(0)
+
+
+def test_aggregate_events_ignores_unknown_platform(monkeypatch):
+    now = datetime.now(timezone.utc)
+    events = [
+        {
+            "timestamp": now.isoformat(),
+            "rollout": {"enforced": True},
+            "platform": "windows",
+        }
+    ]
+
+    monkeypatch.setattr(rollout.agg, "_iter_events", lambda limit=None: events)
+    monkeypatch.setattr(rollout.agg, "_merge_payload", lambda event: event)
+    monkeypatch.setattr(
+        rollout.agg, "_coerce_iso_timestamp", lambda payload: payload["timestamp"]
+    )
+
+    since_dt = now - timedelta(hours=1)
+    buckets = rollout._aggregate_events(since_dt)
+
+    assert buckets["android"] == {
+        "control": {"latencies": [], "fps": []},
+        "enforced": {"latencies": [], "fps": []},
+    }
+    assert buckets["ios"] == {
+        "control": {"latencies": [], "fps": []},
+        "enforced": {"latencies": [], "fps": []},
+    }

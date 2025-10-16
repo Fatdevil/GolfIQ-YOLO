@@ -164,7 +164,9 @@ def _empty_bucket() -> Dict[str, Dict[str, list[float]]]:
     }
 
 
-def _aggregate_events(since_dt: datetime) -> Dict[str, Dict[str, Dict[str, list[float]]]]:
+def _aggregate_events(
+    since_dt: datetime,
+) -> Dict[str, Dict[str, Dict[str, list[float]]]]:
     buckets: Dict[str, Dict[str, Dict[str, list[float]]]] = {
         "android": _empty_bucket(),
         "ios": _empty_bucket(),
@@ -213,7 +215,10 @@ def _summarize(
         if cohorts["enforced"]["fps"] and enforced_fps < guard["fps_min"]:
             breach = True
         summary[platform] = {
-            "control": {"p95Latency": round(control_lat, 2), "fpsAvg": round(control_fps, 2)},
+            "control": {
+                "p95Latency": round(control_lat, 2),
+                "fpsAvg": round(control_fps, 2),
+            },
             "enforced": {
                 "p95Latency": round(enforced_lat, 2),
                 "fpsAvg": round(enforced_fps, 2),
@@ -231,14 +236,20 @@ async def rollout_health(since: str = Query("24h")) -> Dict[str, Any]:
     summary = _summarize(buckets, guard)
     return {
         "since": since_iso,
-        "android": summary.get("android", {
-            "control": {"p95Latency": 0.0, "fpsAvg": 0.0},
-            "enforced": {"p95Latency": 0.0, "fpsAvg": 0.0},
-            "breach": False,
-        }),
-        "ios": summary.get("ios", {
-            "control": {"p95Latency": 0.0, "fpsAvg": 0.0},
-            "enforced": {"p95Latency": 0.0, "fpsAvg": 0.0},
-            "breach": False,
-        }),
+        "android": summary.get(
+            "android",
+            {
+                "control": {"p95Latency": 0.0, "fpsAvg": 0.0},
+                "enforced": {"p95Latency": 0.0, "fpsAvg": 0.0},
+                "breach": False,
+            },
+        ),
+        "ios": summary.get(
+            "ios",
+            {
+                "control": {"p95Latency": 0.0, "fpsAvg": 0.0},
+                "enforced": {"p95Latency": 0.0, "fpsAvg": 0.0},
+                "breach": False,
+            },
+        ),
     }
