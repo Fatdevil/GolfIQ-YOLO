@@ -1,4 +1,5 @@
 """Lightweight geographic helpers for bundle tooling."""
+
 from __future__ import annotations
 
 from decimal import Decimal, ROUND_HALF_UP, getcontext
@@ -26,7 +27,7 @@ def haversine_meters(a: Point, b: Point) -> float:
 
     sin_dlat = math.sin(dlat / 2.0)
     sin_dlon = math.sin(dlon / 2.0)
-    h = sin_dlat ** 2 + math.cos(lat1_rad) * math.cos(lat2_rad) * sin_dlon ** 2
+    h = sin_dlat**2 + math.cos(lat1_rad) * math.cos(lat2_rad) * sin_dlon**2
     c = 2 * math.atan2(math.sqrt(h), math.sqrt(1 - h))
     return EARTH_RADIUS_M * c
 
@@ -113,7 +114,11 @@ def compute_bbox_from_coordinates(coords: Iterable) -> List[float]:
     bbox: List[float] = []
 
     def _walk(node: Iterable) -> None:
-        if isinstance(node, (list, tuple)) and node and isinstance(node[0], (int, float)):
+        if (
+            isinstance(node, (list, tuple))
+            and node
+            and isinstance(node[0], (int, float))
+        ):
             lon, lat = float(node[0]), float(node[1])
             update_bbox(bbox, (lon, lat))
         elif isinstance(node, (list, tuple)):

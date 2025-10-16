@@ -40,7 +40,9 @@ def _load_kind_map(path: str | None) -> Mapping[str, str]:
         key = str(raw_key).strip().lower()
         value = str(raw_value).strip().lower()
         if value not in SUPPORTED_TYPES:
-            raise ValueError(f"Unsupported mapped type '{raw_value}' for key '{raw_key}'")
+            raise ValueError(
+                f"Unsupported mapped type '{raw_value}' for key '{raw_key}'"
+            )
         normalized[key] = value
     return normalized
 
@@ -50,7 +52,9 @@ def _iter_source_files(pattern: str) -> List[Path]:
     return [Path(match) for match in matches if Path(match).is_file()]
 
 
-def _extract_kind(properties: Mapping[str, Any], kind_map: Mapping[str, str]) -> str | None:
+def _extract_kind(
+    properties: Mapping[str, Any], kind_map: Mapping[str, str]
+) -> str | None:
     for key in ("kind", "type", "feature", "feature_type"):
         if key in properties and properties[key] is not None:
             candidate = str(properties[key]).strip().lower()
@@ -105,7 +109,9 @@ def _simplify_linestring(
     return [[float(lon), float(lat)] for lon, lat in simplified_points]
 
 
-def _filter_geometry(feature_type: str, geometry: Mapping[str, Any], tolerance: float) -> Mapping[str, Any] | None:
+def _filter_geometry(
+    feature_type: str, geometry: Mapping[str, Any], tolerance: float
+) -> Mapping[str, Any] | None:
     geom_type = geometry.get("type")
     coords = geometry.get("coordinates")
     if geom_type == "Polygon":
@@ -114,7 +120,9 @@ def _filter_geometry(feature_type: str, geometry: Mapping[str, Any], tolerance: 
         simplified = _simplify_polygon(coords, tolerance)
         if not simplified:
             return None
-        area = _geo.polygon_area_sq_m([[tuple(pt) for pt in ring] for ring in simplified])
+        area = _geo.polygon_area_sq_m(
+            [[tuple(pt) for pt in ring] for ring in simplified]
+        )
         if area < 1.0:
             return None
         return {"type": "Polygon", "coordinates": simplified}
@@ -126,7 +134,9 @@ def _filter_geometry(feature_type: str, geometry: Mapping[str, Any], tolerance: 
             return None
         area = 0.0
         for polygon in simplified:
-            area += _geo.polygon_area_sq_m([[tuple(pt) for pt in ring] for ring in polygon])
+            area += _geo.polygon_area_sq_m(
+                [[tuple(pt) for pt in ring] for ring in polygon]
+            )
         if area < 1.0:
             return None
         return {"type": "MultiPolygon", "coordinates": simplified}
@@ -144,8 +154,12 @@ def _filter_geometry(feature_type: str, geometry: Mapping[str, Any], tolerance: 
     return None
 
 
-def _quantize_geometry(geometry: Mapping[str, Any], quantum: float) -> Mapping[str, Any]:
-    quantized_coords = _geo.quantize_coordinates(geometry.get("coordinates", []), quantum)
+def _quantize_geometry(
+    geometry: Mapping[str, Any], quantum: float
+) -> Mapping[str, Any]:
+    quantized_coords = _geo.quantize_coordinates(
+        geometry.get("coordinates", []), quantum
+    )
     if isinstance(quantized_coords, list):
         coords = quantized_coords
     else:
@@ -153,7 +167,12 @@ def _quantize_geometry(geometry: Mapping[str, Any], quantum: float) -> Mapping[s
     return {"type": geometry.get("type"), "coordinates": coords}
 
 
-def _canonical_feature(feature: Mapping[str, Any], feature_id: str, feature_type: str, geometry: Mapping[str, Any]) -> Dict[str, Any]:
+def _canonical_feature(
+    feature: Mapping[str, Any],
+    feature_id: str,
+    feature_type: str,
+    geometry: Mapping[str, Any],
+) -> Dict[str, Any]:
     canonical = {
         "id": feature_id,
         "type": feature_type,
@@ -162,7 +181,9 @@ def _canonical_feature(feature: Mapping[str, Any], feature_id: str, feature_type
     return canonical
 
 
-def _resolve_feature_id(feature_type: str, counters: MutableMapping[str, int], raw_id: Any | None) -> str:
+def _resolve_feature_id(
+    feature_type: str, counters: MutableMapping[str, int], raw_id: Any | None
+) -> str:
     if raw_id:
         candidate = str(raw_id)
         if candidate:
@@ -192,7 +213,9 @@ def _pluralize(feature_type: str) -> str:
     return feature_type + "s"
 
 
-def _collect_metadata(course_id: str, course_name: str | None, features: List[Dict[str, Any]]) -> Dict[str, Any]:
+def _collect_metadata(
+    course_id: str, course_name: str | None, features: List[Dict[str, Any]]
+) -> Dict[str, Any]:
     bbox: List[float] = []
     counts: Counter[str] = Counter()
     area_total = 0.0
@@ -215,10 +238,14 @@ def _collect_metadata(course_id: str, course_name: str | None, features: List[Di
             else:
                 coords_iter = coords
             for polygon in coords_iter:
-                area_total += _geo.polygon_area_sq_m([[tuple(pt) for pt in ring] for ring in polygon])
+                area_total += _geo.polygon_area_sq_m(
+                    [[tuple(pt) for pt in ring] for ring in polygon]
+                )
         counts[feature["type"]] += 1
 
-    approx_counts = { _pluralize(ftype): counts.get(ftype, 0) for ftype in sorted(SUPPORTED_TYPES) }
+    approx_counts = {
+        _pluralize(ftype): counts.get(ftype, 0) for ftype in sorted(SUPPORTED_TYPES)
+    }
     metadata: Dict[str, Any] = {
         "courseId": course_id,
         "bbox": bbox,
@@ -232,7 +259,9 @@ def _collect_metadata(course_id: str, course_name: str | None, features: List[Di
     return metadata
 
 
-def process_file(path: Path, args: argparse.Namespace, kind_map: Mapping[str, str]) -> None:
+def process_file(
+    path: Path, args: argparse.Namespace, kind_map: Mapping[str, str]
+) -> None:
     payload = _load_json(path)
     course_id = payload.get("courseId") or path.stem
     course_name = payload.get("name")
@@ -262,7 +291,9 @@ def process_file(path: Path, args: argparse.Namespace, kind_map: Mapping[str, st
 
         quantized_geometry = _quantize_geometry(simplified_geometry, quantum)
         feature_id = _resolve_feature_id(feature_type, counters, feature.get("id"))
-        processed = _canonical_feature(feature, feature_id, feature_type, quantized_geometry)
+        processed = _canonical_feature(
+            feature, feature_id, feature_type, quantized_geometry
+        )
         processed_features.append(processed)
 
     processed_features.sort(key=lambda f: (f["type"], f["id"]))
@@ -293,20 +324,48 @@ def process_file(path: Path, args: argparse.Namespace, kind_map: Mapping[str, st
 
 
 def parse_args(argv: Sequence[str]) -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Generate course bundle JSON from raw data")
-    parser.add_argument("--in", dest="input_glob", required=True, help="Input glob for raw GeoJSON")
-    parser.add_argument("--out", dest="out", required=True, help="Output directory for bundles")
-    parser.add_argument("--kind-map", dest="kind_map", help="Optional mapping from source kinds to bundle types")
-    parser.add_argument("--simplify-m", dest="simplify_m", type=float, default=0.8, help="RDP tolerance in metres")
-    parser.add_argument("--quant", dest="quant", type=float, default=1e-6, help="Coordinate quantisation quantum")
-    parser.add_argument("--limit", dest="limit", type=int, default=0, help="Process at most N files")
-    parser.add_argument("--log-level", dest="log_level", default="INFO", help="Logging level")
+    parser = argparse.ArgumentParser(
+        description="Generate course bundle JSON from raw data"
+    )
+    parser.add_argument(
+        "--in", dest="input_glob", required=True, help="Input glob for raw GeoJSON"
+    )
+    parser.add_argument(
+        "--out", dest="out", required=True, help="Output directory for bundles"
+    )
+    parser.add_argument(
+        "--kind-map",
+        dest="kind_map",
+        help="Optional mapping from source kinds to bundle types",
+    )
+    parser.add_argument(
+        "--simplify-m",
+        dest="simplify_m",
+        type=float,
+        default=0.8,
+        help="RDP tolerance in metres",
+    )
+    parser.add_argument(
+        "--quant",
+        dest="quant",
+        type=float,
+        default=1e-6,
+        help="Coordinate quantisation quantum",
+    )
+    parser.add_argument(
+        "--limit", dest="limit", type=int, default=0, help="Process at most N files"
+    )
+    parser.add_argument(
+        "--log-level", dest="log_level", default="INFO", help="Logging level"
+    )
     return parser.parse_args(argv)
 
 
 def main(argv: Sequence[str] | None = None) -> int:
     args = parse_args(argv or sys.argv[1:])
-    logging.basicConfig(level=getattr(logging, str(args.log_level).upper(), logging.INFO))
+    logging.basicConfig(
+        level=getattr(logging, str(args.log_level).upper(), logging.INFO)
+    )
 
     kind_map = _load_kind_map(args.kind_map) if args.kind_map else {}
     source_files = _iter_source_files(args.input_glob)

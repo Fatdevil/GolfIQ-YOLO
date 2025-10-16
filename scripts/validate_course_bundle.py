@@ -130,7 +130,9 @@ def iter_paths(patterns: Sequence[str]) -> List[Path]:
 def parse_args(argv: Sequence[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Validate course bundle JSON files")
     parser.add_argument("paths", nargs="+", help="Bundle file globs to validate")
-    parser.add_argument("--max-kb", type=int, default=200, help="Maximum allowed size per bundle (kB)")
+    parser.add_argument(
+        "--max-kb", type=int, default=200, help="Maximum allowed size per bundle (kB)"
+    )
     return parser.parse_args(argv)
 
 

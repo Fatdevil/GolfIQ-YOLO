@@ -74,7 +74,11 @@ def _load_metadata(course_id: str) -> Mapping[str, Any] | None:
 
 
 def _isoformat_timestamp(timestamp: float) -> str:
-    return datetime.fromtimestamp(timestamp, tz=timezone.utc).isoformat().replace("+00:00", "Z")
+    return (
+        datetime.fromtimestamp(timestamp, tz=timezone.utc)
+        .isoformat()
+        .replace("+00:00", "Z")
+    )
 
 
 def _build_course_entry(course_path: Path) -> Dict[str, Any] | None:
@@ -120,7 +124,9 @@ async def bundle_index() -> JSONResponse:
             if entry:
                 courses.append(entry)
     payload = {"version": VERSION, "courses": courses}
-    canonical = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    canonical = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode(
+        "utf-8"
+    )
     etag = hashlib.sha256(canonical).hexdigest()
     headers = {
         "ETag": f'"{etag}"',

@@ -1,4 +1,5 @@
 """Ramer–Douglas–Peucker simplification utilities."""
+
 from __future__ import annotations
 
 from typing import List, Sequence, Tuple
