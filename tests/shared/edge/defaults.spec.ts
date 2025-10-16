@@ -19,6 +19,7 @@ import {
   maybeEnforceEdgeDefaultsInRuntime,
   type EdgeDefaultsMap,
 } from '../../../shared/edge/defaults';
+import type { EdgeRolloutDecision } from '../../../shared/edge/rollout';
 
 const SAMPLE_DEFAULTS: EdgeDefaultsMap = {
   android: {
@@ -111,14 +112,109 @@ test('maybeEnforceEdgeDefaultsInRuntime applies cached defaults when enabled', a
     });
   await fetchEdgeDefaults();
   const applied: unknown[] = [];
+  const states: EdgeRolloutDecision[] = [];
   await maybeEnforceEdgeDefaultsInRuntime({
     platform: 'ios',
     rcEnforce: true,
     apply: (value) => {
       applied.push(value);
     },
+    rollout: {
+      deviceId: 'device-rollout',
+      rc: {
+        'edge.rollout.enabled': true,
+        'edge.rollout.percent': 42,
+        'edge.rollout.kill': false,
+      },
+      onEvaluated: (decision) => {
+        states.push(decision);
+      },
+    },
   });
   assert.strictEqual(applied.length, 1);
   assert.deepEqual(applied[0], SAMPLE_DEFAULTS.ios);
+  assert.strictEqual(states.length, 1);
+  assert.equal(states[0].enforced, true);
+  assert.equal(states[0].percent, 42);
   globalThis.fetch = originalFetch;
+});
+
+test('maybeEnforceEdgeDefaultsInRuntime respects rollout percentage when not forced', async () => {
+  __resetEdgeDefaultsCacheForTests();
+  const applied: unknown[] = [];
+  const decisions: EdgeRolloutDecision[] = [];
+  await maybeEnforceEdgeDefaultsInRuntime({
+    platform: 'android',
+    rcEnforce: false,
+    apply: (value) => {
+      applied.push(value);
+    },
+    rollout: {
+      deviceId: 'device-percent-in',
+      rc: {
+        'edge.rollout.enabled': true,
+        'edge.rollout.percent': 100,
+        'edge.rollout.kill': false,
+      },
+      onEvaluated: (decision) => {
+        decisions.push(decision);
+      },
+    },
+  });
+  assert.equal(applied.length, 1);
+  assert.equal(decisions.length, 1);
+  assert.equal(decisions[0].enforced, true);
+
+  __resetEdgeDefaultsCacheForTests();
+  const appliedOut: unknown[] = [];
+  const decisionsOut: EdgeRolloutDecision[] = [];
+  await maybeEnforceEdgeDefaultsInRuntime({
+    platform: 'android',
+    rcEnforce: false,
+    apply: (value) => {
+      appliedOut.push(value);
+    },
+    rollout: {
+      deviceId: 'device-percent-out',
+      rc: {
+        'edge.rollout.enabled': true,
+        'edge.rollout.percent': 0,
+        'edge.rollout.kill': false,
+      },
+      onEvaluated: (decision) => {
+        decisionsOut.push(decision);
+      },
+    },
+  });
+  assert.equal(appliedOut.length, 0);
+  assert.equal(decisionsOut.length, 1);
+  assert.equal(decisionsOut[0].enforced, false);
+});
+
+test('maybeEnforceEdgeDefaultsInRuntime honours kill switch even when enforcement forced', async () => {
+  __resetEdgeDefaultsCacheForTests();
+  const applied: unknown[] = [];
+  const states: EdgeRolloutDecision[] = [];
+  await maybeEnforceEdgeDefaultsInRuntime({
+    platform: 'ios',
+    rcEnforce: true,
+    apply: (value) => {
+      applied.push(value);
+    },
+    rollout: {
+      deviceId: 'device-kill-switch',
+      rc: {
+        'edge.rollout.enabled': true,
+        'edge.rollout.percent': 100,
+        'edge.rollout.kill': true,
+      },
+      onEvaluated: (decision) => {
+        states.push(decision);
+      },
+    },
+  });
+  assert.equal(applied.length, 0);
+  assert.equal(states.length, 1);
+  assert.equal(states[0].enforced, false);
+  assert.equal(states[0].kill, true);
 });

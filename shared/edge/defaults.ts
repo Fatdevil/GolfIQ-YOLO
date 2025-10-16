@@ -1,3 +1,9 @@
+import {
+  evaluateEdgeRollout,
+  type EdgeRolloutDecision,
+  type RcRecord,
+} from "./rollout";
+
 export type Platform = "android" | "ios";
 
 export interface EdgeDefaults {
@@ -24,6 +30,13 @@ type GlobalWithEdgeDefaults = typeof globalThis & {
   EDGE_DEFAULTS_BASE?: string;
   __EDGE_DEFAULTS_STORAGE__?: AsyncStorageLike;
 };
+
+export interface EdgeRuntimeRolloutOptions {
+  deviceId?: string | null;
+  rc?: RcRecord;
+  resolveDeviceId?: () => string | null | Promise<string | null>;
+  onEvaluated?: (decision: EdgeRolloutDecision) => void | Promise<void>;
+}
 
 const CACHE_KEY = "edge.defaults.v1";
 
@@ -328,10 +341,39 @@ export async function maybeEnforceEdgeDefaultsInRuntime(params: {
   platform: Platform;
   rcEnforce: boolean;
   apply: (d: EdgeDefaults) => void;
+  rollout?: EdgeRuntimeRolloutOptions;
 }): Promise<void> {
-  if (!params.rcEnforce) {
+  const rollout = params.rollout;
+  let deviceId = rollout?.deviceId ?? null;
+  if (!deviceId && rollout?.resolveDeviceId) {
+    try {
+      const resolved = await rollout.resolveDeviceId();
+      if (resolved) {
+        deviceId = resolved;
+      }
+    } catch {
+      // ignore resolution errors and fall back to default
+    }
+  }
+
+  const decision = evaluateEdgeRollout({
+    deviceId,
+    rc: rollout?.rc,
+    rcEnforceFlag: params.rcEnforce,
+  });
+
+  if (rollout?.onEvaluated) {
+    try {
+      await rollout.onEvaluated(decision);
+    } catch {
+      // ignore telemetry callback failures
+    }
+  }
+
+  if (!decision.enforced) {
     return;
   }
+
   const defaults = await getCachedEdgeDefaults(params.platform);
   if (defaults) {
     params.apply(defaults);
