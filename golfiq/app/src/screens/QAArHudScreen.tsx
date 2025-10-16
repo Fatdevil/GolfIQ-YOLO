@@ -6,12 +6,14 @@ import React, {
   useState,
 } from 'react';
 import {
+  ActivityIndicator,
   ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
 } from 'react-native';
+import Svg, { Circle, Path } from 'react-native-svg';
 
 import { API_BASE } from '../lib/api';
 
@@ -32,12 +34,69 @@ import {
   ArhudState,
   createArhudStateMachine,
 } from '../../../../shared/arhud/state_machine';
+import {
+  createBundleClient,
+  type Bundle,
+  type BundleFetchInfo,
+  type CourseIndexEntry,
+} from '../../../../shared/arhud/bundle_client';
+import {
+  distancePointToLineString,
+  distancePointToPolygonEdge,
+  toLocalENU,
+  type LatLon,
+  type LineString,
+  type Polygon,
+  type Vec2,
+} from '../../../../shared/arhud/geo';
+import { qaHudEnabled } from '../../../../shared/arhud/native/qa_gate';
 
 const BADGE_COLORS = {
   ok: '#14532d',
   warn: '#7f1d1d',
   neutral: '#1f2937',
 } as const;
+
+const FEATURE_STYLES: Record<
+  string,
+  { fill?: string; stroke: string; opacity?: number; strokeWidth?: number }
+> = {
+  green: { fill: '#14532d', stroke: '#166534', opacity: 0.28 },
+  fairway: { fill: '#0f766e', stroke: '#115e59', opacity: 0.22 },
+  bunker: { fill: '#facc15', stroke: '#d97706', opacity: 0.32 },
+  hazard: { fill: '#f87171', stroke: '#dc2626', opacity: 0.28 },
+  cartpath: { stroke: '#94a3b8', strokeWidth: 2 },
+  water: { fill: '#38bdf8', stroke: '#0ea5e9', opacity: 0.28 },
+};
+
+const HAZARD_TYPES = new Set(['bunker', 'hazard', 'water']);
+const OVERLAY_SIZE = 320;
+const OVERLAY_PADDING = 24;
+const SELECTION_FILENAME = 'bundles/selection.json';
+
+type ProjectedPolygonFeature = {
+  id: string;
+  type: string;
+  polygons: Polygon[];
+};
+
+type ProjectedLineFeature = {
+  id: string;
+  type: string;
+  line: LineString;
+};
+
+type HazardShape =
+  | { type: 'polygon'; geometry: Polygon }
+  | { type: 'line'; geometry: LineString };
+
+type OverlayModel = {
+  origin: LatLon;
+  bounds: { minX: number; maxX: number; minY: number; maxY: number };
+  polygons: ProjectedPolygonFeature[];
+  lines: ProjectedLineFeature[];
+  hazards: HazardShape[];
+};
 
 type BadgeStatus = keyof typeof BADGE_COLORS;
 
@@ -84,6 +143,30 @@ const QAArHudScreen: React.FC = () => {
   const [logs, setLogs] = useState<string[]>([]);
   const [deviceInfo, setDeviceInfo] = useState<DeviceInfo>(INITIAL_DEVICE_INFO);
 
+  const qaEnabled = qaHudEnabled();
+  const fetchInfoRef = useRef<(info: BundleFetchInfo) => void>(() => undefined);
+  const bundleClientRef = useRef(
+    createBundleClient({
+      baseUrl: API_BASE,
+      onFetch: (info) => fetchInfoRef.current(info),
+    }),
+  );
+  const [courses, setCourses] = useState<CourseIndexEntry[]>([]);
+  const [indexLoading, setIndexLoading] = useState(false);
+  const [bundleLoading, setBundleLoading] = useState(false);
+  const [selectedCourseId, setSelectedCourseId] = useState<string | null>(null);
+  const [bundle, setBundle] = useState<Bundle | null>(null);
+  const [bundleMeta, setBundleMeta] = useState<BundleFetchInfo | null>(null);
+  const [indexMeta, setIndexMeta] = useState<BundleFetchInfo | null>(null);
+  const [offline, setOffline] = useState(false);
+  const [overlayZoom, setOverlayZoom] = useState(1);
+  const [nearestHazard, setNearestHazard] = useState<number | null>(null);
+  const [pickerExpanded, setPickerExpanded] = useState(false);
+  const [userLocation, setUserLocation] = useState<LatLon | null>(null);
+  const lastSelectionRef = useRef<string | null>(null);
+  const selectionPathRef = useRef<string | null>(null);
+  const userLocationRef = useRef<LatLon | null>(null);
+
   const headingRawRef = useRef(0);
   const headingSmoothedRef = useRef(0);
   const headingRmsRef = useRef(0);
@@ -97,6 +180,30 @@ const QAArHudScreen: React.FC = () => {
   const hudRunRef = useRef<HudTelemetryEvent[]>([]);
   const hudRunPathRef = useRef<string | null>(null);
   const persistTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    fetchInfoRef.current = (info: BundleFetchInfo) => {
+      if (info.id === 'index') {
+        setIndexMeta(info);
+        if (info.error) {
+          pushLog(`bundle index fallback: ${info.error}`);
+        }
+        return;
+      }
+      if (!selectedCourseId || info.id !== selectedCourseId) {
+        return;
+      }
+      setBundleMeta(info);
+      if (info.error) {
+        setOffline(true);
+        pushLog(`bundle fetch ${info.id} failed: ${info.error}`);
+        return;
+      }
+      if (!info.fromCache) {
+        setOffline(false);
+      }
+    };
+  }, [pushLog, selectedCourseId]);
 
   const pushLog = useCallback((entry: string) => {
     setLogs((prev) => {
@@ -137,6 +244,47 @@ const QAArHudScreen: React.FC = () => {
       cancelled = true;
     };
   }, []);
+
+  useEffect(() => {
+    if (!qaEnabled) {
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const FileSystem = await import('expo-file-system');
+        const base = FileSystem.documentDirectory;
+        if (!base) {
+          return;
+        }
+        const normalizedBase = base.replace(/\/+$/, '');
+        const path = `${normalizedBase}/${SELECTION_FILENAME}`;
+        selectionPathRef.current = path;
+        if (!FileSystem.getInfoAsync || !FileSystem.readAsStringAsync) {
+          return;
+        }
+        const info = await FileSystem.getInfoAsync(path);
+        if (!info.exists || info.isDirectory) {
+          return;
+        }
+        const raw = await FileSystem.readAsStringAsync(path);
+        const parsed = JSON.parse(raw) as { courseId?: string | null } | null;
+        if (!cancelled && parsed?.courseId) {
+          lastSelectionRef.current = parsed.courseId;
+          setSelectedCourseId((prev) => prev ?? parsed.courseId ?? null);
+        }
+      } catch (error) {
+        pushLog(
+          `selection load failed: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+        );
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [qaEnabled, pushLog]);
 
   const persistHudRun = useCallback(async () => {
     try {
@@ -181,6 +329,567 @@ const QAArHudScreen: React.FC = () => {
       camera.stop();
     };
   }, [camera]);
+
+  useEffect(() => {
+    if (!qaEnabled || !selectedCourseId) {
+      return;
+    }
+    if (lastSelectionRef.current === selectedCourseId) {
+      return;
+    }
+    lastSelectionRef.current = selectedCourseId;
+    (async () => {
+      try {
+        const FileSystem = await import('expo-file-system');
+        const base = FileSystem.documentDirectory;
+        if (!base || !FileSystem.writeAsStringAsync) {
+          return;
+        }
+        const normalizedBase = base.replace(/\/+$/, '');
+        const path = `${normalizedBase}/${SELECTION_FILENAME}`;
+        selectionPathRef.current = path;
+        const dir = path.replace(/\/+[^/]*$/, '');
+        if (FileSystem.makeDirectoryAsync) {
+          await FileSystem.makeDirectoryAsync(dir, { intermediates: true });
+        }
+        await FileSystem.writeAsStringAsync(
+          path,
+          JSON.stringify({ courseId: selectedCourseId, updatedAt: Date.now() }),
+        );
+      } catch (error) {
+        pushLog(
+          `selection save failed: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+        );
+      }
+    })();
+  }, [qaEnabled, selectedCourseId, pushLog]);
+
+  useEffect(() => {
+    userLocationRef.current = userLocation;
+  }, [userLocation]);
+
+  useEffect(() => {
+    if (!qaEnabled) {
+      return;
+    }
+    let active = true;
+    let subscription: { remove?: () => void } | null = null;
+    let watchId: number | null = null;
+
+    (async () => {
+      try {
+        const Location = (await import('expo-location')) as Record<string, unknown> & {
+          requestForegroundPermissionsAsync?: () => Promise<{ status: string }>;
+          watchPositionAsync?: (
+            options: Record<string, unknown>,
+            callback: (event: { coords: { latitude: number; longitude: number } }) => void,
+          ) => Promise<{ remove?: () => void }>;
+          getCurrentPositionAsync?: (
+            options?: Record<string, unknown>,
+          ) => Promise<{ coords: { latitude: number; longitude: number } }>;
+          Accuracy?: { High?: unknown };
+        };
+        if (!active) {
+          return;
+        }
+        if (Location.requestForegroundPermissionsAsync) {
+          const permission = await Location.requestForegroundPermissionsAsync();
+          if (!active || permission.status !== 'granted') {
+            return;
+          }
+        }
+        if (Location.watchPositionAsync) {
+          subscription = await Location.watchPositionAsync(
+            {
+              accuracy: Location.Accuracy?.High ?? undefined,
+              distanceInterval: 1,
+            },
+            (event) => {
+              if (!active) {
+                return;
+              }
+              setUserLocation({
+                lat: event.coords.latitude,
+                lon: event.coords.longitude,
+              });
+            },
+          );
+          return;
+        }
+        if (Location.getCurrentPositionAsync) {
+          const current = await Location.getCurrentPositionAsync();
+          if (!active) {
+            return;
+          }
+          setUserLocation({
+            lat: current.coords.latitude,
+            lon: current.coords.longitude,
+          });
+          return;
+        }
+      } catch {
+        if (typeof navigator !== 'undefined' && navigator?.geolocation?.watchPosition) {
+          watchId = navigator.geolocation.watchPosition(
+            (position) => {
+              if (!active) {
+                return;
+              }
+              setUserLocation({
+                lat: position.coords.latitude,
+                lon: position.coords.longitude,
+              });
+            },
+            () => undefined,
+            { enableHighAccuracy: true, distanceFilter: 1 },
+          );
+        }
+      }
+    })();
+
+    return () => {
+      active = false;
+      if (subscription?.remove) {
+        subscription.remove();
+      }
+      if (watchId !== null && typeof navigator !== 'undefined') {
+        navigator.geolocation?.clearWatch?.(watchId);
+      }
+    };
+  }, [qaEnabled]);
+
+  useEffect(() => {
+    if (!qaEnabled || !selectedCourseId) {
+      return;
+    }
+    const entry = courses.find((course) => course.courseId === selectedCourseId);
+    if (!entry) {
+      return;
+    }
+    if (!userLocationRef.current) {
+      const [minLon, minLat, maxLon, maxLat] = entry.bbox;
+      const lat = (minLat + maxLat) / 2;
+      const lon = (minLon + maxLon) / 2;
+      setUserLocation({ lat, lon });
+    }
+  }, [qaEnabled, courses, selectedCourseId]);
+
+  useEffect(() => {
+    if (!qaEnabled) {
+      return;
+    }
+    let cancelled = false;
+    setIndexLoading(true);
+    bundleClientRef.current
+      .getIndex()
+      .then((list) => {
+        if (cancelled) {
+          return;
+        }
+        setCourses(list);
+      })
+      .catch((error) => {
+        if (cancelled) {
+          return;
+        }
+        pushLog(
+          `bundle index error: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+        );
+        setCourses([]);
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setIndexLoading(false);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [qaEnabled, pushLog]);
+
+  useEffect(() => {
+    if (!qaEnabled || !courses.length) {
+      return;
+    }
+    if (selectedCourseId && courses.some((course) => course.courseId === selectedCourseId)) {
+      return;
+    }
+    const preferred = lastSelectionRef.current;
+    if (preferred && courses.some((course) => course.courseId === preferred)) {
+      setSelectedCourseId(preferred);
+      return;
+    }
+    setSelectedCourseId(courses[0]?.courseId ?? null);
+  }, [qaEnabled, courses, selectedCourseId]);
+
+  useEffect(() => {
+    if (!qaEnabled || !selectedCourseId) {
+      setBundle(null);
+      return;
+    }
+    let cancelled = false;
+    setBundleLoading(true);
+    setOffline(false);
+    bundleClientRef.current
+      .getBundle(selectedCourseId)
+      .then((data) => {
+        if (!cancelled) {
+          setBundle(data);
+        }
+      })
+      .catch((error) => {
+        if (!cancelled) {
+          setBundle(null);
+          pushLog(
+            `bundle load failed: ${
+              error instanceof Error ? error.message : String(error)
+            }`,
+          );
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setBundleLoading(false);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [qaEnabled, selectedCourseId, pushLog]);
+
+  const selectedCourse = useMemo(() => {
+    if (!selectedCourseId) {
+      return null;
+    }
+    return courses.find((course) => course.courseId === selectedCourseId) ?? null;
+  }, [courses, selectedCourseId]);
+
+  const selectedCourseName = useMemo(() => {
+    if (selectedCourse) {
+      return selectedCourse.name ?? selectedCourse.courseId;
+    }
+    return selectedCourseId ?? 'Select course';
+  }, [selectedCourse, selectedCourseId]);
+
+  const overlayModel = useMemo<OverlayModel | null>(() => {
+    if (!bundle) {
+      return null;
+    }
+
+    const deriveOrigin = (): LatLon | null => {
+      if (selectedCourse) {
+        const [minLon, minLat, maxLon, maxLat] = selectedCourse.bbox;
+        const lat = (minLat + maxLat) / 2;
+        const lon = (minLon + maxLon) / 2;
+        if (Number.isFinite(lat) && Number.isFinite(lon)) {
+          return { lat, lon };
+        }
+      }
+      for (const feature of bundle.features) {
+        const geometry = feature?.geometry;
+        if (!geometry) {
+          continue;
+        }
+        if (geometry.type === 'LineString') {
+          const line = geometry.coordinates as unknown[];
+          for (const coord of line) {
+            if (Array.isArray(coord) && coord.length >= 2) {
+              const [lon, lat] = coord as [number, number];
+              if (Number.isFinite(lat) && Number.isFinite(lon)) {
+                return { lat, lon };
+              }
+            }
+          }
+        } else if (geometry.type === 'Polygon') {
+          const rings = geometry.coordinates as unknown[];
+          for (const ring of rings) {
+            if (!Array.isArray(ring)) {
+              continue;
+            }
+            for (const coord of ring as unknown[]) {
+              if (Array.isArray(coord) && coord.length >= 2) {
+                const [lon, lat] = coord as [number, number];
+                if (Number.isFinite(lat) && Number.isFinite(lon)) {
+                  return { lat, lon };
+                }
+              }
+            }
+          }
+        } else if (geometry.type === 'MultiPolygon') {
+          const polygons = geometry.coordinates as unknown[];
+          for (const polygon of polygons) {
+            if (!Array.isArray(polygon)) {
+              continue;
+            }
+            for (const ring of polygon as unknown[]) {
+              if (!Array.isArray(ring)) {
+                continue;
+              }
+              for (const coord of ring as unknown[]) {
+                if (Array.isArray(coord) && coord.length >= 2) {
+                  const [lon, lat] = coord as [number, number];
+                  if (Number.isFinite(lat) && Number.isFinite(lon)) {
+                    return { lat, lon };
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+      return null;
+    };
+
+    const origin = deriveOrigin();
+    if (!origin) {
+      return null;
+    }
+
+    const polygons: ProjectedPolygonFeature[] = [];
+    const lines: ProjectedLineFeature[] = [];
+    const hazards: HazardShape[] = [];
+
+    let minX = Number.POSITIVE_INFINITY;
+    let maxX = Number.NEGATIVE_INFINITY;
+    let minY = Number.POSITIVE_INFINITY;
+    let maxY = Number.NEGATIVE_INFINITY;
+
+    const updateBounds = (point: Vec2) => {
+      if (point.x < minX) {
+        minX = point.x;
+      }
+      if (point.x > maxX) {
+        maxX = point.x;
+      }
+      if (point.y < minY) {
+        minY = point.y;
+      }
+      if (point.y > maxY) {
+        maxY = point.y;
+      }
+    };
+
+    const projectPoint = (coord: unknown): Vec2 | null => {
+      if (!Array.isArray(coord) || coord.length < 2) {
+        return null;
+      }
+      const [lon, lat] = coord as [number, number];
+      if (!Number.isFinite(lat) || !Number.isFinite(lon)) {
+        return null;
+      }
+      const projected = toLocalENU(origin, { lat, lon });
+      updateBounds(projected);
+      return projected;
+    };
+
+    const pushPolygon = (id: string, type: string, groups: Vec2[][][]) => {
+      if (!groups.length) {
+        return;
+      }
+      const poly: Polygon[] = groups.map((rings) => rings.map((ring) => [...ring]) as LineString[]) as Polygon[];
+      polygons.push({ id, type, polygons: poly });
+      if (HAZARD_TYPES.has(type)) {
+        for (const rings of poly) {
+          hazards.push({ type: 'polygon', geometry: rings });
+        }
+      }
+    };
+
+    const pushLine = (id: string, type: string, points: Vec2[]) => {
+      if (!points.length) {
+        return;
+      }
+      const line = points as LineString;
+      lines.push({ id, type, line });
+      if (HAZARD_TYPES.has(type)) {
+        hazards.push({ type: 'line', geometry: line });
+      }
+    };
+
+    for (const feature of bundle.features) {
+      const geometry = feature?.geometry;
+      if (!geometry) {
+        continue;
+      }
+      if (geometry.type === 'LineString') {
+        const coords = geometry.coordinates as unknown[];
+        const points: Vec2[] = [];
+        for (const coord of coords) {
+          const projected = projectPoint(coord);
+          if (projected) {
+            points.push(projected);
+          }
+        }
+        pushLine(feature.id, feature.type, points);
+      } else if (geometry.type === 'Polygon') {
+        const rings = geometry.coordinates as unknown[];
+        const projectedGroups: Vec2[][][] = [];
+        const projectedRings: Vec2[][] = [];
+        for (const ring of rings) {
+          if (!Array.isArray(ring)) {
+            continue;
+          }
+          const projectedRing: Vec2[] = [];
+          for (const coord of ring as unknown[]) {
+            const projected = projectPoint(coord);
+            if (projected) {
+              projectedRing.push(projected);
+            }
+          }
+          if (projectedRing.length) {
+            projectedRings.push(projectedRing);
+          }
+        }
+        if (projectedRings.length) {
+          projectedGroups.push(projectedRings);
+        }
+        pushPolygon(feature.id, feature.type, projectedGroups);
+      } else if (geometry.type === 'MultiPolygon') {
+        const polygonsRaw = geometry.coordinates as unknown[];
+        const groups: Vec2[][][] = [];
+        for (const polygon of polygonsRaw) {
+          if (!Array.isArray(polygon)) {
+            continue;
+          }
+          const rings: Vec2[][] = [];
+          for (const ring of polygon as unknown[]) {
+            if (!Array.isArray(ring)) {
+              continue;
+            }
+            const projectedRing: Vec2[] = [];
+            for (const coord of ring as unknown[]) {
+              const projected = projectPoint(coord);
+              if (projected) {
+                projectedRing.push(projected);
+              }
+            }
+            if (projectedRing.length) {
+              rings.push(projectedRing);
+            }
+          }
+          if (rings.length) {
+            groups.push(rings);
+          }
+        }
+        pushPolygon(feature.id, feature.type, groups);
+      }
+    }
+
+    if (!Number.isFinite(minX) || !Number.isFinite(maxX) || !Number.isFinite(minY) || !Number.isFinite(maxY)) {
+      minX = -25;
+      maxX = 25;
+      minY = -25;
+      maxY = 25;
+    }
+
+    return {
+      origin,
+      bounds: { minX, maxX, minY, maxY },
+      polygons,
+      lines,
+      hazards,
+    };
+  }, [bundle, selectedCourse]);
+
+  const userLocal = useMemo<Vec2 | null>(() => {
+    if (!overlayModel || !userLocation) {
+      return null;
+    }
+    return toLocalENU(overlayModel.origin, userLocation);
+  }, [overlayModel, userLocation]);
+
+  const overlayView = useMemo(() => {
+    if (!overlayModel) {
+      return null;
+    }
+    const { bounds, polygons, lines } = overlayModel;
+    const spanX = Math.max(bounds.maxX - bounds.minX, 1);
+    const spanY = Math.max(bounds.maxY - bounds.minY, 1);
+    const available = OVERLAY_SIZE - OVERLAY_PADDING * 2;
+    const baseScale = Math.min(available / spanX, available / spanY);
+    const scale = baseScale * overlayZoom;
+    const centerX = (bounds.minX + bounds.maxX) / 2;
+    const centerY = (bounds.minY + bounds.maxY) / 2;
+
+    const project = (point: Vec2) => ({
+      x: OVERLAY_SIZE / 2 + (point.x - centerX) * scale,
+      y: OVERLAY_SIZE / 2 - (point.y - centerY) * scale,
+    });
+
+    const polygonPaths = polygons.map((polygon) => {
+      const paths = polygon.polygons.map((rings) => {
+        const commands: string[] = [];
+        for (const ring of rings) {
+          if (!ring.length) {
+            continue;
+          }
+          const projectedRing = ring.map(project);
+          const [first, ...rest] = projectedRing;
+          commands.push(`M ${first.x.toFixed(1)} ${first.y.toFixed(1)}`);
+          for (const point of rest) {
+            commands.push(`L ${point.x.toFixed(1)} ${point.y.toFixed(1)}`);
+          }
+          commands.push('Z');
+        }
+        return commands.join(' ');
+      });
+      return { id: polygon.id, type: polygon.type, paths };
+    });
+
+    const linePaths = lines.map((line) => {
+      if (!line.line.length) {
+        return { id: line.id, type: line.type, path: '' };
+      }
+      const projectedPoints = line.line.map(project);
+      const [first, ...rest] = projectedPoints;
+      const commands = [`M ${first.x.toFixed(1)} ${first.y.toFixed(1)}`];
+      for (const point of rest) {
+        commands.push(`L ${point.x.toFixed(1)} ${point.y.toFixed(1)}`);
+      }
+      return { id: line.id, type: line.type, path: commands.join(' ') };
+    });
+
+    const userPoint = userLocal ? project(userLocal) : null;
+    const headingRad = ((headingSmoothed % 360) * Math.PI) / 180;
+    const arrow = userPoint
+      ? {
+          x1: userPoint.x,
+          y1: userPoint.y,
+          x2: userPoint.x + Math.sin(headingRad) * 28,
+          y2: userPoint.y - Math.cos(headingRad) * 28,
+        }
+      : null;
+
+    return { polygonPaths, linePaths, userPoint, arrow };
+  }, [overlayModel, overlayZoom, userLocal, headingSmoothed]);
+
+  useEffect(() => {
+    if (!overlayModel || !userLocal) {
+      setNearestHazard(null);
+      return;
+    }
+    const compute = () => {
+      let min = Number.POSITIVE_INFINITY;
+      for (const hazard of overlayModel.hazards) {
+        const distance =
+          hazard.type === 'line'
+            ? distancePointToLineString(userLocal, hazard.geometry)
+            : distancePointToPolygonEdge(userLocal, hazard.geometry);
+        if (distance < min) {
+          min = distance;
+        }
+      }
+      setNearestHazard(Number.isFinite(min) ? min : null);
+    };
+    compute();
+    const timer = setInterval(compute, 200);
+    return () => {
+      clearInterval(timer);
+    };
+  }, [overlayModel, userLocal]);
 
   const recordTelemetry = useCallback(
     (event: string, data: Record<string, unknown>) => {
@@ -529,6 +1238,178 @@ const QAArHudScreen: React.FC = () => {
           Heading smooth: {formatNumber(headingSmoothed, 1)}°
         </Text>
       </View>
+      {qaEnabled ? (
+        <View style={styles.overlaySection}>
+          <View style={styles.overlayHeader}>
+            <Text style={styles.sectionTitle}>On-course overlay</Text>
+            {offline ? <Text style={styles.offlineBadge}>Offline</Text> : null}
+          </View>
+          <View style={styles.pickerRow}>
+            <TouchableOpacity
+              style={styles.pickerButton}
+              onPress={() => setPickerExpanded((prev) => !prev)}
+            >
+              <Text style={styles.pickerButtonLabel}>{selectedCourseName}</Text>
+              <Text style={styles.pickerButtonHint}>
+                {courses.length ? `${courses.length} course(s)` : 'Tap to load courses'}
+              </Text>
+            </TouchableOpacity>
+            {indexLoading ? (
+              <ActivityIndicator size="small" color="#2563eb" />
+            ) : null}
+          </View>
+          {pickerExpanded ? (
+            <View style={styles.pickerDropdown}>
+              {courses.map((course) => {
+                const active = course.courseId === selectedCourseId;
+                return (
+                  <TouchableOpacity
+                    key={course.courseId}
+                    style={[styles.pickerItem, active && styles.pickerItemActive]}
+                    onPress={() => {
+                      setSelectedCourseId(course.courseId);
+                      setPickerExpanded(false);
+                    }}
+                  >
+                    <Text style={styles.pickerItemLabel}>
+                      {course.name ?? course.courseId}
+                    </Text>
+                    <Text style={styles.pickerItemMeta}>
+                      Updated {new Date(course.updatedAt).toLocaleDateString()}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          ) : null}
+          <View style={styles.overlayCanvasWrapper}>
+            {overlayView ? (
+              <Svg
+                width={OVERLAY_SIZE}
+                height={OVERLAY_SIZE}
+                style={styles.overlaySvg}
+              >
+                {overlayView.polygonPaths.map((polygon) => {
+                  const style = FEATURE_STYLES[polygon.type] ?? {
+                    fill: '#6b7280',
+                    stroke: '#4b5563',
+                    opacity: 0.18,
+                  };
+                  return polygon.paths.map((path, index) => (
+                    <Path
+                      key={`${polygon.id}-${index}`}
+                      d={path}
+                      fill={style.fill ?? 'none'}
+                      fillOpacity={style.opacity ?? (style.fill ? 0.24 : 0)}
+                      stroke={style.stroke}
+                      strokeWidth={style.strokeWidth ?? 1.4}
+                    />
+                  ));
+                })}
+                {overlayView.linePaths.map((line) => {
+                  if (!line.path) {
+                    return null;
+                  }
+                  const style = FEATURE_STYLES[line.type] ?? {
+                    stroke: '#4b5563',
+                    strokeWidth: 1.8,
+                  };
+                  return (
+                    <Path
+                      key={line.id}
+                      d={line.path}
+                      stroke={style.stroke}
+                      strokeWidth={style.strokeWidth ?? 1.8}
+                      strokeLinecap="round"
+                      fill="none"
+                    />
+                  );
+                })}
+                {overlayView.userPoint ? (
+                  <>
+                    <Circle
+                      cx={overlayView.userPoint.x}
+                      cy={overlayView.userPoint.y}
+                      r={7}
+                      fill="#1d4ed8"
+                      opacity={0.9}
+                    />
+                    <Circle
+                      cx={overlayView.userPoint.x}
+                      cy={overlayView.userPoint.y}
+                      r={11}
+                      stroke="#bfdbfe"
+                      strokeWidth={1.2}
+                      fill="none"
+                      opacity={0.7}
+                    />
+                  </>
+                ) : null}
+                {overlayView.arrow ? (
+                  <Path
+                    d={`M ${overlayView.arrow.x1.toFixed(1)} ${overlayView.arrow.y1.toFixed(1)} L ${overlayView.arrow.x2.toFixed(1)} ${overlayView.arrow.y2.toFixed(1)}`}
+                    stroke="#3b82f6"
+                    strokeWidth={2.4}
+                    strokeLinecap="round"
+                  />
+                ) : null}
+              </Svg>
+            ) : (
+              <View style={styles.overlayPlaceholder}>
+                {bundleLoading ? (
+                  <ActivityIndicator color="#e5e7eb" />
+                ) : null}
+                <Text style={styles.overlayPlaceholderText}>
+                  {bundleLoading
+                    ? 'Loading bundle…'
+                    : 'Pick a course to preview its bundle'}
+                </Text>
+              </View>
+            )}
+          </View>
+          <View style={styles.zoomRow}>
+            <TouchableOpacity
+              style={styles.zoomButton}
+              onPress={() => setOverlayZoom((value) => Math.max(0.4, Number((value - 0.2).toFixed(1))))}
+            >
+              <Text style={styles.zoomButtonLabel}>−</Text>
+            </TouchableOpacity>
+            <Text style={styles.zoomLabel}>{overlayZoom.toFixed(1)}×</Text>
+            <TouchableOpacity
+              style={styles.zoomButton}
+              onPress={() => setOverlayZoom((value) => Math.min(3, Number((value + 0.2).toFixed(1))))}
+            >
+              <Text style={styles.zoomButtonLabel}>+</Text>
+            </TouchableOpacity>
+          </View>
+          <View style={styles.distanceRow}>
+            <View style={styles.distanceCard}>
+              <Text style={styles.distanceLabel}>Nearest hazard</Text>
+              <Text style={styles.distanceValue}>
+                {nearestHazard === null
+                  ? '–'
+                  : `${formatNumber(Math.max(0, nearestHazard), 1)} m`}
+              </Text>
+            </View>
+            {bundleMeta ? (
+              <View style={styles.distanceCard}>
+                <Text style={styles.distanceLabel}>Bundle source</Text>
+                <Text style={styles.distanceValue}>
+                  {bundleMeta.fromCache ? 'Cache' : 'Network'}
+                </Text>
+                <Text style={styles.distanceMeta}>
+                  {bundleMeta.etag ? `ETag ${bundleMeta.etag}` : 'No ETag'}
+                </Text>
+              </View>
+            ) : null}
+          </View>
+          {indexMeta?.timestamp ? (
+            <Text style={styles.overlayFootnote}>
+              Index refreshed {new Date(indexMeta.timestamp).toLocaleTimeString()}
+            </Text>
+          ) : null}
+        </View>
+      ) : null}
       <View style={styles.buttonsRow}>
         <TouchableOpacity
           style={[
@@ -624,6 +1505,101 @@ const styles = StyleSheet.create({
   badgeValue: { color: '#f9fafb', fontSize: 18, fontWeight: '700' },
   headingBlock: { backgroundColor: '#f3f4f6', padding: 12, borderRadius: 8 },
   headingText: { fontSize: 14, color: '#111827' },
+  overlaySection: {
+    backgroundColor: '#111827',
+    padding: 16,
+    borderRadius: 12,
+    gap: 12,
+  },
+  overlayHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  sectionTitle: { color: '#f9fafb', fontSize: 16, fontWeight: '700' },
+  offlineBadge: {
+    backgroundColor: '#78350f',
+    color: '#fef08a',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 999,
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  pickerRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  pickerButton: {
+    flex: 1,
+    backgroundColor: '#1f2937',
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    gap: 4,
+  },
+  pickerButtonLabel: { color: '#f9fafb', fontWeight: '600', fontSize: 14 },
+  pickerButtonHint: { color: '#9ca3af', fontSize: 12 },
+  pickerDropdown: {
+    backgroundColor: '#0f172a',
+    borderRadius: 10,
+    overflow: 'hidden',
+  },
+  pickerItem: {
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: '#1f2937',
+  },
+  pickerItemActive: { backgroundColor: '#1e3a8a' },
+  pickerItemLabel: { color: '#f9fafb', fontWeight: '600', fontSize: 14 },
+  pickerItemMeta: { color: '#cbd5f5', fontSize: 11, marginTop: 2 },
+  overlayCanvasWrapper: {
+    backgroundColor: '#0f172a',
+    borderRadius: 12,
+    padding: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  overlaySvg: { borderRadius: 12 },
+  overlayPlaceholder: {
+    width: OVERLAY_SIZE,
+    height: OVERLAY_SIZE,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  overlayPlaceholderText: { color: '#94a3b8', fontSize: 12 },
+  zoomRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 16,
+  },
+  zoomButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#1f2937',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  zoomButtonLabel: { color: '#f9fafb', fontSize: 18, fontWeight: '700' },
+  zoomLabel: { color: '#d1d5db', fontWeight: '600' },
+  distanceRow: { flexDirection: 'row', gap: 12 },
+  distanceCard: {
+    flex: 1,
+    backgroundColor: '#1f2937',
+    borderRadius: 10,
+    padding: 12,
+    gap: 4,
+  },
+  distanceLabel: {
+    color: '#94a3b8',
+    fontSize: 12,
+    textTransform: 'uppercase',
+    letterSpacing: 0.4,
+  },
+  distanceValue: { color: '#f9fafb', fontSize: 20, fontWeight: '700' },
+  distanceMeta: { color: '#cbd5f5', fontSize: 11 },
+  overlayFootnote: { color: '#9ca3af', fontSize: 12, textAlign: 'right' },
   buttonsRow: { flexDirection: 'row', gap: 12 },
   button: { flex: 1, paddingVertical: 12, borderRadius: 8, alignItems: 'center' },
   startButton: { backgroundColor: '#1e3a8a' },
