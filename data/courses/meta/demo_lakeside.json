@@ -1,15 +1,1 @@
-{
-  "approx": {
-    "bunkers": 1,
-    "cartpaths": 1,
-    "fairways": 1,
-    "greens": 1,
-    "tees": 1
-  },
-  "areaSqM": 16200.0,
-  "bbox": [-93.211200, 44.982700, -93.210200, 44.983700],
-  "courseId": "demo_lakeside",
-  "featureCount": 5,
-  "name": "Demo Lakeside",
-  "updatedAt": "2025-02-01T00:15:00Z"
-}
+{"courseId":"demo_lakeside","bbox":[18.06145,59.33088,18.06275,59.33215],"updatedAt":"2025-10-16T20:55:04Z","approx":{"greens":1,"bunkers":1,"fairways":1,"hazards":1}}
