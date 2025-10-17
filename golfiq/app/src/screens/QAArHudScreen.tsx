@@ -7,6 +7,7 @@ import React, {
 } from 'react';
 import {
   ActivityIndicator,
+  Platform,
   ScrollView,
   StyleSheet,
   Text,
@@ -50,6 +51,16 @@ import {
   type Vec2,
 } from '../../../../shared/arhud/geo';
 import { qaHudEnabled } from '../../../../shared/arhud/native/qa_gate';
+import {
+  maybeEnforceEdgeDefaultsInRuntime,
+  type EdgeDefaults,
+} from '../../../../shared/edge/defaults';
+import {
+  inRollout,
+  readEdgeRolloutConfig,
+  type EdgeRolloutTelemetry,
+  type RcRecord,
+} from '../../../../shared/edge/rollout';
 
 const BADGE_COLORS = {
   ok: '#14532d',
@@ -118,6 +129,78 @@ type HudTelemetryEvent = {
   data: Record<string, unknown>;
 };
 
+type GlobalWithRc = typeof globalThis & { RC?: RcRecord };
+
+function getGlobalRc(): RcRecord {
+  if (typeof globalThis === 'undefined') {
+    return undefined;
+  }
+  const holder = globalThis as GlobalWithRc;
+  return holder.RC;
+}
+
+function readRcBoolean(rc: RcRecord, key: string): boolean {
+  if (!rc || typeof rc !== 'object') {
+    return false;
+  }
+  const value = (rc as Record<string, unknown>)[key];
+  if (typeof value === 'boolean') {
+    return value;
+  }
+  if (typeof value === 'number') {
+    return value !== 0;
+  }
+  if (typeof value === 'string') {
+    const token = value.trim().toLowerCase();
+    return token === '1' || token === 'true' || token === 'yes' || token === 'on';
+  }
+  return false;
+}
+
+async function resolveDeviceId(): Promise<string> {
+  try {
+    const Application = (await import('expo-application')) as Record<string, unknown> & {
+      androidId?: string | null;
+      getIosIdForVendorAsync?: () => Promise<string | null | undefined>;
+    };
+    if (Application && typeof Application === 'object') {
+      const androidId = typeof Application.androidId === 'string' ? Application.androidId.trim() : '';
+      if (androidId) {
+        return `android-${androidId}`;
+      }
+      if (typeof Application.getIosIdForVendorAsync === 'function') {
+        const iosId = await Application.getIosIdForVendorAsync();
+        if (iosId && typeof iosId === 'string' && iosId.trim()) {
+          return `ios-${iosId.trim()}`;
+        }
+      }
+    }
+  } catch (error) {
+    // ignore missing module or runtime errors
+  }
+  try {
+    const { default: Constants } = (await import('expo-constants')) as Record<string, unknown> & {
+      installationId?: string | null;
+      deviceId?: string | null;
+    };
+    if (Constants && typeof Constants === 'object') {
+      const installationId = typeof Constants.installationId === 'string'
+        ? Constants.installationId.trim()
+        : '';
+      if (installationId) {
+        return installationId;
+      }
+      const deviceId = typeof Constants.deviceId === 'string' ? Constants.deviceId.trim() : '';
+      if (deviceId) {
+        return deviceId;
+      }
+    }
+  } catch (error) {
+    // ignore
+  }
+  return 'unknown-device';
+}
+
 const QAArHudScreen: React.FC = () => {
   const machineRef = useRef(createArhudStateMachine());
   const smootherRef = useRef(createHeadingSmoother());
@@ -142,6 +225,11 @@ const QAArHudScreen: React.FC = () => {
   const [lastRecenterMs, setLastRecenterMs] = useState<number | null>(null);
   const [logs, setLogs] = useState<string[]>([]);
   const [deviceInfo, setDeviceInfo] = useState<DeviceInfo>(INITIAL_DEVICE_INFO);
+  const [rolloutTelemetry, setRolloutTelemetry] = useState<EdgeRolloutTelemetry>({
+    enforced: false,
+    percent: 0,
+    kill: false,
+  });
 
   const qaEnabled = qaHudEnabled();
   const fetchInfoRef = useRef<(info: BundleFetchInfo) => void>(() => undefined);
@@ -285,6 +373,81 @@ const QAArHudScreen: React.FC = () => {
       cancelled = true;
     };
   }, [qaEnabled, pushLog]);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const rc = getGlobalRc();
+      const rolloutConfig = readEdgeRolloutConfig(rc);
+      const rcEnforceLegacy = readRcBoolean(rc, 'edge.defaults.enforce');
+      let deviceId = 'unknown-device';
+      try {
+        deviceId = await resolveDeviceId();
+      } catch (error) {
+        if (!cancelled) {
+          pushLog(
+            `device id unavailable: ${
+              error instanceof Error ? error.message : String(error)
+            }`,
+          );
+        }
+      }
+      const targetPercent = rolloutConfig.percent;
+      const inCohort = rolloutConfig.enabled && inRollout(deviceId, targetPercent);
+      const enforce = !rolloutConfig.kill && (rcEnforceLegacy || inCohort);
+      if (!cancelled) {
+        setRolloutTelemetry({
+          enforced: enforce,
+          percent: targetPercent,
+          kill: rolloutConfig.kill,
+        });
+        pushLog(
+          enforce
+            ? `edge defaults rollout: enforcing (${targetPercent}% target)`
+            : `edge defaults rollout: control (${targetPercent}% target)`,
+        );
+      }
+      try {
+        await maybeEnforceEdgeDefaultsInRuntime({
+          platform: Platform.OS === 'ios' ? 'ios' : 'android',
+          rcEnforce: enforce,
+          apply: (defaults: EdgeDefaults) => {
+            if (cancelled) {
+              return;
+            }
+            pushLog(
+              `edge defaults applied: ${defaults.runtime}/${defaults.inputSize}/${defaults.quant}`,
+            );
+          },
+          rollout: {
+            deviceId,
+            rc,
+            onEvaluated: (decision) => {
+              if (cancelled) {
+                return;
+              }
+              setRolloutTelemetry({
+                enforced: decision.enforced,
+                percent: decision.percent,
+                kill: decision.kill,
+              });
+            },
+          },
+        });
+      } catch (error) {
+        if (!cancelled) {
+          pushLog(
+            `edge defaults error: ${
+              error instanceof Error ? error.message : String(error)
+            }`,
+          );
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [pushLog]);
 
   const persistHudRun = useCallback(async () => {
     try {
@@ -1002,6 +1165,7 @@ const QAArHudScreen: React.FC = () => {
       device: deviceInfo.device,
       os: deviceInfo.os,
       appVersion: deviceInfo.appVersion,
+      rollout: rolloutTelemetry,
     });
     try {
       await camera.start(handleFrame);
@@ -1022,6 +1186,7 @@ const QAArHudScreen: React.FC = () => {
     persistHudRun,
     pushLog,
     recordTelemetry,
+    rolloutTelemetry,
   ]);
 
   const stopSession = useCallback(() => {
