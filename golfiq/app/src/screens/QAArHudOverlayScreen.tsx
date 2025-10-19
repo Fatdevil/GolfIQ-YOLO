@@ -23,9 +23,9 @@ import {
   type CourseBundle,
 } from '../../../../shared/arhud/bundle_client';
 import {
-  distancePointToLineString,
-  distancePointToPolygonEdge,
+  nearestFeature,
   toLocalENU,
+  type GeoPoint,
   type LocalPoint,
 } from '../../../../shared/arhud/geo';
 import { createCameraStub, type CameraFrame } from '../../../../shared/arhud/native/camera_stub';
@@ -82,9 +82,22 @@ const FEATURE_STROKES: Record<FeatureKind, number> = {
   other: 3,
 };
 
-const HAZARD_KINDS: readonly FeatureKind[] = ['bunker', 'hazard'];
+const EARTH_RADIUS_M = 6_378_137;
+
+type TelemetryEmitter = (event: string, data: Record<string, unknown>) => void;
+
+type HazardDirection = 'LEFT' | 'RIGHT';
 
 let lastSelectedCourseMemory: string | null = null;
+
+function resolveTelemetryEmitter(): TelemetryEmitter | null {
+  if (typeof globalThis === 'undefined') {
+    return null;
+  }
+  const holder = globalThis as { __ARHUD_QA_TELEMETRY__?: unknown };
+  const candidate = holder.__ARHUD_QA_TELEMETRY__;
+  return typeof candidate === 'function' ? (candidate as TelemetryEmitter) : null;
+}
 
 async function loadFileSystem(): Promise<OptionalFileSystemModule | null> {
   try {
@@ -162,6 +175,21 @@ function normalizeFeatureKind(value: unknown): FeatureKind {
     return 'cartpath';
   }
   return 'other';
+}
+
+function fromLocalPoint(origin: { lat: number; lon: number }, point: LocalPoint): GeoPoint {
+  const lat0 = Number.isFinite(origin.lat) ? origin.lat : 0;
+  const lon0 = Number.isFinite(origin.lon) ? origin.lon : 0;
+  const latRad = (lat0 * Math.PI) / 180;
+  const lat = lat0 + ((point.y / EARTH_RADIUS_M) * 180) / Math.PI;
+  const denom = Math.cos(latRad) || 1;
+  const lon = lon0 + ((point.x / (EARTH_RADIUS_M * denom)) * 180) / Math.PI;
+  return { lat, lon };
+}
+
+function directionFromBearing(bearing: number, heading: number): HazardDirection {
+  const delta = ((bearing - heading + 540) % 360) - 180;
+  return delta < 0 ? 'LEFT' : 'RIGHT';
 }
 
 function toLocalPoint(origin: { lat: number; lon: number }, coord: [number, number]): LocalPoint {
@@ -375,10 +403,10 @@ type MapOverlayProps = {
   player: LocalPoint;
   heading: number;
   offline: boolean;
-  nearestHazard: number | null;
+  hazard: { distance: number; direction: HazardDirection } | null;
 };
 
-const MapOverlay: React.FC<MapOverlayProps> = ({ data, player, heading, offline, nearestHazard }) => {
+const MapOverlay: React.FC<MapOverlayProps> = ({ data, player, heading, offline, hazard }) => {
   const { width } = useWindowDimensions();
   const size = Math.min(width - 32, 340);
   const padding = 20;
@@ -488,7 +516,7 @@ const MapOverlay: React.FC<MapOverlayProps> = ({ data, player, heading, offline,
       <View style={styles.hazardBadge}>
         <Text style={styles.hazardLabel}>Nearest hazard</Text>
         <Text style={styles.hazardValue}>
-          {nearestHazard !== null ? `${nearestHazard.toFixed(1)} m` : '—'}
+          {hazard ? `${hazard.distance.toFixed(1)} m ${hazard.direction}` : '—'}
         </Text>
       </View>
     </View>
@@ -560,23 +588,59 @@ const QAArHudOverlayScreen: React.FC = () => {
   const [offline, setOffline] = useState(false);
   const [playerPosition, setPlayerPosition] = useState<LocalPoint>({ x: 0, y: 0 });
   const [heading, setHeading] = useState(0);
-  const [nearestHazard, setNearestHazard] = useState<number | null>(null);
-  const overlayData = useMemo(
-    () => buildOverlayData(bundle, courses.find((c) => c.courseId === selectedCourseId) ?? null),
-    [bundle, courses, selectedCourseId],
+  const [pin, setPin] = useState<GeoPoint | null>(null);
+  const [pinMetrics, setPinMetrics] = useState<{ distance: number; bearing: number } | null>(null);
+  const [hazardInfo, setHazardInfo] = useState<{ id: string; type: string; dist_m: number; bearing: number } | null>(null);
+  const selectedCourse = useMemo(
+    () => courses.find((c) => c.courseId === selectedCourseId) ?? null,
+    [courses, selectedCourseId],
   );
-  const playerRef = useRef(playerPosition);
-  const featuresRef = useRef(overlayData.features);
+  const overlayData = useMemo(() => buildOverlayData(bundle, selectedCourse), [bundle, selectedCourse]);
+  const overlayOrigin = useMemo(
+    () => (bundle ? deriveOrigin(bundle, selectedCourse) : null),
+    [bundle, selectedCourse],
+  );
+  const playerLatLon = useMemo(
+    () => (overlayOrigin ? fromLocalPoint(overlayOrigin, playerPosition) : null),
+    [overlayOrigin, playerPosition],
+  );
   const camera = useMemo(() => createCameraStub({ fps: 15 }), []);
   const [cameraStats, setCameraStats] = useState<CameraStats>({ latency: 0, fps: 0 });
+  const telemetryRef = useRef<TelemetryEmitter | null>(resolveTelemetryEmitter());
+  const bundleRef = useRef<CourseBundle | null>(bundle);
+  const playerGeoRef = useRef<GeoPoint | null>(playerLatLon);
+  const pinRef = useRef<GeoPoint | null>(pin);
 
   useEffect(() => {
-    playerRef.current = playerPosition;
-  }, [playerPosition]);
+    telemetryRef.current = resolveTelemetryEmitter();
+  }, [qaEnabled]);
 
   useEffect(() => {
-    featuresRef.current = overlayData.features;
-  }, [overlayData.features]);
+    bundleRef.current = bundle;
+  }, [bundle]);
+
+  useEffect(() => {
+    playerGeoRef.current = playerLatLon;
+  }, [playerLatLon]);
+
+  useEffect(() => {
+    pinRef.current = pin;
+  }, [pin]);
+
+  const emitTelemetry = useCallback(
+    (event: string, data: Record<string, unknown>) => {
+      if (!qaEnabled) {
+        return;
+      }
+      const emitter = telemetryRef.current;
+      if (emitter) {
+        emitter(event, data);
+      } else if (typeof console !== 'undefined' && typeof console.log === 'function') {
+        console.log(`[qa-arhud] ${event}`, data);
+      }
+    },
+    [qaEnabled],
+  );
 
   useEffect(() => {
     if (!qaEnabled) {
@@ -731,43 +795,66 @@ const QAArHudOverlayScreen: React.FC = () => {
       return undefined;
     }
     const interval = setInterval(() => {
-      const position = playerRef.current;
-      const features = featuresRef.current;
-      let minDistance: number | null = null;
-      for (const feature of features) {
-        if (!HAZARD_KINDS.includes(feature.kind)) {
-          continue;
-        }
-        if (feature.polygonRings.length) {
-          const candidate = distancePointToPolygonEdge(position, {
-            rings: feature.polygonRings,
-          });
-          if (Number.isFinite(candidate)) {
-            minDistance = minDistance === null ? candidate : Math.min(minDistance, candidate);
-          }
-        }
-        if (feature.segments.length) {
-          const line: LocalPoint[] = [];
-          feature.segments.forEach((segment, idx) => {
-            if (idx === 0) {
-              line.push(segment.start);
-            }
-            line.push(segment.end);
-          });
-          if (line.length >= 2) {
-            const candidate = distancePointToLineString(position, line);
-            if (Number.isFinite(candidate)) {
-              minDistance = minDistance === null ? candidate : Math.min(minDistance, candidate);
-            }
-          }
-        }
+      const bundleCurrent = bundleRef.current;
+      const playerGeo = playerGeoRef.current;
+      if (!bundleCurrent || !playerGeo) {
+        setHazardInfo((prev) => (prev ? null : prev));
+        setPinMetrics((prev) => (prev ? null : prev));
+        return;
       }
-      setNearestHazard(minDistance !== null ? minDistance : null);
+      const hazard = nearestFeature(playerGeo, bundleCurrent);
+      setHazardInfo((prev) => {
+        if (!hazard) {
+          return prev ? null : prev;
+        }
+        if (
+          prev &&
+          prev.id === hazard.id &&
+          prev.type === hazard.type &&
+          Math.abs(prev.dist_m - hazard.dist_m) < 0.01 &&
+          Math.abs(prev.bearing - hazard.bearing) < 0.01
+        ) {
+          return prev;
+        }
+        return hazard;
+      });
+      const pinTarget = pinRef.current;
+      if (pinTarget) {
+        const local = toLocalENU(playerGeo, pinTarget);
+        const distance = Math.hypot(local.x, local.y);
+        const bearing = ((Math.atan2(local.x, local.y) * 180) / Math.PI + 360) % 360;
+        setPinMetrics((prev) => {
+          if (
+            prev &&
+            Math.abs(prev.distance - distance) < 0.01 &&
+            Math.abs(prev.bearing - bearing) < 0.01
+          ) {
+            return prev;
+          }
+          return { distance, bearing };
+        });
+        emitTelemetry('hud.frame', { pinDist: distance });
+      } else {
+        setPinMetrics((prev) => (prev ? null : prev));
+      }
     }, 200);
     return () => {
       clearInterval(interval);
     };
-  }, [qaEnabled]);
+  }, [emitTelemetry, qaEnabled]);
+
+  const hazardCallout = useMemo(() => {
+    if (!hazardInfo) {
+      return null;
+    }
+    return {
+      distance: hazardInfo.dist_m,
+      direction: directionFromBearing(hazardInfo.bearing, heading),
+      id: hazardInfo.id,
+      type: hazardInfo.type,
+      bearing: hazardInfo.bearing,
+    };
+  }, [hazardInfo, heading]);
 
   const handleCourseSelect = useCallback(
     (courseId: string) => {
@@ -793,6 +880,27 @@ const QAArHudOverlayScreen: React.FC = () => {
       }
     })();
   }, [qaEnabled]);
+
+  const handleSetPin = useCallback(() => {
+    const current = playerGeoRef.current;
+    if (!current) {
+      return;
+    }
+    const payload = { ...current };
+    setPin(payload);
+    pinRef.current = payload;
+    emitTelemetry('hud.pin.set', { lat: current.lat, lon: current.lon });
+  }, [emitTelemetry]);
+
+  const handleClearPin = useCallback(() => {
+    if (!pinRef.current) {
+      return;
+    }
+    setPin(null);
+    pinRef.current = null;
+    setPinMetrics(null);
+    emitTelemetry('hud.pin.clear', {});
+  }, [emitTelemetry]);
 
   if (!qaEnabled) {
     return null;
@@ -820,12 +928,46 @@ const QAArHudOverlayScreen: React.FC = () => {
             player={playerPosition}
             heading={heading}
             offline={offline}
-            nearestHazard={nearestHazard}
+            hazard={hazardCallout ? { distance: hazardCallout.distance, direction: hazardCallout.direction } : null}
           />
         </View>
       </View>
       <View style={styles.statusPanel}>
-        <Text style={styles.sectionTitle}>Bundle</Text>
+        <Text style={styles.sectionTitle}>Pin tools</Text>
+        <View style={styles.pinControlsRow}>
+          <TouchableOpacity
+            onPress={handleSetPin}
+            disabled={!playerLatLon}
+            style={[styles.pinButton, styles.pinButtonPrimary, !playerLatLon ? styles.pinButtonDisabled : null]}
+          >
+            <Text style={styles.pinButtonText}>Set Pin</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            onPress={handleClearPin}
+            disabled={!pin}
+            style={[styles.pinButton, !pin ? styles.pinButtonDisabled : null]}
+          >
+            <Text style={styles.pinButtonText}>Clear Pin</Text>
+          </TouchableOpacity>
+        </View>
+        <View style={styles.calloutRow}>
+          <View style={styles.calloutCard}>
+            <Text style={styles.calloutLabel}>Pin</Text>
+            <Text style={styles.calloutValue}>
+              {pinMetrics ? `${pinMetrics.distance.toFixed(1)} m @ ${pinMetrics.bearing.toFixed(0)}°` : '—'}
+            </Text>
+          </View>
+          <View style={styles.calloutCard}>
+            <Text style={styles.calloutLabel}>Hazard</Text>
+            <Text style={styles.calloutValue}>
+              {hazardCallout ? `${hazardCallout.distance.toFixed(1)} m ${hazardCallout.direction}` : '—'}
+            </Text>
+            {hazardCallout ? (
+              <Text style={styles.calloutSubtext}>{hazardCallout.type.toUpperCase()}</Text>
+            ) : null}
+          </View>
+        </View>
+        <Text style={[styles.sectionTitle, styles.sectionTitleSpacing]}>Bundle</Text>
         {bundleLoading ? <ActivityIndicator size="small" color="#60a5fa" /> : null}
         {bundleError ? <Text style={styles.errorText}>{bundleError}</Text> : null}
         {bundle && !bundleLoading ? (
@@ -934,6 +1076,60 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     padding: 12,
     gap: 8,
+  },
+  pinControlsRow: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  pinButton: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 10,
+    borderRadius: 10,
+    backgroundColor: '#1f2937',
+  },
+  pinButtonPrimary: {
+    backgroundColor: '#2563eb',
+  },
+  pinButtonDisabled: {
+    opacity: 0.4,
+  },
+  pinButtonText: {
+    color: '#f8fafc',
+    fontWeight: '600',
+  },
+  calloutRow: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  calloutCard: {
+    flex: 1,
+    backgroundColor: '#0b1120',
+    borderRadius: 10,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: '#1f2937',
+    gap: 4,
+  },
+  calloutLabel: {
+    color: '#cbd5f5',
+    fontSize: 10,
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+  },
+  calloutValue: {
+    color: '#f8fafc',
+    fontWeight: '700',
+    fontSize: 14,
+  },
+  calloutSubtext: {
+    color: '#94a3b8',
+    fontSize: 10,
+    textTransform: 'uppercase',
+  },
+  sectionTitleSpacing: {
+    marginTop: 12,
   },
   bundleDetails: {
     gap: 4,
