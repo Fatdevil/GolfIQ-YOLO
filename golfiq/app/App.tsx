@@ -8,6 +8,8 @@ import { QaSummaryProvider } from './src/context/QaSummaryContext';
 import QAArHudScreen from './src/screens/QAArHudScreen';
 import QABenchScreen from './src/screens/QABenchScreen';
 import { qaHudEnabled } from '../../shared/arhud/native/qa_gate';
+import { QALauncher } from './qa/QALauncher';
+import { isQAMode } from './qa/QAGate';
 
 type TabKey = 'cal' | 'rec' | 'cam' | 'qaHud' | 'qaBench';
 
@@ -46,7 +48,7 @@ export default function App(){
     }
   };
 
-  return (
+  const appRoot = (
     <QaSummaryProvider>
       <SafeAreaView style={{flex:1}}>
         <View style={styles.topBar}>
@@ -81,6 +83,12 @@ export default function App(){
       </SafeAreaView>
     </QaSummaryProvider>
   );
+
+  if (isQAMode()) {
+    return <QALauncher>{appRoot}</QALauncher>;
+  }
+
+  return appRoot;
 }
 const styles = StyleSheet.create({
   topBar:{flexDirection:'row', alignItems:'center', justifyContent:'space-between', borderBottomWidth:1, borderColor:'#ddd', paddingHorizontal:8},
