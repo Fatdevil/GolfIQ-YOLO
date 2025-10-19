@@ -31,6 +31,13 @@ import {
 import { createCameraStub, type CameraFrame } from '../../../../shared/arhud/native/camera_stub';
 import { subscribeHeading } from '../../../../shared/arhud/native/heading';
 import { qaHudEnabled } from '../../../../shared/arhud/native/qa_gate';
+import { computePlaysLike, type PlanOut } from '../../../../shared/playslike/aggregate';
+import {
+  CLUB_SEQUENCE,
+  defaultBag,
+  suggestClub,
+  type ClubId,
+} from '../../../../shared/playslike/bag';
 
 type FeatureKind = 'green' | 'fairway' | 'bunker' | 'hazard' | 'cartpath' | 'other';
 
@@ -63,6 +70,13 @@ type OptionalFileSystemModule = {
   readAsStringAsync?: (path: string) => Promise<string>;
   writeAsStringAsync?: (path: string, contents: string) => Promise<void>;
 };
+
+type PlannerInputKey =
+  | 'temperatureC'
+  | 'altitude_m'
+  | 'wind_mps'
+  | 'wind_from_deg'
+  | 'slope_dh_m';
 
 const FEATURE_COLORS: Record<FeatureKind, string> = {
   green: '#16a34a',
@@ -404,9 +418,21 @@ type MapOverlayProps = {
   heading: number;
   offline: boolean;
   hazard: { distance: number; direction: HazardDirection } | null;
+  markLandingActive: boolean;
+  onSelectLanding?: (point: LocalPoint) => void;
+  landing?: LocalPoint | null;
 };
 
-const MapOverlay: React.FC<MapOverlayProps> = ({ data, player, heading, offline, hazard }) => {
+const MapOverlay: React.FC<MapOverlayProps> = ({
+  data,
+  player,
+  heading,
+  offline,
+  hazard,
+  markLandingActive,
+  onSelectLanding,
+  landing,
+}) => {
   const { width } = useWindowDimensions();
   const size = Math.min(width - 32, 340);
   const padding = 20;
@@ -441,8 +467,30 @@ const MapOverlay: React.FC<MapOverlayProps> = ({ data, player, heading, offline,
     y: size / 2 - Math.cos(headingRad) * headingRadius,
   };
 
+  const handleRelease = useCallback(
+    (event: {
+      nativeEvent: { locationX: number; locationY: number };
+    }) => {
+      if (!markLandingActive || !onSelectLanding) {
+        return;
+      }
+      const { locationX, locationY } = event.nativeEvent;
+      const relativeX = locationX - size / 2;
+      const relativeY = locationY - size / 2;
+      const localX = center.x + relativeX / scale;
+      const localY = center.y - relativeY / scale;
+      onSelectLanding({ x: localX, y: localY });
+    },
+    [center.x, center.y, markLandingActive, onSelectLanding, scale, size],
+  );
+
   return (
-    <View style={[styles.mapContainer, { width: size, height: size }]} pointerEvents="none">
+    <View
+      style={[styles.mapContainer, { width: size, height: size }]}
+      pointerEvents="auto"
+      onStartShouldSetResponder={() => markLandingActive}
+      onResponderRelease={handleRelease}
+    >
       <View style={styles.mapBackground} />
       {data.features.map((feature) =>
         feature.segments.map((segment, idx) => {
@@ -494,6 +542,22 @@ const MapOverlay: React.FC<MapOverlayProps> = ({ data, player, heading, offline,
           transform: [{ translateX: -8 }, { translateY: -8 }],
         }}
       />
+      {landing ? (
+        <View
+          style={{
+            position: 'absolute',
+            left: toScreen(landing).x,
+            top: toScreen(landing).y,
+            width: 14,
+            height: 14,
+            borderRadius: 7,
+            backgroundColor: '#f472b6',
+            borderWidth: 2,
+            borderColor: '#0f172a',
+            transform: [{ translateX: -7 }, { translateY: -7 }],
+          }}
+        />
+      ) : null}
       <View
         style={{
           position: 'absolute',
@@ -511,6 +575,11 @@ const MapOverlay: React.FC<MapOverlayProps> = ({ data, player, heading, offline,
       {offline ? (
         <View style={styles.offlineBadge}>
           <Text style={styles.offlineBadgeText}>Offline</Text>
+        </View>
+      ) : null}
+      {markLandingActive ? (
+        <View style={styles.markLandingBadge}>
+          <Text style={styles.markLandingText}>Tap map to mark landing</Text>
         </View>
       ) : null}
       <View style={styles.hazardBadge}>
@@ -591,6 +660,23 @@ const QAArHudOverlayScreen: React.FC = () => {
   const [pin, setPin] = useState<GeoPoint | null>(null);
   const [pinMetrics, setPinMetrics] = useState<{ distance: number; bearing: number } | null>(null);
   const [hazardInfo, setHazardInfo] = useState<{ id: string; type: string; dist_m: number; bearing: number } | null>(null);
+  const [plannerExpanded, setPlannerExpanded] = useState(false);
+  const [plannerInputs, setPlannerInputs] = useState({
+    temperatureC: 20,
+    altitude_m: 0,
+    wind_mps: 0,
+    wind_from_deg: 0,
+    slope_dh_m: 0,
+  });
+  const [plannerResult, setPlannerResult] = useState<PlanOut | null>(null);
+  const [shotSession, setShotSession] = useState<{
+    startedAt: number;
+    baseDistance: number;
+    origin: LocalPoint;
+    plan: PlanOut;
+    landing?: LocalPoint;
+  } | null>(null);
+  const [markLandingArmed, setMarkLandingArmed] = useState(false);
   const selectedCourse = useMemo(
     () => courses.find((c) => c.courseId === selectedCourseId) ?? null,
     [courses, selectedCourseId],
@@ -605,6 +691,138 @@ const QAArHudOverlayScreen: React.FC = () => {
     [overlayOrigin, playerPosition],
   );
   const camera = useMemo(() => createCameraStub({ fps: 15 }), []);
+  const qaBag = useMemo(() => defaultBag(), []);
+  const formatDelta = useCallback((value: number) => (value >= 0 ? `+${value.toFixed(1)}` : value.toFixed(1)), []);
+  const wrapDegrees = useCallback((value: number) => {
+    const mod = value % 360;
+    return mod < 0 ? mod + 360 : mod;
+  }, []);
+  const adjustPlannerValue = useCallback(
+    (key: PlannerInputKey, delta: number) => {
+      setPlannerInputs((prev) => {
+        const current = prev[key];
+        let next = current + delta;
+        switch (key) {
+          case 'temperatureC':
+            next = Math.min(45, Math.max(-20, next));
+            next = Math.round(next);
+            break;
+          case 'altitude_m':
+            next = Math.min(3000, Math.max(-200, next));
+            next = Math.round(next);
+            break;
+          case 'wind_mps':
+            next = Math.min(25, Math.max(0, next));
+            next = Math.round(next * 10) / 10;
+            break;
+          case 'wind_from_deg':
+            next = wrapDegrees(Math.round(next));
+            break;
+          case 'slope_dh_m':
+            next = Math.min(50, Math.max(-50, next));
+            next = Math.round(next * 10) / 10;
+            break;
+          default:
+            break;
+        }
+        return { ...prev, [key]: next };
+      });
+      setPlannerResult(null);
+      setShotSession(null);
+      setMarkLandingArmed(false);
+    },
+    [setPlannerInputs, setPlannerResult, setShotSession, setMarkLandingArmed, wrapDegrees],
+  );
+  const handleComputePlan = useCallback(() => {
+    if (!pinMetrics || pinMetrics.distance <= 0) {
+      setPlannerResult(null);
+      return;
+    }
+    const result = computePlaysLike({
+      baseDistance_m: pinMetrics.distance,
+      temperatureC: plannerInputs.temperatureC,
+      altitude_m: plannerInputs.altitude_m,
+      wind_mps: plannerInputs.wind_mps,
+      wind_from_deg: plannerInputs.wind_from_deg,
+      target_azimuth_deg: pinMetrics.bearing,
+      slope_dh_m: plannerInputs.slope_dh_m,
+    });
+    setPlannerResult(result);
+    setShotSession(null);
+    setMarkLandingArmed(false);
+  }, [pinMetrics, plannerInputs, setPlannerResult, setShotSession, setMarkLandingArmed]);
+  const handleHit = useCallback(() => {
+    if (!plannerResult || !pinMetrics) {
+      return;
+    }
+    setShotSession({
+      startedAt: Date.now(),
+      baseDistance: pinMetrics.distance,
+      origin: playerPosition,
+      plan: plannerResult,
+    });
+    setMarkLandingArmed(true);
+  }, [pinMetrics, plannerResult, playerPosition]);
+  const handleArmLanding = useCallback(() => {
+    setShotSession((prev) => {
+      if (!prev) {
+        return prev;
+      }
+      return { ...prev, landing: undefined };
+    });
+    setMarkLandingArmed(true);
+  }, [setMarkLandingArmed, setShotSession]);
+  const handleLandingSelected = useCallback(
+    (point: LocalPoint) => {
+      setShotSession((prev) => {
+        if (!prev) {
+          return prev;
+        }
+        return { ...prev, landing: point };
+      });
+      setMarkLandingArmed(false);
+    },
+    [setShotSession, setMarkLandingArmed],
+  );
+  const shotSummary = useMemo(() => {
+    if (!shotSession || !shotSession.landing) {
+      return null;
+    }
+    const dx = shotSession.landing.x - shotSession.origin.x;
+    const dy = shotSession.landing.y - shotSession.origin.y;
+    const actual = Math.hypot(dx, dy);
+    const planned = shotSession.plan.playsLike_m;
+    const error = actual - planned;
+    const isClubId = (value: string | undefined): value is ClubId =>
+      Boolean(value && (CLUB_SEQUENCE as readonly string[]).includes(value));
+    const plannedClub = isClubId(shotSession.plan.clubSuggested)
+      ? shotSession.plan.clubSuggested
+      : suggestClub(qaBag, planned);
+    const actualClub = suggestClub(qaBag, actual);
+    const plannedIdx = CLUB_SEQUENCE.indexOf(plannedClub);
+    const actualIdx = CLUB_SEQUENCE.indexOf(actualClub);
+    let feedback: string | null = null;
+    if (plannedIdx !== -1 && actualIdx !== -1) {
+      const diff = actualIdx - plannedIdx;
+      if (diff > 0) {
+        feedback = `${diff} club${diff === 1 ? '' : 's'} long`;
+      } else if (diff < 0) {
+        const magnitude = Math.abs(diff);
+        feedback = `${magnitude} club${magnitude === 1 ? '' : 's'} short`;
+      }
+    }
+    return { actual, planned, error, feedback, plannedClub, actualClub };
+  }, [qaBag, shotSession]);
+  const plannerControls = useMemo(
+    () => [
+      { key: 'temperatureC' as const, label: 'Temp', unit: '°C', step: 1 },
+      { key: 'altitude_m' as const, label: 'Altitude', unit: 'm ASL', step: 50 },
+      { key: 'wind_mps' as const, label: 'Wind', unit: 'm/s', step: 1 },
+      { key: 'wind_from_deg' as const, label: 'From', unit: '°', step: 15 },
+      { key: 'slope_dh_m' as const, label: 'Slope Δh', unit: 'm', step: 1 },
+    ],
+    [],
+  );
   const [cameraStats, setCameraStats] = useState<CameraStats>({ latency: 0, fps: 0 });
   const telemetryRef = useRef<TelemetryEmitter | null>(resolveTelemetryEmitter());
   const bundleRef = useRef<CourseBundle | null>(bundle);
@@ -902,6 +1120,11 @@ const QAArHudOverlayScreen: React.FC = () => {
     emitTelemetry('hud.pin.clear', {});
   }, [emitTelemetry]);
 
+  const baseDistance = pinMetrics?.distance ?? 0;
+  const baseDistanceText = baseDistance > 0 ? `${baseDistance.toFixed(1)} m` : '—';
+  const plannerDisabled = !pinMetrics || pinMetrics.distance <= 0;
+  const planClub = plannerResult?.clubSuggested ?? null;
+
   if (!qaEnabled) {
     return null;
   }
@@ -929,6 +1152,9 @@ const QAArHudOverlayScreen: React.FC = () => {
             heading={heading}
             offline={offline}
             hazard={hazardCallout ? { distance: hazardCallout.distance, direction: hazardCallout.direction } : null}
+            markLandingActive={markLandingArmed}
+            landing={shotSession?.landing ?? null}
+            onSelectLanding={handleLandingSelected}
           />
         </View>
       </View>
@@ -966,6 +1192,117 @@ const QAArHudOverlayScreen: React.FC = () => {
               <Text style={styles.calloutSubtext}>{hazardCallout.type.toUpperCase()}</Text>
             ) : null}
           </View>
+        </View>
+        <View style={[styles.plannerContainer, styles.sectionTitleSpacing]}>
+          <TouchableOpacity
+            onPress={() => setPlannerExpanded((prev) => !prev)}
+            style={styles.plannerHeader}
+          >
+            <Text style={styles.sectionTitle}>Planner</Text>
+            <Text style={styles.plannerChevron}>{plannerExpanded ? '▾' : '▸'}</Text>
+          </TouchableOpacity>
+          {plannerExpanded ? (
+            <View style={styles.plannerContent}>
+              <Text style={styles.plannerBase}>Base distance: {baseDistanceText}</Text>
+              {plannerControls.map((control) => (
+                <View key={control.key} style={styles.plannerRow}>
+                  <View style={styles.plannerLabelBlock}>
+                    <Text style={styles.plannerLabel}>{control.label}</Text>
+                    <Text style={styles.plannerUnit}>{control.unit}</Text>
+                  </View>
+                  <View style={styles.plannerStepper}>
+                    <TouchableOpacity
+                      onPress={() => adjustPlannerValue(control.key, -control.step)}
+                      style={styles.plannerStepButton}
+                    >
+                      <Text style={styles.plannerStepText}>-</Text>
+                    </TouchableOpacity>
+                    <Text style={styles.plannerValue}>
+                      {plannerInputs[control.key].toFixed(
+                        control.key === 'wind_from_deg' ||
+                          control.key === 'altitude_m' ||
+                          control.key === 'temperatureC'
+                          ? 0
+                          : 1,
+                      )}
+                    </Text>
+                    <TouchableOpacity
+                      onPress={() => adjustPlannerValue(control.key, control.step)}
+                      style={styles.plannerStepButton}
+                    >
+                      <Text style={styles.plannerStepText}>+</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              ))}
+              <View style={styles.plannerButtonRow}>
+                <TouchableOpacity
+                  onPress={handleComputePlan}
+                  disabled={plannerDisabled}
+                  style={[
+                    styles.plannerButton,
+                    styles.plannerButtonPrimary,
+                    plannerDisabled ? styles.plannerButtonDisabled : null,
+                  ]}
+                >
+                  <Text style={styles.plannerButtonText}>Compute</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  onPress={handleHit}
+                  disabled={!plannerResult}
+                  style={[styles.plannerButton, !plannerResult ? styles.plannerButtonDisabled : null]}
+                >
+                  <Text style={styles.plannerButtonText}>Hit</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  onPress={handleArmLanding}
+                  disabled={!shotSession}
+                  style={[
+                    styles.plannerButton,
+                    markLandingArmed ? styles.plannerButtonActive : null,
+                    !shotSession ? styles.plannerButtonDisabled : null,
+                  ]}
+                >
+                  <Text style={styles.plannerButtonText}>
+                    {markLandingArmed ? 'Tap map…' : 'Mark landing'}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+              <View style={styles.plannerResultBlock}>
+                <Text style={styles.plannerResultText}>
+                  Plays-Like: {plannerResult ? `${plannerResult.playsLike_m.toFixed(1)} m` : '—'}
+                </Text>
+                {plannerResult ? (
+                  <>
+                    <Text style={styles.plannerBreakdown}>
+                      Δtemp {formatDelta(plannerResult.breakdown.temp_m)} / Δalt{' '}
+                      {formatDelta(plannerResult.breakdown.alt_m)} / head{' '}
+                      {formatDelta(plannerResult.breakdown.head_m)} / slope{' '}
+                      {formatDelta(plannerResult.breakdown.slope_m)}
+                    </Text>
+                    {planClub ? (
+                      <Text style={styles.plannerClub}>Suggested club: {planClub}</Text>
+                    ) : null}
+                  </>
+                ) : null}
+              </View>
+              {shotSummary ? (
+                <View style={styles.resultCard}>
+                  <Text style={styles.resultCardTitle}>Result</Text>
+                  <Text style={styles.resultCardLine}>
+                    Planned: {shotSummary.planned.toFixed(1)} m ({shotSummary.plannedClub})
+                  </Text>
+                  <Text style={styles.resultCardLine}>
+                    Actual carry: {shotSummary.actual.toFixed(1)} m ({shotSummary.actualClub})
+                  </Text>
+                  <Text style={styles.resultCardLine}>Error: {formatDelta(shotSummary.error)}</Text>
+                  {shotSummary.feedback ? (
+                    <Text style={styles.resultCardFeedback}>{shotSummary.feedback}</Text>
+                  ) : null}
+                </View>
+              ) : null}
+            </View>
+          ) : null}
         </View>
         <Text style={[styles.sectionTitle, styles.sectionTitleSpacing]}>Bundle</Text>
         {bundleLoading ? <ActivityIndicator size="small" color="#60a5fa" /> : null}
@@ -1099,6 +1436,133 @@ const styles = StyleSheet.create({
     color: '#f8fafc',
     fontWeight: '600',
   },
+  plannerContainer: {
+    backgroundColor: '#101827',
+    borderRadius: 10,
+    padding: 12,
+    gap: 12,
+  },
+  plannerHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  plannerChevron: {
+    color: '#94a3b8',
+    fontSize: 16,
+  },
+  plannerContent: {
+    gap: 12,
+  },
+  plannerBase: {
+    color: '#cbd5f5',
+    fontSize: 13,
+  },
+  plannerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  plannerLabelBlock: {
+    flex: 1,
+    gap: 2,
+  },
+  plannerLabel: {
+    color: '#f8fafc',
+    fontWeight: '600',
+  },
+  plannerUnit: {
+    color: '#94a3b8',
+    fontSize: 12,
+  },
+  plannerStepper: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  plannerStepButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 8,
+    backgroundColor: '#1f2937',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  plannerStepText: {
+    color: '#f8fafc',
+    fontSize: 18,
+    fontWeight: '600',
+  },
+  plannerValue: {
+    minWidth: 68,
+    textAlign: 'center',
+    color: '#f8fafc',
+    fontVariant: ['tabular-nums'],
+  },
+  plannerButtonRow: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  plannerButton: {
+    flex: 1,
+    borderRadius: 8,
+    paddingVertical: 10,
+    backgroundColor: '#1f2937',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  plannerButtonPrimary: {
+    backgroundColor: '#2563eb',
+  },
+  plannerButtonActive: {
+    backgroundColor: '#7c3aed',
+  },
+  plannerButtonDisabled: {
+    opacity: 0.5,
+  },
+  plannerButtonText: {
+    color: '#f8fafc',
+    fontWeight: '600',
+  },
+  plannerResultBlock: {
+    gap: 6,
+  },
+  plannerResultText: {
+    color: '#f8fafc',
+    fontWeight: '700',
+    fontSize: 15,
+  },
+  plannerBreakdown: {
+    color: '#cbd5f5',
+    fontSize: 12,
+    lineHeight: 18,
+  },
+  plannerClub: {
+    color: '#facc15',
+    fontWeight: '600',
+  },
+  resultCard: {
+    backgroundColor: '#0b1120',
+    borderRadius: 10,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: '#1f2937',
+    gap: 4,
+  },
+  resultCardTitle: {
+    color: '#f8fafc',
+    fontWeight: '700',
+    fontSize: 14,
+  },
+  resultCardLine: {
+    color: '#e5e7eb',
+    fontSize: 13,
+  },
+  resultCardFeedback: {
+    color: '#f97316',
+    fontWeight: '600',
+  },
   calloutRow: {
     flexDirection: 'row',
     gap: 8,
@@ -1162,6 +1626,21 @@ const styles = StyleSheet.create({
     color: '#111827',
     fontWeight: '700',
     fontSize: 10,
+  },
+  markLandingBadge: {
+    position: 'absolute',
+    bottom: 12,
+    left: 12,
+    backgroundColor: '#7c3aed',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 999,
+  },
+  markLandingText: {
+    color: '#f8fafc',
+    fontWeight: '600',
+    fontSize: 10,
+    letterSpacing: 0.5,
   },
   hazardBadge: {
     position: 'absolute',
