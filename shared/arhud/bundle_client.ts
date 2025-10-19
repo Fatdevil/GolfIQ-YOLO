@@ -126,35 +126,34 @@ function parseIndex(json: unknown): BundleIndexEntry[] {
   if (!Array.isArray(json)) {
     return [];
   }
-  return json
-    .map((entry) => {
-      if (!entry || typeof entry !== 'object') {
-        return null;
-      }
-      const record = entry as Record<string, unknown>;
-      const courseId = typeof record.courseId === 'string' ? record.courseId : null;
-      if (!courseId) {
-        return null;
-      }
-      const rawBbox = Array.isArray(record.bbox) ? record.bbox : null;
-      if (!rawBbox || rawBbox.length !== 4) {
-        return null;
-      }
-      const bboxValues = rawBbox.map((value) => Number(value));
-      if (bboxValues.some((value) => !Number.isFinite(value))) {
-        return null;
-      }
-      const bbox = bboxValues as [number, number, number, number];
-      const name = typeof record.name === 'string' ? record.name : undefined;
-      const updatedAt = typeof record.updatedAt === 'string' ? record.updatedAt : undefined;
-      return {
-        courseId,
-        name,
-        bbox,
-        updatedAt,
-      } satisfies BundleIndexEntry;
-    })
-    .filter((value): value is BundleIndexEntry => value !== null);
+  const entries: BundleIndexEntry[] = [];
+  for (const entry of json) {
+    if (!entry || typeof entry !== 'object') {
+      continue;
+    }
+    const record = entry as Record<string, unknown>;
+    const courseId = typeof record.courseId === 'string' ? record.courseId : null;
+    if (!courseId) {
+      continue;
+    }
+    const rawBbox = Array.isArray(record.bbox) ? record.bbox : null;
+    if (!rawBbox || rawBbox.length !== 4) {
+      continue;
+    }
+    const bboxValues = rawBbox.map((value) => Number(value));
+    if (bboxValues.some((value) => !Number.isFinite(value))) {
+      continue;
+    }
+    const name = typeof record.name === 'string' ? record.name : undefined;
+    const updatedAt = typeof record.updatedAt === 'string' ? record.updatedAt : undefined;
+    entries.push({
+      courseId,
+      name,
+      bbox: bboxValues as [number, number, number, number],
+      updatedAt,
+    });
+  }
+  return entries;
 }
 
 async function loadExpoBackend(): Promise<CacheBackend | null> {
@@ -425,10 +424,7 @@ async function fetchBundleFromNetwork(id: string, etag: string | null): Promise<
   return { status: 'ok', record: cached };
 }
 
-function isValid(record: CachedBundleRecord | null, nowTs: number): record is CachedBundleRecord {
-  if (!record) {
-    return false;
-  }
+function isValid(record: CachedBundleRecord, nowTs: number): boolean {
   if (!Number.isFinite(record.ttlSec) || record.ttlSec <= 0) {
     return false;
   }
@@ -457,8 +453,8 @@ export async function getBundle(id: string): Promise<CourseBundle> {
   }
   const task = (async () => {
     const nowTs = Date.now();
-    let cached = await readCache(cleanedId);
-    if (isValid(cached, nowTs)) {
+    let cached: CachedBundleRecord | null = await readCache(cleanedId);
+    if (cached && isValid(cached, nowTs)) {
       logBundleTelemetry({
         id: cleanedId,
         timestamp: nowTs,
