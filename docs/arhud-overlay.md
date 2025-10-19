@@ -43,6 +43,13 @@ instrument cache usage during QA sessions.
 - Heading updates at ~5 Hz via the existing magnetometer helper.
 - Hazard distance is recomputed on the same cadence so QA can confirm the
   nearest-edge calculation quickly.
+- The pin panel adds "Set Pin" (captures the aimpoint at the crosshair) and
+  "Clear Pin" actions for quick targeting. Once a pin is set, the overlay shows
+  the live distance/bearing to that point and emits `hud.pin.set`,
+  `hud.pin.clear`, and `hud.frame` (`pinDist`) QA events. The nearest hazard
+  callout compares the hazard bearing against the smoothed heading using
+  `((bearing - heading + 540) % 360) - 180`; negative values label the hazard as
+  `LEFT`, positive values as `RIGHT`.
 
 ## Performance tips
 
