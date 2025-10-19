@@ -53,3 +53,19 @@ instrument cache usage during QA sessions.
 - When testing offline behaviour, disable networking after a bundle finishes
   downloading to force the cache path.
 
+
+## QA Launcher
+
+When the regular Expo entry point is running with the QA HUD gate enabled, a
+floating "QA" button appears in the bottom-right corner. Enable the gate with
+any of the following:
+
+- Set `QA_HUD=1` in the environment before launching the app (works in
+  production-like builds).
+- In local development (`__DEV__`), set `QA_DEV=1` to surface the launcher
+  without toggling the production flag.
+- Remote config can also flip the gate by returning `RC["qa.hud.enabled"]=true`.
+
+Tapping the button opens an action sheet with "Open AR-HUD Overlay" and
+"Cancel" options. Selecting the open action mounts the overlay as a modal, and a
+"Close" button in the top-left corner returns to the underlying QA screens.
