@@ -38,6 +38,8 @@ import { createCameraStub, type CameraFrame } from '../../../../shared/arhud/nat
 import { subscribeHeading } from '../../../../shared/arhud/native/heading';
 import { qaHudEnabled } from '../../../../shared/arhud/native/qa_gate';
 import { computePlaysLike, type PlanOut } from '../../../../shared/playslike/aggregate';
+import { addShot as addRoundShot, getActiveRound as getActiveRoundState } from '../../../../shared/round/round_store';
+import type { Shot as RoundShot } from '../../../../shared/round/round_types';
 import {
   CLUB_SEQUENCE,
   defaultBag,
@@ -238,6 +240,44 @@ async function persistLastSelectedCourse(courseId: string): Promise<void> {
   } catch (error) {
     // ignore persistence errors
   }
+}
+
+function mapHudRecordToRoundShot(record: ShotLogRecord): RoundShot | null {
+  if (!record || !record.pin) {
+    return null;
+  }
+  const tStart = Number(record.tStart);
+  if (!Number.isFinite(tStart)) {
+    return null;
+  }
+  const pinLat = Number(record.pin.lat);
+  const pinLon = Number(record.pin.lon);
+  if (!Number.isFinite(pinLat) || !Number.isFinite(pinLon)) {
+    return null;
+  }
+  const base = typeof record.base_m === 'number' && Number.isFinite(record.base_m) ? record.base_m : undefined;
+  const playsLike = typeof record.playsLike_m === 'number' && Number.isFinite(record.playsLike_m) ? record.playsLike_m : base;
+  const shot: RoundShot = {
+    tStart,
+    club: record.club ?? 'UNK',
+    base_m: base ?? 0,
+    playsLike_m: playsLike ?? 0,
+    pin: { lat: pinLat, lon: pinLon },
+  };
+  if (typeof record.tEnd === 'number' && Number.isFinite(record.tEnd)) {
+    shot.tEnd = record.tEnd;
+  }
+  if (typeof record.carry_m === 'number' && Number.isFinite(record.carry_m)) {
+    shot.carry_m = record.carry_m;
+  }
+  if (record.land && typeof record.land === 'object') {
+    const landLat = Number((record.land as { lat?: number }).lat);
+    const landLon = Number((record.land as { lon?: number }).lon);
+    if (Number.isFinite(landLat) && Number.isFinite(landLon)) {
+      shot.land = { lat: landLat, lon: landLon };
+    }
+  }
+  return shot;
 }
 
 async function appendHudRunShot(record: ShotLogRecord): Promise<void> {
@@ -1136,6 +1176,15 @@ const QAArHudOverlayScreen: React.FC = () => {
     }
     emitTelemetry('hud.shot', payload);
     void appendHudRunShot(payload);
+    const activeRound = getActiveRoundState();
+    if (activeRound && !activeRound.finished && activeRound.holes.length) {
+      const index = Math.min(Math.max(activeRound.currentHole, 0), activeRound.holes.length - 1);
+      const hole = activeRound.holes[index];
+      const roundShot = mapHudRecordToRoundShot(payload);
+      if (hole && roundShot) {
+        addRoundShot(hole.holeNo, roundShot);
+      }
+    }
     setShotSession((prev) => {
       if (!prev || prev.shotId !== shotSession.shotId) {
         return prev;

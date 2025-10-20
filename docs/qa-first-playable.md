@@ -54,3 +54,12 @@ production defaults. Expand **Calibrate bag** in the pin tools card to reveal tw
 
 If no qualifying shots exist the table remains unchanged and the module reports the
 requirement so you can gather more swings.
+
+
+## Round Mode (QA only)
+
+1. Enable QA mode via the launcher or set `QA_ROUND=1` in the Metro environment. A new **Round Mode** panel becomes available alongside the QA tools.
+2. Pick a course (the tool will auto-suggest the nearest bundle) and choose a tee preset. Tap **Start round** to create a new session or resume the persisted round.
+3. The hole view shows par, running score, and the shot log. Use **Open HUD overlay** to launch the AR HUD planner and record shots; every shot recorded in the overlay automatically syncs into the active hole.
+4. Use **+ Stroke** or enter a specific value with **Set score** to track the hole. Navigate with **Previous/Next** and tap **Finish round** on the final hole to lock in the summary.
+5. The summary view reports total score vs. par, FIR/GIR heuristics, and allows exporting the session as `round_run.json` for replay analysis.
