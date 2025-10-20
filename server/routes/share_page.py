@@ -72,33 +72,33 @@ def _render_index_html(*, title: str, description: str, url: str) -> str:
     html = _replace_title(template, safe_title)
     html = _upsert_meta(
         html,
-        r"<meta[^>]+name=['"]description['"][^>]*>",
-        f"<meta name="description" content="{safe_desc}" />",
+        r'<meta[^>]+name=["\']description["\'][^>]*>',
+        f'<meta name="description" content="{safe_desc}" />',
     )
     html = _upsert_meta(
         html,
-        r"<meta[^>]+property=['"]og:title['"][^>]*>",
-        f"<meta property="og:title" content="{safe_title}" />",
+        r'<meta[^>]+property=["\']og:title["\'][^>]*>',
+        f'<meta property="og:title" content="{safe_title}" />',
     )
     html = _upsert_meta(
         html,
-        r"<meta[^>]+property=['"]og:description['"][^>]*>",
-        f"<meta property="og:description" content="{safe_desc}" />",
+        r'<meta[^>]+property=["\']og:description["\'][^>]*>',
+        f'<meta property="og:description" content="{safe_desc}" />',
     )
     html = _upsert_meta(
         html,
-        r"<meta[^>]+property=['"]og:url['"][^>]*>",
-        f"<meta property="og:url" content="{safe_url}" />",
+        r'<meta[^>]+property=["\']og:url["\'][^>]*>',
+        f'<meta property="og:url" content="{safe_url}" />',
     )
     html = _upsert_meta(
         html,
-        r"<meta[^>]+property=['"]og:type['"][^>]*>",
-        "<meta property="og:type" content="website" />",
+        r'<meta[^>]+property=["\']og:type["\'][^>]*>',
+        '<meta property="og:type" content="website" />',
     )
     html = _upsert_link(
         html,
-        r"<link[^>]+rel=['"]canonical['"][^>]*>",
-        f"<link rel="canonical" href="{safe_url}" />",
+        r'<link[^>]+rel=["\']canonical["\'][^>]*>',
+        f'<link rel="canonical" href="{safe_url}" />',
     )
     return html
 
