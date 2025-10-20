@@ -190,7 +190,7 @@ export default function ReplayAnalyzerPage() {
             <>
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <h2 className="text-lg font-semibold text-slate-100">
-                  Active run: {activeRun?.run.summary.sessionId ?? "n/a"}
+                  Active run: {activeRun?.run?.summary.sessionId ?? "n/a"}
                 </h2>
                 {primary && comparison ? (
                   <div className="inline-flex overflow-hidden rounded border border-slate-700">
