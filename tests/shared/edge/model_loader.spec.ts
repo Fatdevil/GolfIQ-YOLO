@@ -116,6 +116,8 @@ test('ensureModel downloads and caches manifest entries', async (t) => {
   const expectedPath = storage.join('android', 'demo-model-int8-320.tflite');
   assert.equal(result.path, expectedPath);
   assert.equal(await verifySha256(result.path, modelSha), true);
+  const metaPath = storage.join('android', 'last-good.json');
+  assert.equal(storage.files.has(metaPath), true);
 
   const second = await ensureModel({ platform: 'android' });
   assert.equal(second.path, expectedPath);
@@ -198,6 +200,67 @@ test('ensureModel respects remote config pinned id override', async (t) => {
   const result = await ensureModel({ platform: 'android', id: 'model-a-int8-320' });
   assert.equal(result.path, storage.join('android', 'model-b-int8-320.tflite'));
   assert.equal(await verifySha256(result.path, shaB), true);
+});
+
+test('ensureModel falls back to last known good model on download failure', async (t) => {
+  __resetEdgeModelLoaderForTests();
+  const storage = createMemoryStorage();
+  __setEdgeModelStorageForTests(storage);
+
+  const fallbackData = new TextEncoder().encode('existing-model');
+  const fallbackSha = createHash('sha256').update(fallbackData).digest('hex');
+  const fallbackPath = storage.join('android', 'cached-model.tflite');
+  await storage.writeFile(fallbackPath, fallbackData);
+  const metadata = {
+    modelId: 'cached-model-int8-320',
+    sha256: fallbackSha,
+    path: fallbackPath,
+    savedAt: Date.now(),
+    platform: 'android',
+  };
+  await storage.writeFile(
+    storage.join('android', 'last-good.json'),
+    new TextEncoder().encode(JSON.stringify(metadata)),
+  );
+
+  const manifest = {
+    version: 1,
+    recommended: { android: 'fresh-model-int8-320' },
+    android: [
+      {
+        id: 'fresh-model-int8-320',
+        url: 'https://cdn.example.com/android/fresh-model.tflite',
+        sha256: 'd'.repeat(64),
+        size: 42,
+        runtime: 'tflite',
+        inputSize: 320,
+        quant: 'int8',
+      },
+    ],
+    ios: [],
+  };
+
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (input: RequestInfo | URL) => {
+    const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : String(input);
+    if (url.includes('/models/manifest.json')) {
+      return createResponse(JSON.stringify(manifest));
+    }
+    if (url.endsWith('/android/fresh-model.tflite')) {
+      throw new Error('network unreachable');
+    }
+    throw new Error(`Unexpected fetch url: ${url}`);
+  };
+
+  t.after(() => {
+    globalThis.fetch = originalFetch;
+    __resetEdgeModelLoaderForTests();
+  });
+
+  const result = await ensureModel({ platform: 'android' });
+  assert.equal(result.path, fallbackPath);
+  assert.equal(await verifySha256(result.path, fallbackSha), true);
+  assert.equal(await storage.exists(storage.join('android', 'fresh-model-int8-320.tflite')), false);
 });
 
 test('ensureModel enforces defaults when rollout gate applies', async (t) => {
