@@ -1,5 +1,6 @@
 import type { ParsedHudRun } from "./parseHudRun";
 import type { BenchSummary } from "./parseBenchSummary";
+import type { DispersionStats } from "./parseShotLog";
 
 function fmtNumber(value: number | null | undefined, digits = 2): string {
   if (value === null || value === undefined || Number.isNaN(value)) {
@@ -31,9 +32,20 @@ function fmtSeconds(value: number | null | undefined): string {
   return `${(value / 1000).toFixed(2)} s`;
 }
 
+function fmtPercent(value: number | null | undefined): string {
+  if (value === null || value === undefined) {
+    return "n/a";
+  }
+  if (!Number.isFinite(value)) {
+    return String(value);
+  }
+  return `${value.toFixed(1)}%`;
+}
+
 export function mkReportMd(
   run: ParsedHudRun,
   summary: BenchSummary | null | undefined,
+  dispersion?: DispersionStats | null,
 ): string {
   const lines: string[] = [];
   lines.push("# HUD Run QA Report");
@@ -58,6 +70,19 @@ export function mkReportMd(
     `- Recenters: ${session.recenterCount} (avg ${fmtMs(session.recenterAvgMs)}, max ${fmtMs(session.recenterMaxMs)})`,
   );
   lines.push("");
+
+  if (dispersion) {
+    lines.push("## Shot dispersion");
+    lines.push(`- Shots logged: ${dispersion.count}`);
+    lines.push(`- Avg carry: ${fmtNumber(dispersion.avgCarry)} m (σ ${fmtNumber(dispersion.stdCarry)} m)`);
+    lines.push(
+      `- Mean offset: L/R ${fmtNumber(dispersion.meanX)} m, Long ${fmtNumber(dispersion.meanY)} m (σₓ ${fmtNumber(dispersion.stdX)} m, σᵧ ${fmtNumber(dispersion.stdY)} m)`,
+    );
+    lines.push(
+      `- Distribution: short ${fmtPercent(dispersion.pctShort)}, long ${fmtPercent(dispersion.pctLong)}, left ${fmtPercent(dispersion.pctLeft)}, right ${fmtPercent(dispersion.pctRight)}`,
+    );
+    lines.push("");
+  }
 
   if (run.recenterEvents.length) {
     lines.push("### Recenters");
