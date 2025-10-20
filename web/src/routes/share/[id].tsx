@@ -5,7 +5,6 @@ import { describeRunKind, fetchRun, type FetchRunResult } from "../../lib/fetchR
 import {
   RunSummary as RunSummaryCard,
   buildShareableSummary,
-  describeSummary,
   type ShareableRunSummary,
 } from "../../features/share/RunSummary";
 
@@ -14,42 +13,6 @@ interface AsyncState {
   error: string | null;
   result: FetchRunResult | null;
   notFound: boolean;
-}
-
-function useShareMeta(title: string, description: string, url: string) {
-  useEffect(() => {
-    if (typeof document === "undefined") return;
-    if (title) {
-      document.title = title;
-    }
-    setMetaTag("name", "description", description);
-    setMetaTag("property", "og:title", title);
-    setMetaTag("property", "og:description", description);
-    setMetaTag("property", "og:url", url);
-    setLinkTag("canonical", url);
-  }, [title, description, url]);
-}
-
-function setMetaTag(attribute: "name" | "property", key: string, value: string) {
-  if (!value || typeof document === "undefined") return;
-  let element = document.head.querySelector(`meta[${attribute}="${key}"]`) as HTMLMetaElement | null;
-  if (!element) {
-    element = document.createElement("meta");
-    element.setAttribute(attribute, key);
-    document.head.appendChild(element);
-  }
-  element.setAttribute("content", value);
-}
-
-function setLinkTag(rel: string, href: string) {
-  if (!href || typeof document === "undefined") return;
-  let element = document.head.querySelector(`link[rel="${rel}"]`) as HTMLLinkElement | null;
-  if (!element) {
-    element = document.createElement("link");
-    element.setAttribute("rel", rel);
-    document.head.appendChild(element);
-  }
-  element.setAttribute("href", href);
 }
 
 export default function ShareRunPage() {
@@ -89,16 +52,25 @@ export default function ShareRunPage() {
     return buildShareableSummary(state.result.kind, state.result.data);
   }, [state.result]);
 
-  const description = useMemo(() => describeSummary(summary), [summary]);
   const title = `GolfIQ – Run ${id}`;
   const shareUrl = useMemo(() => {
     if (typeof window === "undefined") {
       return location.pathname;
     }
+    if (typeof document !== "undefined") {
+      const canonicalLink = document.querySelector('link[rel="canonical"]') as HTMLLinkElement | null;
+      if (canonicalLink?.href) {
+        return canonicalLink.href;
+      }
+    }
     return `${window.location.origin}${location.pathname}`;
   }, [location.pathname]);
 
-  useShareMeta(title, description, shareUrl);
+  useEffect(() => {
+    if (typeof document !== "undefined") {
+      document.title = title;
+    }
+  }, [title]);
 
   const openLink = `/runs/${encodeURIComponent(id)}`;
   const downloadUrl = `${API}/runs/${encodeURIComponent(id)}`;
