@@ -31,11 +31,6 @@ function createMemoryStorage(): MemoryStorage {
   } satisfies MemoryStorage;
 }
 
-declare global {
-  // eslint-disable-next-line no-var
-  var fetch: (input: any, init?: any) => Promise<any>;
-}
-
 const STORAGE_KEY = "runs.upload.queue.v1";
 
 beforeEach(() => {
