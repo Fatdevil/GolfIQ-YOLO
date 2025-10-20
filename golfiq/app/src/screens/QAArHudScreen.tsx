@@ -15,6 +15,7 @@ import {
 } from 'react-native';
 
 import { API_BASE } from '../lib/api';
+import { resumePendingUploads, uploadHudRun } from '../../../../shared/runs/uploader';
 
 import {
   FPS_MIN,
@@ -171,6 +172,9 @@ const QAArHudScreen: React.FC = () => {
     percent: 0,
     kill: false,
   });
+  const [shareUploading, setShareUploading] = useState(false);
+  const [shareMessage, setShareMessage] = useState<string | null>(null);
+  const [shareError, setShareError] = useState(false);
 
   const headingRawRef = useRef(0);
   const headingSmoothedRef = useRef(0);
@@ -191,6 +195,10 @@ const QAArHudScreen: React.FC = () => {
       const next = [entry, ...prev];
       return next.slice(0, 5);
     });
+  }, []);
+
+  useEffect(() => {
+    resumePendingUploads().catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -640,6 +648,33 @@ const QAArHudScreen: React.FC = () => {
     }
   }, [pushLog]);
 
+  const uploadSharedRun = useCallback(async () => {
+    if (shareUploading) {
+      return;
+    }
+    if (!hudRunRef.current.length) {
+      setShareMessage('No HUD telemetry captured yet');
+      setShareError(true);
+      return;
+    }
+    setShareUploading(true);
+    setShareError(false);
+    setShareMessage('Uploading HUD run…');
+    try {
+      const receipt = await uploadHudRun(hudRunRef.current);
+      setShareMessage(`Share ID: ${receipt.id}`);
+      setShareError(false);
+      pushLog(`HUD run shared as ${receipt.id}`);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      setShareMessage(`Upload failed: ${message}`);
+      setShareError(true);
+      pushLog(`share failed: ${message}`);
+    } finally {
+      setShareUploading(false);
+    }
+  }, [shareUploading, pushLog]);
+
   const fpsStatus: BadgeStatus = fps >= FPS_MIN ? 'ok' : 'warn';
   const latencyStatus: BadgeStatus =
     latencyMs <= HUD_LATENCY_MAX_MS ? 'ok' : 'warn';
@@ -717,18 +752,34 @@ const QAArHudScreen: React.FC = () => {
         >
           <Text style={styles.buttonText}>Re-center</Text>
         </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.button, styles.secondaryButton]}
-          onPress={exportRun}
-        >
-          <Text style={styles.buttonText}>Export</Text>
-        </TouchableOpacity>
-      </View>
-      <View style={styles.logContainer}>
-        <Text style={styles.logTitle}>Recent events</Text>
-        {logs.length === 0 ? (
-          <Text style={styles.logEntry}>No events yet.</Text>
-        ) : (
+      <TouchableOpacity
+        style={[styles.button, styles.secondaryButton]}
+        onPress={exportRun}
+      >
+        <Text style={styles.buttonText}>Export</Text>
+      </TouchableOpacity>
+    </View>
+    <View style={styles.shareContainer}>
+      <TouchableOpacity
+        style={[styles.button, styles.secondaryButton, shareUploading && styles.disabledButton]}
+        onPress={uploadSharedRun}
+        disabled={shareUploading}
+      >
+        <Text style={styles.buttonText}>
+          {shareUploading ? 'Uploading…' : 'Upload HUD run'}
+        </Text>
+      </TouchableOpacity>
+      {shareMessage ? (
+        <Text style={[styles.shareMessage, shareError ? styles.shareMessageError : null]}>
+          {shareMessage}
+        </Text>
+      ) : null}
+    </View>
+    <View style={styles.logContainer}>
+      <Text style={styles.logTitle}>Recent events</Text>
+      {logs.length === 0 ? (
+        <Text style={styles.logEntry}>No events yet.</Text>
+      ) : (
           logs.map((entry, index) => (
             <Text key={`${entry}-${index}`} style={styles.logEntry}>
               {entry}
@@ -796,6 +847,9 @@ const styles = StyleSheet.create({
   secondaryButton: { backgroundColor: '#1f2937' },
   disabledButton: { opacity: 0.4 },
   buttonText: { color: '#f9fafb', fontWeight: '600' },
+  shareContainer: { marginTop: 8, alignSelf: 'stretch', gap: 8 },
+  shareMessage: { color: '#1f2937', fontSize: 12 },
+  shareMessageError: { color: '#b91c1c' },
   logContainer: { backgroundColor: '#0f172a', padding: 12, borderRadius: 8 },
   logTitle: { color: '#f9fafb', fontWeight: '700', marginBottom: 8 },
   logEntry: { color: '#f9fafb', fontSize: 12, marginBottom: 4 },

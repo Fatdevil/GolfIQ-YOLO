@@ -18,6 +18,7 @@ export default defineConfig({
     include: [
       "src/__tests__/**/*.spec.ts",
       "../shared/playslike/__tests__/**/*.spec.ts",
+      "../shared/runs/__tests__/**/*.spec.ts",
     ],
   },
 });

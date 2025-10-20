@@ -12,6 +12,14 @@ There are two supported ingest paths:
 2. **Fetch by run id** — paste a `run_id` that already lives in the `/runs` API and press **Load**. The analyzer will pull the
    `events` array from the record and derive the same data as the local export.
 
+### Upload from device & open by ID
+
+- On the QA HUD screens, use **Upload HUD run** (for telemetry) or **Upload Round** (for shot summaries). The device queues the
+  JSON payload locally and retries with backoff until the server returns a share id.
+- The analyzer exposes an **Open shared run** card. Paste the share id, choose the target slot, and press **Load** to fetch the
+  JSON from `/runs/{id}`.
+- Use **Copy share link** to grab a ready-to-share `${API_BASE}/runs/<id>` URL for teammates.
+
 The parser accepts the JSON array emitted by the QA HUD capture pipeline. Each entry is expected to look like:
 
 ```jsonc

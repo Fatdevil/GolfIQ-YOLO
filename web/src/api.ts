@@ -81,6 +81,8 @@ export const listRuns = () =>
   axios.get(`${API}/runs`, { headers: withAuth() }).then((r) => r.data);
 export const getRun = (id: string) =>
   axios.get(`${API}/runs/${id}`, { headers: withAuth() }).then((r) => r.data);
+export const fetchSharedRun = (id: string) =>
+  axios.get(`${API}/runs/${id}`, { headers: withAuth() }).then((r) => r.data);
 export const deleteRun = (id: string) =>
   axios.delete(`${API}/runs/${id}`, { headers: withAuth() }).then((r) => r.data);
 
