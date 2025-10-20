@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+from datetime import datetime, timezone
 from pathlib import Path
 
 import pytest
@@ -90,3 +92,52 @@ def test_upload_run_rejects_non_fs_backend(tmp_path, monkeypatch):
             files={"file": ("run.zip", b"zip-bytes", "application/zip")},
         )
         assert response.status_code == 400
+
+
+def test_hud_run_share_flow(tmp_path, monkeypatch):
+    monkeypatch.setenv("RUNS_DATA_DIR", str(tmp_path))
+
+    events = [
+        {"event": "hud.frame", "timestampMs": 1, "device": "Pixel 7", "data": {"fps": 60}},
+        {"event": "hud.frame", "timestampMs": 2, "device": "Pixel 7", "data": {"fps": 58}},
+    ]
+
+    with TestClient(app) as client:
+        response = client.post("/runs/hud", json=events)
+        assert response.status_code == 200
+        payload = response.json()
+        run_id = payload["id"]
+        assert payload["url"] == f"/runs/{run_id}"
+
+        by_id = Path(tmp_path, "by_id", f"{run_id}.json")
+        assert by_id.exists()
+        stored = json.loads(by_id.read_text(encoding="utf-8"))
+        assert stored == events
+
+        day = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        jsonl_path = Path(tmp_path, "hud", f"{day}.jsonl")
+        assert jsonl_path.exists()
+        lines = [line for line in jsonl_path.read_text(encoding="utf-8").splitlines() if line.strip()]
+        entry = json.loads(lines[-1])
+        assert entry["id"] == run_id
+        assert entry["kind"] == "hud"
+        assert entry["url"] == f"/runs/{run_id}"
+
+        get_response = client.get(f"/runs/{run_id}")
+        assert get_response.status_code == 200
+        etag = get_response.headers.get("etag")
+        assert etag
+        assert get_response.json() == events
+
+        cached = client.get(f"/runs/{run_id}", headers={"If-None-Match": etag})
+        assert cached.status_code == 304
+
+
+def test_round_run_invalid_payload(tmp_path, monkeypatch):
+    monkeypatch.setenv("RUNS_DATA_DIR", str(tmp_path))
+
+    with TestClient(app) as client:
+        response = client.post("/runs/round", json=["not", "an", "object"])
+        assert response.status_code == 400
+        detail = response.json().get("detail")
+        assert "round run" in detail

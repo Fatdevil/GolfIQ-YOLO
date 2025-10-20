@@ -26,6 +26,8 @@ Use the format `M{milestone}-{feature}-{device}-{runNumber}`. Example: `M5-bench
 - HUD captures: attach the `hud_run.json` to the PR and link it as `[HUD: filename](secure://hud/M5-bench-latency-pixel7-03.json)`.
 - Bench runs: upload to BenchHub and add `[Bench: runId](https://bench.golfiq.dev/runs/runId)`.
 - Replay exports: include the generated Markdown in the PR or link `[Replay: filename](secure://replay/M6-replay-pixel7.md)`.
+- Mobile QA builds expose **Upload HUD run** and **Upload Round** buttons—trigger them to persist telemetry, then record the
+  returned share id so reviewers can load it via `/qa/replay` → **Open shared run**.
 
 When you fill in the PR template, add these links under **QA notes** so reviewers can quickly cross-reference evidence.
 

@@ -44,6 +44,7 @@ import { subscribeHeading } from '../../../../shared/arhud/native/heading';
 import { qaHudEnabled } from '../../../../shared/arhud/native/qa_gate';
 import { computePlaysLike, type PlanOut } from '../../../../shared/playslike/aggregate';
 import { addShot as addRoundShot, getActiveRound as getActiveRoundState } from '../../../../shared/round/round_store';
+import { resumePendingUploads, uploadRoundRun } from '../../../../shared/runs/uploader';
 import type { Shot as RoundShot } from '../../../../shared/round/round_types';
 import {
   CLUB_SEQUENCE,
@@ -857,6 +858,9 @@ const QAArHudOverlayScreen: React.FC = () => {
   const [bundleLoading, setBundleLoading] = useState(false);
   const [bundleError, setBundleError] = useState<string | null>(null);
   const [offline, setOffline] = useState(false);
+  const [roundShareUploading, setRoundShareUploading] = useState(false);
+  const [roundShareMessage, setRoundShareMessage] = useState<string | null>(null);
+  const [roundShareError, setRoundShareError] = useState(false);
   const [autoPickEnabled, setAutoPickEnabled] = useState(false);
   const [autoPickAvailable, setAutoPickAvailable] = useState(true);
   const [autoPickCandidate, setAutoPickCandidate] = useState<AutoCourseCandidate | null>(null);
@@ -887,6 +891,10 @@ const QAArHudOverlayScreen: React.FC = () => {
   const [calibrationMessage, setCalibrationMessage] = useState<string | null>(null);
   const [landingProposal, setLandingProposal] = useState<LandingProposal | null>(null);
   const [landingState, setLandingState] = useState<AutoLandingState>('IDLE');
+
+  useEffect(() => {
+    resumePendingUploads().catch(() => {});
+  }, []);
   const selectedCourse = useMemo(
     () => courses.find((c) => c.courseId === selectedCourseId) ?? null,
     [courses, selectedCourseId],
@@ -1227,6 +1235,31 @@ const QAArHudOverlayScreen: React.FC = () => {
     },
     [overlayOrigin],
   );
+
+  const handleRoundShareUpload = useCallback(async () => {
+    if (roundShareUploading) {
+      return;
+    }
+    const round = getActiveRoundState();
+    if (!round) {
+      setRoundShareMessage('No active round to upload');
+      setRoundShareError(true);
+      return;
+    }
+    setRoundShareUploading(true);
+    setRoundShareError(false);
+    setRoundShareMessage('Uploading round…');
+    try {
+      const receipt = await uploadRoundRun(round);
+      setRoundShareMessage(`Share ID: ${receipt.id}`);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      setRoundShareMessage(`Upload failed: ${message}`);
+      setRoundShareError(true);
+    } finally {
+      setRoundShareUploading(false);
+    }
+  }, [roundShareUploading]);
   useEffect(() => {
     if (!shotSession || !shotSession.landing || shotSession.logged) {
       return;
@@ -1916,6 +1949,26 @@ const QAArHudOverlayScreen: React.FC = () => {
           </View>
         ) : null}
       </View>
+      <View style={styles.shareCard}>
+        <Text style={styles.shareTitle}>Round sharing</Text>
+        <Text style={styles.shareSubtitle}>
+          Upload the current QA round to generate a share link for replay.
+        </Text>
+        <TouchableOpacity
+          onPress={handleRoundShareUpload}
+          disabled={roundShareUploading}
+          style={[styles.shareButton, roundShareUploading ? styles.shareButtonDisabled : null]}
+        >
+          <Text style={styles.shareButtonLabel}>
+            {roundShareUploading ? 'Uploading…' : 'Upload Round'}
+          </Text>
+        </TouchableOpacity>
+        {roundShareMessage ? (
+          <Text style={[styles.shareStatus, roundShareError ? styles.shareStatusError : null]}>
+            {roundShareMessage}
+          </Text>
+        ) : null}
+      </View>
       <View style={styles.cameraSection}>
         <View style={styles.cameraStub}>
           <Text style={styles.cameraLabel}>Camera stub</Text>
@@ -2229,6 +2282,41 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     padding: 12,
     gap: 12,
+  },
+  shareCard: {
+    backgroundColor: '#111827',
+    borderRadius: 12,
+    padding: 12,
+    gap: 8,
+  },
+  shareTitle: {
+    color: '#f8fafc',
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  shareSubtitle: {
+    color: '#94a3b8',
+    fontSize: 12,
+  },
+  shareButton: {
+    alignItems: 'center',
+    paddingVertical: 10,
+    borderRadius: 10,
+    backgroundColor: '#2563eb',
+  },
+  shareButtonDisabled: {
+    opacity: 0.6,
+  },
+  shareButtonLabel: {
+    color: '#f8fafc',
+    fontWeight: '600',
+  },
+  shareStatus: {
+    color: '#cbd5f5',
+    fontSize: 12,
+  },
+  shareStatusError: {
+    color: '#fca5a5',
   },
   autoPickRow: {
     flexDirection: 'row',
