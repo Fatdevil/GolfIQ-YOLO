@@ -1,5 +1,10 @@
 import type { EdgeDefaults, Platform } from './defaults';
 import { fetchEdgeDefaults, getCachedEdgeDefaults } from './defaults';
+import {
+  evaluateEdgeRollout,
+  type EdgeRolloutDecision,
+  type RcRecord,
+} from './rollout';
 
 type Runtime = EdgeDefaults['runtime'];
 type Quant = EdgeDefaults['quant'];
@@ -29,8 +34,6 @@ interface ManifestSection {
   recommended?: string;
 }
 
-type RcRecord = Record<string, unknown> | null | undefined;
-
 type Storage = {
   root: string;
   join(...segments: string[]): string;
@@ -44,6 +47,13 @@ type Storage = {
 let manifestCache: Manifest | null = null;
 let storageOverride: Storage | null = null;
 let storagePromise: Promise<Storage> | null = null;
+
+export interface EdgeModelRolloutOptions {
+  deviceId?: string | null;
+  rc?: RcRecord;
+  resolveDeviceId?: () => string | null | Promise<string | null>;
+  onEvaluated?: (decision: EdgeRolloutDecision) => void | Promise<void>;
+}
 
 function getGlobalObject(): typeof globalThis & {
   EDGE_MODEL_MANIFEST_ENDPOINT?: string;
@@ -340,12 +350,12 @@ function getRc(): RcRecord {
   return globalObject.RC ?? undefined;
 }
 
-function readRcString(key: string): string | undefined {
-  const rc = getRc();
-  if (!rc || typeof rc !== 'object') {
+function readRcString(key: string, rc?: RcRecord): string | undefined {
+  const source = rc ?? getRc();
+  if (!source || typeof source !== 'object') {
     return undefined;
   }
-  const value = (rc as Record<string, unknown>)[key];
+  const value = (source as Record<string, unknown>)[key];
   if (typeof value === 'string') {
     return value.trim();
   }
@@ -355,8 +365,8 @@ function readRcString(key: string): string | undefined {
   return undefined;
 }
 
-function readRcBoolean(key: string): boolean {
-  const value = readRcString(key);
+function readRcBoolean(key: string, rc?: RcRecord): boolean {
+  const value = readRcString(key, rc);
   if (!value) {
     return false;
   }
@@ -592,18 +602,7 @@ async function pickModelFromDefaults(
     return null;
   }
   if (!enforce) {
-    const cached = await getCachedEdgeDefaults(platform);
-    if (cached) {
-      const match = section.models.find(
-        (model) =>
-          model.runtime === cached.runtime &&
-          model.inputSize === cached.inputSize &&
-          model.quant === cached.quant,
-      );
-      if (match) {
-        return match;
-      }
-    }
+    return null;
   }
   try {
     const defaults = await fetchEdgeDefaults({ platform });
@@ -622,6 +621,18 @@ async function pickModelFromDefaults(
   } catch {
     // ignore fetch failures
   }
+  const cached = await getCachedEdgeDefaults(platform);
+  if (cached) {
+    const match = section.models.find(
+      (model) =>
+        model.runtime === cached.runtime &&
+        model.inputSize === cached.inputSize &&
+        model.quant === cached.quant,
+    );
+    if (match) {
+      return match;
+    }
+  }
   return null;
 }
 
@@ -638,9 +649,11 @@ async function selectModel(
   platform: Platform,
   manifest: Manifest,
   explicitId?: string,
+  rollout?: EdgeModelRolloutOptions,
 ): Promise<ManifestModel> {
   const section = getSection(manifest, platform);
-  const rcPinned = readRcString('edge.model.pinnedId');
+  const rcSource = rollout?.rc ?? getRc();
+  const rcPinned = readRcString('edge.model.pinnedId', rcSource);
   if (rcPinned) {
     const pinned = findModelById(section, rcPinned);
     if (pinned) {
@@ -648,16 +661,42 @@ async function selectModel(
     }
     throw new Error(`Pinned model ${rcPinned} not found in manifest`);
   }
-  const rcEnforce = readRcBoolean('edge.defaults.enforce');
-  if (explicitId && !rcEnforce) {
+  let deviceId = rollout?.deviceId ?? null;
+  if (!deviceId && rollout?.resolveDeviceId) {
+    try {
+      const resolved = await rollout.resolveDeviceId();
+      if (resolved) {
+        deviceId = resolved;
+      }
+    } catch {
+      // ignore device id resolution errors
+    }
+  }
+  const rcEnforceLegacy = readRcBoolean('edge.defaults.enforce', rcSource);
+  const decision = evaluateEdgeRollout({
+    deviceId,
+    rc: rcSource,
+    rcEnforceFlag: rcEnforceLegacy,
+  });
+  if (rollout?.onEvaluated) {
+    try {
+      await rollout.onEvaluated(decision);
+    } catch {
+      // ignore telemetry callback failures
+    }
+  }
+  const enforced = decision.enforced;
+  if (explicitId && !enforced) {
     const explicit = findModelById(section, explicitId);
     if (explicit) {
       return { ...explicit };
     }
   }
-  const fromDefaults = await pickModelFromDefaults(platform, section, rcEnforce);
-  if (fromDefaults) {
-    return { ...fromDefaults };
+  if (enforced) {
+    const fromDefaults = await pickModelFromDefaults(platform, section, enforced);
+    if (fromDefaults) {
+      return { ...fromDefaults };
+    }
   }
   const recommendedId = explicitId ?? section.recommended;
   if (recommendedId) {
@@ -694,9 +733,10 @@ export async function ensureModel(opts: {
   platform: Platform;
   id?: string;
   signal?: AbortSignal;
+  rollout?: EdgeModelRolloutOptions;
 }): Promise<{ path: string }> {
   const manifest = await getManifest({ signal: opts.signal });
-  const model = await selectModel(opts.platform, manifest, opts.id);
+  const model = await selectModel(opts.platform, manifest, opts.id, opts.rollout);
   const storage = await getStorage();
   const extension = fileExtensionFromUrl(model.url);
   const fileName = `${sanitizeSegment(model.id)}${extension}`;

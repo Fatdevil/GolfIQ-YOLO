@@ -199,3 +199,170 @@ test('ensureModel respects remote config pinned id override', async (t) => {
   assert.equal(result.path, storage.join('android', 'model-b-int8-320.tflite'));
   assert.equal(await verifySha256(result.path, shaB), true);
 });
+
+test('ensureModel enforces defaults when rollout gate applies', async (t) => {
+  __resetEdgeModelLoaderForTests();
+  const storage = createMemoryStorage();
+  __setEdgeModelStorageForTests(storage);
+
+  const dataA = new TextEncoder().encode('model-A');
+  const shaA = createHash('sha256').update(dataA).digest('hex');
+  const dataB = new TextEncoder().encode('model-B');
+  const shaB = createHash('sha256').update(dataB).digest('hex');
+
+  const manifest = {
+    version: 1,
+    recommended: { android: 'model-a-int8-320' },
+    android: [
+      {
+        id: 'model-a-int8-320',
+        url: 'https://cdn.example.com/android/model-a.tflite',
+        sha256: shaA,
+        size: dataA.length,
+        runtime: 'tflite',
+        inputSize: 320,
+        quant: 'int8',
+      },
+      {
+        id: 'model-b-fp16-384',
+        url: 'https://cdn.example.com/android/model-b.tflite',
+        sha256: shaB,
+        size: dataB.length,
+        runtime: 'tflite',
+        inputSize: 384,
+        quant: 'fp16',
+      },
+    ],
+  };
+
+  const defaultsPayload = {
+    android: {
+      runtime: 'tflite',
+      inputSize: 384,
+      quant: 'fp16',
+    },
+  };
+
+  const calls: string[] = [];
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (input: RequestInfo | URL) => {
+    const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : String(input);
+    calls.push(url);
+    if (url.includes('/models/manifest.json')) {
+      return createResponse(JSON.stringify(manifest));
+    }
+    if (url.includes('/bench/summary')) {
+      return createResponse(JSON.stringify(defaultsPayload));
+    }
+    if (url.endsWith('/android/model-b.tflite')) {
+      return new Response(dataB, { status: 200 });
+    }
+    if (url.endsWith('/android/model-a.tflite')) {
+      return new Response(dataA, { status: 200 });
+    }
+    throw new Error(`Unexpected fetch url: ${url}`);
+  };
+
+  const originalRc = (globalThis as { RC?: Record<string, unknown> }).RC;
+  (globalThis as { RC?: Record<string, unknown> }).RC = {
+    'edge.defaults.enforce': false,
+    'edge.rollout.enabled': true,
+    'edge.rollout.percent': 100,
+    'edge.rollout.kill': false,
+  };
+
+  t.after(() => {
+    globalThis.fetch = originalFetch;
+    (globalThis as { RC?: Record<string, unknown> }).RC = originalRc;
+    __resetEdgeModelLoaderForTests();
+  });
+
+  const result = await ensureModel({ platform: 'android', id: 'model-a-int8-320' });
+  assert.equal(result.path, storage.join('android', 'model-b-fp16-384.tflite'));
+  assert.equal(await verifySha256(result.path, shaB), true);
+  assert.ok(calls.some((url) => url.includes('/bench/summary')));
+});
+
+test('ensureModel kill switch disables enforcement', async (t) => {
+  __resetEdgeModelLoaderForTests();
+  const storage = createMemoryStorage();
+  __setEdgeModelStorageForTests(storage);
+
+  const dataA = new TextEncoder().encode('model-A');
+  const shaA = createHash('sha256').update(dataA).digest('hex');
+  const dataB = new TextEncoder().encode('model-B');
+  const shaB = createHash('sha256').update(dataB).digest('hex');
+
+  const manifest = {
+    version: 1,
+    recommended: { android: 'model-a-int8-320' },
+    android: [
+      {
+        id: 'model-a-int8-320',
+        url: 'https://cdn.example.com/android/model-a.tflite',
+        sha256: shaA,
+        size: dataA.length,
+        runtime: 'tflite',
+        inputSize: 320,
+        quant: 'int8',
+      },
+      {
+        id: 'model-b-fp16-384',
+        url: 'https://cdn.example.com/android/model-b.tflite',
+        sha256: shaB,
+        size: dataB.length,
+        runtime: 'tflite',
+        inputSize: 384,
+        quant: 'fp16',
+      },
+    ],
+  };
+
+  const defaultsPayload = {
+    android: {
+      runtime: 'tflite',
+      inputSize: 384,
+      quant: 'fp16',
+    },
+  };
+
+  const calls: string[] = [];
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (input: RequestInfo | URL) => {
+    const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : String(input);
+    calls.push(url);
+    if (url.includes('/models/manifest.json')) {
+      return createResponse(JSON.stringify(manifest));
+    }
+    if (url.includes('/bench/summary')) {
+      return createResponse(JSON.stringify(defaultsPayload));
+    }
+    if (url.endsWith('/android/model-a.tflite')) {
+      return new Response(dataA, { status: 200 });
+    }
+    if (url.endsWith('/android/model-b.tflite')) {
+      return new Response(dataB, { status: 200 });
+    }
+    throw new Error(`Unexpected fetch url: ${url}`);
+  };
+
+  const originalRc = (globalThis as { RC?: Record<string, unknown> }).RC;
+  (globalThis as { RC?: Record<string, unknown> }).RC = {
+    'edge.defaults.enforce': true,
+    'edge.rollout.enabled': true,
+    'edge.rollout.percent': 100,
+    'edge.rollout.kill': true,
+  };
+
+  t.after(() => {
+    globalThis.fetch = originalFetch;
+    (globalThis as { RC?: Record<string, unknown> }).RC = originalRc;
+    __resetEdgeModelLoaderForTests();
+  });
+
+  const result = await ensureModel({ platform: 'android', id: 'model-a-int8-320' });
+  assert.equal(result.path, storage.join('android', 'model-a-int8-320.tflite'));
+  assert.equal(await verifySha256(result.path, shaA), true);
+  const benchCalls = calls.filter((url) => url.includes('/bench/summary'));
+  assert.equal(benchCalls.length, 0);
+});
