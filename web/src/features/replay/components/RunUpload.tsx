@@ -5,9 +5,18 @@ import { Upload, Download } from "lucide-react";
 import { getRun } from "../../../api";
 import type { ParsedHudRun } from "../utils/parseHudRun";
 import { parseHudRun } from "../utils/parseHudRun";
+import type { Shot } from "../utils/parseShotLog";
+import { parseShotLog } from "../utils/parseShotLog";
+
+export type RunSlot = "primary" | "comparison";
+
+export interface LoadedRun {
+  run: ParsedHudRun;
+  shots: Shot[];
+}
 
 interface RunUploadProps {
-  onRunLoaded: (run: ParsedHudRun) => void;
+  onRunLoaded: (payload: LoadedRun, slot: RunSlot) => void;
 }
 
 type FetchState = "idle" | "loading" | "error";
@@ -16,13 +25,18 @@ export function RunUpload({ onRunLoaded }: RunUploadProps) {
   const [error, setError] = useState<string | null>(null);
   const [fetchState, setFetchState] = useState<FetchState>("idle");
   const [runId, setRunId] = useState("");
+  const [slot, setSlot] = useState<RunSlot>("primary");
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const handleParsed = useCallback(
-    (payload: string) => {
+    (records: unknown[], target: RunSlot) => {
       try {
-        const parsed = parseHudRun(payload);
-        onRunLoaded(parsed);
+        if (!Array.isArray(records)) {
+          throw new Error("hud_run.json must be a JSON array");
+        }
+        const run = parseHudRun(records);
+        const shots = parseShotLog(records);
+        onRunLoaded({ run, shots }, target);
         setError(null);
       } catch (err) {
         setError(err instanceof Error ? err.message : String(err));
@@ -42,12 +56,20 @@ export function RunUpload({ onRunLoaded }: RunUploadProps) {
         setError("Please select a hud_run.json file");
         return;
       }
+      const targetSlot = slot;
       file
         .text()
-        .then(handleParsed)
+        .then((text) => {
+          try {
+            const parsed = JSON.parse(text);
+            handleParsed(parsed, targetSlot);
+          } catch (err) {
+            setError(err instanceof Error ? err.message : String(err));
+          }
+        })
         .catch((err) => setError(err instanceof Error ? err.message : String(err)));
     },
-    [handleParsed],
+    [handleParsed, slot],
   );
 
   const onDrop = useCallback(
@@ -76,20 +98,20 @@ export function RunUpload({ onRunLoaded }: RunUploadProps) {
     }
     setFetchState("loading");
     setError(null);
+    const targetSlot = slot;
     try {
       const run = await getRun(runId.trim());
       const events = (run as Record<string, unknown>)["events"];
       if (!Array.isArray(events)) {
         throw new Error("Run did not include telemetry events");
       }
-      const parsed = parseHudRun(events as unknown[]);
-      onRunLoaded(parsed);
+      handleParsed(events as unknown[], targetSlot);
       setFetchState("idle");
     } catch (err) {
       setFetchState("error");
       setError(err instanceof Error ? err.message : String(err));
     }
-  }, [onRunLoaded, runId]);
+  }, [handleParsed, runId, slot]);
 
   const helperText = useMemo(() => {
     if (fetchState === "loading") {
@@ -103,6 +125,33 @@ export function RunUpload({ onRunLoaded }: RunUploadProps) {
 
   return (
     <section className="space-y-4">
+      <div className="flex flex-wrap items-center justify-end gap-3 text-xs font-semibold uppercase tracking-wide text-slate-400">
+        <span>Target slot</span>
+        <div className="inline-flex overflow-hidden rounded border border-slate-700">
+          <button
+            type="button"
+            onClick={() => setSlot("primary")}
+            className={`px-3 py-1 transition ${
+              slot === "primary"
+                ? "bg-emerald-500 text-emerald-950"
+                : "bg-slate-900/70 text-slate-300 hover:bg-slate-800/80"
+            }`}
+          >
+            Primary
+          </button>
+          <button
+            type="button"
+            onClick={() => setSlot("comparison")}
+            className={`px-3 py-1 transition ${
+              slot === "comparison"
+                ? "bg-emerald-500 text-emerald-950"
+                : "bg-slate-900/70 text-slate-300 hover:bg-slate-800/80"
+            }`}
+          >
+            Comparison
+          </button>
+        </div>
+      </div>
       <div
         className="flex flex-col items-center justify-center gap-4 rounded-lg border border-dashed border-slate-700 bg-slate-900/50 p-8 text-center transition hover:border-emerald-400 hover:bg-slate-900"
         onDrop={onDrop}

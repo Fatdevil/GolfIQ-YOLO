@@ -102,6 +102,44 @@ type TelemetryEmitter = (event: string, data: Record<string, unknown>) => void;
 
 type HazardDirection = 'LEFT' | 'RIGHT';
 
+type ShotLogRecord = {
+  tStart: number;
+  tEnd: number;
+  shotId: string;
+  club: string | null;
+  base_m: number | null;
+  playsLike_m: number | null;
+  deltas: {
+    temp: number | null;
+    alt: number | null;
+    head: number | null;
+    slope: number | null;
+  };
+  pin: { lat: number; lon: number } | null;
+  land: { lat: number; lon: number } | null;
+  carry_m: number | null;
+  heading_deg: number | null;
+  notes?: string | null;
+};
+
+type ShotSessionState = {
+  shotId: string;
+  startedAt: number;
+  headingDeg: number;
+  baseDistance: number;
+  origin: LocalPoint;
+  plan: PlanOut;
+  club: string | null;
+  pin: GeoPoint | null;
+  landing?: LocalPoint;
+  completedAt?: number;
+  logged?: boolean;
+};
+
+function finiteOrNull(value: unknown): number | null {
+  return typeof value === 'number' && Number.isFinite(value) ? value : null;
+}
+
 let lastSelectedCourseMemory: string | null = null;
 
 function resolveTelemetryEmitter(): TelemetryEmitter | null {
@@ -165,6 +203,60 @@ async function persistLastSelectedCourse(courseId: string): Promise<void> {
     await FileSystem.writeAsStringAsync(path, JSON.stringify({ courseId }));
   } catch (error) {
     // ignore persistence errors
+  }
+}
+
+async function appendHudRunShot(record: ShotLogRecord): Promise<void> {
+  const FileSystem = await loadFileSystem();
+  if (!FileSystem?.documentDirectory || !FileSystem.writeAsStringAsync) {
+    return;
+  }
+  const base = FileSystem.documentDirectory.replace(/\/+$/, '');
+  const path = `${base}/hud_run.json`;
+  let records: unknown[] | null = null;
+  if (!FileSystem.readAsStringAsync) {
+    if (FileSystem.getInfoAsync) {
+      try {
+        const info = await FileSystem.getInfoAsync(path);
+        if (info.exists && info.isFile !== false) {
+          return;
+        }
+      } catch (error) {
+        // ignore stat errors
+      }
+    }
+    records = [];
+  } else {
+    try {
+      const contents = await FileSystem.readAsStringAsync(path);
+      const parsed = JSON.parse(contents);
+      if (Array.isArray(parsed)) {
+        records = parsed;
+      } else {
+        return;
+      }
+    } catch (error) {
+      if (FileSystem.getInfoAsync) {
+        try {
+          const info = await FileSystem.getInfoAsync(path);
+          if (info.exists && info.isFile !== false) {
+            return;
+          }
+        } catch (statError) {
+          // ignore stat errors when determining file existence
+        }
+      }
+      records = [];
+    }
+  }
+  if (!records) {
+    records = [];
+  }
+  records.push(record);
+  try {
+    await FileSystem.writeAsStringAsync(path, JSON.stringify(records, null, 2));
+  } catch (error) {
+    // ignore write errors
   }
 }
 
@@ -669,13 +761,7 @@ const QAArHudOverlayScreen: React.FC = () => {
     slope_dh_m: 0,
   });
   const [plannerResult, setPlannerResult] = useState<PlanOut | null>(null);
-  const [shotSession, setShotSession] = useState<{
-    startedAt: number;
-    baseDistance: number;
-    origin: LocalPoint;
-    plan: PlanOut;
-    landing?: LocalPoint;
-  } | null>(null);
+  const [shotSession, setShotSession] = useState<ShotSessionState | null>(null);
   const [markLandingArmed, setMarkLandingArmed] = useState(false);
   const selectedCourse = useMemo(
     () => courses.find((c) => c.courseId === selectedCourseId) ?? null,
@@ -755,20 +841,36 @@ const QAArHudOverlayScreen: React.FC = () => {
     if (!plannerResult || !pinMetrics) {
       return;
     }
+    const now = Date.now();
+    shotIdCounterRef.current += 1;
+    const shotId = `shot-${now}-${shotIdCounterRef.current}`;
+    const suggested =
+      typeof plannerResult.clubSuggested === 'string' ? plannerResult.clubSuggested : null;
+    const normalizedClub =
+      suggested && (CLUB_SEQUENCE as readonly string[]).includes(suggested)
+        ? suggested
+        : suggestClub(qaBag, plannerResult.playsLike_m);
     setShotSession({
-      startedAt: Date.now(),
+      shotId,
+      startedAt: now,
+      headingDeg: heading,
       baseDistance: pinMetrics.distance,
-      origin: playerPosition,
+      origin: { ...playerPosition },
       plan: plannerResult,
+      club: normalizedClub,
+      pin: pinRef.current ? { ...pinRef.current } : null,
+      landing: undefined,
+      completedAt: undefined,
+      logged: false,
     });
     setMarkLandingArmed(true);
-  }, [pinMetrics, plannerResult, playerPosition]);
+  }, [heading, pinMetrics, plannerResult, playerPosition, qaBag]);
   const handleArmLanding = useCallback(() => {
     setShotSession((prev) => {
       if (!prev) {
         return prev;
       }
-      return { ...prev, landing: undefined };
+      return { ...prev, landing: undefined, completedAt: undefined, logged: false };
     });
     setMarkLandingArmed(true);
   }, [setMarkLandingArmed, setShotSession]);
@@ -778,12 +880,66 @@ const QAArHudOverlayScreen: React.FC = () => {
         if (!prev) {
           return prev;
         }
-        return { ...prev, landing: point };
+        return { ...prev, landing: point, completedAt: Date.now(), logged: false };
       });
       setMarkLandingArmed(false);
     },
     [setShotSession, setMarkLandingArmed],
   );
+  const createShotPayload = useCallback(
+    (session: ShotSessionState): ShotLogRecord | null => {
+      if (!session.landing) {
+        return null;
+      }
+      const breakdown = session.plan.breakdown ?? {
+        temp_m: 0,
+        alt_m: 0,
+        head_m: 0,
+        slope_m: 0,
+      };
+      const landGeo = overlayOrigin ? fromLocalPoint(overlayOrigin, session.landing) : null;
+      const carry = Math.hypot(
+        session.landing.x - session.origin.x,
+        session.landing.y - session.origin.y,
+      );
+      return {
+        tStart: session.startedAt,
+        tEnd: session.completedAt ?? Date.now(),
+        shotId: session.shotId,
+        club: session.club ?? null,
+        base_m: finiteOrNull(session.baseDistance),
+        playsLike_m: finiteOrNull(session.plan.playsLike_m),
+        deltas: {
+          temp: finiteOrNull(breakdown.temp_m),
+          alt: finiteOrNull(breakdown.alt_m),
+          head: finiteOrNull(breakdown.head_m),
+          slope: finiteOrNull(breakdown.slope_m),
+        },
+        pin: session.pin ? { lat: session.pin.lat, lon: session.pin.lon } : null,
+        land: landGeo ? { lat: landGeo.lat, lon: landGeo.lon } : null,
+        carry_m: finiteOrNull(carry),
+        heading_deg: finiteOrNull(session.headingDeg),
+      };
+    },
+    [overlayOrigin],
+  );
+  useEffect(() => {
+    if (!shotSession || !shotSession.landing || shotSession.logged) {
+      return;
+    }
+    const payload = createShotPayload(shotSession);
+    if (!payload) {
+      return;
+    }
+    emitTelemetry('hud.shot', payload);
+    void appendHudRunShot(payload);
+    setShotSession((prev) => {
+      if (!prev || prev.shotId !== shotSession.shotId) {
+        return prev;
+      }
+      return { ...prev, logged: true };
+    });
+  }, [createShotPayload, emitTelemetry, shotSession]);
   const shotSummary = useMemo(() => {
     if (!shotSession || !shotSession.landing) {
       return null;
@@ -793,11 +949,14 @@ const QAArHudOverlayScreen: React.FC = () => {
     const actual = Math.hypot(dx, dy);
     const planned = shotSession.plan.playsLike_m;
     const error = actual - planned;
-    const isClubId = (value: string | undefined): value is ClubId =>
+    const isClubId = (value: string | null | undefined): value is ClubId =>
       Boolean(value && (CLUB_SEQUENCE as readonly string[]).includes(value));
-    const plannedClub = isClubId(shotSession.plan.clubSuggested)
-      ? shotSession.plan.clubSuggested
-      : suggestClub(qaBag, planned);
+    const storedClub = shotSession.club;
+    const plannedClub = storedClub && isClubId(storedClub)
+      ? storedClub
+      : isClubId(shotSession.plan.clubSuggested)
+        ? shotSession.plan.clubSuggested
+        : suggestClub(qaBag, planned);
     const actualClub = suggestClub(qaBag, actual);
     const plannedIdx = CLUB_SEQUENCE.indexOf(plannedClub);
     const actualIdx = CLUB_SEQUENCE.indexOf(actualClub);
@@ -825,6 +984,7 @@ const QAArHudOverlayScreen: React.FC = () => {
   );
   const [cameraStats, setCameraStats] = useState<CameraStats>({ latency: 0, fps: 0 });
   const telemetryRef = useRef<TelemetryEmitter | null>(resolveTelemetryEmitter());
+  const shotIdCounterRef = useRef(0);
   const bundleRef = useRef<CourseBundle | null>(bundle);
   const playerGeoRef = useRef<GeoPoint | null>(playerLatLon);
   const pinRef = useRef<GeoPoint | null>(pin);

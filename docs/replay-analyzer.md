@@ -50,6 +50,20 @@ The analyzer renders:
 - **Heading RMS** — residual error reported by the heading smoother.
 - **Heading trace** — the smoothed heading series (falls back to raw if smoothing is absent).
 
+## Shot log & dispersion
+
+QA overlay captures append plan vs actual shot records to `hud_run.json` under the `hud.shot` envelope. The analyzer parses
+every object with a `shotId` and renders two complementary views:
+
+- **Dispersion plot** — plots the landing point relative to the pin (origin). The Y axis runs along the target line (positive
+  values = long); the X axis shows lateral error (positive values = right). Multiple runs can be overlaid, with the active
+  run highlighted via the toggle above the charts.
+- **Shot stats table** — compares average carry, standard deviations, and the share of short/long/left/right misses. This
+  table updates as you switch between the primary/comparison runs.
+
+Use the slot picker above the upload card to load a capture as **Primary** or **Comparison**. The timeline & FPS/latency
+charts operate on the active slot while the dispersion widgets always show all loaded runs side-by-side.
+
 ## Bench comparison
 
 `GET /bench/summary` provides the most recent platform recommendations. The analyzer fetches the JSON automatically and
@@ -64,6 +78,7 @@ Use **Export report** to download a Markdown summary that contains:
 - Session metadata (device, OS, duration).
 - Average FPS, latency p95, and RMS mean.
 - Re-centre counts with average and max duration.
+- Shot dispersion summary (count, carry mean/std, directional bias).
 - A table with the current bench defaults.
 
 The file is written without server round-trips to keep the workflow fast and binary-safe.
