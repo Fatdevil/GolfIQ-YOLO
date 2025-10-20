@@ -5,6 +5,7 @@ import {
   type EdgeRolloutDecision,
   type RcRecord,
 } from './rollout';
+import { emitReliabilityEvent } from '../reliability/events';
 
 type Runtime = EdgeDefaults['runtime'];
 type Quant = EdgeDefaults['quant'];
@@ -48,6 +49,24 @@ let manifestCache: Manifest | null = null;
 let storageOverride: Storage | null = null;
 let storagePromise: Promise<Storage> | null = null;
 
+type LastKnownGoodRecord = {
+  modelId: string;
+  sha256: string;
+  path: string;
+  savedAt: number;
+  platform: Platform;
+};
+
+type EdgeModelTelemetryEvent = {
+  event: 'edge.model.init_failed' | 'edge.model.fallback_used';
+  platform: Platform;
+  attemptedId?: string;
+  fallbackId?: string;
+  reason: string;
+};
+
+const LAST_KNOWN_GOOD_FILE = 'last-good.json';
+
 export interface EdgeModelRolloutOptions {
   deviceId?: string | null;
   rc?: RcRecord;
@@ -62,6 +81,7 @@ function getGlobalObject(): typeof globalThis & {
   EDGE_MODEL_CACHE_DIR?: string;
   __EDGE_MODEL_CACHE_DIR__?: string;
   RC?: RcRecord;
+  __EDGE_MODEL_TELEMETRY__?: (event: EdgeModelTelemetryEvent) => void;
 } {
   return globalThis as typeof globalThis & {
     EDGE_MODEL_MANIFEST_ENDPOINT?: string;
@@ -70,6 +90,7 @@ function getGlobalObject(): typeof globalThis & {
     EDGE_MODEL_CACHE_DIR?: string;
     __EDGE_MODEL_CACHE_DIR__?: string;
     RC?: RcRecord;
+    __EDGE_MODEL_TELEMETRY__?: (event: EdgeModelTelemetryEvent) => void;
   };
 }
 
@@ -160,6 +181,100 @@ function normalizeQuant(value: unknown): Quant | null {
   }
   const lower = value.trim().toLowerCase();
   return (QUANTS as readonly string[]).includes(lower) ? (lower as Quant) : null;
+}
+
+function encodeUtf8(value: string): Uint8Array {
+  if (typeof TextEncoder !== 'undefined') {
+    return new TextEncoder().encode(value);
+  }
+  if (typeof Buffer !== 'undefined') {
+    return new Uint8Array(Buffer.from(value, 'utf-8'));
+  }
+  const bytes = new Uint8Array(value.length);
+  for (let i = 0; i < value.length; i += 1) {
+    bytes[i] = value.charCodeAt(i) & 0xff;
+  }
+  return bytes;
+}
+
+function decodeUtf8(data: Uint8Array): string {
+  if (typeof TextDecoder !== 'undefined') {
+    return new TextDecoder().decode(data);
+  }
+  if (typeof Buffer !== 'undefined') {
+    return Buffer.from(data).toString('utf-8');
+  }
+  let binary = '';
+  for (let i = 0; i < data.length; i += 1) {
+    binary += String.fromCharCode(data[i]);
+  }
+  try {
+    return decodeURIComponent(escape(binary));
+  } catch {
+    return binary;
+  }
+}
+
+function emitEdgeModelTelemetry(event: EdgeModelTelemetryEvent): void {
+  const sink = getGlobalObject().__EDGE_MODEL_TELEMETRY__;
+  if (typeof sink === 'function') {
+    try {
+      sink(event);
+      return;
+    } catch {
+      // ignore telemetry sink failures
+    }
+  }
+  if (typeof console !== 'undefined' && typeof console.warn === 'function') {
+    console.warn(`[edge-model] ${event.event}`, event);
+  }
+}
+
+async function persistLastKnownGood(
+  storage: Storage,
+  platform: Platform,
+  record: LastKnownGoodRecord,
+): Promise<void> {
+  try {
+    const path = storage.join(platform, LAST_KNOWN_GOOD_FILE);
+    await storage.ensureDir(path);
+    await storage.writeFile(path, encodeUtf8(JSON.stringify(record)));
+  } catch {
+    // persistence of metadata is best-effort
+  }
+}
+
+async function loadLastKnownGood(
+  storage: Storage,
+  platform: Platform,
+): Promise<LastKnownGoodRecord | null> {
+  try {
+    const path = storage.join(platform, LAST_KNOWN_GOOD_FILE);
+    const data = await storage.readFile(path);
+    if (!data) {
+      return null;
+    }
+    const decoded = decodeUtf8(data);
+    const parsed = JSON.parse(decoded) as Partial<LastKnownGoodRecord> | null;
+    if (!parsed || typeof parsed !== 'object') {
+      return null;
+    }
+    const modelId = typeof parsed.modelId === 'string' ? parsed.modelId : null;
+    const sha256 = typeof parsed.sha256 === 'string' ? parsed.sha256 : null;
+    const filePath = typeof parsed.path === 'string' ? parsed.path : null;
+    if (!modelId || !sha256 || !filePath) {
+      return null;
+    }
+    return {
+      modelId,
+      sha256,
+      path: filePath,
+      savedAt: typeof parsed.savedAt === 'number' ? parsed.savedAt : Date.now(),
+      platform,
+    } satisfies LastKnownGoodRecord;
+  } catch {
+    return null;
+  }
 }
 
 function normalizeId(value: unknown): string | null {
@@ -741,25 +856,82 @@ export async function ensureModel(opts: {
   const extension = fileExtensionFromUrl(model.url);
   const fileName = `${sanitizeSegment(model.id)}${extension}`;
   const destination = storage.join(opts.platform, fileName);
-  if (await storage.exists(destination)) {
-    const ok = await verifySha256(destination, model.sha256);
-    if (ok) {
-      return { path: destination };
+  try {
+    if (await storage.exists(destination)) {
+      const ok = await verifySha256(destination, model.sha256);
+      if (ok) {
+        await persistLastKnownGood(storage, opts.platform, {
+          modelId: model.id,
+          sha256: model.sha256,
+          path: destination,
+          savedAt: Date.now(),
+          platform: opts.platform,
+        });
+        return { path: destination };
+      }
+      await storage.removeFile(destination);
     }
-    await storage.removeFile(destination);
+    const payload = await downloadModel(model.url, opts.signal);
+    const digest = await computeSha256(payload);
+    if (digest !== model.sha256) {
+      throw new Error('Downloaded model failed integrity check');
+    }
+    await storage.ensureDir(destination);
+    await storage.writeFile(destination, payload);
+    const verified = await verifySha256(destination, model.sha256);
+    if (!verified) {
+      await storage.removeFile(destination);
+      throw new Error('Stored model failed integrity verification');
+    }
+    await persistLastKnownGood(storage, opts.platform, {
+      modelId: model.id,
+      sha256: model.sha256,
+      path: destination,
+      savedAt: Date.now(),
+      platform: opts.platform,
+    });
+    return { path: destination };
+  } catch (error) {
+    const failure =
+      error instanceof Error ? error : new Error(typeof error === 'string' ? error : 'model init failed');
+    const reason = failure.message || 'model init failed';
+    emitEdgeModelTelemetry({
+      event: 'edge.model.init_failed',
+      platform: opts.platform,
+      attemptedId: model.id,
+      reason,
+    });
+    emitReliabilityEvent({
+      type: 'model:init_failed',
+      platform: opts.platform,
+      attemptedId: model.id,
+      reason,
+      timestamp: Date.now(),
+    });
+    const fallback = await loadLastKnownGood(storage, opts.platform);
+    if (fallback) {
+      const ok = await verifySha256(fallback.path, fallback.sha256);
+      if (ok) {
+        emitEdgeModelTelemetry({
+          event: 'edge.model.fallback_used',
+          platform: opts.platform,
+          attemptedId: model.id,
+          fallbackId: fallback.modelId,
+          reason,
+        });
+        emitReliabilityEvent({
+          type: 'model:fallback',
+          platform: opts.platform,
+          attemptedId: model.id,
+          fallbackId: fallback.modelId,
+          reason,
+          timestamp: Date.now(),
+        });
+        return { path: fallback.path };
+      }
+    }
+    throw failure;
   }
-  const payload = await downloadModel(model.url, opts.signal);
-  const digest = await computeSha256(payload);
-  if (digest !== model.sha256) {
-    throw new Error('Downloaded model failed integrity check');
-  }
-  await storage.writeFile(destination, payload);
-  const verified = await verifySha256(destination, model.sha256);
-  if (!verified) {
-    await storage.removeFile(destination);
-    throw new Error('Stored model failed integrity verification');
-  }
-  return { path: destination };
 }
 
 export function __setEdgeModelStorageForTests(storage: Storage | null): void {
