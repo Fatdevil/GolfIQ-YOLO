@@ -140,6 +140,20 @@ def _append_jsonl(kind: str, run_id: str, device: str | None, size: int) -> None
         handle.write(json.dumps(entry, ensure_ascii=False) + "\n")
 
 
+def _append_failure(kind: str, reason: str) -> None:
+    now = datetime.now(timezone.utc)
+    day = now.strftime("%Y-%m-%d")
+    path = (_runs_root() / "failed" / f"{day}.jsonl").resolve()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    entry = {
+        "kind": kind,
+        "reason": reason,
+        "created_at": now.replace(microsecond=0).isoformat().replace("+00:00", "Z"),
+    }
+    with path.open("a", encoding="utf-8") as handle:
+        handle.write(json.dumps(entry, ensure_ascii=False) + "\n")
+
+
 def _store_shared_run(kind: str, payload: Any) -> Dict[str, str]:
     device_hint = _extract_device(payload)
     run_id = _make_share_id(kind, device_hint)
@@ -201,18 +215,35 @@ def _etag_matches(header: str | None, etag: str) -> bool:
 @router.post("/hud")
 async def upload_hud_run_json(payload: Any = Body(...)) -> Dict[str, str]:
     if not isinstance(payload, list) or len(payload) == 0:
+        _append_failure("hud", "invalid-payload")
         raise HTTPException(status_code=400, detail="hud run must be a JSON array")
-    return _store_shared_run("hud", payload)
+    try:
+        return _store_shared_run("hud", payload)
+    except HTTPException as exc:
+        _append_failure("hud", f"http-{exc.status_code}")
+        raise
+    except Exception as exc:  # pragma: no cover - defensive guard
+        _append_failure("hud", exc.__class__.__name__)
+        raise
 
 
 @router.post("/round")
 async def upload_round_run_json(payload: Any = Body(...)) -> Dict[str, str]:
     if not isinstance(payload, dict):
+        _append_failure("round", "invalid-payload")
         raise HTTPException(status_code=400, detail="round run must be a JSON object")
     holes = payload.get("holes")
     if holes is not None and not isinstance(holes, list):
+        _append_failure("round", "invalid-holes")
         raise HTTPException(status_code=400, detail="round run holes must be a list")
-    return _store_shared_run("round", payload)
+    try:
+        return _store_shared_run("round", payload)
+    except HTTPException as exc:
+        _append_failure("round", f"http-{exc.status_code}")
+        raise
+    except Exception as exc:  # pragma: no cover
+        _append_failure("round", exc.__class__.__name__)
+        raise
 
 
 @router.get("/{run_id}")
