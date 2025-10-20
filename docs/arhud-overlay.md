@@ -76,3 +76,24 @@ any of the following:
 Tapping the button opens an action sheet with "Open AR-HUD Overlay" and
 "Cancel" options. Selecting the open action mounts the overlay as a modal, and a
 "Close" button in the top-left corner returns to the underlying QA screens.
+
+## Auto-picking courses
+
+The overlay can now suggest course bundles based on the device GPS. Enable the
+"Auto-pick course" toggle in the course panel to start polling for a location
+fix. The helper requests foreground permissions via `expo-location`; if the
+user denies access we simply disable the feature and keep the manual picker.
+
+- Location fixes are debounced to ~10 seconds to avoid draining the battery.
+- A prompt appears only when the nearest course moves at least 300 m closer
+  than the previous candidate and remains within 1.5 km of the device. This
+  prevents rapid flip-flopping near course boundaries.
+- Dismissing the prompt mutes further prompts for ten minutes unless the user
+  explicitly enables it again.
+- Accepting a suggestion switches the course and logs a telemetry event with
+  `{ event: 'bundle.autopick', id, dist_m }` so we can monitor adoption.
+
+Auto-pick reuses the bundle index and cache from `shared/arhud/bundle_client`,
+so previously loaded bundles stay available offline. When testing in flight mode
+keep a few bundles cached ahead of time; the auto-picker will continue to pick
+from the cached index even without network access.
