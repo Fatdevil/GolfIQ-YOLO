@@ -33,7 +33,12 @@ import {
   type GeoPoint,
   type LocalPoint,
 } from '../../../../shared/arhud/geo';
-import { getLocation, LocationError } from '../../../../shared/arhud/location';
+import {
+  getLocation,
+  LocationError,
+  estimateSpeedMps,
+  type LocationFix,
+} from '../../../../shared/arhud/location';
 import { createCameraStub, type CameraFrame } from '../../../../shared/arhud/native/camera_stub';
 import { subscribeHeading } from '../../../../shared/arhud/native/heading';
 import { qaHudEnabled } from '../../../../shared/arhud/native/qa_gate';
@@ -55,6 +60,12 @@ import {
   type CalibOut,
   type Shot as CalibrateShot,
 } from '../../../../shared/playslike/bag_calibrator';
+import {
+  createLandingHeuristics,
+  type LandingProposal,
+  type LandingState as AutoLandingState,
+  type LandingSample,
+} from '../../../../shared/arhud/landing_heuristics';
 
 type FeatureKind = 'green' | 'fairway' | 'bunker' | 'hazard' | 'cartpath' | 'other';
 
@@ -874,6 +885,8 @@ const QAArHudOverlayScreen: React.FC = () => {
   const [calibrationResult, setCalibrationResult] = useState<CalibOut | null>(null);
   const [calibrationLoading, setCalibrationLoading] = useState(false);
   const [calibrationMessage, setCalibrationMessage] = useState<string | null>(null);
+  const [landingProposal, setLandingProposal] = useState<LandingProposal | null>(null);
+  const [landingState, setLandingState] = useState<AutoLandingState>('IDLE');
   const selectedCourse = useMemo(
     () => courses.find((c) => c.courseId === selectedCourseId) ?? null,
     [courses, selectedCourseId],
@@ -1106,8 +1119,52 @@ const QAArHudOverlayScreen: React.FC = () => {
       completedAt: undefined,
       logged: false,
     });
+    setLandingProposal(null);
+    const heuristics = landingHeuristicsRef.current;
+    const lastFix = lastLocationFixRef.current;
+    const startGeo = lastFix
+      ? {
+          lat: lastFix.lat,
+          lon: lastFix.lon,
+          acc_m: lastFix.acc_m,
+          timestamp: lastFix.timestamp,
+        }
+      : playerLatLon
+        ? {
+            lat: playerLatLon.lat,
+            lon: playerLatLon.lon,
+            acc_m: 10,
+            timestamp: now,
+          }
+        : null;
+    if (startGeo) {
+      const sample: LandingSample = {
+        t: typeof startGeo.timestamp === 'number' ? startGeo.timestamp : now,
+        lat: startGeo.lat,
+        lon: startGeo.lon,
+        acc_m: startGeo.acc_m ?? 10,
+        speed_mps: 0,
+        heading_deg: heading,
+      };
+      heuristics.beginTracking(sample);
+      setLandingState(heuristics.state());
+      startLandingTimeout();
+    } else {
+      heuristics.reset();
+      setLandingState(heuristics.state());
+      clearLandingTimeout();
+    }
     setMarkLandingArmed(true);
-  }, [heading, pinMetrics, plannerResult, playerPosition, qaBag]);
+  }, [
+    heading,
+    pinMetrics,
+    plannerResult,
+    playerLatLon,
+    playerPosition,
+    qaBag,
+    startLandingTimeout,
+    clearLandingTimeout,
+  ]);
   const handleArmLanding = useCallback(() => {
     setShotSession((prev) => {
       if (!prev) {
@@ -1126,8 +1183,12 @@ const QAArHudOverlayScreen: React.FC = () => {
         return { ...prev, landing: point, completedAt: Date.now(), logged: false };
       });
       setMarkLandingArmed(false);
+      landingHeuristicsRef.current.cancel('manual');
+      setLandingState(landingHeuristicsRef.current.state());
+      setLandingProposal(null);
+      clearLandingTimeout();
     },
-    [setShotSession, setMarkLandingArmed],
+    [setShotSession, setMarkLandingArmed, clearLandingTimeout],
   );
   const createShotPayload = useCallback(
     (session: ShotSessionState): ShotLogRecord | null => {
@@ -1240,6 +1301,28 @@ const QAArHudOverlayScreen: React.FC = () => {
   const bundleRef = useRef<CourseBundle | null>(bundle);
   const playerGeoRef = useRef<GeoPoint | null>(playerLatLon);
   const pinRef = useRef<GeoPoint | null>(pin);
+  const landingHeuristicsRef = useRef(createLandingHeuristics());
+  const lastLocationFixRef = useRef<LocationFix | null>(null);
+  const landingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const clearLandingTimeout = useCallback(() => {
+    if (landingTimeoutRef.current) {
+      clearTimeout(landingTimeoutRef.current);
+      landingTimeoutRef.current = null;
+    }
+  }, []);
+
+  const startLandingTimeout = useCallback(() => {
+    clearLandingTimeout();
+    landingTimeoutRef.current = setTimeout(() => {
+      const heuristics = landingHeuristicsRef.current;
+      if (heuristics.state() === 'TRACKING') {
+        heuristics.cancel('timeout');
+        setLandingProposal(null);
+        setLandingState(heuristics.state());
+      }
+    }, 60_000);
+  }, [clearLandingTimeout]);
 
   useEffect(() => {
     telemetryRef.current = resolveTelemetryEmitter();
@@ -1257,6 +1340,28 @@ const QAArHudOverlayScreen: React.FC = () => {
     pinRef.current = pin;
   }, [pin]);
 
+  useEffect(() => {
+    landingHeuristicsRef.current.setCourse({ bundle, origin: overlayOrigin });
+  }, [bundle, overlayOrigin]);
+
+  useEffect(() => {
+    if (!qaEnabled) {
+      landingHeuristicsRef.current.reset();
+      setLandingProposal(null);
+      setLandingState('IDLE');
+      clearLandingTimeout();
+    }
+  }, [qaEnabled, clearLandingTimeout]);
+
+  useEffect(() => {
+    if (!shotSession) {
+      landingHeuristicsRef.current.reset();
+      setLandingProposal(null);
+      setLandingState('IDLE');
+      clearLandingTimeout();
+    }
+  }, [shotSession, clearLandingTimeout]);
+
   const emitTelemetry = useCallback(
     (event: string, data: Record<string, unknown>) => {
       if (!qaEnabled) {
@@ -1271,6 +1376,121 @@ const QAArHudOverlayScreen: React.FC = () => {
     },
     [qaEnabled],
   );
+
+  useEffect(() => {
+    if (!qaEnabled) {
+      lastLocationFixRef.current = null;
+      return undefined;
+    }
+    let cancelled = false;
+    let timeout: ReturnType<typeof setTimeout> | null = null;
+
+    const poll = async () => {
+      if (cancelled) {
+        return;
+      }
+      try {
+        const fix = await getLocation();
+        if (cancelled) {
+          return;
+        }
+        const previous = lastLocationFixRef.current;
+        lastLocationFixRef.current = fix;
+        const heuristics = landingHeuristicsRef.current;
+        const estimated = estimateSpeedMps(previous, fix);
+        const sample: LandingSample = {
+          t: fix.timestamp,
+          lat: fix.lat,
+          lon: fix.lon,
+          acc_m: fix.acc_m,
+          speed_mps: estimated !== null && Number.isFinite(estimated) ? estimated : 0,
+          heading_deg: heading,
+        };
+        const proposal = heuristics.ingest(sample);
+        const nextState = heuristics.state();
+        setLandingState((prev) => (prev === nextState ? prev : nextState));
+        if (proposal) {
+          setLandingProposal(proposal);
+          emitTelemetry('hud.auto_land.proposed', {
+            carry_m: proposal.carry_m,
+            acc_m: sample.acc_m,
+            reason: proposal.reason,
+            conf: proposal.conf,
+          });
+          clearLandingTimeout();
+        }
+      } catch (error) {
+        if (error instanceof LocationError && error.code === 'permission-denied') {
+          landingHeuristicsRef.current.cancel('permission');
+          setLandingState(landingHeuristicsRef.current.state());
+          setLandingProposal(null);
+          clearLandingTimeout();
+          cancelled = true;
+          return;
+        }
+      }
+      if (!cancelled) {
+        timeout = setTimeout(poll, 1000);
+      }
+    };
+
+    poll();
+
+    return () => {
+      cancelled = true;
+      if (timeout) {
+        clearTimeout(timeout);
+      }
+    };
+  }, [qaEnabled, heading, emitTelemetry, clearLandingTimeout]);
+
+  const handleAutoLandingAccept = useCallback(() => {
+    const heuristics = landingHeuristicsRef.current;
+    const proposal = heuristics.getProposal() ?? landingProposal;
+    if (!proposal) {
+      return;
+    }
+    if (!overlayOrigin) {
+      heuristics.cancel('no-origin');
+      setLandingState(heuristics.state());
+      setLandingProposal(null);
+      clearLandingTimeout();
+      setMarkLandingArmed(true);
+      emitTelemetry('hud.auto_land.rejected', { reason: 'no-origin' });
+      return;
+    }
+    const local = toLocalENU(overlayOrigin, proposal.candidate);
+    handleLandingSelected(local);
+    heuristics.confirm();
+    setLandingState(heuristics.state());
+    setLandingProposal(null);
+    emitTelemetry('hud.auto_land.confirmed', { carry_m: proposal.carry_m });
+    clearLandingTimeout();
+  }, [
+    landingProposal,
+    overlayOrigin,
+    handleLandingSelected,
+    emitTelemetry,
+    clearLandingTimeout,
+    setMarkLandingArmed,
+  ]);
+
+  const handleAutoLandingAdjust = useCallback(() => {
+    landingHeuristicsRef.current.reject('adjust');
+    setLandingProposal(null);
+    setLandingState(landingHeuristicsRef.current.state());
+    setMarkLandingArmed(true);
+    emitTelemetry('hud.auto_land.rejected', { reason: 'adjust' });
+    startLandingTimeout();
+  }, [emitTelemetry, startLandingTimeout, setMarkLandingArmed]);
+
+  const handleAutoLandingDismiss = useCallback(() => {
+    landingHeuristicsRef.current.reject('dismiss');
+    setLandingProposal(null);
+    setLandingState(landingHeuristicsRef.current.state());
+    emitTelemetry('hud.auto_land.rejected', { reason: 'dismiss' });
+    startLandingTimeout();
+  }, [emitTelemetry, startLandingTimeout]);
 
   useEffect(() => {
     if (!qaEnabled) {
@@ -1750,6 +1970,33 @@ const QAArHudOverlayScreen: React.FC = () => {
             ) : null}
           </View>
         </View>
+        {landingState === 'PROPOSED' && landingProposal ? (
+          <View style={styles.autoLandingBanner}>
+            <Text style={styles.autoLandingText}>
+              {`Auto landing: ${formatDistanceMeters(landingProposal.carry_m)}`}
+            </Text>
+            <View style={styles.autoLandingActions}>
+              <TouchableOpacity
+                onPress={handleAutoLandingAccept}
+                style={[styles.autoLandingButton, styles.autoLandingPrimaryButton]}
+              >
+                <Text style={styles.autoLandingButtonLabel}>Accept</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={handleAutoLandingAdjust}
+                style={styles.autoLandingButton}
+              >
+                <Text style={styles.autoLandingButtonLabel}>Adjust</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={handleAutoLandingDismiss}
+                style={styles.autoLandingDismissButton}
+              >
+                <Text style={styles.autoLandingDismissLabel}>✕</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        ) : null}
         <View style={[styles.plannerContainer, styles.sectionTitleSpacing]}>
           <TouchableOpacity
             onPress={() => setPlannerExpanded((prev) => !prev)}
@@ -2297,6 +2544,54 @@ const styles = StyleSheet.create({
     color: '#94a3b8',
     fontSize: 10,
     textTransform: 'uppercase',
+  },
+  autoLandingBanner: {
+    marginTop: 12,
+    backgroundColor: '#1f2937',
+    borderRadius: 10,
+    padding: 12,
+    gap: 8,
+  },
+  autoLandingText: {
+    color: '#e2e8f0',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  autoLandingActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  autoLandingButton: {
+    flex: 1,
+    alignItems: 'center',
+    paddingVertical: 8,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#334155',
+    backgroundColor: '#111827',
+  },
+  autoLandingPrimaryButton: {
+    backgroundColor: '#2563eb',
+    borderColor: '#2563eb',
+  },
+  autoLandingButtonLabel: {
+    color: '#f8fafc',
+    fontWeight: '600',
+  },
+  autoLandingDismissButton: {
+    width: 36,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#334155',
+    backgroundColor: '#0f172a',
+  },
+  autoLandingDismissLabel: {
+    color: '#94a3b8',
+    fontSize: 16,
+    fontWeight: '700',
   },
   calibrationContainer: {
     backgroundColor: '#111827',

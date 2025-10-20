@@ -94,3 +94,101 @@ export async function getLocation(): Promise<LocationFix> {
 export function lastPermissionStatus(): PermissionStatus | null {
   return lastPermission;
 }
+
+const EARTH_RADIUS_M = 6_378_137;
+
+function toRadians(value: number): number {
+  return (value * Math.PI) / 180;
+}
+
+function finiteNumber(value: unknown, fallback = 0): number {
+  return typeof value === 'number' && Number.isFinite(value) ? value : fallback;
+}
+
+export type DistancePoint = { lat: number; lon: number };
+
+export function distanceMeters(a: DistancePoint, b: DistancePoint): number {
+  const lat1 = toRadians(finiteNumber(a.lat));
+  const lat2 = toRadians(finiteNumber(b.lat));
+  const dLat = toRadians(finiteNumber(b.lat) - finiteNumber(a.lat));
+  const dLon = toRadians(finiteNumber(b.lon) - finiteNumber(a.lon));
+  const sinLat = Math.sin(dLat / 2);
+  const sinLon = Math.sin(dLon / 2);
+  const h = sinLat * sinLat + Math.cos(lat1) * Math.cos(lat2) * sinLon * sinLon;
+  const c = 2 * Math.atan2(Math.sqrt(h), Math.sqrt(Math.max(0, 1 - h)));
+  return EARTH_RADIUS_M * c;
+}
+
+export function estimateSpeedMps(previous: LocationFix | null | undefined, current: LocationFix): number | null {
+  if (!previous) {
+    return null;
+  }
+  const deltaT = (finiteNumber(current.timestamp) - finiteNumber(previous.timestamp)) / 1000;
+  if (!Number.isFinite(deltaT) || deltaT <= 0) {
+    return null;
+  }
+  const distance = distanceMeters(previous, current);
+  if (!Number.isFinite(distance)) {
+    return null;
+  }
+  return distance / deltaT;
+}
+
+export type SpeedSample = { timestamp: number; speed_mps: number };
+
+export interface SpeedAverageFilter {
+  push(sample: SpeedSample): number | null;
+  value(): number | null;
+  reset(): void;
+}
+
+export function createSpeedAverageFilter(windowMs = 3000): SpeedAverageFilter {
+  const samples: SpeedSample[] = [];
+  let sum = 0;
+  const clampSpeed = (value: number) => (Number.isFinite(value) && value > 0 ? value : 0);
+  return {
+    push(sample: SpeedSample): number | null {
+      const timestamp = finiteNumber(sample.timestamp, Date.now());
+      const speed = clampSpeed(sample.speed_mps);
+      samples.push({ timestamp, speed_mps: speed });
+      sum += speed;
+      const cutoff = timestamp - Math.max(windowMs, 0);
+      while (samples.length && samples[0]!.timestamp < cutoff) {
+        const removed = samples.shift();
+        if (removed) {
+          sum -= removed.speed_mps;
+        }
+      }
+      return samples.length ? sum / samples.length : null;
+    },
+    value(): number | null {
+      return samples.length ? sum / samples.length : null;
+    },
+    reset(): void {
+      samples.splice(0, samples.length);
+      sum = 0;
+    },
+  };
+}
+
+export function createExponentialSpeedFilter(alpha = 0.25): SpeedAverageFilter {
+  const clampSpeed = (value: number) => (Number.isFinite(value) && value > 0 ? value : 0);
+  let current: number | null = null;
+  return {
+    push(sample: SpeedSample): number | null {
+      const speed = clampSpeed(sample.speed_mps);
+      if (current === null) {
+        current = speed;
+      } else {
+        current = current + alpha * (speed - current);
+      }
+      return current;
+    },
+    value(): number | null {
+      return current;
+    },
+    reset(): void {
+      current = null;
+    },
+  };
+}

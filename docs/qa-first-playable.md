@@ -38,6 +38,24 @@ do not interfere with the planner loop.
 To try another shot, recompute or adjust the planner inputs, tap **Hit**, and repeat the
 landing capture.
 
+## Auto-landing (QA only)
+
+After tapping **Hit**, the overlay now runs a conservative landing detector in the
+background. When your device speed drops below roughly 0.8 m/s for at least three seconds
+and GPS accuracy is 12 m or better, the HUD proposes a landing point. Candidates are
+debounced by 12 m so the banner only appears when you have truly stopped near a new
+location.
+
+- The banner reads `Auto landing: 142 m` and offers **Accept**, **Adjust**, or **✕**.
+- **Accept** immediately marks the landing using the snapped point (snaps to the nearest
+  bundle edge within 8 m when possible) and logs the carry distance.
+- **Adjust** arms the manual workflow so you can fine-tune the landing on the mini map.
+- **✕** dismisses the current suggestion while keeping the detector armed for a new
+  candidate.
+
+If no valid proposal is found within 60 s after tapping **Hit**, the detector quietly
+cancels and you can continue with manual marking.
+
 ## Calibrate bag
 
 The QA overlay can learn a personal carry map from recent sessions without touching
