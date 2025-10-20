@@ -35,9 +35,18 @@ import { computePlaysLike, type PlanOut } from '../../../../shared/playslike/agg
 import {
   CLUB_SEQUENCE,
   defaultBag,
+  effectiveBag,
+  getUserBag,
+  saveUserBag,
   suggestClub,
+  type Bag,
   type ClubId,
 } from '../../../../shared/playslike/bag';
+import {
+  calibrate,
+  type CalibOut,
+  type Shot as CalibrateShot,
+} from '../../../../shared/playslike/bag_calibrator';
 
 type FeatureKind = 'green' | 'fairway' | 'bunker' | 'hazard' | 'cartpath' | 'other';
 
@@ -257,6 +266,27 @@ async function appendHudRunShot(record: ShotLogRecord): Promise<void> {
     await FileSystem.writeAsStringAsync(path, JSON.stringify(records, null, 2));
   } catch (error) {
     // ignore write errors
+  }
+}
+
+async function loadHudRunShots(): Promise<ShotLogRecord[]> {
+  const FileSystem = await loadFileSystem();
+  if (!FileSystem?.documentDirectory || !FileSystem.readAsStringAsync) {
+    return [];
+  }
+  const base = FileSystem.documentDirectory.replace(/\/+$/, '');
+  const path = `${base}/hud_run.json`;
+  try {
+    const contents = await FileSystem.readAsStringAsync(path);
+    const parsed = JSON.parse(contents);
+    if (!Array.isArray(parsed)) {
+      return [];
+    }
+    return parsed.filter((item): item is ShotLogRecord => {
+      return Boolean(item && typeof item === 'object');
+    });
+  } catch (error) {
+    return [];
   }
 }
 
@@ -763,6 +793,13 @@ const QAArHudOverlayScreen: React.FC = () => {
   const [plannerResult, setPlannerResult] = useState<PlanOut | null>(null);
   const [shotSession, setShotSession] = useState<ShotSessionState | null>(null);
   const [markLandingArmed, setMarkLandingArmed] = useState(false);
+  const [qaBag, setQaBag] = useState<Bag>(() => effectiveBag());
+  const [userBagActive, setUserBagActive] = useState<Bag | null>(null);
+  const [userBagLoaded, setUserBagLoaded] = useState(false);
+  const [bagCalibExpanded, setBagCalibExpanded] = useState(false);
+  const [calibrationResult, setCalibrationResult] = useState<CalibOut | null>(null);
+  const [calibrationLoading, setCalibrationLoading] = useState(false);
+  const [calibrationMessage, setCalibrationMessage] = useState<string | null>(null);
   const selectedCourse = useMemo(
     () => courses.find((c) => c.courseId === selectedCourseId) ?? null,
     [courses, selectedCourseId],
@@ -777,7 +814,7 @@ const QAArHudOverlayScreen: React.FC = () => {
     [overlayOrigin, playerPosition],
   );
   const camera = useMemo(() => createCameraStub({ fps: 15 }), []);
-  const qaBag = useMemo(() => defaultBag(), []);
+  const defaultQaBag = useMemo(() => defaultBag(), []);
   const formatDelta = useCallback((value: number) => (value >= 0 ? `+${value.toFixed(1)}` : value.toFixed(1)), []);
   const wrapDegrees = useCallback((value: number) => {
     const mod = value % 360;
@@ -819,6 +856,32 @@ const QAArHudOverlayScreen: React.FC = () => {
     },
     [setPlannerInputs, setPlannerResult, setShotSession, setMarkLandingArmed, wrapDegrees],
   );
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const bag = await getUserBag();
+        if (cancelled) {
+          return;
+        }
+        setUserBagActive(bag);
+        setQaBag(effectiveBag());
+      } catch (error) {
+        if (cancelled) {
+          return;
+        }
+        setUserBagActive(null);
+        setQaBag(effectiveBag());
+      } finally {
+        if (!cancelled) {
+          setUserBagLoaded(true);
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
   const handleComputePlan = useCallback(() => {
     if (!pinMetrics || pinMetrics.distance <= 0) {
       setPlannerResult(null);
@@ -837,6 +900,79 @@ const QAArHudOverlayScreen: React.FC = () => {
     setShotSession(null);
     setMarkLandingArmed(false);
   }, [pinMetrics, plannerInputs, setPlannerResult, setShotSession, setMarkLandingArmed]);
+  const handleCalibrateFromSession = useCallback(() => {
+    if (calibrationLoading) {
+      return;
+    }
+    setCalibrationLoading(true);
+    setCalibrationMessage(null);
+    (async () => {
+      try {
+        const records = await loadHudRunShots();
+        const shots: CalibrateShot[] = [];
+        for (const record of records) {
+          if (!record) {
+            continue;
+          }
+          const club = typeof record.club === 'string' ? record.club.trim() : '';
+          const carry = typeof record.carry_m === 'number' ? record.carry_m : null;
+          if (!club || carry === null || !Number.isFinite(carry) || carry <= 0) {
+            continue;
+          }
+          const shot: CalibrateShot = { club, carry_m: carry };
+          if (record.notes && typeof record.notes === 'string') {
+            shot.notes = record.notes;
+          }
+          shots.push(shot);
+        }
+        const result = calibrate(shots);
+        setCalibrationResult(result);
+        if (!shots.length) {
+          setCalibrationMessage('No valid shots found in hud_run.json.');
+        } else if (!result.usedShots) {
+          setCalibrationMessage('Need at least 5 shots per club to compute carries.');
+        } else {
+          setCalibrationMessage(`Calibrated from ${result.usedShots} shots.`);
+        }
+      } catch (error) {
+        setCalibrationResult(null);
+        setCalibrationMessage('Failed to load hud_run.json.');
+      } finally {
+        setCalibrationLoading(false);
+      }
+    })();
+  }, [calibrationLoading]);
+  const handleSavePersonalBag = useCallback(() => {
+    if (!calibrationResult || !calibrationResult.usedShots) {
+      return;
+    }
+    const nextBag: Bag = { ...defaultQaBag };
+    for (const club of CLUB_SEQUENCE) {
+      nextBag[club] = qaBag[club] ?? nextBag[club];
+    }
+    for (const [club, value] of Object.entries(calibrationResult.suggested)) {
+      if (!(CLUB_SEQUENCE as readonly string[]).includes(club)) {
+        continue;
+      }
+      const numeric = Number(value);
+      if (!Number.isFinite(numeric) || numeric <= 0) {
+        continue;
+      }
+      nextBag[club as ClubId] = Math.round(numeric);
+    }
+    setCalibrationMessage('Saving bag…');
+    (async () => {
+      try {
+        await saveUserBag(nextBag);
+        const updated = effectiveBag();
+        setQaBag(updated);
+        setUserBagActive(updated);
+        setCalibrationMessage('Personal bag saved for QA.');
+      } catch (error) {
+        setCalibrationMessage('Failed to persist personal bag.');
+      }
+    })();
+  }, [calibrationResult, defaultQaBag, qaBag]);
   const handleHit = useCallback(() => {
     if (!plannerResult || !pinMetrics) {
       return;
@@ -1283,7 +1419,21 @@ const QAArHudOverlayScreen: React.FC = () => {
   const baseDistance = pinMetrics?.distance ?? 0;
   const baseDistanceText = baseDistance > 0 ? `${baseDistance.toFixed(1)} m` : '—';
   const plannerDisabled = !pinMetrics || pinMetrics.distance <= 0;
-  const planClub = plannerResult?.clubSuggested ?? null;
+  const planClub = useMemo(() => {
+    if (!plannerResult) {
+      return null;
+    }
+    const candidate = plannerResult.clubSuggested;
+    if (
+      typeof candidate === 'string' &&
+      (CLUB_SEQUENCE as readonly string[]).includes(candidate)
+    ) {
+      return candidate;
+    }
+    return suggestClub(qaBag, plannerResult.playsLike_m);
+  }, [plannerResult, qaBag]);
+  const calibrationSaveDisabled = !calibrationResult || !calibrationResult.usedShots;
+  const personalBagApplied = userBagLoaded && Boolean(userBagActive);
 
   if (!qaEnabled) {
     return null;
@@ -1461,6 +1611,92 @@ const QAArHudOverlayScreen: React.FC = () => {
                   ) : null}
                 </View>
               ) : null}
+            </View>
+          ) : null}
+        </View>
+        <View style={[styles.calibrationContainer, styles.sectionTitleSpacing]}>
+          <TouchableOpacity
+            onPress={() => setBagCalibExpanded((prev) => !prev)}
+            style={styles.calibrationHeader}
+          >
+            <Text style={styles.sectionTitle}>Calibrate bag</Text>
+            <Text style={styles.plannerChevron}>{bagCalibExpanded ? '▾' : '▸'}</Text>
+          </TouchableOpacity>
+          {bagCalibExpanded ? (
+            <View style={styles.calibrationContent}>
+              <Text style={styles.calibrationStatus}>
+                {personalBagApplied ? 'Personal bag active' : 'Using default bag'}
+              </Text>
+              <View style={styles.calibrationActions}>
+                <TouchableOpacity
+                  onPress={handleCalibrateFromSession}
+                  disabled={calibrationLoading}
+                  style={[
+                    styles.calibrationButton,
+                    styles.calibrationButtonPrimary,
+                    calibrationLoading ? styles.calibrationButtonDisabled : null,
+                  ]}
+                >
+                  <Text style={styles.calibrationButtonText}>
+                    {calibrationLoading ? 'Loading…' : 'Use last session'}
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  onPress={handleSavePersonalBag}
+                  disabled={calibrationSaveDisabled}
+                  style={[
+                    styles.calibrationButton,
+                    calibrationSaveDisabled ? styles.calibrationButtonDisabled : null,
+                  ]}
+                >
+                  <Text style={styles.calibrationButtonText}>Save as my bag</Text>
+                </TouchableOpacity>
+              </View>
+              {calibrationMessage ? (
+                <Text style={styles.calibrationMessage}>{calibrationMessage}</Text>
+              ) : null}
+              {calibrationLoading ? <ActivityIndicator size="small" color="#60a5fa" /> : null}
+              <View style={styles.calibrationTable}>
+                <View style={styles.calibrationRowHeader}>
+                  <Text style={styles.calibrationHeaderClub}>Club</Text>
+                  <Text style={styles.calibrationHeaderValue}>Default</Text>
+                  <Text style={styles.calibrationHeaderValue}>Suggested</Text>
+                </View>
+                {CLUB_SEQUENCE.slice()
+                  .reverse()
+                  .map((club) => {
+                    const baseline = defaultQaBag[club];
+                    const suggested = calibrationResult?.suggested?.[club];
+                    const perClub = calibrationResult?.perClub?.[club];
+                    const delta =
+                      typeof suggested === 'number'
+                        ? Math.round(suggested - baseline)
+                        : null;
+                    const arrow =
+                      delta === null ? '' : delta > 0 ? '↑' : delta < 0 ? '↓' : '→';
+                    const deltaText =
+                      delta === null ? '—' : `${arrow}${Math.abs(delta)} m`;
+                    return (
+                      <View key={club} style={styles.calibrationRow}>
+                        <View style={styles.calibrationClubCell}>
+                          <Text style={styles.calibrationClubText}>{club}</Text>
+                          {perClub?.n ? (
+                            <Text style={styles.calibrationClubSubtext}>
+                              {perClub.n} shots
+                            </Text>
+                          ) : null}
+                        </View>
+                        <Text style={styles.calibrationValueText}>{`${baseline.toFixed(0)} m`}</Text>
+                        <View style={styles.calibrationSuggestedCell}>
+                          <Text style={styles.calibrationValueText}>
+                            {typeof suggested === 'number' ? `${suggested.toFixed(0)} m` : '—'}
+                          </Text>
+                          <Text style={styles.calibrationDeltaText}>{deltaText}</Text>
+                        </View>
+                      </View>
+                    );
+                  })}
+              </View>
             </View>
           ) : null}
         </View>
@@ -1751,6 +1987,107 @@ const styles = StyleSheet.create({
     color: '#94a3b8',
     fontSize: 10,
     textTransform: 'uppercase',
+  },
+  calibrationContainer: {
+    backgroundColor: '#111827',
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    gap: 10,
+  },
+  calibrationHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  calibrationContent: {
+    gap: 12,
+  },
+  calibrationStatus: {
+    color: '#94a3b8',
+    fontSize: 12,
+  },
+  calibrationActions: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  calibrationButton: {
+    flex: 1,
+    paddingVertical: 10,
+    borderRadius: 8,
+    backgroundColor: '#1f2937',
+    alignItems: 'center',
+  },
+  calibrationButtonPrimary: {
+    backgroundColor: '#1d4ed8',
+  },
+  calibrationButtonDisabled: {
+    opacity: 0.5,
+  },
+  calibrationButtonText: {
+    color: '#f8fafc',
+    fontWeight: '500',
+  },
+  calibrationMessage: {
+    color: '#f8fafc',
+    fontSize: 12,
+  },
+  calibrationTable: {
+    gap: 6,
+  },
+  calibrationRowHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingBottom: 4,
+    borderBottomColor: '#1f2937',
+    borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  calibrationHeaderClub: {
+    flex: 1,
+    color: '#cbd5f5',
+    fontSize: 12,
+    fontWeight: '500',
+  },
+  calibrationHeaderValue: {
+    flex: 1,
+    color: '#cbd5f5',
+    fontSize: 12,
+    textAlign: 'right',
+    fontWeight: '500',
+  },
+  calibrationRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 4,
+    borderBottomColor: '#1f2937',
+    borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  calibrationClubCell: {
+    flex: 1,
+    gap: 2,
+  },
+  calibrationClubText: {
+    color: '#f8fafc',
+    fontWeight: '600',
+  },
+  calibrationClubSubtext: {
+    color: '#94a3b8',
+    fontSize: 11,
+  },
+  calibrationValueText: {
+    flex: 1,
+    color: '#e2e8f0',
+    textAlign: 'right',
+  },
+  calibrationSuggestedCell: {
+    flex: 1,
+    alignItems: 'flex-end',
+    gap: 2,
+  },
+  calibrationDeltaText: {
+    color: '#facc15',
+    fontSize: 11,
   },
   sectionTitleSpacing: {
     marginTop: 12,

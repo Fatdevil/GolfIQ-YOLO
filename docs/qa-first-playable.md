@@ -37,3 +37,20 @@ do not interfere with the planner loop.
 
 To try another shot, recompute or adjust the planner inputs, tap **Hit**, and repeat the
 landing capture.
+
+## Calibrate bag
+
+The QA overlay can learn a personal carry map from recent sessions without touching
+production defaults. Expand **Calibrate bag** in the pin tools card to reveal two actions:
+
+1. **Use last session** parses the `hud_run.json` shot log from the current device. Each
+   club needs at least five qualifying shots before a suggestion is emitted. Carries are
+   filtered with a robust 2.5 × MAD window around the per-club median so single outliers do
+   not skew the result.
+2. Review the table comparing the default QA bag with the suggested medians and the shot
+   counts that supported them. When satisfied, tap **Save as my bag** to persist the personal
+   bag locally (QA only). Future planner suggestions will automatically pull from this saved
+   bag.
+
+If no qualifying shots exist the table remains unchanged and the module reports the
+requirement so you can gather more swings.
