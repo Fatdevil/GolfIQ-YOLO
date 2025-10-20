@@ -91,6 +91,14 @@ Use **Export report** to download a Markdown summary that contains:
 
 The file is written without server round-trips to keep the workflow fast and binary-safe.
 
+## Share links
+
+- Every successful HUD or round upload returns a share id that can be opened directly at `/share/<id>` without requiring the
+  analyzer shell. The page renders the headline metrics, adds proper Open Graph tags for Slack/Teams unfurls, and exposes quick
+  actions to launch the analyzer, copy the link, or download the raw JSON.
+- Share pages load a binary-safe copy of the original payload straight from `/runs/{id}`. The JSON can be re-used locally or
+  re-uploaded into the analyzer slots for deeper inspection.
+
 ## Troubleshooting
 
 - **No timeline** — the HUD run did not record any `hud.frame` events with a recognised state. Capture again and ensure the QA
