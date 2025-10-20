@@ -5,18 +5,21 @@ import { Upload, Download } from "lucide-react";
 import { getRun } from "../../../api";
 import type { ParsedHudRun } from "../utils/parseHudRun";
 import { parseHudRun } from "../utils/parseHudRun";
+import type { ParsedRound } from "../utils/parseRound";
+import { parseRound } from "../utils/parseRound";
 import type { Shot } from "../utils/parseShotLog";
 import { parseShotLog } from "../utils/parseShotLog";
 
 export type RunSlot = "primary" | "comparison";
 
-export interface LoadedRun {
-  run: ParsedHudRun;
-  shots: Shot[];
+export interface LoadedRunPatch {
+  run?: ParsedHudRun;
+  shots?: Shot[];
+  round?: ParsedRound | null;
 }
 
 interface RunUploadProps {
-  onRunLoaded: (payload: LoadedRun, slot: RunSlot) => void;
+  onRunLoaded: (payload: LoadedRunPatch, slot: RunSlot) => void;
 }
 
 type FetchState = "idle" | "loading" | "error";
@@ -29,14 +32,26 @@ export function RunUpload({ onRunLoaded }: RunUploadProps) {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const handleParsed = useCallback(
-    (records: unknown[], target: RunSlot) => {
+    (payload: unknown, target: RunSlot) => {
       try {
-        if (!Array.isArray(records)) {
-          throw new Error("hud_run.json must be a JSON array");
+        if (Array.isArray(payload)) {
+          const run = parseHudRun(payload);
+          const shots = parseShotLog(payload);
+          onRunLoaded({ run, shots }, target);
+        } else if (payload && typeof payload === 'object') {
+          const record = payload as Record<string, unknown>;
+          if (Array.isArray(record.events)) {
+            const events = record.events as unknown[];
+            const run = parseHudRun(events);
+            const shots = parseShotLog(events);
+            onRunLoaded({ run, shots }, target);
+          } else {
+            const round = parseRound(payload);
+            onRunLoaded({ round }, target);
+          }
+        } else {
+          throw new Error('Unsupported JSON payload');
         }
-        const run = parseHudRun(records);
-        const shots = parseShotLog(records);
-        onRunLoaded({ run, shots }, target);
         setError(null);
       } catch (err) {
         setError(err instanceof Error ? err.message : String(err));
@@ -120,7 +135,7 @@ export function RunUpload({ onRunLoaded }: RunUploadProps) {
     if (error) {
       return error;
     }
-    return "Drop hud_run.json or load by run id";
+    return "Drop hud_run.json / round_run.json or load by run id";
   }, [error, fetchState]);
 
   return (
@@ -166,7 +181,7 @@ export function RunUpload({ onRunLoaded }: RunUploadProps) {
       >
         <Upload className="h-10 w-10 text-emerald-300" />
         <div className="space-y-2">
-          <p className="text-lg font-semibold text-slate-100">Drop hud_run.json here</p>
+          <p className="text-lg font-semibold text-slate-100">Drop hud_run.json or round_run.json</p>
           <p className="text-sm text-slate-400">or choose the file from your computer</p>
         </div>
         <button

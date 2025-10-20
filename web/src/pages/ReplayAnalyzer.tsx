@@ -4,22 +4,58 @@ import { BenchCompare } from "../features/replay/components/BenchCompare";
 import { DispersionPlot, type DispersionSeries } from "../features/replay/components/DispersionPlot";
 import { MetricChart } from "../features/replay/components/MetricChart";
 import { RunTimeline } from "../features/replay/components/RunTimeline";
-import { RunUpload, type LoadedRun, type RunSlot } from "../features/replay/components/RunUpload";
+import { RunUpload, type LoadedRunPatch, type RunSlot } from "../features/replay/components/RunUpload";
 import { ShotStatsTable } from "../features/replay/components/ShotStatsTable";
 import type { BenchSummary } from "../features/replay/utils/parseBenchSummary";
+import type { ParsedHudRun } from "../features/replay/utils/parseHudRun";
+import type { ParsedRound } from "../features/replay/utils/parseRound";
 import { computeDispersion, type DispersionStats } from "../features/replay/utils/parseShotLog";
+import type { Shot } from "../features/replay/utils/parseShotLog";
 import { mkReportMd } from "../features/replay/utils/mkReportMd";
 
+type RunState = {
+  run: ParsedHudRun | null;
+  shots: Shot[];
+  round: ParsedRound | null;
+};
+
 export default function ReplayAnalyzerPage() {
-  const [primary, setPrimary] = useState<LoadedRun | null>(null);
-  const [comparison, setComparison] = useState<LoadedRun | null>(null);
+  const [primary, setPrimary] = useState<RunState | null>(null);
+  const [comparison, setComparison] = useState<RunState | null>(null);
   const [activeSlot, setActiveSlot] = useState<RunSlot>("primary");
   const [benchSummary, setBenchSummary] = useState<BenchSummary>({});
   const [exportError, setExportError] = useState<string | null>(null);
 
+  const applyRunPatch = useCallback(
+    (payload: LoadedRunPatch, slot: RunSlot) => {
+      const updater = (prev: RunState | null): RunState => {
+        const base: RunState = prev ?? { run: null, shots: [], round: null };
+        const next: RunState = {
+          run: payload.run ?? base.run,
+          shots: payload.shots ?? base.shots,
+          round: 'round' in payload ? payload.round ?? null : base.round,
+        };
+        return next;
+      };
+      if (slot === 'primary') {
+        setPrimary((prev) => updater(prev));
+        if (payload.run) {
+          setActiveSlot('primary');
+          setExportError(null);
+        }
+      } else {
+        setComparison((prev) => updater(prev));
+        if (payload.run) {
+          setActiveSlot('comparison');
+        }
+      }
+    },
+    [setActiveSlot, setExportError],
+  );
+
   const handleExport = useCallback(() => {
-    if (!primary) {
-      setExportError("Load a primary run first");
+    if (!primary || !primary.run) {
+      setExportError("Load a primary hud_run.json first");
       return;
     }
     try {
@@ -90,7 +126,7 @@ export default function ReplayAnalyzerPage() {
 
   const dispersionSeries = useMemo<DispersionSeries[]>(() => {
     const entries: DispersionSeries[] = [];
-    if (primary && primaryStats) {
+    if (primary?.run && primaryStats) {
       const sessionId = primary.run.summary.sessionId ?? "primary";
       entries.push({
         id: `primary-${sessionId}`,
@@ -100,7 +136,7 @@ export default function ReplayAnalyzerPage() {
         stats: primaryStats,
       });
     }
-    if (comparison && comparisonStats) {
+    if (comparison?.run && comparisonStats) {
       const sessionId = comparison.run.summary.sessionId ?? "comparison";
       entries.push({
         id: `comparison-${sessionId}`,
@@ -113,8 +149,8 @@ export default function ReplayAnalyzerPage() {
     return entries;
   }, [comparison, comparisonStats, primary, primaryStats]);
 
-  const isPrimaryActive = Boolean(primary && activeRun?.run === primary.run);
-  const isComparisonActive = Boolean(comparison && activeRun?.run === comparison.run);
+  const isPrimaryActive = Boolean(primary && activeRun === primary);
+  const isComparisonActive = Boolean(comparison && activeRun === comparison);
 
   return (
     <div className="space-y-8">
@@ -125,17 +161,7 @@ export default function ReplayAnalyzerPage() {
         </p>
       </header>
 
-      <RunUpload
-        onRunLoaded={(payload, slot) => {
-          if (slot === "primary") {
-            setPrimary(payload);
-            setExportError(null);
-          } else {
-            setComparison(payload);
-          }
-          setActiveSlot(slot);
-        }}
-      />
+      <RunUpload onRunLoaded={applyRunPatch} />
 
       {primary || comparison ? (
         <section className="space-y-6">
@@ -164,7 +190,7 @@ export default function ReplayAnalyzerPage() {
             <>
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <h2 className="text-lg font-semibold text-slate-100">
-                  Active run: {activeRun?.run.summary.sessionId ?? "n/a"}
+                  Active run: {activeRun?.run?.summary.sessionId ?? "n/a"}
                 </h2>
                 {primary && comparison ? (
                   <div className="inline-flex overflow-hidden rounded border border-slate-700">
@@ -249,6 +275,8 @@ export default function ReplayAnalyzerPage() {
             </div>
           )}
 
+          {activeRun?.round ? <RoundSummaryPanel round={activeRun.round} /> : null}
+
           {dispersionSeries.length ? (
             <div className="grid gap-6 lg:grid-cols-2">
               <DispersionPlot series={dispersionSeries} />
@@ -269,7 +297,7 @@ export default function ReplayAnalyzerPage() {
         </section>
       ) : (
         <div className="rounded border border-slate-800 bg-slate-900/50 p-6 text-sm text-slate-400">
-          Load a hud_run.json file to see charts and metrics.
+          Load a hud_run.json file to see charts and metrics. Round summaries will appear when a round_run.json is provided.
         </div>
       )}
 
@@ -284,14 +312,69 @@ export default function ReplayAnalyzerPage() {
 
 type RunSummaryCardProps = {
   label: string;
-  run: LoadedRun;
+  run: RunState;
   stats: DispersionStats | null;
   active: boolean;
   onSelect: () => void;
 };
 
+type RoundSummaryPanelProps = {
+  round: ParsedRound;
+};
+
+function RoundSummaryPanel({ round }: RoundSummaryPanelProps) {
+  const firPercent = round.firEligible ? Math.round((round.firHit / round.firEligible) * 100) : null;
+  const girPercent = round.girEligible ? Math.round((round.girHit / round.girEligible) * 100) : null;
+  const relativeText = round.relative === 0 ? 'E' : round.relative > 0 ? `+${round.relative}` : `${round.relative}`;
+  const started = new Date(round.startedAt).toLocaleString();
+  return (
+    <section className="space-y-4 rounded-lg border border-slate-800 bg-slate-900/60 p-4">
+      <div className="flex flex-col gap-2 text-sm text-slate-300 md:flex-row md:items-end md:justify-between">
+        <div>
+          <div className="text-base font-semibold text-slate-100">Round summary</div>
+          <div>Course: {round.courseId}{round.tee ? ` · ${round.tee}` : ''}</div>
+          <div>Started: {started}</div>
+        </div>
+        <div className="text-sm text-slate-200">
+          <div>Total: {round.totalScore} (par {round.totalPar}) · {relativeText}</div>
+          <div>FIR: {round.firHit}/{round.firEligible}{firPercent !== null ? ` (${firPercent}%)` : ''}</div>
+          <div>GIR: {round.girHit}/{round.girEligible}{girPercent !== null ? ` (${girPercent}%)` : ''}</div>
+        </div>
+      </div>
+      <div className="overflow-x-auto">
+        <table className="min-w-full divide-y divide-slate-800 text-left text-xs text-slate-300">
+          <thead className="bg-slate-900/70 text-slate-400">
+            <tr>
+              <th className="px-3 py-2 font-semibold">Hole</th>
+              <th className="px-3 py-2 font-semibold">Par</th>
+              <th className="px-3 py-2 font-semibold">Score</th>
+              <th className="px-3 py-2 font-semibold">FIR</th>
+              <th className="px-3 py-2 font-semibold">GIR</th>
+            </tr>
+          </thead>
+          <tbody>
+            {round.holes.map((hole) => (
+              <tr key={hole.holeNo} className="odd:bg-slate-900/40">
+                <td className="px-3 py-2">{hole.holeNo}</td>
+                <td className="px-3 py-2">{hole.par}</td>
+                <td className="px-3 py-2">{hole.score}</td>
+                <td className="px-3 py-2">{hole.fir === null ? '—' : hole.fir ? '✔︎' : '×'}</td>
+                <td className="px-3 py-2">{hole.gir === null ? '—' : hole.gir ? '✔︎' : '×'}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  );
+}
+
 function RunSummaryCard({ label, run, stats, active, onSelect }: RunSummaryCardProps) {
-  const summary = run.run.summary;
+  const sessionId = run.run?.summary.sessionId ?? run.round?.id ?? 'n/a';
+  const deviceText = run.run?.summary.device ?? 'device unknown';
+  const osText = run.run?.summary.os ?? 'os unknown';
+  const shotsCount = stats ? stats.count : run.round ? run.round.holes.reduce((acc, hole) => acc + hole.strokes, 0) : 0;
+  const relativeText = run.round ? (run.round.relative === 0 ? 'E' : run.round.relative > 0 ? `+${run.round.relative}` : `${run.round.relative}`) : null;
   const baseClasses =
     "w-full rounded-lg border p-4 text-left transition focus:outline-none focus:ring-2 focus:ring-emerald-400";
   const classes = active
@@ -302,21 +385,28 @@ function RunSummaryCard({ label, run, stats, active, onSelect }: RunSummaryCardP
       <div className="flex items-start justify-between gap-3">
         <div className="space-y-1">
           <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">{label}</p>
-          <p className="text-lg font-semibold text-slate-100">{summary.sessionId ?? "n/a"}</p>
-          <p className="text-xs text-slate-400">
-            {summary.device ?? "device unknown"} · {summary.os ?? "os unknown"}
-          </p>
+          <p className="text-lg font-semibold text-slate-100">{sessionId}</p>
+          <p className="text-xs text-slate-400">{deviceText} · {osText}</p>
         </div>
         <div className="text-right text-xs text-slate-300">
-          <div>Shots: {stats ? stats.count : 0}</div>
+          <div>Shots: {shotsCount}</div>
           <div>Avg carry: {stats ? formatNumber(stats.avgCarry) : "n/a"} m</div>
         </div>
       </div>
       <div className="mt-3 grid gap-1 text-xs text-slate-300">
-        <div>Avg FPS: {formatNumber(summary.avgFps)}</div>
-        <div>Latency p95: {formatNumber(summary.p95Latency)} ms</div>
-        <div>RMS mean: {formatNumber(summary.rmsMean)}</div>
-        <div>Recenters: {summary.recenterCount}</div>
+        {run.run ? (
+          <>
+            <div>Avg FPS: {formatNumber(run.run.summary.avgFps)}</div>
+            <div>Latency p95: {formatNumber(run.run.summary.p95Latency)} ms</div>
+            <div>RMS mean: {formatNumber(run.run.summary.rmsMean)}</div>
+            <div>Recenters: {run.run.summary.recenterCount}</div>
+          </>
+        ) : (
+          <div>No HUD telemetry loaded.</div>
+        )}
+        {run.round ? (
+          <div>Round: {run.round.totalScore} (par {run.round.totalPar}) · {relativeText}</div>
+        ) : null}
       </div>
     </button>
   );
