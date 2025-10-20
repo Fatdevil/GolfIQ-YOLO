@@ -9,6 +9,7 @@ import {
   ActivityIndicator,
   ScrollView,
   StyleSheet,
+  Switch,
   Text,
   TouchableOpacity,
   View,
@@ -23,11 +24,16 @@ import {
   type CourseBundle,
 } from '../../../../shared/arhud/bundle_client';
 import {
+  AutoCourseController,
+  type AutoCourseCandidate,
+} from '../../../../shared/arhud/auto_course';
+import {
   nearestFeature,
   toLocalENU,
   type GeoPoint,
   type LocalPoint,
 } from '../../../../shared/arhud/geo';
+import { getLocation, LocationError } from '../../../../shared/arhud/location';
 import { createCameraStub, type CameraFrame } from '../../../../shared/arhud/native/camera_stub';
 import { subscribeHeading } from '../../../../shared/arhud/native/heading';
 import { qaHudEnabled } from '../../../../shared/arhud/native/qa_gate';
@@ -145,8 +151,27 @@ type ShotSessionState = {
   logged?: boolean;
 };
 
+type AutoPickPrompt = {
+  candidate: AutoCourseCandidate;
+  shownAt: number;
+};
+
 function finiteOrNull(value: unknown): number | null {
   return typeof value === 'number' && Number.isFinite(value) ? value : null;
+}
+
+function formatDistanceMeters(value: number | null | undefined): string {
+  if (!Number.isFinite(value ?? Number.NaN)) {
+    return '—';
+  }
+  const meters = Number(value);
+  if (meters >= 1000) {
+    return `${(meters / 1000).toFixed(1)} km`;
+  }
+  if (meters >= 100) {
+    return `${meters.toFixed(0)} m`;
+  }
+  return `${meters.toFixed(1)} m`;
 }
 
 let lastSelectedCourseMemory: string | null = null;
@@ -769,6 +794,10 @@ const CoursePicker: React.FC<CoursePickerProps> = ({
 
 const QAArHudOverlayScreen: React.FC = () => {
   const qaEnabled = qaHudEnabled();
+  const autoCourseRef = useRef<AutoCourseController | null>(null);
+  if (!autoCourseRef.current) {
+    autoCourseRef.current = new AutoCourseController();
+  }
   const [courses, setCourses] = useState<BundleIndexEntry[]>([]);
   const [coursesLoading, setCoursesLoading] = useState(false);
   const [coursesError, setCoursesError] = useState<string | null>(null);
@@ -777,6 +806,11 @@ const QAArHudOverlayScreen: React.FC = () => {
   const [bundleLoading, setBundleLoading] = useState(false);
   const [bundleError, setBundleError] = useState<string | null>(null);
   const [offline, setOffline] = useState(false);
+  const [autoPickEnabled, setAutoPickEnabled] = useState(false);
+  const [autoPickAvailable, setAutoPickAvailable] = useState(true);
+  const [autoPickCandidate, setAutoPickCandidate] = useState<AutoCourseCandidate | null>(null);
+  const [autoPickPrompt, setAutoPickPrompt] = useState<AutoPickPrompt | null>(null);
+  const [autoPickError, setAutoPickError] = useState<string | null>(null);
   const [playerPosition, setPlayerPosition] = useState<LocalPoint>({ x: 0, y: 0 });
   const [heading, setHeading] = useState(0);
   const [pin, setPin] = useState<GeoPoint | null>(null);
@@ -856,6 +890,39 @@ const QAArHudOverlayScreen: React.FC = () => {
     },
     [setPlannerInputs, setPlannerResult, setShotSession, setMarkLandingArmed, wrapDegrees],
   );
+  const handleAutoPickToggle = useCallback(
+    (value: boolean) => {
+      if (value) {
+        if (!autoPickAvailable) {
+          return;
+        }
+        setAutoPickError(null);
+        setAutoPickCandidate(null);
+        autoCourseRef.current?.reset();
+        setAutoPickEnabled(true);
+      } else {
+        setAutoPickEnabled(false);
+        setAutoPickCandidate(null);
+        setAutoPickPrompt(null);
+        setAutoPickError(null);
+        autoCourseRef.current?.reset();
+      }
+    },
+    [autoPickAvailable, autoCourseRef],
+  );
+  const handleAutoPickDismiss = useCallback(() => {
+    autoCourseRef.current?.recordDismiss();
+    setAutoPickPrompt(null);
+  }, [autoCourseRef]);
+  const handleAutoPickSwitch = useCallback(() => {
+    const candidate = autoPickPrompt?.candidate;
+    if (!candidate) {
+      return;
+    }
+    autoCourseRef.current?.recordSwitch(candidate.courseId, candidate.dist_m);
+    setAutoPickPrompt(null);
+    setSelectedCourseId(candidate.courseId);
+  }, [autoPickPrompt, autoCourseRef]);
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -1201,6 +1268,91 @@ const QAArHudOverlayScreen: React.FC = () => {
   }, [qaEnabled, courses]);
 
   useEffect(() => {
+    if (!qaEnabled) {
+      if (autoPickEnabled) {
+        setAutoPickEnabled(false);
+      }
+      setAutoPickPrompt(null);
+      setAutoPickCandidate(null);
+      setAutoPickError(null);
+      autoCourseRef.current?.reset();
+    }
+  }, [qaEnabled, autoPickEnabled, autoCourseRef]);
+
+  useEffect(() => {
+    autoCourseRef.current?.reset();
+    setAutoPickCandidate(null);
+    setAutoPickPrompt(null);
+  }, [courses, autoCourseRef]);
+
+  useEffect(() => {
+    if (!qaEnabled || !autoPickEnabled || !courses.length) {
+      return;
+    }
+    let cancelled = false;
+    const controller = autoCourseRef.current;
+    if (!controller) {
+      return;
+    }
+    let timeout: ReturnType<typeof setTimeout> | null = null;
+
+    const poll = async (): Promise<void> => {
+      if (cancelled) {
+        return;
+      }
+      try {
+        const fix = await getLocation();
+        if (cancelled) {
+          return;
+        }
+        setAutoPickAvailable(true);
+        setAutoPickError(null);
+        const decision = controller.consider(courses, fix, selectedCourseId);
+        setAutoPickCandidate(decision.candidate);
+        if (!decision.candidate) {
+          setAutoPickPrompt(null);
+        } else if (decision.shouldPrompt) {
+          setAutoPickPrompt((prev) => {
+            if (prev && prev.candidate.courseId === decision.candidate?.courseId) {
+              return prev;
+            }
+            return { candidate: decision.candidate, shownAt: Date.now() };
+          });
+        }
+      } catch (error) {
+        if (cancelled) {
+          return;
+        }
+        if (error instanceof LocationError && error.code === 'permission-denied') {
+          setAutoPickAvailable(false);
+          setAutoPickEnabled(false);
+          setAutoPickError('Location permission denied');
+          setAutoPickCandidate(null);
+          setAutoPickPrompt(null);
+          autoCourseRef.current?.reset();
+          return;
+        }
+        const message = error instanceof Error ? error.message : 'Location unavailable';
+        setAutoPickError(message);
+      }
+      if (cancelled) {
+        return;
+      }
+      const delay = Math.max(controller.getDebounceMs(), 1000);
+      timeout = setTimeout(poll, delay);
+    };
+
+    poll();
+
+    return () => {
+      cancelled = true;
+      if (timeout) {
+        clearTimeout(timeout);
+      }
+    };
+  }, [qaEnabled, autoPickEnabled, courses, selectedCourseId, autoCourseRef]);
+
+  useEffect(() => {
     if (!qaEnabled || !selectedCourseId) {
       setBundle(null);
       setBundleError(null);
@@ -1373,6 +1525,7 @@ const QAArHudOverlayScreen: React.FC = () => {
   const handleCourseSelect = useCallback(
     (courseId: string) => {
       setSelectedCourseId(courseId);
+      setAutoPickPrompt(null);
     },
     [],
   );
@@ -1434,6 +1587,21 @@ const QAArHudOverlayScreen: React.FC = () => {
   }, [plannerResult, qaBag]);
   const calibrationSaveDisabled = !calibrationResult || !calibrationResult.usedShots;
   const personalBagApplied = userBagLoaded && Boolean(userBagActive);
+  const autoPickStatusText = !autoPickAvailable
+    ? 'Location permission required'
+    : autoPickError && autoPickEnabled
+      ? autoPickError
+      : autoPickCandidate
+        ? `${autoPickCandidate.name ?? autoPickCandidate.courseId} (${formatDistanceMeters(autoPickCandidate.dist_m)})`
+        : autoPickEnabled
+          ? 'Waiting for GPS…'
+          : 'Off';
+  const autoPickToggleDisabled = !autoPickAvailable || !courses.length || !qaEnabled;
+  const autoPickStatusStyle = [
+    styles.autoPickStatus,
+    !autoPickEnabled ? styles.autoPickStatusMuted : null,
+    !autoPickAvailable || (autoPickError && autoPickEnabled) ? styles.autoPickStatusError : null,
+  ];
 
   if (!qaEnabled) {
     return null;
@@ -1449,6 +1617,36 @@ const QAArHudOverlayScreen: React.FC = () => {
         onRefresh={handleRefresh}
         error={coursesError}
       />
+      <View style={styles.autoPickCard}>
+        <View style={styles.autoPickRow}>
+          <View style={styles.autoPickCopy}>
+            <Text style={styles.autoPickTitle}>Auto-pick course</Text>
+            <Text style={autoPickStatusStyle}>{autoPickStatusText}</Text>
+          </View>
+          <Switch
+            value={autoPickEnabled}
+            onValueChange={handleAutoPickToggle}
+            disabled={autoPickToggleDisabled}
+            thumbColor={autoPickEnabled ? '#2563eb' : '#e2e8f0'}
+            trackColor={{ true: '#60a5fa', false: '#334155' }}
+          />
+        </View>
+        {autoPickPrompt ? (
+          <View style={styles.autoPickPromptBox}>
+            <Text style={styles.autoPickPromptText}>
+              {`Switch to ${autoPickPrompt.candidate.name ?? autoPickPrompt.candidate.courseId} (${formatDistanceMeters(autoPickPrompt.candidate.dist_m)} away)?`}
+            </Text>
+            <View style={styles.autoPickPromptActions}>
+              <TouchableOpacity onPress={handleAutoPickSwitch} style={[styles.autoPickButton, styles.autoPickPrimaryButton]}>
+                <Text style={styles.autoPickButtonLabel}>Switch</Text>
+              </TouchableOpacity>
+              <TouchableOpacity onPress={handleAutoPickDismiss} style={styles.autoPickButton}>
+                <Text style={styles.autoPickButtonLabel}>Not now</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        ) : null}
+      </View>
       <View style={styles.cameraSection}>
         <View style={styles.cameraStub}>
           <Text style={styles.cameraLabel}>Camera stub</Text>
@@ -1729,6 +1927,69 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     padding: 12,
     gap: 8,
+  },
+  autoPickCard: {
+    backgroundColor: '#111827',
+    borderRadius: 12,
+    padding: 12,
+    gap: 12,
+  },
+  autoPickRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  autoPickCopy: {
+    flex: 1,
+    gap: 4,
+  },
+  autoPickTitle: {
+    color: '#f9fafb',
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  autoPickStatus: {
+    color: '#cbd5f5',
+    fontSize: 12,
+  },
+  autoPickStatusMuted: {
+    color: '#94a3b8',
+  },
+  autoPickStatusError: {
+    color: '#fca5a5',
+  },
+  autoPickPromptBox: {
+    backgroundColor: '#1f2937',
+    borderRadius: 10,
+    padding: 12,
+    gap: 8,
+  },
+  autoPickPromptText: {
+    color: '#e2e8f0',
+    fontSize: 13,
+    lineHeight: 18,
+  },
+  autoPickPromptActions: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  autoPickButton: {
+    flex: 1,
+    alignItems: 'center',
+    paddingVertical: 10,
+    borderRadius: 10,
+    backgroundColor: '#1f2937',
+    borderWidth: 1,
+    borderColor: '#334155',
+  },
+  autoPickPrimaryButton: {
+    backgroundColor: '#2563eb',
+    borderColor: '#2563eb',
+  },
+  autoPickButtonLabel: {
+    color: '#f8fafc',
+    fontWeight: '600',
   },
   pickerHeader: {
     flexDirection: 'row',
