@@ -1,6 +1,7 @@
 import { computeTempAltDelta } from "./adjust_temp_alt";
 import { defaultBag, suggestClub } from "./bag";
 import { computeWindSlopeDelta } from "./wind_slope";
+import { getTunedCoeffs, isTuningEnabled } from "./tuning";
 
 export interface PlanInput {
   baseDistance_m: number;
@@ -21,6 +22,8 @@ export interface PlanOut {
     slope_m: number;
   };
   clubSuggested?: string;
+  tuningApplied?: boolean;
+  badges?: readonly string[];
 }
 
 const sanitizeNumber = (value: number | undefined, fallback: number): number => {
@@ -47,11 +50,24 @@ export function computePlaysLike(input: PlanInput): PlanOut {
   const targetAzimuth = sanitizeNumber(input.target_azimuth_deg, 0);
   const slopeDh = sanitizeNumber(input.slope_dh_m, 0);
 
+  const tuningEnabled = isTuningEnabled();
+  const tunedCoeffs = tuningEnabled ? getTunedCoeffs() : null;
+  const tuningApplied = Boolean(tuningEnabled && tunedCoeffs);
+  const coeffOverrides =
+    tuningApplied && tunedCoeffs
+      ? {
+          head_per_mps: tunedCoeffs.head_per_mps,
+          slope_per_m: tunedCoeffs.slope_per_m,
+        }
+      : undefined;
+
   const tempAltDelta = computeTempAltDelta({
     baseDistance_m: baseDistance,
     enable: true,
     temperature: { value: temperatureC, unit: "C" },
     altitudeASL: { value: altitudeM, unit: "m" },
+    betaPerC: tunedCoeffs?.betaPerC,
+    gammaPer100m: tunedCoeffs?.gammaPer100m,
   });
 
   const windSlopeDelta = computeWindSlopeDelta({
@@ -59,6 +75,7 @@ export function computePlaysLike(input: PlanInput): PlanOut {
     enable: true,
     wind: { speed_mps: windSpeed, direction_deg_from: windFrom, targetAzimuth_deg: targetAzimuth },
     slope: { deltaHeight_m: slopeDh },
+    coeff: coeffOverrides,
   });
 
   const breakdown = {
@@ -85,5 +102,7 @@ export function computePlaysLike(input: PlanInput): PlanOut {
     playsLike_m: playsLike,
     breakdown,
     clubSuggested,
+    tuningApplied,
+    badges: tuningApplied ? (["Tuned"] as const) : undefined,
   };
 }

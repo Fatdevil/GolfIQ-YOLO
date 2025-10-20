@@ -134,6 +134,26 @@ Slope inputs always represent the relative height difference between player and 
 absolute altitude (ASL) remains exclusive to the temperature/altitude module to avoid
 double-counting.
 
+## Personal tuning
+
+Personal coefficients are gated behind the remote-config flag `playsLike.tuning.enabled`
+and remain disabled by default. When enabled, we collect recent shot logs containing the
+planned plays-like distance (`playsLike_base_m`) and the measured carry. For every shot we
+recompute the component deltas produced by the existing modules—temperature, altitude,
+headwind, and slope—which yields a feature vector `x = [Δtemp, Δalt, Δhead, Δslope]` in
+metres. The residual that we regress against is `err = actual_carry_m − playsLike_base_m`.
+
+Coefficients are fit with a closed-form ridge regression using `λ = 0.1` to stabilise the
+inverse when data is sparse. Letting `n` denote the number of usable shots, we shrink the
+solution toward the defaults with `α = min(1, n / 100)` via
+`β_personal = (1 − α) ⋅ β_default + α ⋅ β_fit`. The resulting coefficients are cached under
+`playslike.tuning.coeffs.v1` in AsyncStorage and read synchronously by the planner to apply a
+"Tuned" badge when active.
+
+QA tooling can reset the personalised state by invoking `clearTunedCoeffs()` (which also
+deletes the stored entry) or by manually removing the storage key. Until the RC gate is
+flipped, the planner continues to rely on the default coefficients.
+
 ## Quality bands
 
 Quality is derived from the raw inputs:
