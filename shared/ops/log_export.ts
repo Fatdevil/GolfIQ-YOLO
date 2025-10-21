@@ -177,8 +177,17 @@ function toBase64(data: Uint8Array): string {
   throw new Error("Base64 encoding not supported in this environment");
 }
 
+let cachedCrc32Table: Uint32Array | null = null;
+
+function getCrc32Table(): Uint32Array {
+  if (!cachedCrc32Table) {
+    cachedCrc32Table = createCrc32Table();
+  }
+  return cachedCrc32Table;
+}
+
 function crc32(data: Uint8Array): number {
-  const table = crc32.table ?? (crc32.table = createCrc32Table());
+  const table = getCrc32Table();
   let crc = 0xffffffff;
   for (let i = 0; i < data.length; i += 1) {
     const byte = data[i]!;
@@ -325,9 +334,14 @@ async function collectPlatformSnapshot(): Promise<PlatformSnapshot> {
     const mod = (await import("react-native")) as { Platform?: { OS: string; Version?: unknown } };
     const Platform = mod.Platform;
     if (Platform && typeof Platform === "object") {
+      const rawVersion = Platform.Version;
+      const normalizedVersion =
+        typeof rawVersion === "string" || typeof rawVersion === "number"
+          ? rawVersion
+          : null;
       return {
         os: typeof Platform.OS === "string" ? Platform.OS : "unknown",
-        version: Platform.Version ?? null,
+        version: normalizedVersion,
       };
     }
   } catch {
