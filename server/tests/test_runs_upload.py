@@ -207,6 +207,8 @@ def test_round_run_rejects_non_list_holes(tmp_path, monkeypatch):
 def test_extract_device_walks_nested_payloads():
     from server.routes import runs_upload as runs_upload_module
 
+    assert runs_upload_module._extract_device(None, depth=5) == ""
+
     nested = {
         "meta": {
             "session": {
@@ -225,6 +227,17 @@ def test_extract_device_walks_nested_payloads():
     assert runs_upload_module._extract_device(items) == "VisionOne"
 
 
+def test_make_share_id_handles_hint_and_empty():
+    from server.routes import runs_upload as runs_upload_module
+
+    with_hint = runs_upload_module._make_share_id("hud", "Pixel-7")
+    assert with_hint.startswith("hud-")
+
+    without_hint = runs_upload_module._make_share_id("round", "!!!!")
+    assert without_hint.startswith("round-")
+    assert "--" not in without_hint
+
+
 def test_etag_matches_handles_wildcards():
     from server.routes import runs_upload as runs_upload_module
 
@@ -232,3 +245,53 @@ def test_etag_matches_handles_wildcards():
     assert runs_upload_module._etag_matches("*", etag) is True
     assert runs_upload_module._etag_matches('W/"zzz", "abc123"', etag) is True
     assert runs_upload_module._etag_matches('W/"zzz"', etag) is False
+
+
+def test_hud_run_http_exception_records_failure(tmp_path, monkeypatch):
+    from server.routes import runs_upload as runs_upload_module
+
+    monkeypatch.setenv("RUNS_DATA_DIR", str(tmp_path))
+
+    def boom(kind: str, payload):
+        raise HTTPException(status_code=409, detail="conflict")
+
+    monkeypatch.setattr(runs_upload_module, "_store_shared_run", boom)
+
+    with TestClient(app) as client:
+        response = client.post("/runs/hud", json=[{"event": "hud.frame"}])
+        assert response.status_code == 409
+
+    day = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    failure_path = Path(tmp_path, "failed", f"{day}.jsonl")
+    entries = [
+        json.loads(line)
+        for line in failure_path.read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    ]
+    assert entries[-1]["kind"] == "hud"
+    assert entries[-1]["reason"] == "http-409"
+
+
+def test_round_run_http_exception_records_failure(tmp_path, monkeypatch):
+    from server.routes import runs_upload as runs_upload_module
+
+    monkeypatch.setenv("RUNS_DATA_DIR", str(tmp_path))
+
+    def boom(kind: str, payload):
+        raise HTTPException(status_code=429, detail="too many")
+
+    monkeypatch.setattr(runs_upload_module, "_store_shared_run", boom)
+
+    with TestClient(app) as client:
+        response = client.post("/runs/round", json={"holes": []})
+        assert response.status_code == 429
+
+    day = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    failure_path = Path(tmp_path, "failed", f"{day}.jsonl")
+    entries = [
+        json.loads(line)
+        for line in failure_path.read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    ]
+    assert entries[-1]["kind"] == "round"
+    assert entries[-1]["reason"] == "http-429"
