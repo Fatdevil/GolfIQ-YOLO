@@ -118,6 +118,21 @@ def validate_file(path: Path, max_bytes: int | None = None) -> List[str]:
     return validate_bundle(payload, max_bytes)
 
 
+def describe_bundle(path: Path) -> Dict[str, Any]:
+    try:
+        with path.open("r", encoding="utf-8") as handle:
+            payload = json.load(handle)
+    except Exception:  # pragma: no cover - defensive
+        return {"courseId": "", "feature_count": None}
+    course_id = payload.get("courseId") if isinstance(payload, dict) else None
+    features = payload.get("features") if isinstance(payload, dict) else None
+    feature_count = len(features) if isinstance(features, list) else None
+    return {
+        "courseId": str(course_id) if isinstance(course_id, str) else "",
+        "feature_count": feature_count,
+    }
+
+
 def iter_paths(patterns: Sequence[str]) -> List[Path]:
     paths: List[Path] = []
     for pattern in patterns:
@@ -125,6 +140,41 @@ def iter_paths(patterns: Sequence[str]) -> List[Path]:
             if path.is_file():
                 paths.append(path)
     return sorted(set(paths))
+
+
+def print_summary(rows: List[Dict[str, str]]) -> None:
+    if not rows:
+        return
+    columns: List[tuple[str, str, str]] = [
+        ("Status", "status", "left"),
+        ("Course", "course", "left"),
+        ("Features", "features", "right"),
+        ("Size (kB)", "size", "right"),
+        ("File", "file", "left"),
+    ]
+    widths: Dict[str, int] = {}
+    for header, key, _ in columns:
+        width = len(header)
+        for row in rows:
+            width = max(width, len(row.get(key, "")))
+        widths[key] = width
+    print("\nSummary:")
+    header_line = "  ".join(
+        header.ljust(widths[key]) if align == "left" else header.rjust(widths[key])
+        for header, key, align in columns
+    )
+    print(header_line)
+    print("  ".join("-" * widths[key] for _, key, _ in columns))
+    for row in rows:
+        line = "  ".join(
+            (
+                row[key].ljust(widths[key])
+                if align == "left"
+                else row[key].rjust(widths[key])
+            )
+            for _, key, align in columns
+        )
+        print(line)
 
 
 def parse_args(argv: Sequence[str]) -> argparse.Namespace:
@@ -144,6 +194,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 0
     max_bytes = args.max_kb * 1024 if args.max_kb else None
     had_error = False
+    summary_rows: List[Dict[str, str]] = []
     for path in paths:
         errors = validate_file(path, max_bytes)
         if errors:
@@ -153,6 +204,27 @@ def main(argv: Sequence[str] | None = None) -> int:
                 print(f"  - {err}")
         else:
             print(f"✓ {path}")
+        details = describe_bundle(path)
+        feature_count = details.get("feature_count")
+        if isinstance(feature_count, int):
+            feature_text = str(feature_count)
+        else:
+            feature_text = "—"
+        try:
+            size_bytes = path.stat().st_size
+            size_text = f"{size_bytes / 1024:.1f}"
+        except OSError:
+            size_text = "—"
+        summary_rows.append(
+            {
+                "status": "✓" if not errors else "✗",
+                "course": details.get("courseId", ""),
+                "features": feature_text,
+                "size": size_text,
+                "file": str(path),
+            }
+        )
+    print_summary(summary_rows)
     return 1 if had_error else 0
 
 

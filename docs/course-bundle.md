@@ -120,3 +120,47 @@ If OpenStreetMap (OSM) or other ODbL/CC-BY-SA sources are used upstream, ensure 
 4. Run the validator + targeted tests.
 5. Start the dev server and confirm `/bundle/index` and `/bundle/course/{id}` respond as expected.
 6. Mobile QA: load 2–3 courses in AR HUD QA-mode and verify offline rendering.
+
+## Batch to 50+
+
+When scaling beyond a handful of courses, switch to the manifest-driven generator flow. Create `data/sources/manifest.json` with entries describing each bundle:
+
+```json
+[
+  {
+    "id": "sunset_links",
+    "source": "data/sources/sunset_links.geojson",
+    "name": "Sunset Links"
+  },
+  {
+    "id": "copper_creek",
+    "source": "data/sources/copper_creek.geojson",
+    "name": "Copper Creek"
+  }
+]
+```
+
+The generator accepts the manifest via `--manifest` and can slice work into predictable batches. Example commands:
+
+```bash
+python scripts/gen_course_bundle.py \
+  --manifest data/sources/manifest.json \
+  --out data/courses \
+  --simplify-m 0.8 \
+  --quant 1e-6 \
+  --batch 0:10
+
+# Next 10 entries
+python scripts/gen_course_bundle.py \
+  --manifest data/sources/manifest.json \
+  --out data/courses \
+  --simplify-m 0.8 \
+  --quant 1e-6 \
+  --batch 10:10
+```
+
+`--batch` accepts `start:count`, `index/total` (e.g. `2/5`), or a simple count (`--batch 10` processes the first ten manifest rows). Each run prints a table summarising course IDs, feature counts, and bundle sizes so the full batch can be inspected quickly.
+
+## In-app search
+
+The QA AR HUD overlay now includes a search bar that filters the bundle index in real-time. Results surface fuzzy name matches (prefix + typo tolerance) and, when a location fix is available, nearby courses float to the top. Selecting a suggestion instantly loads the corresponding bundle using the same cache-aware client as the manual picker.
