@@ -1,0 +1,88 @@
+name: ios-build
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+      - release/**
+
+jobs:
+  build:
+    runs-on: macos-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Derive version metadata
+        run: |
+          echo "GIT_SHA=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
+          echo "APP_BUILD_NUMBER=${GITHUB_RUN_NUMBER}" >> "$GITHUB_ENV"
+          echo "APP_VERSION=$(node -p \"require('./golfiq/app/package.json').version\")" >> "$GITHUB_ENV"
+
+      - name: Write version manifest
+        run: node scripts/write-version-json.mjs
+
+      - name: Install CocoaPods (if available)
+        run: |
+          if [ -f ios/Podfile ]; then
+            cd ios
+            pod install
+          else
+            echo 'No Podfile found, skipping pod install.'
+          fi
+
+      - name: Detect workspace and scheme
+        id: detect
+        run: |
+          set -euo pipefail
+          workspace=$(find ios -name "*.xcworkspace" | head -n 1 || true)
+          project=$(find ios -name "*.xcodeproj" | head -n 1 || true)
+          if [ -n "$workspace" ]; then
+            echo "workspace=$workspace" >> "$GITHUB_OUTPUT"
+            scheme=$(xcodebuild -workspace "$workspace" -list -json | python3 -c "import json,sys; data=json.load(sys.stdin); schemes=(data.get('workspace') or {}).get('schemes') or []; print(schemes[0] if schemes else '')")
+            echo "scheme=$scheme" >> "$GITHUB_OUTPUT"
+          elif [ -n "$project" ]; then
+            echo "project=$project" >> "$GITHUB_OUTPUT"
+            scheme=$(xcodebuild -project "$project" -list -json | python3 -c "import json,sys; data=json.load(sys.stdin); schemes=(data.get('project') or {}).get('schemes') or []; print(schemes[0] if schemes else '')")
+            echo "scheme=$scheme" >> "$GITHUB_OUTPUT"
+          else
+            echo '::error ::No Xcode workspace or project found under ios/'
+            exit 1
+          fi
+          if [ -z "$scheme" ]; then
+            echo '::error ::Unable to detect a default scheme'
+            exit 1
+          fi
+
+      - name: Archive (iphonesimulator)
+        env:
+          WORKSPACE: ${{ steps.detect.outputs.workspace }}
+          PROJECT: ${{ steps.detect.outputs.project }}
+          SCHEME: ${{ steps.detect.outputs.scheme }}
+        run: |
+          set -o pipefail
+          mkdir -p build
+          if [ -n "$WORKSPACE" ]; then
+            xcodebuild -workspace "$WORKSPACE" -scheme "$SCHEME" -configuration Release -sdk iphonesimulator -archivePath build/App.xcarchive archive | tee build/xcodebuild.log
+          else
+            xcodebuild -project "$PROJECT" -scheme "$SCHEME" -configuration Release -sdk iphonesimulator -archivePath build/App.xcarchive archive | tee build/xcodebuild.log
+          fi
+
+      - name: Upload logs
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-build-logs
+          if-no-files-found: error
+          path: |
+            build/xcodebuild.log
+            shared/app/version.json
+          retention-days: 14

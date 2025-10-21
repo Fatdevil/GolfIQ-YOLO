@@ -1,0 +1,67 @@
+name: android-release
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+      - release/**
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Accept licenses
+        run: yes | sdkmanager --licenses
+
+      - name: Derive version metadata
+        run: |
+          echo "GIT_SHA=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
+          echo "APP_BUILD_NUMBER=${GITHUB_RUN_NUMBER}" >> "$GITHUB_ENV"
+          echo "APP_VERSION=$(node -p \"require('./golfiq/app/package.json').version\")" >> "$GITHUB_ENV"
+
+      - name: Write version manifest
+        run: node scripts/write-version-json.mjs
+
+      - name: Create local.properties
+        run: |
+          mkdir -p android
+          echo "sdk.dir=$ANDROID_SDK_ROOT" > android/local.properties
+          cat android/local.properties
+
+      - name: Print Android version info
+        uses: gradle/gradle-build-action@v3
+        with:
+          gradle-version: '8.7'
+          arguments: -p android :app:properties --console=plain
+
+      - name: Assemble release (unsigned)
+        uses: gradle/gradle-build-action@v3
+        with:
+          gradle-version: '8.7'
+          arguments: -p android assembleRelease --stacktrace
+
+      - name: Upload unsigned APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-app-release-unsigned
+          if-no-files-found: error
+          path: |
+            android/app/build/outputs/apk/release/app-release-unsigned.apk
+            shared/app/version.json
+          retention-days: 14

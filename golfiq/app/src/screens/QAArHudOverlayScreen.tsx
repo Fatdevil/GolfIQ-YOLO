@@ -63,6 +63,7 @@ import {
   type CalibOut,
   type Shot as CalibrateShot,
 } from '../../../../shared/playslike/bag_calibrator';
+import { isTelemetryOptedOut } from '../../../../shared/ops/log_export';
 import { buildShotFeedback, type FeedbackOutput } from '../../../../shared/playslike/feedback';
 import {
   createLandingHeuristics,
@@ -1524,6 +1525,9 @@ const QAArHudOverlayScreen: React.FC = () => {
   const emitTelemetry = useCallback(
     (event: string, data: Record<string, unknown>) => {
       if (!qaEnabled) {
+        return;
+      }
+      if (isTelemetryOptedOut()) {
         return;
       }
       const emitter = telemetryRef.current;

@@ -28,6 +28,7 @@ android/bench/src/main/assets/frames/*
 !android/bench/src/main/assets/frames/.gitkeep
 ios/DerivedData/
 ios/build/
+shared/app/version.json
 
 # Model weights and exports
 *.pt
