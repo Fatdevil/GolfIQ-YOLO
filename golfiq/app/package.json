@@ -8,7 +8,7 @@
     "android": "expo run:android",
     "ios": "expo run:ios",
     "web": "expo start --web",
-    "test:unit": "vitest -r"
+    "test:unit": "vitest run"
   },
   "dependencies": {
     "expo": "~51.0.0",
@@ -19,5 +19,8 @@
     "expo-status-bar": "~1.12.1",
     "react": "18.2.0",
     "react-native": "0.74.3"
+  },
+  "devDependencies": {
+    "vitest": "^2.1.4"
   }
 }

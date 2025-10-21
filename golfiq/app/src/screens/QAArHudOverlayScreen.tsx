@@ -77,6 +77,7 @@ import {
   type LandingState as AutoLandingState,
   type LandingSample,
 } from '../../../../shared/arhud/landing_heuristics';
+import { buildGhostTelemetryKey } from './utils/ghostTelemetry';
 
 type FeatureKind = 'green' | 'fairway' | 'bunker' | 'hazard' | 'cartpath' | 'other';
 
@@ -2359,7 +2360,7 @@ const QAArHudOverlayScreen: React.FC = () => {
   }, [ghostOverlay, ghostProgress, shotSession?.landing]);
 
   useEffect(() => {
-    if (!ghostOverlay || !qaEnabled) {
+    if (!ghostOverlay || !shotSession?.landing || !qaEnabled) {
       ghostTelemetryKeyRef.current = null;
       return;
     }
@@ -2371,7 +2372,13 @@ const QAArHudOverlayScreen: React.FC = () => {
     const lateral = Number(ghostOverlay.profile.lateral_m.toFixed(2));
     const longErr = ghostErrors ? Number(ghostErrors.long.toFixed(2)) : null;
     const latErr = ghostErrors ? Number(ghostErrors.lateral.toFixed(2)) : null;
-    const key = `${range}|${lateral}|${longErr ?? 'null'}|${latErr ?? 'null'}`;
+    const key = buildGhostTelemetryKey({
+      shotId: shotSession.shotId,
+      range,
+      lateral,
+      longErr,
+      latErr,
+    });
     if (ghostTelemetryKeyRef.current === key) {
       return;
     }
@@ -2382,7 +2389,14 @@ const QAArHudOverlayScreen: React.FC = () => {
       long_err: longErr,
       lat_err: latErr,
     });
-  }, [ghostOverlay, ghostErrors, qaEnabled, telemetryRef]);
+  }, [
+    ghostOverlay,
+    ghostErrors,
+    qaEnabled,
+    shotSession?.shotId,
+    shotSession?.landing,
+    telemetryRef,
+  ]);
 
   const handleCourseSelect = useCallback(
     (courseId: string) => {
