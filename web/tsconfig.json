@@ -27,8 +27,8 @@
     "src",
     "../shared/**/*.ts",
     "../shared/**/*.d.ts",
-    "../golfiq/app/src/**/*.ts",
-    "../golfiq/app/src/**/*.tsx"
+    "../golfiq/app/src/screens/utils/**/*.ts",
+    "../golfiq/app/src/screens/utils/**/*.tsx"
   ],
   "references": [{ "path": "./tsconfig.node.json" }]
 }
