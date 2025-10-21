@@ -27,8 +27,8 @@
     "src",
     "../shared/**/*.ts",
     "../shared/**/*.d.ts",
-    "../golfiq/app/src/screens/utils/ghostTelemetry.ts",
-    "tests/**/ghostTelemetry.spec.ts"
+    "tests/**/*.ts",
+    "../golfiq/app/src/screens/utils/ghostTelemetry.ts"
   ],
   "references": [{ "path": "./tsconfig.node.json" }]
 }
