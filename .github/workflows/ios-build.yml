@@ -87,7 +87,26 @@ jobs:
               CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO | tee build/xcodebuild.log
           fi
 
+      - name: Assert archive exists
+        run: |
+          set -euo pipefail
+          if [ ! -d build/App.xcarchive ]; then
+            echo "::group::Build folder tree"
+            find build -maxdepth 2 -print || true
+            echo "::endgroup::"
+            echo "::error::iOS archive not created (build/App.xcarchive missing). See xcodebuild.log."
+            exit 1
+          fi
+          echo "✅ Archive present:"
+          du -sh build/App.xcarchive || true
+          # Helpful metadata (non-fatal if missing)
+          if [ -f build/App.xcarchive/Info.plist ]; then
+            /usr/libexec/PlistBuddy -c 'Print :ApplicationProperties:BundleIdentifier' build/App.xcarchive/Info.plist || true
+            /usr/libexec/PlistBuddy -c 'Print :ApplicationProperties:ApplicationPath'   build/App.xcarchive/Info.plist || true
+          fi
+
       - name: Upload logs
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: ios-build-logs
