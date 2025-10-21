@@ -77,6 +77,7 @@ import {
   type LandingState as AutoLandingState,
   type LandingSample,
 } from '../../../../shared/arhud/landing_heuristics';
+import { buildGhostTelemetryKey } from './utils/ghostTelemetry';
 
 type FeatureKind = 'green' | 'fairway' | 'bunker' | 'hazard' | 'cartpath' | 'other';
 
@@ -1459,6 +1460,8 @@ const QAArHudOverlayScreen: React.FC = () => {
     }
     const now = Date.now();
     shotIdCounterRef.current += 1;
+    shotIdRef.current += 1;
+    ghostTelemetryKeyRef.current = null;
     const shotId = `shot-${now}-${shotIdCounterRef.current}`;
     const suggested =
       typeof plannerResult.clubSuggested === 'string' ? plannerResult.clubSuggested : null;
@@ -1720,6 +1723,7 @@ const QAArHudOverlayScreen: React.FC = () => {
   const [cameraStats, setCameraStats] = useState<CameraStats>({ latency: 0, fps: 0 });
   const telemetryRef = useRef<TelemetryEmitter | null>(resolveTelemetryEmitter());
   const shotIdCounterRef = useRef(0);
+  const shotIdRef = useRef(0);
   const bundleRef = useRef<CourseBundle | null>(bundle);
   const playerGeoRef = useRef<GeoPoint | null>(playerLatLon);
   const pinRef = useRef<GeoPoint | null>(pin);
@@ -2371,7 +2375,13 @@ const QAArHudOverlayScreen: React.FC = () => {
     const lateral = Number(ghostOverlay.profile.lateral_m.toFixed(2));
     const longErr = ghostErrors ? Number(ghostErrors.long.toFixed(2)) : null;
     const latErr = ghostErrors ? Number(ghostErrors.lateral.toFixed(2)) : null;
-    const key = `${range}|${lateral}|${longErr ?? 'null'}|${latErr ?? 'null'}`;
+    const key = buildGhostTelemetryKey({
+      shotId: shotIdRef.current,
+      range,
+      lateral,
+      longErr: longErr ?? null,
+      latErr: latErr ?? null,
+    });
     if (ghostTelemetryKeyRef.current === key) {
       return;
     }
