@@ -15,6 +15,8 @@ This document explains how to grab unsigned release artifacts from CI, install t
 
 > iOS builds run in archive dry-run mode against `iphonesimulator` so that no signing credentials are required. Use the recorded commands to reproduce a local archive when needed.
 
+iOS archive uses generic device, unsigned (CI).
+
 ## Installing the Android APK locally
 
 1. Unzip the artifact bundle and locate `app-release-unsigned.apk`.
