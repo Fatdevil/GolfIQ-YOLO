@@ -77,6 +77,14 @@ import {
   type LandingState as AutoLandingState,
   type LandingSample,
 } from '../../../../shared/arhud/landing_heuristics';
+import { buildPlayerModel } from '../../../../shared/caddie/player_model';
+import {
+  planApproach,
+  planTeeShot,
+  type RiskMode as CaddieRiskMode,
+  type ShotPlan as CaddieShotPlan,
+} from '../../../../shared/caddie/strategy';
+import { caddieTipToText } from '../../../../shared/caddie/text';
 import { buildGhostTelemetryKey } from './utils/ghostTelemetry';
 
 type FeatureKind = 'green' | 'fairway' | 'bunker' | 'hazard' | 'cartpath' | 'other';
@@ -134,6 +142,13 @@ const FEATURE_STROKES: Record<FeatureKind, number> = {
   hazard: 4,
   cartpath: 6,
   other: 3,
+};
+
+const CADDIE_RISK_OPTIONS: readonly CaddieRiskMode[] = ['safe', 'normal', 'aggressive'];
+const CADDIE_RISK_LABELS: Record<CaddieRiskMode, string> = {
+  safe: 'Safe',
+  normal: 'Normal',
+  aggressive: 'Aggro',
 };
 
 const EARTH_RADIUS_M = 6_378_137;
@@ -1223,6 +1238,8 @@ const QAArHudOverlayScreen: React.FC = () => {
   const [calibrationMessage, setCalibrationMessage] = useState<string | null>(null);
   const [landingProposal, setLandingProposal] = useState<LandingProposal | null>(null);
   const [landingState, setLandingState] = useState<AutoLandingState>('IDLE');
+  const [caddieRiskMode, setCaddieRiskMode] = useState<CaddieRiskMode>('normal');
+  const [caddieGoForGreen, setCaddieGoForGreen] = useState(false);
 
   useEffect(() => {
     resumePendingUploads().catch(() => {});
@@ -1720,6 +1737,97 @@ const QAArHudOverlayScreen: React.FC = () => {
     ],
     [],
   );
+  const caddiePlayerModel = useMemo(() => buildPlayerModel({ bag: qaBag }), [qaBag]);
+  const likelyPar5 = useMemo(() => (pinMetrics?.distance ?? 0) > 360, [pinMetrics?.distance]);
+  useEffect(() => {
+    if (!likelyPar5 && caddieGoForGreen) {
+      setCaddieGoForGreen(false);
+    }
+  }, [caddieGoForGreen, likelyPar5]);
+  const caddieScenario = useMemo<'tee' | 'approach'>(() => {
+    const distance = pinMetrics?.distance ?? 0;
+    return distance > 220 ? 'tee' : 'approach';
+  }, [pinMetrics?.distance]);
+  const caddiePlan = useMemo<CaddieShotPlan | null>(() => {
+    if (!playerLatLon || !pin) {
+      return null;
+    }
+    const wind = {
+      speed_mps: plannerInputs.wind_mps,
+      from_deg: plannerInputs.wind_from_deg,
+    };
+    if (caddieScenario === 'tee') {
+      return planTeeShot({
+        bundle,
+        tee: playerLatLon,
+        pin,
+        player: caddiePlayerModel,
+        riskMode: caddieRiskMode,
+        wind,
+        slope_dh_m: plannerInputs.slope_dh_m,
+        goForGreen: likelyPar5 && caddieGoForGreen,
+      });
+    }
+    return planApproach({
+      bundle,
+      ball: playerLatLon,
+      pin,
+      player: caddiePlayerModel,
+      riskMode: caddieRiskMode,
+      wind,
+      slope_dh_m: plannerInputs.slope_dh_m,
+    });
+  }, [
+    bundle,
+    caddieGoForGreen,
+    caddiePlayerModel,
+    caddieRiskMode,
+    caddieScenario,
+    likelyPar5,
+    pin,
+    plannerInputs.slope_dh_m,
+    plannerInputs.wind_from_deg,
+    plannerInputs.wind_mps,
+    playerLatLon,
+  ]);
+  const caddieTips = useMemo(
+    () =>
+      caddiePlan
+        ? caddieTipToText(caddiePlan, {
+            mode: caddieRiskMode,
+            wind: { cross_mps: caddiePlan.crosswind_mps, head_mps: caddiePlan.headwind_mps },
+            tuningActive: caddiePlayerModel.tuningActive,
+          })
+        : [],
+    [caddiePlan, caddiePlayerModel.tuningActive, caddieRiskMode],
+  );
+  const caddieTitle = caddieScenario === 'tee' ? 'Tee plan' : 'Next shot';
+  useEffect(() => {
+    if (!caddiePlan) {
+      lastCaddiePlanRef.current = null;
+      return;
+    }
+    const key = `${caddiePlan.kind}-${caddiePlan.club}-${caddiePlan.mode}-${Math.round(
+      caddiePlan.landing.distance_m,
+    )}-${Math.round(caddiePlan.aimDeg * 10)}-${caddiePlan.aimDirection}`;
+    if (lastCaddiePlanRef.current === key) {
+      return;
+    }
+    const signedAim =
+      caddiePlan.aimDirection === 'LEFT'
+        ? -caddiePlan.aimDeg
+        : caddiePlan.aimDirection === 'RIGHT'
+          ? caddiePlan.aimDeg
+          : 0;
+    emitTelemetry('hud.caddie.plan', {
+      club: caddiePlan.club,
+      risk: Number(caddiePlan.risk.toFixed(3)),
+      aimDeg: signedAim,
+      D: Number(caddiePlan.landing.distance_m.toFixed(1)),
+      mode: caddiePlan.mode,
+    });
+    lastCaddiePlanRef.current = key;
+  }, [caddiePlan, emitTelemetry]);
   const [cameraStats, setCameraStats] = useState<CameraStats>({ latency: 0, fps: 0 });
   const telemetryRef = useRef<TelemetryEmitter | null>(resolveTelemetryEmitter());
   const shotIdCounterRef = useRef(0);
@@ -1737,6 +1845,7 @@ const QAArHudOverlayScreen: React.FC = () => {
   }
   const ghostProgress = ghostProgressRef.current;
   const ghostTelemetryKeyRef = useRef<string | null>(null);
+  const lastCaddiePlanRef = useRef<string | null>(null);
 
   const clearLandingTimeout = useCallback(() => {
     if (landingTimeoutRef.current) {
@@ -1928,6 +2037,34 @@ const QAArHudOverlayScreen: React.FC = () => {
     emitTelemetry('hud.auto_land.rejected', { reason: 'dismiss' });
     startLandingTimeout();
   }, [emitTelemetry, startLandingTimeout]);
+
+  const handleApplyCaddiePlan = useCallback(() => {
+    if (!caddiePlan) {
+      return;
+    }
+    const signedAim =
+      caddiePlan.aimDirection === 'LEFT'
+        ? -caddiePlan.aimDeg
+        : caddiePlan.aimDirection === 'RIGHT'
+          ? caddiePlan.aimDeg
+          : 0;
+    setPlannerExpanded(true);
+    setPlannerResult({
+      playsLike_m: caddiePlan.landing.distance_m,
+      breakdown: { temp_m: 0, alt_m: 0, head_m: 0, slope_m: 0 },
+      clubSuggested: caddiePlan.club,
+      tuningApplied: caddiePlan.tuningActive,
+      aimAdjust_deg: signedAim,
+    });
+    emitTelemetry('hud.caddie.plan', {
+      club: caddiePlan.club,
+      risk: Number(caddiePlan.risk.toFixed(3)),
+      aimDeg: signedAim,
+      D: Number(caddiePlan.landing.distance_m.toFixed(1)),
+      mode: caddiePlan.mode,
+      applied: true,
+    });
+  }, [caddiePlan, emitTelemetry, setPlannerExpanded, setPlannerResult]);
 
   useEffect(() => {
     if (!qaEnabled) {
@@ -2644,6 +2781,67 @@ const QAArHudOverlayScreen: React.FC = () => {
             </View>
           </View>
         ) : null}
+        <View style={[styles.caddieContainer, styles.sectionTitleSpacing]}>
+          <View style={styles.caddieHeader}>
+            <Text style={styles.sectionTitle}>Caddie</Text>
+            {caddiePlayerModel.tuningActive ? (
+              <View style={styles.caddieBadge}>
+                <Text style={styles.caddieBadgeText}>TUNED</Text>
+              </View>
+            ) : null}
+          </View>
+          <View style={styles.caddieModeRow}>
+            {CADDIE_RISK_OPTIONS.map((mode) => (
+              <TouchableOpacity
+                key={mode}
+                onPress={() => setCaddieRiskMode(mode)}
+                style={[
+                  styles.caddieModeOption,
+                  caddieRiskMode === mode ? styles.caddieModeOptionActive : null,
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.caddieModeText,
+                    caddieRiskMode === mode ? styles.caddieModeTextActive : null,
+                  ]}
+                >
+                  {CADDIE_RISK_LABELS[mode]}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+          <View style={styles.caddieToggleRow}>
+            <Text style={styles.caddieToggleLabel}>Go for green</Text>
+            <Switch
+              value={caddieGoForGreen && likelyPar5}
+              onValueChange={setCaddieGoForGreen}
+              disabled={!likelyPar5}
+            />
+          </View>
+          {caddiePlan ? (
+            <View style={styles.caddiePlanBlock}>
+              <Text style={styles.caddiePlanTitle}>{caddieTitle}</Text>
+              {caddieTips.map((line, index) => (
+                <Text key={`caddie-line-${index}`} style={styles.caddieTipLine}>
+                  {line}
+                </Text>
+              ))}
+            </View>
+          ) : (
+            <Text style={styles.caddieTipLine}>Ingen plan – välj bana och pin.</Text>
+          )}
+          <TouchableOpacity
+            onPress={handleApplyCaddiePlan}
+            disabled={!caddiePlan}
+            style={[
+              styles.caddieApplyButton,
+              !caddiePlan ? styles.caddieApplyButtonDisabled : null,
+            ]}
+          >
+            <Text style={styles.caddieApplyButtonText}>Apply to HUD</Text>
+          </TouchableOpacity>
+        </View>
         <View style={[styles.plannerContainer, styles.sectionTitleSpacing]}>
           <TouchableOpacity
             onPress={() => setPlannerExpanded((prev) => !prev)}
@@ -3333,6 +3531,88 @@ const styles = StyleSheet.create({
   resultCardFeedbackLine: {
     color: '#f8fafc',
     fontSize: 12,
+  },
+  caddieContainer: {
+    backgroundColor: '#0f172a',
+    borderRadius: 10,
+    padding: 12,
+    gap: 12,
+  },
+  caddieHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  caddieBadge: {
+    backgroundColor: '#1f2937',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 6,
+  },
+  caddieBadgeText: {
+    color: '#facc15',
+    fontSize: 10,
+    fontWeight: '700',
+  },
+  caddieModeRow: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  caddieModeOption: {
+    flex: 1,
+    borderRadius: 8,
+    backgroundColor: '#1f2937',
+    paddingVertical: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  caddieModeOptionActive: {
+    backgroundColor: '#2563eb',
+  },
+  caddieModeText: {
+    color: '#94a3b8',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  caddieModeTextActive: {
+    color: '#f8fafc',
+  },
+  caddieToggleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  caddieToggleLabel: {
+    color: '#cbd5f5',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  caddiePlanBlock: {
+    gap: 6,
+  },
+  caddiePlanTitle: {
+    color: '#f8fafc',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  caddieTipLine: {
+    color: '#cbd5f5',
+    fontSize: 13,
+    lineHeight: 18,
+  },
+  caddieApplyButton: {
+    marginTop: 4,
+    borderRadius: 8,
+    backgroundColor: '#10b981',
+    paddingVertical: 10,
+    alignItems: 'center',
+  },
+  caddieApplyButtonDisabled: {
+    backgroundColor: '#1e293b',
+  },
+  caddieApplyButtonText: {
+    color: '#0f172a',
+    fontWeight: '700',
   },
   calloutRow: {
     flexDirection: 'row',
