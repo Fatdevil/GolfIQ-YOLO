@@ -319,9 +319,9 @@ const QABenchScreen: React.FC = () => {
     const embedded = pickDefaultsForPlatform(getEmbeddedEdgeDefaults(), platformKey);
     const base = embedded ?? DEFAULT_CONFIG[platformKey];
     return {
-      runtime: toRuntime(base.runtime) ?? DEFAULT_CONFIG[platformKey].runtime,
+      runtime: (toRuntime(base.runtime) ?? DEFAULT_CONFIG[platformKey].runtime) as EdgeRuntime,
       inputSize: clampInputSize(base.inputSize),
-      quant: toQuant(base.quant) ?? DEFAULT_CONFIG[platformKey].quant,
+      quant: (toQuant(base.quant) ?? DEFAULT_CONFIG[platformKey].quant) as EdgeQuant,
       threads: clampThreads(base.threads),
       delegate: toDelegate(base.delegate, delegates),
     };
@@ -376,7 +376,11 @@ const QABenchScreen: React.FC = () => {
     (async () => {
       try {
         const Device = await import('expo-device');
-        const { default: Constants } = await import('expo-constants');
+        const constantsModule = await import('expo-constants');
+        const Constants = (constantsModule.default ?? {}) as {
+          expoConfig?: { version?: string | null; runtimeVersion?: string | null };
+          manifest?: { version?: string | null };
+        };
         const deviceName = (Device as Record<string, unknown>).modelName as
           | string
           | undefined;
@@ -386,9 +390,9 @@ const QABenchScreen: React.FC = () => {
           | undefined;
         const os = [osName, osVersion].filter(Boolean).join(' ').trim() || 'unknown';
         const appVersion =
-          (Constants as Record<string, unknown>)?.expoConfig?.version ||
-          (Constants as Record<string, unknown>)?.expoConfig?.runtimeVersion ||
-          (Constants as Record<string, unknown>)?.manifest?.version ||
+          Constants.expoConfig?.version ??
+          Constants.expoConfig?.runtimeVersion ??
+          Constants.manifest?.version ??
           'dev';
         if (!cancelled) {
           setDeviceInfo({

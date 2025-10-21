@@ -46,6 +46,23 @@ export async function inferWithDetections(meta: Meta, detections: DetFrame[]){
   return await r.json();
 }
 
+export function mockDetections(): DetFrame[] {
+  return [
+    {
+      dets: [
+        {
+          cls: 'ball',
+          conf: 0.9,
+          x1: 0.45,
+          y1: 0.45,
+          x2: 0.55,
+          y2: 0.55,
+        },
+      ],
+    },
+  ];
+}
+
 export async function inferWithFrames(meta: Meta, frames: ImgFrame[], yolo: YoloConfig){
   const payload = { mode: 'frames_b64', frames, meta, yolo };
   const r = await fetch(`${API_BASE}/infer`, {

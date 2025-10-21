@@ -76,7 +76,7 @@ import {
   type LandingState as AutoLandingState,
   type LandingSample,
 } from '../../../../shared/arhud/landing_heuristics';
-import { buildGhostTelemetryKey } from '../utils/ghostTelemetry';
+import { buildGhostTelemetryKey } from './utils/ghostTelemetry';
 
 type FeatureKind = 'green' | 'fairway' | 'bunker' | 'hazard' | 'cartpath' | 'other';
 
@@ -1453,6 +1453,42 @@ const QAArHudOverlayScreen: React.FC = () => {
       }
     })();
   }, [calibrationResult, defaultQaBag, qaBag]);
+  const [cameraStats, setCameraStats] = useState<CameraStats>({ latency: 0, fps: 0 });
+  const telemetryRef = useRef<TelemetryEmitter | null>(resolveTelemetryEmitter());
+  const shotIdRef = useRef(0);
+  const bundleRef = useRef<CourseBundle | null>(bundle);
+  const playerGeoRef = useRef<GeoPoint | null>(playerLatLon);
+  const pinRef = useRef<GeoPoint | null>(pin);
+  const landingHeuristicsRef = useRef(createLandingHeuristics());
+  const lastLocationFixRef = useRef<LocationFix | null>(null);
+  const landingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastFeedbackShotRef = useRef<string | null>(null);
+  const ghostProgressRef = useRef<Animated.Value | null>(null);
+  if (!ghostProgressRef.current) {
+    ghostProgressRef.current = new Animated.Value(0);
+  }
+  const ghostProgress = ghostProgressRef.current;
+  const ghostTelemetryKeyRef = useRef<string | null>(null);
+
+  const clearLandingTimeout = useCallback(() => {
+    if (landingTimeoutRef.current) {
+      clearTimeout(landingTimeoutRef.current);
+      landingTimeoutRef.current = null;
+    }
+  }, []);
+
+  const startLandingTimeout = useCallback(() => {
+    clearLandingTimeout();
+    landingTimeoutRef.current = setTimeout(() => {
+      const heuristics = landingHeuristicsRef.current;
+      if (heuristics.state() === 'TRACKING') {
+        heuristics.cancel('timeout');
+        setLandingProposal(null);
+        setLandingState(heuristics.state());
+      }
+    }, 60_000);
+  }, [clearLandingTimeout]);
+
   const handleHit = useCallback(() => {
     if (!plannerResult || !pinMetrics) {
       return;
@@ -1613,6 +1649,21 @@ const QAArHudOverlayScreen: React.FC = () => {
       setRoundShareUploading(false);
     }
   }, [roundShareUploading]);
+  const emitTelemetry = useCallback(
+    (event: string, data: Record<string, unknown>) => {
+      if (!qaEnabled) {
+        return;
+      }
+      const emitter = telemetryRef.current;
+      if (emitter) {
+        emitter(event, data);
+      } else if (typeof console !== 'undefined' && typeof console.log === 'function') {
+        console.log(`[qa-arhud] ${event}`, data);
+      }
+    },
+    [qaEnabled],
+  );
+
   useEffect(() => {
     if (!shotSession || !shotSession.landing || shotSession.logged) {
       return;
@@ -1718,42 +1769,6 @@ const QAArHudOverlayScreen: React.FC = () => {
     ],
     [],
   );
-  const [cameraStats, setCameraStats] = useState<CameraStats>({ latency: 0, fps: 0 });
-  const telemetryRef = useRef<TelemetryEmitter | null>(resolveTelemetryEmitter());
-  const shotIdRef = useRef(0);
-  const bundleRef = useRef<CourseBundle | null>(bundle);
-  const playerGeoRef = useRef<GeoPoint | null>(playerLatLon);
-  const pinRef = useRef<GeoPoint | null>(pin);
-  const landingHeuristicsRef = useRef(createLandingHeuristics());
-  const lastLocationFixRef = useRef<LocationFix | null>(null);
-  const landingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const lastFeedbackShotRef = useRef<string | null>(null);
-  const ghostProgressRef = useRef<Animated.Value | null>(null);
-  if (!ghostProgressRef.current) {
-    ghostProgressRef.current = new Animated.Value(0);
-  }
-  const ghostProgress = ghostProgressRef.current;
-  const ghostTelemetryKeyRef = useRef<string | null>(null);
-
-  const clearLandingTimeout = useCallback(() => {
-    if (landingTimeoutRef.current) {
-      clearTimeout(landingTimeoutRef.current);
-      landingTimeoutRef.current = null;
-    }
-  }, []);
-
-  const startLandingTimeout = useCallback(() => {
-    clearLandingTimeout();
-    landingTimeoutRef.current = setTimeout(() => {
-      const heuristics = landingHeuristicsRef.current;
-      if (heuristics.state() === 'TRACKING') {
-        heuristics.cancel('timeout');
-        setLandingProposal(null);
-        setLandingState(heuristics.state());
-      }
-    }, 60_000);
-  }, [clearLandingTimeout]);
-
   useEffect(() => {
     telemetryRef.current = resolveTelemetryEmitter();
   }, [qaEnabled]);
@@ -1792,21 +1807,6 @@ const QAArHudOverlayScreen: React.FC = () => {
       lastFeedbackShotRef.current = null;
     }
   }, [shotSession, clearLandingTimeout]);
-
-  const emitTelemetry = useCallback(
-    (event: string, data: Record<string, unknown>) => {
-      if (!qaEnabled) {
-        return;
-      }
-      const emitter = telemetryRef.current;
-      if (emitter) {
-        emitter(event, data);
-      } else if (typeof console !== 'undefined' && typeof console.log === 'function') {
-        console.log(`[qa-arhud] ${event}`, data);
-      }
-    },
-    [qaEnabled],
-  );
 
   useEffect(() => {
     if (!qaEnabled) {

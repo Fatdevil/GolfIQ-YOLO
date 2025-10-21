@@ -121,18 +121,23 @@ async function resolveDeviceId(): Promise<string> {
     // ignore missing module or runtime errors
   }
   try {
-    const { default: Constants } = (await import('expo-constants')) as Record<string, unknown> & {
-      installationId?: string | null;
-      deviceId?: string | null;
+    const constantsModule = (await import('expo-constants')) as {
+      default?: Record<string, unknown> & {
+        installationId?: string | null;
+        deviceId?: string | null;
+        expoConfig?: { version?: string | null; runtimeVersion?: string | null };
+        manifest?: { version?: string | null };
+      };
     };
-    if (Constants && typeof Constants === 'object') {
-      const installationId = typeof Constants.installationId === 'string'
-        ? Constants.installationId.trim()
+    const constants = constantsModule.default ?? {};
+    if (typeof constants === 'object') {
+      const installationId = typeof constants.installationId === 'string'
+        ? constants.installationId.trim()
         : '';
       if (installationId) {
         return installationId;
       }
-      const deviceId = typeof Constants.deviceId === 'string' ? Constants.deviceId.trim() : '';
+      const deviceId = typeof constants.deviceId === 'string' ? constants.deviceId.trim() : '';
       if (deviceId) {
         return deviceId;
       }
@@ -206,7 +211,11 @@ const QAArHudScreen: React.FC = () => {
     (async () => {
       try {
         const Device = await import('expo-device');
-        const { default: Constants } = await import('expo-constants');
+        const constantsModule = await import('expo-constants');
+        const Constants = (constantsModule.default ?? {}) as {
+          expoConfig?: { version?: string | null; runtimeVersion?: string | null };
+          manifest?: { version?: string | null };
+        };
         const deviceName = Device?.modelName ?? 'unknown';
         const osName = Device?.osName ?? 'unknown';
         const osVersion = Device?.osVersion ?? '';

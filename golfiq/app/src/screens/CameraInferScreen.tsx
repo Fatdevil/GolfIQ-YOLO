@@ -11,7 +11,7 @@ import { inferWithFrames, coachFeedback, Meta, API_BASE, metricsFaceOn } from '.
 import { useQaSummary } from '../context/QaSummaryContext';
 
 export default function CameraInferScreen(){
-  const cameraRef = useRef<Camera | null>(null);
+  const cameraRef = useRef<any>(null);
   const [perm, requestPerm] = Camera.useCameraPermissions();
   const { fps: fpsClient, tick } = useFps();
   const [fpsInput, setFpsInput] = useState('120');
