@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { BenchCompare } from "../features/replay/components/BenchCompare";
 import { DispersionPlot, type DispersionSeries } from "../features/replay/components/DispersionPlot";
@@ -7,10 +7,10 @@ import { RunTimeline } from "../features/replay/components/RunTimeline";
 import { RunUpload, type LoadedRunPatch, type RunSlot } from "../features/replay/components/RunUpload";
 import { ShotStatsTable } from "../features/replay/components/ShotStatsTable";
 import type { BenchSummary } from "../features/replay/utils/parseBenchSummary";
-import type { ParsedHudRun } from "../features/replay/utils/parseHudRun";
-import type { ParsedRound } from "../features/replay/utils/parseRound";
-import { computeDispersion, type DispersionStats } from "../features/replay/utils/parseShotLog";
-import type { Shot } from "../features/replay/utils/parseShotLog";
+import { parseHudRun, type ParsedHudRun } from "../features/replay/utils/parseHudRun";
+import { parseRound, type ParsedRound } from "../features/replay/utils/parseRound";
+import { computeDispersion, parseShotLog, type DispersionStats, type Shot } from "../features/replay/utils/parseShotLog";
+import { fetchRun } from "../lib/fetchRun";
 import { mkReportMd } from "../features/replay/utils/mkReportMd";
 
 type RunState = {
@@ -25,6 +25,12 @@ export default function ReplayAnalyzerPage() {
   const [activeSlot, setActiveSlot] = useState<RunSlot>("primary");
   const [benchSummary, setBenchSummary] = useState<BenchSummary>({});
   const [exportError, setExportError] = useState<string | null>(null);
+  const [shareParam] = useState<string | null>(() => {
+    if (typeof window === "undefined") return null;
+    const params = new URLSearchParams(window.location.search);
+    const value = params.get("share");
+    return value && value.trim() ? value.trim() : null;
+  });
 
   const applyRunPatch = useCallback(
     (payload: LoadedRunPatch, slot: RunSlot) => {
@@ -76,6 +82,41 @@ export default function ReplayAnalyzerPage() {
       setExportError(err instanceof Error ? err.message : String(err));
     }
   }, [benchSummary, primary]);
+
+  useEffect(() => {
+    if (!shareParam) {
+      return;
+    }
+    let active = true;
+    fetchRun(shareParam)
+      .then((payload) => {
+        if (!active) return;
+        if (!payload) {
+          setExportError("Shared run not found or has expired");
+          return;
+        }
+        try {
+          if (payload.kind === "hud") {
+            const parsed = parseHudRun(payload.events);
+            const shots = parseShotLog(payload.events);
+            applyRunPatch({ run: parsed, shots }, "primary");
+          } else {
+            const round = parseRound(payload.record);
+            applyRunPatch({ round }, "primary");
+          }
+          setExportError(null);
+        } catch (error) {
+          setExportError(error instanceof Error ? error.message : String(error));
+        }
+      })
+      .catch((error) => {
+        if (!active) return;
+        setExportError(error instanceof Error ? error.message : String(error));
+      });
+    return () => {
+      active = false;
+    };
+  }, [applyRunPatch, shareParam]);
 
   const activeRun = useMemo(() => {
     if (activeSlot === "comparison") {

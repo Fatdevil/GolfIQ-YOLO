@@ -91,6 +91,15 @@ Use **Export report** to download a Markdown summary that contains:
 
 The file is written without server round-trips to keep the workflow fast and binary-safe.
 
+## Share links
+
+- Every uploaded HUD or round capture receives a share id. Visit `/share/<id>` to open a public, mobile-friendly run summary
+  with OG metadata for pasting into Slack or issues.
+- The share page exposes quick actions to open the run directly in the analyzer, copy the canonical link, or download the raw
+  JSON without recompression.
+- HUD runs show duration, FPS, p95 latency, re-centre counts, and pin-distance dispersion heuristics. Round uploads render
+  course info, total vs par, strokes per hole, and FIR/GIR hit rates.
+
 ## Troubleshooting
 
 - **No timeline** — the HUD run did not record any `hud.frame` events with a recognised state. Capture again and ensure the QA
