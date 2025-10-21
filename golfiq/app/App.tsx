@@ -3,6 +3,7 @@ import { SafeAreaView, View, Text, TouchableOpacity, StyleSheet, ScrollView } fr
 import CalibrateScreen from './src/screens/CalibrateScreen';
 import RecordSwingScreen from './src/screens/RecordSwingScreen';
 import CameraInferScreen from './src/screens/CameraInferScreen';
+import AboutDiagnostics from './src/screens/AboutDiagnostics';
 import FeedbackModal from './src/components/FeedbackModal';
 import { QaSummaryProvider } from './src/context/QaSummaryContext';
 import QAArHudScreen from './src/screens/QAArHudScreen';
@@ -11,7 +12,7 @@ import { qaHudEnabled } from '../../shared/arhud/native/qa_gate';
 import { QALauncher } from './qa/QALauncher';
 import { isQAMode } from './qa/QAGate';
 
-type TabKey = 'cal' | 'rec' | 'cam' | 'qaHud' | 'qaBench';
+type TabKey = 'cal' | 'rec' | 'cam' | 'about' | 'qaHud' | 'qaBench';
 
 export default function App(){
   const qaEnabled = qaHudEnabled();
@@ -39,6 +40,8 @@ export default function App(){
         return <RecordSwingScreen/>;
       case 'cam':
         return <CameraInferScreen/>;
+      case 'about':
+        return <AboutDiagnostics/>;
       case 'qaHud':
         return <QAArHudScreen/>;
       case 'qaBench':
@@ -61,6 +64,9 @@ export default function App(){
             </TouchableOpacity>
             <TouchableOpacity onPress={()=>setTab('cam')} style={[styles.tab, tab==='cam' && styles.tabActive]}>
               <Text style={styles.tabText}>Kamera</Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={()=>setTab('about')} style={[styles.tab, tab==='about' && styles.tabActive]}>
+              <Text style={styles.tabText}>About</Text>
             </TouchableOpacity>
             {qaTabs.map(({ key, label }) => (
               <TouchableOpacity
