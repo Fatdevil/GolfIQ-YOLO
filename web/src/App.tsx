@@ -11,6 +11,7 @@ import FeedbackAdminPage from "./pages/FeedbackAdmin";
 import ReplayAnalyzerPage from "./pages/ReplayAnalyzer";
 import Nav from "./components/Nav";
 import { qaReplayEnabled } from "./config";
+import ShareRunPage from "./pages/ShareRun";
 
 export default function App() {
   return (
@@ -23,6 +24,7 @@ export default function App() {
           <Route path="/mock" element={<MockAnalyzePage />} />
           <Route path="/runs" element={<RunsPage />} />
           <Route path="/runs/:id" element={<RunDetailPage />} />
+          <Route path="/share/:id" element={<ShareRunPage />} />
           <Route path="/field-runs" element={<FieldRunsPage />} />
           <Route path="/device-dashboard" element={<DeviceDashboardPage />} />
           <Route path="/accuracy" element={<AccuracyBoardPage />} />
