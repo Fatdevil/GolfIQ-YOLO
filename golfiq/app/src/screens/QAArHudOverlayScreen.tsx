@@ -7,6 +7,8 @@ import React, {
 } from 'react';
 import {
   ActivityIndicator,
+  Animated,
+  Easing,
   ScrollView,
   StyleSheet,
   Switch,
@@ -29,6 +31,10 @@ import {
   AutoCourseController,
   type AutoCourseCandidate,
 } from '../../../../shared/arhud/auto_course';
+import {
+  computeGhostTrajectory,
+  type GhostTrajectoryResult,
+} from '../../../../shared/arhud/ballistics';
 import {
   nearestFeature,
   toLocalENU,
@@ -634,6 +640,193 @@ function buildOverlayData(
   return { features, points };
 }
 
+type GhostTrajectoryViewProps = {
+  profile: GhostTrajectoryResult;
+  progress: Animated.Value;
+  range: number;
+  lateral: number;
+  errors: GhostErrorVector | null;
+};
+
+const GhostTrajectoryView: React.FC<GhostTrajectoryViewProps> = ({
+  profile,
+  progress,
+  range,
+  lateral,
+  errors,
+}) => {
+  if (!profile.path.length) {
+    return null;
+  }
+  const width = 260;
+  const height = 140;
+  const padding = 16;
+  const maxX = profile.path[profile.path.length - 1]?.x ?? range ?? 1;
+  const maxY = profile.path.reduce((acc, sample) => Math.max(acc, sample.y), 0);
+  const verticalBasis = Math.max(maxY, maxX * 0.25, 1);
+  const scaleX = maxX > 0 ? (width - padding * 2) / maxX : 1;
+  const scaleY = (height - padding * 2) / verticalBasis;
+  const screenPoints = profile.path.map((sample) => ({
+    x: padding + sample.x * scaleX,
+    y: height - padding - sample.y * scaleY,
+  }));
+  const apexPoint = screenPoints[profile.apexIdx] ?? null;
+  const inputRange = profile.path.map((_, idx) => idx / Math.max(profile.path.length - 1, 1));
+  const outputRangeX = screenPoints.map((pt) => pt.x);
+  const outputRangeY = screenPoints.map((pt) => pt.y);
+  const animatedX = progress.interpolate({ inputRange, outputRange: outputRangeX });
+  const animatedY = progress.interpolate({ inputRange, outputRange: outputRangeY });
+  const impactPoint = screenPoints[screenPoints.length - 1];
+  const groundY = height - padding;
+  const formatSigned = (value: number) => (value >= 0 ? `+${value.toFixed(1)}` : value.toFixed(1));
+  const errorColor = (value: number | null | undefined) => {
+    if (value == null) {
+      return '#cbd5f5';
+    }
+    const magnitude = Math.abs(value);
+    if (magnitude < 0.8) {
+      return '#22d3ee';
+    }
+    return value > 0 ? '#f97316' : '#38bdf8';
+  };
+
+  return (
+    <View style={styles.ghostContainer}>
+      <Text style={styles.ghostTitle}>Ghost trajectory</Text>
+      <View style={[styles.ghostGraph, { width, height }]}> 
+        <View
+          style={{
+            position: 'absolute',
+            left: padding,
+            right: padding,
+            top: groundY,
+            height: 2,
+            backgroundColor: '#1f2937',
+          }}
+        />
+        {screenPoints.slice(0, -1).map((start, idx) => {
+          const end = screenPoints[idx + 1];
+          if (!end) {
+            return null;
+          }
+          const dx = end.x - start.x;
+          const dy = end.y - start.y;
+          const length = Math.hypot(dx, dy);
+          if (length <= 0) {
+            return null;
+          }
+          const progressRatio = idx / (screenPoints.length - 1 || 1);
+          const opacity = 0.35 + (1 - progressRatio) * 0.5;
+          return (
+            <View
+              // eslint-disable-next-line react/no-array-index-key
+              key={`ghost-profile-${idx}`}
+              style={{
+                position: 'absolute',
+                left: start.x,
+                top: start.y,
+                width: length,
+                height: 3,
+                backgroundColor: `rgba(59,130,246,${opacity})`,
+                transform: [
+                  { translateX: 0 },
+                  { translateY: -1.5 },
+                  { rotate: `${Math.atan2(dy, dx)}rad` },
+                ],
+              }}
+            />
+          );
+        })}
+        {apexPoint ? (
+          <View
+            style={{
+              position: 'absolute',
+              left: apexPoint.x,
+              top: apexPoint.y,
+              width: 10,
+              height: 10,
+              borderRadius: 5,
+              backgroundColor: '#60a5fa',
+              borderWidth: 2,
+              borderColor: '#1d4ed8',
+              transform: [{ translateX: -5 }, { translateY: -5 }],
+            }}
+          />
+        ) : null}
+        {impactPoint ? (
+          <View
+            style={{
+              position: 'absolute',
+              left: impactPoint.x,
+              top: groundY,
+              width: Math.max(8, profile.impactEllipse.major_m * scaleX * 0.4),
+              height: Math.max(6, profile.impactEllipse.minor_m * scaleX * 0.3),
+              borderRadius: Math.max(3, (profile.impactEllipse.minor_m * scaleX * 0.3) / 2),
+              borderWidth: 1,
+              borderColor: 'rgba(96,165,250,0.9)',
+              backgroundColor: 'rgba(96,165,250,0.2)',
+              transform: [
+                { translateX: -Math.max(4, (profile.impactEllipse.major_m * scaleX * 0.4) / 2) },
+                { translateY: -Math.max(3, (profile.impactEllipse.minor_m * scaleX * 0.3) / 2) },
+              ],
+            }}
+          />
+        ) : null}
+        <Animated.View
+          style={[
+            styles.ghostMarker,
+            {
+              transform: [
+                { translateX: Animated.subtract(animatedX, 6) },
+                { translateY: Animated.subtract(animatedY, 6) },
+              ],
+            },
+          ]}
+        />
+      </View>
+      <View style={styles.ghostStatsRow}>
+        <View style={styles.ghostStat}>
+          <Text style={styles.ghostLabel}>Range</Text>
+          <Text style={styles.ghostValue}>{`${range.toFixed(1)} m`}</Text>
+        </View>
+        <View style={styles.ghostStat}>
+          <Text style={styles.ghostLabel}>Drift</Text>
+          <Text style={styles.ghostValue}>{`${formatSigned(lateral)} m`}</Text>
+        </View>
+      </View>
+      <View style={styles.ghostStatsRow}>
+        <View style={styles.ghostStat}>
+          <Text style={styles.ghostLabel}>Longitudinal</Text>
+          <Text style={[styles.ghostValue, { color: errorColor(errors?.long ?? null) }]}>
+            {errors ? `${formatSigned(errors.long)} m` : '—'}
+          </Text>
+        </View>
+        <View style={styles.ghostStat}>
+          <Text style={styles.ghostLabel}>Lateral</Text>
+          <Text style={[styles.ghostValue, { color: errorColor(errors?.lateral ?? null) }]}>
+            {errors
+              ? `${Math.abs(errors.lateral).toFixed(1)} m ${errors.lateral >= 0 ? 'RIGHT' : 'LEFT'}`
+              : '—'}
+          </Text>
+        </View>
+      </View>
+    </View>
+  );
+};
+
+type GhostOverlay = {
+  profile: GhostTrajectoryResult;
+  range: number;
+  groundPath: LocalPoint[];
+  impactCenter: LocalPoint;
+  dirUnit: LocalPoint;
+};
+
+type GhostErrorVector = {
+  long: number;
+  lateral: number;
+};
+
 type MapOverlayProps = {
   data: OverlayData;
   player: LocalPoint;
@@ -643,6 +836,7 @@ type MapOverlayProps = {
   markLandingActive: boolean;
   onSelectLanding?: (point: LocalPoint) => void;
   landing?: LocalPoint | null;
+  ghost?: GhostOverlay | null;
 };
 
 const MapOverlay: React.FC<MapOverlayProps> = ({
@@ -654,11 +848,22 @@ const MapOverlay: React.FC<MapOverlayProps> = ({
   markLandingActive,
   onSelectLanding,
   landing,
+  ghost,
 }) => {
   const { width } = useWindowDimensions();
   const size = Math.min(width - 32, 340);
   const padding = 20;
-  const allPoints = data.points.length ? data.points.concat(player) : [player];
+  const extendedPoints = useMemo(() => {
+    const base = data.points.length ? [...data.points] : [];
+    if (ghost?.groundPath?.length) {
+      base.push(...ghost.groundPath);
+    }
+    if (ghost?.impactCenter) {
+      base.push(ghost.impactCenter);
+    }
+    return base;
+  }, [data.points, ghost?.groundPath, ghost?.impactCenter]);
+  const allPoints = extendedPoints.length ? extendedPoints.concat(player) : [player];
   const bounds = allPoints.reduce(
     (acc, point) => ({
       minX: Math.min(acc.minX, point.x),
@@ -706,6 +911,10 @@ const MapOverlay: React.FC<MapOverlayProps> = ({
     [center.x, center.y, markLandingActive, onSelectLanding, scale, size],
   );
 
+  const ghostScreenPath = ghost?.groundPath?.map((point) => toScreen(point)) ?? [];
+  const ghostImpactScreen = ghost ? toScreen(ghost.impactCenter) : null;
+  const ghostAngle = ghost ? Math.atan2(ghost.dirUnit.y, ghost.dirUnit.x) : 0;
+
   return (
     <View
       style={[styles.mapContainer, { width: size, height: size }]}
@@ -750,6 +959,61 @@ const MapOverlay: React.FC<MapOverlayProps> = ({
           );
         }),
       )}
+      {ghostScreenPath.length > 1
+        ? ghostScreenPath.slice(0, -1).map((start, idx) => {
+            const end = ghostScreenPath[idx + 1];
+            if (!end) {
+              return null;
+            }
+            const dx = end.x - start.x;
+            const dy = end.y - start.y;
+            const length = Math.hypot(dx, dy);
+            if (length <= 0) {
+              return null;
+            }
+            const progress = idx / (ghostScreenPath.length - 1 || 1);
+            const opacity = 0.25 + (1 - progress) * 0.5;
+            return (
+              <View
+                // eslint-disable-next-line react/no-array-index-key
+                key={`ghost-${idx}`}
+                style={{
+                  position: 'absolute',
+                  left: start.x,
+                  top: start.y,
+                  width: length,
+                  height: 3,
+                  backgroundColor: `rgba(96,165,250,${opacity})`,
+                  transform: [
+                    { translateX: 0 },
+                    { translateY: -1.5 },
+                    { rotate: `${Math.atan2(dy, dx)}rad` },
+                  ],
+                }}
+              />
+            );
+          })
+        : null}
+      {ghost && ghostImpactScreen ? (
+        <View
+          style={{
+            position: 'absolute',
+            left: ghostImpactScreen.x,
+            top: ghostImpactScreen.y,
+            width: Math.max(12, ghost.profile.impactEllipse.major_m * scale),
+            height: Math.max(8, ghost.profile.impactEllipse.minor_m * scale),
+            borderRadius: Math.max(4, (ghost.profile.impactEllipse.minor_m * scale) / 2),
+            borderWidth: 1,
+            borderColor: 'rgba(96,165,250,0.9)',
+            backgroundColor: 'rgba(96,165,250,0.18)',
+            transform: [
+              { translateX: -Math.max(6, (ghost.profile.impactEllipse.major_m * scale) / 2) },
+              { translateY: -Math.max(4, (ghost.profile.impactEllipse.minor_m * scale) / 2) },
+              { rotate: `${ghostAngle}rad` },
+            ],
+          }}
+        />
+      ) : null}
       <View
         style={{
           position: 'absolute',
@@ -1462,6 +1726,12 @@ const QAArHudOverlayScreen: React.FC = () => {
   const lastLocationFixRef = useRef<LocationFix | null>(null);
   const landingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastFeedbackShotRef = useRef<string | null>(null);
+  const ghostProgressRef = useRef<Animated.Value | null>(null);
+  if (!ghostProgressRef.current) {
+    ghostProgressRef.current = new Animated.Value(0);
+  }
+  const ghostProgress = ghostProgressRef.current;
+  const ghostTelemetryKeyRef = useRef<string | null>(null);
 
   const clearLandingTimeout = useCallback(() => {
     if (landingTimeoutRef.current) {
@@ -1975,6 +2245,141 @@ const QAArHudOverlayScreen: React.FC = () => {
     };
   }, [hazardInfo, heading]);
 
+  const ghostOverlay = useMemo(() => {
+    if (!overlayOrigin || !playerLatLon || !pin) {
+      return null;
+    }
+    const originLocal = playerPosition;
+    const targetLocal = toLocalENU(overlayOrigin, pin);
+    const dirVector = {
+      x: targetLocal.x - originLocal.x,
+      y: targetLocal.y - originLocal.y,
+    };
+    const baseRange = Math.hypot(dirVector.x, dirVector.y);
+    const headingRad = (heading * Math.PI) / 180;
+    const dirUnit = baseRange > 1
+      ? { x: dirVector.x / baseRange, y: dirVector.y / baseRange }
+      : { x: Math.sin(headingRad), y: Math.cos(headingRad) };
+    const playsLike = plannerResult?.playsLike_m ?? pinMetrics?.distance ?? baseRange;
+    if (!Number.isFinite(playsLike) || playsLike <= 0) {
+      return null;
+    }
+    const trajectory = computeGhostTrajectory({
+      startLatLon: playerLatLon,
+      targetLatLon: pin,
+      playsLike_m: playsLike,
+      wind_mps: plannerInputs.wind_mps,
+      cross_from_deg: plannerInputs.wind_from_deg,
+    });
+    if (!trajectory || trajectory.path.length < 2) {
+      return null;
+    }
+    const finalRange = trajectory.path[trajectory.path.length - 1]?.x ?? playsLike;
+    if (!Number.isFinite(finalRange) || finalRange <= 0) {
+      return null;
+    }
+    const rightUnit = { x: dirUnit.y, y: -dirUnit.x };
+    const groundPath = trajectory.path.map((sample, idx) => {
+      const progressRatio = trajectory.path.length > 1 ? idx / (trajectory.path.length - 1) : 1;
+      const lateral = trajectory.lateral_m * progressRatio;
+      return {
+        x: originLocal.x + dirUnit.x * sample.x + rightUnit.x * lateral,
+        y: originLocal.y + dirUnit.y * sample.x + rightUnit.y * lateral,
+      };
+    });
+    const impactCenter = groundPath[groundPath.length - 1] ?? {
+      x: originLocal.x + dirUnit.x * finalRange,
+      y: originLocal.y + dirUnit.y * finalRange,
+    };
+    return {
+      profile: trajectory,
+      range: finalRange,
+      groundPath,
+      impactCenter,
+      dirUnit,
+    } satisfies GhostOverlay;
+  }, [
+    overlayOrigin,
+    playerLatLon,
+    pin,
+    plannerResult?.playsLike_m,
+    plannerInputs.wind_mps,
+    plannerInputs.wind_from_deg,
+    playerPosition.x,
+    playerPosition.y,
+    pinMetrics?.distance,
+    heading,
+  ]);
+
+  const ghostErrors = useMemo<GhostErrorVector | null>(() => {
+    if (!ghostOverlay || !shotSession?.landing) {
+      return null;
+    }
+    const dir = ghostOverlay.dirUnit;
+    const right = { x: dir.y, y: -dir.x };
+    const landingVec = {
+      x: shotSession.landing.x - shotSession.origin.x,
+      y: shotSession.landing.y - shotSession.origin.y,
+    };
+    const downrange = landingVec.x * dir.x + landingVec.y * dir.y;
+    const lateral = landingVec.x * right.x + landingVec.y * right.y;
+    return {
+      long: downrange - ghostOverlay.range,
+      lateral: lateral - ghostOverlay.profile.lateral_m,
+    };
+  }, [
+    ghostOverlay,
+    shotSession?.landing?.x,
+    shotSession?.landing?.y,
+    shotSession?.origin.x,
+    shotSession?.origin.y,
+  ]);
+
+  useEffect(() => {
+    if (!ghostProgress) {
+      return;
+    }
+    if (!ghostOverlay || !shotSession?.landing) {
+      ghostProgress.stopAnimation?.();
+      ghostProgress.setValue(0);
+      return;
+    }
+    ghostProgress.stopAnimation?.();
+    ghostProgress.setValue(0);
+    Animated.timing(ghostProgress, {
+      toValue: 1,
+      duration: 600,
+      easing: Easing.inOut(Easing.quad),
+      useNativeDriver: true,
+    }).start();
+  }, [ghostOverlay, ghostProgress, shotSession?.landing]);
+
+  useEffect(() => {
+    if (!ghostOverlay || !qaEnabled) {
+      ghostTelemetryKeyRef.current = null;
+      return;
+    }
+    const emitter = telemetryRef.current;
+    if (!emitter) {
+      return;
+    }
+    const range = Number(ghostOverlay.range.toFixed(1));
+    const lateral = Number(ghostOverlay.profile.lateral_m.toFixed(2));
+    const longErr = ghostErrors ? Number(ghostErrors.long.toFixed(2)) : null;
+    const latErr = ghostErrors ? Number(ghostErrors.lateral.toFixed(2)) : null;
+    const key = `${range}|${lateral}|${longErr ?? 'null'}|${latErr ?? 'null'}`;
+    if (ghostTelemetryKeyRef.current === key) {
+      return;
+    }
+    ghostTelemetryKeyRef.current = key;
+    emitter('hud.ghost', {
+      range,
+      lateral_m: lateral,
+      long_err: longErr,
+      lat_err: latErr,
+    });
+  }, [ghostOverlay, ghostErrors, qaEnabled, telemetryRef]);
+
   const handleCourseSelect = useCallback(
     (courseId: string) => {
       setSelectedCourseId(courseId);
@@ -2135,21 +2540,31 @@ const QAArHudOverlayScreen: React.FC = () => {
         ) : null}
       </View>
       <View style={styles.cameraSection}>
-        <View style={styles.cameraStub}>
-          <Text style={styles.cameraLabel}>Camera stub</Text>
-          <Text style={styles.cameraStat}>FPS: {cameraStats.fps.toFixed(1)}</Text>
-          <Text style={styles.cameraStat}>Latency: {cameraStats.latency.toFixed(0)} ms</Text>
-        </View>
-        <View style={styles.overlayWrapper}>
-          <MapOverlay
-            data={overlayData}
-            player={playerPosition}
-            heading={heading}
-            offline={offline}
-            hazard={hazardCallout ? { distance: hazardCallout.distance, direction: hazardCallout.direction } : null}
-            markLandingActive={markLandingArmed}
-            landing={shotSession?.landing ?? null}
-            onSelectLanding={handleLandingSelected}
+      <View style={styles.cameraStub}>
+        <Text style={styles.cameraLabel}>Camera stub</Text>
+        <Text style={styles.cameraStat}>FPS: {cameraStats.fps.toFixed(1)}</Text>
+        <Text style={styles.cameraStat}>Latency: {cameraStats.latency.toFixed(0)} ms</Text>
+        {ghostOverlay && ghostProgress ? (
+          <GhostTrajectoryView
+            profile={ghostOverlay.profile}
+            progress={ghostProgress}
+            range={ghostOverlay.range}
+            lateral={ghostOverlay.profile.lateral_m}
+            errors={ghostErrors}
+          />
+        ) : null}
+      </View>
+      <View style={styles.overlayWrapper}>
+        <MapOverlay
+          data={overlayData}
+          player={playerPosition}
+          heading={heading}
+          offline={offline}
+          hazard={hazardCallout ? { distance: hazardCallout.distance, direction: hazardCallout.direction } : null}
+          markLandingActive={markLandingArmed}
+          landing={shotSession?.landing ?? null}
+          onSelectLanding={handleLandingSelected}
+            ghost={ghostOverlay}
           />
         </View>
       </View>
@@ -2667,6 +3082,54 @@ const styles = StyleSheet.create({
     color: '#cbd5f5',
     fontSize: 12,
     marginTop: 2,
+  },
+  ghostContainer: {
+    marginTop: 16,
+    paddingTop: 12,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: '#1f2937',
+    gap: 12,
+  },
+  ghostTitle: {
+    color: '#cbd5f5',
+    fontSize: 13,
+    fontWeight: '600',
+    letterSpacing: 0.4,
+    textTransform: 'uppercase',
+  },
+  ghostGraph: {
+    marginTop: 4,
+    borderRadius: 12,
+    backgroundColor: '#0f172a',
+    overflow: 'hidden',
+  },
+  ghostMarker: {
+    position: 'absolute',
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    backgroundColor: '#facc15',
+    borderWidth: 2,
+    borderColor: '#0f172a',
+  },
+  ghostStatsRow: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  ghostStat: {
+    flex: 1,
+    gap: 4,
+  },
+  ghostLabel: {
+    color: '#94a3b8',
+    fontSize: 11,
+    letterSpacing: 0.8,
+    textTransform: 'uppercase',
+  },
+  ghostValue: {
+    color: '#f8fafc',
+    fontSize: 13,
+    fontVariant: ['tabular-nums'],
   },
   overlayWrapper: {
     flex: 1,
