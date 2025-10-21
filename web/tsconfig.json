@@ -23,6 +23,12 @@
       "vitest/*": ["./node_modules/vitest/*"]
     }
   },
-  "include": ["src", "../shared/**/*.ts", "../shared/**/*.d.ts"],
+  "include": [
+    "src",
+    "../shared/**/*.ts",
+    "../shared/**/*.d.ts",
+    "../golfiq/app/src/**/*.ts",
+    "../golfiq/app/src/**/*.tsx"
+  ],
   "references": [{ "path": "./tsconfig.node.json" }]
 }
