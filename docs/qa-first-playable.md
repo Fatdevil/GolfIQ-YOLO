@@ -30,7 +30,22 @@ club suggestion based on the default QA bag.
 2. Once the ball lands, tap **Mark landing** and then tap on the mini map to drop the
    landing marker. (The map will highlight when it is ready to record a landing point.)
 3. The result card compares planned plays-like distance vs. the measured carry from start
-   to landing. It also reports a quick club-difference note such as “1 club short”.
+   to landing. It now includes smart feedback that highlights the top contributing deltas,
+   shows club usage vs. the planner recommendation, and suggests the next club or crosswind
+   aim tweak.
+
+## Smart feedback
+
+- The headline summarizes the miss in metres and approximates it in club steps using the
+  effective QA bag.
+- The detail lines explain the largest temperature/altitude, wind, and slope deltas, note
+  which club was actually hit vs. suggested, and outline the next-shot adjustment.
+- When personal tuning is active a small **TUNED** badge appears next to the headline so
+  testers can confirm the personalized coefficients were applied.
+
+Telemetry (QA only) now emits `hud.feedback` with the signed error distance, the estimated
+club delta, the reported top factors, the recommended next club, and whether tuning was
+engaged.
 
 Use the **LEFT/RIGHT** hazard callouts as before – they continue to update from the pin and
 do not interfere with the planner loop.

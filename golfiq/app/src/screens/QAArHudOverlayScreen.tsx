@@ -61,6 +61,7 @@ import {
   type CalibOut,
   type Shot as CalibrateShot,
 } from '../../../../shared/playslike/bag_calibrator';
+import { buildShotFeedback, type FeedbackOutput } from '../../../../shared/playslike/feedback';
 import {
   createLandingHeuristics,
   type LandingProposal,
@@ -163,6 +164,15 @@ type ShotSessionState = {
   landing?: LocalPoint;
   completedAt?: number;
   logged?: boolean;
+};
+
+type ShotSummary = {
+  actual: number;
+  planned: number;
+  error: number;
+  plannedClub: ClubId;
+  actualClub: string;
+  feedback: FeedbackOutput | null;
 };
 
 type AutoPickPrompt = {
@@ -1286,7 +1296,7 @@ const QAArHudOverlayScreen: React.FC = () => {
       return { ...prev, logged: true };
     });
   }, [createShotPayload, emitTelemetry, shotSession]);
-  const shotSummary = useMemo(() => {
+  const shotSummary = useMemo<ShotSummary | null>(() => {
     if (!shotSession || !shotSession.landing) {
       return null;
     }
@@ -1298,26 +1308,63 @@ const QAArHudOverlayScreen: React.FC = () => {
     const isClubId = (value: string | null | undefined): value is ClubId =>
       Boolean(value && (CLUB_SEQUENCE as readonly string[]).includes(value));
     const storedClub = shotSession.club;
-    const plannedClub = storedClub && isClubId(storedClub)
-      ? storedClub
-      : isClubId(shotSession.plan.clubSuggested)
-        ? shotSession.plan.clubSuggested
-        : suggestClub(qaBag, planned);
-    const actualClub = suggestClub(qaBag, actual);
-    const plannedIdx = CLUB_SEQUENCE.indexOf(plannedClub);
-    const actualIdx = CLUB_SEQUENCE.indexOf(actualClub);
-    let feedback: string | null = null;
-    if (plannedIdx !== -1 && actualIdx !== -1) {
-      const diff = actualIdx - plannedIdx;
-      if (diff > 0) {
-        feedback = `${diff} club${diff === 1 ? '' : 's'} long`;
-      } else if (diff < 0) {
-        const magnitude = Math.abs(diff);
-        feedback = `${magnitude} club${magnitude === 1 ? '' : 's'} short`;
-      }
-    }
-    return { actual, planned, error, feedback, plannedClub, actualClub };
+    const plannedClub = isClubId(shotSession.plan.clubSuggested)
+      ? shotSession.plan.clubSuggested
+      : suggestClub(qaBag, planned);
+    const actualClubInferred = suggestClub(qaBag, actual);
+    const actualClubUsed = storedClub && isClubId(storedClub) ? storedClub : null;
+    const feedback = buildShotFeedback({
+      planned: {
+        base_m: shotSession.baseDistance,
+        playsLike_m: planned,
+        deltas: {
+          temp: shotSession.plan.breakdown.temp_m,
+          alt: shotSession.plan.breakdown.alt_m,
+          head: shotSession.plan.breakdown.head_m,
+          slope: shotSession.plan.breakdown.slope_m,
+        },
+        clubSuggested: shotSession.plan.clubSuggested ?? plannedClub,
+        tuningActive: shotSession.plan.tuningApplied,
+        aimAdjust_deg: shotSession.plan.aimAdjust_deg,
+      },
+      actual: {
+        carry_m: actual,
+        clubUsed: shotSession.club,
+      },
+      bag: qaBag,
+      heading_deg: shotSession.headingDeg,
+      cross_aim_deg_per_mps: shotSession.plan.aimAdjust_deg,
+    });
+
+    return {
+      actual,
+      planned,
+      error,
+      plannedClub,
+      actualClub: actualClubUsed ?? actualClubInferred,
+      feedback,
+    };
   }, [qaBag, shotSession]);
+
+  useEffect(() => {
+    if (!shotSession || !shotSummary?.feedback) {
+      return;
+    }
+    if (lastFeedbackShotRef.current === shotSession.shotId) {
+      return;
+    }
+    emitTelemetry('hud.feedback', {
+      error_m: shotSummary.feedback.error_m,
+      clubError: shotSummary.feedback.clubError,
+      topFactors: shotSummary.feedback.topFactors.map((factor) => ({
+        id: factor.id,
+        value_m: factor.value_m,
+      })),
+      nextClub: shotSummary.feedback.nextClub ?? null,
+      tuningActive: Boolean(shotSummary.feedback.tuningActive),
+    });
+    lastFeedbackShotRef.current = shotSession.shotId;
+  }, [emitTelemetry, shotSession, shotSummary]);
   const plannerControls = useMemo(
     () => [
       { key: 'temperatureC' as const, label: 'Temp', unit: '°C', step: 1 },
@@ -1337,6 +1384,7 @@ const QAArHudOverlayScreen: React.FC = () => {
   const landingHeuristicsRef = useRef(createLandingHeuristics());
   const lastLocationFixRef = useRef<LocationFix | null>(null);
   const landingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastFeedbackShotRef = useRef<string | null>(null);
 
   const clearLandingTimeout = useCallback(() => {
     if (landingTimeoutRef.current) {
@@ -1392,6 +1440,7 @@ const QAArHudOverlayScreen: React.FC = () => {
       setLandingProposal(null);
       setLandingState('IDLE');
       clearLandingTimeout();
+      lastFeedbackShotRef.current = null;
     }
   }, [shotSession, clearLandingTimeout]);
 
@@ -2154,7 +2203,21 @@ const QAArHudOverlayScreen: React.FC = () => {
                   </Text>
                   <Text style={styles.resultCardLine}>Error: {formatDelta(shotSummary.error)}</Text>
                   {shotSummary.feedback ? (
-                    <Text style={styles.resultCardFeedback}>{shotSummary.feedback}</Text>
+                    <View style={styles.resultCardFeedbackBlock}>
+                      <View style={styles.resultCardFeedbackHeader}>
+                        <Text style={styles.resultCardFeedbackTitle}>{shotSummary.feedback.title}</Text>
+                        {shotSummary.feedback.tuningActive ? (
+                          <View style={styles.resultCardFeedbackBadge}>
+                            <Text style={styles.resultCardFeedbackBadgeText}>TUNED</Text>
+                          </View>
+                        ) : null}
+                      </View>
+                      {shotSummary.feedback.lines.map((line, index) => (
+                        <Text key={`feedback-line-${index}`} style={styles.resultCardFeedbackLine}>
+                          {line}
+                        </Text>
+                      ))}
+                    </View>
                   ) : null}
                 </View>
               ) : null}
@@ -2600,9 +2663,37 @@ const styles = StyleSheet.create({
     color: '#e5e7eb',
     fontSize: 13,
   },
-  resultCardFeedback: {
+  resultCardFeedbackBlock: {
+    borderTopWidth: 1,
+    borderTopColor: '#1f2937',
+    marginTop: 6,
+    paddingTop: 6,
+    gap: 4,
+  },
+  resultCardFeedbackHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  resultCardFeedbackTitle: {
     color: '#f97316',
-    fontWeight: '600',
+    fontWeight: '700',
+    fontSize: 13,
+  },
+  resultCardFeedbackBadge: {
+    backgroundColor: '#1d4ed8',
+    borderRadius: 4,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+  },
+  resultCardFeedbackBadgeText: {
+    color: '#bfdbfe',
+    fontSize: 10,
+    fontWeight: '700',
+  },
+  resultCardFeedbackLine: {
+    color: '#f8fafc',
+    fontSize: 12,
   },
   calloutRow: {
     flexDirection: 'row',
