@@ -97,3 +97,20 @@ Auto-pick reuses the bundle index and cache from `shared/arhud/bundle_client`,
 so previously loaded bundles stay available offline. When testing in flight mode
 keep a few bundles cached ahead of time; the auto-picker will continue to pick
 from the cached index even without network access.
+
+## Ghost trajectory preview
+
+QA testers can toggle wind and slope inputs in the planner and immediately see a
+predicted "ghost" carry path over the camera stub. The helper samples forty
+points from a simple projectile curve, clamps the apex to a reasonable height,
+and applies a deterministic crosswind offset (`0.12 × wind_cross × flight_time`)
+so lateral drift is easy to reason about. If no launch angle is supplied the
+module defaults to 14° for irons and 11° for woods based on the requested
+plays-like range. The final landing zone is rendered as a narrow ellipse, with
+the major axis scaling with carry distance and the minor axis giving a quick
+dispersion hint. When a landing is marked, the overlay animates along the ghost
+path for 0.6 seconds and highlights both the longitudinal (long/short) error
+and lateral miss (LEFT/RIGHT) so QA can confirm the impact alignment quickly.
+Telemetry events (`hud.ghost`) emit the predicted range, drift, and the measured
+miss to help benchmark future physics tweaks. This is purely a visual aid and
+does not replace the full aero simulation used elsewhere in the stack.
