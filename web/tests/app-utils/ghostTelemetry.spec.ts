@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { buildGhostTelemetryKey } from '../ghostTelemetry';
+import { buildGhostTelemetryKey } from './ghostTelemetry';
 
 describe('buildGhostTelemetryKey', () => {
   it('formats with fixed decimals and nulls', () => {
