@@ -9,7 +9,17 @@ import glob
 from collections import Counter, defaultdict
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Mapping, MutableMapping, NamedTuple, Sequence, Tuple
+from typing import (
+    Any,
+    Dict,
+    Iterable,
+    List,
+    Mapping,
+    MutableMapping,
+    NamedTuple,
+    Sequence,
+    Tuple,
+)
 
 from scripts import _geo, _rdp
 
@@ -112,7 +122,9 @@ def _load_manifest(path: str) -> List[ManifestEntry]:
         course_name = raw_entry.get("name")
         if course_name is not None and not isinstance(course_name, str):
             raise ValueError(f"Manifest entry '{course_id}' name must be a string")
-        entries.append(ManifestEntry(course_id=course_id, source=source_path, name=course_name))
+        entries.append(
+            ManifestEntry(course_id=course_id, source=source_path, name=course_name)
+        )
     return entries
 
 
@@ -369,7 +381,11 @@ def _print_summary(rows: List[Dict[str, Any]]) -> None:
     print("  ".join("-" * widths[key] for _, key, _ in columns))
     for row in formatted:
         line = "  ".join(
-            row[key].ljust(widths[key]) if align == "left" else row[key].rjust(widths[key])
+            (
+                row[key].ljust(widths[key])
+                if align == "left"
+                else row[key].rjust(widths[key])
+            )
             for _, key, align in columns
         )
         print(line)
@@ -462,9 +478,7 @@ def parse_args(argv: Sequence[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Generate course bundle JSON from raw data"
     )
-    parser.add_argument(
-        "--in", dest="input_glob", help="Input glob for raw GeoJSON"
-    )
+    parser.add_argument("--in", dest="input_glob", help="Input glob for raw GeoJSON")
     parser.add_argument(
         "--out", dest="out", required=True, help="Output directory for bundles"
     )
@@ -558,7 +572,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     summary: List[Dict[str, Any]] = []
     for path, course_id_override, course_name_override in jobs:
         try:
-            result = process_file(path, args, kind_map, course_id_override, course_name_override)
+            result = process_file(
+                path, args, kind_map, course_id_override, course_name_override
+            )
             summary.append(result)
         except Exception as exc:  # pragma: no cover - defensive
             LOGGER.exception("Failed to process %s: %s", path, exc)

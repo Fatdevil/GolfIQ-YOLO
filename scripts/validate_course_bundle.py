@@ -167,7 +167,11 @@ def print_summary(rows: List[Dict[str, str]]) -> None:
     print("  ".join("-" * widths[key] for _, key, _ in columns))
     for row in rows:
         line = "  ".join(
-            row[key].ljust(widths[key]) if align == "left" else row[key].rjust(widths[key])
+            (
+                row[key].ljust(widths[key])
+                if align == "left"
+                else row[key].rjust(widths[key])
+            )
             for _, key, align in columns
         )
         print(line)
