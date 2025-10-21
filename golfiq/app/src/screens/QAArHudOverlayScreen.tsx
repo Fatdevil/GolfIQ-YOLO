@@ -11,6 +11,7 @@ import {
   StyleSheet,
   Switch,
   Text,
+  TextInput,
   TouchableOpacity,
   View,
   useWindowDimensions,
@@ -23,6 +24,7 @@ import {
   type BundleIndexEntry,
   type CourseBundle,
 } from '../../../../shared/arhud/bundle_client';
+import { searchCourses, type CourseSearchResult } from '../../../../shared/arhud/course_search';
 import {
   AutoCourseController,
   type AutoCourseCandidate,
@@ -186,6 +188,17 @@ function formatDistanceMeters(value: number | null | undefined): string {
     return `${meters.toFixed(0)} m`;
   }
   return `${meters.toFixed(1)} m`;
+}
+
+function formatSearchDistance(distKm: number | null | undefined): string {
+  if (!Number.isFinite(distKm ?? Number.NaN)) {
+    return '—';
+  }
+  const km = Number(distKm);
+  if (km >= 1) {
+    return `${km.toFixed(1)} km`;
+  }
+  return `${Math.round(km * 1000)} m`;
 }
 
 let lastSelectedCourseMemory: string | null = null;
@@ -798,6 +811,10 @@ type CoursePickerProps = {
   onSelect: (courseId: string) => void;
   onRefresh: () => void;
   error: string | null;
+  suggestions: CourseSearchResult[];
+  searchQuery: string;
+  onSearchChange: (value: string) => void;
+  onSuggestionSelect: (courseId: string) => void;
 };
 
 const CoursePicker: React.FC<CoursePickerProps> = ({
@@ -807,6 +824,10 @@ const CoursePicker: React.FC<CoursePickerProps> = ({
   onSelect,
   onRefresh,
   error,
+  suggestions,
+  searchQuery,
+  onSearchChange,
+  onSuggestionSelect,
 }) => {
   return (
     <View style={styles.pickerContainer}>
@@ -816,6 +837,39 @@ const CoursePicker: React.FC<CoursePickerProps> = ({
           <Text style={styles.refreshText}>Refresh</Text>
         </TouchableOpacity>
       </View>
+      <View style={styles.searchContainer}>
+        <TextInput
+          value={searchQuery}
+          onChangeText={onSearchChange}
+          placeholder="Search courses…"
+          placeholderTextColor="#94a3b8"
+          style={styles.searchInput}
+          autoCorrect={false}
+          autoCapitalize="none"
+          returnKeyType="search"
+        />
+      </View>
+      {suggestions.length ? (
+        <View style={styles.suggestionList}>
+          {suggestions.map((suggestion, index) => (
+            <TouchableOpacity
+              key={suggestion.id}
+              onPress={() => onSuggestionSelect(suggestion.id)}
+              style={[
+                styles.suggestionItem,
+                index === suggestions.length - 1 ? styles.suggestionItemLast : null,
+              ]}
+            >
+              <View style={styles.suggestionTextBlock}>
+                <Text style={styles.suggestionName}>{suggestion.name}</Text>
+              </View>
+              <Text style={styles.suggestionDistance}>
+                {formatSearchDistance(suggestion.dist_km)}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+      ) : null}
       {loading ? <ActivityIndicator size="small" color="#60a5fa" /> : null}
       {error ? <Text style={styles.errorText}>{error}</Text> : null}
       <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.courseScroll}>
@@ -853,6 +907,8 @@ const QAArHudOverlayScreen: React.FC = () => {
   const [courses, setCourses] = useState<BundleIndexEntry[]>([]);
   const [coursesLoading, setCoursesLoading] = useState(false);
   const [coursesError, setCoursesError] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchHere, setSearchHere] = useState<GeoPoint | null>(null);
   const [selectedCourseId, setSelectedCourseId] = useState<string | null>(null);
   const [bundle, setBundle] = useState<CourseBundle | null>(null);
   const [bundleLoading, setBundleLoading] = useState(false);
@@ -895,6 +951,12 @@ const QAArHudOverlayScreen: React.FC = () => {
   useEffect(() => {
     resumePendingUploads().catch(() => {});
   }, []);
+  const searchResults = useMemo(() => {
+    if (!courses.length) {
+      return [] as CourseSearchResult[];
+    }
+    return searchCourses({ courses }, searchQuery, searchHere ?? undefined);
+  }, [courses, searchQuery, searchHere]);
   const selectedCourse = useMemo(
     () => courses.find((c) => c.courseId === selectedCourseId) ?? null,
     [courses, selectedCourseId],
@@ -908,6 +970,21 @@ const QAArHudOverlayScreen: React.FC = () => {
     () => (overlayOrigin ? fromLocalPoint(overlayOrigin, playerPosition) : null),
     [overlayOrigin, playerPosition],
   );
+  useEffect(() => {
+    if (!playerLatLon) {
+      return;
+    }
+    setSearchHere((prev) => {
+      if (
+        prev &&
+        Math.abs(prev.lat - playerLatLon.lat) < 1e-6 &&
+        Math.abs(prev.lon - playerLatLon.lon) < 1e-6
+      ) {
+        return prev;
+      }
+      return { lat: playerLatLon.lat, lon: playerLatLon.lon };
+    });
+  }, [playerLatLon?.lat, playerLatLon?.lon]);
   const camera = useMemo(() => createCameraStub({ fps: 15 }), []);
   const defaultQaBag = useMemo(() => defaultBag(), []);
   const formatDelta = useCallback((value: number) => (value >= 0 ? `+${value.toFixed(1)}` : value.toFixed(1)), []);
@@ -1554,6 +1631,30 @@ const QAArHudOverlayScreen: React.FC = () => {
   }, [qaEnabled]);
 
   useEffect(() => {
+    if (!qaEnabled || searchHere) {
+      return () => {};
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const fix = await getLocation();
+        if (cancelled) {
+          return;
+        }
+        setSearchHere({ lat: fix.lat, lon: fix.lon });
+      } catch (error) {
+        if (cancelled) {
+          return;
+        }
+        // location optional for search suggestions
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [qaEnabled, searchHere]);
+
+  useEffect(() => {
     if (!qaEnabled || !courses.length) {
       return;
     }
@@ -1609,6 +1710,7 @@ const QAArHudOverlayScreen: React.FC = () => {
         }
         setAutoPickAvailable(true);
         setAutoPickError(null);
+        setSearchHere({ lat: fix.lat, lon: fix.lon });
         const decision = controller.consider(courses, fix, selectedCourseId);
         setAutoPickCandidate(decision.candidate);
         if (!decision.candidate) {
@@ -1831,6 +1933,13 @@ const QAArHudOverlayScreen: React.FC = () => {
     },
     [],
   );
+  const handleSuggestionSelect = useCallback(
+    (courseId: string) => {
+      setSearchQuery('');
+      handleCourseSelect(courseId);
+    },
+    [handleCourseSelect],
+  );
 
   const handleRefresh = useCallback(() => {
     if (!qaEnabled) {
@@ -1898,6 +2007,9 @@ const QAArHudOverlayScreen: React.FC = () => {
         : autoPickEnabled
           ? 'Waiting for GPS…'
           : 'Off';
+  const handleSearchChange = useCallback((value: string) => {
+    setSearchQuery(value);
+  }, []);
   const autoPickToggleDisabled = !autoPickAvailable || !courses.length || !qaEnabled;
   const autoPickStatusStyle = [
     styles.autoPickStatus,
@@ -1918,6 +2030,10 @@ const QAArHudOverlayScreen: React.FC = () => {
         onSelect={handleCourseSelect}
         onRefresh={handleRefresh}
         error={coursesError}
+        suggestions={searchResults}
+        searchQuery={searchQuery}
+        onSearchChange={handleSearchChange}
+        onSuggestionSelect={handleSuggestionSelect}
       />
       <View style={styles.autoPickCard}>
         <View style={styles.autoPickRow}>
@@ -2276,6 +2392,52 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     padding: 12,
     gap: 8,
+  },
+  searchContainer: {
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#1f2937',
+    backgroundColor: '#0b1120',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+  },
+  searchInput: {
+    color: '#f8fafc',
+    fontSize: 14,
+  },
+  suggestionList: {
+    marginTop: 4,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#1f2937',
+    backgroundColor: '#0b1120',
+    overflow: 'hidden',
+  },
+  suggestionItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: '#1f2937',
+    gap: 12,
+  },
+  suggestionItemLast: {
+    borderBottomWidth: 0,
+  },
+  suggestionTextBlock: {
+    flexShrink: 1,
+  },
+  suggestionName: {
+    color: '#f8fafc',
+    fontWeight: '600',
+    fontSize: 14,
+  },
+  suggestionDistance: {
+    color: '#cbd5f5',
+    fontSize: 12,
+    fontVariant: ['tabular-nums'],
   },
   autoPickCard: {
     backgroundColor: '#111827',
