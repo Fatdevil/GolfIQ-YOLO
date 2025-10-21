@@ -31,3 +31,15 @@ The QA AR HUD overlay now includes a deterministic “Caddie” assistant that r
 2. Integrate green complexes (front/middle/back) to refine approach bail-outs.
 3. Persist shot outcomes to refine player dispersion (per-club sigma updates).
 4. Surface “what-if” comparisons (risk deltas between clubs) and suggest layups automatically.
+
+## Coach Style
+
+The QA HUD exposes a small “coach style” model that controls the tone and verbosity of the generated tips without changing the underlying strategy. A style consists of:
+
+- **Tone** – `concise`, `neutral`, or `pep`.
+- **Verbosity** – `short`, `normal`, or `detailed`.
+- **Language** – `sv` (default) or `en`.
+- **Format** – `text` today (reserved `tts` for future audio output).
+- **Emoji** – optional pep-only embellishment when the style format is text.
+
+The default style is neutral/normal Swedish text without emoji. Switching style updates only the rendered narration; club selection, risk scoring, and trajectory planning remain unchanged and continue to follow the deterministic QA plan output.
