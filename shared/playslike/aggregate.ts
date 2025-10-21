@@ -24,6 +24,7 @@ export interface PlanOut {
   clubSuggested?: string;
   tuningApplied?: boolean;
   badges?: readonly string[];
+  aimAdjust_deg?: number;
 }
 
 const sanitizeNumber = (value: number | undefined, fallback: number): number => {
@@ -104,5 +105,6 @@ export function computePlaysLike(input: PlanInput): PlanOut {
     clubSuggested,
     tuningApplied,
     badges: tuningApplied ? (["Tuned"] as const) : undefined,
+    aimAdjust_deg: windSlopeDelta.aimAdjust_deg,
   };
 }
