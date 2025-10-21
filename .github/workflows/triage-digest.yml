@@ -1,0 +1,93 @@
+name: triage-digest
+
+on:
+  schedule:
+    - cron: '15 6 * * *'
+  workflow_dispatch: {}
+
+jobs:
+  digest:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Compute daily counts
+        id: digest
+        run: |
+          python - <<'PY'
+          from __future__ import annotations
+
+          import os
+          from datetime import datetime, timedelta, timezone
+
+          target_day = (datetime.now(timezone.utc) - timedelta(days=1)).strftime('%Y-%m-%d')
+
+          def count(path: str) -> int:
+              try:
+                  with open(path, 'r', encoding='utf-8') as handle:
+                      return sum(1 for line in handle if line.strip())
+              except FileNotFoundError:
+                  return 0
+
+          issues_path = os.path.join('data', 'issues', f'{target_day}.jsonl')
+          failures_path = os.path.join('data', 'runs', 'failed', f'{target_day}.jsonl')
+
+          issues = count(issues_path)
+          failures = count(failures_path)
+
+          summary = f"""### Digest for {target_day}
+- Issues reported: {issues}
+- Failed uploads: {failures}
+"""
+
+          print(summary)
+
+          output_path = os.environ['GITHUB_OUTPUT']
+          with open(output_path, 'a', encoding='utf-8') as fh:
+              fh.write(f"day={target_day}\n")
+              fh.write(f"issues={issues}\n")
+              fh.write(f"failures={failures}\n")
+              fh.write('body<<EOF\n')
+              fh.write(summary)
+              fh.write('EOF\n')
+          PY
+
+      - name: Append digest to Ops issue
+        uses: actions/github-script@v7
+        env:
+          DIGEST_BODY: ${{ steps.digest.outputs.body }}
+          DIGEST_DAY: ${{ steps.digest.outputs.day }}
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const issueTitle = "Ops digest";
+            const { owner, repo } = context.repo;
+            const openIssues = await github.paginate(github.rest.issues.listForRepo, {
+              owner,
+              repo,
+              state: "open",
+              per_page: 100,
+            });
+            let target = openIssues.find((issue) => issue.title === issueTitle);
+            if (!target) {
+              const created = await github.rest.issues.create({
+                owner,
+                repo,
+                title: issueTitle,
+                body: "Automated operations digest.",
+              });
+              target = created.data;
+            }
+            const body = (process.env.DIGEST_BODY || '').trim();
+            if (!body) {
+              core.info('Digest body empty, skipping comment.');
+              return;
+            }
+            const footer = `_Automated summary generated for ${process.env.DIGEST_DAY}_`;
+            await github.rest.issues.createComment({
+              owner,
+              repo,
+              issue_number: target.number,
+              body: `${body}\n${footer}`,
+            });
