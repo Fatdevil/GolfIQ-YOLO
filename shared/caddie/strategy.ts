@@ -1,0 +1,758 @@
+import { toLocalENU, type GeoPoint } from "../arhud/geo";
+import type { CourseBundle } from "../arhud/bundle_client";
+import { CLUB_SEQUENCE, type ClubId } from "../playslike/bag";
+import { ellipseOverlapRisk, lateralWindOffset, sampleEllipsePoints, type RiskFeature } from "./risk";
+import { buildPlayerModel, type PlayerModel } from "./player_model";
+
+const EARTH_RADIUS_M = 6_378_137;
+
+export type RiskMode = "safe" | "normal" | "aggressive";
+
+export interface ShotPlan {
+  kind: "tee" | "approach";
+  club: ClubId;
+  target: GeoPoint;
+  aimDeg: number;
+  aimDirection: "LEFT" | "RIGHT" | "STRAIGHT";
+  reason: string;
+  risk: number;
+  landing: { distance_m: number; lateral_m: number };
+  aim: { lateral_m: number };
+  mode: RiskMode;
+  carry_m: number;
+  crosswind_mps: number;
+  headwind_mps: number;
+  windDrift_m: number;
+  tuningActive: boolean;
+}
+
+type WindInput = { speed_mps?: number; from_deg?: number } | null | undefined;
+
+type TeePlanArgs = {
+  bundle: CourseBundle | null;
+  tee: GeoPoint;
+  pin: GeoPoint;
+  player: PlayerModel;
+  riskMode: RiskMode;
+  wind?: WindInput;
+  slope_dh_m?: number;
+  goForGreen?: boolean;
+  par?: number;
+};
+
+type ApproachPlanArgs = {
+  bundle: CourseBundle | null;
+  ball: GeoPoint;
+  pin: GeoPoint;
+  player: PlayerModel;
+  riskMode: RiskMode;
+  wind?: WindInput;
+  slope_dh_m?: number;
+  preferredClub?: ClubId;
+};
+
+const RISK_MULTIPLIER: Record<RiskMode, number> = {
+  safe: 1.2,
+  normal: 1,
+  aggressive: 0.8,
+};
+
+const AIM_OFFSETS_TEE = [-25, -15, -8, 0, 8, 15, 25];
+const AIM_OFFSETS_APPROACH = [-12, -8, -4, 0, 4, 8, 12];
+const STEP_METERS = 10;
+const MIN_DISTANCE = 30;
+
+const clamp01 = (value: number): number => {
+  if (!Number.isFinite(value)) {
+    return 0;
+  }
+  if (value <= 0) {
+    return 0;
+  }
+  if (value >= 1) {
+    return 1;
+  }
+  return value;
+};
+
+const toRadians = (deg: number): number => (deg * Math.PI) / 180;
+
+const wrapDegrees = (deg: number): number => {
+  const normalized = deg % 360;
+  return normalized < 0 ? normalized + 360 : normalized;
+};
+
+const fromLocal = (origin: GeoPoint, point: { x: number; y: number }): GeoPoint => {
+  const lat0 = origin.lat;
+  const lon0 = origin.lon;
+  const latOffset = (point.y / EARTH_RADIUS_M) * (180 / Math.PI);
+  const lonOffset =
+    (point.x / (EARTH_RADIUS_M * Math.cos(toRadians(lat0 || 0)))) * (180 / Math.PI);
+  return {
+    lat: lat0 + latOffset,
+    lon: lon0 + lonOffset,
+  };
+};
+
+type Frame = {
+  origin: GeoPoint;
+  cos: number;
+  sin: number;
+  headingDeg: number;
+  pin: { x: number; y: number };
+};
+
+const buildFrame = (origin: GeoPoint, pin: GeoPoint): Frame | null => {
+  if (!origin || !pin) {
+    return null;
+  }
+  const baseline = toLocalENU(origin, pin);
+  const length = Math.hypot(baseline.x, baseline.y);
+  if (!Number.isFinite(length) || length <= 0) {
+    return null;
+  }
+  const headingRad = Math.atan2(baseline.x, baseline.y);
+  const cos = Math.cos(headingRad);
+  const sin = Math.sin(headingRad);
+  const pinAligned = {
+    x: baseline.x * cos - baseline.y * sin,
+    y: baseline.x * sin + baseline.y * cos,
+  };
+  const headingDeg = wrapDegrees((headingRad * 180) / Math.PI);
+  return {
+    origin,
+    cos,
+    sin,
+    headingDeg,
+    pin: pinAligned,
+  };
+};
+
+const toFramePoint = (
+  frame: Frame,
+  coord: unknown,
+): { x: number; y: number } | null => {
+  if (!Array.isArray(coord) || coord.length < 2) {
+    return null;
+  }
+  const lon = Number(coord[0]);
+  const lat = Number(coord[1]);
+  if (!Number.isFinite(lat) || !Number.isFinite(lon)) {
+    return null;
+  }
+  const local = toLocalENU(frame.origin, { lat, lon });
+  return {
+    x: local.x * frame.cos - local.y * frame.sin,
+    y: local.x * frame.sin + local.y * frame.cos,
+  };
+};
+
+const collectPolygonRings = (frame: Frame, geometry: { type?: string; coordinates?: unknown }): { x: number; y: number }[][] => {
+  const rings: { x: number; y: number }[][] = [];
+  if (!geometry || typeof geometry.type !== "string") {
+    return rings;
+  }
+  const type = geometry.type.toLowerCase();
+  const coords = geometry.coordinates;
+  if (!coords) {
+    return rings;
+  }
+  const pushRing = (ringCoords: unknown) => {
+    if (!Array.isArray(ringCoords)) {
+      return;
+    }
+    const ring: { x: number; y: number }[] = [];
+    for (const coord of ringCoords as unknown[]) {
+      const point = toFramePoint(frame, coord);
+      if (point) {
+        ring.push(point);
+      }
+    }
+    if (ring.length) {
+      rings.push(ring);
+    }
+  };
+  if (type === "polygon" && Array.isArray(coords)) {
+    for (const ring of coords as unknown[]) {
+      pushRing(ring);
+    }
+  } else if (type === "multipolygon" && Array.isArray(coords)) {
+    for (const polygon of coords as unknown[]) {
+      if (!Array.isArray(polygon)) {
+        continue;
+      }
+      for (const ring of polygon as unknown[]) {
+        pushRing(ring);
+      }
+    }
+  }
+  return rings;
+};
+
+const collectPolylines = (frame: Frame, geometry: { type?: string; coordinates?: unknown }): { x: number; y: number }[][] => {
+  const lines: { x: number; y: number }[][] = [];
+  if (!geometry || typeof geometry.type !== "string") {
+    return lines;
+  }
+  const type = geometry.type.toLowerCase();
+  const coords = geometry.coordinates;
+  if (!coords) {
+    return lines;
+  }
+  const pushLine = (lineCoords: unknown) => {
+    if (!Array.isArray(lineCoords)) {
+      return;
+    }
+    const line: { x: number; y: number }[] = [];
+    for (const coord of lineCoords as unknown[]) {
+      const point = toFramePoint(frame, coord);
+      if (point) {
+        line.push(point);
+      }
+    }
+    if (line.length) {
+      lines.push(line);
+    }
+  };
+  if (type === "linestring" && Array.isArray(coords)) {
+    pushLine(coords);
+  } else if (type === "multilinestring" && Array.isArray(coords)) {
+    for (const line of coords as unknown[]) {
+      pushLine(line);
+    }
+  }
+  return lines;
+};
+
+const normalizeFeatureType = (value: unknown): string => {
+  if (typeof value !== "string") {
+    return "";
+  }
+  return value.trim().toLowerCase();
+};
+
+const hazardPenalty = (type: string): number => {
+  if (type === "water" || type === "hazard") {
+    return 1;
+  }
+  if (type === "bunker") {
+    return 0.6;
+  }
+  return 0.4;
+};
+
+type CourseFeature = {
+  type: string;
+  geometry?: { type?: string; coordinates?: unknown };
+};
+
+type PreparedFeatures = {
+  hazards: RiskFeature[];
+  fairways: { x: number; y: number }[][];
+  greens: { x: number; y: number }[][];
+};
+
+const prepareFeatures = (bundle: CourseBundle | null, frame: Frame | null): PreparedFeatures => {
+  if (!bundle || !frame || !Array.isArray(bundle.features)) {
+    return { hazards: [], fairways: [], greens: [] };
+  }
+  const hazards: RiskFeature[] = [];
+  const fairways: { x: number; y: number }[][] = [];
+  const greens: { x: number; y: number }[][] = [];
+  for (const raw of bundle.features as CourseFeature[]) {
+    if (!raw || typeof raw !== "object") {
+      continue;
+    }
+    const featureType =
+      normalizeFeatureType((raw as { type?: unknown }).type) ||
+      normalizeFeatureType((raw as { properties?: { type?: unknown; kind?: unknown } }).properties?.type) ||
+      normalizeFeatureType((raw as { properties?: { type?: unknown; kind?: unknown } }).properties?.kind);
+    if (!featureType) {
+      continue;
+    }
+    if (featureType === "fairway") {
+      const rings = collectPolygonRings(frame, raw.geometry ?? {});
+      if (rings.length) {
+        fairways.push(...rings.map((ring) => ring));
+      }
+      continue;
+    }
+    if (featureType === "green") {
+      const rings = collectPolygonRings(frame, raw.geometry ?? {});
+      if (rings.length) {
+        greens.push(...rings.map((ring) => ring));
+      }
+      continue;
+    }
+    if (["hazard", "water", "bunker"].includes(featureType)) {
+      const rings = collectPolygonRings(frame, raw.geometry ?? {});
+      if (rings.length) {
+        hazards.push({ kind: "polygon", rings, penalty: hazardPenalty(featureType) });
+        continue;
+      }
+      const lines = collectPolylines(frame, raw.geometry ?? {});
+      for (const line of lines) {
+        hazards.push({ kind: "polyline", line, penalty: hazardPenalty(featureType) });
+      }
+    }
+  }
+  return { hazards, fairways, greens };
+};
+
+const ringContains = (point: { x: number; y: number }, ring: { x: number; y: number }[]): boolean => {
+  if (!Array.isArray(ring) || ring.length < 3) {
+    return false;
+  }
+  let inside = false;
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i, i += 1) {
+    const xi = ring[i].x;
+    const yi = ring[i].y;
+    const xj = ring[j].x;
+    const yj = ring[j].y;
+    const intersect = yi > point.y !== yj > point.y;
+    if (intersect) {
+      const slope = ((xj - xi) * (point.y - yi)) / ((yj - yi) || 1e-6) + xi;
+      if (slope > point.x) {
+        inside = !inside;
+      }
+    }
+  }
+  return inside;
+};
+
+const polygonContains = (
+  point: { x: number; y: number },
+  polygons: { x: number; y: number }[][],
+): boolean => {
+  if (!Array.isArray(polygons) || polygons.length === 0) {
+    return false;
+  }
+  let inside = false;
+  for (const ring of polygons) {
+    if (!ring || ring.length < 3) {
+      continue;
+    }
+    if (ringContains(point, ring)) {
+      inside = !inside;
+    }
+  }
+  return inside;
+};
+
+const fairwayPenalty = (
+  center: { x: number; y: number },
+  longRadius: number,
+  latRadius: number,
+  fairways: { x: number; y: number }[][],
+): number => {
+  if (!fairways.length) {
+    return 0.15;
+  }
+  const samples = sampleEllipsePoints(center, longRadius, latRadius);
+  let outside = 0;
+  for (const sample of samples) {
+    if (!polygonContains(sample, fairways)) {
+      outside += 1;
+    }
+  }
+  const ratio = outside / samples.length;
+  return clamp01(ratio * 0.6);
+};
+
+const greenPenalty = (
+  center: { x: number; y: number },
+  longRadius: number,
+  latRadius: number,
+  greens: { x: number; y: number }[][],
+): number => {
+  if (!greens.length) {
+    return 0;
+  }
+  const samples = sampleEllipsePoints(center, longRadius, latRadius);
+  let outside = 0;
+  for (const sample of samples) {
+    if (!polygonContains(sample, greens)) {
+      outside += 1;
+    }
+  }
+  const ratio = outside / samples.length;
+  return clamp01(ratio * 0.5);
+};
+
+const estimateFlightTime = (distance: number): number => {
+  if (!Number.isFinite(distance) || distance <= 0) {
+    return 0;
+  }
+  const clipped = Math.max(40, Math.min(320, distance));
+  return Math.max(1.8, Math.min(4.8, clipped / 65));
+};
+
+const resolveWind = (wind: WindInput, headingDeg: number): { cross: number; head: number } => {
+  const speed = Number.isFinite(wind?.speed_mps ?? NaN) ? Math.max(0, Number(wind?.speed_mps)) : 0;
+  const fromDeg = Number.isFinite(wind?.from_deg ?? NaN) ? wrapDegrees(Number(wind?.from_deg)) : 0;
+  if (speed === 0) {
+    return { cross: 0, head: 0 };
+  }
+  const toDeg = wrapDegrees(fromDeg + 180);
+  const diffRad = toRadians(toDeg - headingDeg);
+  const cross = speed * Math.sin(diffRad);
+  const head = speed * Math.cos(diffRad);
+  return { cross, head };
+};
+
+const inferPar = (length: number): number => {
+  if (!Number.isFinite(length)) {
+    return 4;
+  }
+  if (length <= 180) {
+    return 3;
+  }
+  if (length <= 430) {
+    return 4;
+  }
+  return 5;
+};
+
+const viabilityPenalty = (
+  remaining: number,
+  par: number,
+  goForGreen: boolean,
+  maxCarry: number,
+): number => {
+  if (!Number.isFinite(remaining)) {
+    return 0.2;
+  }
+  let penalty = 0;
+  if (par <= 3) {
+    if (remaining > 18) {
+      penalty += 0.45;
+    }
+  } else if (par === 4) {
+    if (remaining > 190) {
+      penalty += 0.35;
+    } else if (remaining < 60) {
+      penalty += 0.12;
+    }
+  } else {
+    if (remaining > maxCarry * 1.05) {
+      penalty += 0.35;
+    } else if (!goForGreen && remaining > 210) {
+      penalty += 0.25;
+    } else if (goForGreen && remaining > maxCarry * 0.9) {
+      penalty += 0.18;
+    }
+  }
+  return clamp01(penalty);
+};
+
+const aimDirection = (offset: number): "LEFT" | "RIGHT" | "STRAIGHT" => {
+  if (Math.abs(offset) < 1) {
+    return "STRAIGHT";
+  }
+  return offset < 0 ? "LEFT" : "RIGHT";
+};
+
+const aimMagnitudeDeg = (offset: number, distance: number): number => {
+  if (!Number.isFinite(offset) || !Number.isFinite(distance) || distance <= 0) {
+    return 0;
+  }
+  const rad = Math.atan2(Math.abs(offset), distance);
+  return Math.abs((rad * 180) / Math.PI);
+};
+
+const selectClubForDistance = (distance: number, player: PlayerModel): ClubId => {
+  let best: ClubId = CLUB_SEQUENCE[CLUB_SEQUENCE.length - 1];
+  let bestDiff = Number.POSITIVE_INFINITY;
+  for (const club of CLUB_SEQUENCE) {
+    const stats = player.clubs[club];
+    if (!stats) {
+      continue;
+    }
+    const diff = Math.abs(stats.carry_m - distance);
+    if (diff < bestDiff) {
+      best = club;
+      bestDiff = diff;
+    }
+    if (stats.carry_m >= distance && diff <= bestDiff + 2) {
+      best = club;
+      bestDiff = diff;
+    }
+  }
+  return best;
+};
+
+export function dispersionEllipseForClub(
+  club: ClubId,
+  player: PlayerModel,
+): { long_m: number; lat_m: number } {
+  const stats = player.clubs[club];
+  if (!stats) {
+    return { long_m: 12, lat_m: 6 };
+  }
+  return {
+    long_m: Math.max(1, stats.sigma_long_m),
+    lat_m: Math.max(1, stats.sigma_lat_m),
+  };
+}
+
+export function planTeeShot(args: TeePlanArgs): ShotPlan {
+  const frame = buildFrame(args.tee, args.pin);
+  if (!frame) {
+    const fallbackClub = CLUB_SEQUENCE[CLUB_SEQUENCE.length - 1];
+    return {
+      kind: "tee",
+      club: fallbackClub,
+      target: args.pin,
+      aimDeg: 0,
+      aimDirection: "STRAIGHT",
+      reason: "No course geometry available; aim straight at pin.",
+      risk: 0,
+      landing: { distance_m: 0, lateral_m: 0 },
+      aim: { lateral_m: 0 },
+      mode: args.riskMode,
+      carry_m: 0,
+      crosswind_mps: 0,
+      headwind_mps: 0,
+      windDrift_m: 0,
+      tuningActive: args.player.tuningActive,
+    };
+  }
+  const prepared = prepareFeatures(args.bundle, frame);
+  const par = args.par ?? inferPar(frame.pin.y);
+  const goForGreen = Boolean(args.goForGreen);
+  const maxCarry = Math.max(
+    ...CLUB_SEQUENCE.map((club) => args.player.clubs[club]?.carry_m ?? 0),
+    0,
+  );
+  const wind = resolveWind(args.wind ?? null, frame.headingDeg);
+  const candidates: {
+    club: ClubId;
+    carry: number;
+    distance: number;
+    aimOffset: number;
+    aimDeg: number;
+    aimDir: "LEFT" | "RIGHT" | "STRAIGHT";
+    risk: number;
+    combined: number;
+    remaining: number;
+    centerX: number;
+  }[] = [];
+  for (const club of CLUB_SEQUENCE) {
+    const stats = args.player.clubs[club];
+    if (!stats || stats.carry_m <= 0) {
+      continue;
+    }
+    const longRadius = stats.sigma_long_m * RISK_MULTIPLIER[args.riskMode];
+    const latRadius = stats.sigma_lat_m * RISK_MULTIPLIER[args.riskMode];
+    const minDist = Math.max(MIN_DISTANCE, stats.carry_m * 0.9);
+    const maxDist = Math.min(stats.carry_m * 1.1, frame.pin.y + 40);
+    for (let distance = minDist; distance <= maxDist; distance += STEP_METERS) {
+      const flightTime = estimateFlightTime(distance);
+      const drift = lateralWindOffset(wind.cross, flightTime);
+      for (const aimOffset of AIM_OFFSETS_TEE) {
+        const centerX = aimOffset + drift;
+        const risk = ellipseOverlapRisk({
+          center: { x: centerX, y: distance },
+          longRadius_m: longRadius,
+          latRadius_m: latRadius,
+          features: prepared.hazards,
+        });
+        const fairway = fairwayPenalty({ x: centerX, y: distance }, longRadius, latRadius, prepared.fairways);
+        const totalRisk = clamp01(risk + fairway);
+        const remaining = Math.max(
+          0,
+          Math.hypot(frame.pin.x - centerX, frame.pin.y - distance),
+        );
+        const viability = viabilityPenalty(remaining, par, goForGreen, maxCarry);
+        const combined = clamp01(totalRisk + viability);
+        const aimDir = aimDirection(aimOffset);
+        const aimDeg = aimMagnitudeDeg(aimOffset, distance);
+        candidates.push({
+          club,
+          carry: stats.carry_m,
+          distance,
+          aimOffset,
+          aimDeg,
+          aimDir,
+          risk: totalRisk,
+          combined,
+          remaining,
+          centerX,
+        });
+      }
+    }
+  }
+  if (!candidates.length) {
+    return {
+      kind: "tee",
+      club: CLUB_SEQUENCE[CLUB_SEQUENCE.length - 1],
+      target: args.pin,
+      aimDeg: 0,
+      aimDirection: "STRAIGHT",
+      reason: "No candidates available; defaulting to straight shot.",
+      risk: 0,
+      landing: { distance_m: 0, lateral_m: 0 },
+      aim: { lateral_m: 0 },
+      mode: args.riskMode,
+      carry_m: 0,
+      crosswind_mps: wind.cross,
+      headwind_mps: wind.head,
+      windDrift_m: 0,
+      tuningActive: args.player.tuningActive,
+    };
+  }
+  const idealRemaining = par <= 3 ? 0 : par === 4 ? 140 : goForGreen ? 0 : 170;
+  candidates.sort((a, b) => {
+    if (a.combined !== b.combined) {
+      return a.combined - b.combined;
+    }
+    const diffA = Math.abs(a.remaining - idealRemaining);
+    const diffB = Math.abs(b.remaining - idealRemaining);
+    if (diffA !== diffB) {
+      return diffA - diffB;
+    }
+    return a.distance - b.distance;
+  });
+  const best = candidates[0];
+  const targetLocal = {
+    x: best.aimOffset,
+    y: best.distance,
+  };
+  const targetGeo = fromLocal(args.tee, {
+    x: targetLocal.x * frame.cos + targetLocal.y * frame.sin,
+    y: -targetLocal.x * frame.sin + targetLocal.y * frame.cos,
+  });
+  const riskPercent = Math.round(best.risk * 100);
+  const remainingLabel = Math.round(best.remaining);
+  const reasonParts: string[] = [];
+  reasonParts.push(`Leaves ${remainingLabel} m for next shot.`);
+  if (best.aimDir !== "STRAIGHT") {
+    reasonParts.push(`Aim ${best.aimDir.toLowerCase()} to clear hazards.`);
+  }
+  if (Math.abs(best.centerX) > 3) {
+    reasonParts.push(`Expected lateral drift ${best.centerX.toFixed(1)} m.`);
+  }
+  reasonParts.push(`Risk approx ${riskPercent}%.`);
+  return {
+    kind: "tee",
+    club: best.club,
+    target: targetGeo,
+    aimDeg: best.aimDeg,
+    aimDirection: best.aimDir,
+    reason: reasonParts.join(" "),
+    risk: best.combined,
+    landing: { distance_m: best.distance, lateral_m: best.centerX },
+    aim: { lateral_m: best.aimOffset },
+    mode: args.riskMode,
+    carry_m: best.carry,
+    crosswind_mps: wind.cross,
+    headwind_mps: wind.head,
+    windDrift_m: best.centerX - best.aimOffset,
+    tuningActive: args.player.tuningActive,
+  };
+}
+
+export function planApproach(args: ApproachPlanArgs): ShotPlan {
+  const frame = buildFrame(args.ball, args.pin);
+  if (!frame) {
+    const fallbackClub = selectClubForDistance(0, args.player);
+    return {
+      kind: "approach",
+      club: fallbackClub,
+      target: args.pin,
+      aimDeg: 0,
+      aimDirection: "STRAIGHT",
+      reason: "No geometry available; play straight at pin.",
+      risk: 0,
+      landing: { distance_m: 0, lateral_m: 0 },
+      aim: { lateral_m: 0 },
+      mode: args.riskMode,
+      carry_m: 0,
+      crosswind_mps: 0,
+      headwind_mps: 0,
+      windDrift_m: 0,
+      tuningActive: args.player.tuningActive,
+    };
+  }
+  const prepared = prepareFeatures(args.bundle, frame);
+  const distance = Math.max(0, frame.pin.y);
+  const preferredClub = args.preferredClub ?? selectClubForDistance(distance, args.player);
+  const stats = args.player.clubs[preferredClub] ?? args.player.clubs[CLUB_SEQUENCE[0]]!;
+  const longRadius = stats.sigma_long_m * RISK_MULTIPLIER[args.riskMode];
+  const latRadius = stats.sigma_lat_m * RISK_MULTIPLIER[args.riskMode];
+  const wind = resolveWind(args.wind ?? null, frame.headingDeg);
+  const flightTime = estimateFlightTime(distance || stats.carry_m);
+  const drift = lateralWindOffset(wind.cross, flightTime);
+  const candidates: {
+    aimOffset: number;
+    aimDeg: number;
+    aimDir: "LEFT" | "RIGHT" | "STRAIGHT";
+    risk: number;
+    combined: number;
+    centerX: number;
+  }[] = [];
+  for (const aimOffset of AIM_OFFSETS_APPROACH) {
+    const centerX = aimOffset + drift;
+    const hazardRisk = ellipseOverlapRisk({
+      center: { x: centerX, y: distance },
+      longRadius_m: longRadius,
+      latRadius_m: latRadius,
+      features: prepared.hazards,
+    });
+    const greenRisk = greenPenalty({ x: centerX, y: distance }, longRadius, latRadius, prepared.greens);
+    const combined = clamp01(hazardRisk + greenRisk);
+    const aimDeg = aimMagnitudeDeg(aimOffset, distance || stats.carry_m);
+    candidates.push({
+      aimOffset,
+      aimDeg,
+      aimDir: aimDirection(aimOffset),
+      risk: hazardRisk,
+      combined,
+      centerX,
+    });
+  }
+  candidates.sort((a, b) => {
+    if (a.combined !== b.combined) {
+      return a.combined - b.combined;
+    }
+    const offA = Math.abs(a.aimOffset);
+    const offB = Math.abs(b.aimOffset);
+    if (offA !== offB) {
+      return offA - offB;
+    }
+    return a.aimOffset - b.aimOffset;
+  });
+  const best = candidates[0];
+  const targetLocal = { x: best.aimOffset, y: distance };
+  const targetGeo = fromLocal(args.ball, {
+    x: targetLocal.x * frame.cos + targetLocal.y * frame.sin,
+    y: -targetLocal.x * frame.sin + targetLocal.y * frame.cos,
+  });
+  const reasonParts: string[] = [];
+  if (best.aimDir !== "STRAIGHT") {
+    reasonParts.push(`Favours ${best.aimDir.toLowerCase()} side of green.`);
+  } else {
+    reasonParts.push("Play center of green.");
+  }
+  const missLabel = best.combined > 0.4 ? "High risk – bail out." : `Risk ≈ ${Math.round(best.combined * 100)}%.`;
+  reasonParts.push(missLabel);
+  return {
+    kind: "approach",
+    club: preferredClub,
+    target: targetGeo,
+    aimDeg: best.aimDeg,
+    aimDirection: best.aimDir,
+    reason: reasonParts.join(" "),
+    risk: best.combined,
+    landing: { distance_m: distance, lateral_m: best.centerX },
+    aim: { lateral_m: best.aimOffset },
+    mode: args.riskMode,
+    carry_m: stats.carry_m,
+    crosswind_mps: wind.cross,
+    headwind_mps: wind.head,
+    windDrift_m: best.centerX - best.aimOffset,
+    tuningActive: args.player.tuningActive,
+  };
+}
+
+export { buildPlayerModel };
