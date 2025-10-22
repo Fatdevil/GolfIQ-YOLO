@@ -1,11 +1,18 @@
 export type CoachTone = "concise" | "neutral" | "pep";
 export type CoachVerbosity = "short" | "normal" | "detailed";
+export interface CoachVoiceSettings {
+  lang?: "sv-SE" | "en-US";
+  rate?: number;
+  pitch?: number;
+}
+
 export interface CoachStyle {
   tone: CoachTone;
   verbosity: CoachVerbosity;
   language: "sv" | "en";
   format: "text" | "tts";
   emoji?: boolean;
+  voice?: CoachVoiceSettings;
 }
 
 export const defaultCoachStyle: CoachStyle = {
@@ -14,6 +21,7 @@ export const defaultCoachStyle: CoachStyle = {
   language: "sv",
   format: "text",
   emoji: false,
+  voice: undefined,
 };
 
 type AsyncStorageLike = {
@@ -43,6 +51,31 @@ const VALID_TONES: readonly CoachTone[] = ["concise", "neutral", "pep"];
 const VALID_VERBOSITY: readonly CoachVerbosity[] = ["short", "normal", "detailed"];
 const VALID_LANGUAGES = ["sv", "en"] as const;
 const VALID_FORMATS = ["text", "tts"] as const;
+const VALID_VOICE_LANGUAGES = ["sv-SE", "en-US"] as const;
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, value));
+}
+
+function normalizeVoiceSettings(value: unknown): CoachVoiceSettings | undefined {
+  if (!value || typeof value !== "object") {
+    return undefined;
+  }
+  const input = value as Partial<CoachVoiceSettings>;
+  const lang = VALID_VOICE_LANGUAGES.includes(input.lang as (typeof VALID_VOICE_LANGUAGES)[number])
+    ? (input.lang as CoachVoiceSettings["lang"])
+    : undefined;
+  const rate = typeof input.rate === "number" && Number.isFinite(input.rate)
+    ? clamp(input.rate, 0.2, 2.0)
+    : undefined;
+  const pitch = typeof input.pitch === "number" && Number.isFinite(input.pitch)
+    ? clamp(input.pitch, 0.5, 2.0)
+    : undefined;
+  if (lang === undefined && rate === undefined && pitch === undefined) {
+    return undefined;
+  }
+  return { lang, rate, pitch };
+}
 
 let storagePromise: Promise<AsyncStorageLike> | null = null;
 let styleCache: CoachStyle | null | undefined;
@@ -88,12 +121,14 @@ function normalizeCoachStyle(value: unknown): CoachStyle | null {
     ? (input.format as CoachStyle["format"])
     : defaultCoachStyle.format;
   const emoji = input.emoji === true;
+  const voice = normalizeVoiceSettings(input.voice);
   return {
     tone,
     verbosity,
     language,
     format,
     emoji,
+    voice,
   } satisfies CoachStyle;
 }
 
