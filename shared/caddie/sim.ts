@@ -182,17 +182,18 @@ export function runSim(opts: SimOpts): SimOut {
   const greens = filterPolygons(opts.features, 'green');
   const hazards = filterPolygons(opts.features, 'hazard');
 
-  let sumLongMiss = 0;
-  let sumLatMiss = 0;
+  let sumLongNoise = 0;
+  let sumLatNoise = 0;
   let fairwayHits = 0;
   let hazardHits = 0;
   let greenHits = 0;
 
   for (let i = 0; i < samples; i += 1) {
-    const longError = gaussian() * longSigma - headDrift;
-    const latError = gaussian() * latSigma;
-    const y = range + longError;
-    const x = aimOffset + crossDrift + latError;
+    const longNoise = gaussian() * longSigma;
+    const latNoise = gaussian() * latSigma;
+
+    const y = range + longNoise - headDrift;
+    const x = aimOffset + crossDrift + latNoise;
 
     if (hazards.length && hazards.some((rings) => pointInPolygon({ x, y }, rings))) {
       hazardHits += 1;
@@ -204,15 +205,15 @@ export function runSim(opts: SimOpts): SimOut {
       greenHits += 1;
     }
 
-    sumLongMiss += y - range;
-    sumLatMiss += x;
+    sumLongNoise += longNoise;
+    sumLatNoise += latNoise;
   }
 
   const pFairway = fairways.length ? clamp01(fairwayHits / samples) : 0;
   const pHazard = hazards.length ? clamp01(hazardHits / samples) : 0;
   const pGreen = greens.length ? clamp01(greenHits / samples) : undefined;
-  const expLongMiss = samples > 0 ? sumLongMiss / samples : 0;
-  const expLatMiss = samples > 0 ? sumLatMiss / samples : 0;
+  const expLongMiss = samples > 0 ? sumLongNoise / samples : 0;
+  const expLatMiss = samples > 0 ? sumLatNoise / samples : 0;
   const denom = Math.max(1, Math.abs(range));
   const scoreProxy = clamp01(
     2 * pHazard +
