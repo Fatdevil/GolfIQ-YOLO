@@ -118,7 +118,9 @@ def _load_run_events(run_id: str) -> List[Dict[str, Any]]:
 
 
 @router.get("/health", response_model=CaddieHealthResponse)
-def caddie_health(since: Optional[str] = Query(None, description="Lookback window, e.g. 24h")):
+def caddie_health(
+    since: Optional[str] = Query(None, description="Lookback window, e.g. 24h")
+):
     window = _parse_since_param(since)
     cutoff = datetime.now(timezone.utc) - window
 
