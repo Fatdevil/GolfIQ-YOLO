@@ -104,6 +104,7 @@ function cloneShot(shot: Shot): Shot {
     carry_m: shot.carry_m,
     pin: { lat: shot.pin.lat, lon: shot.pin.lon },
     land: shot.land ? { lat: shot.land.lat, lon: shot.land.lon } : undefined,
+    heading_deg: shot.heading_deg,
   };
 }
 
@@ -142,6 +143,7 @@ function sanitizeShot(input: unknown): Shot | null {
   const tStart = Number(record.tStart);
   const tEndRaw = record.tEnd;
   const carryRaw = record.carry_m;
+  const headingRaw = record.heading_deg ?? record.headingDeg;
   const pinRaw = record.pin;
   if (!Number.isFinite(tStart) || !pinRaw || typeof pinRaw !== 'object') {
     return null;
@@ -163,6 +165,9 @@ function sanitizeShot(input: unknown): Shot | null {
   }
   if (Number.isFinite(Number(carryRaw))) {
     shot.carry_m = Number(carryRaw);
+  }
+  if (Number.isFinite(Number(headingRaw))) {
+    shot.heading_deg = Number(headingRaw);
   }
   const landRaw = record.land;
   if (landRaw && typeof landRaw === 'object') {

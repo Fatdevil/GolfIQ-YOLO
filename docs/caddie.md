@@ -32,6 +32,12 @@ The QA AR HUD overlay now includes a deterministic “Caddie” assistant that r
 3. Persist shot outcomes to refine player dispersion (per-club sigma updates).
 4. Surface “what-if” comparisons (risk deltas between clubs) and suggest layups automatically.
 
+## Dispersion learner (σ per club)
+
+- **Learn** – The QA HUD can ingest the `hud_run.json` shot log and estimate per-club dispersion using `learnDispersion`. Only shots with a recorded pin and landing contribute. Longitudinal error is computed as `carry - planned_range`; lateral error comes from the signed offset against the aim heading. Median/MAD filtering drops |z| > 2.5 outliers before taking the population standard deviation.
+- **Persist** – Learned sigmas are cached in AsyncStorage (`caddie.dispersion.v1`) alongside a timestamp. The in-memory cache powers both deterministic advice strings and Monte Carlo sampling without blocking the UI.
+- **Apply** – When the dispersion table is saved, the player model merges the learned entries (minimum six kept samples) and toggles the TUNED badge. Clubs without enough valid shots fall back to the default fractions.
+
 ## Coach Style
 
 The QA HUD exposes a small “coach style” model that controls the tone and verbosity of the generated tips without changing the underlying strategy. A style consists of:
