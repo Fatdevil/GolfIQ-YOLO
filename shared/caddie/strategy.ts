@@ -224,14 +224,43 @@ const collectPolylines = (frame: Frame, geometry: { type?: string; coordinates?:
   return lines;
 };
 
-const normalizeFeatureType = (value: unknown): string => {
-  if (typeof value !== "string") {
-    return "";
+type DomType = "fairway" | "green" | "hazard" | "water" | "bunker" | "cartpath" | null;
+
+const normalizeFeatureType = (raw: any): DomType => {
+  const p = (
+    raw?.properties?.type ?? raw?.properties?.kind ?? raw?.properties?.category ?? ""
+  )
+    .toString()
+    .toLowerCase();
+  const map: Record<string, DomType> = {
+    fairway: "fairway",
+    green: "green",
+    putting_green: "green",
+    green_complex: "green",
+    bunker: "bunker",
+    sand: "bunker",
+    sand_trap: "bunker",
+    water: "water",
+    pond: "water",
+    lake: "water",
+    hazard: "hazard",
+    penalty: "hazard",
+    penalty_area: "hazard",
+    cartpath: "cartpath",
+    cart_path: "cartpath",
+    path: "cartpath",
+  };
+  if (p && map[p]) {
+    return map[p];
   }
-  return value.trim().toLowerCase();
+  const fallback = (raw?.type ?? "").toString().toLowerCase();
+  if (fallback && fallback !== "feature") {
+    return map[fallback] ?? null;
+  }
+  return null;
 };
 
-const hazardPenalty = (type: string): number => {
+const hazardPenalty = (type: DomType): number => {
   if (type === "water" || type === "hazard") {
     return 1;
   }
@@ -250,53 +279,54 @@ type PreparedFeatures = {
   hazards: RiskFeature[];
   fairways: { x: number; y: number }[][];
   greens: { x: number; y: number }[][];
+  cartpaths: { x: number; y: number }[][];
 };
 
 const prepareFeatures = (bundle: CourseBundle | null, frame: Frame | null): PreparedFeatures => {
   if (!bundle || !frame || !Array.isArray(bundle.features)) {
-    return { hazards: [], fairways: [], greens: [] };
+    return { hazards: [], fairways: [], greens: [], cartpaths: [] };
   }
   const hazards: RiskFeature[] = [];
   const fairways: { x: number; y: number }[][] = [];
   const greens: { x: number; y: number }[][] = [];
+  const cartpaths: { x: number; y: number }[][] = [];
   for (const raw of bundle.features as CourseFeature[]) {
     if (!raw || typeof raw !== "object") {
       continue;
     }
-    const featureType =
-      normalizeFeatureType((raw as { type?: unknown }).type) ||
-      normalizeFeatureType((raw as { properties?: { type?: unknown; kind?: unknown } }).properties?.type) ||
-      normalizeFeatureType((raw as { properties?: { type?: unknown; kind?: unknown } }).properties?.kind);
-    if (!featureType) {
+    const domType = normalizeFeatureType(raw);
+    const geomType = raw?.geometry?.type;
+    if (typeof geomType !== "string") {
       continue;
     }
-    if (featureType === "fairway") {
+    const normalizedType = geomType.toLowerCase();
+    const isPoly = normalizedType === "polygon" || normalizedType === "multipolygon";
+    const isLine = normalizedType === "linestring" || normalizedType === "multilinestring";
+    if (domType === "fairway" && isPoly) {
       const rings = collectPolygonRings(frame, raw.geometry ?? {});
       if (rings.length) {
-        fairways.push(...rings.map((ring) => ring));
+        fairways.push(...rings);
       }
-      continue;
-    }
-    if (featureType === "green") {
+    } else if (domType === "green" && isPoly) {
       const rings = collectPolygonRings(frame, raw.geometry ?? {});
       if (rings.length) {
-        greens.push(...rings.map((ring) => ring));
+        greens.push(...rings);
       }
-      continue;
-    }
-    if (["hazard", "water", "bunker"].includes(featureType)) {
+    } else if ((domType === "hazard" || domType === "water" || domType === "bunker") && isPoly) {
       const rings = collectPolygonRings(frame, raw.geometry ?? {});
       if (rings.length) {
-        hazards.push({ kind: "polygon", rings, penalty: hazardPenalty(featureType) });
-        continue;
+        hazards.push({ kind: "polygon", rings, penalty: hazardPenalty(domType) });
       }
+    } else if (domType === "cartpath" && isLine) {
       const lines = collectPolylines(frame, raw.geometry ?? {});
       for (const line of lines) {
-        hazards.push({ kind: "polyline", line, penalty: hazardPenalty(featureType) });
+        cartpaths.push(line);
       }
+    } else {
+      continue;
     }
   }
-  return { hazards, fairways, greens };
+  return { hazards, fairways, greens, cartpaths };
 };
 
 const ringContains = (point: { x: number; y: number }, ring: { x: number; y: number }[]): boolean => {
@@ -756,3 +786,9 @@ export function planApproach(args: ApproachPlanArgs): ShotPlan {
 }
 
 export { buildPlayerModel };
+
+export const __test__ = {
+  normalizeFeatureType,
+  prepareFeatures,
+  buildFrame,
+};
