@@ -85,7 +85,8 @@ import {
   type ShotPlan as CaddieShotPlan,
 } from '../../../../shared/caddie/strategy';
 import { defaultCoachStyle, loadCoachStyle, saveCoachStyle, type CoachStyle, type CoachTone, type CoachVerbosity } from '../../../../shared/caddie/style';
-import { caddieTipToText } from '../../../../shared/caddie/text';
+import { advise, type Advice } from '../../../../shared/caddie/advice';
+import { caddieTipToText, advicesToText } from '../../../../shared/caddie/text';
 import { buildGhostTelemetryKey } from './utils/ghostTelemetry';
 
 type FeatureKind = 'green' | 'fairway' | 'bunker' | 'hazard' | 'cartpath' | 'other';
@@ -1850,6 +1851,72 @@ const QAArHudOverlayScreen: React.FC = () => {
         : [],
     [caddiePlan, caddiePlayerModel.tuningActive, caddieRiskMode, coachStyle],
   );
+  const caddieAdvices = useMemo<Advice[]>(() => {
+    if (!caddiePlan) {
+      return [];
+    }
+    const breakdown = plannerResult?.breakdown ?? {
+      temp_m: 0,
+      alt_m: 0,
+      head_m: 0,
+      slope_m: 0,
+    };
+    const hazardReason = (caddiePlan.reason ?? '').toLowerCase();
+    const hazardRight = hazardReason.includes('aim left to clear hazards');
+    const hazardLeft = hazardReason.includes('aim right to clear hazards');
+    const clubStats = caddiePlayerModel.clubs[caddiePlan.club];
+    const signedAim =
+      caddiePlan.aimDirection === 'LEFT'
+        ? -caddiePlan.aimDeg
+        : caddiePlan.aimDirection === 'RIGHT'
+          ? caddiePlan.aimDeg
+          : 0;
+    return advise({
+      wind: {
+        head_mps: caddiePlan.headwind_mps,
+        cross_mps: caddiePlan.crosswind_mps,
+      },
+      deltas: {
+        temp_m: breakdown.temp_m ?? 0,
+        alt_m: breakdown.alt_m ?? 0,
+        head_m: breakdown.head_m ?? 0,
+        slope_m: breakdown.slope_m ?? 0,
+      },
+      plan: {
+        club: caddiePlan.club,
+        aimDeg: signedAim,
+        aimDirection: caddiePlan.aimDirection,
+        risk: caddiePlan.risk,
+        distance_m: caddiePlan.landing.distance_m,
+        reason: caddiePlan.reason,
+        hazardRightOfAim: hazardRight,
+        hazardLeftOfAim: hazardLeft,
+      },
+      dispersion: clubStats
+        ? {
+            sigma_long_m: clubStats.sigma_long_m,
+            sigma_lat_m: clubStats.sigma_lat_m,
+          }
+        : undefined,
+      round: {
+        hole: 0,
+        lastErrors: [],
+        streak: { bogey: 0, birdie: 0 },
+      },
+      style: coachStyle,
+    });
+  }, [caddiePlan, caddiePlayerModel, coachStyle, plannerResult]);
+  const caddieAdviceLines = useMemo(
+    () =>
+      caddieAdvices.length
+        ? advicesToText(caddieAdvices, coachStyle, coachStyle.language)
+        : [],
+    [caddieAdvices, coachStyle],
+  );
+  const caddieAdviceTypes = useMemo(
+    () => caddieAdvices.map((item) => item.type),
+    [caddieAdvices],
+  );
   const caddieTitle = caddieScenario === 'tee' ? 'Tee plan' : 'Next shot';
   useEffect(() => {
     if (!caddiePlan) {
@@ -1874,6 +1941,7 @@ const QAArHudOverlayScreen: React.FC = () => {
       aimDeg: signedAim,
       D: Number(caddiePlan.landing.distance_m.toFixed(1)),
       mode: caddiePlan.mode,
+      adviceTypes: caddieAdviceTypes,
       tone: coachStyle.tone,
       verbosity: coachStyle.verbosity,
       language: coachStyle.language,
@@ -1881,7 +1949,7 @@ const QAArHudOverlayScreen: React.FC = () => {
       format: coachStyle.format,
     });
     lastCaddiePlanRef.current = key;
-  }, [caddiePlan, coachStyle, emitTelemetry]);
+  }, [caddieAdviceTypes, caddiePlan, coachStyle, emitTelemetry]);
   const [cameraStats, setCameraStats] = useState<CameraStats>({ latency: 0, fps: 0 });
   const telemetryRef = useRef<TelemetryEmitter | null>(resolveTelemetryEmitter());
   const shotIdCounterRef = useRef(0);
@@ -2117,13 +2185,21 @@ const QAArHudOverlayScreen: React.FC = () => {
       D: Number(caddiePlan.landing.distance_m.toFixed(1)),
       mode: caddiePlan.mode,
       applied: true,
+      adviceTypes: caddieAdviceTypes,
       tone: coachStyle.tone,
       verbosity: coachStyle.verbosity,
       language: coachStyle.language,
       emoji: Boolean(coachStyle.emoji),
       format: coachStyle.format,
     });
-  }, [caddiePlan, coachStyle, emitTelemetry, setPlannerExpanded, setPlannerResult]);
+  }, [
+    caddieAdviceTypes,
+    caddiePlan,
+    coachStyle,
+    emitTelemetry,
+    setPlannerExpanded,
+    setPlannerResult,
+  ]);
 
   useEffect(() => {
     if (!qaEnabled) {
@@ -2978,6 +3054,15 @@ const QAArHudOverlayScreen: React.FC = () => {
                   {line}
                 </Text>
               ))}
+              {caddieAdviceLines.length ? (
+                <View style={styles.caddieAdviceRow}>
+                  {caddieAdviceLines.map((line, index) => (
+                    <View key={`caddie-advice-${index}`} style={styles.caddieAdviceChip}>
+                      <Text style={styles.caddieAdviceText}>{line}</Text>
+                    </View>
+                  ))}
+                </View>
+              ) : null}
             </View>
           ) : (
             <Text style={styles.caddieTipLine}>Ingen plan – välj bana och pin.</Text>
@@ -3811,6 +3896,24 @@ const styles = StyleSheet.create({
     color: '#cbd5f5',
     fontSize: 13,
     lineHeight: 18,
+  },
+  caddieAdviceRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+  },
+  caddieAdviceChip: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+    backgroundColor: '#0f172a',
+    borderWidth: 1,
+    borderColor: '#1e293b',
+  },
+  caddieAdviceText: {
+    color: '#f8fafc',
+    fontSize: 11,
+    fontWeight: '600',
   },
   caddieApplyButton: {
     marginTop: 4,

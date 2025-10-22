@@ -24,7 +24,7 @@ test('caddieTipToText emits deterministic summary lines', () => {
   };
   const lines = caddieTipToText(plan, { mode: 'safe' });
   assert.deepEqual(lines, [
-    'SAFE: D till landningszon 240 m, sikta 3.2° RIGHT, risk≈25%.',
+    'SAFE: D till landningszon 240 m, Sikta 3.2° höger, Risk≈25%.',
     'Vind 3.0 m/s vänster→höger. Drift≈4.0 m.',
     'Tuning aktiv – personlig dispersion används.',
     'Leaves 150 m for next shot.',
