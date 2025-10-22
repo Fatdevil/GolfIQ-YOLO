@@ -33,7 +33,7 @@ const MIN_SIGMA_LONG = 6;
 const MIN_SIGMA_LAT = 3;
 const DEFAULT_LONG_FRACTION = 0.14;
 const DEFAULT_LAT_FRACTION = 0.09;
-const DISPERSION_STORAGE_KEY = "caddie.dispersion.v1";
+const DISPERSION_STORAGE_KEY = "caddie.dispersion.v2";
 
 const fallbackStorage: AsyncStorageLike = (() => {
   const store = new Map<string, string>();

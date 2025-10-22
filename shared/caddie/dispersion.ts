@@ -114,17 +114,15 @@ export function learnDispersion(
     if (!club) {
       continue;
     }
-    const carry = toFinite(shot?.carry_m);
-    const planned = toFinite(shot?.playsLike_m);
     const heading = toFinite(shot?.heading_deg);
-    if (carry === null || planned === null || heading === null || !shot?.pin || !shot?.land) {
+    if (heading === null || !shot?.pin || !shot?.land) {
       continue;
     }
     const relative = computeRelative(shot.pin, shot.land, heading);
     if (!relative) {
       continue;
     }
-    const longErr = carry - planned;
+    const longErr = relative.y;
     const latErr = relative.x;
     if (!Number.isFinite(longErr) || !Number.isFinite(latErr)) {
       continue;
