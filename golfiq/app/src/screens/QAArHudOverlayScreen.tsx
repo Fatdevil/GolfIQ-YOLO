@@ -7,15 +7,18 @@ import React, {
 } from 'react';
 import {
   ActivityIndicator,
+  Alert,
   Animated,
   Easing,
   LayoutChangeEvent,
   PanResponder,
+  Platform,
   ScrollView,
   StyleSheet,
   Switch,
   Text,
   TextInput,
+  ToastAndroid,
   TouchableOpacity,
   View,
   useWindowDimensions,
@@ -79,7 +82,13 @@ import {
   type LandingState as AutoLandingState,
   type LandingSample,
 } from '../../../../shared/arhud/landing_heuristics';
-import { buildPlayerModel } from '../../../../shared/caddie/player_model';
+import {
+  buildPlayerModel,
+  loadLearnedDispersion,
+  saveLearnedDispersion,
+  type DispersionSnapshot,
+} from '../../../../shared/caddie/player_model';
+import { learnDispersion, type ClubDispersion } from '../../../../shared/caddie/dispersion';
 import {
   planApproach,
   planApproachMC,
@@ -346,6 +355,65 @@ const formatSignedMeters = (value: number): string => {
   return `${sign}${value.toFixed(1)} m`;
 };
 
+const DISPERSION_MIN_SAMPLES = 6;
+
+const cloneDispersionMap = (
+  source: Partial<Record<ClubId, ClubDispersion>> | null,
+): Partial<Record<ClubId, ClubDispersion>> | null => {
+  if (!source) {
+    return null;
+  }
+  const next: Partial<Record<ClubId, ClubDispersion>> = {};
+  for (const club of CLUB_SEQUENCE) {
+    const entry = source[club];
+    if (entry) {
+      next[club] = { ...entry };
+    }
+  }
+  return Object.keys(next).length ? next : null;
+};
+
+const dispersionMapsEqual = (
+  a: Partial<Record<ClubId, ClubDispersion>> | null,
+  b: Partial<Record<ClubId, ClubDispersion>> | null,
+): boolean => {
+  for (const club of CLUB_SEQUENCE) {
+    const left = a ? a[club] : undefined;
+    const right = b ? b[club] : undefined;
+    if (!left && !right) {
+      continue;
+    }
+    if (!left || !right) {
+      return false;
+    }
+    if (Math.abs(left.sigma_long_m - right.sigma_long_m) > 1e-3) {
+      return false;
+    }
+    if (Math.abs(left.sigma_lat_m - right.sigma_lat_m) > 1e-3) {
+      return false;
+    }
+    if (left.n !== right.n) {
+      return false;
+    }
+  }
+  return true;
+};
+
+const formatSigma = (value: number | null | undefined): string => {
+  if (!Number.isFinite(value ?? Number.NaN)) {
+    return '—';
+  }
+  return (value as number).toFixed(1);
+};
+
+const showToast = (message: string): void => {
+  if (Platform.OS === 'android') {
+    ToastAndroid.show(message, ToastAndroid.SHORT);
+    return;
+  }
+  Alert.alert('Caddie', message);
+};
+
 type TelemetryEmitter = (event: string, data: Record<string, unknown>) => void;
 
 type HazardDirection = 'LEFT' | 'RIGHT';
@@ -577,6 +645,9 @@ function mapHudRecordToRoundShot(record: ShotLogRecord): RoundShot | null {
   }
   if (typeof record.carry_m === 'number' && Number.isFinite(record.carry_m)) {
     shot.carry_m = record.carry_m;
+  }
+  if (typeof record.heading_deg === 'number' && Number.isFinite(record.heading_deg)) {
+    shot.heading_deg = record.heading_deg;
   }
   if (record.land && typeof record.land === 'object') {
     const landLat = Number((record.land as { lat?: number }).lat);
@@ -1480,6 +1551,13 @@ const QAArHudOverlayScreen: React.FC = () => {
   const [shotSession, setShotSession] = useState<ShotSessionState | null>(null);
   const [markLandingArmed, setMarkLandingArmed] = useState(false);
   const [qaBag, setQaBag] = useState<Bag>(() => effectiveBag());
+  const [storedDispersion, setStoredDispersion] = useState<DispersionSnapshot | null>(null);
+  const [dispersionPreview, setDispersionPreview] = useState<
+    Partial<Record<ClubId, ClubDispersion>> | null
+  >(null);
+  const [dispersionLoading, setDispersionLoading] = useState(false);
+  const [dispersionSaving, setDispersionSaving] = useState(false);
+  const [dispersionMessage, setDispersionMessage] = useState<string | null>(null);
   const [userBagActive, setUserBagActive] = useState<Bag | null>(null);
   const [userBagLoaded, setUserBagLoaded] = useState(false);
   const [bagCalibExpanded, setBagCalibExpanded] = useState(false);
@@ -1509,6 +1587,32 @@ const QAArHudOverlayScreen: React.FC = () => {
     null,
   );
   const planAdoptedRef = useRef(false);
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      try {
+        const snapshot = await loadLearnedDispersion();
+        if (!mounted) {
+          return;
+        }
+        if (snapshot) {
+          setStoredDispersion(snapshot);
+          setDispersionPreview(cloneDispersionMap(snapshot.clubs));
+        } else {
+          setStoredDispersion(null);
+          setDispersionPreview(null);
+        }
+      } catch (error) {
+        if (mounted) {
+          setStoredDispersion(null);
+          setDispersionPreview(null);
+        }
+      }
+    })();
+    return () => {
+      mounted = false;
+    };
+  }, []);
   const caddieMcRolloutEnabled = caddieRollout.mc;
   const caddieAdviceRolloutEnabled = caddieRollout.advice;
   const caddieTtsRolloutEnabled = caddieRollout.tts;
@@ -1944,6 +2048,75 @@ const QAArHudOverlayScreen: React.FC = () => {
     },
     [setShotSession, setMarkLandingArmed, clearLandingTimeout],
   );
+  const handleUpdateDispersion = useCallback(() => {
+    if (dispersionLoading) {
+      return;
+    }
+    setDispersionLoading(true);
+    setDispersionMessage('Learning dispersion…');
+    (async () => {
+      try {
+        const records = await loadHudRunShots();
+        const shots: RoundShot[] = [];
+        for (const record of records) {
+          const shot = mapHudRecordToRoundShot(record);
+          if (shot) {
+            shots.push(shot);
+          }
+        }
+        const learned = learnDispersion(shots, DISPERSION_MIN_SAMPLES);
+        const clubsLearned = Object.keys(learned).length;
+        if (!clubsLearned) {
+          setDispersionPreview(null);
+          setDispersionMessage('Need at least 6 valid shots per club with pin + landing.');
+        } else {
+          setDispersionPreview(cloneDispersionMap(learned));
+          setDispersionMessage(
+            `Learned dispersion for ${clubsLearned} club${clubsLearned === 1 ? '' : 's'}.`,
+          );
+        }
+      } catch (error) {
+        setDispersionPreview(null);
+        setDispersionMessage('Failed to learn dispersion from hud_run.json.');
+      } finally {
+        setDispersionLoading(false);
+      }
+    })();
+  }, [dispersionLoading]);
+  const handleSaveDispersion = useCallback(() => {
+    if (dispersionSaving) {
+      return;
+    }
+    const active = dispersionPreview ?? storedDispersion?.clubs ?? null;
+    if (!active || Object.keys(active).length === 0) {
+      setDispersionMessage('No dispersion data to save yet.');
+      return;
+    }
+    if (storedDispersion && dispersionMapsEqual(active, storedDispersion.clubs)) {
+      setDispersionMessage('Dispersion already saved.');
+      return;
+    }
+    const payload = cloneDispersionMap(active);
+    if (!payload) {
+      setDispersionMessage('No dispersion data to save yet.');
+      return;
+    }
+    setDispersionSaving(true);
+    (async () => {
+      const timestamp = Date.now();
+      try {
+        await saveLearnedDispersion(payload, timestamp);
+        setStoredDispersion({ updatedAt: timestamp, clubs: payload });
+        setDispersionPreview(payload);
+        setDispersionMessage('Dispersion saved.');
+        showToast('Dispersion saved.');
+      } catch (error) {
+        setDispersionMessage('Failed to save dispersion.');
+      } finally {
+        setDispersionSaving(false);
+      }
+    })();
+  }, [dispersionPreview, dispersionSaving, storedDispersion]);
   const createShotPayload = useCallback(
     (session: ShotSessionState): ShotLogRecord | null => {
       if (!session.landing) {
@@ -2111,6 +2284,28 @@ const QAArHudOverlayScreen: React.FC = () => {
     });
     lastFeedbackShotRef.current = shotSession.shotId;
   }, [emitTelemetry, shotSession, shotSummary]);
+  const dispersionLastSavedLabel = useMemo(() => {
+    if (!storedDispersion) {
+      return null;
+    }
+    try {
+      return new Date(storedDispersion.updatedAt).toLocaleString();
+    } catch (error) {
+      return null;
+    }
+  }, [storedDispersion]);
+  const dispersionTableData = useMemo(
+    () => dispersionPreview ?? storedDispersion?.clubs ?? null,
+    [dispersionPreview, storedDispersion],
+  );
+  const dispersionDirty = useMemo(
+    () =>
+      Boolean(
+        dispersionPreview &&
+          !dispersionMapsEqual(dispersionPreview, storedDispersion?.clubs ?? null),
+      ),
+    [dispersionPreview, storedDispersion],
+  );
   const plannerControls = useMemo(
     () => [
       { key: 'temperatureC' as const, label: 'Temp', unit: '°C', step: 1 },
@@ -2121,7 +2316,15 @@ const QAArHudOverlayScreen: React.FC = () => {
     ],
     [],
   );
-  const caddiePlayerModel = useMemo(() => buildPlayerModel({ bag: qaBag }), [qaBag]);
+  const caddiePlayerModel = useMemo(
+    () =>
+      buildPlayerModel({
+        bag: qaBag,
+        dispersion: storedDispersion?.clubs,
+        minSamples: DISPERSION_MIN_SAMPLES,
+      }),
+    [qaBag, storedDispersion],
+  );
   const likelyPar5 = useMemo(() => (pinMetrics?.distance ?? 0) > 360, [pinMetrics?.distance]);
   useEffect(() => {
     if (!likelyPar5 && caddieGoForGreen) {
@@ -3512,6 +3715,79 @@ const QAArHudOverlayScreen: React.FC = () => {
               </View>
             ) : null}
           </View>
+          <View style={styles.caddieDispersionBlock}>
+            <View style={styles.caddieDispersionHeader}>
+              <Text style={styles.caddieDispersionTitle}>Dispersion learner</Text>
+              {dispersionLastSavedLabel ? (
+                <Text style={styles.caddieDispersionTimestamp}>
+                  Saved {dispersionLastSavedLabel}
+                </Text>
+              ) : null}
+            </View>
+            <View style={styles.caddieDispersionActions}>
+              <TouchableOpacity
+                onPress={handleUpdateDispersion}
+                disabled={dispersionLoading}
+                style={[
+                  styles.caddieDispersionButton,
+                  styles.caddieDispersionButtonPrimary,
+                  dispersionLoading ? styles.caddieDispersionButtonDisabled : null,
+                ]}
+              >
+                <Text style={styles.caddieDispersionButtonText}>
+                  {dispersionLoading ? 'Learning…' : 'Update from last session'}
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={handleSaveDispersion}
+                disabled={dispersionSaving || !dispersionDirty}
+                style={[
+                  styles.caddieDispersionButton,
+                  dispersionSaving || !dispersionDirty
+                    ? styles.caddieDispersionButtonDisabled
+                    : null,
+                ]}
+              >
+                <Text style={styles.caddieDispersionButtonText}>
+                  {dispersionSaving ? 'Saving…' : 'Save'}
+                </Text>
+              </TouchableOpacity>
+            </View>
+            {dispersionMessage ? (
+              <Text style={styles.caddieDispersionMessage}>{dispersionMessage}</Text>
+            ) : null}
+            {dispersionTableData ? (
+              <View style={styles.caddieDispersionTable}>
+                <View style={styles.caddieDispersionRowHeader}>
+                  <Text style={styles.caddieDispersionHeaderClub}>Club</Text>
+                  <Text style={styles.caddieDispersionHeaderValue}>σ long</Text>
+                  <Text style={styles.caddieDispersionHeaderValue}>σ lat</Text>
+                  <Text style={styles.caddieDispersionHeaderValue}>n</Text>
+                </View>
+                {CLUB_SEQUENCE.slice()
+                  .reverse()
+                  .map((club) => {
+                    const entry = dispersionTableData?.[club];
+                    return (
+                      <View key={`dispersion-${club}`} style={styles.caddieDispersionRow}>
+                        <Text style={styles.caddieDispersionClub}>{club}</Text>
+                        <Text style={styles.caddieDispersionValue}>
+                          {entry ? formatSigma(entry.sigma_long_m) : '—'}
+                        </Text>
+                        <Text style={styles.caddieDispersionValue}>
+                          {entry ? formatSigma(entry.sigma_lat_m) : '—'}
+                        </Text>
+                        <Text style={styles.caddieDispersionValue}>
+                          {entry ? `${entry.n}` : '0'}
+                        </Text>
+                      </View>
+                    );
+                  })}
+              </View>
+            ) : (
+              <Text style={styles.caddieDispersionEmpty}>No dispersion data yet.</Text>
+            )}
+          </View>
           <View style={styles.caddieModeRow}>
             {CADDIE_RISK_OPTIONS.map((mode) => (
               <TouchableOpacity
@@ -4538,6 +4814,106 @@ const styles = StyleSheet.create({
     color: '#facc15',
     fontSize: 10,
     fontWeight: '700',
+  },
+  caddieDispersionBlock: {
+    backgroundColor: '#0b1120',
+    borderRadius: 10,
+    padding: 10,
+    gap: 10,
+  },
+  caddieDispersionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  caddieDispersionTitle: {
+    color: '#e2e8f0',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  caddieDispersionTimestamp: {
+    color: '#94a3b8',
+    fontSize: 11,
+  },
+  caddieDispersionActions: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  caddieDispersionButton: {
+    flex: 1,
+    borderRadius: 8,
+    paddingVertical: 8,
+    alignItems: 'center',
+    backgroundColor: '#1f2937',
+  },
+  caddieDispersionButtonPrimary: {
+    backgroundColor: '#2563eb',
+  },
+  caddieDispersionButtonDisabled: {
+    opacity: 0.5,
+  },
+  caddieDispersionButtonText: {
+    color: '#f8fafc',
+    fontWeight: '600',
+    fontSize: 12,
+  },
+  caddieDispersionMessage: {
+    color: '#cbd5f5',
+    fontSize: 11,
+  },
+  caddieDispersionTable: {
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#1f2937',
+    overflow: 'hidden',
+  },
+  caddieDispersionRowHeader: {
+    flexDirection: 'row',
+    backgroundColor: '#1f2937',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    gap: 12,
+  },
+  caddieDispersionHeaderClub: {
+    flex: 1,
+    color: '#94a3b8',
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  caddieDispersionHeaderValue: {
+    width: 60,
+    textAlign: 'right',
+    color: '#94a3b8',
+    fontSize: 11,
+    fontWeight: '600',
+    fontVariant: ['tabular-nums'],
+  },
+  caddieDispersionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    gap: 12,
+    backgroundColor: '#0f172a',
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: '#1f2937',
+  },
+  caddieDispersionClub: {
+    flex: 1,
+    color: '#f8fafc',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  caddieDispersionValue: {
+    width: 60,
+    textAlign: 'right',
+    color: '#e2e8f0',
+    fontSize: 12,
+    fontVariant: ['tabular-nums'],
+  },
+  caddieDispersionEmpty: {
+    color: '#94a3b8',
+    fontSize: 12,
   },
   caddieModeRow: {
     flexDirection: 'row',

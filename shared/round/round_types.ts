@@ -7,6 +7,7 @@ export interface Shot {
   carry_m?: number;
   pin: { lat: number; lon: number };
   land?: { lat: number; lon: number };
+  heading_deg?: number;
 }
 
 export interface Hole {
