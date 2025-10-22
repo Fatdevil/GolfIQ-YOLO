@@ -88,9 +88,18 @@ import {
   type RiskMode as CaddieRiskMode,
   type ShotPlan as CaddieShotPlan,
 } from '../../../../shared/caddie/strategy';
-import { defaultCoachStyle, loadCoachStyle, saveCoachStyle, type CoachStyle, type CoachTone, type CoachVerbosity } from '../../../../shared/caddie/style';
+import {
+  defaultCoachStyle,
+  loadCoachStyle,
+  saveCoachStyle,
+  type CoachStyle,
+  type CoachTone,
+  type CoachVerbosity,
+  type CoachVoiceSettings,
+} from '../../../../shared/caddie/style';
 import { advise, type Advice } from '../../../../shared/caddie/advice';
 import { caddieTipToText, advicesToText } from '../../../../shared/caddie/text';
+import { speak as speakTip, stop as stopSpeech } from '../../../../shared/tts/speak';
 import { buildGhostTelemetryKey } from './utils/ghostTelemetry';
 
 type FeatureKind = 'green' | 'fairway' | 'bunker' | 'hazard' | 'cartpath' | 'other';
@@ -180,9 +189,152 @@ const COACH_LANGUAGE_OPTIONS: ReadonlyArray<{ value: CoachStyle['language']; lab
   { value: 'en', label: 'EN' },
 ];
 
+const COACH_VOICE_LANGUAGE_OPTIONS: ReadonlyArray<{ value: 'sv-SE' | 'en-US'; label: string }> = [
+  { value: 'sv-SE', label: 'SV' },
+  { value: 'en-US', label: 'EN' },
+];
+
+const DEFAULT_VOICE_BY_LANGUAGE: Record<CoachStyle['language'], 'sv-SE' | 'en-US'> = {
+  sv: 'sv-SE',
+  en: 'en-US',
+};
+
+const DEFAULT_RATE_BY_VOICE_LANG: Record<'sv-SE' | 'en-US', number> = {
+  'sv-SE': 0.95,
+  'en-US': 1.0,
+};
+
+const DEFAULT_VOICE_PITCH = 1.0;
+const VOICE_RATE_MIN = 0.5;
+const VOICE_RATE_MAX = 1.5;
+const VOICE_RATE_STEP = 0.05;
+const VOICE_PITCH_MIN = 0.75;
+const VOICE_PITCH_MAX = 1.5;
+const VOICE_PITCH_STEP = 0.05;
+const VOICE_LANGUAGE_TO_COACH: Record<'sv-SE' | 'en-US', CoachStyle['language']> = {
+  'sv-SE': 'sv',
+  'en-US': 'en',
+};
+
 const EARTH_RADIUS_M = 6_378_137;
 
 const clamp01 = (value: number): number => Math.max(0, Math.min(1, value));
+
+const clampVoiceValue = (value: number, min: number, max: number): number => Math.min(max, Math.max(min, value));
+
+const sanitizeVoiceSettings = (voice?: CoachVoiceSettings | null): CoachVoiceSettings | undefined => {
+  if (!voice) {
+    return undefined;
+  }
+  const result: CoachVoiceSettings = {};
+  if (voice.lang === 'sv-SE' || voice.lang === 'en-US') {
+    result.lang = voice.lang;
+  }
+  if (typeof voice.rate === 'number' && Number.isFinite(voice.rate)) {
+    result.rate = Number(clampVoiceValue(voice.rate, VOICE_RATE_MIN, VOICE_RATE_MAX).toFixed(2));
+  }
+  if (typeof voice.pitch === 'number' && Number.isFinite(voice.pitch)) {
+    result.pitch = Number(clampVoiceValue(voice.pitch, VOICE_PITCH_MIN, VOICE_PITCH_MAX).toFixed(2));
+  }
+  return result.lang || result.rate !== undefined || result.pitch !== undefined ? result : undefined;
+};
+
+const resolveVoiceLanguage = (style: CoachStyle): 'sv-SE' | 'en-US' =>
+  style.voice?.lang === 'sv-SE' || style.voice?.lang === 'en-US'
+    ? style.voice.lang
+    : DEFAULT_VOICE_BY_LANGUAGE[style.language];
+
+const resolveVoiceRate = (style: CoachStyle, lang: 'sv-SE' | 'en-US'): number => {
+  const rate = style.voice?.rate;
+  if (typeof rate === 'number' && Number.isFinite(rate)) {
+    return clampVoiceValue(rate, VOICE_RATE_MIN, VOICE_RATE_MAX);
+  }
+  return DEFAULT_RATE_BY_VOICE_LANG[lang];
+};
+
+const resolveVoicePitch = (style: CoachStyle): number => {
+  const pitch = style.voice?.pitch;
+  if (typeof pitch === 'number' && Number.isFinite(pitch)) {
+    return clampVoiceValue(pitch, VOICE_PITCH_MIN, VOICE_PITCH_MAX);
+  }
+  return DEFAULT_VOICE_PITCH;
+};
+
+type VoiceSliderProps = {
+  label: string;
+  value: number;
+  min: number;
+  max: number;
+  step: number;
+  disabled?: boolean;
+  onChange(value: number): void;
+};
+
+const VoiceSlider: React.FC<VoiceSliderProps> = ({ label, value, min, max, step, disabled, onChange }) => {
+  const [trackWidth, setTrackWidth] = useState(1);
+  const metricsRef = useRef<{ left: number }>({ left: 0 });
+
+  const clampToRange = useCallback(
+    (input: number) => {
+      const clamped = clampVoiceValue(input, min, max);
+      const stepped = Math.round(clamped / step) * step;
+      return Number(stepped.toFixed(2));
+    },
+    [max, min, step],
+  );
+
+  const updateFromPageX = useCallback(
+    (pageX: number) => {
+      if (disabled) {
+        return;
+      }
+      const left = metricsRef.current.left;
+      const relative = Math.max(0, Math.min(trackWidth, pageX - left));
+      const ratio = trackWidth <= 0 ? 0 : relative / trackWidth;
+      const raw = min + ratio * (max - min);
+      onChange(clampToRange(raw));
+    },
+    [clampToRange, disabled, max, min, onChange, trackWidth],
+  );
+
+  const panResponder = useMemo(
+    () =>
+      PanResponder.create({
+        onStartShouldSetPanResponder: () => !disabled,
+        onPanResponderGrant: (event) => {
+          metricsRef.current.left = event.nativeEvent.pageX - event.nativeEvent.locationX;
+          updateFromPageX(event.nativeEvent.pageX);
+        },
+        onPanResponderMove: (event) => {
+          updateFromPageX(event.nativeEvent.pageX);
+        },
+      }),
+    [disabled, updateFromPageX],
+  );
+
+  const handleLayout = useCallback((event: LayoutChangeEvent) => {
+    setTrackWidth(Math.max(1, event.nativeEvent.layout.width));
+  }, []);
+
+  const constrainedValue = clampToRange(value);
+  const progress = clamp01((constrainedValue - min) / (max - min));
+  const fillWidth = progress * trackWidth;
+  const handleLeft = Math.min(Math.max(0, fillWidth - 8), Math.max(0, trackWidth - 16));
+
+  return (
+    <View style={styles.voiceSliderBlock}>
+      <Text style={[styles.voiceSliderLabel, disabled ? styles.voiceSliderLabelDisabled : null]}>{label}</Text>
+      <View
+        style={[styles.voiceSliderTrack, disabled ? styles.voiceSliderTrackDisabled : null]}
+        onLayout={handleLayout}
+        {...panResponder.panHandlers}
+      >
+        <View style={[styles.voiceSliderFill, { width: fillWidth }]} />
+        <View style={[styles.voiceSliderHandle, { left: handleLeft }]} />
+      </View>
+    </View>
+  );
+};
 
 const formatSignedMeters = (value: number): string => {
   if (!Number.isFinite(value)) {
@@ -1285,6 +1437,7 @@ const QAArHudOverlayScreen: React.FC = () => {
   const [mcSliderWidth, setMcSliderWidth] = useState(1);
   const mcSliderMetricsRef = useRef<{ left: number }>({ left: 0 });
   const lastMcTelemetryRef = useRef<string | null>(null);
+  const lastSpokenPlanRef = useRef<string | null>(null);
 
   const updateSamplesFromValue = useCallback((value: number) => {
     const clamped = Math.max(MC_SAMPLES_MIN, Math.min(MC_SAMPLES_MAX, value));
@@ -1329,8 +1482,39 @@ const QAArHudOverlayScreen: React.FC = () => {
 
   const applyCoachStyle = useCallback((patch: Partial<CoachStyle>) => {
     setCoachStyle((prev) => {
-      const nextBase = { ...prev, ...patch };
-      const next = nextBase.tone === 'pep' ? nextBase : { ...nextBase, emoji: false };
+      const nextLanguage = patch.language ?? prev.language;
+      let voiceSource: CoachVoiceSettings | undefined;
+      if (patch.voice === null) {
+        voiceSource = undefined;
+      } else if (patch.voice !== undefined) {
+        voiceSource = { ...(prev.voice ?? {}), ...patch.voice };
+      } else {
+        voiceSource = prev.voice;
+      }
+      let voice = sanitizeVoiceSettings(voiceSource);
+      if (voice && !voice.lang) {
+        voice = { ...voice, lang: DEFAULT_VOICE_BY_LANGUAGE[nextLanguage] };
+      }
+      const wantsVoice =
+        patch.format === 'tts' ||
+        (patch.format === undefined && prev.format === 'tts') ||
+        (patch.voice !== undefined && patch.voice !== null);
+      if (!voice && wantsVoice) {
+        voice = { lang: DEFAULT_VOICE_BY_LANGUAGE[nextLanguage] };
+      }
+      const nextBase: CoachStyle = {
+        ...prev,
+        ...patch,
+        language: nextLanguage,
+        voice,
+      };
+      const next =
+        nextBase.tone === 'pep'
+          ? nextBase
+          : {
+              ...nextBase,
+              emoji: false,
+            };
       void saveCoachStyle(next);
       return next;
     });
@@ -1960,6 +2144,88 @@ const QAArHudOverlayScreen: React.FC = () => {
         : [],
     [caddiePlan, caddiePlayerModel.tuningActive, caddieRiskMode, coachStyle],
   );
+  const voiceEnabled = coachStyle.format === 'tts';
+  const voiceLang = resolveVoiceLanguage(coachStyle);
+  const voiceRate = resolveVoiceRate(coachStyle, voiceLang);
+  const voicePitch = resolveVoicePitch(coachStyle);
+  const conciseTipText = caddieTips[0] ?? '';
+  const handleVoiceToggle = useCallback((value: boolean) => {
+    applyCoachStyle({ format: value ? 'tts' : 'text' });
+  }, [applyCoachStyle]);
+  const handleVoiceLanguageChange = useCallback(
+    (value: 'sv-SE' | 'en-US') => {
+      applyCoachStyle({ language: VOICE_LANGUAGE_TO_COACH[value], voice: { lang: value } });
+    },
+    [applyCoachStyle],
+  );
+  const handleVoiceRateChange = useCallback(
+    (value: number) => {
+      applyCoachStyle({ voice: { rate: value } });
+    },
+    [applyCoachStyle],
+  );
+  const handleVoicePitchChange = useCallback(
+    (value: number) => {
+      applyCoachStyle({ voice: { pitch: value } });
+    },
+    [applyCoachStyle],
+  );
+  const speakConciseTip = useCallback(
+    (options?: { queue?: boolean }) => {
+      if (!voiceEnabled || !conciseTipText) {
+        return;
+      }
+      const queue = options?.queue ?? false;
+      void speakTip({
+        text: conciseTipText,
+        lang: voiceLang,
+        rate: voiceRate,
+        pitch: voicePitch,
+        queue,
+      }).catch(() => {});
+      emitTelemetry('hud.caddie.tts', {
+        lang: voiceLang,
+        rate: Number(voiceRate.toFixed(2)),
+        pitch: Number(voicePitch.toFixed(2)),
+        chars: conciseTipText.length,
+      });
+    },
+    [conciseTipText, emitTelemetry, voiceEnabled, voiceLang, voicePitch, voiceRate],
+  );
+  const handlePlayTip = useCallback(() => {
+    speakConciseTip();
+  }, [speakConciseTip]);
+  const handleStopTip = useCallback(() => {
+    stopSpeech();
+  }, []);
+  useEffect(() => {
+    return () => {
+      stopSpeech();
+    };
+  }, []);
+  useEffect(() => {
+    if (!voiceEnabled) {
+      stopSpeech();
+      lastSpokenPlanRef.current = null;
+    }
+  }, [voiceEnabled]);
+  useEffect(() => {
+    if (!caddiePlan) {
+      lastSpokenPlanRef.current = null;
+      return;
+    }
+    if (!voiceEnabled || !conciseTipText) {
+      return;
+    }
+    const planKey = `${caddiePlan.kind}-${caddiePlan.club}-${caddiePlan.mode}-${Math.round(
+      caddiePlan.landing.distance_m,
+    )}-${Math.round(caddiePlan.aimDeg * 10)}-${caddiePlan.aimDirection}`;
+    if (lastSpokenPlanRef.current === planKey) {
+      return;
+    }
+    lastSpokenPlanRef.current = planKey;
+    speakConciseTip();
+  }, [caddiePlan, conciseTipText, speakConciseTip, voiceEnabled]);
   useEffect(() => {
     if (!caddieUseMC || !mcResult) {
       if (!caddieUseMC) {
@@ -3179,6 +3445,81 @@ const QAArHudOverlayScreen: React.FC = () => {
               </View>
             ) : null}
           </View>
+          <View style={styles.caddieVoiceBlock}>
+            <View style={styles.caddieVoiceHeader}>
+              <Text style={styles.caddieStyleLabel}>Voice</Text>
+              <Switch value={voiceEnabled} onValueChange={handleVoiceToggle} />
+            </View>
+            <View style={styles.caddieStyleRow}>
+              {COACH_VOICE_LANGUAGE_OPTIONS.map((option) => (
+                <TouchableOpacity
+                  key={option.value}
+                  onPress={() => handleVoiceLanguageChange(option.value)}
+                  disabled={!voiceEnabled}
+                  style={[
+                    styles.caddieStyleOption,
+                    styles.caddieStyleOptionSmall,
+                    voiceLang === option.value ? styles.caddieStyleOptionActive : null,
+                    !voiceEnabled ? styles.caddieStyleOptionDisabled : null,
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.caddieStyleOptionText,
+                      voiceLang === option.value ? styles.caddieStyleOptionTextActive : null,
+                      !voiceEnabled ? styles.caddieStyleOptionTextDisabled : null,
+                    ]}
+                  >
+                    {option.label}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+            <View style={styles.voiceSliderGroup}>
+              <VoiceSlider
+                label={`Rate ${voiceRate.toFixed(2)}`}
+                value={voiceRate}
+                min={VOICE_RATE_MIN}
+                max={VOICE_RATE_MAX}
+                step={VOICE_RATE_STEP}
+                disabled={!voiceEnabled}
+                onChange={handleVoiceRateChange}
+              />
+              <VoiceSlider
+                label={`Pitch ${voicePitch.toFixed(2)}`}
+                value={voicePitch}
+                min={VOICE_PITCH_MIN}
+                max={VOICE_PITCH_MAX}
+                step={VOICE_PITCH_STEP}
+                disabled={!voiceEnabled}
+                onChange={handleVoicePitchChange}
+              />
+            </View>
+            <View style={styles.caddieVoiceActions}>
+              <TouchableOpacity
+                onPress={handlePlayTip}
+                disabled={!voiceEnabled || !conciseTipText}
+                style={[
+                  styles.caddieVoiceButton,
+                  !voiceEnabled || !conciseTipText ? styles.caddieVoiceButtonDisabled : null,
+                ]}
+              >
+                <Text style={styles.caddieVoiceButtonLabel}>Play tip</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={handleStopTip}
+                disabled={!voiceEnabled}
+                style={[
+                  styles.caddieVoiceButton,
+                  styles.caddieVoiceButtonSecondary,
+                  styles.caddieVoiceButtonLast,
+                  !voiceEnabled ? styles.caddieVoiceButtonDisabled : null,
+                ]}
+              >
+                <Text style={styles.caddieVoiceButtonLabel}>Stop</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
           <View style={styles.caddieToggleRow}>
             <Text style={styles.caddieToggleLabel}>Monte Carlo</Text>
             <Switch value={caddieUseMC} onValueChange={setCaddieUseMC} />
@@ -4074,6 +4415,12 @@ const styles = StyleSheet.create({
   caddieStyleOptionTextActive: {
     color: '#f8fafc',
   },
+  caddieStyleOptionDisabled: {
+    opacity: 0.4,
+  },
+  caddieStyleOptionTextDisabled: {
+    color: '#4b5563',
+  },
   caddieStyleRowCompact: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -4092,6 +4439,85 @@ const styles = StyleSheet.create({
   caddieStyleToggleLabel: {
     color: '#cbd5f5',
     fontSize: 12,
+    fontWeight: '600',
+  },
+  caddieVoiceBlock: {
+    marginTop: 12,
+    paddingTop: 12,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: '#1f2937',
+    gap: 10,
+  },
+  caddieVoiceHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  voiceSliderGroup: {
+    gap: 6,
+  },
+  voiceSliderBlock: {
+    gap: 4,
+  },
+  voiceSliderLabel: {
+    color: '#9ca3af',
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  voiceSliderLabelDisabled: {
+    color: '#4b5563',
+  },
+  voiceSliderTrack: {
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: '#1f2937',
+    justifyContent: 'center',
+    paddingHorizontal: 2,
+  },
+  voiceSliderTrackDisabled: {
+    backgroundColor: '#111827',
+  },
+  voiceSliderFill: {
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    bottom: 0,
+    backgroundColor: '#2563eb',
+    borderRadius: 11,
+  },
+  voiceSliderHandle: {
+    position: 'absolute',
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+    backgroundColor: '#f9fafb',
+    borderWidth: 1,
+    borderColor: '#0f172a',
+  },
+  caddieVoiceActions: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  caddieVoiceButton: {
+    flex: 1,
+    paddingVertical: 8,
+    borderRadius: 8,
+    backgroundColor: '#2563eb',
+    alignItems: 'center',
+  },
+  caddieVoiceButtonSecondary: {
+    backgroundColor: '#1f2937',
+  },
+  caddieVoiceButtonDisabled: {
+    backgroundColor: '#1f2937',
+    opacity: 0.4,
+  },
+  caddieVoiceButtonLast: {
+    marginRight: 0,
+  },
+  caddieVoiceButtonLabel: {
+    color: '#f8fafc',
+    fontSize: 13,
     fontWeight: '600',
   },
   caddieToggleRow: {
