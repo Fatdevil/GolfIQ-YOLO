@@ -3,6 +3,7 @@ import type { CourseBundle } from "../arhud/bundle_client";
 import { CLUB_SEQUENCE, type ClubId } from "../playslike/bag";
 import { ellipseOverlapRisk, lateralWindOffset, sampleEllipsePoints, type RiskFeature } from "./risk";
 import { buildPlayerModel, type PlayerModel } from "./player_model";
+import { runSim, type BundleFeature as SimFeature, type SimOut } from "./sim";
 
 const EARTH_RADIUS_M = 6_378_137;
 
@@ -24,6 +25,7 @@ export interface ShotPlan {
   headwind_mps: number;
   windDrift_m: number;
   tuningActive: boolean;
+  mc?: (SimOut & { samples: number }) | null;
 }
 
 type WindInput = { speed_mps?: number; from_deg?: number } | null | undefined;
@@ -38,6 +40,9 @@ type TeePlanArgs = {
   slope_dh_m?: number;
   goForGreen?: boolean;
   par?: number;
+  useMC?: boolean;
+  mcSamples?: number;
+  mcSeed?: number;
 };
 
 type ApproachPlanArgs = {
@@ -49,6 +54,9 @@ type ApproachPlanArgs = {
   wind?: WindInput;
   slope_dh_m?: number;
   preferredClub?: ClubId;
+  useMC?: boolean;
+  mcSamples?: number;
+  mcSeed?: number;
 };
 
 const RISK_MULTIPLIER: Record<RiskMode, number> = {
@@ -282,6 +290,71 @@ type PreparedFeatures = {
   cartpaths: { x: number; y: number }[][];
 };
 
+type TeeCandidate = {
+  club: ClubId;
+  carry: number;
+  distance: number;
+  aimOffset: number;
+  aimDeg: number;
+  aimDegSigned: number;
+  aimDir: "LEFT" | "RIGHT" | "STRAIGHT";
+  risk: number;
+  combined: number;
+  remaining: number;
+  centerX: number;
+  sigmaLong: number;
+  sigmaLat: number;
+  sim?: SimOut;
+};
+
+type ApproachCandidate = {
+  aimOffset: number;
+  aimDeg: number;
+  aimDegSigned: number;
+  aimDir: "LEFT" | "RIGHT" | "STRAIGHT";
+  risk: number;
+  combined: number;
+  centerX: number;
+  sigmaLong: number;
+  sigmaLat: number;
+  sim?: SimOut;
+};
+
+const SIM_EPSILON = 1e-6;
+
+const normalizeSamples = (samples?: number): number => {
+  const value = Number(samples);
+  if (!Number.isFinite(value)) {
+    return 800;
+  }
+  const rounded = Math.round(value);
+  if (!Number.isFinite(rounded)) {
+    return 800;
+  }
+  return Math.max(32, Math.min(5000, rounded));
+};
+
+const isBetterSim = (
+  candidate: SimOut,
+  incumbent: SimOut,
+  rangeFitCandidate: number,
+  rangeFitIncumbent: number,
+): boolean => {
+  if (candidate.scoreProxy < incumbent.scoreProxy - SIM_EPSILON) {
+    return true;
+  }
+  if (candidate.scoreProxy > incumbent.scoreProxy + SIM_EPSILON) {
+    return false;
+  }
+  if (candidate.pFairway > incumbent.pFairway + SIM_EPSILON) {
+    return true;
+  }
+  if (candidate.pFairway + SIM_EPSILON < incumbent.pFairway) {
+    return false;
+  }
+  return rangeFitCandidate < rangeFitIncumbent - SIM_EPSILON;
+};
+
 const prepareFeatures = (bundle: CourseBundle | null, frame: Frame | null): PreparedFeatures => {
   if (!bundle || !frame || !Array.isArray(bundle.features)) {
     return { hazards: [], fairways: [], greens: [], cartpaths: [] };
@@ -327,6 +400,26 @@ const prepareFeatures = (bundle: CourseBundle | null, frame: Frame | null): Prep
     }
   }
   return { hazards, fairways, greens, cartpaths };
+};
+
+const buildSimFeatures = (prepared: PreparedFeatures): SimFeature[] => {
+  const features: SimFeature[] = [];
+  for (const fairway of prepared.fairways) {
+    if (fairway && fairway.length) {
+      features.push({ kind: "fairway", rings: [fairway] });
+    }
+  }
+  for (const green of prepared.greens) {
+    if (green && green.length) {
+      features.push({ kind: "green", rings: [green] });
+    }
+  }
+  for (const hazard of prepared.hazards) {
+    if (hazard?.kind === "polygon" && hazard.rings && hazard.rings.length) {
+      features.push({ kind: "hazard", rings: hazard.rings });
+    }
+  }
+  return features;
 };
 
 const ringContains = (point: { x: number; y: number }, ring: { x: number; y: number }[]): boolean => {
@@ -525,27 +618,48 @@ export function dispersionEllipseForClub(
   };
 }
 
-export function planTeeShot(args: TeePlanArgs): ShotPlan {
+type TeeMcOptions = {
+  useMC: boolean;
+  samples?: number;
+  seed?: number;
+};
+
+type ApproachMcOptions = {
+  useMC: boolean;
+  samples?: number;
+  seed?: number;
+};
+
+const createTeeFallback = (
+  args: TeePlanArgs,
+  reason: string,
+  wind?: { cross: number; head: number },
+): ShotPlan => {
+  const fallbackClub = CLUB_SEQUENCE[CLUB_SEQUENCE.length - 1];
+  return {
+    kind: "tee",
+    club: fallbackClub,
+    target: args.pin,
+    aimDeg: 0,
+    aimDirection: "STRAIGHT",
+    reason,
+    risk: 0,
+    landing: { distance_m: 0, lateral_m: 0 },
+    aim: { lateral_m: 0 },
+    mode: args.riskMode,
+    carry_m: 0,
+    crosswind_mps: wind?.cross ?? 0,
+    headwind_mps: wind?.head ?? 0,
+    windDrift_m: 0,
+    tuningActive: args.player.tuningActive,
+    mc: null,
+  };
+};
+
+const planTeeShotInternal = (args: TeePlanArgs, options: TeeMcOptions): ShotPlan => {
   const frame = buildFrame(args.tee, args.pin);
   if (!frame) {
-    const fallbackClub = CLUB_SEQUENCE[CLUB_SEQUENCE.length - 1];
-    return {
-      kind: "tee",
-      club: fallbackClub,
-      target: args.pin,
-      aimDeg: 0,
-      aimDirection: "STRAIGHT",
-      reason: "No course geometry available; aim straight at pin.",
-      risk: 0,
-      landing: { distance_m: 0, lateral_m: 0 },
-      aim: { lateral_m: 0 },
-      mode: args.riskMode,
-      carry_m: 0,
-      crosswind_mps: 0,
-      headwind_mps: 0,
-      windDrift_m: 0,
-      tuningActive: args.player.tuningActive,
-    };
+    return createTeeFallback(args, "No course geometry available; aim straight at pin.");
   }
   const prepared = prepareFeatures(args.bundle, frame);
   const par = args.par ?? inferPar(frame.pin.y);
@@ -555,25 +669,14 @@ export function planTeeShot(args: TeePlanArgs): ShotPlan {
     0,
   );
   const wind = resolveWind(args.wind ?? null, frame.headingDeg);
-  const candidates: {
-    club: ClubId;
-    carry: number;
-    distance: number;
-    aimOffset: number;
-    aimDeg: number;
-    aimDir: "LEFT" | "RIGHT" | "STRAIGHT";
-    risk: number;
-    combined: number;
-    remaining: number;
-    centerX: number;
-  }[] = [];
+  const candidates: TeeCandidate[] = [];
   for (const club of CLUB_SEQUENCE) {
     const stats = args.player.clubs[club];
     if (!stats || stats.carry_m <= 0) {
       continue;
     }
-    const longRadius = stats.sigma_long_m * RISK_MULTIPLIER[args.riskMode];
-    const latRadius = stats.sigma_lat_m * RISK_MULTIPLIER[args.riskMode];
+    const sigmaLong = stats.sigma_long_m * RISK_MULTIPLIER[args.riskMode];
+    const sigmaLat = stats.sigma_lat_m * RISK_MULTIPLIER[args.riskMode];
     const minDist = Math.max(MIN_DISTANCE, stats.carry_m * 0.9);
     const maxDist = Math.min(stats.carry_m * 1.1, frame.pin.y + 40);
     for (let distance = minDist; distance <= maxDist; distance += STEP_METERS) {
@@ -581,14 +684,19 @@ export function planTeeShot(args: TeePlanArgs): ShotPlan {
       const drift = lateralWindOffset(wind.cross, flightTime);
       for (const aimOffset of AIM_OFFSETS_TEE) {
         const centerX = aimOffset + drift;
-        const risk = ellipseOverlapRisk({
+        const hazardRisk = ellipseOverlapRisk({
           center: { x: centerX, y: distance },
-          longRadius_m: longRadius,
-          latRadius_m: latRadius,
+          longRadius_m: sigmaLong,
+          latRadius_m: sigmaLat,
           features: prepared.hazards,
         });
-        const fairway = fairwayPenalty({ x: centerX, y: distance }, longRadius, latRadius, prepared.fairways);
-        const totalRisk = clamp01(risk + fairway);
+        const fairwayRisk = fairwayPenalty(
+          { x: centerX, y: distance },
+          sigmaLong,
+          sigmaLat,
+          prepared.fairways,
+        );
+        const totalRisk = clamp01(hazardRisk + fairwayRisk);
         const remaining = Math.max(
           0,
           Math.hypot(frame.pin.x - centerX, frame.pin.y - distance),
@@ -597,39 +705,27 @@ export function planTeeShot(args: TeePlanArgs): ShotPlan {
         const combined = clamp01(totalRisk + viability);
         const aimDir = aimDirection(aimOffset);
         const aimDeg = aimMagnitudeDeg(aimOffset, distance);
+        const aimDegSigned = aimOffset < 0 ? -aimDeg : aimDeg;
         candidates.push({
           club,
           carry: stats.carry_m,
           distance,
           aimOffset,
           aimDeg,
+          aimDegSigned,
           aimDir,
           risk: totalRisk,
           combined,
           remaining,
           centerX,
+          sigmaLong,
+          sigmaLat,
         });
       }
     }
   }
   if (!candidates.length) {
-    return {
-      kind: "tee",
-      club: CLUB_SEQUENCE[CLUB_SEQUENCE.length - 1],
-      target: args.pin,
-      aimDeg: 0,
-      aimDirection: "STRAIGHT",
-      reason: "No candidates available; defaulting to straight shot.",
-      risk: 0,
-      landing: { distance_m: 0, lateral_m: 0 },
-      aim: { lateral_m: 0 },
-      mode: args.riskMode,
-      carry_m: 0,
-      crosswind_mps: wind.cross,
-      headwind_mps: wind.head,
-      windDrift_m: 0,
-      tuningActive: args.player.tuningActive,
-    };
+    return createTeeFallback(args, "No candidates available; defaulting to straight shot.", wind);
   }
   const idealRemaining = par <= 3 ? 0 : par === 4 ? 140 : goForGreen ? 0 : 170;
   candidates.sort((a, b) => {
@@ -643,7 +739,43 @@ export function planTeeShot(args: TeePlanArgs): ShotPlan {
     }
     return a.distance - b.distance;
   });
-  const best = candidates[0];
+  let best = candidates[0];
+  let mcResult: (SimOut & { samples: number }) | null = null;
+  if (options.useMC) {
+    const sampleCount = normalizeSamples(options.samples);
+    const simFeatures = buildSimFeatures(prepared);
+    const limit = Math.min(5, candidates.length);
+    let bestSim: SimOut | null = null;
+    for (let i = 0; i < limit; i += 1) {
+      const candidate = candidates[i];
+      const sim = runSim({
+        samples: sampleCount,
+        seed: options.seed !== undefined ? options.seed + i : undefined,
+        windCross_mps: wind.cross,
+        windHead_mps: wind.head,
+        longSigma_m: candidate.sigmaLong,
+        latSigma_m: candidate.sigmaLat,
+        range_m: candidate.distance,
+        aimDeg: candidate.aimDegSigned,
+        features: simFeatures,
+      });
+      candidate.sim = sim;
+      if (!bestSim) {
+        bestSim = sim;
+        best = candidate;
+        continue;
+      }
+      const candidateFit = Math.abs(candidate.remaining - idealRemaining);
+      const incumbentFit = Math.abs(best.remaining - idealRemaining);
+      if (isBetterSim(sim, bestSim, candidateFit, incumbentFit)) {
+        bestSim = sim;
+        best = candidate;
+      }
+    }
+    if (bestSim) {
+      mcResult = { ...bestSim, samples: sampleCount };
+    }
+  }
   const targetLocal = {
     x: best.aimOffset,
     y: best.distance,
@@ -652,7 +784,6 @@ export function planTeeShot(args: TeePlanArgs): ShotPlan {
     x: targetLocal.x * frame.cos + targetLocal.y * frame.sin,
     y: -targetLocal.x * frame.sin + targetLocal.y * frame.cos,
   });
-  const riskPercent = Math.round(best.risk * 100);
   const remainingLabel = Math.round(best.remaining);
   const reasonParts: string[] = [];
   reasonParts.push(`Leaves ${remainingLabel} m for next shot.`);
@@ -662,7 +793,14 @@ export function planTeeShot(args: TeePlanArgs): ShotPlan {
   if (Math.abs(best.centerX) > 3) {
     reasonParts.push(`Expected lateral drift ${best.centerX.toFixed(1)} m.`);
   }
-  reasonParts.push(`Risk approx ${riskPercent}%.`);
+  if (mcResult) {
+    reasonParts.push(
+      `MC fairway ${(mcResult.pFairway * 100).toFixed(0)}%, hazard ${(mcResult.pHazard * 100).toFixed(0)}%.`,
+    );
+  } else {
+    const riskPercent = Math.round(best.risk * 100);
+    reasonParts.push(`Risk approx ${riskPercent}%.`);
+  }
   return {
     kind: "tee",
     club: best.club,
@@ -670,7 +808,7 @@ export function planTeeShot(args: TeePlanArgs): ShotPlan {
     aimDeg: best.aimDeg,
     aimDirection: best.aimDir,
     reason: reasonParts.join(" "),
-    risk: best.combined,
+    risk: mcResult ? mcResult.scoreProxy : best.combined,
     landing: { distance_m: best.distance, lateral_m: best.centerX },
     aim: { lateral_m: best.aimOffset },
     mode: args.riskMode,
@@ -679,66 +817,85 @@ export function planTeeShot(args: TeePlanArgs): ShotPlan {
     headwind_mps: wind.head,
     windDrift_m: best.centerX - best.aimOffset,
     tuningActive: args.player.tuningActive,
+    mc: options.useMC ? mcResult : null,
   };
+};
+
+export function planTeeShot(args: TeePlanArgs): ShotPlan {
+  return planTeeShotInternal(args, { useMC: false });
 }
 
-export function planApproach(args: ApproachPlanArgs): ShotPlan {
+export function planTeeShotMC(args: TeePlanArgs): ShotPlan {
+  if (!args.useMC) {
+    return planTeeShot(args);
+  }
+  return planTeeShotInternal(args, {
+    useMC: true,
+    samples: args.mcSamples,
+    seed: args.mcSeed,
+  });
+}
+
+const createApproachFallback = (args: ApproachPlanArgs, reason: string): ShotPlan => {
+  const fallbackClub = selectClubForDistance(0, args.player);
+  return {
+    kind: "approach",
+    club: fallbackClub,
+    target: args.pin,
+    aimDeg: 0,
+    aimDirection: "STRAIGHT",
+    reason,
+    risk: 0,
+    landing: { distance_m: 0, lateral_m: 0 },
+    aim: { lateral_m: 0 },
+    mode: args.riskMode,
+    carry_m: 0,
+    crosswind_mps: 0,
+    headwind_mps: 0,
+    windDrift_m: 0,
+    tuningActive: args.player.tuningActive,
+    mc: null,
+  };
+};
+
+const planApproachInternal = (args: ApproachPlanArgs, options: ApproachMcOptions): ShotPlan => {
   const frame = buildFrame(args.ball, args.pin);
   if (!frame) {
-    const fallbackClub = selectClubForDistance(0, args.player);
-    return {
-      kind: "approach",
-      club: fallbackClub,
-      target: args.pin,
-      aimDeg: 0,
-      aimDirection: "STRAIGHT",
-      reason: "No geometry available; play straight at pin.",
-      risk: 0,
-      landing: { distance_m: 0, lateral_m: 0 },
-      aim: { lateral_m: 0 },
-      mode: args.riskMode,
-      carry_m: 0,
-      crosswind_mps: 0,
-      headwind_mps: 0,
-      windDrift_m: 0,
-      tuningActive: args.player.tuningActive,
-    };
+    return createApproachFallback(args, "No geometry available; play straight at pin.");
   }
   const prepared = prepareFeatures(args.bundle, frame);
   const distance = Math.max(0, frame.pin.y);
   const preferredClub = args.preferredClub ?? selectClubForDistance(distance, args.player);
   const stats = args.player.clubs[preferredClub] ?? args.player.clubs[CLUB_SEQUENCE[0]]!;
-  const longRadius = stats.sigma_long_m * RISK_MULTIPLIER[args.riskMode];
-  const latRadius = stats.sigma_lat_m * RISK_MULTIPLIER[args.riskMode];
+  const sigmaLong = stats.sigma_long_m * RISK_MULTIPLIER[args.riskMode];
+  const sigmaLat = stats.sigma_lat_m * RISK_MULTIPLIER[args.riskMode];
   const wind = resolveWind(args.wind ?? null, frame.headingDeg);
-  const flightTime = estimateFlightTime(distance || stats.carry_m);
+  const rangeForSim = distance || stats.carry_m;
+  const flightTime = estimateFlightTime(rangeForSim);
   const drift = lateralWindOffset(wind.cross, flightTime);
-  const candidates: {
-    aimOffset: number;
-    aimDeg: number;
-    aimDir: "LEFT" | "RIGHT" | "STRAIGHT";
-    risk: number;
-    combined: number;
-    centerX: number;
-  }[] = [];
+  const candidates: ApproachCandidate[] = [];
   for (const aimOffset of AIM_OFFSETS_APPROACH) {
     const centerX = aimOffset + drift;
     const hazardRisk = ellipseOverlapRisk({
       center: { x: centerX, y: distance },
-      longRadius_m: longRadius,
-      latRadius_m: latRadius,
+      longRadius_m: sigmaLong,
+      latRadius_m: sigmaLat,
       features: prepared.hazards,
     });
-    const greenRisk = greenPenalty({ x: centerX, y: distance }, longRadius, latRadius, prepared.greens);
+    const greenRisk = greenPenalty({ x: centerX, y: distance }, sigmaLong, sigmaLat, prepared.greens);
     const combined = clamp01(hazardRisk + greenRisk);
-    const aimDeg = aimMagnitudeDeg(aimOffset, distance || stats.carry_m);
+    const aimDeg = aimMagnitudeDeg(aimOffset, rangeForSim);
+    const aimDegSigned = aimOffset < 0 ? -aimDeg : aimDeg;
     candidates.push({
       aimOffset,
       aimDeg,
+      aimDegSigned,
       aimDir: aimDirection(aimOffset),
       risk: hazardRisk,
       combined,
       centerX,
+      sigmaLong,
+      sigmaLat,
     });
   }
   candidates.sort((a, b) => {
@@ -752,7 +909,43 @@ export function planApproach(args: ApproachPlanArgs): ShotPlan {
     }
     return a.aimOffset - b.aimOffset;
   });
-  const best = candidates[0];
+  let best = candidates[0];
+  let mcResult: (SimOut & { samples: number }) | null = null;
+  if (options.useMC) {
+    const sampleCount = normalizeSamples(options.samples);
+    const simFeatures = buildSimFeatures(prepared);
+    const limit = Math.min(3, candidates.length);
+    let bestSim: SimOut | null = null;
+    for (let i = 0; i < limit; i += 1) {
+      const candidate = candidates[i];
+      const sim = runSim({
+        samples: sampleCount,
+        seed: options.seed !== undefined ? options.seed + i : undefined,
+        windCross_mps: wind.cross,
+        windHead_mps: wind.head,
+        longSigma_m: candidate.sigmaLong,
+        latSigma_m: candidate.sigmaLat,
+        range_m: rangeForSim,
+        aimDeg: candidate.aimDegSigned,
+        features: simFeatures,
+      });
+      candidate.sim = sim;
+      if (!bestSim) {
+        bestSim = sim;
+        best = candidate;
+        continue;
+      }
+      const candidateFit = Math.abs(candidate.aimOffset);
+      const incumbentFit = Math.abs(best.aimOffset);
+      if (isBetterSim(sim, bestSim, candidateFit, incumbentFit)) {
+        bestSim = sim;
+        best = candidate;
+      }
+    }
+    if (bestSim) {
+      mcResult = { ...bestSim, samples: sampleCount };
+    }
+  }
   const targetLocal = { x: best.aimOffset, y: distance };
   const targetGeo = fromLocal(args.ball, {
     x: targetLocal.x * frame.cos + targetLocal.y * frame.sin,
@@ -764,8 +957,17 @@ export function planApproach(args: ApproachPlanArgs): ShotPlan {
   } else {
     reasonParts.push("Play center of green.");
   }
-  const missLabel = best.combined > 0.4 ? "High risk – bail out." : `Risk ≈ ${Math.round(best.combined * 100)}%.`;
+  const riskValue = mcResult ? mcResult.scoreProxy : best.combined;
+  const missLabel = riskValue > 0.4 ? "High risk – bail out." : `Risk ≈ ${Math.round(riskValue * 100)}%.`;
   reasonParts.push(missLabel);
+  if (mcResult) {
+    const mcParts: string[] = [];
+    if (typeof mcResult.pGreen === "number") {
+      mcParts.push(`green ${(mcResult.pGreen * 100).toFixed(0)}%`);
+    }
+    mcParts.push(`hazard ${(mcResult.pHazard * 100).toFixed(0)}%`);
+    reasonParts.push(`MC ${mcParts.join(", ")}.`);
+  }
   return {
     kind: "approach",
     club: preferredClub,
@@ -773,7 +975,7 @@ export function planApproach(args: ApproachPlanArgs): ShotPlan {
     aimDeg: best.aimDeg,
     aimDirection: best.aimDir,
     reason: reasonParts.join(" "),
-    risk: best.combined,
+    risk: riskValue,
     landing: { distance_m: distance, lateral_m: best.centerX },
     aim: { lateral_m: best.aimOffset },
     mode: args.riskMode,
@@ -782,7 +984,23 @@ export function planApproach(args: ApproachPlanArgs): ShotPlan {
     headwind_mps: wind.head,
     windDrift_m: best.centerX - best.aimOffset,
     tuningActive: args.player.tuningActive,
+    mc: options.useMC ? mcResult : null,
   };
+};
+
+export function planApproach(args: ApproachPlanArgs): ShotPlan {
+  return planApproachInternal(args, { useMC: false });
+}
+
+export function planApproachMC(args: ApproachPlanArgs): ShotPlan {
+  if (!args.useMC) {
+    return planApproach(args);
+  }
+  return planApproachInternal(args, {
+    useMC: true,
+    samples: args.mcSamples,
+    seed: args.mcSeed,
+  });
 }
 
 export { buildPlayerModel };
