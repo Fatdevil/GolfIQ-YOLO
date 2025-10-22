@@ -181,10 +181,14 @@ test('prepareFeatures ignores non-cartpath lines for hazards', () => {
 
   const prepared = prepareFeatures(bundle, frame);
 
-  assert.ok(prepared.hazards.length > 0, 'polygon hazards should be preserved');
+  assert.strictEqual(prepared.hazards.length, 1, 'only polygon hazard should be recorded');
   assert.ok(
     prepared.hazards.every((feature) => feature.kind === 'polygon'),
     'hazards should not contain polyline entries',
+  );
+  assert.ok(
+    !JSON.stringify(prepared.hazards).includes('LineString'),
+    'hazard payload must omit LineString geometries',
   );
   assert.ok(prepared.cartpaths.length === 1, 'cartpath line should be captured exactly once');
 });

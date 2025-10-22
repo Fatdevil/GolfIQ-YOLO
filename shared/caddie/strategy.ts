@@ -300,19 +300,19 @@ const prepareFeatures = (bundle: CourseBundle | null, frame: Frame | null): Prep
       continue;
     }
     const normalizedType = geomType.toLowerCase();
-    const isPolygon = normalizedType === "polygon" || normalizedType === "multipolygon";
+    const isPoly = normalizedType === "polygon" || normalizedType === "multipolygon";
     const isLine = normalizedType === "linestring" || normalizedType === "multilinestring";
-    if (domType === "fairway" && isPolygon) {
+    if (domType === "fairway" && isPoly) {
       const rings = collectPolygonRings(frame, raw.geometry ?? {});
       if (rings.length) {
         fairways.push(...rings);
       }
-    } else if (domType === "green" && isPolygon) {
+    } else if (domType === "green" && isPoly) {
       const rings = collectPolygonRings(frame, raw.geometry ?? {});
       if (rings.length) {
         greens.push(...rings);
       }
-    } else if ((domType === "hazard" || domType === "water" || domType === "bunker") && isPolygon) {
+    } else if ((domType === "hazard" || domType === "water" || domType === "bunker") && isPoly) {
       const rings = collectPolygonRings(frame, raw.geometry ?? {});
       if (rings.length) {
         hazards.push({ kind: "polygon", rings, penalty: hazardPenalty(domType) });
@@ -322,6 +322,8 @@ const prepareFeatures = (bundle: CourseBundle | null, frame: Frame | null): Prep
       for (const line of lines) {
         cartpaths.push(line);
       }
+    } else {
+      continue;
     }
   }
   return { hazards, fairways, greens, cartpaths };
