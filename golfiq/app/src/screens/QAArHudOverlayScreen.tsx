@@ -9,6 +9,8 @@ import {
   ActivityIndicator,
   Animated,
   Easing,
+  LayoutChangeEvent,
+  PanResponder,
   ScrollView,
   StyleSheet,
   Switch,
@@ -80,7 +82,9 @@ import {
 import { buildPlayerModel } from '../../../../shared/caddie/player_model';
 import {
   planApproach,
+  planApproachMC,
   planTeeShot,
+  planTeeShotMC,
   type RiskMode as CaddieRiskMode,
   type ShotPlan as CaddieShotPlan,
 } from '../../../../shared/caddie/strategy';
@@ -146,6 +150,10 @@ const FEATURE_STROKES: Record<FeatureKind, number> = {
   other: 3,
 };
 
+const MC_SAMPLES_MIN = 200;
+const MC_SAMPLES_MAX = 1200;
+const MC_SAMPLES_STEP = 50;
+
 const CADDIE_RISK_OPTIONS: readonly CaddieRiskMode[] = ['safe', 'normal', 'aggressive'];
 const CADDIE_RISK_LABELS: Record<CaddieRiskMode, string> = {
   safe: 'Safe',
@@ -173,6 +181,16 @@ const COACH_LANGUAGE_OPTIONS: ReadonlyArray<{ value: CoachStyle['language']; lab
 ];
 
 const EARTH_RADIUS_M = 6_378_137;
+
+const clamp01 = (value: number): number => Math.max(0, Math.min(1, value));
+
+const formatSignedMeters = (value: number): string => {
+  if (!Number.isFinite(value)) {
+    return '0.0 m';
+  }
+  const sign = value >= 0 ? '+' : '';
+  return `${sign}${value.toFixed(1)} m`;
+};
 
 type TelemetryEmitter = (event: string, data: Record<string, unknown>) => void;
 
@@ -1262,6 +1280,52 @@ const QAArHudOverlayScreen: React.FC = () => {
   const [coachStyle, setCoachStyle] = useState<CoachStyle>(defaultCoachStyle);
   const [caddieRiskMode, setCaddieRiskMode] = useState<CaddieRiskMode>('normal');
   const [caddieGoForGreen, setCaddieGoForGreen] = useState(false);
+  const [caddieUseMC, setCaddieUseMC] = useState(true);
+  const [caddieSamples, setCaddieSamples] = useState(800);
+  const [mcSliderWidth, setMcSliderWidth] = useState(1);
+  const mcSliderMetricsRef = useRef<{ left: number }>({ left: 0 });
+  const lastMcTelemetryRef = useRef<string | null>(null);
+
+  const updateSamplesFromValue = useCallback((value: number) => {
+    const clamped = Math.max(MC_SAMPLES_MIN, Math.min(MC_SAMPLES_MAX, value));
+    const stepped = Math.round(clamped / MC_SAMPLES_STEP) * MC_SAMPLES_STEP;
+    setCaddieSamples(stepped);
+  }, []);
+
+  const updateSamplesFromPageX = useCallback(
+    (pageX: number) => {
+      const width = mcSliderWidth;
+      if (width <= 0) {
+        return;
+      }
+      const left = mcSliderMetricsRef.current.left;
+      const relative = Math.max(0, Math.min(width, pageX - left));
+      const ratio = relative / width;
+      const raw = MC_SAMPLES_MIN + ratio * (MC_SAMPLES_MAX - MC_SAMPLES_MIN);
+      updateSamplesFromValue(raw);
+    },
+    [mcSliderWidth, updateSamplesFromValue],
+  );
+
+  const mcPanResponder = useMemo(
+    () =>
+      PanResponder.create({
+        onStartShouldSetPanResponder: () => true,
+        onPanResponderGrant: (event) => {
+          mcSliderMetricsRef.current.left = event.nativeEvent.pageX - event.nativeEvent.locationX;
+          updateSamplesFromPageX(event.nativeEvent.pageX);
+        },
+        onPanResponderMove: (event) => {
+          updateSamplesFromPageX(event.nativeEvent.pageX);
+        },
+      }),
+    [updateSamplesFromPageX],
+  );
+
+  const handleSliderLayout = useCallback((event: LayoutChangeEvent) => {
+    const width = Math.max(1, event.nativeEvent.layout.width);
+    setMcSliderWidth(width);
+  }, []);
 
   const applyCoachStyle = useCallback((patch: Partial<CoachStyle>) => {
     setCoachStyle((prev) => {
@@ -1795,7 +1859,7 @@ const QAArHudOverlayScreen: React.FC = () => {
     return distance > 220 ? 'tee' : 'approach';
   }, [pinMetrics?.distance]);
   const caddiePlan = useMemo<CaddieShotPlan | null>(() => {
-    if (!playerLatLon || !pin) {
+    if (!bundle || !playerLatLon || !pin) {
       return null;
     }
     const wind = {
@@ -1803,6 +1867,20 @@ const QAArHudOverlayScreen: React.FC = () => {
       from_deg: plannerInputs.wind_from_deg,
     };
     if (caddieScenario === 'tee') {
+      if (caddieUseMC) {
+        return planTeeShotMC({
+          bundle,
+          tee: playerLatLon,
+          pin,
+          player: caddiePlayerModel,
+          riskMode: caddieRiskMode,
+          wind,
+          slope_dh_m: plannerInputs.slope_dh_m,
+          goForGreen: likelyPar5 && caddieGoForGreen,
+          useMC: true,
+          mcSamples: caddieSamples,
+        });
+      }
       return planTeeShot({
         bundle,
         tee: playerLatLon,
@@ -1812,6 +1890,19 @@ const QAArHudOverlayScreen: React.FC = () => {
         wind,
         slope_dh_m: plannerInputs.slope_dh_m,
         goForGreen: likelyPar5 && caddieGoForGreen,
+      });
+    }
+    if (caddieUseMC) {
+      return planApproachMC({
+        bundle,
+        ball: playerLatLon,
+        pin,
+        player: caddiePlayerModel,
+        riskMode: caddieRiskMode,
+        wind,
+        slope_dh_m: plannerInputs.slope_dh_m,
+        useMC: true,
+        mcSamples: caddieSamples,
       });
     }
     return planApproach({
@@ -1826,8 +1917,10 @@ const QAArHudOverlayScreen: React.FC = () => {
   }, [
     bundle,
     caddieGoForGreen,
+    caddieSamples,
     caddiePlayerModel,
     caddieRiskMode,
+    caddieUseMC,
     caddieScenario,
     likelyPar5,
     pin,
@@ -1836,6 +1929,22 @@ const QAArHudOverlayScreen: React.FC = () => {
     plannerInputs.wind_mps,
     playerLatLon,
   ]);
+  const sliderHandleSize = 18;
+  const sliderProgress = clamp01(
+    (caddieSamples - MC_SAMPLES_MIN) / (MC_SAMPLES_MAX - MC_SAMPLES_MIN),
+  );
+  const sliderFillWidth = sliderProgress * mcSliderWidth;
+  const sliderHandleLeft = Math.min(
+    Math.max(0, sliderFillWidth - sliderHandleSize / 2),
+    Math.max(0, mcSliderWidth - sliderHandleSize),
+  );
+  const mcResult = caddiePlan?.mc ?? null;
+  const mcFairwayPct = mcResult ? Math.round(clamp01(mcResult.pFairway) * 100) : 0;
+  const mcHazardPct = mcResult ? Math.round(clamp01(mcResult.pHazard) * 100) : 0;
+  const mcGreenPct =
+    mcResult && typeof mcResult.pGreen === 'number'
+      ? Math.round(clamp01(mcResult.pGreen) * 100)
+      : null;
   const caddieTips = useMemo(
     () =>
       caddiePlan
@@ -1851,6 +1960,38 @@ const QAArHudOverlayScreen: React.FC = () => {
         : [],
     [caddiePlan, caddiePlayerModel.tuningActive, caddieRiskMode, coachStyle],
   );
+  useEffect(() => {
+    if (!caddieUseMC || !mcResult) {
+      if (!caddieUseMC) {
+        lastMcTelemetryRef.current = null;
+      }
+      return;
+    }
+    const signedAim =
+      caddiePlan?.aimDirection === 'LEFT'
+        ? -caddiePlan.aimDeg
+        : caddiePlan?.aimDirection === 'RIGHT'
+          ? caddiePlan.aimDeg
+          : 0;
+    const key = [
+      caddiePlan?.club ?? 'NA',
+      mcResult.samples,
+      mcResult.scoreProxy.toFixed(3),
+      signedAim.toFixed(1),
+    ].join('|');
+    if (lastMcTelemetryRef.current === key) {
+      return;
+    }
+    lastMcTelemetryRef.current = key;
+    emitTelemetry('hud.caddie.mc', {
+      samples: mcResult.samples,
+      pFairway: Number(mcResult.pFairway.toFixed(3)),
+      pHazard: Number(mcResult.pHazard.toFixed(3)),
+      scoreProxy: Number(mcResult.scoreProxy.toFixed(3)),
+      club: caddiePlan?.club ?? 'NA',
+      aimDeg: signedAim,
+    });
+  }, [caddiePlan, caddieUseMC, emitTelemetry, mcResult]);
   const caddieAdvices = useMemo<Advice[]>(() => {
     if (!caddiePlan) {
       return [];
@@ -3039,6 +3180,30 @@ const QAArHudOverlayScreen: React.FC = () => {
             ) : null}
           </View>
           <View style={styles.caddieToggleRow}>
+            <Text style={styles.caddieToggleLabel}>Monte Carlo</Text>
+            <Switch value={caddieUseMC} onValueChange={setCaddieUseMC} />
+          </View>
+          {caddieUseMC ? (
+            <View style={styles.mcControls}>
+              <View style={styles.mcSamplesHeader}>
+                <Text style={styles.mcSamplesLabel}>Samples</Text>
+                <Text style={styles.mcSamplesValue}>{caddieSamples}</Text>
+              </View>
+              <View
+                style={styles.mcSliderTrack}
+                onLayout={handleSliderLayout}
+                {...mcPanResponder.panHandlers}
+              >
+                <View style={[styles.mcSliderFill, { width: sliderFillWidth }]} />
+                <View style={[styles.mcSliderHandle, { left: sliderHandleLeft }]} />
+              </View>
+              <View style={styles.mcSamplesTicks}>
+                <Text style={styles.mcSamplesTickLabel}>{MC_SAMPLES_MIN}</Text>
+                <Text style={styles.mcSamplesTickLabel}>{MC_SAMPLES_MAX}</Text>
+              </View>
+            </View>
+          ) : null}
+          <View style={styles.caddieToggleRow}>
             <Text style={styles.caddieToggleLabel}>Go for green</Text>
             <Switch
               value={caddieGoForGreen && likelyPar5}
@@ -3061,6 +3226,61 @@ const QAArHudOverlayScreen: React.FC = () => {
                       <Text style={styles.caddieAdviceText}>{line}</Text>
                     </View>
                   ))}
+                </View>
+              ) : null}
+              {caddieUseMC && mcResult ? (
+                <View style={styles.mcStatsBlock}>
+                  <View style={styles.mcBarRow}>
+                    <Text style={styles.mcBarLabel}>Fairway</Text>
+                    <View style={styles.mcBarTrack}>
+                      <View
+                        style={[
+                          styles.mcBarFill,
+                          styles.mcBarFillPositive,
+                          { width: `${mcFairwayPct}%` },
+                        ]}
+                      />
+                    </View>
+                    <Text style={styles.mcBarValue}>{mcFairwayPct}%</Text>
+                  </View>
+                  <View style={styles.mcBarRow}>
+                    <Text style={styles.mcBarLabel}>Hazard</Text>
+                    <View style={styles.mcBarTrack}>
+                      <View
+                        style={[
+                          styles.mcBarFill,
+                          styles.mcBarFillNegative,
+                          { width: `${mcHazardPct}%` },
+                        ]}
+                      />
+                    </View>
+                    <Text style={styles.mcBarValue}>{mcHazardPct}%</Text>
+                  </View>
+                  {mcGreenPct !== null ? (
+                    <View style={styles.mcBarRow}>
+                      <Text style={styles.mcBarLabel}>Green</Text>
+                      <View style={styles.mcBarTrack}>
+                        <View
+                          style={[
+                            styles.mcBarFill,
+                            styles.mcBarFillPositive,
+                            { width: `${mcGreenPct}%` },
+                          ]}
+                        />
+                      </View>
+                      <Text style={styles.mcBarValue}>{mcGreenPct}%</Text>
+                    </View>
+                  ) : null}
+                  <View style={styles.mcMissRow}>
+                    <Text style={styles.mcMissLabel}>Long</Text>
+                    <Text style={styles.mcMissValue}>
+                      {formatSignedMeters(mcResult.expLongMiss_m)}
+                    </Text>
+                    <Text style={styles.mcMissLabel}>Lat</Text>
+                    <Text style={styles.mcMissValue}>
+                      {formatSignedMeters(mcResult.expLatMiss_m)}
+                    </Text>
+                  </View>
                 </View>
               ) : null}
             </View>
@@ -3884,6 +4104,55 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '600',
   },
+  mcControls: {
+    marginTop: 8,
+    gap: 8,
+  },
+  mcSamplesHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  mcSamplesLabel: {
+    color: '#cbd5f5',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  mcSamplesValue: {
+    color: '#f8fafc',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  mcSliderTrack: {
+    position: 'relative',
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#1e293b',
+    overflow: 'hidden',
+  },
+  mcSliderFill: {
+    height: '100%',
+    backgroundColor: '#38bdf8',
+  },
+  mcSliderHandle: {
+    position: 'absolute',
+    top: -5,
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: '#f8fafc',
+    borderWidth: 1,
+    borderColor: '#0f172a',
+  },
+  mcSamplesTicks: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  mcSamplesTickLabel: {
+    color: '#64748b',
+    fontSize: 10,
+    fontWeight: '600',
+  },
   caddiePlanBlock: {
     gap: 6,
   },
@@ -3914,6 +4183,65 @@ const styles = StyleSheet.create({
     color: '#f8fafc',
     fontSize: 11,
     fontWeight: '600',
+  },
+  mcStatsBlock: {
+    marginTop: 8,
+    paddingTop: 6,
+    borderTopWidth: 1,
+    borderTopColor: '#1e293b',
+    gap: 6,
+  },
+  mcBarRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  mcBarLabel: {
+    width: 60,
+    color: '#cbd5f5',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  mcBarTrack: {
+    flex: 1,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#1e293b',
+    overflow: 'hidden',
+  },
+  mcBarFill: {
+    height: '100%',
+    borderRadius: 4,
+  },
+  mcBarFillPositive: {
+    backgroundColor: '#10b981',
+  },
+  mcBarFillNegative: {
+    backgroundColor: '#ef4444',
+  },
+  mcBarValue: {
+    width: 40,
+    textAlign: 'right',
+    color: '#cbd5f5',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  mcMissRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 4,
+  },
+  mcMissLabel: {
+    color: '#94a3b8',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  mcMissValue: {
+    color: '#f8fafc',
+    fontSize: 12,
+    fontWeight: '600',
+    fontVariant: ['tabular-nums'],
   },
   caddieApplyButton: {
     marginTop: 4,
