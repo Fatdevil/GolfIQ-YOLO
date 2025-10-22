@@ -84,6 +84,7 @@ import {
   type RiskMode as CaddieRiskMode,
   type ShotPlan as CaddieShotPlan,
 } from '../../../../shared/caddie/strategy';
+import { defaultCoachStyle, loadCoachStyle, saveCoachStyle, type CoachStyle, type CoachTone, type CoachVerbosity } from '../../../../shared/caddie/style';
 import { caddieTipToText } from '../../../../shared/caddie/text';
 import { buildGhostTelemetryKey } from './utils/ghostTelemetry';
 
@@ -150,6 +151,25 @@ const CADDIE_RISK_LABELS: Record<CaddieRiskMode, string> = {
   normal: 'Normal',
   aggressive: 'Aggro',
 };
+
+const COACH_TONE_OPTIONS: readonly CoachTone[] = ['concise', 'neutral', 'pep'];
+const COACH_TONE_LABELS: Record<CoachTone, string> = {
+  concise: 'Concise',
+  neutral: 'Neutral',
+  pep: 'Pep',
+};
+
+const COACH_VERBOSITY_OPTIONS: readonly CoachVerbosity[] = ['short', 'normal', 'detailed'];
+const COACH_VERBOSITY_LABELS: Record<CoachVerbosity, string> = {
+  short: 'Short',
+  normal: 'Normal',
+  detailed: 'Detailed',
+};
+
+const COACH_LANGUAGE_OPTIONS: ReadonlyArray<{ value: CoachStyle['language']; label: string }> = [
+  { value: 'sv', label: 'SV' },
+  { value: 'en', label: 'EN' },
+];
 
 const EARTH_RADIUS_M = 6_378_137;
 
@@ -1238,8 +1258,33 @@ const QAArHudOverlayScreen: React.FC = () => {
   const [calibrationMessage, setCalibrationMessage] = useState<string | null>(null);
   const [landingProposal, setLandingProposal] = useState<LandingProposal | null>(null);
   const [landingState, setLandingState] = useState<AutoLandingState>('IDLE');
+  const [coachStyle, setCoachStyle] = useState<CoachStyle>(defaultCoachStyle);
   const [caddieRiskMode, setCaddieRiskMode] = useState<CaddieRiskMode>('normal');
   const [caddieGoForGreen, setCaddieGoForGreen] = useState(false);
+
+  const applyCoachStyle = useCallback((patch: Partial<CoachStyle>) => {
+    setCoachStyle((prev) => {
+      const nextBase = { ...prev, ...patch };
+      const next = nextBase.tone === 'pep' ? nextBase : { ...nextBase, emoji: false };
+      void saveCoachStyle(next);
+      return next;
+    });
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+    loadCoachStyle()
+      .then((stored) => {
+        if (!active) {
+          return;
+        }
+        setCoachStyle({ ...stored, emoji: stored.emoji ?? false });
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, []);
 
   useEffect(() => {
     resumePendingUploads().catch(() => {});
@@ -1793,13 +1838,17 @@ const QAArHudOverlayScreen: React.FC = () => {
   const caddieTips = useMemo(
     () =>
       caddiePlan
-        ? caddieTipToText(caddiePlan, {
-            mode: caddieRiskMode,
-            wind: { cross_mps: caddiePlan.crosswind_mps, head_mps: caddiePlan.headwind_mps },
-            tuningActive: caddiePlayerModel.tuningActive,
-          })
+        ? caddieTipToText(
+            caddiePlan,
+            {
+              mode: caddieRiskMode,
+              wind: { cross_mps: caddiePlan.crosswind_mps, head_mps: caddiePlan.headwind_mps },
+              tuningActive: caddiePlayerModel.tuningActive,
+            },
+            coachStyle,
+          )
         : [],
-    [caddiePlan, caddiePlayerModel.tuningActive, caddieRiskMode],
+    [caddiePlan, caddiePlayerModel.tuningActive, caddieRiskMode, coachStyle],
   );
   const caddieTitle = caddieScenario === 'tee' ? 'Tee plan' : 'Next shot';
   useEffect(() => {
@@ -1825,9 +1874,14 @@ const QAArHudOverlayScreen: React.FC = () => {
       aimDeg: signedAim,
       D: Number(caddiePlan.landing.distance_m.toFixed(1)),
       mode: caddiePlan.mode,
+      tone: coachStyle.tone,
+      verbosity: coachStyle.verbosity,
+      language: coachStyle.language,
+      emoji: Boolean(coachStyle.emoji),
+      format: coachStyle.format,
     });
     lastCaddiePlanRef.current = key;
-  }, [caddiePlan, emitTelemetry]);
+  }, [caddiePlan, coachStyle, emitTelemetry]);
   const [cameraStats, setCameraStats] = useState<CameraStats>({ latency: 0, fps: 0 });
   const telemetryRef = useRef<TelemetryEmitter | null>(resolveTelemetryEmitter());
   const shotIdCounterRef = useRef(0);
@@ -2063,8 +2117,13 @@ const QAArHudOverlayScreen: React.FC = () => {
       D: Number(caddiePlan.landing.distance_m.toFixed(1)),
       mode: caddiePlan.mode,
       applied: true,
+      tone: coachStyle.tone,
+      verbosity: coachStyle.verbosity,
+      language: coachStyle.language,
+      emoji: Boolean(coachStyle.emoji),
+      format: coachStyle.format,
     });
-  }, [caddiePlan, emitTelemetry, setPlannerExpanded, setPlannerResult]);
+  }, [caddiePlan, coachStyle, emitTelemetry, setPlannerExpanded, setPlannerResult]);
 
   useEffect(() => {
     if (!qaEnabled) {
@@ -2810,6 +2869,98 @@ const QAArHudOverlayScreen: React.FC = () => {
                 </Text>
               </TouchableOpacity>
             ))}
+          </View>
+          <View style={styles.caddieStyleGrid}>
+            <View style={styles.caddieStyleBlock}>
+              <Text style={styles.caddieStyleLabel}>Tone</Text>
+              <View style={styles.caddieStyleRow}>
+                {COACH_TONE_OPTIONS.map((tone) => (
+                  <TouchableOpacity
+                    key={tone}
+                    onPress={() => applyCoachStyle({ tone })}
+                    style={[
+                      styles.caddieStyleOption,
+                      coachStyle.tone === tone ? styles.caddieStyleOptionActive : null,
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.caddieStyleOptionText,
+                        coachStyle.tone === tone ? styles.caddieStyleOptionTextActive : null,
+                      ]}
+                    >
+                      {COACH_TONE_LABELS[tone]}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
+            <View style={styles.caddieStyleBlock}>
+              <Text style={styles.caddieStyleLabel}>Verbosity</Text>
+              <View style={styles.caddieStyleRow}>
+                {COACH_VERBOSITY_OPTIONS.map((verbosity) => (
+                  <TouchableOpacity
+                    key={verbosity}
+                    onPress={() => applyCoachStyle({ verbosity })}
+                    style={[
+                      styles.caddieStyleOption,
+                      coachStyle.verbosity === verbosity ? styles.caddieStyleOptionActive : null,
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.caddieStyleOptionText,
+                        coachStyle.verbosity === verbosity
+                          ? styles.caddieStyleOptionTextActive
+                          : null,
+                      ]}
+                    >
+                      {COACH_VERBOSITY_LABELS[verbosity]}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
+          </View>
+          <View style={styles.caddieStyleRowCompact}>
+            <View style={styles.caddieStyleLanguageBlock}>
+              <Text style={styles.caddieStyleLabel}>Language</Text>
+              <View style={styles.caddieStyleRow}>
+                {COACH_LANGUAGE_OPTIONS.map((option) => (
+                  <TouchableOpacity
+                    key={option.value}
+                    onPress={() => applyCoachStyle({ language: option.value })}
+                    style={[
+                      styles.caddieStyleOption,
+                      styles.caddieStyleOptionSmall,
+                      coachStyle.language === option.value
+                        ? styles.caddieStyleOptionActive
+                        : null,
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.caddieStyleOptionText,
+                        coachStyle.language === option.value
+                          ? styles.caddieStyleOptionTextActive
+                          : null,
+                      ]}
+                    >
+                      {option.label}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
+            {coachStyle.tone === 'pep' ? (
+              <View style={styles.caddieStyleToggleRow}>
+                <Text style={styles.caddieStyleToggleLabel}>Emoji</Text>
+                <Switch
+                  value={Boolean(coachStyle.emoji)}
+                  onValueChange={(value) => applyCoachStyle({ emoji: value })}
+                />
+              </View>
+            ) : null}
           </View>
           <View style={styles.caddieToggleRow}>
             <Text style={styles.caddieToggleLabel}>Go for green</Text>
@@ -3576,6 +3727,67 @@ const styles = StyleSheet.create({
   },
   caddieModeTextActive: {
     color: '#f8fafc',
+  },
+  caddieStyleGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
+  },
+  caddieStyleBlock: {
+    flex: 1,
+    gap: 6,
+  },
+  caddieStyleLabel: {
+    color: '#94a3b8',
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 0.6,
+    textTransform: 'uppercase',
+  },
+  caddieStyleRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+  },
+  caddieStyleOption: {
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderRadius: 8,
+    backgroundColor: '#1f2937',
+  },
+  caddieStyleOptionSmall: {
+    paddingHorizontal: 8,
+  },
+  caddieStyleOptionActive: {
+    backgroundColor: '#2563eb',
+  },
+  caddieStyleOptionText: {
+    color: '#94a3b8',
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  caddieStyleOptionTextActive: {
+    color: '#f8fafc',
+  },
+  caddieStyleRowCompact: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  caddieStyleLanguageBlock: {
+    flex: 1,
+    gap: 6,
+  },
+  caddieStyleToggleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  caddieStyleToggleLabel: {
+    color: '#cbd5f5',
+    fontSize: 12,
+    fontWeight: '600',
   },
   caddieToggleRow: {
     flexDirection: 'row',
