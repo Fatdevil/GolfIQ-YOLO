@@ -54,6 +54,24 @@ describe('caddieTipToText with coach style', () => {
     expect(lines.some((line) => line.includes("Let's go") || line.includes('🔥'))).toBe(true);
   });
 
+  it('pep short includes pep intro plus concise instructions', () => {
+    const style: CoachStyle = {
+      ...defaultCoachStyle,
+      tone: 'pep',
+      verbosity: 'short',
+      language: 'sv',
+      format: 'text',
+      emoji: true,
+    };
+    const lines = caddieTipToText(basePlan, undefined, style);
+    expect(lines).toHaveLength(1);
+    const line = lines[0];
+    expect(line).toMatch(/6i/);
+    expect(line).toMatch(/\b\d+ m/);
+    expect(line).toMatch(/\d+\.\d°/);
+    expect(line).toMatch(/\d+%/);
+  });
+
   it('language toggle switches aim verb', () => {
     const swedish: CoachStyle = {
       ...defaultCoachStyle,

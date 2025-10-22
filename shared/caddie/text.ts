@@ -187,8 +187,12 @@ export function caddieTipToText(
 
   if (resolvedStyle.verbosity === "short") {
     if (resolvedStyle.tone === "pep") {
-      const pepLine = `${dictionary.pep.intro} ${dictionary.pep.risk(riskPercent)}`;
-      return [includeEmoji ? `${pepLine} ${dictionary.pep.emoji}`.trim() : pepLine];
+      const pepLineBase = `${dictionary.pep.intro} ${dictionary.pep.risk(riskPercent)}`;
+      const pepLine = includeEmoji
+        ? `${pepLineBase} ${dictionary.pep.emoji}`.trim()
+        : pepLineBase;
+      const conciseLine = `${plan.club}, ${dictionary.landingShort(distance)}, ${dictionary.aimVerb} ${aimValue}° ${aimDirectionShort}. ${dictionary.riskWord} ${riskPercent}%.`;
+      return [`${pepLine} ${conciseLine}`.trim()];
     }
     const conciseLine = `${plan.club}, ${dictionary.landingShort(distance)}, ${dictionary.aimVerb} ${aimValue}° ${aimDirectionShort}. ${dictionary.riskWord} ${riskPercent}%.`;
     return [conciseLine];
