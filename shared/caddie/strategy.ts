@@ -279,60 +279,52 @@ type PreparedFeatures = {
   hazards: RiskFeature[];
   fairways: { x: number; y: number }[][];
   greens: { x: number; y: number }[][];
+  cartpaths: { x: number; y: number }[][];
 };
 
 const prepareFeatures = (bundle: CourseBundle | null, frame: Frame | null): PreparedFeatures => {
   if (!bundle || !frame || !Array.isArray(bundle.features)) {
-    return { hazards: [], fairways: [], greens: [] };
+    return { hazards: [], fairways: [], greens: [], cartpaths: [] };
   }
   const hazards: RiskFeature[] = [];
   const fairways: { x: number; y: number }[][] = [];
   const greens: { x: number; y: number }[][] = [];
+  const cartpaths: { x: number; y: number }[][] = [];
   for (const raw of bundle.features as CourseFeature[]) {
     if (!raw || typeof raw !== "object") {
       continue;
     }
     const domType = normalizeFeatureType(raw);
-    const geomTypeRaw = raw?.geometry?.type;
-    if (typeof geomTypeRaw !== "string") {
+    const geomType = raw?.geometry?.type;
+    if (typeof geomType !== "string") {
       continue;
     }
-    const geomType = geomTypeRaw.toLowerCase();
-    const isPolygon = geomType === "polygon" || geomType === "multipolygon";
-    const isLine = geomType === "linestring" || geomType === "multilinestring";
+    const normalizedType = geomType.toLowerCase();
+    const isPolygon = normalizedType === "polygon" || normalizedType === "multipolygon";
+    const isLine = normalizedType === "linestring" || normalizedType === "multilinestring";
     if (domType === "fairway" && isPolygon) {
       const rings = collectPolygonRings(frame, raw.geometry ?? {});
       if (rings.length) {
-        fairways.push(...rings.map((ring) => ring));
+        fairways.push(...rings);
       }
-      continue;
-    }
-    if (domType === "green" && isPolygon) {
+    } else if (domType === "green" && isPolygon) {
       const rings = collectPolygonRings(frame, raw.geometry ?? {});
       if (rings.length) {
-        greens.push(...rings.map((ring) => ring));
+        greens.push(...rings);
       }
-      continue;
-    }
-    if ((domType === "hazard" || domType === "water" || domType === "bunker") && isPolygon) {
+    } else if ((domType === "hazard" || domType === "water" || domType === "bunker") && isPolygon) {
       const rings = collectPolygonRings(frame, raw.geometry ?? {});
       if (rings.length) {
         hazards.push({ kind: "polygon", rings, penalty: hazardPenalty(domType) });
-        continue;
       }
-    }
-    if (
-      domType === "cartpath" ||
-      isLine ||
-      ((domType === "hazard" || domType === "water" || domType === "bunker") && isLine)
-    ) {
+    } else if (domType === "cartpath" && isLine) {
       const lines = collectPolylines(frame, raw.geometry ?? {});
       for (const line of lines) {
-        hazards.push({ kind: "polyline", line, penalty: hazardPenalty(domType) });
+        cartpaths.push(line);
       }
     }
   }
-  return { hazards, fairways, greens };
+  return { hazards, fairways, greens, cartpaths };
 };
 
 const ringContains = (point: { x: number; y: number }, ring: { x: number; y: number }[]): boolean => {

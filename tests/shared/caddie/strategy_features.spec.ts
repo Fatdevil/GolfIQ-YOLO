@@ -25,7 +25,7 @@ function ringFromLocal(points: Array<{ x: number; y: number }>): number[][] {
   });
 }
 
-test('prepareFeatures collects polygons and polylines via properties-based type detection', () => {
+test('prepareFeatures collects polygons and cart paths via properties-based type detection', () => {
   const frame = buildFrame(ORIGIN, toLatLon(0, 250));
   assert.ok(frame, 'expected a valid frame');
 
@@ -115,9 +115,78 @@ test('prepareFeatures collects polygons and polylines via properties-based type 
   const polygonHazards = prepared.hazards.filter((feature) => feature.kind === 'polygon');
   assert.ok(polygonHazards.length >= 2, 'hazard polygons should be collected');
   assert.ok(
-    prepared.hazards.some((feature) => feature.kind === 'polyline'),
-    'cart paths or hazard lines should be recorded as polylines',
+    prepared.hazards.every((feature) => feature.kind === 'polygon'),
+    'hazards should only contain polygon features',
   );
+  assert.ok(prepared.cartpaths.length > 0, 'cart paths should be recorded separately');
+});
+
+test('prepareFeatures ignores non-cartpath lines for hazards', () => {
+  const frame = buildFrame(ORIGIN, toLatLon(0, 200));
+  assert.ok(frame, 'expected a valid frame');
+
+  const bunkerRing = ringFromLocal([
+    { x: 10, y: 40 },
+    { x: 40, y: 40 },
+    { x: 40, y: 80 },
+    { x: 10, y: 80 },
+    { x: 10, y: 40 },
+  ]);
+  const fairwayRing = ringFromLocal([
+    { x: -30, y: -20 },
+    { x: 30, y: -20 },
+    { x: 30, y: 120 },
+    { x: -30, y: 120 },
+    { x: -30, y: -20 },
+  ]);
+
+  const bundle: CourseBundle = {
+    courseId: 'line-gating',
+    version: 1,
+    ttlSec: 60,
+    features: [
+      {
+        type: 'Feature',
+        properties: { type: 'bunker' },
+        geometry: { type: 'Polygon', coordinates: [bunkerRing] },
+      },
+      {
+        type: 'Feature',
+        properties: { type: 'fairway' },
+        geometry: { type: 'Polygon', coordinates: [fairwayRing] },
+      },
+      {
+        type: 'Feature',
+        geometry: {
+          type: 'LineString',
+          coordinates: [
+            [ORIGIN.lon + 0.0001, ORIGIN.lat + 0.0001],
+            [ORIGIN.lon + 0.0002, ORIGIN.lat + 0.0002],
+          ],
+        },
+      },
+      {
+        type: 'Feature',
+        properties: { type: 'cartpath' },
+        geometry: {
+          type: 'LineString',
+          coordinates: [
+            [ORIGIN.lon - 0.0001, ORIGIN.lat - 0.0001],
+            [ORIGIN.lon - 0.0003, ORIGIN.lat - 0.0002],
+          ],
+        },
+      },
+    ],
+  };
+
+  const prepared = prepareFeatures(bundle, frame);
+
+  assert.ok(prepared.hazards.length > 0, 'polygon hazards should be preserved');
+  assert.ok(
+    prepared.hazards.every((feature) => feature.kind === 'polygon'),
+    'hazards should not contain polyline entries',
+  );
+  assert.ok(prepared.cartpaths.length === 1, 'cartpath line should be captured exactly once');
 });
 
 function findFirstCoordinate(feature: any): [number, number] | null {
