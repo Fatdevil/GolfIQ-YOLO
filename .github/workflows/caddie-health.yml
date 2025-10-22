@@ -1,0 +1,104 @@
+name: Caddie health digest
+
+on:
+  schedule:
+    - cron: '15 6 * * *'
+
+jobs:
+  digest:
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+    steps:
+      - name: Fetch caddie health snapshot
+        id: fetch
+        env:
+          DEFAULT_URL: http://localhost:8000/caddie/health?since=24h
+          CADDIE_HEALTH_URL_SECRET: ${{ secrets.CADDIE_HEALTH_URL }}
+          CADDIE_HEALTH_URL_VAR: ${{ vars.CADDIE_HEALTH_URL }}
+        run: |
+          set -euo pipefail
+          url="${CADDIE_HEALTH_URL_SECRET:-}"
+          if [ -z "$url" ]; then
+            url="${CADDIE_HEALTH_URL_VAR:-}"
+          fi
+          if [ -z "$url" ]; then
+            url="${DEFAULT_URL}"
+          fi
+          echo "Fetching caddie health from $url"
+          response=$(curl --fail --silent --show-error "$url")
+          echo "$response"
+          {
+            echo "json<<'EOF'"
+            echo "$response"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+      - name: Update Caddie Health Digest issue
+        uses: actions/github-script@v7
+        env:
+          CADDIE_HEALTH_JSON: ${{ steps.fetch.outputs.json }}
+        with:
+          script: |
+            if (!process.env.CADDIE_HEALTH_JSON) {
+              core.setFailed('Missing caddie health payload');
+              return;
+            }
+            const payload = JSON.parse(process.env.CADDIE_HEALTH_JSON);
+            const mc = payload.mc || {};
+            const advice = payload.advice || {};
+            const tts = payload.tts || {};
+            const since = payload.since || 'unknown';
+            const toPercent = (value, scale = 100) => {
+              const num = Number(value);
+              if (!Number.isFinite(num)) {
+                return '0.0%';
+              }
+              return `${(num * scale).toFixed(1)}%`;
+            };
+            const toFixed = (value, digits = 2) => {
+              const num = Number(value);
+              if (!Number.isFinite(num)) {
+                return '0.00';
+              }
+              return num.toFixed(digits);
+            };
+            const spark = (ratio) => {
+              const blocks = ['▁','▂','▃','▄','▅','▆','▇','█'];
+              const clamped = Math.max(0, Math.min(1, Number(ratio) || 0));
+              return blocks[Math.round(clamped * (blocks.length - 1))];
+            };
+            const errSpark = spark(Math.min(Math.abs(Number(mc.avgLongErr) || 0) / 10, 1));
+            const table = [
+              '| Metric | Value | Spark |',
+              '| --- | --- | --- |',
+              `| Adopt % | ${toPercent(mc.adoptRate, 100)} | ${spark(mc.adoptRate)} |`,
+              `| pHazard | ${toPercent(mc.hazardRate, 100)} | ${spark(mc.hazardRate)} |`,
+              `| pFairway | ${toPercent(mc.fairwayRate, 100)} | ${spark(mc.fairwayRate)} |`,
+              `| Avg Err (L/R m) | ${toFixed(mc.avgLongErr)} / ${toFixed(mc.avgLatErr)} | ${errSpark} |`,
+            ].join('\n');
+            const adviceList = (advice.topAdvice || []).map((item, idx) => ` ${idx + 1}. ${item}`).join('\n');
+            const commentBody = [
+              `### Caddie health digest (${new Date().toISOString()})`,
+              `Since: ${since}`,
+              '',
+              table,
+              '',
+              `Advice adopt rate: ${toPercent(advice.adoptRate, 100)}`,
+              adviceList ? `Top advice:\n${adviceList}` : 'Top advice: —',
+              '',
+              `TTS play rate: ${toPercent(tts.playRate, 100)} · Avg chars: ${toFixed(tts.avgChars, 1)}`,
+            ].join('\n');
+            const issueTitle = 'Caddie Health Digest';
+            const { owner, repo } = context.repo;
+            const issues = await github.paginate(github.rest.issues.listForRepo, {
+              owner,
+              repo,
+              state: 'open',
+              per_page: 100,
+            });
+            let issue = issues.find((item) => item.title === issueTitle);
+            if (!issue) {
+              await github.rest.issues.create({ owner, repo, title: issueTitle, body: commentBody });
+            } else {
+              await github.rest.issues.createComment({ owner, repo, issue_number: issue.number, body: commentBody });
+            }

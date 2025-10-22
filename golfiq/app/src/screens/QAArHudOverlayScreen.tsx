@@ -98,6 +98,8 @@ import {
   type CoachVoiceSettings,
 } from '../../../../shared/caddie/style';
 import { advise, type Advice } from '../../../../shared/caddie/advice';
+import { getCaddieRc } from '../../../../shared/caddie/rc';
+import { inRollout } from '../../../../shared/caddie/rollout';
 import { caddieTipToText, advicesToText } from '../../../../shared/caddie/text';
 import { speak as speakTip, stop as stopSpeech } from '../../../../shared/tts/speak';
 import { buildGhostTelemetryKey } from './utils/ghostTelemetry';
@@ -396,6 +398,19 @@ type AutoPickPrompt = {
   shownAt: number;
 };
 
+type CaddieRolloutState = {
+  ready: boolean;
+  deviceId: string;
+  mc: boolean;
+  advice: boolean;
+  tts: boolean;
+  percents: {
+    mc: number;
+    advice: number;
+    tts: number;
+  };
+};
+
 function finiteOrNull(value: unknown): number | null {
   return typeof value === 'number' && Number.isFinite(value) ? value : null;
 }
@@ -434,6 +449,50 @@ function resolveTelemetryEmitter(): TelemetryEmitter | null {
   const holder = globalThis as { __ARHUD_QA_TELEMETRY__?: unknown };
   const candidate = holder.__ARHUD_QA_TELEMETRY__;
   return typeof candidate === 'function' ? (candidate as TelemetryEmitter) : null;
+}
+
+async function resolveDeviceId(): Promise<string> {
+  try {
+    const Application = (await import('expo-application')) as Record<string, unknown> & {
+      androidId?: string | null;
+      getIosIdForVendorAsync?: () => Promise<string | null | undefined>;
+    };
+    if (Application && typeof Application === 'object') {
+      const androidId = typeof Application.androidId === 'string' ? Application.androidId.trim() : '';
+      if (androidId) {
+        return `android-${androidId}`;
+      }
+      if (typeof Application.getIosIdForVendorAsync === 'function') {
+        const iosId = await Application.getIosIdForVendorAsync();
+        if (iosId && typeof iosId === 'string' && iosId.trim()) {
+          return `ios-${iosId.trim()}`;
+        }
+      }
+    }
+  } catch (error) {
+    // ignore missing module
+  }
+  try {
+    const { default: Constants } = (await import('expo-constants')) as Record<string, unknown> & {
+      installationId?: string | null;
+      deviceId?: string | null;
+    };
+    if (Constants && typeof Constants === 'object') {
+      const installationId = typeof Constants.installationId === 'string'
+        ? Constants.installationId.trim()
+        : '';
+      if (installationId) {
+        return installationId;
+      }
+      const deviceId = typeof Constants.deviceId === 'string' ? Constants.deviceId.trim() : '';
+      if (deviceId) {
+        return deviceId;
+      }
+    }
+  } catch (error) {
+    // ignore missing module
+  }
+  return 'unknown-device';
 }
 
 async function loadFileSystem(): Promise<OptionalFileSystemModule | null> {
@@ -1438,6 +1497,27 @@ const QAArHudOverlayScreen: React.FC = () => {
   const mcSliderMetricsRef = useRef<{ left: number }>({ left: 0 });
   const lastMcTelemetryRef = useRef<string | null>(null);
   const lastSpokenPlanRef = useRef<string | null>(null);
+  const [caddieRollout, setCaddieRollout] = useState<CaddieRolloutState>({
+    ready: false,
+    deviceId: 'unknown-device',
+    mc: false,
+    advice: true,
+    tts: false,
+    percents: { mc: 0, advice: 100, tts: 0 },
+  });
+  const lastPlanContextRef = useRef<{ key: string; mcUsed: boolean; hadAdvice: boolean } | null>(
+    null,
+  );
+  const planAdoptedRef = useRef(false);
+  const caddieMcRolloutEnabled = caddieRollout.mc;
+  const caddieAdviceRolloutEnabled = caddieRollout.advice;
+  const caddieTtsRolloutEnabled = caddieRollout.tts;
+  const caddieMcActive = caddieMcRolloutEnabled && caddieUseMC;
+  useEffect(() => {
+    if (!caddieMcRolloutEnabled && caddieUseMC) {
+      setCaddieUseMC(false);
+    }
+  }, [caddieMcRolloutEnabled, caddieUseMC]);
 
   const updateSamplesFromValue = useCallback((value: number) => {
     const clamped = Math.max(MC_SAMPLES_MIN, Math.min(MC_SAMPLES_MAX, value));
@@ -1951,6 +2031,16 @@ const QAArHudOverlayScreen: React.FC = () => {
       }
       return { ...prev, logged: true };
     });
+    if (!planAdoptedRef.current && lastPlanContextRef.current) {
+      const context = lastPlanContextRef.current;
+      emitTelemetry('hud.caddie.adopt', {
+        adopted: false,
+        mcUsed: context.mcUsed,
+        hadAdvice: context.hadAdvice,
+      });
+    }
+    planAdoptedRef.current = false;
+    lastPlanContextRef.current = null;
   }, [createShotPayload, emitTelemetry, shotSession]);
   const shotSummary = useMemo<ShotSummary | null>(() => {
     if (!shotSession || !shotSession.landing) {
@@ -2051,7 +2141,7 @@ const QAArHudOverlayScreen: React.FC = () => {
       from_deg: plannerInputs.wind_from_deg,
     };
     if (caddieScenario === 'tee') {
-      if (caddieUseMC) {
+      if (caddieMcActive) {
         return planTeeShotMC({
           bundle,
           tee: playerLatLon,
@@ -2076,7 +2166,7 @@ const QAArHudOverlayScreen: React.FC = () => {
         goForGreen: likelyPar5 && caddieGoForGreen,
       });
     }
-    if (caddieUseMC) {
+    if (caddieMcActive) {
       return planApproachMC({
         bundle,
         ball: playerLatLon,
@@ -2104,7 +2194,7 @@ const QAArHudOverlayScreen: React.FC = () => {
     caddieSamples,
     caddiePlayerModel,
     caddieRiskMode,
-    caddieUseMC,
+    caddieMcActive,
     caddieScenario,
     likelyPar5,
     pin,
@@ -2170,9 +2260,14 @@ const QAArHudOverlayScreen: React.FC = () => {
     },
     [applyCoachStyle],
   );
+  useEffect(() => {
+    if (!caddieTtsRolloutEnabled && voiceEnabled) {
+      applyCoachStyle({ format: 'text' });
+    }
+  }, [applyCoachStyle, caddieTtsRolloutEnabled, voiceEnabled]);
   const speakConciseTip = useCallback(
     (options?: { queue?: boolean }) => {
-      if (!voiceEnabled || !conciseTipText) {
+      if (!voiceEnabled || !caddieTtsRolloutEnabled || !conciseTipText) {
         return;
       }
       const queue = options?.queue ?? false;
@@ -2190,7 +2285,15 @@ const QAArHudOverlayScreen: React.FC = () => {
         chars: conciseTipText.length,
       });
     },
-    [conciseTipText, emitTelemetry, voiceEnabled, voiceLang, voicePitch, voiceRate],
+    [
+      caddieTtsRolloutEnabled,
+      conciseTipText,
+      emitTelemetry,
+      voiceEnabled,
+      voiceLang,
+      voicePitch,
+      voiceRate,
+    ],
   );
   const handlePlayTip = useCallback(() => {
     speakConciseTip();
@@ -2227,8 +2330,8 @@ const QAArHudOverlayScreen: React.FC = () => {
     speakConciseTip();
   }, [caddiePlan, conciseTipText, speakConciseTip, voiceEnabled]);
   useEffect(() => {
-    if (!caddieUseMC || !mcResult) {
-      if (!caddieUseMC) {
+    if (!caddieMcActive || !mcResult) {
+      if (!caddieMcActive) {
         lastMcTelemetryRef.current = null;
       }
       return;
@@ -2256,10 +2359,12 @@ const QAArHudOverlayScreen: React.FC = () => {
       scoreProxy: Number(mcResult.scoreProxy.toFixed(3)),
       club: caddiePlan?.club ?? 'NA',
       aimDeg: signedAim,
+      expLongMiss_m: Number(mcResult.expLongMiss_m.toFixed(2)),
+      expLatMiss_m: Number(mcResult.expLatMiss_m.toFixed(2)),
     });
-  }, [caddiePlan, caddieUseMC, emitTelemetry, mcResult]);
+  }, [caddiePlan, caddieMcActive, emitTelemetry, mcResult]);
   const caddieAdvices = useMemo<Advice[]>(() => {
-    if (!caddiePlan) {
+    if (!caddieAdviceRolloutEnabled || !caddiePlan) {
       return [];
     }
     const breakdown = plannerResult?.breakdown ?? {
@@ -2312,13 +2417,19 @@ const QAArHudOverlayScreen: React.FC = () => {
       },
       style: coachStyle,
     });
-  }, [caddiePlan, caddiePlayerModel, coachStyle, plannerResult]);
+  }, [
+    caddieAdviceRolloutEnabled,
+    caddiePlan,
+    caddiePlayerModel,
+    coachStyle,
+    plannerResult,
+  ]);
   const caddieAdviceLines = useMemo(
     () =>
-      caddieAdvices.length
+      caddieAdviceRolloutEnabled && caddieAdvices.length
         ? advicesToText(caddieAdvices, coachStyle, coachStyle.language)
         : [],
-    [caddieAdvices, coachStyle],
+    [caddieAdviceRolloutEnabled, caddieAdvices, coachStyle],
   );
   const caddieAdviceTypes = useMemo(
     () => caddieAdvices.map((item) => item.type),
@@ -2328,6 +2439,8 @@ const QAArHudOverlayScreen: React.FC = () => {
   useEffect(() => {
     if (!caddiePlan) {
       lastCaddiePlanRef.current = null;
+      lastPlanContextRef.current = null;
+      planAdoptedRef.current = false;
       return;
     }
     const key = `${caddiePlan.kind}-${caddiePlan.club}-${caddiePlan.mode}-${Math.round(
@@ -2342,6 +2455,7 @@ const QAArHudOverlayScreen: React.FC = () => {
         : caddiePlan.aimDirection === 'RIGHT'
           ? caddiePlan.aimDeg
           : 0;
+    const hadAdvice = caddieAdviceRolloutEnabled && caddieAdviceLines.length > 0;
     emitTelemetry('hud.caddie.plan', {
       club: caddiePlan.club,
       risk: Number(caddiePlan.risk.toFixed(3)),
@@ -2349,14 +2463,26 @@ const QAArHudOverlayScreen: React.FC = () => {
       D: Number(caddiePlan.landing.distance_m.toFixed(1)),
       mode: caddiePlan.mode,
       adviceTypes: caddieAdviceTypes,
+      adviceText: hadAdvice ? caddieAdviceLines.slice(0, 5) : [],
       tone: coachStyle.tone,
       verbosity: coachStyle.verbosity,
       language: coachStyle.language,
       emoji: Boolean(coachStyle.emoji),
       format: coachStyle.format,
+      mcUsed: caddieMcActive,
     });
     lastCaddiePlanRef.current = key;
-  }, [caddieAdviceTypes, caddiePlan, coachStyle, emitTelemetry]);
+    lastPlanContextRef.current = { key, mcUsed: caddieMcActive, hadAdvice };
+    planAdoptedRef.current = false;
+  }, [
+    caddieAdviceLines,
+    caddieAdviceRolloutEnabled,
+    caddieAdviceTypes,
+    caddieMcActive,
+    caddiePlan,
+    coachStyle,
+    emitTelemetry,
+  ]);
   const [cameraStats, setCameraStats] = useState<CameraStats>({ latency: 0, fps: 0 });
   const telemetryRef = useRef<TelemetryEmitter | null>(resolveTelemetryEmitter());
   const shotIdCounterRef = useRef(0);
@@ -2451,6 +2577,51 @@ const QAArHudOverlayScreen: React.FC = () => {
     },
     [qaEnabled],
   );
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const rc = getCaddieRc();
+      let deviceId = 'unknown-device';
+      try {
+        deviceId = await resolveDeviceId();
+      } catch (error) {
+        // ignore
+      }
+      const mcEnabled = rc.mc.enabled && inRollout(deviceId, rc.mc.percent);
+      const adviceEnabled = rc.advice.enabled && inRollout(deviceId, rc.advice.percent);
+      const ttsEnabled = rc.tts.enabled && inRollout(deviceId, rc.tts.percent);
+      if (cancelled) {
+        return;
+      }
+      setCaddieRollout({
+        ready: true,
+        deviceId,
+        mc: mcEnabled,
+        advice: adviceEnabled,
+        tts: ttsEnabled,
+        percents: {
+          mc: rc.mc.percent,
+          advice: rc.advice.percent,
+          tts: rc.tts.percent,
+        },
+      });
+      emitTelemetry('hud.caddie.rollout', {
+        deviceId,
+        mc: mcEnabled,
+        advice: adviceEnabled,
+        tts: ttsEnabled,
+        percents: {
+          mc: rc.mc.percent,
+          advice: rc.advice.percent,
+          tts: rc.tts.percent,
+        },
+      });
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [emitTelemetry]);
 
   useEffect(() => {
     if (!qaEnabled) {
@@ -2571,6 +2742,8 @@ const QAArHudOverlayScreen: React.FC = () => {
     if (!caddiePlan) {
       return;
     }
+    const mcUsed = caddieMcActive;
+    const hadAdvice = caddieAdviceRolloutEnabled && caddieAdviceLines.length > 0;
     const signedAim =
       caddiePlan.aimDirection === 'LEFT'
         ? -caddiePlan.aimDeg
@@ -2593,14 +2766,21 @@ const QAArHudOverlayScreen: React.FC = () => {
       mode: caddiePlan.mode,
       applied: true,
       adviceTypes: caddieAdviceTypes,
+      adviceText: hadAdvice ? caddieAdviceLines.slice(0, 5) : [],
       tone: coachStyle.tone,
       verbosity: coachStyle.verbosity,
       language: coachStyle.language,
       emoji: Boolean(coachStyle.emoji),
       format: coachStyle.format,
+      mcUsed,
     });
+    emitTelemetry('hud.caddie.adopt', { adopted: true, mcUsed, hadAdvice });
+    planAdoptedRef.current = true;
   }, [
+    caddieAdviceLines,
+    caddieAdviceRolloutEnabled,
     caddieAdviceTypes,
+    caddieMcActive,
     caddiePlan,
     coachStyle,
     emitTelemetry,
@@ -3448,7 +3628,11 @@ const QAArHudOverlayScreen: React.FC = () => {
           <View style={styles.caddieVoiceBlock}>
             <View style={styles.caddieVoiceHeader}>
               <Text style={styles.caddieStyleLabel}>Voice</Text>
-              <Switch value={voiceEnabled} onValueChange={handleVoiceToggle} />
+              <Switch
+                value={voiceEnabled}
+                onValueChange={handleVoiceToggle}
+                disabled={!caddieTtsRolloutEnabled}
+              />
             </View>
             <View style={styles.caddieStyleRow}>
               {COACH_VOICE_LANGUAGE_OPTIONS.map((option) => (
@@ -3522,9 +3706,13 @@ const QAArHudOverlayScreen: React.FC = () => {
           </View>
           <View style={styles.caddieToggleRow}>
             <Text style={styles.caddieToggleLabel}>Monte Carlo</Text>
-            <Switch value={caddieUseMC} onValueChange={setCaddieUseMC} />
+            <Switch
+              value={caddieUseMC}
+              onValueChange={setCaddieUseMC}
+              disabled={!caddieMcRolloutEnabled}
+            />
           </View>
-          {caddieUseMC ? (
+          {caddieMcActive ? (
             <View style={styles.mcControls}>
               <View style={styles.mcSamplesHeader}>
                 <Text style={styles.mcSamplesLabel}>Samples</Text>
@@ -3569,7 +3757,7 @@ const QAArHudOverlayScreen: React.FC = () => {
                   ))}
                 </View>
               ) : null}
-              {caddieUseMC && mcResult ? (
+              {caddieMcActive && mcResult ? (
                 <View style={styles.mcStatsBlock}>
                   <View style={styles.mcBarRow}>
                     <Text style={styles.mcBarLabel}>Fairway</Text>
