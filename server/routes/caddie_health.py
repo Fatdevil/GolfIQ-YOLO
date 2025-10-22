@@ -139,9 +139,9 @@ def caddie_health(
     tts_events = 0
     chars_sum = 0.0
 
-    last_plan_context: Optional[Dict[str, bool]] = None
-
     for run_id in _iter_recent_hud_runs(cutoff):
+        last_plan_context: Optional[Dict[str, bool]] = None
+        last_plan_ts: Optional[float] = None
         for event in _load_run_events(run_id):
             name = event.get("event")
             data = event.get("data")
@@ -163,23 +163,45 @@ def caddie_health(
                                 advice_counter[text] += 1
                 had_advice = bool(advice_texts)
                 last_plan_context = {"mcUsed": mc_used, "hadAdvice": had_advice}
+                ts_value = (
+                    event.get("ts")
+                    or event.get("time")
+                    or event.get("timestamp")
+                    or event.get("timestampMs")
+                )
+                try:
+                    last_plan_ts = float(ts_value) if ts_value is not None else None
+                except (TypeError, ValueError):
+                    last_plan_ts = None
             elif name == "hud.caddie.adopt":
                 adopted = bool(data.get("adopted"))
-                mc_used = bool(data.get("mcUsed"))
-                had_advice = bool(data.get("hadAdvice"))
-                if last_plan_context:
-                    mc_used = mc_used or last_plan_context.get("mcUsed", False)
-                    had_advice = had_advice or last_plan_context.get("hadAdvice", False)
-                if mc_used:
-                    adoption_mc_total += 1
-                    if adopted:
-                        adoption_mc_true += 1
-                if had_advice:
-                    adoption_adv_total += 1
-                    if adopted:
-                        adoption_adv_true += 1
-                if adopted:
-                    last_plan_context = None
+
+                within = False
+                if last_plan_ts is not None:
+                    ts_value = (
+                        event.get("ts")
+                        or event.get("time")
+                        or event.get("timestamp")
+                        or event.get("timestampMs")
+                    )
+                    try:
+                        ts_float = float(ts_value) if ts_value is not None else None
+                    except (TypeError, ValueError):
+                        ts_float = None
+                    if ts_float is not None:
+                        within = abs(ts_float - float(last_plan_ts)) <= 120.0
+
+                if last_plan_context and within:
+                    if last_plan_context.get("mcUsed"):
+                        adoption_mc_total += 1
+                        if adopted:
+                            adoption_mc_true += 1
+                    if last_plan_context.get("hadAdvice"):
+                        adoption_adv_total += 1
+                        if adopted:
+                            adoption_adv_true += 1
+                last_plan_context = None
+                last_plan_ts = None
             elif name == "hud.caddie.mc":
                 mc_events += 1
                 hazard_sum += float(data.get("pHazard") or 0.0)
