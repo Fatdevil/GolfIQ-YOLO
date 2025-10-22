@@ -4,6 +4,8 @@
   "type": "module",
   "version": "1.0.0",
   "scripts": {
+    "typecheck:web": "npm --prefix web run typecheck",
+    "test:web": "npm --prefix web run test:unit",
     "store:screens": "tsx --tsconfig tsconfig.tools.json tools/store_screenshots.ts",
     "store:privacy": "python3 tools/privacy_labels.py",
     "store:zip": "bash scripts/make_store_zip.sh",
