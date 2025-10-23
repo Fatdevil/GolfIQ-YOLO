@@ -9,6 +9,7 @@ import { QaSummaryProvider } from './src/context/QaSummaryContext';
 import QAArHudScreen from './src/screens/QAArHudScreen';
 import QABenchScreen from './src/screens/QABenchScreen';
 import { qaHudEnabled } from '../../shared/arhud/native/qa_gate';
+import { cleanupDispersionV1 } from '../../shared/caddie/migrations';
 import { QALauncher } from './qa/QALauncher';
 import { isQAMode } from './qa/QAGate';
 
@@ -18,6 +19,11 @@ export default function App(){
   const qaEnabled = qaHudEnabled();
   const [tab, setTab] = useState<TabKey>('cal');
   const [feedbackOpen, setFeedbackOpen] = useState(false);
+
+  useEffect(() => {
+    // fire-and-forget; idempotent via cleanup flag
+    cleanupDispersionV1().catch(() => {});
+  }, []);
 
   useEffect(() => {
     if (!qaEnabled && (tab === 'qaHud' || tab === 'qaBench')) {

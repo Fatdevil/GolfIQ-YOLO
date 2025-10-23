@@ -9,7 +9,7 @@
     "preview": "vite preview",
     "typecheck": "cd .. && tsc -p web/tsconfig.json --noEmit",
     "test:playslike": "vitest run src/__tests__/playslike.percent_v1.spec.ts src/__tests__/replay.dispersion.spec.ts ../shared/playslike/__tests__/adjust_temp_alt.spec.ts",
-    "test:unit": "vitest -r"
+    "test:unit": "vitest --config vitest.config.ts run"
   },
   "dependencies": {
     "@sentry/browser": "^7.119.0",
