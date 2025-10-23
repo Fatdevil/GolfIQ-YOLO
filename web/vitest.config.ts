@@ -12,7 +12,8 @@ export default defineConfig({
       'src/__tests__/**/*.spec.ts',
       '../shared/playslike/__tests__/**/*.spec.ts',
       '../shared/runs/__tests__/**/*.spec.ts',
-      'tests/**/*.spec.ts'
+      'tests/**/*.spec.ts',
+      '../tests/shared/caddie/dispersion_merge.spec.ts'
     ]
   }
 });

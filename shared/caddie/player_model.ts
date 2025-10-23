@@ -99,11 +99,16 @@ function normalizeClubDispersion(value: unknown): ClubDispersion | null {
   if (n <= 0) {
     return null;
   }
-  return {
+  const normalized: ClubDispersion = {
     sigma_long_m: Math.max(0, sigmaLong),
     sigma_lat_m: Math.max(0, sigmaLat),
     n,
   };
+  const updatedAtRaw = toFinite(record.updatedAt);
+  if (updatedAtRaw && updatedAtRaw > 0) {
+    normalized.updatedAt = updatedAtRaw;
+  }
+  return normalized;
 }
 
 function normalizeSnapshot(value: unknown): DispersionSnapshot | null {
@@ -265,6 +270,21 @@ export async function loadLearnedDispersion(): Promise<DispersionSnapshot | null
   }
 }
 
+export async function loadDispersion(): Promise<Record<ClubId, ClubDispersion>> {
+  const snapshot = await loadLearnedDispersion();
+  if (!snapshot) {
+    return {} as Record<ClubId, ClubDispersion>;
+  }
+  const clubs: Partial<Record<ClubId, ClubDispersion>> = {};
+  for (const club of CLUB_SEQUENCE) {
+    const entry = snapshot.clubs[club];
+    if (entry) {
+      clubs[club] = { ...entry };
+    }
+  }
+  return clubs as Record<ClubId, ClubDispersion>;
+}
+
 export async function saveLearnedDispersion(
   clubs: Partial<Record<ClubId, ClubDispersion>>,
   updatedAt: number = Date.now(),
@@ -298,7 +318,48 @@ export async function saveLearnedDispersion(
 }
 
 export async function saveDispersion(clubs: Record<ClubId, ClubDispersion>): Promise<void> {
-  await saveLearnedDispersion(clubs, Date.now());
+  await saveMergedDispersion(clubs, Date.now());
+}
+
+export async function saveMergedDispersion(
+  incoming: Record<ClubId, ClubDispersion>,
+  now = Date.now(),
+): Promise<void> {
+  const base = await loadDispersion().catch(() => ({} as Record<ClubId, ClubDispersion>));
+  const out: Record<ClubId, ClubDispersion> = { ...base };
+
+  for (const [club, inc] of Object.entries(incoming)) {
+    const clubId = club as ClubId;
+    if (!inc || !Number.isFinite(inc.sigma_long_m) || !Number.isFinite(inc.sigma_lat_m)) {
+      continue;
+    }
+    const prev = base[clubId];
+    const n1 = prev && Number.isFinite(prev.n) ? Math.max(0, prev.n) : 0;
+    const n2 = Number.isFinite(inc.n) ? Math.max(0, inc.n) : 0;
+    if (!prev || !Number.isFinite(prev.sigma_long_m) || !Number.isFinite(prev.sigma_lat_m) || n1 <= 0) {
+      if (n2 > 0) {
+        out[clubId] = { ...inc, updatedAt: now };
+      }
+      continue;
+    }
+
+    const denom = Math.max(1, n1 + n2);
+    const wLong = Math.sqrt(
+      (n1 * prev.sigma_long_m ** 2 + n2 * inc.sigma_long_m ** 2) / denom,
+    );
+    const wLat = Math.sqrt(
+      (n1 * prev.sigma_lat_m ** 2 + n2 * inc.sigma_lat_m ** 2) / denom,
+    );
+
+    out[clubId] = {
+      sigma_long_m: wLong,
+      sigma_lat_m: wLat,
+      n: n1 + n2,
+      updatedAt: now,
+    };
+  }
+
+  await saveLearnedDispersion(out, now);
 }
 
 export function __setDispersionStorageForTests(storage: AsyncStorageLike | null): void {

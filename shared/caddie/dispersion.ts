@@ -5,6 +5,7 @@ export interface ClubDispersion {
   sigma_long_m: number;
   sigma_lat_m: number;
   n: number;
+  updatedAt?: number;
 }
 
 const EARTH_RADIUS_M = 6_378_137;

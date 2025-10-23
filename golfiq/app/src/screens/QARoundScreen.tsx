@@ -17,7 +17,7 @@ import {
 import { AutoCourseController, type AutoCourseCandidate } from '../../../../shared/arhud/auto_course';
 import { type BundleIndexEntry, getIndex } from '../../../../shared/arhud/bundle_client';
 import { learnFromRound } from '../../../../shared/caddie/dispersion';
-import { saveDispersion } from '../../../../shared/caddie/player_model';
+import { saveMergedDispersion } from '../../../../shared/caddie/player_model';
 import { getLocation, LocationError } from '../../../../shared/arhud/location';
 import { qaHudEnabled } from '../../../../shared/arhud/native/qa_gate';
 import { toLocalENU } from '../../../../shared/arhud/geo';
@@ -420,12 +420,14 @@ const QARoundScreen: React.FC = () => {
           if (nonTrivial) {
             const ok = await confirmAsync({
               title: t('Uppdatera min dispersion?'),
-              message: t('Vi kan spara nya σ per klubba från rundan (bättre MC & tips).'),
+              message: t(
+                'Spara och merga in ny dispersion per klubba (andra klubbar påverkas inte).',
+              ),
               confirmText: t('Spara'),
               cancelText: t('Inte nu'),
             });
             if (ok) {
-              await saveDispersion(learned);
+              await saveMergedDispersion(learned);
               toast(t('Dispersion uppdaterad'));
             }
           }
