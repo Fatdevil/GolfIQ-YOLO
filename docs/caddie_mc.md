@@ -44,5 +44,7 @@ When Monte-Carlo mode is active, the caddie panel shows:
 - **Green** bar (approach only): likelihood of holding the green surface
 - **Exp miss (Long/Lat)**: signed average miss distances (positive = long/right)
 
+Exp miss is measured relative to the aim line.
+
 Use these to judge trade-offs between safety and aggression before applying the
 suggested plan to the HUD.

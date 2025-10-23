@@ -152,6 +152,20 @@ type PlannerInputKey =
   | 'wind_from_deg'
   | 'slope_dh_m';
 
+const clampPct = (value: number): number => Math.max(0, Math.min(100, Math.round(value)));
+
+const Bar = ({ pct, good }: { pct: number; good?: boolean }) => (
+  <View style={styles.mcMiniBarTrack}>
+    <View
+      style={[
+        styles.mcMiniBarFill,
+        { width: `${clampPct(pct)}%` },
+        good ? styles.mcMiniBarFillPositive : styles.mcMiniBarFillNegative,
+      ]}
+    />
+  </View>
+);
+
 const FEATURE_COLORS: Record<FeatureKind, string> = {
   green: '#16a34a',
   fairway: '#22c55e',
@@ -4035,47 +4049,30 @@ const QAArHudOverlayScreen: React.FC = () => {
               ) : null}
               {caddieMcActive && mcResult ? (
                 <View style={styles.mcStatsBlock}>
-                  <View style={styles.mcBarRow}>
-                    <Text style={styles.mcBarLabel}>Fairway</Text>
-                    <View style={styles.mcBarTrack}>
-                      <View
-                        style={[
-                          styles.mcBarFill,
-                          styles.mcBarFillPositive,
-                          { width: `${mcFairwayPct}%` },
-                        ]}
-                      />
+                  <View style={styles.mcMiniBarBlock}>
+                    <View style={styles.mcMiniBarLabelRow}>
+                      <Text style={styles.mcMiniBarLabel}>Fairway</Text>
+                      <Text style={styles.mcMiniBarLabel}>{mcFairwayPct}%</Text>
                     </View>
-                    <Text style={styles.mcBarValue}>{mcFairwayPct}%</Text>
+                    <Bar pct={mcFairwayPct} good />
                   </View>
-                  <View style={styles.mcBarRow}>
-                    <Text style={styles.mcBarLabel}>Hazard</Text>
-                    <View style={styles.mcBarTrack}>
-                      <View
-                        style={[
-                          styles.mcBarFill,
-                          styles.mcBarFillNegative,
-                          { width: `${mcHazardPct}%` },
-                        ]}
-                      />
+                  <View style={styles.mcMiniBarBlock}>
+                    <View style={styles.mcMiniBarLabelRow}>
+                      <Text style={styles.mcMiniBarLabel}>Hazard</Text>
+                      <Text style={styles.mcMiniBarLabel}>{mcHazardPct}%</Text>
                     </View>
-                    <Text style={styles.mcBarValue}>{mcHazardPct}%</Text>
+                    <Bar pct={mcHazardPct} />
                   </View>
                   {mcGreenPct !== null ? (
-                    <View style={styles.mcBarRow}>
-                      <Text style={styles.mcBarLabel}>Green</Text>
-                      <View style={styles.mcBarTrack}>
-                        <View
-                          style={[
-                            styles.mcBarFill,
-                            styles.mcBarFillPositive,
-                            { width: `${mcGreenPct}%` },
-                          ]}
-                        />
+                    <View style={styles.mcMiniBarBlock}>
+                      <View style={styles.mcMiniBarLabelRow}>
+                        <Text style={styles.mcMiniBarLabel}>Green</Text>
+                        <Text style={styles.mcMiniBarLabel}>{mcGreenPct}%</Text>
                       </View>
-                      <Text style={styles.mcBarValue}>{mcGreenPct}%</Text>
+                      <Bar pct={mcGreenPct} good />
                     </View>
                   ) : null}
+                  <Text style={styles.mcMissHeading}>exp miss (vs aim line)</Text>
                   <View style={styles.mcMissRow}>
                     <Text style={styles.mcMissLabel}>Long</Text>
                     <Text style={styles.mcMissValue}>
@@ -5181,39 +5178,39 @@ const styles = StyleSheet.create({
     borderTopColor: '#1e293b',
     gap: 6,
   },
-  mcBarRow: {
+  mcMiniBarBlock: {
+    gap: 4,
+  },
+  mcMiniBarLabelRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    justifyContent: 'space-between',
   },
-  mcBarLabel: {
-    width: 60,
+  mcMiniBarLabel: {
     color: '#cbd5f5',
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '600',
   },
-  mcBarTrack: {
-    flex: 1,
-    height: 8,
-    borderRadius: 4,
+  mcMiniBarTrack: {
+    height: 4,
+    width: '100%',
     backgroundColor: '#1e293b',
+    borderRadius: 2,
     overflow: 'hidden',
   },
-  mcBarFill: {
+  mcMiniBarFill: {
     height: '100%',
-    borderRadius: 4,
+    borderRadius: 2,
   },
-  mcBarFillPositive: {
-    backgroundColor: '#10b981',
+  mcMiniBarFillPositive: {
+    backgroundColor: '#16a34a',
   },
-  mcBarFillNegative: {
+  mcMiniBarFillNegative: {
     backgroundColor: '#ef4444',
   },
-  mcBarValue: {
-    width: 40,
-    textAlign: 'right',
-    color: '#cbd5f5',
-    fontSize: 12,
+  mcMissHeading: {
+    color: '#94a3b8',
+    fontSize: 11,
     fontWeight: '600',
   },
   mcMissRow: {
