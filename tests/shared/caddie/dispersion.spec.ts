@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { learnDispersion } from '../../../shared/caddie/dispersion';
-import type { Shot } from '../../../shared/round/round_types';
+import { learnDispersion, learnFromRound } from '../../../shared/caddie/dispersion';
+import type { Round, Shot } from '../../../shared/round/round_types';
 
 const EARTH_RADIUS_M = 6_378_137;
 const PIN = { lat: 59.3293, lon: 18.0686 };
@@ -82,6 +82,73 @@ test('learnDispersion filters outliers and recovers per-club sigma', () => {
   assert.ok(Math.abs(sevenIron.sigma_long_m - 2.52) < 0.3);
   assert.ok(Math.abs(sevenIron.sigma_lat_m - 1.45) < 0.2);
   assert.ok(!result['PW'], 'insufficient PW samples should not produce dispersion');
+});
+
+test('learnFromRound aggregates hole shots before learning dispersion', async () => {
+  const makeShot = (
+    index: number,
+    club: string,
+    base: number,
+    offsets: { long: number; lat: number },
+  ): Shot => ({
+    tStart: index * 1_000,
+    club,
+    base_m: base,
+    playsLike_m: base,
+    carry_m: base + offsets.long,
+    pin: PIN,
+    land: offsetPoint(offsets.lat, offsets.long),
+    heading_deg: 0,
+  });
+
+  const sevenIronSamples: Array<{ long: number; lat: number }> = [
+    { long: 2, lat: 1 },
+    { long: -1, lat: -2 },
+    { long: 3, lat: 2 },
+    { long: -4, lat: -1 },
+    { long: 1, lat: 0 },
+    { long: 0, lat: 1 },
+  ];
+  const holeOneShots = sevenIronSamples.slice(0, 3).map((offsets, index) =>
+    makeShot(index, '7i', 150, offsets),
+  );
+  const holeTwoShots = sevenIronSamples.slice(3).map((offsets, index) =>
+    makeShot(100 + index, '7i', 150, offsets),
+  );
+  const wedgeShots = [
+    makeShot(200, 'PW', 110, { long: 0.5, lat: 0.5 }),
+    makeShot(201, 'PW', 110, { long: -0.3, lat: -0.1 }),
+    makeShot(202, 'PW', 110, { long: 0.2, lat: -0.4 }),
+  ];
+
+  const round: Round = {
+    id: 'round-test',
+    courseId: 'qa-course',
+    startedAt: Date.now(),
+    holes: [
+      { holeNo: 1, par: 4, shots: [...holeOneShots, wedgeShots[0]], score: holeOneShots.length + 1 },
+      {
+        holeNo: 2,
+        par: 3,
+        shots: [...holeTwoShots, wedgeShots[1], wedgeShots[2]],
+        score: holeTwoShots.length + 2,
+      },
+    ],
+    currentHole: 1,
+    finished: true,
+  };
+
+  const learned = await learnFromRound(round);
+  const direct = learnDispersion([...holeOneShots, ...holeTwoShots, ...wedgeShots]);
+  const sevenIron = learned['7i'];
+  assert.ok(sevenIron, 'expected dispersion for 7i');
+  const directSeven = direct['7i'];
+  assert.ok(directSeven, 'direct learning should return 7i dispersion');
+  assert.equal(sevenIron.n, directSeven.n);
+  assert.ok(Math.abs(sevenIron.sigma_long_m - directSeven.sigma_long_m) < 1e-12);
+  assert.ok(Math.abs(sevenIron.sigma_lat_m - directSeven.sigma_lat_m) < 1e-12);
+  const learnedMap = learned as Partial<Record<string, unknown>>;
+  assert.ok(!Object.prototype.hasOwnProperty.call(learnedMap, 'PW'));
 });
 
 test('learnDispersion keeps longitudinal error insensitive to pure lateral misses', () => {
