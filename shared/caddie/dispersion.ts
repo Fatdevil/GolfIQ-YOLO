@@ -1,5 +1,5 @@
 import { CLUB_SEQUENCE, type ClubId } from '../playslike/bag';
-import type { Shot } from '../round/round_types';
+import type { Round, Shot } from '../round/round_types';
 
 export interface ClubDispersion {
   sigma_long_m: number;
@@ -161,4 +161,9 @@ export function learnDispersion(
   }
 
   return result;
+}
+
+export async function learnFromRound(round: Round): Promise<Record<ClubId, ClubDispersion>> {
+  const shots: Shot[] = round.holes.flatMap((hole) => hole.shots || []);
+  return learnDispersion(shots) as Record<ClubId, ClubDispersion>;
 }

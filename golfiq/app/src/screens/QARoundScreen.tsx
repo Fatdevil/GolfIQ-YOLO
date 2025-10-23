@@ -3,17 +3,21 @@ import {
   ActivityIndicator,
   Alert,
   Modal,
+  Platform,
   SafeAreaView,
   ScrollView,
   StyleSheet,
   Text,
   TextInput,
+  ToastAndroid,
   TouchableOpacity,
   View,
 } from 'react-native';
 
 import { AutoCourseController, type AutoCourseCandidate } from '../../../../shared/arhud/auto_course';
 import { type BundleIndexEntry, getIndex } from '../../../../shared/arhud/bundle_client';
+import { learnFromRound } from '../../../../shared/caddie/dispersion';
+import { saveDispersion } from '../../../../shared/caddie/player_model';
 import { getLocation, LocationError } from '../../../../shared/arhud/location';
 import { qaHudEnabled } from '../../../../shared/arhud/native/qa_gate';
 import { toLocalENU } from '../../../../shared/arhud/geo';
@@ -83,6 +87,47 @@ type RoundSummary = {
 };
 
 const TEE_OPTIONS: TeeOption[] = createTeeOptions();
+
+const t = (value: string): string => value;
+
+type ConfirmOptions = {
+  title: string;
+  message: string;
+  confirmText: string;
+  cancelText: string;
+};
+
+function confirmAsync(options: ConfirmOptions): Promise<boolean> {
+  return new Promise((resolve) => {
+    Alert.alert(
+      options.title,
+      options.message,
+      [
+        {
+          text: options.cancelText,
+          style: 'cancel',
+          onPress: () => resolve(false),
+        },
+        {
+          text: options.confirmText,
+          onPress: () => resolve(true),
+        },
+      ],
+      {
+        cancelable: true,
+        onDismiss: () => resolve(false),
+      },
+    );
+  });
+}
+
+function toast(message: string): void {
+  if (Platform.OS === 'android') {
+    ToastAndroid.show(message, ToastAndroid.SHORT);
+    return;
+  }
+  Alert.alert('Caddie', message);
+}
 
 function createTeeOptions(): TeeOption[] {
   const makeMap = (sequence: number[]): Record<number, number> => {
@@ -366,8 +411,30 @@ const QARoundScreen: React.FC = () => {
       return;
     }
     if (round.currentHole >= round.holes.length - 1) {
+      const currentRound = round;
       finishRound();
-      Alert.alert('Round finished', 'Round marked as complete.');
+      void (async () => {
+        try {
+          const learned = await learnFromRound(currentRound);
+          const nonTrivial = Object.values(learned).some((value) => value && value.n >= 6);
+          if (nonTrivial) {
+            const ok = await confirmAsync({
+              title: t('Uppdatera min dispersion?'),
+              message: t('Vi kan spara nya σ per klubba från rundan (bättre MC & tips).'),
+              confirmText: t('Spara'),
+              cancelText: t('Inte nu'),
+            });
+            if (ok) {
+              await saveDispersion(learned);
+              toast(t('Dispersion uppdaterad'));
+            }
+          }
+        } catch (error) {
+          console.warn('Failed to autosave dispersion after round', error);
+        } finally {
+          Alert.alert('Round finished', 'Round marked as complete.');
+        }
+      })();
       return;
     }
     nextHole();

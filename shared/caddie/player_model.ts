@@ -297,6 +297,10 @@ export async function saveLearnedDispersion(
   }
 }
 
+export async function saveDispersion(clubs: Record<ClubId, ClubDispersion>): Promise<void> {
+  await saveLearnedDispersion(clubs, Date.now());
+}
+
 export function __setDispersionStorageForTests(storage: AsyncStorageLike | null): void {
   storageOverride = storage;
   storagePromise = storage ? Promise.resolve(storage) : null;
