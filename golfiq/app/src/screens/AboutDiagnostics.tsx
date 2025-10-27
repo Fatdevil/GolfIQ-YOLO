@@ -469,7 +469,18 @@ const AboutDiagnostics: React.FC = () => {
 
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Privacy &amp; Data</Text>
-        <Text style={styles.body}>Beta builds collect limited QA telemetry to diagnose accuracy and reliability.</Text>
+        <Text style={styles.body}>
+          Beta builds collect limited QA telemetry to diagnose accuracy and reliability. Telemetry is
+          optional and only streams while this toggle is on.
+        </Text>
+        <Text style={styles.body}>
+          Export: use the “Export logs” action above to download a JSON copy for yourself or support.
+        </Text>
+        <Text style={styles.body}>
+          Erase: turn telemetry off here to stop new uploads, then clear QA telemetry from Settings →
+          Reset (or delete the app) to remove stored diagnostics. Server copies are removed on
+          request via privacy@golfiq.dev.
+        </Text>
         <TouchableOpacity onPress={openPrivacyDocs}>
           <Text style={styles.link}>{PRIVACY_DOCS_URL}</Text>
         </TouchableOpacity>

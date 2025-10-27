@@ -188,12 +188,12 @@ export function caddieTipToText(
 
   if (resolvedStyle.verbosity === "short") {
     if (resolvedStyle.tone === "pep") {
+      const conciseLine = `${plan.club}, ${dictionary.landingShort(distance)}, ${dictionary.aimVerb} ${aimValue}° ${aimDirectionShort}. ${dictionary.riskWord} ${riskPercent}%.`;
       const pepLineBase = `${dictionary.pep.intro} ${dictionary.pep.risk(riskPercent)}`;
       const pepLine = includeEmoji
         ? `${pepLineBase} ${dictionary.pep.emoji}`.trim()
         : pepLineBase;
-      const conciseLine = `${plan.club}, ${dictionary.landingShort(distance)}, ${dictionary.aimVerb} ${aimValue}° ${aimDirectionShort}. ${dictionary.riskWord} ${riskPercent}%.`;
-      return [`${pepLine} ${conciseLine}`.trim()];
+      return [`${conciseLine} ${pepLine}`.trim()];
     }
     const conciseLine = `${plan.club}, ${dictionary.landingShort(distance)}, ${dictionary.aimVerb} ${aimValue}° ${aimDirectionShort}. ${dictionary.riskWord} ${riskPercent}%.`;
     return [conciseLine];
@@ -202,8 +202,7 @@ export function caddieTipToText(
   if (resolvedStyle.verbosity === "detailed") {
     if (resolvedStyle.tone === "pep") {
       const pepLines = [
-        includeEmoji ? `${dictionary.pep.intro} ${dictionary.pep.emoji}`.trim() : dictionary.pep.intro,
-        `${dictionary.pep.action(plan.club, distance)}.`,
+        `${modeLabel}: ${dictionary.pep.action(plan.club, distance)}.`,
         `${dictionary.pep.aim(aimValue, aimDirectionLong)}. ${dictionary.pep.risk(riskPercent)}`,
         windLine,
       ];
@@ -213,6 +212,10 @@ export function caddieTipToText(
       if (plan.reason) {
         pepLines.push(plan.reason);
       }
+      const pepOutro = includeEmoji
+        ? `${dictionary.pep.intro} ${dictionary.pep.emoji}`.trim()
+        : dictionary.pep.intro;
+      pepLines.push(pepOutro);
       return pepLines;
     }
     const detailedLines = [
@@ -373,7 +376,10 @@ const ADVICE_LANGUAGE: Record<CoachStyle["language"], AdviceLanguagePack> = {
         base: () => "Reset: andas 4–6, rutin, safe target",
         detail: (advice, pack) => {
           const bogey = toNumber(advice.data?.bogeyStreak);
-          const misses = advice.data?.largeMisses === true ? "senaste missar >12 m" : "";
+          const misses =
+            advice.data?.badShotStreak === true || advice.data?.largeMisses === true
+              ? "två missar i rad"
+              : "";
           const parts: string[] = [];
           if (bogey !== null && bogey >= 2) {
             parts.push(`${bogey} bogeys i rad`);
@@ -465,7 +471,10 @@ const ADVICE_LANGUAGE: Record<CoachStyle["language"], AdviceLanguagePack> = {
         base: () => "Reset: breathe 4–6, routine, safe target",
         detail: (advice, pack) => {
           const bogey = toNumber(advice.data?.bogeyStreak);
-          const misses = advice.data?.largeMisses === true ? "recent misses >12 m" : "";
+          const misses =
+            advice.data?.badShotStreak === true || advice.data?.largeMisses === true
+              ? "two misses in a row"
+              : "";
           const parts: string[] = [];
           if (bogey !== null && bogey >= 2) {
             parts.push(`${bogey} bogeys running`);
