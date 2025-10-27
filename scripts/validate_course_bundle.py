@@ -101,7 +101,10 @@ def validate_feature(feature: Dict[str, Any]) -> List[str]:
                             continue
                         if entry not in GREEN_SECTION_VALUES:
                             errors.append(
-                                f"green.sections[{idx}] must be one of {sorted(GREEN_SECTION_VALUES)}"
+                                (
+                                    f"green.sections[{idx}] must be one of "
+                                    f"{sorted(GREEN_SECTION_VALUES)}"
+                                )
                             )
             fat_side = green_meta.get("fatSide")
             if fat_side is not None:
