@@ -8,6 +8,8 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional
 
+import math
+
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
 
@@ -33,11 +35,19 @@ class CaddieTtsHealth(BaseModel):
     avgChars: float
 
 
+class SgPerRound(BaseModel):
+    sample: int
+    mean: float | None
+    median: float | None
+
+
 class CaddieHealthResponse(BaseModel):
     since: str
     mc: CaddieMcHealth
     advice: CaddieAdviceHealth
     tts: CaddieTtsHealth
+    sg_gained_per_round: SgPerRound
+    adoption_sg_lift: float | None
 
 
 def _parse_since_param(value: Optional[str]) -> timedelta:
@@ -117,6 +127,26 @@ def _load_run_events(run_id: str) -> List[Dict[str, Any]]:
     return []
 
 
+def _finite_float(value: Any) -> Optional[float]:
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return None
+    if not math.isfinite(number):
+        return None
+    return number
+
+
+def _median(values: List[float]) -> Optional[float]:
+    if not values:
+        return None
+    ordered = sorted(values)
+    mid = len(ordered) // 2
+    if len(ordered) % 2:
+        return ordered[mid]
+    return (ordered[mid - 1] + ordered[mid]) / 2
+
+
 @router.get("/health", response_model=CaddieHealthResponse)
 def caddie_health(
     since: Optional[str] = Query(None, description="Lookback window, e.g. 24h")
@@ -138,10 +168,15 @@ def caddie_health(
     lat_sum = 0.0
     tts_events = 0
     chars_sum = 0.0
+    sg_totals: List[float] = []
+    adopted_sg: List[float] = []
+    other_sg: List[float] = []
 
     for run_id in _iter_recent_hud_runs(cutoff):
         last_plan_context: Optional[Dict[str, bool]] = None
         last_plan_ts: Optional[float] = None
+        run_sg_total = 0.0
+        run_has_sg = False
         for event in _load_run_events(run_id):
             name = event.get("event")
             data = event.get("data")
@@ -200,6 +235,18 @@ def caddie_health(
                         adoption_adv_total += 1
                         if adopted:
                             adoption_adv_true += 1
+            elif name == "hud.shot":
+                sg_data = data.get("sg")
+                if isinstance(sg_data, dict):
+                    total_value = _finite_float(sg_data.get("total"))
+                    if total_value is not None:
+                        run_has_sg = True
+                        run_sg_total += total_value
+                        adopted_flag = data.get("planAdopted")
+                        if adopted_flag is True:
+                            adopted_sg.append(total_value)
+                        elif adopted_flag is False:
+                            other_sg.append(total_value)
                 last_plan_context = None
                 last_plan_ts = None
             elif name == "hud.caddie.mc":
@@ -213,6 +260,9 @@ def caddie_health(
                 chars = data.get("chars")
                 if isinstance(chars, (int, float)):
                     chars_sum += float(chars)
+
+        if run_has_sg:
+            sg_totals.append(run_sg_total)
 
     def safe_div(num: float, den: float) -> float:
         if den <= 0:
@@ -232,7 +282,17 @@ def caddie_health(
     tts_play_rate = safe_div(float(tts_events), float(plan_total))
     tts_avg_chars = safe_div(chars_sum, float(tts_events))
 
-    response = CaddieHealthResponse(
+    sg_mean = (sum(sg_totals) / len(sg_totals)) if sg_totals else None
+    sg_median = _median(sg_totals)
+    adopted_avg = (sum(adopted_sg) / len(adopted_sg)) if adopted_sg else None
+    other_avg = (sum(other_sg) / len(other_sg)) if other_sg else None
+    lift = (
+        adopted_avg - other_avg
+        if adopted_avg is not None and other_avg is not None
+        else None
+    )
+
+    return CaddieHealthResponse(
         since=cutoff.isoformat(),
         mc=CaddieMcHealth(
             enabledPct=mc_enabled_pct,
@@ -244,5 +304,8 @@ def caddie_health(
         ),
         advice=CaddieAdviceHealth(adoptRate=advice_adopt_rate, topAdvice=top_advice),
         tts=CaddieTtsHealth(playRate=tts_play_rate, avgChars=tts_avg_chars),
+        sg_gained_per_round=SgPerRound(
+            sample=len(sg_totals), mean=sg_mean, median=sg_median
+        ),
+        adoption_sg_lift=lift,
     )
-    return response

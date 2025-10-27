@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { BenchCompare } from "../features/replay/components/BenchCompare";
 import { DispersionPlot, type DispersionSeries } from "../features/replay/components/DispersionPlot";
 import { MetricChart } from "../features/replay/components/MetricChart";
+import { SGPanel } from "../features/replay/SGPanel";
 import { RunTimeline } from "../features/replay/components/RunTimeline";
 import { RunUpload, type LoadedRunPatch, type RunSlot } from "../features/replay/components/RunUpload";
 import { ShotStatsTable } from "../features/replay/components/ShotStatsTable";
@@ -12,6 +13,7 @@ import { parseRound, type ParsedRound } from "../features/replay/utils/parseRoun
 import { computeDispersion, parseShotLog, type DispersionStats, type Shot } from "../features/replay/utils/parseShotLog";
 import { fetchRun } from "../lib/fetchRun";
 import { mkReportMd } from "../features/replay/utils/mkReportMd";
+import { summarizeShots } from "../features/replay/utils/sg";
 
 type RunState = {
   run: ParsedHudRun | null;
@@ -66,7 +68,8 @@ export default function ReplayAnalyzerPage() {
     }
     try {
       const dispersion = computeDispersion(primary.shots);
-      const markdown = mkReportMd(primary.run, benchSummary, dispersion);
+      const sgSummary = summarizeShots(primary.shots);
+      const markdown = mkReportMd(primary.run, benchSummary, dispersion, sgSummary);
       const blob = new Blob([markdown], { type: "text/markdown;charset=utf-8" });
       const fileName = `${primary.run.summary.sessionId ?? "hud-run"}.md`;
       const url = URL.createObjectURL(blob);
@@ -126,6 +129,11 @@ export default function ReplayAnalyzerPage() {
   }, [activeSlot, comparison, primary]);
 
   const activeHud = activeRun?.run ?? null;
+  const activeShots = activeRun?.shots ?? [];
+  const hasSgData = useMemo(
+    () => activeShots.some((shot) => shot.sg && Number.isFinite(shot.sg.total ?? Number.NaN)),
+    [activeShots],
+  );
 
   const fpsSeries = useMemo(() => {
     if (!activeHud) return [];
@@ -317,6 +325,8 @@ export default function ReplayAnalyzerPage() {
           )}
 
           {activeRun?.round ? <RoundSummaryPanel round={activeRun.round} /> : null}
+
+          {hasSgData ? <SGPanel shots={activeShots} round={activeRun?.round ?? null} /> : null}
 
           {dispersionSeries.length ? (
             <div className="grid gap-6 lg:grid-cols-2">

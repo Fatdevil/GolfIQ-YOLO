@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { computeDispersion, parseShotLog } from "../features/replay/utils/parseShotLog";
+import { makeShot } from "./helpers/factories";
 
 const EARTH_RADIUS_M = 6_378_137;
 
@@ -70,54 +71,21 @@ describe("parseShotLog", () => {
 describe("computeDispersion", () => {
   it("summarises carry, spread, and directional bias", () => {
     const summary = computeDispersion([
-      {
+      makeShot({
         shotId: "a",
-        tStart: null,
-        tEnd: null,
-        durationMs: null,
-        club: null,
-        base_m: null,
-        playsLike_m: null,
-        carry_m: 150,
-        heading_deg: null,
-        pin: null,
-        land: null,
-        deltas: { temp: null, alt: null, head: null, slope: null },
         relative: { x: 2, y: -5, distance: Math.hypot(2, -5) },
-        notes: null,
-      },
-      {
+        carry_m: 150,
+      }),
+      makeShot({
         shotId: "b",
-        tStart: null,
-        tEnd: null,
-        durationMs: null,
-        club: null,
-        base_m: null,
-        playsLike_m: null,
-        carry_m: 155,
-        heading_deg: null,
-        pin: null,
-        land: null,
-        deltas: { temp: null, alt: null, head: null, slope: null },
         relative: { x: -3, y: 10, distance: Math.hypot(-3, 10) },
-        notes: null,
-      },
-      {
+        carry_m: 155,
+      }),
+      makeShot({
         shotId: "c",
-        tStart: null,
-        tEnd: null,
-        durationMs: null,
-        club: null,
-        base_m: null,
-        playsLike_m: null,
-        carry_m: null,
-        heading_deg: null,
-        pin: null,
-        land: null,
-        deltas: { temp: null, alt: null, head: null, slope: null },
         relative: { x: 0.05, y: 1, distance: Math.hypot(0.05, 1) },
-        notes: null,
-      },
+        carry_m: null,
+      }),
     ]);
 
     expect(summary.count).toBe(3);
