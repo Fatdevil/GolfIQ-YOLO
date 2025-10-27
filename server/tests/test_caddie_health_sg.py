@@ -10,7 +10,9 @@ from fastapi.testclient import TestClient
 from server.app import app
 
 
-def _write_run(root: Path, run_id: str, created_at: datetime, events: list[dict]) -> None:
+def _write_run(
+    root: Path, run_id: str, created_at: datetime, events: list[dict]
+) -> None:
     hud_dir = root / "hud"
     by_id_dir = root / "by_id"
     hud_dir.mkdir(parents=True, exist_ok=True)
@@ -19,7 +21,9 @@ def _write_run(root: Path, run_id: str, created_at: datetime, events: list[dict]
     hud_entry = {
         "id": run_id,
         "kind": "hud",
-        "created_at": created_at.replace(microsecond=0).isoformat().replace("+00:00", "Z"),
+        "created_at": created_at.replace(microsecond=0)
+        .isoformat()
+        .replace("+00:00", "Z"),
         "device": "test-device",
     }
     hud_path = hud_dir / f"{created_at.strftime('%Y-%m-%d')}.jsonl"
