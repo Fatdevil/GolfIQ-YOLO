@@ -27,6 +27,7 @@ test('pickNearest returns the closest bundle by bounding box distance', () => {
     lat: 37.755,
     lon: -122.39,
     acc_m: 5,
+    accuracy_m: 5,
     timestamp: Date.now(),
   };
 
@@ -50,10 +51,10 @@ test('AutoCourseController enforces hysteresis and dismiss timers', () => {
     },
   ];
 
-  const far: LocationFix = { lat: 0.03, lon: 0.03, acc_m: 5, timestamp: 0 };
-  const closer: LocationFix = { lat: 0.029, lon: 0.029, acc_m: 5, timestamp: 1 };
-  const close: LocationFix = { lat: 0.024, lon: 0.024, acc_m: 5, timestamp: 2 };
-  const veryClose: LocationFix = { lat: 0.022, lon: 0.022, acc_m: 5, timestamp: 3 };
+  const far: LocationFix = { lat: 0.03, lon: 0.03, acc_m: 5, accuracy_m: 5, timestamp: 0 };
+  const closer: LocationFix = { lat: 0.029, lon: 0.029, acc_m: 5, accuracy_m: 5, timestamp: 1 };
+  const close: LocationFix = { lat: 0.024, lon: 0.024, acc_m: 5, accuracy_m: 5, timestamp: 2 };
+  const veryClose: LocationFix = { lat: 0.022, lon: 0.022, acc_m: 5, accuracy_m: 5, timestamp: 3 };
 
   let now = 0;
   const controller = new AutoCourseController({ debounceMs: 0, now: () => now });

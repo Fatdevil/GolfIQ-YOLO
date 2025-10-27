@@ -424,6 +424,7 @@ class LandingHeuristics implements LandingHeuristicsController {
       lat: sample.lat,
       lon: sample.lon,
       acc_m: sample.acc_m,
+      accuracy_m: sample.acc_m,
       timestamp: sample.t,
     };
     const previousFix: LocationFix | null = this.lastSample
@@ -431,6 +432,7 @@ class LandingHeuristics implements LandingHeuristicsController {
           lat: this.lastSample.lat,
           lon: this.lastSample.lon,
           acc_m: this.lastSample.acc_m,
+          accuracy_m: this.lastSample.acc_m,
           timestamp: this.lastSample.t,
         }
       : null;

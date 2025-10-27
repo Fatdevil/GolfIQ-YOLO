@@ -51,6 +51,11 @@ import {
   LocationError,
   estimateSpeedMps,
   distanceMeters,
+  formatAccuracyMeters,
+  formatDop,
+  formatDualFrequency,
+  formatSatelliteCount,
+  gnssAccuracyLevel,
   type LocationFix,
 } from '../../../../shared/arhud/location';
 import { createCameraStub, type CameraFrame } from '../../../../shared/arhud/native/camera_stub';
@@ -1663,6 +1668,7 @@ const QAArHudOverlayScreen: React.FC = () => {
   const [autoPickPrompt, setAutoPickPrompt] = useState<AutoPickPrompt | null>(null);
   const [autoPickError, setAutoPickError] = useState<string | null>(null);
   const [playerPosition, setPlayerPosition] = useState<LocalPoint>({ x: 0, y: 0 });
+  const [gnssFix, setGnssFix] = useState<LocationFix | null>(null);
   const [heading, setHeading] = useState(0);
   const [pin, setPin] = useState<GeoPoint | null>(null);
   const [pinMetrics, setPinMetrics] = useState<{ distance: number; bearing: number } | null>(null);
@@ -2130,6 +2136,7 @@ const QAArHudOverlayScreen: React.FC = () => {
           lat: lastFix.lat,
           lon: lastFix.lon,
           acc_m: lastFix.acc_m,
+          accuracy_m: lastFix.accuracy_m ?? lastFix.acc_m,
           timestamp: lastFix.timestamp,
         }
       : playerLatLon
@@ -2137,6 +2144,7 @@ const QAArHudOverlayScreen: React.FC = () => {
             lat: playerLatLon.lat,
             lon: playerLatLon.lon,
             acc_m: 10,
+            accuracy_m: 10,
             timestamp: now,
           }
         : null;
@@ -3039,6 +3047,7 @@ const QAArHudOverlayScreen: React.FC = () => {
   useEffect(() => {
     if (!qaEnabled) {
       lastLocationFixRef.current = null;
+      setGnssFix(null);
       return undefined;
     }
     let cancelled = false;
@@ -3055,6 +3064,7 @@ const QAArHudOverlayScreen: React.FC = () => {
         }
         const previous = lastLocationFixRef.current;
         lastLocationFixRef.current = fix;
+        setGnssFix(fix);
         const heuristics = landingHeuristicsRef.current;
         const estimated = estimateSpeedMps(previous, fix);
         const sample: LandingSample = {
@@ -3084,6 +3094,7 @@ const QAArHudOverlayScreen: React.FC = () => {
           setLandingState(landingHeuristicsRef.current.state());
           setLandingProposal(null);
           clearLandingTimeout();
+          setGnssFix(null);
           cancelled = true;
           return;
         }
@@ -3756,6 +3767,38 @@ const QAArHudOverlayScreen: React.FC = () => {
     !autoPickEnabled ? styles.autoPickStatusMuted : null,
     !autoPickAvailable || (autoPickError && autoPickEnabled) ? styles.autoPickStatusError : null,
   ];
+  const gnssAccuracyValue = useMemo(() => {
+    if (!gnssFix) {
+      return null;
+    }
+    if (typeof gnssFix.accuracy_m === 'number' && Number.isFinite(gnssFix.accuracy_m)) {
+      return gnssFix.accuracy_m;
+    }
+    if (typeof gnssFix.acc_m === 'number' && Number.isFinite(gnssFix.acc_m)) {
+      return gnssFix.acc_m;
+    }
+    return null;
+  }, [gnssFix?.accuracy_m, gnssFix?.acc_m]);
+  const gnssLevel = useMemo(() => gnssAccuracyLevel(gnssAccuracyValue), [gnssAccuracyValue]);
+  const gnssBadgeText = useMemo(
+    () =>
+      [
+        formatAccuracyMeters(gnssAccuracyValue),
+        formatSatelliteCount(gnssFix?.sats ?? null),
+        formatDop(gnssFix?.dop ?? null),
+        formatDualFrequency(gnssFix?.dualFreqGuess ?? null),
+      ].join(' • '),
+    [gnssAccuracyValue, gnssFix?.sats, gnssFix?.dop, gnssFix?.dualFreqGuess],
+  );
+  const gnssBadgeToneStyle =
+    gnssLevel === 'good'
+      ? styles.gnssBadgeGood
+      : gnssLevel === 'ok'
+        ? styles.gnssBadgeOk
+        : gnssLevel === 'poor'
+          ? styles.gnssBadgePoor
+          : styles.gnssBadgeUnknown;
+  const gnssShowTip = gnssLevel === 'poor';
 
   if (!qaEnabled) {
     return null;
@@ -3763,6 +3806,12 @@ const QAArHudOverlayScreen: React.FC = () => {
 
   return (
     <View style={styles.container}>
+      <View style={styles.gnssCard}>
+        <View style={[styles.gnssBadge, gnssBadgeToneStyle]}>
+          <Text style={styles.gnssBadgeText}>{gnssBadgeText}</Text>
+        </View>
+        {gnssShowTip ? <Text style={styles.gnssTip}>stand still 2–3 s</Text> : null}
+      </View>
       <CoursePicker
         courses={courses}
         selected={selectedCourseId}
@@ -4553,6 +4602,40 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 20,
     gap: 16,
+  },
+  gnssCard: {
+    backgroundColor: '#111827',
+    borderRadius: 12,
+    padding: 12,
+    gap: 6,
+  },
+  gnssBadge: {
+    borderRadius: 10,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+  },
+  gnssBadgeText: {
+    color: '#f8fafc',
+    fontSize: 13,
+    fontWeight: '600',
+    textAlign: 'center',
+  },
+  gnssBadgeGood: {
+    backgroundColor: '#166534',
+  },
+  gnssBadgeOk: {
+    backgroundColor: '#854d0e',
+  },
+  gnssBadgePoor: {
+    backgroundColor: '#7f1d1d',
+  },
+  gnssBadgeUnknown: {
+    backgroundColor: '#1f2937',
+  },
+  gnssTip: {
+    color: '#94a3b8',
+    fontSize: 11,
+    textTransform: 'none',
   },
   pickerContainer: {
     backgroundColor: '#111827',

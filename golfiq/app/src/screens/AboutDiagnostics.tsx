@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
+  Alert,
   Linking,
   Platform,
   ScrollView,
@@ -23,9 +24,20 @@ import {
   subscribeToUploadQueueSummary,
   type UploadQueueSummary,
 } from '../../../../shared/runs/uploader';
+import {
+  formatAccuracyMeters,
+  formatDop,
+  formatDualFrequency,
+  formatSatelliteCount,
+  gnssAccuracyLevel,
+  getLocation,
+  LocationError,
+  type LocationFix,
+} from '../../../../shared/arhud/location';
 import { isQAMode } from '../../qa/QAGate';
 
 const PRIVACY_DOCS_URL = 'https://docs.golfiq.dev/privacy';
+const GNSS_POLICY_DOC_URL = 'https://docs.golfiq.dev/gnss-device-policy';
 
 function formatTimestamp(value: string | number | null | undefined): string {
   if (value === null || typeof value === 'undefined') {
@@ -159,6 +171,8 @@ const AboutDiagnostics: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [gnssFix, setGnssFix] = useState<LocationFix | null>(null);
+  const [gnssError, setGnssError] = useState<string | null>(null);
   const [queueSummary, setQueueSummary] = useState<UploadQueueSummary | null>(null);
   const [exporting, setExporting] = useState(false);
   const [exportMessage, setExportMessage] = useState<string | null>(null);
@@ -170,6 +184,7 @@ const AboutDiagnostics: React.FC = () => {
   const refreshDiagnostics = useCallback(async () => {
     setRefreshing(true);
     setError(null);
+    setGnssError(null);
     try {
       const next = await collectDiagnosticsSnapshot({ hints: { qaMode } });
       setSnapshot(next);
@@ -177,6 +192,21 @@ const AboutDiagnostics: React.FC = () => {
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Unable to load diagnostics.';
       setError(message);
+    }
+    try {
+      const fix = await getLocation();
+      setGnssFix(fix);
+    } catch (err) {
+      if (err instanceof LocationError) {
+        setGnssError(
+          err.code === 'permission-denied' ? 'Location permission denied.' : 'Location unavailable.',
+        );
+      } else if (err instanceof Error) {
+        setGnssError(err.message);
+      } else {
+        setGnssError('Location unavailable.');
+      }
+      setGnssFix(null);
     } finally {
       setRefreshing(false);
       setLoading(false);
@@ -268,11 +298,41 @@ const AboutDiagnostics: React.FC = () => {
     });
   }, []);
 
+  const openGnssPolicy = useCallback(() => {
+    Linking.openURL(GNSS_POLICY_DOC_URL).catch(() => {
+      Alert.alert('Unable to open GNSS device policy', GNSS_POLICY_DOC_URL);
+    });
+  }, []);
+
   const bagRows = useMemo(() => bagHighlights(snapshot), [snapshot]);
   const rcRows = useMemo(() => rcEntries(snapshot), [snapshot]);
   const logsRow = useMemo(() => logsSummary(snapshot), [snapshot]);
   const edgeRow = useMemo(() => edgeSummary(snapshot), [snapshot]);
   const tuningRow = useMemo(() => tuningSummary(snapshot), [snapshot]);
+  const gnssAccuracyValue = useMemo(() => {
+    if (!gnssFix) {
+      return null;
+    }
+    if (typeof gnssFix.accuracy_m === 'number' && Number.isFinite(gnssFix.accuracy_m)) {
+      return gnssFix.accuracy_m;
+    }
+    if (typeof gnssFix.acc_m === 'number' && Number.isFinite(gnssFix.acc_m)) {
+      return gnssFix.acc_m;
+    }
+    return null;
+  }, [gnssFix?.accuracy_m, gnssFix?.acc_m]);
+  const gnssLevel = useMemo(() => gnssAccuracyLevel(gnssAccuracyValue), [gnssAccuracyValue]);
+  const gnssSummaryText = useMemo(
+    () =>
+      [
+        formatAccuracyMeters(gnssAccuracyValue),
+        formatSatelliteCount(gnssFix?.sats ?? null),
+        formatDop(gnssFix?.dop ?? null),
+        formatDualFrequency(gnssFix?.dualFreqGuess ?? null),
+      ].join(' • '),
+    [gnssAccuracyValue, gnssFix?.sats, gnssFix?.dop, gnssFix?.dualFreqGuess],
+  );
+  const gnssTipText = gnssLevel === 'poor' ? 'Tip: stand still 2–3 s for a tighter fix.' : null;
 
   return (
     <ScrollView contentContainerStyle={styles.container}>
@@ -314,6 +374,16 @@ const AboutDiagnostics: React.FC = () => {
           <Text style={styles.body}>Runtime: {String(snapshot.device.runtimeVersion ?? 'n/a')}</Text>
         </View>
       ) : null}
+
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>GNSS health</Text>
+        <Text style={styles.body}>{gnssSummaryText}</Text>
+        {gnssTipText ? <Text style={styles.caption}>{gnssTipText}</Text> : null}
+        {gnssError ? <Text style={[styles.caption, styles.captionError]}>{gnssError}</Text> : null}
+        <TouchableOpacity onPress={openGnssPolicy}>
+          <Text style={styles.link}>{GNSS_POLICY_DOC_URL}</Text>
+        </TouchableOpacity>
+      </View>
 
       {snapshot ? (
         <View style={styles.section}>
@@ -538,6 +608,9 @@ const styles = StyleSheet.create({
   caption: {
     color: '#64748b',
     fontSize: 12,
+  },
+  captionError: {
+    color: '#b91c1c',
   },
 });
 
