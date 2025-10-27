@@ -36,6 +36,22 @@ export type Shot = {
   deltas: ShotDeltas;
   relative: ShotRelative | null;
   notes: string | null;
+  phase: 'tee' | 'approach' | 'short' | 'putt' | null;
+  sg: {
+    tee: number | null;
+    approach: number | null;
+    short: number | null;
+    putt: number | null;
+    total: number | null;
+    expStart: number | null;
+    expEnd: number | null;
+    strokes: number | null;
+  } | null;
+  planAdopted: boolean | null;
+  evBefore: number | null;
+  evAfter: number | null;
+  endDist_m: number | null;
+  holed: boolean | null;
 };
 
 export type DispersionStats = {
@@ -67,6 +83,23 @@ function pickString(value: unknown): string | null {
   if (typeof value === "string") {
     const trimmed = value.trim();
     return trimmed.length ? trimmed : null;
+  }
+  return null;
+}
+
+function pickBoolean(value: unknown): boolean | null {
+  if (typeof value === "boolean") {
+    return value;
+  }
+  if (typeof value === "number") {
+    if (value === 0) return false;
+    if (value === 1) return true;
+  }
+  if (typeof value === "string") {
+    const normalized = value.trim().toLowerCase();
+    if (!normalized) return null;
+    if (normalized === "true" || normalized === "1") return true;
+    if (normalized === "false" || normalized === "0") return false;
   }
   return null;
 }
@@ -169,6 +202,33 @@ export function parseShotLog(records: unknown): Shot[] {
     const land = pickPoint(record["land"]);
     const relative = pin && land ? computeRelative(pin, land, heading) : null;
     const notes = pickString(record["notes"]);
+    const rawPhase = pickString(record["phase"]);
+    const phase =
+      rawPhase && ["tee", "approach", "short", "putt"].includes(rawPhase)
+        ? (rawPhase as Shot["phase"])
+        : null;
+    const sgRaw = record["sg"];
+    const sg =
+      sgRaw && typeof sgRaw === "object"
+        ? {
+            tee: pickNumber((sgRaw as Record<string, unknown>)["tee"]),
+            approach: pickNumber((sgRaw as Record<string, unknown>)["approach"]),
+            short: pickNumber((sgRaw as Record<string, unknown>)["short"]),
+            putt: pickNumber((sgRaw as Record<string, unknown>)["putt"]),
+            total: pickNumber((sgRaw as Record<string, unknown>)["total"]),
+            expStart: pickNumber((sgRaw as Record<string, unknown>)["expStart"]),
+            expEnd: pickNumber((sgRaw as Record<string, unknown>)["expEnd"]),
+            strokes: pickNumber((sgRaw as Record<string, unknown>)["strokes"]),
+          }
+        : null;
+    const evRaw = record["ev"];
+    const evBefore =
+      evRaw && typeof evRaw === "object" ? pickNumber((evRaw as Record<string, unknown>)["before"]) : null;
+    const evAfter =
+      evRaw && typeof evRaw === "object" ? pickNumber((evRaw as Record<string, unknown>)["after"]) : null;
+    const planAdopted = pickBoolean(record["planAdopted"]);
+    const endDist = pickNumber(record["endDist_m"]);
+    const holed = pickBoolean(record["holed"]);
     shots.push({
       shotId: shotIdRaw,
       tStart,
@@ -184,6 +244,13 @@ export function parseShotLog(records: unknown): Shot[] {
       deltas,
       relative,
       notes,
+      phase,
+      sg,
+      planAdopted,
+      evBefore,
+      evAfter,
+      endDist_m: endDist,
+      holed,
     });
   });
   return shots;

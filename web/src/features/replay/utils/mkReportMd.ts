@@ -1,6 +1,7 @@
 import type { ParsedHudRun } from "./parseHudRun";
 import type { BenchSummary } from "./parseBenchSummary";
 import type { DispersionStats } from "./parseShotLog";
+import type { SgSummary } from "./sg";
 
 function fmtNumber(value: number | null | undefined, digits = 2): string {
   if (value === null || value === undefined || Number.isNaN(value)) {
@@ -46,6 +47,7 @@ export function mkReportMd(
   run: ParsedHudRun,
   summary: BenchSummary | null | undefined,
   dispersion?: DispersionStats | null,
+  sgSummary?: SgSummary | null,
 ): string {
   const lines: string[] = [];
   lines.push("# HUD Run QA Report");
@@ -81,6 +83,30 @@ export function mkReportMd(
     lines.push(
       `- Distribution: short ${fmtPercent(dispersion.pctShort)}, long ${fmtPercent(dispersion.pctLong)}, left ${fmtPercent(dispersion.pctLeft)}, right ${fmtPercent(dispersion.pctRight)}`,
     );
+    lines.push("");
+  }
+
+  if (sgSummary && sgSummary.count) {
+    lines.push("## Strokes gained");
+    lines.push(`- Shots with SG: ${sgSummary.count}`);
+    lines.push(
+      `- Total: ${fmtNumber(sgSummary.total)} (tee ${fmtNumber(sgSummary.tee)}, approach ${fmtNumber(sgSummary.approach)}, short ${fmtNumber(sgSummary.short)}, putt ${fmtNumber(sgSummary.putt)})`,
+    );
+    if (sgSummary.adopted.count || sgSummary.notAdopted.count) {
+      lines.push(
+        `- Adopted plan: ${sgSummary.adopted.count} shots${
+          sgSummary.adopted.average !== null ? ` · avg ${fmtNumber(sgSummary.adopted.average)}` : ""
+        }`,
+      );
+      lines.push(
+        `- Other decisions: ${sgSummary.notAdopted.count} shots${
+          sgSummary.notAdopted.average !== null ? ` · avg ${fmtNumber(sgSummary.notAdopted.average)}` : ""
+        }`,
+      );
+    }
+    if (sgSummary.lift !== null) {
+      lines.push(`- Adoption lift: ${fmtNumber(sgSummary.lift)}`);
+    }
     lines.push("");
   }
 

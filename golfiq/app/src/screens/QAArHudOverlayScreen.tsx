@@ -50,6 +50,7 @@ import {
   getLocation,
   LocationError,
   estimateSpeedMps,
+  distanceMeters,
   type LocationFix,
 } from '../../../../shared/arhud/location';
 import { createCameraStub, type CameraFrame } from '../../../../shared/arhud/native/camera_stub';
@@ -112,6 +113,11 @@ import { inRollout } from '../../../../shared/caddie/rollout';
 import { caddieTipToText, advicesToText } from '../../../../shared/caddie/text';
 import { speak as speakTip, stop as stopSpeech } from '../../../../shared/tts/speak';
 import { buildGhostTelemetryKey } from './utils/ghostTelemetry';
+import {
+  classifyPhase,
+  computeSG,
+  type ShotPhase,
+} from '../../../../shared/sg/engine';
 
 type FeatureKind = 'green' | 'fairway' | 'bunker' | 'hazard' | 'cartpath' | 'other';
 
@@ -432,6 +438,8 @@ type TelemetryEmitter = (event: string, data: Record<string, unknown>) => void;
 
 type HazardDirection = 'LEFT' | 'RIGHT';
 
+const HOLED_THRESHOLD_M = 0.75;
+
 type ShotLogRecord = {
   tStart: number;
   tEnd: number;
@@ -449,6 +457,24 @@ type ShotLogRecord = {
   land: { lat: number; lon: number } | null;
   carry_m: number | null;
   heading_deg: number | null;
+  endDist_m?: number | null;
+  holed?: boolean;
+  phase?: ShotPhase;
+  planAdopted?: boolean;
+  sg?: {
+    tee: number | null;
+    approach: number | null;
+    short: number | null;
+    putt: number | null;
+    total: number | null;
+    expStart: number | null;
+    expEnd: number | null;
+    strokes: number | null;
+  };
+  ev?: {
+    before: number | null;
+    after: number | null;
+  };
   notes?: string | null;
 };
 
@@ -461,6 +487,8 @@ type ShotSessionState = {
   plan: PlanOut;
   club: string | null;
   pin: GeoPoint | null;
+  phase: ShotPhase;
+  planAdopted: boolean;
   landing?: LocalPoint;
   completedAt?: number;
   logged?: boolean;
@@ -473,6 +501,16 @@ type ShotSummary = {
   plannedClub: ClubId;
   actualClub: string;
   feedback: FeedbackOutput | null;
+  evBefore: number | null;
+  evAfter: number | null;
+  sg: {
+    tee: number;
+    approach: number;
+    short: number;
+    putt: number;
+    total: number;
+  } | null;
+  planAdopted: boolean;
 };
 
 type AutoPickPrompt = {
@@ -779,6 +817,37 @@ function fromLocalPoint(origin: { lat: number; lon: number }, point: LocalPoint)
   const denom = Math.cos(latRad) || 1;
   const lon = lon0 + ((point.x / (EARTH_RADIUS_M * denom)) * 180) / Math.PI;
   return { lat, lon };
+}
+
+type LandingOutcome = {
+  carry: number;
+  landGeo: GeoPoint | null;
+  endDist: number;
+  holed: boolean;
+};
+
+function computeLandingOutcome(
+  session: ShotSessionState,
+  origin: GeoPoint | null,
+): LandingOutcome | null {
+  if (!session.landing) {
+    return null;
+  }
+  const carry = Math.hypot(session.landing.x - session.origin.x, session.landing.y - session.origin.y);
+  const landGeo = origin ? fromLocalPoint(origin, session.landing) : null;
+  let endDist: number | null = null;
+  if (landGeo && session.pin) {
+    const dist = distanceMeters(landGeo, session.pin);
+    if (Number.isFinite(dist)) {
+      endDist = Math.max(0, dist);
+    }
+  }
+  if (endDist === null) {
+    const fallback = Math.max(0, session.baseDistance - carry);
+    endDist = fallback;
+  }
+  const holed = endDist <= HOLED_THRESHOLD_M;
+  return { carry, landGeo, endDist, holed };
 }
 
 function directionFromBearing(bearing: number, heading: number): HazardDirection {
@@ -1773,6 +1842,19 @@ const QAArHudOverlayScreen: React.FC = () => {
   const camera = useMemo(() => createCameraStub({ fps: 15 }), []);
   const defaultQaBag = useMemo(() => defaultBag(), []);
   const formatDelta = useCallback((value: number) => (value >= 0 ? `+${value.toFixed(1)}` : value.toFixed(1)), []);
+  const formatSg = useCallback((value: number | null | undefined) => {
+    if (!Number.isFinite(value ?? Number.NaN)) {
+      return 'n/a';
+    }
+    const numeric = Number(value);
+    return `${numeric >= 0 ? '+' : ''}${numeric.toFixed(2)}`;
+  }, []);
+  const formatEv = useCallback((value: number | null | undefined) => {
+    if (!Number.isFinite(value ?? Number.NaN)) {
+      return '—';
+    }
+    return Number(value).toFixed(2);
+  }, []);
   const wrapDegrees = useCallback((value: number) => {
     const mod = value % 360;
     return mod < 0 ? mod + 360 : mod;
@@ -1978,6 +2060,7 @@ const QAArHudOverlayScreen: React.FC = () => {
       suggested && (CLUB_SEQUENCE as readonly string[]).includes(suggested)
         ? suggested
         : suggestClub(qaBag, plannerResult.playsLike_m);
+    const shotPhase = classifyPhase(pinMetrics.distance);
     setShotSession({
       shotId,
       startedAt: now,
@@ -1987,6 +2070,8 @@ const QAArHudOverlayScreen: React.FC = () => {
       plan: plannerResult,
       club: normalizedClub,
       pin: pinRef.current ? { ...pinRef.current } : null,
+      phase: shotPhase,
+      planAdopted: planAdoptedRef.current,
       landing: undefined,
       completedAt: undefined,
       logged: false,
@@ -2142,11 +2227,17 @@ const QAArHudOverlayScreen: React.FC = () => {
         head_m: 0,
         slope_m: 0,
       };
-      const landGeo = overlayOrigin ? fromLocalPoint(overlayOrigin, session.landing) : null;
-      const carry = Math.hypot(
-        session.landing.x - session.origin.x,
-        session.landing.y - session.origin.y,
-      );
+      const outcome = computeLandingOutcome(session, overlayOrigin);
+      if (!outcome) {
+        return null;
+      }
+      const { carry, landGeo, endDist, holed } = outcome;
+      const sgResult = computeSG({
+        phase: session.phase,
+        startDist_m: session.baseDistance,
+        endDist_m: endDist,
+        holed,
+      });
       return {
         tStart: session.startedAt,
         tEnd: session.completedAt ?? Date.now(),
@@ -2164,6 +2255,24 @@ const QAArHudOverlayScreen: React.FC = () => {
         land: landGeo ? { lat: landGeo.lat, lon: landGeo.lon } : null,
         carry_m: finiteOrNull(carry),
         heading_deg: finiteOrNull(session.headingDeg),
+        endDist_m: finiteOrNull(endDist),
+        holed,
+        phase: session.phase,
+        planAdopted: session.planAdopted,
+        sg: {
+          tee: finiteOrNull(sgResult.sgTee),
+          approach: finiteOrNull(sgResult.sgApp),
+          short: finiteOrNull(sgResult.sgShort),
+          putt: finiteOrNull(sgResult.sgPutt),
+          total: finiteOrNull(sgResult.total),
+          expStart: finiteOrNull(sgResult.expStart),
+          expEnd: finiteOrNull(sgResult.expEnd),
+          strokes: finiteOrNull(sgResult.strokesTaken),
+        },
+        ev: {
+          before: finiteOrNull(sgResult.expStart),
+          after: finiteOrNull(sgResult.strokesTaken + sgResult.expEnd),
+        },
       };
     },
     [overlayOrigin],
@@ -2233,9 +2342,11 @@ const QAArHudOverlayScreen: React.FC = () => {
     if (!shotSession || !shotSession.landing) {
       return null;
     }
-    const dx = shotSession.landing.x - shotSession.origin.x;
-    const dy = shotSession.landing.y - shotSession.origin.y;
-    const actual = Math.hypot(dx, dy);
+    const outcome = computeLandingOutcome(shotSession, overlayOrigin);
+    if (!outcome) {
+      return null;
+    }
+    const { carry: actual, endDist, holed } = outcome;
     const planned = shotSession.plan.playsLike_m;
     const error = actual - planned;
     const isClubId = (value: string | null | undefined): value is ClubId =>
@@ -2246,6 +2357,19 @@ const QAArHudOverlayScreen: React.FC = () => {
       : suggestClub(qaBag, planned);
     const actualClubInferred = suggestClub(qaBag, actual);
     const actualClubUsed = storedClub && isClubId(storedClub) ? storedClub : null;
+    const sgResult = computeSG({
+      phase: shotSession.phase,
+      startDist_m: shotSession.baseDistance,
+      endDist_m: endDist,
+      holed,
+    });
+    const sg = {
+      tee: sgResult.sgTee,
+      approach: sgResult.sgApp,
+      short: sgResult.sgShort,
+      putt: sgResult.sgPutt,
+      total: sgResult.total,
+    } as const;
     const feedback = buildShotFeedback({
       planned: {
         base_m: shotSession.baseDistance,
@@ -2276,8 +2400,12 @@ const QAArHudOverlayScreen: React.FC = () => {
       plannedClub,
       actualClub: actualClubUsed ?? actualClubInferred,
       feedback,
+      evBefore: sgResult.expStart,
+      evAfter: sgResult.strokesTaken + sgResult.expEnd,
+      sg,
+      planAdopted: shotSession.planAdopted,
     };
-  }, [qaBag, shotSession]);
+  }, [overlayOrigin, qaBag, shotSession]);
 
   useEffect(() => {
     if (!shotSession || !shotSummary?.feedback) {
@@ -4202,6 +4330,14 @@ const QAArHudOverlayScreen: React.FC = () => {
                   <Text style={styles.resultCardLine}>
                     Actual carry: {shotSummary.actual.toFixed(1)} m ({shotSummary.actualClub})
                   </Text>
+                  {shotSummary.sg ? (
+                    <Text style={styles.resultCardLine}>
+                      EV {formatEv(shotSummary.evBefore)}→{formatEv(shotSummary.evAfter)} · SG Δ{' '}
+                      {formatSg(shotSummary.sg.total)} ({
+                        shotSummary.planAdopted ? 'adopted plan' : 'not adopted'
+                      })
+                    </Text>
+                  ) : null}
                   <Text style={styles.resultCardLine}>Error: {formatDelta(shotSummary.error)}</Text>
                   {shotSummary.feedback ? (
                     <View style={styles.resultCardFeedbackBlock}>
