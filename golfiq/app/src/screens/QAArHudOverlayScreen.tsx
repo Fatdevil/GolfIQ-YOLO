@@ -172,6 +172,51 @@ const Bar = ({ pct, good }: { pct: number; good?: boolean }) => (
   </View>
 );
 
+const normalizeRcBoolean = (value: unknown): boolean => {
+  if (value === true) {
+    return true;
+  }
+  if (value === false) {
+    return false;
+  }
+  if (typeof value === 'number') {
+    return value !== 0;
+  }
+  if (typeof value === 'string') {
+    const normalized = value.trim().toLowerCase();
+    if (!normalized) {
+      return false;
+    }
+    return ['1', 'true', 'yes', 'on'].includes(normalized);
+  }
+  return false;
+};
+
+const readTournamentSafe = (): boolean => {
+  if (typeof globalThis === 'undefined') {
+    return false;
+  }
+  const rc = (globalThis as { RC?: Record<string, unknown> }).RC;
+  if (!rc || typeof rc !== 'object') {
+    return false;
+  }
+  const record = rc as Record<string, unknown>;
+  if (record['hud.tournamentSafe'] !== undefined) {
+    return normalizeRcBoolean(record['hud.tournamentSafe']);
+  }
+  if (record.tournamentSafe !== undefined) {
+    return normalizeRcBoolean(record.tournamentSafe);
+  }
+  return false;
+};
+
+const formatGreenSectionLabel = (value: string): string => {
+  if (!value) {
+    return '';
+  }
+  return value.charAt(0).toUpperCase() + value.slice(1);
+};
+
 const FEATURE_COLORS: Record<FeatureKind, string> = {
   green: '#16a34a',
   fairway: '#22c55e',
@@ -1658,6 +1703,7 @@ const QAArHudOverlayScreen: React.FC = () => {
   const mcSliderMetricsRef = useRef<{ left: number }>({ left: 0 });
   const lastMcTelemetryRef = useRef<string | null>(null);
   const lastSpokenPlanRef = useRef<string | null>(null);
+  const tournamentSafe = useMemo(() => readTournamentSafe(), []);
   const [caddieRollout, setCaddieRollout] = useState<CaddieRolloutState>({
     ready: false,
     deviceId: 'unknown-device',
@@ -2548,6 +2594,28 @@ const QAArHudOverlayScreen: React.FC = () => {
     plannerInputs.wind_mps,
     playerLatLon,
   ]);
+  const greenSectionLabel = useMemo(() => {
+    if (!caddiePlan || caddiePlan.kind !== 'approach' || !caddiePlan.greenSection) {
+      return null;
+    }
+    return formatGreenSectionLabel(caddiePlan.greenSection);
+  }, [caddiePlan]);
+  const fatSideIcon = useMemo(() => {
+    if (!caddiePlan || caddiePlan.kind !== 'approach' || !caddiePlan.fatSide) {
+      return null;
+    }
+    return caddiePlan.fatSide === 'L' ? '⬅︎' : '➡︎';
+  }, [caddiePlan]);
+  const showGreenHints = useMemo(
+    () =>
+      Boolean(
+        caddiePlan &&
+          caddiePlan.kind === 'approach' &&
+          !tournamentSafe &&
+          (caddiePlan.greenSection || caddiePlan.fatSide),
+      ),
+    [caddiePlan, tournamentSafe],
+  );
   const sliderHandleSize = 18;
   const sliderProgress = clamp01(
     (caddieSamples - MC_SAMPLES_MIN) / (MC_SAMPLES_MAX - MC_SAMPLES_MIN),
@@ -4161,6 +4229,21 @@ const QAArHudOverlayScreen: React.FC = () => {
           {caddiePlan ? (
             <View style={styles.caddiePlanBlock}>
               <Text style={styles.caddiePlanTitle}>{caddieTitle}</Text>
+              {showGreenHints ? (
+                <View style={styles.greenSectionRow}>
+                  {greenSectionLabel ? (
+                    <View style={styles.greenSectionChip}>
+                      <Text style={styles.greenSectionLabelText}>{greenSectionLabel}</Text>
+                    </View>
+                  ) : null}
+                  {fatSideIcon ? (
+                    <View style={styles.greenSectionChip}>
+                      <Text style={styles.greenSectionIcon}>{fatSideIcon}</Text>
+                      <Text style={styles.greenSectionLabelText}>Fat side</Text>
+                    </View>
+                  ) : null}
+                </View>
+              ) : null}
               {caddieTips.map((line, index) => (
                 <Text key={`caddie-line-${index}`} style={styles.caddieTipLine}>
                   {line}
@@ -5283,6 +5366,33 @@ const styles = StyleSheet.create({
     color: '#f8fafc',
     fontSize: 14,
     fontWeight: '700',
+  },
+  greenSectionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 4,
+    marginBottom: 2,
+  },
+  greenSectionChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 12,
+    backgroundColor: '#0f172a',
+    borderWidth: 1,
+    borderColor: '#1e293b',
+    gap: 4,
+  },
+  greenSectionLabelText: {
+    color: '#f8fafc',
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  greenSectionIcon: {
+    color: '#38bdf8',
+    fontSize: 12,
   },
   caddieTipLine: {
     color: '#cbd5f5',

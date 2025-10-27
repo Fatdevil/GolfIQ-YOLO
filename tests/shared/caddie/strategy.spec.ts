@@ -54,6 +54,7 @@ function buildSyntheticBundle(): CourseBundle {
         geometry: { type: 'Polygon', coordinates: [bunkerRing] },
       },
     ],
+    greensById: {},
   };
 }
 

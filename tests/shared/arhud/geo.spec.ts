@@ -129,6 +129,7 @@ test('nearestFeature finds the closest polygon edge', () => {
         },
       },
     ],
+    greensById: {},
   };
 
   const result = nearestFeature(origin, bundle);
@@ -173,6 +174,7 @@ test('nearestFeature respects feature type filters', () => {
         },
       },
     ],
+    greensById: {},
   };
 
   const bunkerOnly = nearestFeature(origin, bundle, ['bunker']);

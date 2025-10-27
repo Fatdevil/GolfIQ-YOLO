@@ -106,6 +106,7 @@ test('prepareFeatures collects polygons and cart paths via properties-based type
         },
       },
     ],
+    greensById: {},
   };
 
   const prepared = prepareFeatures(bundle, frame);
@@ -177,6 +178,7 @@ test('prepareFeatures ignores non-cartpath lines for hazards', () => {
         },
       },
     ],
+    greensById: {},
   };
 
   const prepared = prepareFeatures(bundle, frame);

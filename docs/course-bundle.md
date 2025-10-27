@@ -60,10 +60,24 @@ Generated bundles follow this envelope:
   "version": 1,
   "ttlSec": 86400,
   "features": [
-    {"id": "g1", "type": "green", "geometry": {"type": "Polygon", "coordinates": [...]}}
+    {
+      "id": "g1",
+      "type": "green",
+      "geometry": { "type": "Polygon", "coordinates": [...] },
+      "green": {
+        "sections": ["front", "middle", "back"],
+        "fatSide": "L"
+      }
+    }
   ]
 }
 ```
+
+When present, the optional `green` object captures approach metadata for that putting surface. `sections`
+lists the valid pin slices (front/middle/back) in tee-to-green order, while `fatSide` indicates the safer
+side (`"L"` for left, `"R"` for right) used to bias aim selection when hazards guard the thin side. Mobile
+clients cache this metadata via `greensById` and expose it to the caddie planner and HUD (the HUD suppresses
+fat-side/section hints whenever remote configuration marks the experience as tournament-safe).
 
 Metadata files look like:
 

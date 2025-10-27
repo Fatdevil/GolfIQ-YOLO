@@ -3,7 +3,12 @@ from __future__ import annotations
 import hashlib
 import json
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any, Mapping, NotRequired, TypedDict
+
+try:  # Python 3.11+
+    from typing import Literal
+except ImportError:  # pragma: no cover - fallback for older runtimes
+    from typing_extensions import Literal  # type: ignore
 
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import JSONResponse
@@ -16,7 +21,26 @@ COURSES_DIR = Path(__file__).resolve().parent.parent.parent / "data" / "courses"
 _VERSION = 1
 
 
-def _load_features(course_id: str) -> list[Any]:
+class CourseFeatureGreen(TypedDict, total=False):
+    sections: list[Literal["front", "middle", "back"]]
+    fatSide: Literal["L", "R"]
+
+
+class CourseFeature(TypedDict, total=False):
+    id: str
+    type: str
+    geometry: dict[str, Any]
+    green: NotRequired[CourseFeatureGreen]
+
+
+class CourseBundlePayload(TypedDict):
+    courseId: str
+    version: int
+    ttlSec: int
+    features: list[CourseFeature]
+
+
+def _load_features(course_id: str) -> list[CourseFeature]:
     course_file = COURSES_DIR / f"{course_id}.json"
     if not course_file.exists():
         return []
@@ -26,7 +50,7 @@ def _load_features(course_id: str) -> list[Any]:
         return []
     features = payload.get("features") if isinstance(payload, Mapping) else None
     if isinstance(features, list):
-        return features
+        return features  # type: ignore[return-value]
     return []
 
 
@@ -46,7 +70,7 @@ async def get_course_bundle(course_id: str, request: Request) -> JSONResponse:
 
     ttl = get_bundle_ttl(remote_config)
     features = _load_features(course_id)
-    payload = {
+    payload: CourseBundlePayload = {
         "courseId": course_id,
         "version": _VERSION,
         "ttlSec": ttl,
