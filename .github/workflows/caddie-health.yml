@@ -67,7 +67,52 @@ jobs:
               const clamped = Math.max(0, Math.min(1, Number(ratio) || 0));
               return blocks[Math.round(clamped * (blocks.length - 1))];
             };
+            const toSignedPercent = (value) => {
+              const num = Number(value);
+              if (!Number.isFinite(num)) {
+                return '—';
+              }
+              const scaled = num * 100;
+              const sign = scaled >= 0 ? '+' : '';
+              return `${sign}${scaled.toFixed(1)}pp`;
+            };
+            const toSignedFixed = (value, digits = 2) => {
+              const num = Number(value);
+              if (!Number.isFinite(num)) {
+                return '—';
+              }
+              const sign = num >= 0 ? '+' : '';
+              return `${sign}${num.toFixed(digits)}`;
+            };
             const errSpark = spark(Math.min(Math.abs(Number(mc.avgLongErr) || 0) / 10, 1));
+            const abLines = [];
+            if (mc.ab) {
+              const control = mc.ab.control || {};
+              const enforced = mc.ab.enforced || {};
+              const delta = mc.ab.delta || {};
+              abLines.push(
+                `| MC | adopt ${toPercent(control.adoptRate)} / sg ${toFixed(control.sgPerRound)} | adopt ${toPercent(enforced.adoptRate)} / sg ${toFixed(enforced.sgPerRound)} | adopt ${toSignedPercent(delta.adoptRate)} · sg ${toSignedFixed(delta.sgPerRound)} |`
+              );
+            }
+            if (advice.ab) {
+              const control = advice.ab.control || {};
+              const enforced = advice.ab.enforced || {};
+              const delta = advice.ab.delta || {};
+              abLines.push(
+                `| Advice | adopt ${toPercent(control.adoptRate)} / sg ${toFixed(control.sgPerRound)} | adopt ${toPercent(enforced.adoptRate)} / sg ${toFixed(enforced.sgPerRound)} | adopt ${toSignedPercent(delta.adoptRate)} · sg ${toSignedFixed(delta.sgPerRound)} |`
+              );
+            }
+            if (tts.ab) {
+              const control = tts.ab.control || {};
+              const enforced = tts.ab.enforced || {};
+              const delta = tts.ab.delta || {};
+              abLines.push(
+                `| TTS | play ${toPercent(control.playRate)} / sg ${toFixed(control.sgPerRound)} | play ${toPercent(enforced.playRate)} / sg ${toFixed(enforced.sgPerRound)} | play ${toSignedPercent(delta.playRate)} · sg ${toSignedFixed(delta.sgPerRound)} |`
+              );
+            }
+            const abTable = abLines.length
+              ? ['| Feature | Control | Enforced | Δ |', '| --- | --- | --- | --- |', ...abLines].join('\n')
+              : null;
             const table = [
               '| Metric | Value | Spark |',
               '| --- | --- | --- |',
@@ -77,17 +122,19 @@ jobs:
               `| Avg Err (L/R m) | ${toFixed(mc.avgLongErr)} / ${toFixed(mc.avgLatErr)} | ${errSpark} |`,
             ].join('\n');
             const adviceList = (advice.topAdvice || []).map((item, idx) => ` ${idx + 1}. ${item}`).join('\n');
-            const commentBody = [
+            const commentLines = [
               `### Caddie health digest (${new Date().toISOString()})`,
               `Since: ${since}`,
               '',
+              ...(abTable ? [abTable, ''] : []),
               table,
               '',
               `Advice adopt rate: ${toPercent(advice.adoptRate, 100)}`,
               adviceList ? `Top advice:\n${adviceList}` : 'Top advice: —',
               '',
               `TTS play rate: ${toPercent(tts.playRate, 100)} · Avg chars: ${toFixed(tts.avgChars, 1)}`,
-            ].join('\n');
+            ];
+            const commentBody = commentLines.join('\n');
             const issueTitle = 'Caddie Health Digest';
             const { owner, repo } = context.repo;
             const issues = await github.paginate(github.rest.issues.listForRepo, {

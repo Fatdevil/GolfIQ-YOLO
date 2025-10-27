@@ -526,6 +526,11 @@ type ShotLogRecord = {
     after: number | null;
   };
   notes?: string | null;
+  rollout?: {
+    mc: boolean;
+    advice: boolean;
+    tts: boolean;
+  };
 };
 
 type ShotSessionState = {
@@ -1718,9 +1723,9 @@ const QAArHudOverlayScreen: React.FC = () => {
     tts: false,
     percents: { mc: 0, advice: 100, tts: 0 },
   });
-  const lastPlanContextRef = useRef<{ key: string; mcUsed: boolean; hadAdvice: boolean } | null>(
-    null,
-  );
+  const lastPlanContextRef = useRef<
+    { key: string; mcUsed: boolean; hadAdvice: boolean; ttsUsed: boolean } | null
+  >(null);
   const planAdoptedRef = useRef(false);
   useEffect(() => {
     let mounted = true;
@@ -2327,9 +2332,14 @@ const QAArHudOverlayScreen: React.FC = () => {
           before: finiteOrNull(sgResult.expStart),
           after: finiteOrNull(sgResult.strokesTaken + sgResult.expEnd),
         },
+        rollout: {
+          mc: caddieRollout.mc,
+          advice: caddieRollout.advice,
+          tts: caddieRollout.tts,
+        },
       };
     },
-    [overlayOrigin],
+    [caddieRollout, overlayOrigin],
   );
 
   const handleRoundShareUpload = useCallback(async () => {
@@ -2387,6 +2397,7 @@ const QAArHudOverlayScreen: React.FC = () => {
         adopted: false,
         mcUsed: context.mcUsed,
         hadAdvice: context.hadAdvice,
+        ttsUsed: context.ttsUsed,
       });
     }
     planAdoptedRef.current = false;
@@ -2876,7 +2887,9 @@ const QAArHudOverlayScreen: React.FC = () => {
         : caddiePlan.aimDirection === 'RIGHT'
           ? caddiePlan.aimDeg
           : 0;
-    const hadAdvice = caddieAdviceRolloutEnabled && caddieAdviceLines.length > 0;
+    const adviceEnabled = caddieAdviceRolloutEnabled;
+    const adviceHasText = adviceEnabled && caddieAdviceLines.length > 0;
+    const ttsUsed = caddieTtsRolloutEnabled;
     emitTelemetry('hud.caddie.plan', {
       club: caddiePlan.club,
       risk: Number(caddiePlan.risk.toFixed(3)),
@@ -2884,17 +2897,19 @@ const QAArHudOverlayScreen: React.FC = () => {
       D: Number(caddiePlan.landing.distance_m.toFixed(1)),
       mode: caddiePlan.mode,
       adviceTypes: caddieAdviceTypes,
-      adviceText: hadAdvice ? caddieAdviceLines.slice(0, 5) : [],
+      adviceText: adviceHasText ? caddieAdviceLines.slice(0, 5) : [],
       tone: coachStyle.tone,
       verbosity: coachStyle.verbosity,
       language: coachStyle.language,
       emoji: Boolean(coachStyle.emoji),
       format: coachStyle.format,
       mcUsed: caddieMcActive,
+      hadAdvice: adviceEnabled,
+      ttsUsed,
       tags: ['style/timing'],
     });
     lastCaddiePlanRef.current = key;
-    lastPlanContextRef.current = { key, mcUsed: caddieMcActive, hadAdvice };
+    lastPlanContextRef.current = { key, mcUsed: caddieMcActive, hadAdvice: adviceEnabled, ttsUsed };
     planAdoptedRef.current = false;
   }, [
     caddieAdviceLines,
@@ -2902,6 +2917,7 @@ const QAArHudOverlayScreen: React.FC = () => {
     caddieAdviceTypes,
     caddieMcActive,
     caddiePlan,
+    caddieTtsRolloutEnabled,
     coachStyle,
     emitTelemetry,
   ]);
@@ -3010,9 +3026,15 @@ const QAArHudOverlayScreen: React.FC = () => {
       } catch (error) {
         // ignore
       }
-      const mcEnabled = rc.mc.enabled && inRollout(deviceId, rc.mc.percent);
-      const adviceEnabled = rc.advice.enabled && inRollout(deviceId, rc.advice.percent);
-      const ttsEnabled = rc.tts.enabled && inRollout(deviceId, rc.tts.percent);
+      const mcEnabled =
+        rc.mc.kill === true ? false : rc.mc.enabled && inRollout(deviceId, rc.mc.percent);
+      const adviceEnabled =
+        rc.advice.kill === true
+          ? false
+          : rc.advice.enabled && inRollout(deviceId, rc.advice.percent);
+      const ttsEnabled =
+        rc.tts.kill === true ? false : rc.tts.enabled && inRollout(deviceId, rc.tts.percent);
+      const digestEnabled = rc.digest?.enabled ?? true;
       if (cancelled) {
         return;
       }
@@ -3033,11 +3055,22 @@ const QAArHudOverlayScreen: React.FC = () => {
         mc: mcEnabled,
         advice: adviceEnabled,
         tts: ttsEnabled,
+        perc: {
+          mc: rc.mc.percent,
+          advice: rc.advice.percent,
+          tts: rc.tts.percent,
+        },
         percents: {
           mc: rc.mc.percent,
           advice: rc.advice.percent,
           tts: rc.tts.percent,
         },
+        kill: {
+          mc: rc.mc.kill === true,
+          advice: rc.advice.kill === true,
+          tts: rc.tts.kill === true,
+        },
+        digest: { enabled: digestEnabled },
       });
     })();
     return () => {
@@ -3168,7 +3201,9 @@ const QAArHudOverlayScreen: React.FC = () => {
       return;
     }
     const mcUsed = caddieMcActive;
-    const hadAdvice = caddieAdviceRolloutEnabled && caddieAdviceLines.length > 0;
+    const adviceEnabled = caddieAdviceRolloutEnabled;
+    const adviceHasText = adviceEnabled && caddieAdviceLines.length > 0;
+    const ttsUsed = caddieTtsRolloutEnabled;
     const signedAim =
       caddiePlan.aimDirection === 'LEFT'
         ? -caddiePlan.aimDeg
@@ -3191,16 +3226,18 @@ const QAArHudOverlayScreen: React.FC = () => {
       mode: caddiePlan.mode,
       applied: true,
       adviceTypes: caddieAdviceTypes,
-      adviceText: hadAdvice ? caddieAdviceLines.slice(0, 5) : [],
+      adviceText: adviceHasText ? caddieAdviceLines.slice(0, 5) : [],
       tone: coachStyle.tone,
       verbosity: coachStyle.verbosity,
       language: coachStyle.language,
       emoji: Boolean(coachStyle.emoji),
       format: coachStyle.format,
       mcUsed,
+      hadAdvice: adviceEnabled,
+      ttsUsed,
       tags: ['style/timing'],
     });
-    emitTelemetry('hud.caddie.adopt', { adopted: true, mcUsed, hadAdvice });
+    emitTelemetry('hud.caddie.adopt', { adopted: true, mcUsed, hadAdvice: adviceEnabled, ttsUsed });
     planAdoptedRef.current = true;
   }, [
     caddieAdviceLines,
@@ -3208,6 +3245,7 @@ const QAArHudOverlayScreen: React.FC = () => {
     caddieAdviceTypes,
     caddieMcActive,
     caddiePlan,
+    caddieTtsRolloutEnabled,
     coachStyle,
     emitTelemetry,
     setPlannerExpanded,
