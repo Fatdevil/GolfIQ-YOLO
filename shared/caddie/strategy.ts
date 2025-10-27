@@ -1,5 +1,11 @@
 import { toLocalENU, type GeoPoint } from "../arhud/geo";
-import type { CourseBundle } from "../arhud/bundle_client";
+import type {
+  CourseBundle,
+  CourseFeature,
+  FatSide,
+  GreenInfo,
+  GreenSection,
+} from "../arhud/bundle_client";
 import { CLUB_SEQUENCE, type ClubId } from "../playslike/bag";
 import { ellipseOverlapRisk, lateralWindOffset, sampleEllipsePoints, type RiskFeature } from "./risk";
 import { buildPlayerModel, type PlayerModel } from "./player_model";
@@ -26,6 +32,8 @@ export interface ShotPlan {
   windDrift_m: number;
   tuningActive: boolean;
   mc?: (SimOut & { samples: number }) | null;
+  greenSection?: GreenSection | null;
+  fatSide?: FatSide | null;
 }
 
 type WindInput = { speed_mps?: number; from_deg?: number } | null | undefined;
@@ -232,6 +240,78 @@ const collectPolylines = (frame: Frame, geometry: { type?: string; coordinates?:
   return lines;
 };
 
+const computeRingCentroid = (ring: { x: number; y: number }[]): { x: number; y: number } | null => {
+  if (!Array.isArray(ring) || ring.length === 0) {
+    return null;
+  }
+  let sumX = 0;
+  let sumY = 0;
+  let count = 0;
+  for (const point of ring) {
+    if (!point) {
+      continue;
+    }
+    const { x, y } = point;
+    if (!Number.isFinite(x) || !Number.isFinite(y)) {
+      continue;
+    }
+    sumX += x;
+    sumY += y;
+    count += 1;
+  }
+  if (!count) {
+    return null;
+  }
+  return { x: sumX / count, y: sumY / count };
+};
+
+const computeGreenCentroid = (rings: { x: number; y: number }[][]): { x: number; y: number } | null => {
+  if (!Array.isArray(rings) || rings.length === 0) {
+    return null;
+  }
+  for (const ring of rings) {
+    const centroid = computeRingCentroid(ring);
+    if (centroid) {
+      return centroid;
+    }
+  }
+  return null;
+};
+
+const computeGreenYRange = (
+  rings: { x: number; y: number }[][],
+): { min: number; max: number } | null => {
+  if (!Array.isArray(rings) || rings.length === 0) {
+    return null;
+  }
+  let min = Number.POSITIVE_INFINITY;
+  let max = Number.NEGATIVE_INFINITY;
+  for (const ring of rings) {
+    if (!Array.isArray(ring)) {
+      continue;
+    }
+    for (const point of ring) {
+      if (!point) {
+        continue;
+      }
+      const { y } = point;
+      if (!Number.isFinite(y)) {
+        continue;
+      }
+      if (y < min) {
+        min = y;
+      }
+      if (y > max) {
+        max = y;
+      }
+    }
+  }
+  if (min === Number.POSITIVE_INFINITY || max === Number.NEGATIVE_INFINITY) {
+    return null;
+  }
+  return { min, max };
+};
+
 type DomType = "fairway" | "green" | "hazard" | "water" | "bunker" | "cartpath" | null;
 
 const normalizeFeatureType = (raw: any): DomType => {
@@ -278,16 +358,26 @@ const hazardPenalty = (type: DomType): number => {
   return 0.4;
 };
 
-type CourseFeature = {
-  type: string;
-  geometry?: { type?: string; coordinates?: unknown };
-};
-
 type PreparedFeatures = {
   hazards: RiskFeature[];
   fairways: { x: number; y: number }[][];
-  greens: { x: number; y: number }[][];
+  greens: PreparedGreen[];
+  greenRings: { x: number; y: number }[][];
   cartpaths: { x: number; y: number }[][];
+};
+
+const DEFAULT_GREEN_SECTIONS: readonly GreenSection[] = [
+  "front",
+  "middle",
+  "back",
+];
+
+type PreparedGreen = {
+  id: string | null;
+  rings: { x: number; y: number }[][];
+  meta: GreenInfo | null;
+  centroid: { x: number; y: number } | null;
+  yRange: { min: number; max: number } | null;
 };
 
 type TeeCandidate = {
@@ -355,13 +445,52 @@ const isBetterSim = (
   return rangeFitCandidate < rangeFitIncumbent - SIM_EPSILON;
 };
 
+const normalizeGreenMeta = (meta: GreenInfo | null | undefined): GreenInfo | null => {
+  if (!meta) {
+    return null;
+  }
+  const sectionsSource = Array.isArray(meta.sections) ? meta.sections : [];
+  const sections: GreenSection[] = [];
+  for (const section of sectionsSource) {
+    if (!section) {
+      continue;
+    }
+    if (!sections.includes(section)) {
+      sections.push(section);
+    }
+  }
+  if (!sections.length) {
+    sections.push(...DEFAULT_GREEN_SECTIONS);
+  }
+  const fatSide: FatSide | null = meta.fatSide === "L" || meta.fatSide === "R" ? meta.fatSide : null;
+  return {
+    sections,
+    fatSide,
+  };
+};
+
+const resolveGreenMeta = (
+  feature: CourseFeature | null | undefined,
+  bundle: CourseBundle | null,
+): GreenInfo | null => {
+  if (!feature) {
+    return null;
+  }
+  const id = typeof feature.id === "string" ? feature.id : null;
+  if (id && bundle?.greensById && bundle.greensById[id]) {
+    return normalizeGreenMeta(bundle.greensById[id]);
+  }
+  return normalizeGreenMeta(feature.green ?? null);
+};
+
 const prepareFeatures = (bundle: CourseBundle | null, frame: Frame | null): PreparedFeatures => {
   if (!bundle || !frame || !Array.isArray(bundle.features)) {
-    return { hazards: [], fairways: [], greens: [], cartpaths: [] };
+    return { hazards: [], fairways: [], greens: [], greenRings: [], cartpaths: [] };
   }
   const hazards: RiskFeature[] = [];
   const fairways: { x: number; y: number }[][] = [];
-  const greens: { x: number; y: number }[][] = [];
+  const greens: PreparedGreen[] = [];
+  const greenRings: { x: number; y: number }[][] = [];
   const cartpaths: { x: number; y: number }[][] = [];
   for (const raw of bundle.features as CourseFeature[]) {
     if (!raw || typeof raw !== "object") {
@@ -383,7 +512,14 @@ const prepareFeatures = (bundle: CourseBundle | null, frame: Frame | null): Prep
     } else if (domType === "green" && isPoly) {
       const rings = collectPolygonRings(frame, raw.geometry ?? {});
       if (rings.length) {
-        greens.push(...rings);
+        greenRings.push(...rings);
+        greens.push({
+          id: typeof raw.id === "string" ? raw.id : null,
+          rings,
+          meta: resolveGreenMeta(raw, bundle),
+          centroid: computeGreenCentroid(rings),
+          yRange: computeGreenYRange(rings),
+        });
       }
     } else if ((domType === "hazard" || domType === "water" || domType === "bunker") && isPoly) {
       const rings = collectPolygonRings(frame, raw.geometry ?? {});
@@ -399,7 +535,7 @@ const prepareFeatures = (bundle: CourseBundle | null, frame: Frame | null): Prep
       continue;
     }
   }
-  return { hazards, fairways, greens, cartpaths };
+  return { hazards, fairways, greens, greenRings, cartpaths };
 };
 
 const buildSimFeatures = (prepared: PreparedFeatures): SimFeature[] => {
@@ -409,7 +545,7 @@ const buildSimFeatures = (prepared: PreparedFeatures): SimFeature[] => {
       features.push({ kind: "fairway", rings: [fairway] });
     }
   }
-  for (const green of prepared.greens) {
+  for (const green of prepared.greenRings) {
     if (green && green.length) {
       features.push({ kind: "green", rings: [green] });
     }
@@ -486,20 +622,145 @@ const greenPenalty = (
   center: { x: number; y: number },
   longRadius: number,
   latRadius: number,
-  greens: { x: number; y: number }[][],
+  greenRings: { x: number; y: number }[][],
 ): number => {
-  if (!greens.length) {
+  if (!greenRings.length) {
     return 0;
   }
   const samples = sampleEllipsePoints(center, longRadius, latRadius);
   let outside = 0;
   for (const sample of samples) {
-    if (!polygonContains(sample, greens)) {
+    if (!polygonContains(sample, greenRings)) {
       outside += 1;
     }
   }
   const ratio = outside / samples.length;
   return clamp01(ratio * 0.5);
+};
+
+const selectActiveGreen = (
+  greens: PreparedGreen[],
+  pin: { x: number; y: number },
+): PreparedGreen | null => {
+  if (!greens.length) {
+    return null;
+  }
+  for (const green of greens) {
+    if (!green || !green.rings || !green.rings.length) {
+      continue;
+    }
+    if (polygonContains(pin, green.rings)) {
+      return green;
+    }
+  }
+  let best: PreparedGreen | null = null;
+  let bestDistance = Number.POSITIVE_INFINITY;
+  for (const green of greens) {
+    const centroid = green?.centroid;
+    if (!centroid) {
+      continue;
+    }
+    const distance = Math.hypot(pin.x - centroid.x, pin.y - centroid.y);
+    if (distance < bestDistance) {
+      bestDistance = distance;
+      best = green;
+    }
+  }
+  return best;
+};
+
+const inferGreenSection = (
+  pin: { x: number; y: number },
+  green: PreparedGreen | null,
+): GreenSection | null => {
+  if (!green) {
+    return null;
+  }
+  const availableSource = green.meta?.sections && green.meta.sections.length
+    ? green.meta.sections
+    : DEFAULT_GREEN_SECTIONS;
+  const available: GreenSection[] = [];
+  for (const section of availableSource) {
+    if (!available.includes(section)) {
+      available.push(section);
+    }
+  }
+  if (!available.length) {
+    available.push(...DEFAULT_GREEN_SECTIONS);
+  }
+  const range = green.yRange;
+  if (!range) {
+    return available.includes("middle") ? "middle" : available[0] ?? null;
+  }
+  const span = range.max - range.min;
+  if (!Number.isFinite(span) || span <= 1) {
+    return available.includes("middle") ? "middle" : available[0] ?? null;
+  }
+  const ratioRaw = (pin.y - range.min) / span;
+  const ratio = Math.max(0, Math.min(1, ratioRaw));
+  if (ratio <= 0.33 && available.includes("front")) {
+    return "front";
+  }
+  if (ratio >= 0.67 && available.includes("back")) {
+    return "back";
+  }
+  if (available.includes("middle")) {
+    return "middle";
+  }
+  return available[0] ?? null;
+};
+
+const computeFatSideBias = (args: {
+  fatSide: FatSide | null;
+  hazards: RiskFeature[];
+  greenRings: { x: number; y: number }[][];
+  sigmaLong: number;
+  sigmaLat: number;
+  drift: number;
+  distance: number;
+  riskMode: RiskMode;
+}): number => {
+  const { fatSide, sigmaLat } = args;
+  if (!fatSide) {
+    return 0;
+  }
+  if (!Number.isFinite(sigmaLat) || sigmaLat < 3.5) {
+    return 0;
+  }
+  const direction = fatSide === "L" ? -1 : 1;
+  const thinDirection = -direction;
+  const probe = Math.max(3.5, Math.min(8, sigmaLat * 0.9));
+  const evaluate = (offset: number) => {
+    const center = { x: offset + args.drift, y: args.distance };
+    const hazard = ellipseOverlapRisk({
+      center,
+      longRadius_m: Math.max(1, args.sigmaLong),
+      latRadius_m: Math.max(1, sigmaLat),
+      features: args.hazards,
+    });
+    const green = greenPenalty(center, Math.max(1, args.sigmaLong), Math.max(1, sigmaLat), args.greenRings);
+    return { hazard, green };
+  };
+  const thin = evaluate(probe * thinDirection);
+  const fat = evaluate(probe * direction);
+  const hazardDelta = Math.max(0, thin.hazard - fat.hazard);
+  const greenDelta = Math.max(0, thin.green - fat.green);
+  const pressure = hazardDelta + greenDelta * 0.6;
+  if (pressure < 0.05 && thin.hazard < 0.08) {
+    return 0;
+  }
+  const dispersionFactor = Math.max(0, sigmaLat - 3.5) * 0.35;
+  let magnitude = pressure * 4.2 + dispersionFactor;
+  if (thin.hazard > 0.25) {
+    magnitude += 0.5;
+  }
+  magnitude = Math.min(5, magnitude);
+  const modeScale: Record<RiskMode, number> = { safe: 1.2, normal: 1, aggressive: 0.7 };
+  magnitude *= modeScale[args.riskMode] ?? 1;
+  if (magnitude < 0.6) {
+    return 0;
+  }
+  return magnitude * direction;
 };
 
 const estimateFlightTime = (distance: number): number => {
@@ -855,6 +1116,8 @@ const createApproachFallback = (args: ApproachPlanArgs, reason: string): ShotPla
     windDrift_m: 0,
     tuningActive: args.player.tuningActive,
     mc: null,
+    greenSection: null,
+    fatSide: null,
   };
 };
 
@@ -869,28 +1132,42 @@ const planApproachInternal = (args: ApproachPlanArgs, options: ApproachMcOptions
   const stats = args.player.clubs[preferredClub] ?? args.player.clubs[CLUB_SEQUENCE[0]]!;
   const sigmaLong = stats.sigma_long_m * RISK_MULTIPLIER[args.riskMode];
   const sigmaLat = stats.sigma_lat_m * RISK_MULTIPLIER[args.riskMode];
+  const activeGreen = selectActiveGreen(prepared.greens, frame.pin);
+  const selectedSection = inferGreenSection(frame.pin, activeGreen);
+  const fatSide = activeGreen?.meta?.fatSide ?? null;
   const wind = resolveWind(args.wind ?? null, frame.headingDeg);
   const rangeForSim = distance || stats.carry_m;
   const flightTime = estimateFlightTime(rangeForSim);
   const drift = lateralWindOffset(wind.cross, flightTime);
+  const fatBias = computeFatSideBias({
+    fatSide,
+    hazards: prepared.hazards,
+    greenRings: prepared.greenRings,
+    sigmaLong,
+    sigmaLat,
+    drift,
+    distance,
+    riskMode: args.riskMode,
+  });
   const candidates: ApproachCandidate[] = [];
   for (const aimOffset of AIM_OFFSETS_APPROACH) {
-    const centerX = aimOffset + drift;
+    const biasedOffset = aimOffset + fatBias;
+    const centerX = biasedOffset + drift;
     const hazardRisk = ellipseOverlapRisk({
       center: { x: centerX, y: distance },
       longRadius_m: sigmaLong,
       latRadius_m: sigmaLat,
       features: prepared.hazards,
     });
-    const greenRisk = greenPenalty({ x: centerX, y: distance }, sigmaLong, sigmaLat, prepared.greens);
+    const greenRisk = greenPenalty({ x: centerX, y: distance }, sigmaLong, sigmaLat, prepared.greenRings);
     const combined = clamp01(hazardRisk + greenRisk);
-    const aimDeg = aimMagnitudeDeg(aimOffset, rangeForSim);
-    const aimDegSigned = aimOffset < 0 ? -aimDeg : aimDeg;
+    const aimDeg = aimMagnitudeDeg(biasedOffset, rangeForSim);
+    const aimDegSigned = biasedOffset < 0 ? -aimDeg : aimDeg;
     candidates.push({
-      aimOffset,
+      aimOffset: biasedOffset,
       aimDeg,
       aimDegSigned,
-      aimDir: aimDirection(aimOffset),
+      aimDir: aimDirection(biasedOffset),
       risk: hazardRisk,
       combined,
       centerX,
@@ -985,6 +1262,8 @@ const planApproachInternal = (args: ApproachPlanArgs, options: ApproachMcOptions
     windDrift_m: best.centerX - best.aimOffset,
     tuningActive: args.player.tuningActive,
     mc: options.useMC ? mcResult : null,
+    greenSection: selectedSection ?? null,
+    fatSide: fatSide ?? null,
   };
 };
 

@@ -5,11 +5,29 @@ export type BundleIndexEntry = {
   updatedAt?: string;
 };
 
+export type GreenSection = 'front' | 'middle' | 'back';
+export type FatSide = 'L' | 'R';
+
+export type GreenInfo = {
+  sections: GreenSection[];
+  fatSide: FatSide | null;
+};
+
+export type CourseFeature = {
+  id?: string;
+  type?: string;
+  geometry?: { type?: string; coordinates?: unknown };
+  properties?: Record<string, unknown>;
+  green?: GreenInfo | null;
+  [key: string]: unknown;
+};
+
 export type CourseBundle = {
   courseId: string;
   version: number;
   ttlSec: number;
-  features: any[];
+  features: CourseFeature[];
+  greensById: Record<string, GreenInfo>;
 };
 
 type CachedBundleRecord = {
@@ -58,6 +76,9 @@ let backendPromise: Promise<CacheBackend | null> | null = null;
 let backendOverride: CacheBackend | null | undefined;
 let backendLabel = 'memory';
 
+const GREEN_SECTION_ORDER: readonly GreenSection[] = ['front', 'middle', 'back'];
+const GREEN_SECTION_SET = new Set<GreenSection>(GREEN_SECTION_ORDER);
+
 function getGlobalObject(): GlobalConfig {
   return globalThis as GlobalConfig;
 }
@@ -98,6 +119,52 @@ function bundleUrl(id: string): string {
   return `${base}/bundle/course/${cleaned}`;
 }
 
+function normalizeSection(value: unknown): GreenSection | null {
+  if (typeof value !== 'string') {
+    return null;
+  }
+  const normalized = value.trim().toLowerCase();
+  return GREEN_SECTION_SET.has(normalized as GreenSection)
+    ? (normalized as GreenSection)
+    : null;
+}
+
+function normalizeFatSide(value: unknown): FatSide | null {
+  if (typeof value !== 'string') {
+    return null;
+  }
+  const normalized = value.trim().toUpperCase();
+  return normalized === 'L' || normalized === 'R' ? (normalized as FatSide) : null;
+}
+
+function normalizeGreenInfo(raw: unknown): GreenInfo | null {
+  if (!raw || typeof raw !== 'object') {
+    return null;
+  }
+  const record = raw as Record<string, unknown> & { sections?: unknown; fatSide?: unknown };
+  const sectionsRaw = record.sections;
+  const sections: GreenSection[] = [];
+  if (Array.isArray(sectionsRaw)) {
+    for (const entry of sectionsRaw) {
+      const section = normalizeSection(entry);
+      if (section && !sections.includes(section)) {
+        sections.push(section);
+      }
+    }
+  }
+  const fatSide = normalizeFatSide(record.fatSide);
+  if (!sections.length && fatSide === null) {
+    return null;
+  }
+  if (!sections.length) {
+    sections.push(...GREEN_SECTION_ORDER);
+  }
+  return {
+    sections,
+    fatSide,
+  };
+}
+
 function parseBundle(json: unknown): CourseBundle {
   if (!json || typeof json !== 'object') {
     throw new Error('Invalid bundle payload');
@@ -106,7 +173,7 @@ function parseBundle(json: unknown): CourseBundle {
   const courseId = typeof data.courseId === 'string' ? data.courseId : '';
   const version = typeof data.version === 'number' ? data.version : NaN;
   const ttlSecRaw = data.ttlSec;
-  const features = Array.isArray(data.features) ? data.features : [];
+  const featuresRaw = Array.isArray(data.features) ? data.features : [];
   const ttlSec = Number.isFinite(Number(ttlSecRaw)) ? Math.max(1, Math.floor(Number(ttlSecRaw))) : DEFAULT_TTL_SEC;
   if (!courseId) {
     throw new Error('Bundle payload missing courseId');
@@ -114,11 +181,53 @@ function parseBundle(json: unknown): CourseBundle {
   if (!Number.isFinite(version)) {
     throw new Error('Bundle payload missing version');
   }
+  const greensById: Record<string, GreenInfo> = {};
+  const features: CourseFeature[] = [];
+  for (const entry of featuresRaw) {
+    if (!entry || typeof entry !== 'object') {
+      continue;
+    }
+    const source = entry as Record<string, unknown>;
+    const normalized = { ...source } as CourseFeature;
+    if ('green' in normalized) {
+      delete (normalized as Record<string, unknown>).green;
+    }
+    const geometry = source.geometry;
+    if (geometry && typeof geometry === 'object') {
+      normalized.geometry = geometry as { type?: string; coordinates?: unknown };
+    }
+    const properties = source.properties;
+    if (properties && typeof properties === 'object') {
+      normalized.properties = properties as Record<string, unknown>;
+    }
+    const id = typeof source.id === 'string' ? source.id : undefined;
+    if (id) {
+      normalized.id = id;
+    }
+    let rawGreen: unknown;
+    if (Object.prototype.hasOwnProperty.call(source, 'green')) {
+      rawGreen = (source as { green?: unknown }).green;
+    } else if (normalized.properties && Object.prototype.hasOwnProperty.call(normalized.properties, 'green')) {
+      rawGreen = (normalized.properties as Record<string, unknown>).green;
+    }
+    const greenInfo = normalizeGreenInfo(rawGreen);
+    if (greenInfo) {
+      normalized.green = {
+        sections: [...greenInfo.sections],
+        fatSide: greenInfo.fatSide,
+      };
+      if (id) {
+        greensById[id] = normalized.green;
+      }
+    }
+    features.push(normalized);
+  }
   return {
     courseId,
     version,
     ttlSec,
     features,
+    greensById,
   };
 }
 

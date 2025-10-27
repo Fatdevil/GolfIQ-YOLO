@@ -221,3 +221,54 @@ test('getIndex parses bundle index entries', async (t) => {
   assert.deepEqual(index[0]?.bbox, [-122.4, 37.7, -122.3, 37.8]);
 });
 
+test('green metadata is normalised and indexed by id', async (t) => {
+  __resetBundleClientForTests();
+  const originalFetch = globalThis.fetch;
+  t.after(() => {
+    globalThis.fetch = originalFetch;
+    __resetBundleClientForTests();
+  });
+  globalThis.fetch = async (input: FetchInput) => {
+    const url = typeof input === 'string' ? input : input.toString();
+    if (!url.endsWith('/bundle/course/greens-demo')) {
+      throw new Error(`Unexpected URL ${url}`);
+    }
+    return new Response(
+      JSON.stringify({
+        courseId: 'greens-demo',
+        version: 1,
+        ttlSec: 120,
+        features: [
+          {
+            id: 'g1',
+            type: 'Feature',
+            green: { sections: ['front', 'front', 'middle'], fatSide: 'l' },
+            geometry: {
+              type: 'Polygon',
+              coordinates: [
+                [
+                  [-122.4195, 37.775],
+                  [-122.4190, 37.775],
+                  [-122.4190, 37.7754],
+                  [-122.4195, 37.7754],
+                  [-122.4195, 37.775],
+                ],
+              ],
+            },
+          },
+        ],
+      }),
+      {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      },
+    );
+  };
+
+  const bundle = await getBundle('greens-demo');
+  assert.equal(bundle.greensById.g1?.fatSide, 'L');
+  assert.deepEqual(bundle.greensById.g1?.sections, ['front', 'middle']);
+  assert.equal(bundle.features[0]?.green?.fatSide, 'L');
+  assert.deepEqual(bundle.features[0]?.green?.sections, ['front', 'middle']);
+});
+

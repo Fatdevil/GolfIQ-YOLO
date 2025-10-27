@@ -6,6 +6,9 @@ import sys
 from pathlib import Path
 from typing import Any, Dict, List, Sequence
 
+GREEN_SECTION_VALUES = {"front", "middle", "back"}
+GREEN_FAT_SIDE_VALUES = {"L", "R"}
+
 SUPPORTED_TYPES = {
     "green",
     "fairway",
@@ -79,6 +82,33 @@ def validate_feature(feature: Dict[str, Any]) -> List[str]:
             _validate_linestring_coordinates(coordinates)
     except ValidationError as exc:
         errors.append(str(exc))
+
+    green_meta = feature.get("green")
+    if green_meta is not None:
+        if feature_type != "green":
+            errors.append("green metadata is only supported on green features")
+        if not isinstance(green_meta, dict):
+            errors.append("green metadata must be an object when present")
+        else:
+            sections = green_meta.get("sections")
+            if sections is not None:
+                if not isinstance(sections, list):
+                    errors.append("green.sections must be an array when provided")
+                else:
+                    for idx, entry in enumerate(sections):
+                        if not isinstance(entry, str):
+                            errors.append(f"green.sections[{idx}] must be a string")
+                            continue
+                        if entry not in GREEN_SECTION_VALUES:
+                            errors.append(
+                                f"green.sections[{idx}] must be one of {sorted(GREEN_SECTION_VALUES)}"
+                            )
+            fat_side = green_meta.get("fatSide")
+            if fat_side is not None:
+                if not isinstance(fat_side, str):
+                    errors.append("green.fatSide must be a string when provided")
+                elif fat_side not in GREEN_FAT_SIDE_VALUES:
+                    errors.append("green.fatSide must be 'L' or 'R'")
     return errors
 
 
