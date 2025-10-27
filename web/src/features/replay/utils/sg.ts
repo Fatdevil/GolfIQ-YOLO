@@ -142,7 +142,10 @@ export function groupShotsByHole(shots: Shot[], round: ParsedRound | null): Hole
     round.holes.forEach((hole, index) => {
       const label = `Hole ${hole.holeNo}`;
       const holeShots: Shot[] = [];
-      for (let i = 0; i < hole.shots.length && cursor < shots.length; i += 1) {
+      const strokeCount = Number.isFinite(hole.strokes)
+        ? Math.max(0, Math.trunc(hole.strokes))
+        : 0;
+      for (let i = 0; i < strokeCount && cursor < shots.length; i += 1) {
         holeShots.push(shots[cursor]);
         cursor += 1;
       }

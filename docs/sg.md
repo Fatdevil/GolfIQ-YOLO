@@ -18,7 +18,7 @@ Helpers exported from the module (`expStrokes_Tee`, `expStrokes_Approach`, `expS
 [`shared/sg/engine.ts`](../shared/sg/engine.ts) exposes `computeSG`, which takes a `ShotCtx` describing the shot phase, start distance, resulting distance, and whether the shot incurred a penalty or was holed. The engine:
 
 1. Looks up the expected strokes at the start distance using the appropriate phase table.
-2. Infers the next phase from the end distance (putt ≤ 12 m, short ≤ 30 m, otherwise approach) and fetches the expected strokes remaining.
+2. Infers the next phase from the end distance (putt ≤ 12 m, short ≤ 30 m, otherwise approach, ≥ 220 m treated as tee) and fetches the expected strokes remaining.
 3. Applies the strokes-gained formula `SG = exp(start) - (strokesTaken + exp(end))`, where `strokesTaken` is `1` plus any penalty strokes.
 
 It returns the strokes-gained contribution for each phase, the total delta, and the expected stroke counts before and after the shot. `classifyPhase` is a helper that assigns a phase based on raw distance, and `expectedStrokesAfterShot` / `expectedStrokesForDistance` are convenience wrappers.

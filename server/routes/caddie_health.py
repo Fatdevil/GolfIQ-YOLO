@@ -286,7 +286,11 @@ def caddie_health(
     sg_median = _median(sg_totals)
     adopted_avg = (sum(adopted_sg) / len(adopted_sg)) if adopted_sg else None
     other_avg = (sum(other_sg) / len(other_sg)) if other_sg else None
-    lift = adopted_avg - other_avg if adopted_avg is not None and other_avg is not None else None
+    lift = (
+        adopted_avg - other_avg
+        if adopted_avg is not None and other_avg is not None
+        else None
+    )
 
     return CaddieHealthResponse(
         since=cutoff.isoformat(),
@@ -300,6 +304,8 @@ def caddie_health(
         ),
         advice=CaddieAdviceHealth(adoptRate=advice_adopt_rate, topAdvice=top_advice),
         tts=CaddieTtsHealth(playRate=tts_play_rate, avgChars=tts_avg_chars),
-        sg_gained_per_round=SgPerRound(sample=len(sg_totals), mean=sg_mean, median=sg_median),
+        sg_gained_per_round=SgPerRound(
+            sample=len(sg_totals), mean=sg_mean, median=sg_median
+        ),
         adoption_sg_lift=lift,
     )

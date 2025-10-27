@@ -9,7 +9,7 @@ import {
 export type ShotPhase = 'tee' | 'approach' | 'short' | 'putt';
 
 export type ShotCtx = {
-  phase: ShotPhase;
+  phase?: ShotPhase;
   startDist_m: number;
   endDist_m: number;
   penalty?: boolean;
@@ -41,32 +41,33 @@ const EXP_BY_PHASE: Record<ShotPhase, (distanceM: number) => number> = {
   putt: expStrokes_Putt,
 };
 
-const inferNextPhase = (distanceM: number): ShotPhase => {
+const PUTT_MAX = 12;
+const SHORT_MAX = 30;
+const APPROACH_MAX = 220;
+
+export const classifyPhase = (distanceM: number): ShotPhase => {
   const dist = clamp(distanceM);
-  if (dist <= 12) {
+  if (dist <= PUTT_MAX) {
     return 'putt';
   }
-  if (dist <= 30) {
+  if (dist <= SHORT_MAX) {
     return 'short';
   }
-  return 'approach';
+  if (dist <= APPROACH_MAX) {
+    return 'approach';
+  }
+  return 'tee';
 };
 
 export const computeSG = (ctx: ShotCtx): ShotSgResult => {
-  const phase = ctx.phase;
   const startDist = clamp(ctx.startDist_m);
+  const phase = ctx.phase ?? classifyPhase(startDist);
   const endDist = ctx.holed ? 0 : clamp(ctx.endDist_m);
   const penalty = Boolean(ctx.penalty);
 
   const expStart = EXP_BY_PHASE[phase](startDist);
-  const nextPhase = inferNextPhase(endDist);
-  const expEnd = ctx.holed
-    ? 0
-    : nextPhase === 'putt'
-      ? expStrokes_Putt(endDist)
-      : nextPhase === 'short'
-        ? expStrokes_Short(endDist)
-        : expStrokes_Approach(endDist);
+  const nextPhase = classifyPhase(endDist);
+  const expEnd = ctx.holed ? 0 : EXP_BY_PHASE[nextPhase](endDist);
 
   const strokesTaken = 1 + (penalty ? 1 : 0);
   const total = expStart - (strokesTaken + expEnd);
@@ -77,20 +78,6 @@ export const computeSG = (ctx: ShotCtx): ShotSgResult => {
   const sgPutt = phase === 'putt' ? total : 0;
 
   return { sgTee, sgApp, sgShort, sgPutt, total, expStart, expEnd, strokesTaken };
-};
-
-export const classifyPhase = (distanceM: number): ShotPhase => {
-  const dist = clamp(distanceM);
-  if (dist >= 220) {
-    return 'tee';
-  }
-  if (dist > 30) {
-    return 'approach';
-  }
-  if (dist > 12) {
-    return 'short';
-  }
-  return 'putt';
 };
 
 export const expectedStrokesAfterShot = (ctx: ShotCtx): number => {

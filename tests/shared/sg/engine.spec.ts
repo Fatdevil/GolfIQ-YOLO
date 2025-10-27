@@ -38,6 +38,25 @@ describe('computeSG', () => {
     expect(result.total).toBe(result.sgTee);
     expect(result.strokesTaken).toBe(2);
   });
+
+  it('uses tee baseline for penalty re-tee scenarios', () => {
+    const penaltyResult = computeSG({
+      phase: 'tee',
+      startDist_m: 250,
+      endDist_m: 250,
+      penalty: true,
+    });
+
+    const noPenaltyResult = computeSG({
+      phase: 'tee',
+      startDist_m: 250,
+      endDist_m: 250,
+    });
+
+    expect(penaltyResult.expEnd).toBeCloseTo(noPenaltyResult.expEnd, 5);
+    expect(penaltyResult.sgTee).toBeLessThan(noPenaltyResult.sgTee);
+    expect(classifyPhase(250)).toBe('tee');
+  });
 });
 
 describe('classifyPhase', () => {
@@ -46,5 +65,14 @@ describe('classifyPhase', () => {
     expect(classifyPhase(160)).toBe('approach');
     expect(classifyPhase(25)).toBe('short');
     expect(classifyPhase(6)).toBe('putt');
+  });
+
+  it('respects boundary thresholds', () => {
+    expect(classifyPhase(12)).toBe('putt');
+    expect(classifyPhase(12.1)).toBe('short');
+    expect(classifyPhase(30)).toBe('short');
+    expect(classifyPhase(30.5)).toBe('approach');
+    expect(classifyPhase(220)).toBe('approach');
+    expect(classifyPhase(221)).toBe('tee');
   });
 });
