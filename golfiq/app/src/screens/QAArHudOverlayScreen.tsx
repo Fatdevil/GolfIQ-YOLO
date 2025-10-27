@@ -2891,6 +2891,7 @@ const QAArHudOverlayScreen: React.FC = () => {
       emoji: Boolean(coachStyle.emoji),
       format: coachStyle.format,
       mcUsed: caddieMcActive,
+      tags: ['style/timing'],
     });
     lastCaddiePlanRef.current = key;
     lastPlanContextRef.current = { key, mcUsed: caddieMcActive, hadAdvice };
@@ -3197,6 +3198,7 @@ const QAArHudOverlayScreen: React.FC = () => {
       emoji: Boolean(coachStyle.emoji),
       format: coachStyle.format,
       mcUsed,
+      tags: ['style/timing'],
     });
     emitTelemetry('hud.caddie.adopt', { adopted: true, mcUsed, hadAdvice });
     planAdoptedRef.current = true;

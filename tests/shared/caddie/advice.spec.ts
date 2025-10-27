@@ -53,3 +53,37 @@ test('Bogey streak triggers mental reset', () => {
   const messages = advices.map((item) => item.message);
   assert(messages.includes('mental_reset'));
 });
+
+test('Two large misses in a row trigger mental reset', () => {
+  const ctx: AdviceCtx = {
+    ...baseCtx,
+    round: {
+      hole: baseCtx.round.hole,
+      streak: { bogey: 0, birdie: 0 },
+      lastErrors: [
+        { long_m: 13, lat_m: 0 },
+        { long_m: 11, lat_m: 12 },
+      ],
+    },
+  };
+  const advices = advise(ctx);
+  const messages = advices.map((item) => item.message);
+  assert(messages.includes('mental_reset'));
+});
+
+test('Shot quality flag triggers mental reset streak', () => {
+  const ctx: AdviceCtx = {
+    ...baseCtx,
+    round: {
+      hole: baseCtx.round.hole,
+      streak: { bogey: 0, birdie: 0 },
+      lastErrors: [
+        { long_m: 1, lat_m: 1, quality: 'bad' },
+        { long_m: 0, lat_m: 0, quality: 'penalty' },
+      ],
+    },
+  };
+  const advices = advise(ctx);
+  const messages = advices.map((item) => item.message);
+  assert(messages.includes('mental_reset'));
+});

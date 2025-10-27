@@ -25,7 +25,11 @@ export interface AdviceCtx {
   dispersion?: { sigma_long_m: number; sigma_lat_m: number };
   round: {
     hole: number;
-    lastErrors: { long_m: number; lat_m: number }[];
+    lastErrors: {
+      long_m: number;
+      lat_m: number;
+      quality?: "good" | "ok" | "neutral" | "bad" | "penalty";
+    }[];
     streak: { bogey: number; birdie: number };
   };
   style: CoachStyle;
@@ -57,15 +61,36 @@ const pushUnique = (list: Advice[], advice: Advice, seen: Map<string, Advice>): 
   }
 };
 
-const hasLargeMisses = (errors: AdviceCtx["round"]["lastErrors"]): boolean => {
-  if (!errors.length) {
+const isBadShot = (
+  entry: AdviceCtx["round"]["lastErrors"][number],
+  vectorThreshold = 12,
+): boolean => {
+  if (!entry) {
     return false;
   }
-  const lastTwo = errors.slice(-2);
-  if (lastTwo.length < 2) {
+  if (typeof entry.quality === "string") {
+    const rating = entry.quality.toLowerCase();
+    if (rating === "bad" || rating === "penalty") {
+      return true;
+    }
+  }
+  const longMiss = clampNumber(entry.long_m ?? 0);
+  const latMiss = clampNumber(entry.lat_m ?? 0);
+  return Math.hypot(longMiss, latMiss) > vectorThreshold;
+};
+
+const hasBadShotStreak = (
+  errors: AdviceCtx["round"]["lastErrors"],
+  streakLength = 2,
+): boolean => {
+  if (!errors.length || streakLength <= 1) {
     return false;
   }
-  return lastTwo.every((entry) => Math.hypot(entry.long_m ?? 0, entry.lat_m ?? 0) > 12);
+  const recent = errors.slice(-streakLength);
+  if (recent.length < streakLength) {
+    return false;
+  }
+  return recent.every((entry) => isBadShot(entry));
 };
 
 export function advise(ctx: AdviceCtx): Advice[] {
@@ -122,14 +147,14 @@ export function advise(ctx: AdviceCtx): Advice[] {
   }
 
   const bogeyStreak = clampNumber(ctx.round.streak?.bogey ?? 0);
-  const largeMisses = hasLargeMisses(ctx.round.lastErrors ?? []);
-  if (bogeyStreak >= 2 || largeMisses) {
+  const badShotStreak = hasBadShotStreak(ctx.round.lastErrors ?? []);
+  if (bogeyStreak >= 2 || badShotStreak) {
     pushUnique(advices, {
       type: "mental",
       message: "mental_reset",
       severity: bogeyStreak >= 3 ? "crit" : "warn",
-      reason: bogeyStreak >= 2 ? `Bogeystreak ${bogeyStreak}` : "Recent misses >12 m",
-      data: { bogeyStreak, largeMisses },
+      reason: bogeyStreak >= 2 ? `Bogeystreak ${bogeyStreak}` : "Two misses in a row",
+      data: { bogeyStreak, badShotStreak },
     }, seen);
   }
 
