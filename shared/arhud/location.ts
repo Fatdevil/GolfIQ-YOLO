@@ -28,9 +28,35 @@ type ExpoLocationModule = typeof import('expo-location');
 let modulePromise: Promise<ExpoLocationModule | null> | null = null;
 let lastPermission: PermissionStatus | null = null;
 
-type DeviceModule = typeof import('expo-device');
+type DeviceInfo = {
+  modelName?: string | null;
+  modelId?: string | null;
+  osName?: string | null;
+  osVersion?: string | null;
+};
 
-let deviceModulePromise: Promise<DeviceModule | null> | null = null;
+let deviceInfoPromise: Promise<DeviceInfo | null> | null = null;
+
+async function loadDeviceInfo(): Promise<DeviceInfo | null> {
+  if (deviceInfoPromise) {
+    return deviceInfoPromise;
+  }
+  deviceInfoPromise = (async () => {
+    try {
+      const mod: any = await import('expo-device');
+      const info: DeviceInfo = {
+        modelName: mod?.modelName ?? null,
+        modelId: mod?.modelId ?? null,
+        osName: mod?.osName ?? null,
+        osVersion: mod?.osVersion ?? null,
+      };
+      return info;
+    } catch {
+      return null;
+    }
+  })();
+  return deviceInfoPromise;
+}
 
 const PRO_PRECISION_MODEL_KEYWORDS = [
   'pixel 5',
@@ -92,13 +118,6 @@ async function loadModule(): Promise<ExpoLocationModule | null> {
   return modulePromise;
 }
 
-async function loadDeviceModule(): Promise<DeviceModule | null> {
-  if (!deviceModulePromise) {
-    deviceModulePromise = import('expo-device').catch(() => null);
-  }
-  return deviceModulePromise;
-}
-
 type DeviceDetails = { modelName: string | null; modelId: string | null };
 
 let cachedDeviceDetails: DeviceDetails | null = null;
@@ -107,18 +126,13 @@ async function resolveDeviceDetails(): Promise<DeviceDetails> {
   if (cachedDeviceDetails) {
     return cachedDeviceDetails;
   }
-  try {
-    const Device = await loadDeviceModule();
-    const details: DeviceDetails = {
-      modelName: Device && typeof Device.modelName === 'string' ? Device.modelName : null,
-      modelId: Device && typeof Device.modelId === 'string' ? Device.modelId : null,
-    };
-    cachedDeviceDetails = details;
-    return details;
-  } catch {
-    cachedDeviceDetails = { modelName: null, modelId: null };
-    return cachedDeviceDetails;
-  }
+  const info = await loadDeviceInfo();
+  const details: DeviceDetails = {
+    modelName: typeof info?.modelName === 'string' ? info.modelName : null,
+    modelId: typeof info?.modelId === 'string' ? info.modelId : null,
+  };
+  cachedDeviceDetails = details;
+  return details;
 }
 
 function normalizeDeviceString(value: string | null | undefined): string {
