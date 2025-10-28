@@ -1,10 +1,7 @@
-import { promises as fs } from 'node:fs';
-import path from 'node:path';
-
 import type { CoachPersona, Drill, Plan, TrainingFocus, TrainingPack } from './types';
 
 const MAX_FILE_BYTES = 50 * 1024;
-const DEFAULT_DIR = 'data/training';
+const DEFAULT_PACKS_SEGMENTS = ['data', 'training', 'packs'] as const;
 const FOCUS_VALUES: readonly TrainingFocus[] = [
   'long-drive',
   'tee',
@@ -17,14 +14,40 @@ const FOCUS_VALUES: readonly TrainingFocus[] = [
 
 const FOCUS_SET = new Set<TrainingFocus>(FOCUS_VALUES);
 
-let cache: { dir: string; packs: TrainingPack[] } | null = null;
+let cache: TrainingPack[] | null = null;
+let cacheKey: string | null = null;
 let pending: Promise<TrainingPack[]> | null = null;
 
-function resolveBaseDir(): string {
-  const override = typeof process !== 'undefined' ? process.env?.TRAINING_PACKS_DIR : undefined;
-  const base = override && override.trim() ? override.trim() : DEFAULT_DIR;
-  return path.resolve(base);
+function isNode(): boolean {
+  // Node when process.versions.node exists and global window is absent
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const maybeProcess = typeof process !== 'undefined' ? (process as any) : undefined;
+  const hasNodeVersion = !!maybeProcess?.versions?.node;
+  const hasWindow = typeof globalThis !== 'undefined' && typeof (globalThis as { window?: unknown }).window !== 'undefined';
+  return hasNodeVersion && !hasWindow;
 }
+
+function getNodeCacheKey(): string {
+  if (!isNode()) {
+    return 'catalog';
+  }
+  const override = typeof process !== 'undefined' ? process.env?.TRAINING_PACKS_DIR?.trim() : undefined;
+  return `node:${override ?? 'default'}`;
+}
+
+type NodeFsLike = {
+  stat(path: string): Promise<{ isDirectory(): boolean }>;
+  readdir(
+    path: string,
+    options: { withFileTypes: true },
+  ): Promise<Array<{ name: string; isDirectory(): boolean; isFile(): boolean }>>;
+  readFile(path: string, encoding: string): Promise<string>;
+};
+
+type NodePathLike = {
+  resolve(...pathSegments: string[]): string;
+  join(...pathSegments: string[]): string;
+};
 
 function assertCondition(condition: boolean, message: string): asserts condition {
   if (!condition) {
@@ -244,7 +267,7 @@ function ensurePlans(value: unknown, file: string): Plan[] {
   return plans;
 }
 
-async function collectJsonFiles(dir: string): Promise<string[]> {
+async function collectJsonFiles(fs: NodeFsLike, path: NodePathLike, dir: string): Promise<string[]> {
   try {
     const stat = await fs.stat(dir);
     if (!stat.isDirectory()) {
@@ -259,7 +282,7 @@ async function collectJsonFiles(dir: string): Promise<string[]> {
     entries.map(async (entry) => {
       const entryPath = path.join(dir, entry.name);
       if (entry.isDirectory()) {
-        const nested = await collectJsonFiles(entryPath);
+        const nested = await collectJsonFiles(fs, path, entryPath);
         files.push(...nested);
       } else if (entry.isFile() && entry.name.toLowerCase().endsWith('.json')) {
         files.push(entryPath);
@@ -270,7 +293,7 @@ async function collectJsonFiles(dir: string): Promise<string[]> {
   return files;
 }
 
-async function readPack(filePath: string): Promise<TrainingPack> {
+async function readPack(fs: NodeFsLike, filePath: string): Promise<TrainingPack> {
   const content = await fs.readFile(filePath, 'utf-8');
   assertCondition(Buffer.byteLength(content, 'utf-8') <= MAX_FILE_BYTES, `${filePath} exceeds ${MAX_FILE_BYTES} bytes`);
   let parsed: unknown;
@@ -279,6 +302,10 @@ async function readPack(filePath: string): Promise<TrainingPack> {
   } catch (error) {
     throw new Error(`Failed to parse ${filePath}: ${(error as Error).message}`);
   }
+  return normalizePack(parsed, filePath);
+}
+
+function normalizePack(parsed: unknown, filePath: string): TrainingPack {
   const obj = ensureObject(parsed, filePath);
   const allowed = new Set(['packId', 'version', 'author', 'updatedAt', 'persona', 'drills', 'plans']);
   for (const key of Object.keys(obj)) {
@@ -303,33 +330,79 @@ async function readPack(filePath: string): Promise<TrainingPack> {
   return pack;
 }
 
-async function loadFromDisk(): Promise<TrainingPack[]> {
-  const dir = resolveBaseDir();
-  const files = await collectJsonFiles(dir);
+async function loadFromNodeFS(): Promise<TrainingPack[]> {
+  const [{ promises: fsModule }, pathModule] = await Promise.all([import('node:fs'), import('node:path')]);
+  const fs = fsModule as unknown as NodeFsLike;
+  const path = pathModule as unknown as NodePathLike;
+  const override = typeof process !== 'undefined' ? process.env?.TRAINING_PACKS_DIR?.trim() : undefined;
+  const root = override && override.length
+    ? path.resolve(override)
+    : path.resolve(process.cwd(), ...DEFAULT_PACKS_SEGMENTS);
+  const files = await collectJsonFiles(fs, path, root);
   if (!files.length) {
     return [];
   }
-  const packs = await Promise.all(files.map((file) => readPack(file)));
+  const packs = await Promise.all(files.map((file) => readPack(fs, file)));
   packs.sort((a, b) => a.packId.localeCompare(b.packId));
   return packs;
 }
 
+async function loadFromCatalog(): Promise<TrainingPack[]> {
+  try {
+    const catalogModule: unknown = await import('../../data/training/catalog.json');
+    const catalog = (catalogModule as { default?: unknown }).default ?? catalogModule;
+    const catalogObj = ensureObject(catalog, 'catalog');
+    const entries = ensureArray(catalogObj.packs, 'catalog.packs');
+    const packs: TrainingPack[] = [];
+    for (const entry of entries) {
+      if (!entry) {
+        continue;
+      }
+      const entryObj = ensureObject(entry, 'catalog.pack');
+      const packIdRaw = entryObj.packId;
+      if (typeof packIdRaw !== 'string' || !packIdRaw.trim()) {
+        continue;
+      }
+      const moduleIdRaw = entryObj.module;
+      const moduleId = typeof moduleIdRaw === 'string' && moduleIdRaw.trim().length ? moduleIdRaw.trim() : packIdRaw.trim();
+      try {
+        const packModule: unknown = await import(
+          /* @vite-ignore */ `../../data/training/packs/${moduleId}.json`
+        );
+        const packValue = (packModule as { default?: unknown }).default ?? packModule;
+        const normalized = normalizePack(packValue, `catalog:${packIdRaw}`);
+        packs.push(normalized);
+      } catch (error) {
+        // ignore missing pack modules in web builds to keep surface resilient
+        continue;
+      }
+    }
+    packs.sort((a, b) => a.packId.localeCompare(b.packId));
+    return packs;
+  } catch (error) {
+    return [];
+  }
+}
+
 export function clearTrainingPackCache(): void {
   cache = null;
+  cacheKey = null;
   pending = null;
 }
 
 export async function loadTrainingPacks(): Promise<TrainingPack[]> {
-  const dir = resolveBaseDir();
-  if (cache && cache.dir === dir) {
-    return cache.packs;
+  const key = getNodeCacheKey();
+  if (cache && cacheKey === key) {
+    return cache;
   }
   if (pending) {
     return pending;
   }
-  pending = loadFromDisk()
+  const loader = isNode() ? loadFromNodeFS : loadFromCatalog;
+  pending = loader()
     .then((packs) => {
-      cache = { dir, packs };
+      cache = packs;
+      cacheKey = key;
       return packs;
     })
     .finally(() => {
@@ -346,7 +419,7 @@ export function getPlansByFocus(focus: TrainingFocus): Plan[] {
   if (!cache) {
     throw new Error('Training packs not loaded; call loadTrainingPacks() first');
   }
-  const plans = cache.packs.flatMap((pack) => pack.plans.filter((plan) => plan.focus === focus));
+  const plans = cache.flatMap((pack) => pack.plans.filter((plan) => plan.focus === focus));
   return plans
     .map((plan) => ({ ...plan, drills: plan.drills.map((item) => ({ ...item })) }))
     .sort((a, b) => a.name.localeCompare(b.name) || focusSorter(a, b));
@@ -356,6 +429,6 @@ export function getDrillsByFocus(focus: TrainingFocus): Drill[] {
   if (!cache) {
     throw new Error('Training packs not loaded; call loadTrainingPacks() first');
   }
-  const drills = cache.packs.flatMap((pack) => pack.drills.filter((drill) => drill.focus === focus));
+  const drills = cache.flatMap((pack) => pack.drills.filter((drill) => drill.focus === focus));
   return drills.map((drill) => ({ ...drill, prerequisites: drill.prerequisites?.slice(), requiredGear: drill.requiredGear?.slice() })).sort(focusSorter);
 }

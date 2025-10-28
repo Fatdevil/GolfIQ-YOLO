@@ -1,0 +1,5 @@
+{
+  "packs": [
+    { "packId": "baseline-putting", "module": "baseline_putting" }
+  ]
+}

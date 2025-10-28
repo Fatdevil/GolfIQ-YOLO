@@ -321,7 +321,9 @@ def caddie_health(
                     candidate = focus_value.strip()
                     if candidate and candidate in TRAINING_FOCUS_SET:
                         focus_token = candidate
-                        entry = focus_adoption.setdefault(candidate, {"plans": 0, "adopts": 0})
+                        entry = focus_adoption.setdefault(
+                            candidate, {"plans": 0, "adopts": 0}
+                        )
                         entry["plans"] += 1
                 last_plan_context = {
                     "mcUsed": mc_used,
@@ -396,7 +398,9 @@ def caddie_health(
                             focus_sg_value = _finite_float(focus_value)
                             if focus_sg_value is None:
                                 continue
-                            run_focus_totals[candidate] = run_focus_totals.get(candidate, 0.0) + focus_sg_value
+                            run_focus_totals[candidate] = (
+                                run_focus_totals.get(candidate, 0.0) + focus_sg_value
+                            )
                 rollout_data = data.get("rollout")
                 if isinstance(rollout_data, dict):
                     for key in ("mc", "advice", "tts"):
