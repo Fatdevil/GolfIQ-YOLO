@@ -8,6 +8,7 @@ pre-commit>=3.3
 fastapi
 python-multipart
 httpx
+jsonschema
 uvicorn
 python-dotenv
 boto3

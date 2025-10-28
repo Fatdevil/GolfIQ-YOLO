@@ -1,0 +1,48 @@
+{
+  "packId": "baseline-putting",
+  "version": "2025.01",
+  "author": "GolfIQ QA",
+  "updatedAt": "2025-01-15",
+  "persona": {
+    "id": "qa-putt",
+    "name": "QA Putting",
+    "version": "1.0",
+    "focus": ["putt", "short"],
+    "styleHints": {"tone": "concise", "verbosity": "short"}
+  },
+  "drills": [
+    {
+      "id": "putt-gate",
+      "focus": "putt",
+      "title": "Gate tempo",
+      "description": "Hit ten putts through the gate focusing on tempo and face control.",
+      "estTimeMin": 10,
+      "targetMetric": {"type": "make%", "segment": "putt"},
+      "difficulty": 2,
+      "requiredGear": ["putter", "tee gate"]
+    },
+    {
+      "id": "lag-circle",
+      "focus": "putt",
+      "title": "Lag circle",
+      "description": "Create a 3m circle and finish inside in three balls.",
+      "estTimeMin": 12,
+      "targetMetric": {"type": "SG", "segment": "putt"},
+      "difficulty": 3
+    }
+  ],
+  "plans": [
+    {
+      "id": "putt-foundation",
+      "name": "Putting foundation",
+      "focus": "putt",
+      "version": "1.0",
+      "drills": [
+        {"id": "putt-gate", "reps": 3},
+        {"id": "lag-circle", "durationMin": 15}
+      ],
+      "schedule": "3x per vecka",
+      "estTotalMin": 40
+    }
+  ]
+}

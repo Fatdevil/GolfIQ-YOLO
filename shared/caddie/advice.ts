@@ -1,3 +1,5 @@
+import type { CoachPersona, TrainingFocus } from "../training/types";
+import { getCoachProvider } from "../coach/provider";
 import type { CoachStyle } from "./style";
 
 export type AdviceType = "club_adjustment" | "execution_cue" | "mental" | "risk";
@@ -33,6 +35,8 @@ export interface AdviceCtx {
     streak: { bogey: number; birdie: number };
   };
   style: CoachStyle;
+  focus?: TrainingFocus;
+  persona?: CoachPersona;
 }
 
 type SeverityRank = Record<Advice["severity"], number>;
@@ -167,6 +171,37 @@ export function advise(ctx: AdviceCtx): Advice[] {
       reason: `Risk ${Math.round(ctx.plan.risk * 100)}% med hazard höger`,
       data: { risk: ctx.plan.risk },
     }, seen);
+  }
+
+  const provider = getCoachProvider();
+  try {
+    const tips = provider.getPreShotAdvice({ ...ctx });
+    if (Array.isArray(tips) && tips.length) {
+      const normalized = tips
+        .map((entry) => (typeof entry === "string" ? entry.trim() : ""))
+        .filter((entry) => entry.length > 0);
+      if (normalized.length) {
+        const limit = ctx.style.verbosity === "short" ? 1 : 2;
+        normalized.slice(0, limit).forEach((tip) => {
+          pushUnique(
+            advices,
+            {
+              type: "mental",
+              message: tip,
+              severity: "info",
+              reason: "coach_provider",
+              data: {
+                provider: ctx.persona?.id ?? "default",
+                focus: ctx.focus,
+              },
+            },
+            seen,
+          );
+        });
+      }
+    }
+  } catch (error) {
+    // ignore provider failures to keep tournament-safe
   }
 
   advices.sort((a, b) => {

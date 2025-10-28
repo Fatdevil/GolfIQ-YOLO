@@ -16,6 +16,18 @@ from pydantic import BaseModel, Field
 router = APIRouter(prefix="/caddie", tags=["caddie"])
 
 
+TRAINING_FOCUS_VALUES = (
+    "long-drive",
+    "tee",
+    "approach",
+    "wedge",
+    "short",
+    "putt",
+    "recovery",
+)
+TRAINING_FOCUS_SET = set(TRAINING_FOCUS_VALUES)
+
+
 class CaddieMcHealth(BaseModel):
     enabledPct: float = Field(..., ge=0.0, le=100.0)
     adoptRate: float = Field(..., ge=0.0, le=1.0)
@@ -85,6 +97,12 @@ class SgPerRound(BaseModel):
     median: float | None
 
 
+class FocusAdoption(BaseModel):
+    plans: int = 0
+    adopts: int = 0
+    adoptRate: float = Field(0.0, ge=0.0, le=1.0)
+
+
 class CaddieHealthResponse(BaseModel):
     since: str
     mc: CaddieMcHealth
@@ -92,6 +110,8 @@ class CaddieHealthResponse(BaseModel):
     tts: CaddieTtsHealth
     sg_gained_per_round: SgPerRound
     adoption_sg_lift: float | None
+    sg_gained_per_round_by_focus: Dict[str, SgPerRound]
+    adoption_by_focus: Dict[str, FocusAdoption]
 
 
 def _parse_since_param(value: Optional[str]) -> timedelta:
@@ -210,6 +230,8 @@ def caddie_health(
     sg_totals: List[float] = []
     adopted_sg: List[float] = []
     other_sg: List[float] = []
+    focus_adoption: Dict[str, Dict[str, int]] = {}
+    focus_round_totals: Dict[str, List[float]] = {}
 
     mc_groups = {
         "control": {"plans": 0, "adopts": 0, "sg_total": 0.0, "rounds": 0},
@@ -225,10 +247,11 @@ def caddie_health(
     }
 
     for run_id in _iter_recent_hud_runs(cutoff):
-        last_plan_context: Optional[Dict[str, bool]] = None
+        last_plan_context: Optional[Dict[str, Any]] = None
         last_plan_ts: Optional[float] = None
         run_sg_total = 0.0
         run_has_sg = False
+        run_focus_totals: Dict[str, float] = {}
         run_rollout: Dict[str, Optional[bool]] = {
             "mc": None,
             "advice": None,
@@ -292,10 +315,19 @@ def caddie_health(
                     run_rollout["advice"] = had_advice
                 if run_rollout["tts"] is None:
                     run_rollout["tts"] = tts_used
+                focus_value = data.get("focus")
+                focus_token: Optional[str] = None
+                if isinstance(focus_value, str):
+                    candidate = focus_value.strip()
+                    if candidate and candidate in TRAINING_FOCUS_SET:
+                        focus_token = candidate
+                        entry = focus_adoption.setdefault(candidate, {"plans": 0, "adopts": 0})
+                        entry["plans"] += 1
                 last_plan_context = {
                     "mcUsed": mc_used,
                     "hadAdvice": had_advice,
                     "ttsUsed": tts_used,
+                    "focus": focus_token,
                 }
                 ts_value = (
                     event.get("ts")
@@ -334,6 +366,13 @@ def caddie_health(
                     )
                     mc_groups[mc_key]["adopts"] += int(adopted)
                     advice_groups[advice_key]["adopts"] += int(adopted)
+                    focus_key = last_plan_context.get("focus")
+                    if isinstance(focus_key, str):
+                        focus_entry = focus_adoption.setdefault(
+                            focus_key,
+                            {"plans": 0, "adopts": 0},
+                        )
+                        focus_entry["adopts"] += int(adopted)
             elif name == "hud.shot":
                 sg_data = data.get("sg")
                 if isinstance(sg_data, dict):
@@ -346,6 +385,18 @@ def caddie_health(
                             adopted_sg.append(total_value)
                         elif adopted_flag is False:
                             other_sg.append(total_value)
+                    by_focus = sg_data.get("byFocus")
+                    if isinstance(by_focus, dict):
+                        for focus_key, focus_value in by_focus.items():
+                            if not isinstance(focus_key, str):
+                                continue
+                            candidate = focus_key.strip()
+                            if not candidate or candidate not in TRAINING_FOCUS_SET:
+                                continue
+                            focus_sg_value = _finite_float(focus_value)
+                            if focus_sg_value is None:
+                                continue
+                            run_focus_totals[candidate] = run_focus_totals.get(candidate, 0.0) + focus_sg_value
                 rollout_data = data.get("rollout")
                 if isinstance(rollout_data, dict):
                     for key in ("mc", "advice", "tts"):
@@ -381,6 +432,8 @@ def caddie_health(
             advice_groups[advice_key]["rounds"] += 1
             tts_groups[tts_key]["sg_total"] += run_sg_total
             tts_groups[tts_key]["rounds"] += 1
+            for focus_key, value in run_focus_totals.items():
+                focus_round_totals.setdefault(focus_key, []).append(value)
 
     def safe_div(num: float, den: float) -> float:
         if den <= 0:
@@ -484,6 +537,27 @@ def caddie_health(
         else None
     )
 
+    focus_keys = sorted(set(focus_round_totals.keys()) | set(focus_adoption.keys()))
+    focus_sg_summary: Dict[str, SgPerRound] = {}
+    focus_adoption_summary: Dict[str, FocusAdoption] = {}
+    for key in focus_keys:
+        totals = focus_round_totals.get(key, [])
+        sample = len(totals)
+        focus_sg_summary[key] = SgPerRound(
+            sample=sample,
+            mean=(sum(totals) / sample) if sample else None,
+            median=_median(totals),
+        )
+        raw = focus_adoption.get(key, {"plans": 0, "adopts": 0})
+        plans = int(raw.get("plans", 0)) if isinstance(raw, dict) else 0
+        adopts = int(raw.get("adopts", 0)) if isinstance(raw, dict) else 0
+        rate = clamp_unit(safe_div(float(adopts), float(plans))) if plans else 0.0
+        focus_adoption_summary[key] = FocusAdoption(
+            plans=plans,
+            adopts=adopts,
+            adoptRate=rate,
+        )
+
     return CaddieHealthResponse(
         since=cutoff.isoformat(),
         mc=CaddieMcHealth(
@@ -505,4 +579,6 @@ def caddie_health(
             sample=len(sg_totals), mean=sg_mean, median=sg_median
         ),
         adoption_sg_lift=lift,
+        sg_gained_per_round_by_focus=focus_sg_summary,
+        adoption_by_focus=focus_adoption_summary,
     )
