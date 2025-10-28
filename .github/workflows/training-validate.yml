@@ -28,6 +28,10 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements-dev.txt
 
+      - name: Build training catalog
+        run: |
+          python scripts/build_training_catalog.py --packs-dir data/training/packs --out data/training/catalog.json --version 1.0.0
+
       - name: Validate training packs
         run: |
           set -o pipefail
