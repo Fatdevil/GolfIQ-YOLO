@@ -44,6 +44,11 @@ def test_caddie_health_snapshot(monkeypatch, tmp_path, since):
     now = datetime.now(timezone.utc)
     events = [
         {
+            "timestampMs": -1,
+            "event": "hud.caddie.rollout",
+            "data": {"mc": True, "advice": True, "tts": True},
+        },
+        {
             "timestampMs": 0,
             "event": "hud.caddie.plan",
             "data": {
@@ -53,6 +58,8 @@ def test_caddie_health_snapshot(monkeypatch, tmp_path, since):
                 "D": 150.0,
                 "mode": "approach",
                 "mcUsed": True,
+                "hadAdvice": True,
+                "ttsUsed": True,
                 "adviceText": ["+1 club", "80% tempo"],
             },
         },
@@ -75,7 +82,12 @@ def test_caddie_health_snapshot(monkeypatch, tmp_path, since):
         {
             "timestampMs": 3,
             "event": "hud.caddie.adopt",
-            "data": {"adopted": True, "mcUsed": True, "hadAdvice": True},
+            "data": {
+                "adopted": True,
+                "mcUsed": True,
+                "hadAdvice": True,
+                "ttsUsed": True,
+            },
         },
     ]
     _write_run_payload(tmp_path, "run-001", now, events)
@@ -98,6 +110,8 @@ def test_caddie_health_snapshot(monkeypatch, tmp_path, since):
     assert payload["advice"]["topAdvice"][1] == "80% tempo"
     assert payload["tts"]["playRate"] == pytest.approx(1.0)
     assert payload["tts"]["avgChars"] == pytest.approx(48.0)
+    assert payload["mc"]["ab"]["enforced"]["plans"] == 1
+    assert payload["tts"]["ab"]["enforced"]["plays"] == 1
 
 
 def test_caddie_health_handles_empty_runs(monkeypatch, tmp_path):
@@ -108,16 +122,19 @@ def test_caddie_health_handles_empty_runs(monkeypatch, tmp_path):
 
     assert response.status_code == 200
     payload = response.json()
-    assert payload["mc"] == {
-        "enabledPct": 0.0,
-        "adoptRate": 0.0,
-        "hazardRate": 0.0,
-        "fairwayRate": 0.0,
-        "avgLongErr": 0.0,
-        "avgLatErr": 0.0,
-    }
-    assert payload["advice"] == {"adoptRate": 0.0, "topAdvice": []}
-    assert payload["tts"] == {"playRate": 0.0, "avgChars": 0.0}
+    assert payload["mc"]["enabledPct"] == 0.0
+    assert payload["mc"]["adoptRate"] == 0.0
+    assert payload["mc"]["hazardRate"] == 0.0
+    assert payload["mc"]["fairwayRate"] == 0.0
+    assert payload["mc"]["avgLongErr"] == 0.0
+    assert payload["mc"]["avgLatErr"] == 0.0
+    assert payload["mc"]["ab"]["control"]["plans"] == 0
+    assert payload["advice"]["adoptRate"] == 0.0
+    assert payload["advice"]["topAdvice"] == []
+    assert payload["advice"]["ab"]["control"]["plans"] == 0
+    assert payload["tts"]["playRate"] == 0.0
+    assert payload["tts"]["avgChars"] == 0.0
+    assert payload["tts"]["ab"]["control"]["plays"] == 0
 
 
 def test_caddie_health_rejects_invalid_since(monkeypatch, tmp_path):

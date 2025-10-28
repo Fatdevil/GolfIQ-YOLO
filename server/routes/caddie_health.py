@@ -23,16 +23,60 @@ class CaddieMcHealth(BaseModel):
     fairwayRate: float = Field(..., ge=0.0, le=1.0)
     avgLongErr: float
     avgLatErr: float
+    ab: CaddieFeatureAb | None = None
 
 
 class CaddieAdviceHealth(BaseModel):
     adoptRate: float = Field(..., ge=0.0, le=1.0)
     topAdvice: List[str]
+    ab: CaddieFeatureAb | None = None
 
 
 class CaddieTtsHealth(BaseModel):
     playRate: float = Field(..., ge=0.0, le=1.0)
     avgChars: float
+    ab: CaddieTtsAb | None = None
+
+
+class FeatureAbGroup(BaseModel):
+    plans: int = 0
+    adopts: int = 0
+    sg_total: float = 0.0
+    rounds: int = 0
+    adoptRate: float = Field(0.0, ge=0.0, le=1.0)
+    sgPerRound: float = 0.0
+
+
+class FeatureAbDelta(BaseModel):
+    adoptRate: float | None = None
+    sgPerRound: float | None = None
+
+
+class CaddieFeatureAb(BaseModel):
+    control: FeatureAbGroup
+    enforced: FeatureAbGroup
+    delta: FeatureAbDelta
+
+
+class TtsAbGroup(BaseModel):
+    plans: int = 0
+    plays: int = 0
+    adopts: int = 0
+    sg_total: float = 0.0
+    rounds: int = 0
+    playRate: float = Field(0.0, ge=0.0, le=1.0)
+    sgPerRound: float = 0.0
+
+
+class TtsAbDelta(BaseModel):
+    playRate: float | None = None
+    sgPerRound: float | None = None
+
+
+class CaddieTtsAb(BaseModel):
+    control: TtsAbGroup
+    enforced: TtsAbGroup
+    delta: TtsAbDelta
 
 
 class SgPerRound(BaseModel):
@@ -155,11 +199,6 @@ def caddie_health(
     cutoff = datetime.now(timezone.utc) - window
 
     plan_total = 0
-    plan_mc = 0
-    adoption_mc_total = 0
-    adoption_mc_true = 0
-    adoption_adv_total = 0
-    adoption_adv_true = 0
     advice_counter: Counter[str] = Counter()
     mc_events = 0
     hazard_sum = 0.0
@@ -172,21 +211,48 @@ def caddie_health(
     adopted_sg: List[float] = []
     other_sg: List[float] = []
 
+    mc_groups = {
+        "control": {"plans": 0, "adopts": 0, "sg_total": 0.0, "rounds": 0},
+        "enforced": {"plans": 0, "adopts": 0, "sg_total": 0.0, "rounds": 0},
+    }
+    advice_groups = {
+        "control": {"plans": 0, "adopts": 0, "sg_total": 0.0, "rounds": 0},
+        "enforced": {"plans": 0, "adopts": 0, "sg_total": 0.0, "rounds": 0},
+    }
+    tts_groups = {
+        "control": {"plans": 0, "plays": 0, "sg_total": 0.0, "rounds": 0},
+        "enforced": {"plans": 0, "plays": 0, "sg_total": 0.0, "rounds": 0},
+    }
+
     for run_id in _iter_recent_hud_runs(cutoff):
         last_plan_context: Optional[Dict[str, bool]] = None
         last_plan_ts: Optional[float] = None
         run_sg_total = 0.0
         run_has_sg = False
+        run_rollout: Dict[str, Optional[bool]] = {
+            "mc": None,
+            "advice": None,
+            "tts": None,
+        }
         for event in _load_run_events(run_id):
             name = event.get("event")
             data = event.get("data")
             if not isinstance(name, str) or not isinstance(data, dict):
                 continue
+            if name == "hud.caddie.rollout":
+                mc_flag = data.get("mc")
+                advice_flag = data.get("advice")
+                tts_flag = data.get("tts")
+                if isinstance(mc_flag, bool):
+                    run_rollout["mc"] = mc_flag
+                if isinstance(advice_flag, bool):
+                    run_rollout["advice"] = advice_flag
+                if isinstance(tts_flag, bool):
+                    run_rollout["tts"] = tts_flag
+                continue
             if name == "hud.caddie.plan":
                 plan_total += 1
                 mc_used = bool(data.get("mcUsed"))
-                if mc_used:
-                    plan_mc += 1
                 advice_texts: List[str] = []
                 raw_advice = data.get("adviceText")
                 if isinstance(raw_advice, list):
@@ -196,8 +262,41 @@ def caddie_health(
                             if text:
                                 advice_texts.append(text)
                                 advice_counter[text] += 1
-                had_advice = bool(advice_texts)
-                last_plan_context = {"mcUsed": mc_used, "hadAdvice": had_advice}
+                advice_flag_raw = data.get("hadAdvice")
+                had_advice = (
+                    bool(advice_flag_raw)
+                    if advice_flag_raw is not None
+                    else bool(advice_texts)
+                )
+                tts_flag_raw = data.get("ttsUsed")
+                tts_used = (
+                    bool(tts_flag_raw)
+                    if tts_flag_raw is not None
+                    else bool(run_rollout["tts"])
+                )
+                if mc_used:
+                    mc_groups["enforced"]["plans"] += 1
+                else:
+                    mc_groups["control"]["plans"] += 1
+                if had_advice:
+                    advice_groups["enforced"]["plans"] += 1
+                else:
+                    advice_groups["control"]["plans"] += 1
+                if tts_used:
+                    tts_groups["enforced"]["plans"] += 1
+                else:
+                    tts_groups["control"]["plans"] += 1
+                if run_rollout["mc"] is None:
+                    run_rollout["mc"] = mc_used
+                if run_rollout["advice"] is None:
+                    run_rollout["advice"] = had_advice
+                if run_rollout["tts"] is None:
+                    run_rollout["tts"] = tts_used
+                last_plan_context = {
+                    "mcUsed": mc_used,
+                    "hadAdvice": had_advice,
+                    "ttsUsed": tts_used,
+                }
                 ts_value = (
                     event.get("ts")
                     or event.get("time")
@@ -227,14 +326,14 @@ def caddie_health(
                         within = abs(ts_float - float(last_plan_ts)) <= 120.0
 
                 if last_plan_context and within:
-                    if last_plan_context.get("mcUsed"):
-                        adoption_mc_total += 1
-                        if adopted:
-                            adoption_mc_true += 1
-                    if last_plan_context.get("hadAdvice"):
-                        adoption_adv_total += 1
-                        if adopted:
-                            adoption_adv_true += 1
+                    mc_key = (
+                        "enforced" if last_plan_context.get("mcUsed") else "control"
+                    )
+                    advice_key = (
+                        "enforced" if last_plan_context.get("hadAdvice") else "control"
+                    )
+                    mc_groups[mc_key]["adopts"] += int(adopted)
+                    advice_groups[advice_key]["adopts"] += int(adopted)
             elif name == "hud.shot":
                 sg_data = data.get("sg")
                 if isinstance(sg_data, dict):
@@ -247,6 +346,12 @@ def caddie_health(
                             adopted_sg.append(total_value)
                         elif adopted_flag is False:
                             other_sg.append(total_value)
+                rollout_data = data.get("rollout")
+                if isinstance(rollout_data, dict):
+                    for key in ("mc", "advice", "tts"):
+                        value = rollout_data.get(key)
+                        if isinstance(value, bool) and run_rollout.get(key) is None:
+                            run_rollout[key] = value
                 last_plan_context = None
                 last_plan_ts = None
             elif name == "hud.caddie.mc":
@@ -260,23 +365,110 @@ def caddie_health(
                 chars = data.get("chars")
                 if isinstance(chars, (int, float)):
                     chars_sum += float(chars)
+                if run_rollout["tts"] is None:
+                    run_rollout["tts"] = True
+                tts_key = "enforced" if run_rollout["tts"] else "control"
+                tts_groups[tts_key]["plays"] += 1
 
         if run_has_sg:
             sg_totals.append(run_sg_total)
+            mc_key = "enforced" if run_rollout.get("mc") else "control"
+            advice_key = "enforced" if run_rollout.get("advice") else "control"
+            tts_key = "enforced" if run_rollout.get("tts") else "control"
+            mc_groups[mc_key]["sg_total"] += run_sg_total
+            mc_groups[mc_key]["rounds"] += 1
+            advice_groups[advice_key]["sg_total"] += run_sg_total
+            advice_groups[advice_key]["rounds"] += 1
+            tts_groups[tts_key]["sg_total"] += run_sg_total
+            tts_groups[tts_key]["rounds"] += 1
 
     def safe_div(num: float, den: float) -> float:
         if den <= 0:
             return 0.0
         return num / den
 
-    mc_enabled_pct = safe_div(plan_mc * 100.0, float(plan_total))
-    mc_adopt_rate = safe_div(float(adoption_mc_true), float(adoption_mc_total))
+    def clamp_unit(value: float) -> float:
+        if value < 0.0:
+            return 0.0
+        if value > 1.0:
+            return 1.0
+        return value
+
+    def build_feature_group(raw: Dict[str, Any]) -> FeatureAbGroup:
+        plans = int(raw.get("plans", 0))
+        adopts = int(raw.get("adopts", 0))
+        sg_total = float(raw.get("sg_total", 0.0))
+        rounds = int(raw.get("rounds", 0))
+        adopt_rate = clamp_unit(safe_div(float(adopts), float(plans)))
+        sg_per_round = safe_div(sg_total, float(rounds))
+        return FeatureAbGroup(
+            plans=plans,
+            adopts=adopts,
+            sg_total=sg_total,
+            rounds=rounds,
+            adoptRate=adopt_rate,
+            sgPerRound=sg_per_round,
+        )
+
+    def build_tts_group(raw: Dict[str, Any]) -> TtsAbGroup:
+        plans = int(raw.get("plans", 0))
+        plays = int(raw.get("plays", 0))
+        sg_total = float(raw.get("sg_total", 0.0))
+        rounds = int(raw.get("rounds", 0))
+        play_rate = clamp_unit(safe_div(float(plays), float(plans)))
+        sg_per_round = safe_div(sg_total, float(rounds))
+        return TtsAbGroup(
+            plans=plans,
+            plays=plays,
+            adopts=plays,
+            sg_total=sg_total,
+            rounds=rounds,
+            playRate=play_rate,
+            sgPerRound=sg_per_round,
+        )
+
+    mc_control_group = build_feature_group(mc_groups["control"])
+    mc_enforced_group = build_feature_group(mc_groups["enforced"])
+    mc_ab = CaddieFeatureAb(
+        control=mc_control_group,
+        enforced=mc_enforced_group,
+        delta=FeatureAbDelta(
+            adoptRate=mc_enforced_group.adoptRate - mc_control_group.adoptRate,
+            sgPerRound=mc_enforced_group.sgPerRound - mc_control_group.sgPerRound,
+        ),
+    )
+
+    advice_control_group = build_feature_group(advice_groups["control"])
+    advice_enforced_group = build_feature_group(advice_groups["enforced"])
+    advice_ab = CaddieFeatureAb(
+        control=advice_control_group,
+        enforced=advice_enforced_group,
+        delta=FeatureAbDelta(
+            adoptRate=advice_enforced_group.adoptRate - advice_control_group.adoptRate,
+            sgPerRound=advice_enforced_group.sgPerRound
+            - advice_control_group.sgPerRound,
+        ),
+    )
+
+    tts_control_group = build_tts_group(tts_groups["control"])
+    tts_enforced_group = build_tts_group(tts_groups["enforced"])
+    tts_ab = CaddieTtsAb(
+        control=tts_control_group,
+        enforced=tts_enforced_group,
+        delta=TtsAbDelta(
+            playRate=tts_enforced_group.playRate - tts_control_group.playRate,
+            sgPerRound=tts_enforced_group.sgPerRound - tts_control_group.sgPerRound,
+        ),
+    )
+
+    mc_enabled_pct = safe_div(mc_enforced_group.plans * 100.0, float(plan_total))
+    mc_adopt_rate = mc_enforced_group.adoptRate
     mc_hazard_rate = safe_div(hazard_sum, float(mc_events))
     mc_fairway_rate = safe_div(fairway_sum, float(mc_events))
     mc_long_err = safe_div(long_sum, float(mc_events))
     mc_lat_err = safe_div(lat_sum, float(mc_events))
 
-    advice_adopt_rate = safe_div(float(adoption_adv_true), float(adoption_adv_total))
+    advice_adopt_rate = advice_enforced_group.adoptRate
     top_advice = [text for text, _ in advice_counter.most_common(3)]
 
     tts_play_rate = safe_div(float(tts_events), float(plan_total))
@@ -301,9 +493,14 @@ def caddie_health(
             fairwayRate=mc_fairway_rate,
             avgLongErr=mc_long_err,
             avgLatErr=mc_lat_err,
+            ab=mc_ab,
         ),
-        advice=CaddieAdviceHealth(adoptRate=advice_adopt_rate, topAdvice=top_advice),
-        tts=CaddieTtsHealth(playRate=tts_play_rate, avgChars=tts_avg_chars),
+        advice=CaddieAdviceHealth(
+            adoptRate=advice_adopt_rate,
+            topAdvice=top_advice,
+            ab=advice_ab,
+        ),
+        tts=CaddieTtsHealth(playRate=tts_play_rate, avgChars=tts_avg_chars, ab=tts_ab),
         sg_gained_per_round=SgPerRound(
             sample=len(sg_totals), mean=sg_mean, median=sg_median
         ),

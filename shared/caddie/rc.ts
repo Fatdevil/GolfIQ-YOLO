@@ -2,21 +2,30 @@ import { clampRolloutPercent } from "./rollout";
 
 export type RcRecord = Record<string, unknown> | null | undefined;
 
-export type CaddieFeatureRc = {
+export interface CaddieFeatureToggle {
   enabled: boolean;
   percent: number;
-};
+  kill?: boolean;
+}
 
-export type CaddieRc = {
-  mc: CaddieFeatureRc;
-  advice: CaddieFeatureRc;
-  tts: CaddieFeatureRc;
-};
+export interface CaddieDigestToggle {
+  enabled?: boolean;
+}
 
-const DEFAULT_RC: CaddieRc = {
-  mc: { enabled: false, percent: 0 },
-  advice: { enabled: true, percent: 100 },
-  tts: { enabled: false, percent: 0 },
+export interface CaddieRC {
+  mc: CaddieFeatureToggle;
+  advice: CaddieFeatureToggle;
+  tts: CaddieFeatureToggle;
+  digest?: CaddieDigestToggle;
+}
+
+export type CaddieRc = CaddieRC;
+
+const DEFAULT_RC: CaddieRC = {
+  mc: { enabled: false, percent: 0, kill: false },
+  advice: { enabled: true, percent: 100, kill: false },
+  tts: { enabled: false, percent: 0, kill: false },
+  digest: { enabled: true },
 };
 
 function getGlobalRc(): RcRecord {
@@ -53,26 +62,46 @@ function readRcValue(rc: RcRecord, key: string): unknown {
   return (rc as Record<string, unknown>)[key];
 }
 
-function readFeature(rc: RcRecord, prefix: string, fallback: CaddieFeatureRc): CaddieFeatureRc {
-  const enabledRaw = readRcValue(rc, `${prefix}.enabled`);
-  const percentRaw = readRcValue(rc, `${prefix}.percent`);
-  const enabled =
-    typeof enabledRaw === "undefined" ? fallback.enabled : normalizeBoolean(enabledRaw);
-  const percent =
-    typeof percentRaw === "undefined" ? fallback.percent : clampRolloutPercent(percentRaw);
-  return {
-    enabled,
-    percent,
+function createGetterFromRecord(record: RcRecord): (key: string, defaultValue?: unknown) => unknown {
+  return (key: string, defaultValue?: unknown) => {
+    const value = readRcValue(record, key);
+    return typeof value === "undefined" ? defaultValue : value;
   };
 }
 
+function coercePercent(value: unknown, fallback: number): number {
+  if (typeof value === "undefined") {
+    return fallback;
+  }
+  return clampRolloutPercent(value);
+}
+
+function readFeatureFromGetter(
+  get: (key: string, defaultValue?: unknown) => unknown,
+  prefix: string,
+  fallback: CaddieFeatureToggle,
+): CaddieFeatureToggle {
+  const enabled = normalizeBoolean(get(`${prefix}.enabled`, fallback.enabled));
+  const percent = coercePercent(get(`${prefix}.percent`, fallback.percent), fallback.percent);
+  const kill = normalizeBoolean(get(`${prefix}.kill`, fallback.kill));
+  return { enabled, percent, kill };
+}
+
+export function readCaddieRC(get: (key: string, defaultValue?: unknown) => unknown): CaddieRC {
+  const fallback = DEFAULT_RC;
+  const mc = readFeatureFromGetter(get, "caddie.mc", fallback.mc);
+  const advice = readFeatureFromGetter(get, "caddie.advice", fallback.advice);
+  const tts = readFeatureFromGetter(get, "caddie.tts", fallback.tts);
+  const digestEnabledRaw = get("caddie.digest.enabled", fallback.digest?.enabled);
+  const digest: CaddieDigestToggle | undefined = digestEnabledRaw === undefined && !fallback.digest
+    ? undefined
+    : { enabled: normalizeBoolean(digestEnabledRaw ?? fallback.digest?.enabled) };
+  return { mc, advice, tts, digest };
+}
+
 export function readCaddieRc(rc?: RcRecord): CaddieRc {
-  const source = rc ?? getGlobalRc();
-  return {
-    mc: readFeature(source, "caddie.mc", DEFAULT_RC.mc),
-    advice: readFeature(source, "caddie.advice", DEFAULT_RC.advice),
-    tts: readFeature(source, "caddie.tts", DEFAULT_RC.tts),
-  };
+  const getter = createGetterFromRecord(rc ?? getGlobalRc());
+  return readCaddieRC(getter);
 }
 
 export function getCaddieRc(): CaddieRc {
