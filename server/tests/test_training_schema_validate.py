@@ -48,5 +48,15 @@ def test_validate_training_packs_handles_ok_and_bad(tmp_path):
     }
     _write_pack(bad_dir / "bad.json", bad_pack)
 
-    assert validate_main(["--base", str(good_dir)]) == 0
-    assert validate_main(["--base", str(bad_dir)]) != 0
+    assert (
+        validate_main(
+            ["--packs-dir", str(good_dir), "--catalog", str(good_dir / "missing.json")]
+        )
+        == 0
+    )
+    assert (
+        validate_main(
+            ["--packs-dir", str(bad_dir), "--catalog", str(bad_dir / "missing.json")]
+        )
+        != 0
+    )

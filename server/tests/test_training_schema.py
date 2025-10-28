@@ -41,8 +41,10 @@ def test_validate_training_packs_smoke(tmp_path: Path) -> None:
         [
             "python",
             "server/scripts/validate_training_packs.py",
-            "--base",
+            "--packs-dir",
             str(packs_dir),
+            "--catalog",
+            str(tmp_path / "missing.json"),
         ],
         capture_output=True,
         text=True,
@@ -50,5 +52,4 @@ def test_validate_training_packs_smoke(tmp_path: Path) -> None:
     )
 
     assert result.returncode == 0, result.stderr
-    assert "Validated" in result.stdout
-    assert "smoke.json" in result.stdout
+    assert "Training packs/catalog OK" in result.stdout
