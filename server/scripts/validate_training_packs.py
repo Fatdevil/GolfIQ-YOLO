@@ -64,12 +64,15 @@ CATALOG_SCHEMA: dict[str, Any] = {
     },
 }
 
+
 def _load_json(path: pathlib.Path) -> Any:
     with path.open("r", encoding="utf-8") as fh:
         return json.load(fh)
 
 
-def _validate_schema(instance: Any, schema: dict[str, Any], path: pathlib.Path) -> list[str]:
+def _validate_schema(
+    instance: Any, schema: dict[str, Any], path: pathlib.Path
+) -> list[str]:
     try:
         validate(instance, schema)
         return []
@@ -82,13 +85,17 @@ def _ensure_pack_focus(value: Any, label: str) -> list[str]:
     if isinstance(value, list):
         for index, focus in enumerate(value):
             if not isinstance(focus, str) or focus not in ALLOWED_FOCUS:
-                errors.append(f"{label}[{index}] must be one of {sorted(ALLOWED_FOCUS)}")
+                errors.append(
+                    f"{label}[{index}] must be one of {sorted(ALLOWED_FOCUS)}"
+                )
     elif value is not None:
         errors.append(f"{label} must be an array")
     return errors
 
 
-def _validate_pack_rules(path: pathlib.Path, pack: dict[str, Any], state: dict[str, set[str]]) -> list[str]:
+def _validate_pack_rules(
+    path: pathlib.Path, pack: dict[str, Any], state: dict[str, set[str]]
+) -> list[str]:
     errors: list[str] = []
     file_size = path.stat().st_size
     if file_size > MAX_PACK_BYTES:
@@ -106,7 +113,9 @@ def _validate_pack_rules(path: pathlib.Path, pack: dict[str, Any], state: dict[s
     version = pack.get("version")
     if isinstance(version, str):
         if not VERSION_RE.match(version):
-            errors.append(f"{path} version must be semantic (1.2.3) or YYYY.MM formatted")
+            errors.append(
+                f"{path} version must be semantic (1.2.3) or YYYY.MM formatted"
+            )
     else:
         errors.append(f"{path} version must be a string")
 
@@ -138,13 +147,17 @@ def _validate_pack_rules(path: pathlib.Path, pack: dict[str, Any], state: dict[s
 
             drill_focus = drill.get("focus")
             if not isinstance(drill_focus, str) or drill_focus not in ALLOWED_FOCUS:
-                errors.append(f"{path} drills[{index}].focus must be one of {sorted(ALLOWED_FOCUS)}")
+                errors.append(
+                    f"{path} drills[{index}].focus must be one of {sorted(ALLOWED_FOCUS)}"
+                )
 
             target_metric = drill.get("targetMetric")
             if isinstance(target_metric, dict):
                 segment = target_metric.get("segment")
                 if not isinstance(segment, str) or segment not in ALLOWED_FOCUS:
-                    errors.append(f"{path} drills[{index}].targetMetric.segment must be one of {sorted(ALLOWED_FOCUS)}")
+                    errors.append(
+                        f"{path} drills[{index}].targetMetric.segment must be one of {sorted(ALLOWED_FOCUS)}"
+                    )
             else:
                 errors.append(f"{path} drills[{index}].targetMetric must be an object")
     else:
@@ -167,17 +180,23 @@ def _validate_pack_rules(path: pathlib.Path, pack: dict[str, Any], state: dict[s
 
             plan_focus = plan.get("focus")
             if not isinstance(plan_focus, str) or plan_focus not in ALLOWED_FOCUS:
-                errors.append(f"{path} plans[{index}].focus must be one of {sorted(ALLOWED_FOCUS)}")
+                errors.append(
+                    f"{path} plans[{index}].focus must be one of {sorted(ALLOWED_FOCUS)}"
+                )
 
             drills_ref = plan.get("drills")
             if isinstance(drills_ref, list):
                 for drill_index, entry in enumerate(drills_ref):
                     if not isinstance(entry, dict):
-                        errors.append(f"{path} plans[{index}].drills[{drill_index}] must be an object")
+                        errors.append(
+                            f"{path} plans[{index}].drills[{drill_index}] must be an object"
+                        )
                         continue
                     drill_ref = entry.get("id")
                     if not isinstance(drill_ref, str):
-                        errors.append(f"{path} plans[{index}].drills[{drill_index}].id must be a string")
+                        errors.append(
+                            f"{path} plans[{index}].drills[{drill_index}].id must be a string"
+                        )
                     elif drill_ref not in pack_drill_ids:
                         errors.append(
                             f"{path} plans[{index}].drills[{drill_index}] references unknown drill id {drill_ref}"
@@ -222,7 +241,9 @@ def main(argv: list[str] | None = None) -> int:
         except json.JSONDecodeError as exc:
             errors.append(f"{args.catalog}: invalid JSON - {exc.msg}")
         else:
-            errors.extend(_validate_schema(catalog_payload, CATALOG_SCHEMA, args.catalog))
+            errors.extend(
+                _validate_schema(catalog_payload, CATALOG_SCHEMA, args.catalog)
+            )
 
     if errors:
         print("\n".join(errors))

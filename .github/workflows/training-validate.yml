@@ -40,8 +40,7 @@ jobs:
           set -o pipefail
           python server/scripts/validate_training_packs.py \
             --packs-dir data/training/packs \
-            --catalog data/training/catalog.json 
-          2>&1 | tee training-validation.log
+            --catalog data/training/catalog.json 2>&1 | tee training-validation.log
 
       - name: Publish summary
         if: always()

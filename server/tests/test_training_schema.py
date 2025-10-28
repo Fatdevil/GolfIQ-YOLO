@@ -10,7 +10,7 @@ def test_validate_training_packs_smoke(tmp_path: Path) -> None:
     packs_dir.mkdir(parents=True, exist_ok=True)
     pack = {
         "packId": "smoke",
-        "version": "1.0",
+        "version": "1.0.0",
         "drills": [
             {
                 "id": "tempo-chip",
@@ -27,7 +27,7 @@ def test_validate_training_packs_smoke(tmp_path: Path) -> None:
                 "id": "short-reset",
                 "name": "Short game reset",
                 "focus": "short",
-                "version": "1.0",
+                "version": "1.0.0",
                 "drills": [
                     {"id": "tempo-chip", "reps": 5},
                 ],

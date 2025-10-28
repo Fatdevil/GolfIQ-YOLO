@@ -39,16 +39,26 @@ def _collect_focus(pack: dict[str, Any]) -> list[FocusValue]:
     if isinstance(persona, dict):
         persona_focus = persona.get("focus")
         if isinstance(persona_focus, list):
-            focus_entries.extend([entry for entry in persona_focus if isinstance(entry, str)])
+            focus_entries.extend(
+                [entry for entry in persona_focus if isinstance(entry, str)]
+            )
     drills = pack.get("drills")
     if isinstance(drills, list):
         focus_entries.extend(
-            [drill.get("focus") for drill in drills if isinstance(drill, dict) and isinstance(drill.get("focus"), str)]
+            [
+                drill.get("focus")
+                for drill in drills
+                if isinstance(drill, dict) and isinstance(drill.get("focus"), str)
+            ]
         )
     plans = pack.get("plans")
     if isinstance(plans, list):
         focus_entries.extend(
-            [plan.get("focus") for plan in plans if isinstance(plan, dict) and isinstance(plan.get("focus"), str)]
+            [
+                plan.get("focus")
+                for plan in plans
+                if isinstance(plan, dict) and isinstance(plan.get("focus"), str)
+            ]
         )
     return _ordered_unique(focus_entries)
 
@@ -68,11 +78,11 @@ def build_catalog(packs_dir: pathlib.Path, version: str) -> dict[str, Any]:
             plans = pack.get("plans")
             pack_entries.append(
                 {
-                  "packId": pack_id,
-                  "version": pack_version,
-                  "focus": _collect_focus(pack),
-                  "plans": len(plans) if isinstance(plans, list) else 0,
-                  "drills": len(drills) if isinstance(drills, list) else 0,
+                    "packId": pack_id,
+                    "version": pack_version,
+                    "focus": _collect_focus(pack),
+                    "plans": len(plans) if isinstance(plans, list) else 0,
+                    "drills": len(drills) if isinstance(drills, list) else 0,
                 }
             )
     pack_entries.sort(key=lambda entry: entry["packId"])
@@ -84,7 +94,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--packs-dir", type=pathlib.Path, default=DEFAULT_PACKS_DIR)
     parser.add_argument("--out", type=pathlib.Path, default=DEFAULT_OUTPUT)
     parser.add_argument("--version", required=True)
-    parser.add_argument("--pretty", action="store_true", help="Write catalog with indentation")
+    parser.add_argument(
+        "--pretty", action="store_true", help="Write catalog with indentation"
+    )
     args = parser.parse_args(argv)
 
     catalog = build_catalog(args.packs_dir, args.version)
