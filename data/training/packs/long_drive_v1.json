@@ -1,0 +1,45 @@
+{
+  "packId": "long_drive_v1",
+  "version": "1.0.0",
+  "persona": {
+    "id": "coach-long-v1",
+    "name": "Long-Drive Coach",
+    "version": "1.0.0",
+    "styleHints": { "tone": "pep", "verbosity": "short" },
+    "focus": ["long-drive", "tee"]
+  },
+  "drills": [
+    {
+      "id": "ld-tee-height-ab",
+      "focus": "long-drive",
+      "title": "Tee-höjd A/B",
+      "description": "10 slag låg tee, 10 slag hög tee; jämför carry & fairway%.",
+      "estTimeMin": 12,
+      "targetMetric": {"type": "dispersion", "segment": "long-drive"},
+      "difficulty": 2
+    },
+    {
+      "id": "ld-tempo-80pc",
+      "focus": "long-drive",
+      "title": "80% tempo",
+      "description": "12 slag på 80% tempo; registrera carry-medel & spridning.",
+      "estTimeMin": 10,
+      "targetMetric": {"type": "SG", "segment": "long-drive"},
+      "difficulty": 2
+    }
+  ],
+  "plans": [
+    {
+      "id": "ld-week-1",
+      "name": "Long-Drive – Vecka 1",
+      "focus": "long-drive",
+      "version": "1.0.0",
+      "drills": [
+        {"id": "ld-tee-height-ab", "durationMin": 12},
+        {"id": "ld-tempo-80pc", "durationMin": 10}
+      ],
+      "schedule": "2x/vecka",
+      "estTotalMin": 22
+    }
+  ]
+}
