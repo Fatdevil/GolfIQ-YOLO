@@ -1,3 +1,4 @@
+import type { TrainingFocus } from "../training/types";
 import { clampRolloutPercent } from "./rollout";
 
 export type RcRecord = Record<string, unknown> | null | undefined;
@@ -17,6 +18,8 @@ export interface CaddieRC {
   advice: CaddieFeatureToggle;
   tts: CaddieFeatureToggle;
   digest?: CaddieDigestToggle;
+  trainingFocusDefault?: TrainingFocus;
+  coachPersonaDefault?: string;
 }
 
 export type CaddieRc = CaddieRC;
@@ -27,6 +30,17 @@ const DEFAULT_RC: CaddieRC = {
   tts: { enabled: false, percent: 0, kill: false },
   digest: { enabled: true },
 };
+
+const TRAINING_FOCUS_VALUES: readonly TrainingFocus[] = [
+  "long-drive",
+  "tee",
+  "approach",
+  "wedge",
+  "short",
+  "putt",
+  "recovery",
+];
+const TRAINING_FOCUS_SET = new Set(TRAINING_FOCUS_VALUES);
 
 function getGlobalRc(): RcRecord {
   if (typeof globalThis !== "undefined" && (globalThis as Record<string, unknown>).RC) {
@@ -76,6 +90,19 @@ function coercePercent(value: unknown, fallback: number): number {
   return clampRolloutPercent(value);
 }
 
+function normalizeTrainingFocus(value: unknown): TrainingFocus | undefined {
+  if (typeof value !== "string") {
+    return undefined;
+  }
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return undefined;
+  }
+  return TRAINING_FOCUS_SET.has(trimmed as TrainingFocus)
+    ? (trimmed as TrainingFocus)
+    : undefined;
+}
+
 function readFeatureFromGetter(
   get: (key: string, defaultValue?: unknown) => unknown,
   prefix: string,
@@ -96,7 +123,13 @@ export function readCaddieRC(get: (key: string, defaultValue?: unknown) => unkno
   const digest: CaddieDigestToggle | undefined = digestEnabledRaw === undefined && !fallback.digest
     ? undefined
     : { enabled: normalizeBoolean(digestEnabledRaw ?? fallback.digest?.enabled) };
-  return { mc, advice, tts, digest };
+  const focusDefault = normalizeTrainingFocus(get("training.focus.default"));
+  const personaRaw = get("coach.persona.default");
+  const coachPersonaDefault =
+    typeof personaRaw === "string" && personaRaw.trim().length > 0
+      ? personaRaw.trim()
+      : undefined;
+  return { mc, advice, tts, digest, trainingFocusDefault: focusDefault, coachPersonaDefault };
 }
 
 export function readCaddieRc(rc?: RcRecord): CaddieRc {

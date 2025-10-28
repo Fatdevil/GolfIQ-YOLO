@@ -1,0 +1,15 @@
+{
+  "version": "1.0.0",
+  "packs": [
+    {
+      "packId": "baseline-putting",
+      "version": "2025.01",
+      "focus": [
+        "putt",
+        "short"
+      ],
+      "plans": 1,
+      "drills": 2
+    }
+  ]
+}

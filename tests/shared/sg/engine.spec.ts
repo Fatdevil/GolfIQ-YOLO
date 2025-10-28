@@ -13,6 +13,8 @@ describe('computeSG', () => {
     expect(result.total).toBeGreaterThan(0);
     expect(result.sgApp).toBeCloseTo(result.total, 5);
     expect(result.expStart).toBeGreaterThan(result.expEnd);
+    expect(result.focus).toBe('approach');
+    expect(result.byFocus['approach']).toBeCloseTo(result.total, 5);
   });
 
   it('penalises missed greens', () => {
@@ -37,6 +39,8 @@ describe('computeSG', () => {
     expect(result.sgTee).toBeLessThan(0);
     expect(result.total).toBe(result.sgTee);
     expect(result.strokesTaken).toBe(2);
+    expect(result.focus).toBe('recovery');
+    expect(result.byFocus['recovery']).toBeCloseTo(result.total, 5);
   });
 
   it('uses tee baseline for penalty re-tee scenarios', () => {
@@ -56,6 +60,28 @@ describe('computeSG', () => {
     expect(penaltyResult.expEnd).toBeCloseTo(noPenaltyResult.expEnd, 5);
     expect(penaltyResult.sgTee).toBeLessThan(noPenaltyResult.sgTee);
     expect(classifyPhase(250)).toBe('tee');
+  });
+
+  it('maps tee shots to long-drive focus when distance is high', () => {
+    const result = computeSG({
+      phase: 'tee',
+      startDist_m: 260,
+      endDist_m: 40,
+    });
+
+    expect(result.focus).toBe('long-drive');
+    expect(result.byFocus['long-drive']).toBeCloseTo(result.total, 5);
+  });
+
+  it('maps shorter approach shots to wedge focus', () => {
+    const result = computeSG({
+      phase: 'approach',
+      startDist_m: 90,
+      endDist_m: 5,
+    });
+
+    expect(result.focus).toBe('wedge');
+    expect(result.byFocus['wedge']).toBeCloseTo(result.total, 5);
   });
 });
 

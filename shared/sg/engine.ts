@@ -5,6 +5,7 @@ import {
   expStrokes_Short,
   expStrokes_Tee,
 } from './baseline';
+import type { TrainingFocus } from '../training/types';
 
 export type ShotPhase = 'tee' | 'approach' | 'short' | 'putt';
 
@@ -25,6 +26,8 @@ export type ShotSgResult = {
   expStart: number;
   expEnd: number;
   strokesTaken: number;
+  focus: TrainingFocus;
+  byFocus: Partial<Record<TrainingFocus, number>>;
 };
 
 const clamp = (value: number): number => {
@@ -44,6 +47,8 @@ const EXP_BY_PHASE: Record<ShotPhase, (distanceM: number) => number> = {
 const PUTT_MAX = 12;
 const SHORT_MAX = 30;
 const APPROACH_MAX = 220;
+const LONG_DRIVE_MIN = 240;
+const WEDGE_MAX = 120;
 
 export const classifyPhase = (distanceM: number): ShotPhase => {
   const dist = clamp(distanceM);
@@ -57,6 +62,22 @@ export const classifyPhase = (distanceM: number): ShotPhase => {
     return 'approach';
   }
   return 'tee';
+};
+
+export const resolveFocusSegment = (phase: ShotPhase, startDist: number, penalty: boolean): TrainingFocus => {
+  if (penalty) {
+    return 'recovery';
+  }
+  if (phase === 'tee') {
+    return startDist >= LONG_DRIVE_MIN ? 'long-drive' : 'tee';
+  }
+  if (phase === 'approach') {
+    return startDist <= WEDGE_MAX ? 'wedge' : 'approach';
+  }
+  if (phase === 'short') {
+    return 'short';
+  }
+  return 'putt';
 };
 
 export const computeSG = (ctx: ShotCtx): ShotSgResult => {
@@ -77,7 +98,10 @@ export const computeSG = (ctx: ShotCtx): ShotSgResult => {
   const sgShort = phase === 'short' ? total : 0;
   const sgPutt = phase === 'putt' ? total : 0;
 
-  return { sgTee, sgApp, sgShort, sgPutt, total, expStart, expEnd, strokesTaken };
+  const focus = resolveFocusSegment(phase, startDist, penalty);
+  const byFocus: Partial<Record<TrainingFocus, number>> = { [focus]: total };
+
+  return { sgTee, sgApp, sgShort, sgPutt, total, expStart, expEnd, strokesTaken, focus, byFocus };
 };
 
 export const expectedStrokesAfterShot = (ctx: ShotCtx): number => {
