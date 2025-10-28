@@ -8,7 +8,9 @@ from fastapi.testclient import TestClient
 from server.app import app
 
 
-def _write_run(root: Path, run_id: str, created_at: datetime, events: list[dict]) -> None:
+def _write_run(
+    root: Path, run_id: str, created_at: datetime, events: list[dict]
+) -> None:
     runs_dir = root
     hud_dir = runs_dir / "hud"
     by_id_dir = runs_dir / "by_id"
@@ -19,7 +21,9 @@ def _write_run(root: Path, run_id: str, created_at: datetime, events: list[dict]
     entry = {
         "id": run_id,
         "kind": "hud",
-        "created_at": created_at.replace(microsecond=0).isoformat().replace("+00:00", "Z"),
+        "created_at": created_at.replace(microsecond=0)
+        .isoformat()
+        .replace("+00:00", "Z"),
         "device": "test-device",
         "url": f"/runs/{run_id}",
         "size": 123,
@@ -55,7 +59,12 @@ def test_caddie_health_ab_breakdown(monkeypatch, tmp_path):
         {
             "timestampMs": 3,
             "event": "hud.caddie.adopt",
-            "data": {"adopted": False, "mcUsed": False, "hadAdvice": False, "ttsUsed": False},
+            "data": {
+                "adopted": False,
+                "mcUsed": False,
+                "hadAdvice": False,
+                "ttsUsed": False,
+            },
         },
         {
             "timestampMs": 5,
@@ -92,7 +101,12 @@ def test_caddie_health_ab_breakdown(monkeypatch, tmp_path):
         {
             "timestampMs": 3,
             "event": "hud.caddie.adopt",
-            "data": {"adopted": True, "mcUsed": True, "hadAdvice": True, "ttsUsed": True},
+            "data": {
+                "adopted": True,
+                "mcUsed": True,
+                "hadAdvice": True,
+                "ttsUsed": True,
+            },
         },
         {
             "timestampMs": 5,

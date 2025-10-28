@@ -82,7 +82,12 @@ def test_caddie_health_snapshot(monkeypatch, tmp_path, since):
         {
             "timestampMs": 3,
             "event": "hud.caddie.adopt",
-            "data": {"adopted": True, "mcUsed": True, "hadAdvice": True, "ttsUsed": True},
+            "data": {
+                "adopted": True,
+                "mcUsed": True,
+                "hadAdvice": True,
+                "ttsUsed": True,
+            },
         },
     ]
     _write_run_payload(tmp_path, "run-001", now, events)

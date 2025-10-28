@@ -229,7 +229,11 @@ def caddie_health(
         last_plan_ts: Optional[float] = None
         run_sg_total = 0.0
         run_has_sg = False
-        run_rollout: Dict[str, Optional[bool]] = {"mc": None, "advice": None, "tts": None}
+        run_rollout: Dict[str, Optional[bool]] = {
+            "mc": None,
+            "advice": None,
+            "tts": None,
+        }
         for event in _load_run_events(run_id):
             name = event.get("event")
             data = event.get("data")
@@ -259,9 +263,17 @@ def caddie_health(
                                 advice_texts.append(text)
                                 advice_counter[text] += 1
                 advice_flag_raw = data.get("hadAdvice")
-                had_advice = bool(advice_flag_raw) if advice_flag_raw is not None else bool(advice_texts)
+                had_advice = (
+                    bool(advice_flag_raw)
+                    if advice_flag_raw is not None
+                    else bool(advice_texts)
+                )
                 tts_flag_raw = data.get("ttsUsed")
-                tts_used = bool(tts_flag_raw) if tts_flag_raw is not None else bool(run_rollout["tts"])
+                tts_used = (
+                    bool(tts_flag_raw)
+                    if tts_flag_raw is not None
+                    else bool(run_rollout["tts"])
+                )
                 if mc_used:
                     mc_groups["enforced"]["plans"] += 1
                 else:
@@ -280,7 +292,11 @@ def caddie_health(
                     run_rollout["advice"] = had_advice
                 if run_rollout["tts"] is None:
                     run_rollout["tts"] = tts_used
-                last_plan_context = {"mcUsed": mc_used, "hadAdvice": had_advice, "ttsUsed": tts_used}
+                last_plan_context = {
+                    "mcUsed": mc_used,
+                    "hadAdvice": had_advice,
+                    "ttsUsed": tts_used,
+                }
                 ts_value = (
                     event.get("ts")
                     or event.get("time")
@@ -310,8 +326,12 @@ def caddie_health(
                         within = abs(ts_float - float(last_plan_ts)) <= 120.0
 
                 if last_plan_context and within:
-                    mc_key = "enforced" if last_plan_context.get("mcUsed") else "control"
-                    advice_key = "enforced" if last_plan_context.get("hadAdvice") else "control"
+                    mc_key = (
+                        "enforced" if last_plan_context.get("mcUsed") else "control"
+                    )
+                    advice_key = (
+                        "enforced" if last_plan_context.get("hadAdvice") else "control"
+                    )
                     mc_groups[mc_key]["adopts"] += int(adopted)
                     advice_groups[advice_key]["adopts"] += int(adopted)
             elif name == "hud.shot":
@@ -425,7 +445,8 @@ def caddie_health(
         enforced=advice_enforced_group,
         delta=FeatureAbDelta(
             adoptRate=advice_enforced_group.adoptRate - advice_control_group.adoptRate,
-            sgPerRound=advice_enforced_group.sgPerRound - advice_control_group.sgPerRound,
+            sgPerRound=advice_enforced_group.sgPerRound
+            - advice_control_group.sgPerRound,
         ),
     )
 
