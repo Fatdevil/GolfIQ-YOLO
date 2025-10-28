@@ -5,85 +5,111 @@ import argparse
 import json
 import pathlib
 import sys
+from typing import Any
+
+ROOT = pathlib.Path(__file__).resolve().parents[1]
+DEFAULT_PACKS_DIR = ROOT / "data" / "training" / "packs"
+DEFAULT_OUTPUT = ROOT / "data" / "training" / "catalog.json"
+
+FocusValue = str
 
 
-def collect_focus(pack_obj: dict) -> list[str]:
-    """Collect the union of focus identifiers referenced within a pack."""
-
-    focus = set()
-    persona = pack_obj.get("persona") or {}
-    for item in persona.get("focus") or []:
-        focus.add(str(item))
-    for drill in pack_obj.get("drills") or []:
-        if drill.get("focus"):
-            focus.add(str(drill["focus"]))
-    for plan in pack_obj.get("plans") or []:
-        if plan.get("focus"):
-            focus.add(str(plan["focus"]))
-    return sorted(focus)
+def _load_json(path: pathlib.Path) -> dict[str, Any]:
+    with path.open("r", encoding="utf-8") as handle:
+        data = json.load(handle)
+        if not isinstance(data, dict):
+            raise ValueError(f"{path} must contain a JSON object")
+        return data
 
 
-def build_catalog(packs_dir: pathlib.Path, version: str) -> dict:
-    """Build a catalog manifest summarizing available training packs."""
+def _ordered_unique(values: list[FocusValue]) -> list[FocusValue]:
+    seen: set[FocusValue] = set()
+    ordered: list[FocusValue] = []
+    for value in values:
+        if value in seen:
+            continue
+        seen.add(value)
+        ordered.append(value)
+    return ordered
 
-    catalog = {"version": version, "packs": []}
+
+def _collect_focus(pack: dict[str, Any]) -> list[FocusValue]:
+    focus_entries: list[FocusValue] = []
+    persona = pack.get("persona")
+    if isinstance(persona, dict):
+        persona_focus = persona.get("focus")
+        if isinstance(persona_focus, list):
+            focus_entries.extend(
+                [entry for entry in persona_focus if isinstance(entry, str)]
+            )
+    drills = pack.get("drills")
+    if isinstance(drills, list):
+        focus_entries.extend(
+            [
+                drill.get("focus")
+                for drill in drills
+                if isinstance(drill, dict) and isinstance(drill.get("focus"), str)
+            ]
+        )
+    plans = pack.get("plans")
+    if isinstance(plans, list):
+        focus_entries.extend(
+            [
+                plan.get("focus")
+                for plan in plans
+                if isinstance(plan, dict) and isinstance(plan.get("focus"), str)
+            ]
+        )
+    return _ordered_unique(focus_entries)
+
+
+def build_catalog(packs_dir: pathlib.Path, version: str) -> dict[str, Any]:
+    pack_entries = []
     if packs_dir.exists():
         for path in sorted(packs_dir.glob("*.json")):
-            try:
-                pack_obj = json.loads(path.read_text(encoding="utf-8"))
-            except Exception:
-                # Skip unreadable packs; the validator will surface issues separately.
-                continue
-
-            try:
-                pack_id = pack_obj["packId"]
-            except KeyError:
-                # Without a packId we cannot reference the pack in the catalog.
-                continue
-
-            catalog["packs"].append(
+            pack = _load_json(path)
+            pack_id = pack.get("packId")
+            pack_version = pack.get("version")
+            if not isinstance(pack_id, str) or not pack_id:
+                raise ValueError(f"{path} missing packId")
+            if not isinstance(pack_version, str) or not pack_version:
+                raise ValueError(f"{path} missing version")
+            drills = pack.get("drills")
+            plans = pack.get("plans")
+            pack_entries.append(
                 {
                     "packId": pack_id,
-                    "version": pack_obj.get("version", "0.0.0"),
-                    "focus": collect_focus(pack_obj),
-                    "plans": len(pack_obj.get("plans") or []),
-                    "drills": len(pack_obj.get("drills") or []),
+                    "version": pack_version,
+                    "focus": _collect_focus(pack),
+                    "plans": len(plans) if isinstance(plans, list) else 0,
+                    "drills": len(drills) if isinstance(drills, list) else 0,
                 }
             )
-    return catalog
+    pack_entries.sort(key=lambda entry: entry["packId"])
+    return {"version": version, "packs": pack_entries}
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(description="Build training pack catalog metadata")
+    parser.add_argument("--packs-dir", type=pathlib.Path, default=DEFAULT_PACKS_DIR)
+    parser.add_argument("--out", type=pathlib.Path, default=DEFAULT_OUTPUT)
+    parser.add_argument("--version", required=True)
     parser.add_argument(
-        "--packs-dir",
-        type=pathlib.Path,
-        default=pathlib.Path("data/training/packs"),
-        help="Directory containing individual training pack JSON files.",
-    )
-    parser.add_argument(
-        "--out",
-        type=pathlib.Path,
-        default=pathlib.Path("data/training/catalog.json"),
-        help="Destination path for the generated catalog JSON file.",
-    )
-    parser.add_argument(
-        "--version",
-        type=str,
-        default="1.0.0",
-        help="Semantic version assigned to the generated catalog.",
+        "--pretty", action="store_true", help="Write catalog with indentation"
     )
     args = parser.parse_args(argv)
 
-    args.out.parent.mkdir(parents=True, exist_ok=True)
     catalog = build_catalog(args.packs_dir, args.version)
-    args.out.write_text(
-        json.dumps(catalog, ensure_ascii=False, indent=2) + "\n",
-        encoding="utf-8",
-    )
-    print(f"Wrote catalog {args.out} with {len(catalog['packs'])} packs")
+    args.out.parent.mkdir(parents=True, exist_ok=True)
+    with args.out.open("w", encoding="utf-8") as handle:
+        if args.pretty:
+            json.dump(catalog, handle, indent=2)
+            handle.write("\n")
+        else:
+            json.dump(catalog, handle, separators=(",", ":"))
+            handle.write("\n")
     return 0
 
 
-if __name__ == "__main__":
+if __name__ == "__main__":  # pragma: no cover - CLI entry point
     sys.exit(main())

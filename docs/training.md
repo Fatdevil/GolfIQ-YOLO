@@ -16,6 +16,15 @@ The runtime types are defined in [`shared/training/types.ts`](../shared/training
 - `Drill` captures the target metric, estimated time, difficulty, and prerequisites.
 - `Plan` lists ordered drill references, schedule hints, and total time.
 
+## Launch Content Packs
+
+Two starter packs ship with the v1 catalog:
+
+- **Putting v1** – concise green-side persona plus two drills focused on pace control and start line, bundled in the `putt-week-1` plan (18 minuter / 2x vecka).
+- **Long-Drive v1** – pep persona for tee shots with tee-height A/B and tempo drills, grouped in `ld-week-1` (22 minuter / 2x vecka).
+
+The catalog is generated from `data/training/packs/*.json` via [`scripts/build_training_catalog.py`](../scripts/build_training_catalog.py).
+
 ## Content Loader
 
 Use [`shared/training/content_loader.ts`](../shared/training/content_loader.ts) to read packs:
@@ -31,19 +40,23 @@ The loader recursively reads `TRAINING_PACKS_DIR` (defaults to `data/training`),
 
 ## Schema Validation
 
-CI runs [`server/scripts/validate_training_packs.py`](../server/scripts/validate_training_packs.py) via the `training-pack-validate` workflow. The script enforces:
+CI runs [`server/scripts/validate_training_packs.py`](../server/scripts/validate_training_packs.py) via the `training-pack-validate` workflow. The validator now checks:
 
 - required fields (`packId`, `version`, `drills`, `plans`),
-- tight schemas for drills, plans, personas, and target metrics,
-- max file size (50 KB),
-- duplicate drill/plan ID detection, and
+- semantic (`1.2.3`) or YYYY.MM version strings,
+- file size budget (< 50 KB per pack),
+- focus + targetMetric segments constrained to the shared taxonomy,
+- duplicate pack/drill/plan IDs across every pack, and
 - plan drill references pointing to declared drills.
 
-Run locally:
+Rebuild the catalog & run validation locally:
 
 ```bash
-python server/scripts/validate_training_packs.py --base data/training/packs
+python scripts/build_training_catalog.py --packs-dir data/training/packs --out data/training/catalog.json --version 1.0.0
+python server/scripts/validate_training_packs.py --packs-dir data/training/packs --catalog data/training/catalog.json
 ```
+
+Add `--pretty` to the catalog builder for an indented diff while iterating locally.
 
 ## Goals Panel & Practice Sessions
 

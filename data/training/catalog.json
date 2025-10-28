@@ -1,15 +1,1 @@
-{
-  "version": "1.0.0",
-  "packs": [
-    {
-      "packId": "baseline-putting",
-      "version": "2025.01",
-      "focus": [
-        "putt",
-        "short"
-      ],
-      "plans": 1,
-      "drills": 2
-    }
-  ]
-}
+{"version":"1.0.0","packs":[{"packId":"baseline-putting","version":"2025.01","focus":["putt","short"],"plans":1,"drills":2},{"packId":"long_drive_v1","version":"1.0.0","focus":["long-drive","tee"],"plans":1,"drills":2},{"packId":"putting_v1","version":"1.0.0","focus":["putt"],"plans":1,"drills":2}]}

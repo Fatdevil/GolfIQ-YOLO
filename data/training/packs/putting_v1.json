@@ -1,0 +1,45 @@
+{
+  "packId": "putting_v1",
+  "version": "1.0.0",
+  "persona": {
+    "id": "coach-putt-v1",
+    "name": "Putting Coach",
+    "version": "1.0.0",
+    "styleHints": { "tone": "concise" },
+    "focus": ["putt"]
+  },
+  "drills": [
+    {
+      "id": "putt-lag-pace-9m",
+      "focus": "putt",
+      "title": "Lag Pace 9 m",
+      "description": "10 bollar från 9 m, fokus hastighet. Målet är <10% 3-putts.",
+      "estTimeMin": 10,
+      "targetMetric": {"type": "SG", "segment": "putt"},
+      "difficulty": 2
+    },
+    {
+      "id": "putt-startline-2m-gate",
+      "focus": "putt",
+      "title": "Startline Gate 2 m",
+      "description": "Sätt upp två peggar. 20 puttar; registrera make%.",
+      "estTimeMin": 8,
+      "targetMetric": {"type": "make%", "segment": "putt"},
+      "difficulty": 3
+    }
+  ],
+  "plans": [
+    {
+      "id": "putt-week-1",
+      "name": "Putting – Vecka 1",
+      "focus": "putt",
+      "version": "1.0.0",
+      "drills": [
+        {"id": "putt-lag-pace-9m", "durationMin": 10},
+        {"id": "putt-startline-2m-gate", "durationMin": 8}
+      ],
+      "schedule": "2x/vecka",
+      "estTotalMin": 18
+    }
+  ]
+}
