@@ -1,0 +1,47 @@
+{
+  "packId": "putting_v1",
+  "version": "1.0.0",
+  "author": "GolfIQ",
+  "updatedAt": "2025-10-28",
+  "persona": {
+    "id": "coach-putt-v1",
+    "name": "Putting Coach",
+    "version": "1.0.0",
+    "styleHints": { "tone": "concise", "verbosity": "short" },
+    "focus": ["putt"]
+  },
+  "drills": [
+    {
+      "id": "putt-lag-pace-9m",
+      "focus": "putt",
+      "title": "Lag Pace 9 m",
+      "description": "10 balls from 9 m. Target: <10% three-putts.",
+      "estTimeMin": 10,
+      "targetMetric": { "type": "SG", "segment": "putt" },
+      "difficulty": 2
+    },
+    {
+      "id": "putt-startline-2m-gate",
+      "focus": "putt",
+      "title": "Startline Gate 2 m",
+      "description": "Two tees as a gate. 20 putts; log make%.",
+      "estTimeMin": 8,
+      "targetMetric": { "type": "make%", "segment": "putt" },
+      "difficulty": 3
+    }
+  ],
+  "plans": [
+    {
+      "id": "putt-week-1",
+      "name": "Putting – Week 1",
+      "focus": "putt",
+      "version": "1.0.0",
+      "drills": [
+        { "id": "putt-lag-pace-9m", "durationMin": 10 },
+        { "id": "putt-startline-2m-gate", "durationMin": 8 }
+      ],
+      "schedule": "2x/week",
+      "estTotalMin": 18
+    }
+  ]
+}

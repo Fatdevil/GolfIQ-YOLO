@@ -38,6 +38,7 @@ CI runs [`server/scripts/validate_training_packs.py`](../server/scripts/validate
 - max file size (50 KB),
 - duplicate drill/plan ID detection, and
 - plan drill references pointing to declared drills.
+- `persona.version` — required by the runtime; keep semver (e.g., "1.0.0").
 
 Run locally:
 
@@ -58,3 +59,7 @@ The SG engine resolves each shot to a training focus segment. `/caddie/health` a
 
 This mirrors the existing A/B health model so dashboards can compare focus cohorts alongside rollout groups.
 
+
+## Available packs (v1)
+- putting_v1 — Lag pace 9 m, Startline 2 m (gate). Plan: “Putting – Week 1”.
+- long_drive_v1 — Tee height A/B, 80% tempo. Plan: “Long-Drive – Week 1”.

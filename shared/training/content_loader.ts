@@ -13,6 +13,7 @@ const FOCUS_VALUES: readonly TrainingFocus[] = [
 ];
 
 const FOCUS_SET = new Set<TrainingFocus>(FOCUS_VALUES);
+const DEFAULT_PERSONA_VERSION = '1.0.0';
 
 let cache: TrainingPack[] | null = null;
 let cacheKey: string | null = null;
@@ -119,7 +120,7 @@ function ensurePersona(value: unknown, file: string): CoachPersona | undefined {
   const persona: CoachPersona = {
     id: ensureString(obj.id, `${file} persona.id`),
     name: ensureString(obj.name, `${file} persona.name`),
-    version: ensureString(obj.version, `${file} persona.version`),
+    version: ensureString(obj.version ?? DEFAULT_PERSONA_VERSION, `${file} persona.version`),
     focus: ensureArray(obj.focus, `${file} persona.focus`).map((entry, index) =>
       ensureFocus(entry, `${file} persona.focus[${index}]`),
     ),
