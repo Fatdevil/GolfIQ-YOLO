@@ -13,6 +13,15 @@ export interface CaddieDigestToggle {
   enabled?: boolean;
 }
 
+export interface CaddieGreenToggle {
+  enabled: boolean;
+}
+
+export interface CaddieGreenConfig {
+  sections: CaddieGreenToggle;
+  pinDrop: CaddieGreenToggle;
+}
+
 export interface CaddieRC {
   mc: CaddieFeatureToggle;
   advice: CaddieFeatureToggle;
@@ -20,6 +29,7 @@ export interface CaddieRC {
   digest?: CaddieDigestToggle;
   trainingFocusDefault?: TrainingFocus;
   coachPersonaDefault?: string;
+  green: CaddieGreenConfig;
 }
 
 export type CaddieRc = CaddieRC;
@@ -29,6 +39,10 @@ const DEFAULT_RC: CaddieRC = {
   advice: { enabled: true, percent: 100, kill: false },
   tts: { enabled: false, percent: 0, kill: false },
   digest: { enabled: true },
+  green: {
+    sections: { enabled: true },
+    pinDrop: { enabled: true },
+  },
 };
 
 const TRAINING_FOCUS_VALUES: readonly TrainingFocus[] = [
@@ -129,7 +143,24 @@ export function readCaddieRC(get: (key: string, defaultValue?: unknown) => unkno
     typeof personaRaw === "string" && personaRaw.trim().length > 0
       ? personaRaw.trim()
       : undefined;
-  return { mc, advice, tts, digest, trainingFocusDefault: focusDefault, coachPersonaDefault };
+  const greenSectionsEnabled = normalizeBoolean(
+    get("rc.green.sections.enabled", fallback.green.sections.enabled),
+  );
+  const greenPinDropEnabled = normalizeBoolean(
+    get("rc.green.pinDrop.enabled", fallback.green.pinDrop.enabled),
+  );
+  return {
+    mc,
+    advice,
+    tts,
+    digest,
+    trainingFocusDefault: focusDefault,
+    coachPersonaDefault,
+    green: {
+      sections: { enabled: greenSectionsEnabled },
+      pinDrop: { enabled: greenPinDropEnabled },
+    },
+  };
 }
 
 export function readCaddieRc(rc?: RcRecord): CaddieRc {

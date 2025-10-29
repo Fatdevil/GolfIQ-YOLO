@@ -58,7 +58,7 @@ const bundle: CourseBundle = {
     },
   ],
   greensById: {
-    g1: { sections: ['front', 'middle', 'back'], fatSide: 'L' },
+    g1: { sections: ['front', 'middle', 'back'], fatSide: 'L', pin: null },
   },
 };
 

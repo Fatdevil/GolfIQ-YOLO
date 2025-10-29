@@ -8,9 +8,16 @@ export type BundleIndexEntry = {
 export type GreenSection = 'front' | 'middle' | 'back';
 export type FatSide = 'L' | 'R';
 
+export type GreenPin = {
+  lat: number;
+  lon: number;
+  ts?: string | null;
+};
+
 export type GreenInfo = {
   sections: GreenSection[];
   fatSide: FatSide | null;
+  pin: GreenPin | null;
 };
 
 export type CourseFeature = {
@@ -78,6 +85,10 @@ let backendLabel = 'memory';
 
 const GREEN_SECTION_ORDER: readonly GreenSection[] = ['front', 'middle', 'back'];
 const GREEN_SECTION_SET = new Set<GreenSection>(GREEN_SECTION_ORDER);
+const GREEN_PIN_LAT_MIN = -90;
+const GREEN_PIN_LAT_MAX = 90;
+const GREEN_PIN_LON_MIN = -180;
+const GREEN_PIN_LON_MAX = 180;
 
 function getGlobalObject(): GlobalConfig {
   return globalThis as GlobalConfig;
@@ -137,11 +148,38 @@ function normalizeFatSide(value: unknown): FatSide | null {
   return normalized === 'L' || normalized === 'R' ? (normalized as FatSide) : null;
 }
 
+function normalizePin(value: unknown): GreenPin | null {
+  if (!value || typeof value !== 'object') {
+    return null;
+  }
+  const record = value as Record<string, unknown> & { lat?: unknown; lon?: unknown; ts?: unknown };
+  const lat = record.lat;
+  const lon = record.lon;
+  if (typeof lat !== 'number' || !Number.isFinite(lat)) {
+    return null;
+  }
+  if (typeof lon !== 'number' || !Number.isFinite(lon)) {
+    return null;
+  }
+  if (lat < GREEN_PIN_LAT_MIN || lat > GREEN_PIN_LAT_MAX) {
+    return null;
+  }
+  if (lon < GREEN_PIN_LON_MIN || lon > GREEN_PIN_LON_MAX) {
+    return null;
+  }
+  const tsRaw = record.ts;
+  if (typeof tsRaw === 'string') {
+    const trimmed = tsRaw.trim();
+    return { lat, lon, ts: trimmed.length ? trimmed : null };
+  }
+  return { lat, lon, ts: null };
+}
+
 function normalizeGreenInfo(raw: unknown): GreenInfo | null {
   if (!raw || typeof raw !== 'object') {
     return null;
   }
-  const record = raw as Record<string, unknown> & { sections?: unknown; fatSide?: unknown };
+  const record = raw as Record<string, unknown> & { sections?: unknown; fatSide?: unknown; pin?: unknown };
   const sectionsRaw = record.sections;
   const sections: GreenSection[] = [];
   if (Array.isArray(sectionsRaw)) {
@@ -153,7 +191,8 @@ function normalizeGreenInfo(raw: unknown): GreenInfo | null {
     }
   }
   const fatSide = normalizeFatSide(record.fatSide);
-  if (!sections.length && fatSide === null) {
+  const pin = normalizePin(record.pin);
+  if (!sections.length && fatSide === null && !pin) {
     return null;
   }
   if (!sections.length) {
@@ -162,6 +201,7 @@ function normalizeGreenInfo(raw: unknown): GreenInfo | null {
   return {
     sections,
     fatSide,
+    pin,
   };
 }
 
@@ -215,6 +255,7 @@ function parseBundle(json: unknown): CourseBundle {
       normalized.green = {
         sections: [...greenInfo.sections],
         fatSide: greenInfo.fatSide,
+        pin: greenInfo.pin ? { ...greenInfo.pin } : null,
       };
       if (id) {
         greensById[id] = normalized.green;
@@ -621,6 +662,55 @@ export async function getBundle(id: string): Promise<CourseBundle> {
 
 export function getLastBundleFetchMeta(id: string): BundleFetchMeta | null {
   return lastFetchMeta.get(sanitizeId(id)) ?? null;
+}
+
+function readGreenInfo(
+  bundle: CourseBundle | null | undefined,
+  holeId: string | null | undefined,
+): GreenInfo | null {
+  if (!bundle || !holeId) {
+    return null;
+  }
+  const fromIndex = bundle.greensById?.[holeId];
+  if (fromIndex) {
+    return fromIndex;
+  }
+  for (const feature of bundle.features) {
+    if (feature && typeof feature === 'object' && feature.id === holeId && feature.green) {
+      return feature.green;
+    }
+  }
+  return null;
+}
+
+export function getGreenSections(
+  bundle: CourseBundle | null | undefined,
+  holeId: string | null | undefined,
+): GreenSection[] {
+  const info = readGreenInfo(bundle, holeId);
+  if (!info || !Array.isArray(info.sections) || !info.sections.length) {
+    return [];
+  }
+  return [...info.sections];
+}
+
+export function getFatSide(
+  bundle: CourseBundle | null | undefined,
+  holeId: string | null | undefined,
+): FatSide | null {
+  const info = readGreenInfo(bundle, holeId);
+  return info?.fatSide ?? null;
+}
+
+export function getPin(
+  bundle: CourseBundle | null | undefined,
+  holeId: string | null | undefined,
+): GreenPin | null {
+  const info = readGreenInfo(bundle, holeId);
+  if (!info?.pin) {
+    return null;
+  }
+  return { ...info.pin };
 }
 
 export function __resetBundleClientForTests(): void {

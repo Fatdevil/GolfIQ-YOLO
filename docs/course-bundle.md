@@ -66,7 +66,8 @@ Generated bundles follow this envelope:
       "geometry": { "type": "Polygon", "coordinates": [...] },
       "green": {
         "sections": ["front", "middle", "back"],
-        "fatSide": "L"
+        "fatSide": "L",
+        "pin": { "lat": 37.7752, "lon": -122.4192, "ts": "2025-03-01T10:30:00Z" }
       }
     }
   ]
@@ -75,9 +76,12 @@ Generated bundles follow this envelope:
 
 When present, the optional `green` object captures approach metadata for that putting surface. `sections`
 lists the valid pin slices (front/middle/back) in tee-to-green order, while `fatSide` indicates the safer
-side (`"L"` for left, `"R"` for right) used to bias aim selection when hazards guard the thin side. Mobile
-clients cache this metadata via `greensById` and expose it to the caddie planner and HUD (the HUD suppresses
-fat-side/section hints whenever remote configuration marks the experience as tournament-safe).
+side (`"L"` for left, `"R"` for right) used to bias aim selection when hazards guard the thin side. The
+optional `pin` object stores the last-surveyed hole location (latitude/longitude in decimal degrees plus an
+ISO-8601 timestamp). Mobile clients cache this metadata via `greensById` and expose it to the caddie planner
+and HUD. The HUD respects remote configuration keys `rc.green.sections.enabled` and
+`rc.green.pinDrop.enabled`; when either is disabled—or when tournament-safe mode is active—the pin tools
+and fat-side/section hints are hidden automatically.
 
 Metadata files look like:
 
@@ -113,6 +117,10 @@ After the FastAPI app is running locally, validate the responses:
 
 * `GET /bundle/index` – lists available bundles with `bbox`, `updatedAt`, and `approx` counts. ETag is a SHA-256 of the payload and cache-control is `public, max-age=600`.
 * `GET /bundle/course/demo_sunrise` – serves the bundle contract with `ttlSec` sourced from configuration. ETags/Cache-Control mirror the existing implementation.
+
+In QA builds the AR HUD offers a long-press gesture on the course mini-map to drop a manual pin using the
+current GPS fix. The gesture is gated by `rc.green.pinDrop.enabled` and suppressed automatically when
+`hud.tournamentSafe` (or the legacy `tournamentSafe`) is enabled.
 
 ## Size targets and caching
 
