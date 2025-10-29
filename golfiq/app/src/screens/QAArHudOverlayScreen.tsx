@@ -1313,6 +1313,8 @@ type MapOverlayProps = {
   onSelectLanding?: (point: LocalPoint) => void;
   landing?: LocalPoint | null;
   ghost?: GhostOverlay | null;
+  onLongPressPin?: () => void;
+  pinDropEnabled?: boolean;
 };
 
 const MapOverlay: React.FC<MapOverlayProps> = ({
@@ -1325,6 +1327,8 @@ const MapOverlay: React.FC<MapOverlayProps> = ({
   onSelectLanding,
   landing,
   ghost,
+  onLongPressPin,
+  pinDropEnabled,
 }) => {
   const { width } = useWindowDimensions();
   const size = Math.min(width - 32, 340);
@@ -1370,10 +1374,42 @@ const MapOverlay: React.FC<MapOverlayProps> = ({
     y: size / 2 - Math.cos(headingRad) * headingRadius,
   };
 
+  const ghostScreenPath = ghost?.groundPath?.map((point) => toScreen(point)) ?? [];
+  const ghostImpactScreen = ghost ? toScreen(ghost.impactCenter) : null;
+  const ghostAngle = ghost ? Math.atan2(ghost.dirUnit.y, ghost.dirUnit.x) : 0;
+  const longPressTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const longPressTriggeredRef = useRef(false);
+
+  const clearLongPress = useCallback(() => {
+    if (longPressTimeoutRef.current) {
+      clearTimeout(longPressTimeoutRef.current);
+      longPressTimeoutRef.current = null;
+    }
+  }, []);
+
+  const setLongPress = useCallback(
+    (fn: () => void, ms = 650) => {
+      clearLongPress();
+      longPressTimeoutRef.current = setTimeout(() => {
+        longPressTimeoutRef.current = null;
+        fn();
+      }, ms);
+    },
+    [clearLongPress],
+  );
+
+  useEffect(() => clearLongPress(), [clearLongPress]);
+
   const handleRelease = useCallback(
     (event: {
       nativeEvent: { locationX: number; locationY: number };
     }) => {
+      if (longPressTriggeredRef.current) {
+        longPressTriggeredRef.current = false;
+        clearLongPress();
+        return;
+      }
+      clearLongPress();
       if (!markLandingActive || !onSelectLanding) {
         return;
       }
@@ -1384,19 +1420,35 @@ const MapOverlay: React.FC<MapOverlayProps> = ({
       const localY = center.y - relativeY / scale;
       onSelectLanding({ x: localX, y: localY });
     },
-    [center.x, center.y, markLandingActive, onSelectLanding, scale, size],
+    [center.x, center.y, clearLongPress, markLandingActive, onSelectLanding, scale, size],
   );
 
-  const ghostScreenPath = ghost?.groundPath?.map((point) => toScreen(point)) ?? [];
-  const ghostImpactScreen = ghost ? toScreen(ghost.impactCenter) : null;
-  const ghostAngle = ghost ? Math.atan2(ghost.dirUnit.y, ghost.dirUnit.x) : 0;
+  const handleGrant = useCallback(() => {
+    if (!pinDropEnabled || !onLongPressPin) {
+      longPressTriggeredRef.current = false;
+      clearLongPress();
+      return;
+    }
+    longPressTriggeredRef.current = false;
+    setLongPress(() => {
+      longPressTriggeredRef.current = true;
+      onLongPressPin();
+    }, 650);
+  }, [clearLongPress, onLongPressPin, pinDropEnabled, setLongPress]);
+
+  const handleTerminate = useCallback(() => {
+    clearLongPress();
+    longPressTriggeredRef.current = false;
+  }, [clearLongPress]);
 
   return (
     <View
       style={[styles.mapContainer, { width: size, height: size }]}
       pointerEvents="auto"
-      onStartShouldSetResponder={() => markLandingActive}
+      onStartShouldSetResponder={() => Boolean(markLandingActive || pinDropEnabled)}
+      onResponderGrant={handleGrant}
       onResponderRelease={handleRelease}
+      onResponderTerminate={handleTerminate}
     >
       <View style={styles.mapBackground} />
       {data.features.map((feature) =>
@@ -1677,6 +1729,8 @@ const QAArHudOverlayScreen: React.FC = () => {
   const [heading, setHeading] = useState(0);
   const [pin, setPin] = useState<GeoPoint | null>(null);
   const [pinMetrics, setPinMetrics] = useState<{ distance: number; bearing: number } | null>(null);
+  const [rcGreenSectionsEnabled, setRcGreenSectionsEnabled] = useState(true);
+  const [rcGreenPinDropEnabled, setRcGreenPinDropEnabled] = useState(true);
   const [hazardInfo, setHazardInfo] = useState<{ id: string; type: string; dist_m: number; bearing: number } | null>(null);
   const [plannerExpanded, setPlannerExpanded] = useState(false);
   const [plannerInputs, setPlannerInputs] = useState({
@@ -1715,6 +1769,14 @@ const QAArHudOverlayScreen: React.FC = () => {
   const lastMcTelemetryRef = useRef<string | null>(null);
   const lastSpokenPlanRef = useRef<string | null>(null);
   const tournamentSafe = useMemo(() => readTournamentSafe(), []);
+  const greenHintsEnabled = useMemo(
+    () => !tournamentSafe && rcGreenSectionsEnabled,
+    [rcGreenSectionsEnabled, tournamentSafe],
+  );
+  const pinDropUiEnabled = useMemo(
+    () => !tournamentSafe && rcGreenPinDropEnabled,
+    [rcGreenPinDropEnabled, tournamentSafe],
+  );
   const [caddieRollout, setCaddieRollout] = useState<CaddieRolloutState>({
     ready: false,
     deviceId: 'unknown-device',
@@ -2625,15 +2687,33 @@ const QAArHudOverlayScreen: React.FC = () => {
     }
     return caddiePlan.fatSide === 'L' ? '⬅︎' : '➡︎';
   }, [caddiePlan]);
+  const hudSectionLabel = useMemo(() => {
+    if (!greenHintsEnabled) {
+      return null;
+    }
+    if (caddiePlan && caddiePlan.kind === 'approach' && caddiePlan.greenSection) {
+      return formatGreenSectionLabel(caddiePlan.greenSection);
+    }
+    return 'Middle';
+  }, [caddiePlan, greenHintsEnabled]);
+  const hudFatSideTag = useMemo(() => {
+    if (!greenHintsEnabled) {
+      return null;
+    }
+    if (caddiePlan && caddiePlan.kind === 'approach' && caddiePlan.fatSide) {
+      return caddiePlan.fatSide === 'L' ? '⬅︎' : '➡︎';
+    }
+    return null;
+  }, [caddiePlan, greenHintsEnabled]);
   const showGreenHints = useMemo(
     () =>
       Boolean(
         caddiePlan &&
           caddiePlan.kind === 'approach' &&
-          !tournamentSafe &&
+          greenHintsEnabled &&
           (caddiePlan.greenSection || caddiePlan.fatSide),
       ),
-    [caddiePlan, tournamentSafe],
+    [caddiePlan, greenHintsEnabled],
   );
   const sliderHandleSize = 18;
   const sliderProgress = clamp01(
@@ -3035,9 +3115,13 @@ const QAArHudOverlayScreen: React.FC = () => {
       const ttsEnabled =
         rc.tts.kill === true ? false : rc.tts.enabled && inRollout(deviceId, rc.tts.percent);
       const digestEnabled = rc.digest?.enabled ?? true;
+      const sectionsEnabled = rc.green?.sections?.enabled ?? true;
+      const pinDropEnabled = rc.green?.pinDrop?.enabled ?? true;
       if (cancelled) {
         return;
       }
+      setRcGreenSectionsEnabled(sectionsEnabled);
+      setRcGreenPinDropEnabled(pinDropEnabled);
       setCaddieRollout({
         ready: true,
         deviceId,
@@ -3071,6 +3155,7 @@ const QAArHudOverlayScreen: React.FC = () => {
           tts: rc.tts.kill === true,
         },
         digest: { enabled: digestEnabled },
+        green: { sections: sectionsEnabled, pinDrop: pinDropEnabled },
       });
     })();
     return () => {
@@ -3752,14 +3837,15 @@ const QAArHudOverlayScreen: React.FC = () => {
 
   const handleSetPin = useCallback(() => {
     const current = playerGeoRef.current;
-    if (!current) {
+    if (!current || !pinDropUiEnabled) {
       return;
     }
     const payload = { ...current };
     setPin(payload);
     pinRef.current = payload;
     emitTelemetry('hud.pin.set', { lat: current.lat, lon: current.lon });
-  }, [emitTelemetry]);
+    showToast('Pin set');
+  }, [emitTelemetry, pinDropUiEnabled]);
 
   const handleClearPin = useCallback(() => {
     if (!pinRef.current) {
@@ -3939,35 +4025,55 @@ const QAArHudOverlayScreen: React.FC = () => {
           markLandingActive={markLandingArmed}
           landing={shotSession?.landing ?? null}
           onSelectLanding={handleLandingSelected}
-            ghost={ghostOverlay}
-          />
+          ghost={ghostOverlay}
+          onLongPressPin={pinDropUiEnabled ? handleSetPin : undefined}
+          pinDropEnabled={pinDropUiEnabled}
+        />
         </View>
       </View>
       <View style={styles.statusPanel}>
-        <Text style={styles.sectionTitle}>Pin tools</Text>
-        <View style={styles.pinControlsRow}>
-          <TouchableOpacity
-            onPress={handleSetPin}
-            disabled={!playerLatLon}
-            style={[styles.pinButton, styles.pinButtonPrimary, !playerLatLon ? styles.pinButtonDisabled : null]}
-          >
-            <Text style={styles.pinButtonText}>Set Pin</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            onPress={handleClearPin}
-            disabled={!pin}
-            style={[styles.pinButton, !pin ? styles.pinButtonDisabled : null]}
-          >
-            <Text style={styles.pinButtonText}>Clear Pin</Text>
-          </TouchableOpacity>
-        </View>
+        {pinDropUiEnabled ? (
+          <>
+            <Text style={styles.sectionTitle}>Pin tools</Text>
+            <View style={styles.pinControlsRow}>
+              <TouchableOpacity
+                onPress={handleSetPin}
+                disabled={!playerLatLon}
+                style={[
+                  styles.pinButton,
+                  styles.pinButtonPrimary,
+                  !playerLatLon ? styles.pinButtonDisabled : null,
+                ]}
+              >
+                <Text style={styles.pinButtonText}>Set Pin</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={handleClearPin}
+                disabled={!pin}
+                style={[styles.pinButton, !pin ? styles.pinButtonDisabled : null]}
+              >
+                <Text style={styles.pinButtonText}>Clear Pin</Text>
+              </TouchableOpacity>
+            </View>
+          </>
+        ) : null}
         <View style={styles.calloutRow}>
-          <View style={styles.calloutCard}>
-            <Text style={styles.calloutLabel}>Pin</Text>
-            <Text style={styles.calloutValue}>
-              {pinMetrics ? `${pinMetrics.distance.toFixed(1)} m @ ${pinMetrics.bearing.toFixed(0)}°` : '—'}
-            </Text>
-          </View>
+          {pinDropUiEnabled ? (
+            <View style={styles.calloutCard}>
+              <Text style={styles.calloutLabel}>Pin</Text>
+              <Text style={styles.calloutValue}>
+                {pinMetrics ? `${pinMetrics.distance.toFixed(1)} m @ ${pinMetrics.bearing.toFixed(0)}°` : '—'}
+              </Text>
+              {greenHintsEnabled && (hudSectionLabel || hudFatSideTag) ? (
+                <View style={styles.pinSectionPill}>
+                  {hudFatSideTag ? <Text style={styles.pinSectionChevron}>{hudFatSideTag}</Text> : null}
+                  {hudSectionLabel ? (
+                    <Text style={styles.pinSectionLabel}>{hudSectionLabel}</Text>
+                  ) : null}
+                </View>
+              ) : null}
+            </View>
+          ) : null}
           <View style={styles.calloutCard}>
             <Text style={styles.calloutLabel}>Hazard</Text>
             <Text style={styles.calloutValue}>
@@ -4976,6 +5082,27 @@ const styles = StyleSheet.create({
   pinButtonText: {
     color: '#f8fafc',
     fontWeight: '600',
+  },
+  pinSectionPill: {
+    marginTop: 4,
+    alignSelf: 'flex-start',
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 12,
+    backgroundColor: '#1e293b',
+  },
+  pinSectionChevron: {
+    color: '#f8fafc',
+    fontSize: 12,
+    marginRight: 4,
+  },
+  pinSectionLabel: {
+    color: '#f8fafc',
+    fontSize: 12,
+    fontWeight: '600',
+    letterSpacing: 0.4,
   },
   plannerContainer: {
     backgroundColor: '#101827',

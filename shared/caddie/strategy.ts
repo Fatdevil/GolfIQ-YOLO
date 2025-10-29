@@ -463,9 +463,18 @@ const normalizeGreenMeta = (meta: GreenInfo | null | undefined): GreenInfo | nul
     sections.push(...DEFAULT_GREEN_SECTIONS);
   }
   const fatSide: FatSide | null = meta.fatSide === "L" || meta.fatSide === "R" ? meta.fatSide : null;
+  const pin =
+    meta.pin &&
+    typeof meta.pin.lat === "number" &&
+    typeof meta.pin.lon === "number" &&
+    Number.isFinite(meta.pin.lat) &&
+    Number.isFinite(meta.pin.lon)
+      ? { lat: meta.pin.lat, lon: meta.pin.lon, ts: meta.pin.ts ?? null }
+      : null;
   return {
     sections,
     fatSide,
+    pin,
   };
 };
 
@@ -746,7 +755,7 @@ const computeFatSideBias = (args: {
   const hazardDelta = Math.max(0, thin.hazard - fat.hazard);
   const greenDelta = Math.max(0, thin.green - fat.green);
   const pressure = hazardDelta + greenDelta * 0.6;
-  if (pressure < 0.05 && thin.hazard < 0.08) {
+  if (pressure < 0.05 && thin.hazard < 0.08 && sigmaLat < 5) {
     return 0;
   }
   const dispersionFactor = Math.max(0, sigmaLat - 3.5) * 0.35;
@@ -755,7 +764,7 @@ const computeFatSideBias = (args: {
     magnitude += 0.5;
   }
   magnitude = Math.min(5, magnitude);
-  const modeScale: Record<RiskMode, number> = { safe: 1.2, normal: 1, aggressive: 0.7 };
+  const modeScale: Record<RiskMode, number> = { safe: 1, normal: 0.8, aggressive: 0.6 };
   magnitude *= modeScale[args.riskMode] ?? 1;
   if (magnitude < 0.6) {
     return 0;

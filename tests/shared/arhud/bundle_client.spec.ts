@@ -242,7 +242,11 @@ test('green metadata is normalised and indexed by id', async (t) => {
           {
             id: 'g1',
             type: 'Feature',
-            green: { sections: ['front', 'front', 'middle'], fatSide: 'l' },
+            green: {
+              sections: ['front', 'front', 'middle'],
+              fatSide: 'l',
+              pin: { lat: 37.7751, lon: -122.4192, ts: '2025-01-02T12:00:00Z' },
+            },
             geometry: {
               type: 'Polygon',
               coordinates: [
@@ -268,7 +272,17 @@ test('green metadata is normalised and indexed by id', async (t) => {
   const bundle = await getBundle('greens-demo');
   assert.equal(bundle.greensById.g1?.fatSide, 'L');
   assert.deepEqual(bundle.greensById.g1?.sections, ['front', 'middle']);
+  assert.deepEqual(bundle.greensById.g1?.pin, {
+    lat: 37.7751,
+    lon: -122.4192,
+    ts: '2025-01-02T12:00:00Z',
+  });
   assert.equal(bundle.features[0]?.green?.fatSide, 'L');
   assert.deepEqual(bundle.features[0]?.green?.sections, ['front', 'middle']);
+  assert.deepEqual(bundle.features[0]?.green?.pin, {
+    lat: 37.7751,
+    lon: -122.4192,
+    ts: '2025-01-02T12:00:00Z',
+  });
 });
 

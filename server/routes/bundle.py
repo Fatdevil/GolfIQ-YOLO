@@ -21,9 +21,16 @@ COURSES_DIR = Path(__file__).resolve().parent.parent.parent / "data" / "courses"
 _VERSION = 1
 
 
+class CourseFeatureGreenPin(TypedDict, total=False):
+    lat: float
+    lon: float
+    ts: str
+
+
 class CourseFeatureGreen(TypedDict, total=False):
     sections: list[Literal["front", "middle", "back"]]
     fatSide: Literal["L", "R"]
+    pin: CourseFeatureGreenPin
 
 
 class CourseFeature(TypedDict, total=False):

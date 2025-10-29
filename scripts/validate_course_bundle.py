@@ -3,11 +3,14 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Sequence
 
 GREEN_SECTION_VALUES = {"front", "middle", "back"}
 GREEN_FAT_SIDE_VALUES = {"L", "R"}
+GREEN_PIN_LAT_RANGE = (-90.0, 90.0)
+GREEN_PIN_LON_RANGE = (-180.0, 180.0)
 
 SUPPORTED_TYPES = {
     "green",
@@ -57,6 +60,36 @@ def _validate_linestring_coordinates(coords: Any) -> None:
     for point in coords:
         if not _is_sequence(point) or len(point) < 2:
             raise ValidationError("LineString points must be coordinate pairs")
+
+
+def _validate_green_pin(pin: Any, errors: List[str]) -> None:
+    if not isinstance(pin, dict):
+        errors.append("green.pin must be an object when provided")
+        return
+    lat = pin.get("lat")
+    lon = pin.get("lon")
+    ts = pin.get("ts")
+    if isinstance(lat, bool) or not isinstance(lat, (int, float)):
+        errors.append("green.pin.lat must be a number")
+    elif not (GREEN_PIN_LAT_RANGE[0] <= float(lat) <= GREEN_PIN_LAT_RANGE[1]):
+        errors.append("green.pin.lat must be between -90 and 90 degrees")
+    if isinstance(lon, bool) or not isinstance(lon, (int, float)):
+        errors.append("green.pin.lon must be a number")
+    elif not (GREEN_PIN_LON_RANGE[0] <= float(lon) <= GREEN_PIN_LON_RANGE[1]):
+        errors.append("green.pin.lon must be between -180 and 180 degrees")
+    if ts is not None:
+        if not isinstance(ts, str):
+            errors.append("green.pin.ts must be a string when provided")
+        else:
+            candidate = ts.strip()
+            if not candidate:
+                errors.append("green.pin.ts must not be empty when provided")
+            else:
+                try:
+                    normalized = candidate.replace("Z", "+00:00")
+                    datetime.fromisoformat(normalized)
+                except ValueError:
+                    errors.append("green.pin.ts must be ISO-8601 compatible")
 
 
 def validate_feature(feature: Dict[str, Any]) -> List[str]:
@@ -112,6 +145,9 @@ def validate_feature(feature: Dict[str, Any]) -> List[str]:
                     errors.append("green.fatSide must be a string when provided")
                 elif fat_side not in GREEN_FAT_SIDE_VALUES:
                     errors.append("green.fatSide must be 'L' or 'R'")
+            pin_meta = green_meta.get("pin")
+            if pin_meta is not None:
+                _validate_green_pin(pin_meta, errors)
     return errors
 
 
