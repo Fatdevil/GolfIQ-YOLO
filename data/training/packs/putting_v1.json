@@ -6,6 +6,7 @@
   "persona": {
     "id": "coach-putt-v1",
     "name": "Putting Coach",
+    "version": "1.0.0",
     "styleHints": { "tone": "concise", "verbosity": "short" },
     "focus": ["putt"]
   },

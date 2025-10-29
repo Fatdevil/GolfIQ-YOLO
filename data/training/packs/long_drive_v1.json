@@ -6,6 +6,7 @@
   "persona": {
     "id": "coach-long-v1",
     "name": "Long-Drive Coach",
+    "version": "1.0.0",
     "styleHints": { "tone": "pep", "verbosity": "short" },
     "focus": ["long-drive", "tee"]
   },

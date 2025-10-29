@@ -38,6 +38,7 @@ CI runs [`server/scripts/validate_training_packs.py`](../server/scripts/validate
 - max file size (50 KB),
 - duplicate drill/plan ID detection, and
 - plan drill references pointing to declared drills.
+- `persona.version` — required by the runtime; keep semver (e.g., "1.0.0").
 
 Run locally:
 
