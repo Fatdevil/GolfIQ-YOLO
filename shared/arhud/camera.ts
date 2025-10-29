@@ -16,6 +16,29 @@ type CameraModuleLike = CameraModule | null | undefined;
 let moduleOverride: CameraModuleLike = undefined;
 let modulePromise: Promise<CameraModuleLike> | null = null;
 
+let _isRN: boolean | null = null;
+
+function isRN(): boolean {
+  if (_isRN != null) {
+    return _isRN;
+  }
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  _isRN = typeof navigator !== 'undefined' && (navigator as any).product === 'ReactNative';
+  return _isRN;
+}
+
+async function loadExpoCamera(): Promise<CameraModuleLike> {
+  if (!isRN()) {
+    return null;
+  }
+  try {
+    const mod: any = await import('expo-camera');
+    return (mod && typeof mod === 'object' ? (mod as CameraModule) : null) ?? null;
+  } catch {
+    return null;
+  }
+}
+
 async function loadCameraModule(): Promise<CameraModuleLike> {
   if (moduleOverride !== undefined) {
     return moduleOverride;
@@ -23,14 +46,7 @@ async function loadCameraModule(): Promise<CameraModuleLike> {
   if (modulePromise) {
     return modulePromise;
   }
-  modulePromise = (async () => {
-    try {
-      const mod = await import('expo-camera');
-      return (mod && typeof mod === 'object' ? (mod as CameraModule) : null) ?? null;
-    } catch {
-      return null;
-    }
-  })();
+  modulePromise = loadExpoCamera();
   return modulePromise;
 }
 

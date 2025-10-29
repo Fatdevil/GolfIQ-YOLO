@@ -13,6 +13,12 @@ test.afterEach(() => {
   __setCameraModuleForTests(undefined);
 });
 
+test('camera controls resolve without native support', async () => {
+  assert.equal(await lockExposure(), false);
+  assert.equal(await lockWhiteBalance(), false);
+  assert.equal(await unlockAll(), false);
+});
+
 test('camera controls resolve when native module is missing', async () => {
   __setCameraModuleForTests(null);
   assert.equal(await lockExposure(), false);
