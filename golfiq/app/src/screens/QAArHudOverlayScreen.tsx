@@ -1374,6 +1374,32 @@ const MapOverlay: React.FC<MapOverlayProps> = ({
     y: size / 2 - Math.cos(headingRad) * headingRadius,
   };
 
+  const ghostScreenPath = ghost?.groundPath?.map((point) => toScreen(point)) ?? [];
+  const ghostImpactScreen = ghost ? toScreen(ghost.impactCenter) : null;
+  const ghostAngle = ghost ? Math.atan2(ghost.dirUnit.y, ghost.dirUnit.x) : 0;
+  const longPressTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const longPressTriggeredRef = useRef(false);
+
+  const clearLongPress = useCallback(() => {
+    if (longPressTimeoutRef.current) {
+      clearTimeout(longPressTimeoutRef.current);
+      longPressTimeoutRef.current = null;
+    }
+  }, []);
+
+  const setLongPress = useCallback(
+    (fn: () => void, ms = 650) => {
+      clearLongPress();
+      longPressTimeoutRef.current = setTimeout(() => {
+        longPressTimeoutRef.current = null;
+        fn();
+      }, ms);
+    },
+    [clearLongPress],
+  );
+
+  useEffect(() => clearLongPress(), [clearLongPress]);
+
   const handleRelease = useCallback(
     (event: {
       nativeEvent: { locationX: number; locationY: number };
@@ -1397,19 +1423,6 @@ const MapOverlay: React.FC<MapOverlayProps> = ({
     [center.x, center.y, clearLongPress, markLandingActive, onSelectLanding, scale, size],
   );
 
-  const ghostScreenPath = ghost?.groundPath?.map((point) => toScreen(point)) ?? [];
-  const ghostImpactScreen = ghost ? toScreen(ghost.impactCenter) : null;
-  const ghostAngle = ghost ? Math.atan2(ghost.dirUnit.y, ghost.dirUnit.x) : 0;
-  const longPressTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const longPressTriggeredRef = useRef(false);
-
-  const clearLongPress = useCallback(() => {
-    if (longPressTimeoutRef.current) {
-      clearTimeout(longPressTimeoutRef.current);
-      longPressTimeoutRef.current = null;
-    }
-  }, []);
-
   const handleGrant = useCallback(() => {
     if (!pinDropEnabled || !onLongPressPin) {
       longPressTriggeredRef.current = false;
@@ -1417,12 +1430,11 @@ const MapOverlay: React.FC<MapOverlayProps> = ({
       return;
     }
     longPressTriggeredRef.current = false;
-    clearLongPress();
-    longPressTimeoutRef.current = setTimeout(() => {
+    setLongPress(() => {
       longPressTriggeredRef.current = true;
       onLongPressPin();
     }, 650);
-  }, [clearLongPress, onLongPressPin, pinDropEnabled]);
+  }, [clearLongPress, onLongPressPin, pinDropEnabled, setLongPress]);
 
   const handleTerminate = useCallback(() => {
     clearLongPress();
