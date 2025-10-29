@@ -1,11 +1,33 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+} from 'react';
+import {
+  Alert,
+  ScrollView,
+  StyleSheet,
+  Switch,
+  Text,
+  TouchableOpacity,
+  View,
+} from 'react-native';
 
+import { API_BASE } from '../../lib/api';
 import type { Drill, Plan, TrainingFocus } from '../../../../shared/training/types';
 import { loadTrainingPacks, getPlansByFocus } from '../../../../shared/training/content_loader';
 import { getCoachProvider } from '../../../../shared/coach/provider';
 import { getCaddieRc } from '../../../../shared/caddie/rc';
-import { createSessionFromPlan, type PracticeSession } from './Practice/sessionFactory';
+import { generatePlanSessions } from '../../../../shared/training/scheduler';
+import SessionList, {
+  type SessionState,
+} from './Practice/SessionList';
+import {
+  cancelAllPracticeReminders,
+  ensureReminderPermission,
+  scheduleReminder,
+} from '../../../../shared/notifications/local_reminders';
 
 const FOCUS_OPTIONS: TrainingFocus[] = [
   'long-drive',
@@ -18,6 +40,7 @@ const FOCUS_OPTIONS: TrainingFocus[] = [
 ];
 
 type DrillIndex = Record<string, Drill>;
+type FocusTrendMap = Partial<Record<TrainingFocus, { d7: number; d30: number }>>;
 
 const styles = StyleSheet.create({
   container: {
@@ -98,11 +121,76 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontStyle: 'italic',
   },
+  toggleRow: {
+    marginTop: 24,
+    padding: 16,
+    borderRadius: 12,
+    backgroundColor: '#1e293b',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  toggleCopy: {
+    flex: 1,
+  },
+  toggleTitle: {
+    color: '#f1f5f9',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  toggleMeta: {
+    color: '#94a3b8',
+    fontSize: 13,
+    marginTop: 4,
+  },
+  trendCard: {
+    marginTop: 12,
+    padding: 16,
+    borderRadius: 12,
+    backgroundColor: '#1f2937',
+  },
+  trendTitle: {
+    color: '#e2e8f0',
+    fontSize: 16,
+    fontWeight: '600',
+    marginBottom: 6,
+  },
+  trendRow: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  trendValue: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  trendPositive: {
+    color: '#4ade80',
+  },
+  trendNegative: {
+    color: '#f97316',
+  },
+  trendMeta: {
+    color: '#94a3b8',
+    fontSize: 13,
+  },
 });
+
+const formatFocus = (focus: TrainingFocus): string => focus.replace('-', ' ');
+
+const formatDelta = (value: number): string => {
+  if (!Number.isFinite(value)) {
+    return '0.00';
+  }
+  const fixed = value.toFixed(2);
+  return value >= 0 ? `+${fixed}` : fixed;
+};
 
 const GoalsPanel: React.FC = () => {
   const rc = useMemo(() => getCaddieRc(), []);
-  const defaultFocus = useMemo<TrainingFocus>(() => rc.trainingFocusDefault ?? 'approach', [rc]);
+  const defaultFocus = useMemo<TrainingFocus>(
+    () => rc.trainingFocusDefault ?? 'approach',
+    [rc],
+  );
   const [selectedFocus, setSelectedFocus] = useState<TrainingFocus>(defaultFocus);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -116,7 +204,13 @@ const GoalsPanel: React.FC = () => {
     recovery: [],
   });
   const [drillIndex, setDrillIndex] = useState<DrillIndex>({});
-  const [lastSession, setLastSession] = useState<PracticeSession | null>(null);
+  const [sessions, setSessions] = useState<SessionState[]>([]);
+  const [remindersEnabled, setRemindersEnabled] = useState(false);
+  const [statusMessage, setStatusMessage] = useState<string | null>(null);
+  const [trend, setTrend] = useState<FocusTrendMap>({});
+  const [trendLoading, setTrendLoading] = useState(false);
+  const [trendError, setTrendError] = useState<string | null>(null);
+  const [activePlan, setActivePlan] = useState<Plan | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -146,7 +240,6 @@ const GoalsPanel: React.FC = () => {
             const plans = getPlansByFocus(focus);
             nextPlans[focus] = plans;
           } catch (planError) {
-            // ignore focus without packs
             nextPlans[focus] = [];
           }
         });
@@ -166,23 +259,207 @@ const GoalsPanel: React.FC = () => {
     };
   }, []);
 
+  useEffect(() => {
+    let cancelled = false;
+    const loadTrend = async () => {
+      setTrendLoading(true);
+      setTrendError(null);
+      try {
+        const response = await fetch(`${API_BASE}/caddie/health?since=30d`);
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}`);
+        }
+        const payload = await response.json();
+        if (cancelled) {
+          return;
+        }
+        const raw = payload?.sg_trend_by_focus as
+          | Record<string, { d7?: number; d30?: number }>
+          | undefined;
+        const next: FocusTrendMap = {};
+        if (raw && typeof raw === 'object') {
+          FOCUS_OPTIONS.forEach((focus) => {
+            const entry = raw[focus];
+            if (
+              entry &&
+              typeof entry.d7 === 'number' &&
+              typeof entry.d30 === 'number'
+            ) {
+              next[focus] = { d7: entry.d7, d30: entry.d30 };
+            }
+          });
+        }
+        setTrend(next);
+      } catch (err) {
+        if (!cancelled) {
+          setTrend({});
+          setTrendError((err as Error).message ?? 'Kunde inte ladda trend.');
+        }
+      } finally {
+        if (!cancelled) {
+          setTrendLoading(false);
+        }
+      }
+    };
+    loadTrend();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const syncReminders = useCallback(
+    async (nextSessions: SessionState[], enabled: boolean, planName?: string) => {
+      if (!enabled) {
+        try {
+          await cancelAllPracticeReminders();
+        } catch {
+          // ignore
+        }
+        return;
+      }
+      const upcoming = nextSessions.filter((session) => session.status === 'upcoming');
+      if (!upcoming.length) {
+        try {
+          await cancelAllPracticeReminders();
+        } catch {
+          // ignore
+        }
+        return;
+      }
+      try {
+        await cancelAllPracticeReminders();
+      } catch {
+        // ignore clear failures
+      }
+      const label = planName ?? upcoming[0]?.planName ?? 'Practice';
+      await Promise.all(
+        upcoming.slice(0, 6).map(async (session) => {
+          try {
+            const when = new Date(session.scheduledAt);
+            const descriptor = when.toLocaleDateString(undefined, {
+              weekday: 'short',
+              month: 'short',
+              day: 'numeric',
+            });
+            const text = `${label} • ${descriptor}`;
+            await scheduleReminder(session.scheduledAt, text);
+          } catch {
+            // ignore scheduling errors
+          }
+        }),
+      );
+    },
+    [],
+  );
+
+  useEffect(() => {
+    void syncReminders(sessions, remindersEnabled, activePlan?.name ?? undefined);
+  }, [sessions, remindersEnabled, syncReminders, activePlan]);
+
   const handleFocusSelect = useCallback((focus: TrainingFocus) => {
     setSelectedFocus(focus);
   }, []);
 
+  const updateSessionStatus = useCallback((targetId: string, status: SessionState['status']) => {
+    setSessions((prev) =>
+      prev.map((session) => {
+        if (session.id !== targetId) {
+          return session;
+        }
+        if (status === 'completed') {
+          return {
+            ...session,
+            status,
+            completedAt: Date.now(),
+          };
+        }
+        if (status === 'skipped') {
+          return {
+            ...session,
+            status,
+            skippedAt: Date.now(),
+          };
+        }
+        return session;
+      }),
+    );
+  }, []);
+
+  const handleCompleteSession = useCallback(
+    (session: SessionState) => {
+      updateSessionStatus(session.id, 'completed');
+      console.log('practice:event', {
+        action: 'complete',
+        sessionId: session.id,
+        planId: session.planId,
+      });
+    },
+    [updateSessionStatus],
+  );
+
+  const handleSkipSession = useCallback(
+    (session: SessionState) => {
+      updateSessionStatus(session.id, 'skipped');
+      console.log('practice:event', {
+        action: 'skip',
+        sessionId: session.id,
+        planId: session.planId,
+      });
+    },
+    [updateSessionStatus],
+  );
+
   const handleStartPlan = useCallback(
     (plan: Plan) => {
       const provider = getCoachProvider();
-      const session = createSessionFromPlan(plan, selectedFocus, drillIndex);
-      console.log('Practice session created', session);
+      const scheduled = generatePlanSessions(plan, selectedFocus, drillIndex);
+      const nextSessions: SessionState[] = scheduled.map((session) => ({
+        ...session,
+        planName: plan.name,
+        status: 'upcoming',
+        completedAt: null,
+        skippedAt: null,
+      }));
+      setSessions(nextSessions);
+      setActivePlan(plan);
+      setStatusMessage(
+        `Planen ${plan.name} startad – ${nextSessions.length} pass planerade.`,
+      );
+      console.log('practice:event', {
+        action: 'start_plan',
+        planId: plan.id,
+        focus: selectedFocus,
+        sessions: nextSessions.length,
+      });
       const recommendedId = provider.getPracticePlan?.(selectedFocus);
       if (recommendedId && recommendedId !== plan.id) {
         console.log('Coach recommended plan mismatch', recommendedId);
       }
-      setLastSession(session);
     },
     [drillIndex, selectedFocus],
   );
+
+  const handleReminderToggle = useCallback(async (value: boolean) => {
+    if (value) {
+      const allowed = await ensureReminderPermission();
+      if (!allowed) {
+        Alert.alert(
+          'Aviseringar',
+          'Vi kunde inte aktivera lokala påminnelser utan tillstånd.',
+        );
+        setRemindersEnabled(false);
+        await cancelAllPracticeReminders();
+        return;
+      }
+    } else {
+      try {
+        await cancelAllPracticeReminders();
+      } catch {
+        // ignore
+      }
+    }
+    setRemindersEnabled(value);
+  }, []);
 
   const recommendedPlanId = useMemo(() => {
     const provider = getCoachProvider();
@@ -190,6 +467,7 @@ const GoalsPanel: React.FC = () => {
   }, [selectedFocus]);
 
   const plans = plansByFocus[selectedFocus] ?? [];
+  const selectedTrend = trend[selectedFocus];
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={{ paddingBottom: 24 }}>
@@ -203,11 +481,45 @@ const GoalsPanel: React.FC = () => {
               style={[styles.focusChip, active && styles.focusChipActive]}
               onPress={() => handleFocusSelect(focus)}
             >
-              <Text style={styles.focusChipText}>{focus.replace('-', ' ')}</Text>
+              <Text style={styles.focusChipText}>{formatFocus(focus)}</Text>
             </TouchableOpacity>
           );
         })}
       </View>
+
+      <View style={styles.trendCard}>
+        <Text style={styles.trendTitle}>
+          SG-trend ({formatFocus(selectedFocus)})
+        </Text>
+        {trendLoading && <Text style={styles.trendMeta}>Laddar trenddata …</Text>}
+        {!trendLoading && trendError && (
+          <Text style={styles.trendMeta}>Trend saknas ({trendError}).</Text>
+        )}
+        {!trendLoading && !trendError && !selectedTrend && (
+          <Text style={styles.trendMeta}>Ingen trenddata ännu.</Text>
+        )}
+        {!trendLoading && !trendError && selectedTrend && (
+          <View style={styles.trendRow}>
+            <Text
+              style={[
+                styles.trendValue,
+                selectedTrend.d7 >= 0 ? styles.trendPositive : styles.trendNegative,
+              ]}
+            >
+              7d {formatDelta(selectedTrend.d7)}
+            </Text>
+            <Text
+              style={[
+                styles.trendValue,
+                selectedTrend.d30 >= 0 ? styles.trendPositive : styles.trendNegative,
+              ]}
+            >
+              30d {formatDelta(selectedTrend.d30)}
+            </Text>
+          </View>
+        )}
+      </View>
+
       {loading && <Text style={styles.statusText}>Laddar träningsprogram …</Text>}
       {error && !loading && <Text style={styles.statusText}>Fel: {error}</Text>}
       {!loading && !plans.length && !error && (
@@ -244,11 +556,31 @@ const GoalsPanel: React.FC = () => {
             </View>
           );
         })}
-      {lastSession && (
-        <Text style={styles.statusText}>
-          Startade {lastSession.planId} ({lastSession.drills.length} moment) {new Date(lastSession.startedAt).toLocaleTimeString()}.
-        </Text>
+
+      <View style={styles.toggleRow}>
+        <View style={styles.toggleCopy}>
+          <Text style={styles.toggleTitle}>Lokala påminnelser</Text>
+          <Text style={styles.toggleMeta}>
+            Skicka aviseringar inför planerade träningspass. Kan stängas av när som helst.
+          </Text>
+        </View>
+        <Switch
+          value={remindersEnabled}
+          onValueChange={(value) => {
+            void handleReminderToggle(value);
+          }}
+        />
+      </View>
+
+      {sessions.length > 0 && (
+        <SessionList
+          sessions={sessions}
+          onComplete={handleCompleteSession}
+          onSkip={handleSkipSession}
+        />
       )}
+
+      {statusMessage && <Text style={styles.statusText}>{statusMessage}</Text>}
     </ScrollView>
   );
 };

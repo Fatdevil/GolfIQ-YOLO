@@ -6,7 +6,7 @@ import re
 from collections import Counter
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Optional
+from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 import math
 
@@ -26,6 +26,11 @@ TRAINING_FOCUS_VALUES = (
     "recovery",
 )
 TRAINING_FOCUS_SET = set(TRAINING_FOCUS_VALUES)
+
+
+class FocusTrend(BaseModel):
+    d7: float
+    d30: float
 
 
 class CaddieMcHealth(BaseModel):
@@ -112,6 +117,7 @@ class CaddieHealthResponse(BaseModel):
     adoption_sg_lift: float | None
     sg_gained_per_round_by_focus: Dict[str, SgPerRound]
     adoption_by_focus: Dict[str, FocusAdoption]
+    sg_trend_by_focus: Dict[str, FocusTrend]
 
 
 def _parse_since_param(value: Optional[str]) -> timedelta:
@@ -211,12 +217,67 @@ def _median(values: List[float]) -> Optional[float]:
     return (ordered[mid - 1] + ordered[mid]) / 2
 
 
+def _extract_ts_seconds(event: Dict[str, Any]) -> Optional[float]:
+    for key in ("ts", "time", "timestamp", "timestampMs"):
+        value = event.get(key)
+        if value is None:
+            continue
+        try:
+            number = float(value)
+        except (TypeError, ValueError):
+            continue
+        if number > 1e12:
+            return number / 1000.0
+        return number
+    return None
+
+
+def _average_focus_window(
+    entries: List[Tuple[datetime, float]], start: datetime, end: datetime
+) -> Optional[float]:
+    values = [value for ts, value in entries if start < ts <= end]
+    if not values:
+        return None
+    return sum(values) / len(values)
+
+
+def _focus_window_delta(
+    entries: List[Tuple[datetime, float]], now: datetime, window: timedelta
+) -> Optional[float]:
+    current_start = now - window
+    previous_start = current_start - window
+    current_avg = _average_focus_window(entries, current_start, now)
+    if current_avg is None:
+        return None
+    previous_avg = _average_focus_window(entries, previous_start, current_start)
+    baseline = previous_avg if previous_avg is not None else 0.0
+    return current_avg - baseline
+
+
+def _compute_focus_trend(
+    history: Dict[str, List[Tuple[datetime, float]]], now: datetime
+) -> Dict[str, FocusTrend]:
+    result: Dict[str, FocusTrend] = {}
+    for focus_key, values in history.items():
+        ordered = sorted(values, key=lambda item: item[0])
+        delta_7 = _focus_window_delta(ordered, now, timedelta(days=7))
+        delta_30 = _focus_window_delta(ordered, now, timedelta(days=30))
+        if delta_7 is None and delta_30 is None:
+            continue
+        result[focus_key] = FocusTrend(
+            d7=delta_7 if delta_7 is not None else 0.0,
+            d30=delta_30 if delta_30 is not None else 0.0,
+        )
+    return result
+
+
 @router.get("/health", response_model=CaddieHealthResponse)
 def caddie_health(
     since: Optional[str] = Query(None, description="Lookback window, e.g. 24h")
 ):
     window = _parse_since_param(since)
-    cutoff = datetime.now(timezone.utc) - window
+    now = datetime.now(timezone.utc)
+    cutoff = now - window
 
     plan_total = 0
     advice_counter: Counter[str] = Counter()
@@ -232,6 +293,7 @@ def caddie_health(
     other_sg: List[float] = []
     focus_adoption: Dict[str, Dict[str, int]] = {}
     focus_round_totals: Dict[str, List[float]] = {}
+    focus_sg_history: Dict[str, List[Tuple[datetime, float]]] = {}
 
     mc_groups = {
         "control": {"plans": 0, "adopts": 0, "sg_total": 0.0, "rounds": 0},
@@ -252,6 +314,7 @@ def caddie_health(
         run_sg_total = 0.0
         run_has_sg = False
         run_focus_totals: Dict[str, float] = {}
+        run_timestamp_seconds: Optional[float] = None
         run_rollout: Dict[str, Optional[bool]] = {
             "mc": None,
             "advice": None,
@@ -262,6 +325,10 @@ def caddie_health(
             data = event.get("data")
             if not isinstance(name, str) or not isinstance(data, dict):
                 continue
+            ts_seconds = _extract_ts_seconds(event)
+            if ts_seconds is not None:
+                if run_timestamp_seconds is None or ts_seconds < run_timestamp_seconds:
+                    run_timestamp_seconds = ts_seconds
             if name == "hud.caddie.rollout":
                 mc_flag = data.get("mc")
                 advice_flag = data.get("advice")
@@ -438,6 +505,10 @@ def caddie_health(
             tts_groups[tts_key]["rounds"] += 1
             for focus_key, value in run_focus_totals.items():
                 focus_round_totals.setdefault(focus_key, []).append(value)
+            if run_timestamp_seconds is not None:
+                run_dt = datetime.fromtimestamp(run_timestamp_seconds, tz=timezone.utc)
+                for focus_key, value in run_focus_totals.items():
+                    focus_sg_history.setdefault(focus_key, []).append((run_dt, value))
 
     def safe_div(num: float, den: float) -> float:
         if den <= 0:
@@ -562,6 +633,8 @@ def caddie_health(
             adoptRate=rate,
         )
 
+    focus_trend_summary = _compute_focus_trend(focus_sg_history, now)
+
     return CaddieHealthResponse(
         since=cutoff.isoformat(),
         mc=CaddieMcHealth(
@@ -585,4 +658,5 @@ def caddie_health(
         adoption_sg_lift=lift,
         sg_gained_per_round_by_focus=focus_sg_summary,
         adoption_by_focus=focus_adoption_summary,
+        sg_trend_by_focus=focus_trend_summary,
     )
