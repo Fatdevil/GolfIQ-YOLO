@@ -58,9 +58,17 @@ import {
   gnssAccuracyLevel,
   type LocationFix,
 } from '../../../../shared/arhud/location';
+import { lockExposure, lockWhiteBalance, unlockAll } from '../../../../shared/arhud/camera';
 import { createCameraStub, type CameraFrame } from '../../../../shared/arhud/native/camera_stub';
 import { subscribeHeading } from '../../../../shared/arhud/native/heading';
 import { qaHudEnabled } from '../../../../shared/arhud/native/qa_gate';
+import {
+  getCalibrationHealth,
+  isHomographySnapshotStale,
+  loadHomographySnapshot,
+  type CalibrationHealth,
+  type HomographySnapshot,
+} from '../../../../shared/cv/calibration';
 import { computePlaysLike, type PlanOut } from '../../../../shared/playslike/aggregate';
 import { addShot as addRoundShot, getActiveRound as getActiveRoundState } from '../../../../shared/round/round_store';
 import { resumePendingUploads, uploadRoundRun } from '../../../../shared/runs/uploader';
@@ -118,6 +126,7 @@ import { inRollout } from '../../../../shared/caddie/rollout';
 import { caddieTipToText, advicesToText } from '../../../../shared/caddie/text';
 import { speak as speakTip, stop as stopSpeech } from '../../../../shared/tts/speak';
 import { buildGhostTelemetryKey } from './utils/ghostTelemetry';
+import CalibrationWizard from './CalibrationWizard';
 import {
   classifyPhase,
   computeSG,
@@ -1757,6 +1766,8 @@ const QAArHudOverlayScreen: React.FC = () => {
   const [calibrationResult, setCalibrationResult] = useState<CalibOut | null>(null);
   const [calibrationLoading, setCalibrationLoading] = useState(false);
   const [calibrationMessage, setCalibrationMessage] = useState<string | null>(null);
+  const [homographySnapshot, setHomographySnapshot] = useState<HomographySnapshot | null>(null);
+  const [calibrationWizardVisible, setCalibrationWizardVisible] = useState(false);
   const [landingProposal, setLandingProposal] = useState<LandingProposal | null>(null);
   const [landingState, setLandingState] = useState<AutoLandingState>('IDLE');
   const [coachStyle, setCoachStyle] = useState<CoachStyle>(defaultCoachStyle);
@@ -1824,6 +1835,108 @@ const QAArHudOverlayScreen: React.FC = () => {
       setCaddieUseMC(false);
     }
   }, [caddieMcRolloutEnabled, caddieUseMC]);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const snapshot = await loadHomographySnapshot();
+        if (!cancelled) {
+          setHomographySnapshot(snapshot);
+        }
+      } catch {
+        if (!cancelled) {
+          setHomographySnapshot(null);
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        await lockExposure();
+      } catch {
+        // ignore missing exposure controls
+      }
+      try {
+        await lockWhiteBalance();
+      } catch {
+        // ignore missing white balance controls
+      }
+    })();
+    return () => {
+      unlockAll().catch(() => {});
+    };
+  }, []);
+
+  const calibrationHealth = useMemo<CalibrationHealth>(
+    () => getCalibrationHealth(homographySnapshot),
+    [homographySnapshot],
+  );
+  const calibrationStale = useMemo(
+    () => (homographySnapshot ? isHomographySnapshotStale(homographySnapshot) : true),
+    [homographySnapshot],
+  );
+  const calibrationHealthLabel = useMemo(() => {
+    switch (calibrationHealth) {
+      case 'good':
+        return 'Good';
+      case 'ok':
+        return 'OK';
+      default:
+        return 'Poor';
+    }
+  }, [calibrationHealth]);
+  const calibrationChipToneStyle = useMemo(() => {
+    switch (calibrationHealth) {
+      case 'good':
+        return styles.calibrationChipGood;
+      case 'ok':
+        return styles.calibrationChipOk;
+      default:
+        return styles.calibrationChipPoor;
+    }
+  }, [calibrationHealth]);
+  const calibrationSummaryText = useMemo(() => {
+    if (!homographySnapshot) {
+      return 'Run the wizard to map ground distance for HUD overlays.';
+    }
+    const baseline = Math.abs(homographySnapshot.baselineMeters).toFixed(1);
+    const angle = Math.round(Math.abs(homographySnapshot.baselineAngleDeg));
+    const saved = homographySnapshot.computedAt
+      ? new Date(homographySnapshot.computedAt).toLocaleDateString()
+      : null;
+    const suffix = saved ? ` • Saved ${saved}` : '';
+    return `Baseline ${baseline} m • Angle ${angle}°${suffix}`;
+  }, [homographySnapshot]);
+  const showCalibrationNudge = useMemo(
+    () => !homographySnapshot || calibrationStale,
+    [homographySnapshot, calibrationStale],
+  );
+  const calibrationNudgeText = useMemo(() => {
+    if (!homographySnapshot) {
+      return 'No calibration found. Launch the wizard before starting a session.';
+    }
+    return 'Calibration is older than 14 days. Re-run the wizard to stay aligned.';
+  }, [homographySnapshot, calibrationStale]);
+
+  const openCalibrationWizard = useCallback(() => {
+    setCalibrationWizardVisible(true);
+  }, []);
+  const handleCalibrationWizardDismiss = useCallback(() => {
+    setCalibrationWizardVisible(false);
+  }, []);
+  const handleCalibrationWizardSaved = useCallback(
+    (snapshot: HomographySnapshot) => {
+      setHomographySnapshot(snapshot);
+      setCalibrationWizardVisible(false);
+    },
+    [],
+  );
 
   const updateSamplesFromValue = useCallback((value: number) => {
     const clamped = Math.max(MC_SAMPLES_MIN, Math.min(MC_SAMPLES_MAX, value));
@@ -4032,6 +4145,22 @@ const QAArHudOverlayScreen: React.FC = () => {
         </View>
       </View>
       <View style={styles.statusPanel}>
+        <View style={styles.calibrationChipRow}>
+          <View style={[styles.calibrationChip, calibrationChipToneStyle]}>
+            <Text style={styles.calibrationChipLabel}>{`Calibration: ${calibrationHealthLabel}`}</Text>
+          </View>
+          <TouchableOpacity onPress={openCalibrationWizard} style={styles.calibrationChipButton}>
+            <Text style={styles.calibrationChipButtonText}>
+              {homographySnapshot ? 'Retake' : 'Calibrate'}
+            </Text>
+          </TouchableOpacity>
+        </View>
+        <Text style={styles.calibrationChipMeta}>{calibrationSummaryText}</Text>
+        {showCalibrationNudge ? (
+          <TouchableOpacity onPress={openCalibrationWizard} style={styles.calibrationNudgeCard}>
+            <Text style={styles.calibrationNudgeText}>{calibrationNudgeText}</Text>
+          </TouchableOpacity>
+        ) : null}
         {pinDropUiEnabled ? (
           <>
             <Text style={styles.sectionTitle}>Pin tools</Text>
@@ -4736,6 +4865,11 @@ const QAArHudOverlayScreen: React.FC = () => {
             <Text style={styles.bundleLine}>Features: {bundle.features.length}</Text>
           </View>
         ) : null}
+        <CalibrationWizard
+          visible={calibrationWizardVisible}
+          onDismiss={handleCalibrationWizardDismiss}
+          onSaved={handleCalibrationWizardSaved}
+        />
       </View>
     </View>
   );
@@ -5060,6 +5194,60 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     padding: 12,
     gap: 8,
+  },
+  calibrationChipRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  calibrationChip: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 999,
+  },
+  calibrationChipGood: {
+    backgroundColor: 'rgba(34,197,94,0.18)',
+  },
+  calibrationChipOk: {
+    backgroundColor: 'rgba(234,179,8,0.18)',
+  },
+  calibrationChipPoor: {
+    backgroundColor: 'rgba(248,113,113,0.18)',
+  },
+  calibrationChipLabel: {
+    color: '#f8fafc',
+    fontWeight: '600',
+    fontSize: 13,
+  },
+  calibrationChipButton: {
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#2563eb',
+    backgroundColor: '#1e3a8a',
+  },
+  calibrationChipButtonText: {
+    color: '#bfdbfe',
+    fontWeight: '600',
+    letterSpacing: 0.3,
+  },
+  calibrationChipMeta: {
+    color: '#94a3b8',
+    fontSize: 12,
+  },
+  calibrationNudgeCard: {
+    marginTop: 4,
+    backgroundColor: 'rgba(59,130,246,0.1)',
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+  calibrationNudgeText: {
+    color: '#bfdbfe',
+    fontSize: 12,
+    lineHeight: 18,
   },
   pinControlsRow: {
     flexDirection: 'row',
