@@ -20,6 +20,12 @@ import {
   type DiagnosticsSnapshot,
 } from '../../../../shared/ops/log_export';
 import {
+  isCoachLearningOptedIn,
+  resetPlayerProfile,
+  resolveProfileId as resolveCoachProfileId,
+  setCoachLearningOptIn,
+} from '../../../../shared/coach/profile';
+import {
   getUploadQueueSummary,
   subscribeToUploadQueueSummary,
   type UploadQueueSummary,
@@ -178,6 +184,9 @@ const AboutDiagnostics: React.FC = () => {
   const [exportMessage, setExportMessage] = useState<string | null>(null);
   const [copyMessage, setCopyMessage] = useState<string | null>(null);
   const [telemetryOptOut, setTelemetryOptOutState] = useState<boolean>(isTelemetryOptedOut());
+  const [coachLearningOptIn, setCoachLearningOptInState] = useState(false);
+  const [coachResetting, setCoachResetting] = useState(false);
+  const [coachStatusMessage, setCoachStatusMessage] = useState<string | null>(null);
 
   const effectiveQueue = queueSummary ?? snapshot?.queue ?? null;
 
@@ -238,6 +247,25 @@ const AboutDiagnostics: React.FC = () => {
   }, []);
 
   useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const optedIn = await isCoachLearningOptedIn();
+        if (!cancelled) {
+          setCoachLearningOptInState(optedIn);
+        }
+      } catch {
+        if (!cancelled) {
+          setCoachLearningOptInState(false);
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
     if (queueSummary) {
       setSnapshot((prev) => (prev ? { ...prev, queue: queueSummary } : prev));
     }
@@ -291,6 +319,36 @@ const AboutDiagnostics: React.FC = () => {
     },
     [],
   );
+
+  const handleCoachLearningToggle = useCallback(
+    async (enabled: boolean) => {
+      setCoachLearningOptInState(enabled);
+      try {
+        await setCoachLearningOptIn(enabled);
+        setCoachStatusMessage(enabled ? 'Coach learning enabled.' : 'Coach learning disabled.');
+      } catch (error) {
+        setCoachStatusMessage('Failed to update coach learning preference.');
+      }
+    },
+    [],
+  );
+
+  const handleCoachReset = useCallback(async () => {
+    if (coachResetting) {
+      return;
+    }
+    setCoachResetting(true);
+    setCoachStatusMessage('Resetting coach profile…');
+    try {
+      const id = await resolveCoachProfileId();
+      await resetPlayerProfile(id);
+      setCoachStatusMessage('Coach profile cleared.');
+    } catch (error) {
+      setCoachStatusMessage('Failed to reset coach profile.');
+    } finally {
+      setCoachResetting(false);
+    }
+  }, [coachResetting]);
 
   const openPrivacyDocs = useCallback(() => {
     Linking.openURL(PRIVACY_DOCS_URL).catch(() => {
@@ -495,6 +553,23 @@ const AboutDiagnostics: React.FC = () => {
             disabled={!qaMode}
           />
         </View>
+        <View style={styles.toggleRow}>
+          <View style={styles.toggleLabel}>
+            <Text style={styles.body}>Coach learning</Text>
+            <Text style={styles.caption}>
+              Personalize practice plans and advice locally. Turn off to keep recommendations static.
+            </Text>
+          </View>
+          <Switch value={coachLearningOptIn} onValueChange={handleCoachLearningToggle} />
+        </View>
+        <TouchableOpacity
+          style={[styles.button, coachResetting ? styles.buttonDisabled : null]}
+          onPress={handleCoachReset}
+          disabled={coachResetting}
+        >
+          <Text style={styles.buttonText}>{coachResetting ? 'Resetting…' : 'Reset Coach profile'}</Text>
+        </TouchableOpacity>
+        {coachStatusMessage ? <Text style={styles.statusText}>{coachStatusMessage}</Text> : null}
         {!qaMode ? <Text style={styles.caption}>Telemetry toggle available in QA environments.</Text> : null}
       </View>
     </ScrollView>

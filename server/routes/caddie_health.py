@@ -118,6 +118,8 @@ class CaddieHealthResponse(BaseModel):
     sg_gained_per_round_by_focus: Dict[str, SgPerRound]
     adoption_by_focus: Dict[str, FocusAdoption]
     sg_trend_by_focus: Dict[str, FocusTrend]
+    coach_weight_delta: float
+    sg_lift_by_focus: Dict[str, float]
 
 
 def _parse_since_param(value: Optional[str]) -> timedelta:
@@ -294,6 +296,8 @@ def caddie_health(
     focus_adoption: Dict[str, Dict[str, int]] = {}
     focus_round_totals: Dict[str, List[float]] = {}
     focus_sg_history: Dict[str, List[Tuple[datetime, float]]] = {}
+    coach_weight_deltas: List[float] = []
+    focus_lift_samples: Dict[str, List[float]] = {}
 
     mc_groups = {
         "control": {"plans": 0, "adopts": 0, "sg_total": 0.0, "rounds": 0},
@@ -491,6 +495,28 @@ def caddie_health(
                     run_rollout["tts"] = True
                 tts_key = "enforced" if run_rollout["tts"] else "control"
                 tts_groups[tts_key]["plays"] += 1
+            elif name == "coach.profile.updated":
+                d_weights = data.get("dWeights")
+                if isinstance(d_weights, dict):
+                    deltas = [
+                        abs(float(val))
+                        for val in d_weights.values()
+                        if isinstance(val, (int, float))
+                    ]
+                    if deltas:
+                        coach_weight_deltas.append(sum(deltas) / len(deltas))
+                lift_payload = data.get("sgLiftByFocus")
+                if isinstance(lift_payload, dict):
+                    for focus_key, lift_value in lift_payload.items():
+                        if (
+                            not isinstance(focus_key, str)
+                            or focus_key not in TRAINING_FOCUS_SET
+                        ):
+                            continue
+                        numeric = _finite_float(lift_value)
+                        if numeric is None:
+                            continue
+                        focus_lift_samples.setdefault(focus_key, []).append(numeric)
 
         if run_has_sg:
             sg_totals.append(run_sg_total)
@@ -635,6 +661,16 @@ def caddie_health(
 
     focus_trend_summary = _compute_focus_trend(focus_sg_history, now)
 
+    avg_weight_delta = (
+        sum(coach_weight_deltas) / len(coach_weight_deltas)
+        if coach_weight_deltas
+        else 0.0
+    )
+    sg_lift_by_focus: Dict[str, float] = {}
+    for focus_key, samples in focus_lift_samples.items():
+        if samples:
+            sg_lift_by_focus[focus_key] = sum(samples) / len(samples)
+
     return CaddieHealthResponse(
         since=cutoff.isoformat(),
         mc=CaddieMcHealth(
@@ -659,4 +695,6 @@ def caddie_health(
         sg_gained_per_round_by_focus=focus_sg_summary,
         adoption_by_focus=focus_adoption_summary,
         sg_trend_by_focus=focus_trend_summary,
+        coach_weight_delta=avg_weight_delta,
+        sg_lift_by_focus=sg_lift_by_focus,
     )

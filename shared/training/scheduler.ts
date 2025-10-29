@@ -1,3 +1,5 @@
+import type { PlayerProfile } from '../coach/profile';
+import { rankFocus } from '../coach/policy';
 import type { Drill, Plan, TrainingFocus } from './types';
 
 export type PracticeSessionDrill = {
@@ -26,6 +28,11 @@ export interface SessionSchedulerOptions {
   weeks?: number;
   sessionHour?: number;
   customOffsets?: number[];
+}
+
+export interface PlanRecommendation {
+  focus: TrainingFocus;
+  plan: Plan | null;
 }
 
 type DrillIndex = Record<string, Drill>;
@@ -169,6 +176,30 @@ export const generatePlanSessions = (
 
   return sessions.sort((a, b) => a.scheduledAt - b.scheduledAt);
 };
+
+export function recommendFocus(
+  profile: PlayerProfile | null | undefined,
+  fallback: TrainingFocus,
+): TrainingFocus {
+  if (!profile) {
+    return fallback;
+  }
+  const ranked = rankFocus(profile);
+  if (!ranked.length) {
+    return fallback;
+  }
+  return ranked[0].focus;
+}
+
+export function recommendPlan(
+  plansByFocus: Partial<Record<TrainingFocus, Plan[]>>,
+  profile: PlayerProfile | null | undefined,
+  fallback: TrainingFocus,
+): PlanRecommendation {
+  const focus = recommendFocus(profile, fallback);
+  const plans = plansByFocus[focus] ?? [];
+  return { focus, plan: plans.length ? plans[0] : null };
+}
 
 export const __private__ = {
   startOfWeek,
