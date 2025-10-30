@@ -127,6 +127,10 @@ import { inRollout } from '../../../../shared/caddie/rollout';
 import { caddieTipToText, advicesToText } from '../../../../shared/caddie/text';
 import { speak as speakTip, stop as stopSpeech } from '../../../../shared/tts/speak';
 import { evaluatePutt, type PuttEval } from '../../../../shared/greeniq/putt_eval';
+import {
+  puttFeedbackVisible as computePuttFeedbackVisible,
+  puttOverrideEnabled,
+} from '../../../../shared/greeniq/visibility';
 import { emitGreenIqTelemetry } from '../../../../shared/telemetry/greeniq';
 import { buildGhostTelemetryKey } from './utils/ghostTelemetry';
 import CalibrationWizard from './CalibrationWizard';
@@ -1784,8 +1788,9 @@ const QAArHudOverlayScreen: React.FC = () => {
   const [coachProfileId, setCoachProfileId] = useState<string | null>(null);
   const lastProfileUpdateShotRef = useRef<string | null>(null);
   const lastPuttTelemetryRef = useRef<string | null>(null);
+  const telemetryRef = useRef<TelemetryEmitter | null>(null);
   const tournamentSafe = useMemo(() => readTournamentSafe(), []);
-  const [puttFeedbackOverride, setPuttFeedbackOverride] = useState(() => !tournamentSafe);
+  const [puttFeedbackOverride, setPuttFeedbackOverride] = useState(false);
   const greenHintsEnabled = useMemo(
     () => !tournamentSafe && rcGreenSectionsEnabled,
     [rcGreenSectionsEnabled, tournamentSafe],
@@ -2707,13 +2712,6 @@ const QAArHudOverlayScreen: React.FC = () => {
     }
     return toLocalENU(overlayOrigin, shotSession.pin);
   }, [overlayOrigin, shotSession?.pin]);
-  const puttHoled = useMemo(() => {
-    if (!shotSession || shotSession.phase !== 'putt') {
-      return false;
-    }
-    const outcome = computeLandingOutcome(shotSession, overlayOrigin);
-    return Boolean(outcome?.holed);
-  }, [overlayOrigin, shotSession]);
   useEffect(() => {
     if (!shotSession || shotSession.phase !== 'putt' || !shotSession.landing) {
       setPuttEval(null);
@@ -2746,7 +2744,7 @@ const QAArHudOverlayScreen: React.FC = () => {
       });
       lastPuttTelemetryRef.current = fingerprint;
     }
-  }, [lastPuttTelemetryRef, puttTargetLocal, shotSession, telemetryRef]);
+  }, [lastPuttTelemetryRef, puttTargetLocal, shotSession]);
   const puttPaceRatio = useMemo(() => {
     if (!puttEval?.holeDist_m || !puttEval.endDist_m) {
       return null;
@@ -2783,15 +2781,18 @@ const QAArHudOverlayScreen: React.FC = () => {
     const prefix = puttEval.paceClass === 'too_soft' ? '+' : '−';
     return `${prefix}${bucket}% tempo next time`;
   }, [puttEval, puttPaceRatio]);
+  const holeComplete = shotSession?.hole?.completed === true;
+  const overrideEnabled = puttOverrideEnabled(tournamentSafe);
   const puttFeedbackVisible = useMemo(() => {
     if (!puttEval) {
       return false;
     }
-    if (puttHoled) {
-      return true;
-    }
-    return puttFeedbackOverride;
-  }, [puttEval, puttFeedbackOverride, puttHoled]);
+    return computePuttFeedbackVisible({
+      tournamentSafe,
+      holeComplete,
+      override: puttFeedbackOverride,
+    });
+  }, [holeComplete, puttEval, puttFeedbackOverride, tournamentSafe]);
   const puttAngleLabel = useMemo(() => {
     switch (puttEval?.angleClass) {
       case 'on':
@@ -2827,19 +2828,13 @@ const QAArHudOverlayScreen: React.FC = () => {
       return 'Waiting for putt data…';
     }
     if (!puttFeedbackVisible) {
-      if (tournamentSafe && !puttFeedbackOverride) {
+      if (tournamentSafe) {
         return 'Hidden until hole complete (tournament-safe).';
       }
-      return 'Finish the hole to unlock feedback.';
+      return 'Enable override to preview live feedback.';
     }
     return '';
-  }, [
-    puttEval,
-    puttFeedbackOverride,
-    puttFeedbackVisible,
-    shotSession,
-    tournamentSafe,
-  ]);
+  }, [puttEval, puttFeedbackVisible, shotSession, tournamentSafe]);
   useEffect(() => {
     if (
       !learningActive ||
@@ -3374,7 +3369,6 @@ const QAArHudOverlayScreen: React.FC = () => {
     emitTelemetry,
   ]);
   const [cameraStats, setCameraStats] = useState<CameraStats>({ latency: 0, fps: 0 });
-  const telemetryRef = useRef<TelemetryEmitter | null>(resolveTelemetryEmitter());
   const shotIdCounterRef = useRef(0);
   const shotIdRef = useRef(0);
   const bundleRef = useRef<CourseBundle | null>(bundle);
@@ -4176,7 +4170,7 @@ const QAArHudOverlayScreen: React.FC = () => {
       long_err: longErr,
       lat_err: latErr,
     });
-  }, [ghostOverlay, ghostErrors, qaEnabled, telemetryRef]);
+  }, [ghostOverlay, ghostErrors, qaEnabled]);
 
   const handleCourseSelect = useCallback(
     (courseId: string) => {
@@ -5059,11 +5053,16 @@ const QAArHudOverlayScreen: React.FC = () => {
                     <Text style={styles.greeniqTitle}>GreenIQ feedback</Text>
                     <View style={styles.greeniqToggleRow}>
                       <Text style={styles.greeniqToggleLabel}>
-                        {puttFeedbackOverride ? 'Override on' : tournamentSafe ? 'Tournament-safe' : 'Auto'}
+                        {tournamentSafe
+                          ? 'Tournament-safe'
+                          : puttFeedbackOverride
+                            ? 'Override on'
+                            : 'Override off'}
                       </Text>
                       <Switch
+                        disabled={!overrideEnabled}
                         value={puttFeedbackOverride}
-                        onValueChange={setPuttFeedbackOverride}
+                        onValueChange={overrideEnabled ? setPuttFeedbackOverride : undefined}
                         thumbColor={puttFeedbackOverride ? '#22c55e' : '#cbd5f5'}
                         trackColor={{ false: '#1e293b', true: '#14532d' }}
                       />

@@ -21,7 +21,7 @@ On QA HUD the putt workflow reuses existing data:
 3. The currently pinned hole is projected into local ENU space.
 4. `evaluatePutt` runs once a landing exists for a `putt` phase shot.
 
-A new “GreenIQ feedback” card appears in the planner/results column whenever the current session is a putt. By default the card is hidden until the putt is holed. QA can toggle an override switch (disabled when tournament-safe is on) to surface live feedback before the hole is finished.
+A new “GreenIQ feedback” card appears in the planner/results column whenever the current session is a putt. By default the card remains hidden until the hole is completed. In non-tournament sessions QA can enable the override to preview live feedback before the hole is finished. When tournament-safe is active the override is disabled and the card only appears after the hole is complete.
 
 Displayed copy:
 
