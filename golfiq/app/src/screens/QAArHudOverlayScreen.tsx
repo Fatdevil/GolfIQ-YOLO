@@ -126,6 +126,8 @@ import { getCaddieRc } from '../../../../shared/caddie/rc';
 import { inRollout } from '../../../../shared/caddie/rollout';
 import { caddieTipToText, advicesToText } from '../../../../shared/caddie/text';
 import { speak as speakTip, stop as stopSpeech } from '../../../../shared/tts/speak';
+import { evaluatePutt, type PuttEval } from '../../../../shared/greeniq/putt_eval';
+import { emitGreenIqTelemetry } from '../../../../shared/telemetry/greeniq';
 import { buildGhostTelemetryKey } from './utils/ghostTelemetry';
 import CalibrationWizard from './CalibrationWizard';
 import {
@@ -1748,6 +1750,7 @@ const QAArHudOverlayScreen: React.FC = () => {
   const [plannerResult, setPlannerResult] = useState<PlanOut | null>(null);
   const [shotSession, setShotSession] = useState<ShotSessionState | null>(null);
   const [markLandingArmed, setMarkLandingArmed] = useState(false);
+  const [puttEval, setPuttEval] = useState<PuttEval | null>(null);
   const [qaBag, setQaBag] = useState<Bag>(() => effectiveBag());
   const [storedDispersion, setStoredDispersion] = useState<DispersionSnapshot | null>(null);
   const [dispersionPreview, setDispersionPreview] = useState<
@@ -1780,7 +1783,9 @@ const QAArHudOverlayScreen: React.FC = () => {
   const [coachProfile, setCoachProfile] = useState<PlayerProfile | null>(null);
   const [coachProfileId, setCoachProfileId] = useState<string | null>(null);
   const lastProfileUpdateShotRef = useRef<string | null>(null);
+  const lastPuttTelemetryRef = useRef<string | null>(null);
   const tournamentSafe = useMemo(() => readTournamentSafe(), []);
+  const [puttFeedbackOverride, setPuttFeedbackOverride] = useState(() => !tournamentSafe);
   const greenHintsEnabled = useMemo(
     () => !tournamentSafe && rcGreenSectionsEnabled,
     [rcGreenSectionsEnabled, tournamentSafe],
@@ -2696,6 +2701,145 @@ const QAArHudOverlayScreen: React.FC = () => {
       planAdopted: shotSession.planAdopted,
     };
   }, [overlayOrigin, qaBag, shotSession]);
+  const puttTargetLocal = useMemo(() => {
+    if (!overlayOrigin || !shotSession?.pin) {
+      return null;
+    }
+    return toLocalENU(overlayOrigin, shotSession.pin);
+  }, [overlayOrigin, shotSession?.pin]);
+  const puttHoled = useMemo(() => {
+    if (!shotSession || shotSession.phase !== 'putt') {
+      return false;
+    }
+    const outcome = computeLandingOutcome(shotSession, overlayOrigin);
+    return Boolean(outcome?.holed);
+  }, [overlayOrigin, shotSession]);
+  useEffect(() => {
+    if (!shotSession || shotSession.phase !== 'putt' || !shotSession.landing) {
+      setPuttEval(null);
+      lastPuttTelemetryRef.current = null;
+      return;
+    }
+    const result = evaluatePutt({
+      startPx: shotSession.origin,
+      endPx: shotSession.landing,
+      holePx: puttTargetLocal ?? undefined,
+    });
+    setPuttEval(result);
+    const emitter = telemetryRef.current;
+    const fingerprint = [
+      result.angleClass,
+      result.paceClass,
+      Number.isFinite(result.angleDeg) ? result.angleDeg.toFixed(2) : 'nan',
+      result.holeDist_m !== undefined ? result.holeDist_m.toFixed(3) : 'none',
+      result.endDist_m !== undefined ? result.endDist_m.toFixed(3) : 'none',
+    ].join('|');
+    if (emitter && fingerprint !== lastPuttTelemetryRef.current) {
+      emitGreenIqTelemetry(emitter, {
+        angleDeg: Number.isFinite(result.angleDeg)
+          ? Number(result.angleDeg.toFixed(2))
+          : 0,
+        angleClass: result.angleClass,
+        paceClass: result.paceClass,
+        holeDist_m: result.holeDist_m,
+        endDist_m: result.endDist_m,
+      });
+      lastPuttTelemetryRef.current = fingerprint;
+    }
+  }, [lastPuttTelemetryRef, puttTargetLocal, shotSession, telemetryRef]);
+  const puttPaceRatio = useMemo(() => {
+    if (!puttEval?.holeDist_m || !puttEval.endDist_m) {
+      return null;
+    }
+    if (puttEval.holeDist_m <= 0) {
+      return null;
+    }
+    return puttEval.endDist_m / puttEval.holeDist_m;
+  }, [puttEval]);
+  const puttTempoHint = useMemo(() => {
+    if (!puttEval || puttPaceRatio === null) {
+      return null;
+    }
+    const deltaPct = Math.abs(puttPaceRatio - 1) * 100;
+    if (!Number.isFinite(deltaPct) || deltaPct === 0) {
+      return puttEval.paceClass === 'good' ? 'Tempo dialed.' : null;
+    }
+    const clamp = (min: number, max: number) => `${min}–${max}`;
+    let bucket: string;
+    if (deltaPct <= 1.5) {
+      bucket = '≈1';
+    } else if (deltaPct <= 3) {
+      bucket = clamp(1, 3);
+    } else if (deltaPct <= 6) {
+      bucket = clamp(3, 6);
+    } else if (deltaPct <= 10) {
+      bucket = clamp(6, 10);
+    } else {
+      bucket = '10+';
+    }
+    if (puttEval.paceClass === 'good') {
+      return 'Tempo dialed.';
+    }
+    const prefix = puttEval.paceClass === 'too_soft' ? '+' : '−';
+    return `${prefix}${bucket}% tempo next time`;
+  }, [puttEval, puttPaceRatio]);
+  const puttFeedbackVisible = useMemo(() => {
+    if (!puttEval) {
+      return false;
+    }
+    if (puttHoled) {
+      return true;
+    }
+    return puttFeedbackOverride;
+  }, [puttEval, puttFeedbackOverride, puttHoled]);
+  const puttAngleLabel = useMemo(() => {
+    switch (puttEval?.angleClass) {
+      case 'on':
+        return 'on line';
+      case 'ok':
+        return 'ok';
+      case 'off':
+        return 'off line';
+      default:
+        return 'unknown';
+    }
+  }, [puttEval?.angleClass]);
+  const puttPaceLabel = useMemo(() => {
+    switch (puttEval?.paceClass) {
+      case 'too_soft':
+        return 'too soft';
+      case 'too_firm':
+        return 'too firm';
+      case 'good':
+        return 'good';
+      default:
+        return 'unknown';
+    }
+  }, [puttEval?.paceClass]);
+  const puttFeedbackStatus = useMemo(() => {
+    if (!shotSession || shotSession.phase !== 'putt') {
+      return 'Hit a putt to unlock feedback.';
+    }
+    if (!shotSession.landing) {
+      return 'Mark landing to score the putt.';
+    }
+    if (!puttEval) {
+      return 'Waiting for putt data…';
+    }
+    if (!puttFeedbackVisible) {
+      if (tournamentSafe && !puttFeedbackOverride) {
+        return 'Hidden until hole complete (tournament-safe).';
+      }
+      return 'Finish the hole to unlock feedback.';
+    }
+    return '';
+  }, [
+    puttEval,
+    puttFeedbackOverride,
+    puttFeedbackVisible,
+    shotSession,
+    tournamentSafe,
+  ]);
   useEffect(() => {
     if (
       !learningActive ||
@@ -4909,6 +5053,42 @@ const QAArHudOverlayScreen: React.FC = () => {
                   ) : null}
                 </View>
               ) : null}
+              {shotSession?.phase === 'putt' ? (
+                <View style={styles.greeniqCard}>
+                  <View style={styles.greeniqHeader}>
+                    <Text style={styles.greeniqTitle}>GreenIQ feedback</Text>
+                    <View style={styles.greeniqToggleRow}>
+                      <Text style={styles.greeniqToggleLabel}>
+                        {puttFeedbackOverride ? 'Override on' : tournamentSafe ? 'Tournament-safe' : 'Auto'}
+                      </Text>
+                      <Switch
+                        value={puttFeedbackOverride}
+                        onValueChange={setPuttFeedbackOverride}
+                        thumbColor={puttFeedbackOverride ? '#22c55e' : '#cbd5f5'}
+                        trackColor={{ false: '#1e293b', true: '#14532d' }}
+                      />
+                    </View>
+                  </View>
+                  {puttEval && puttFeedbackVisible ? (
+                    <>
+                      <Text style={styles.greeniqMetric}>
+                        Start-line: {puttEval.angleDeg.toFixed(1)}° ({puttAngleLabel})
+                      </Text>
+                      <Text style={styles.greeniqMetric}>
+                        Pace: {puttPaceLabel}
+                        {puttTempoHint ? ` · ${puttTempoHint}` : ''}
+                      </Text>
+                      {puttEval.holeDist_m !== undefined && puttEval.endDist_m !== undefined ? (
+                        <Text style={styles.greeniqMeta}>
+                          Hole {puttEval.holeDist_m.toFixed(2)} m · End {puttEval.endDist_m.toFixed(2)} m
+                        </Text>
+                      ) : null}
+                    </>
+                  ) : (
+                    <Text style={styles.greeniqStatus}>{puttFeedbackStatus}</Text>
+                  )}
+                </View>
+              ) : null}
             </View>
           ) : null}
         </View>
@@ -5590,6 +5770,46 @@ const styles = StyleSheet.create({
   resultCardFeedbackLine: {
     color: '#f8fafc',
     fontSize: 12,
+  },
+  greeniqCard: {
+    marginTop: 16,
+    padding: 16,
+    borderRadius: 12,
+    backgroundColor: '#0f172a',
+    borderWidth: 1,
+    borderColor: '#1e293b',
+    gap: 8,
+  },
+  greeniqHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  greeniqTitle: {
+    color: '#f8fafc',
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  greeniqToggleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  greeniqToggleLabel: {
+    color: '#94a3b8',
+    fontSize: 12,
+    marginRight: 8,
+  },
+  greeniqMetric: {
+    color: '#e2e8f0',
+    fontSize: 14,
+  },
+  greeniqMeta: {
+    color: '#94a3b8',
+    fontSize: 12,
+  },
+  greeniqStatus: {
+    color: '#94a3b8',
+    fontSize: 13,
   },
   caddieContainer: {
     backgroundColor: '#0f172a',

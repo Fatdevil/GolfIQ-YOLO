@@ -14,7 +14,8 @@ export default defineConfig({
       '../shared/runs/__tests__/**/*.spec.ts',
       'tests/**/*.spec.ts',
       '../tests/shared/sg/**/*.spec.ts',
-      '../tests/shared/caddie/**/*.spec.ts'
+      '../tests/shared/caddie/**/*.spec.ts',
+      '../tests/shared/greeniq/**/*.spec.ts'
     ]
   }
 });
