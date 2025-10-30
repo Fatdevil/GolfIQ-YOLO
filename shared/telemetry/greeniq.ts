@@ -1,9 +1,13 @@
 export type GreenIqPuttFeedbackEvent = {
   angleDeg: number;
+  signedAngleDeg?: number;
   angleClass: 'on' | 'ok' | 'off' | 'unknown';
   paceClass: 'too_soft' | 'good' | 'too_firm' | 'unknown';
   holeDist_m?: number;
   endDist_m?: number;
+  aimAdjust_cm?: number;
+  lateralMiss_cm?: number;
+  thresholds?: { on: number; ok: number } | null;
 };
 
 type TelemetryEmitter = (event: string, data: Record<string, unknown>) => void;

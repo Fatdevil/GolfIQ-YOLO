@@ -13,7 +13,8 @@ describe('evaluatePutt', () => {
   const start = { x: 0, y: 0 };
   const hole = { x: 0, y: 10 };
 
-  it('classifies angle boundaries', () => {
+  it('classifies angle boundaries at reference distance', () => {
+    const hole = { x: 0, y: 3 };
     const onZero = evaluatePutt({ startPx: start, endPx: hole, holePx: hole });
     expect(onZero.angleClass).toBe('on');
     expect(toDegrees(onZero.angleDeg)).toBe(0);
@@ -47,6 +48,21 @@ describe('evaluatePutt', () => {
     expect(offAngle.angleClass).toBe('off');
   });
 
+  it('tightens angle thresholds for long putts', () => {
+    const hole = { x: 0, y: 12 };
+    const nearCenter = evaluatePutt({ startPx: start, endPx: polar(12, 0.2), holePx: hole });
+    expect(nearCenter.angleClass).toBe('on');
+
+    const mid = evaluatePutt({ startPx: start, endPx: polar(12, 0.45), holePx: hole });
+    expect(mid.angleClass).toBe('ok');
+
+    const wide = evaluatePutt({ startPx: start, endPx: polar(12, 1), holePx: hole });
+    expect(wide.angleClass).toBe('off');
+
+    expect(nearCenter.angleThresholdsDeg?.on).toBeLessThan(0.5);
+    expect(nearCenter.angleThresholdsDeg?.ok).toBeLessThan(1);
+  });
+
   it('classifies pace boundaries', () => {
     const soft = evaluatePutt({ startPx: start, endPx: { x: 0, y: 8.4 }, holePx: hole });
     expect(soft.paceClass).toBe('too_soft');
@@ -72,6 +88,7 @@ describe('evaluatePutt', () => {
     expect(result.angleClass).toBe('unknown');
     expect(result.paceClass).toBe('unknown');
     expect(result.angleDeg).toBe(0);
+    expect(result.signedAngleDeg).toBe(0);
   });
 
   it('supports homography path', () => {
@@ -85,5 +102,21 @@ describe('evaluatePutt', () => {
     expect(result.paceClass).toBe('good');
     expect(result.holeDist_m).toBeCloseTo(10);
     expect(result.endDist_m).toBeCloseTo(10);
+    expect(result.angleThresholdsDeg?.on).toBeLessThan(1);
+    expect(result.lateralMiss_cm).toBeCloseTo(0);
+    expect(result.aimAdjust_cm).toBeCloseTo(0);
+  });
+
+  it('reports signed angle and aim suggestion', () => {
+    const hole = { x: 0, y: 4 };
+    const rightMiss = evaluatePutt({ startPx: start, endPx: polar(4, 2), holePx: hole });
+    expect(Math.sign(rightMiss.signedAngleDeg)).toBe(1);
+    expect(rightMiss.lateralMiss_cm).toBeGreaterThan(0);
+    expect(rightMiss.aimAdjust_cm).toBeLessThan(0);
+
+    const leftMiss = evaluatePutt({ startPx: start, endPx: polar(4, -2), holePx: hole });
+    expect(Math.sign(leftMiss.signedAngleDeg)).toBe(-1);
+    expect(leftMiss.lateralMiss_cm).toBeLessThan(0);
+    expect(leftMiss.aimAdjust_cm).toBeGreaterThan(0);
   });
 });

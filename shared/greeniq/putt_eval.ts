@@ -11,16 +11,87 @@ export type PuttEvalInput = {
 
 export type PuttEval = {
   angleDeg: number;
+  signedAngleDeg: number;
   angleClass: 'on' | 'ok' | 'off' | 'unknown';
   paceClass: 'too_soft' | 'good' | 'too_firm' | 'unknown';
   holeDist_m?: number;
   endDist_m?: number;
+  lateralMiss_cm?: number;
+  aimAdjust_cm?: number;
+  angleThresholdsDeg?: { on: number; ok: number };
 };
 
 const DEFAULT_PACE = { soft: 0.85, firm: 1.2 } as const;
 const DEFAULT_ANGLE = { on: 1.0, ok: 2.0 } as const;
 const EPSILON = 1e-6;
 const ANGLE_TOLERANCE = 1e-6;
+const DISTANCE_REFERENCE_M = 3;
+const MIN_SCALING_DISTANCE_M = 0.5;
+
+const RAD_PER_DEG = Math.PI / 180;
+const DEG_PER_RAD = 180 / Math.PI;
+
+const BASE_LATERAL_ON_M = Math.tan(DEFAULT_ANGLE.on * RAD_PER_DEG) * DISTANCE_REFERENCE_M;
+const BASE_LATERAL_OK_M = Math.tan(DEFAULT_ANGLE.ok * RAD_PER_DEG) * DISTANCE_REFERENCE_M;
+
+function safeAngle(angleDeg: number): number {
+  if (!Number.isFinite(angleDeg)) {
+    return 0;
+  }
+  if (angleDeg < 0) {
+    return 0;
+  }
+  if (angleDeg > 89.9) {
+    return 89.9;
+  }
+  return angleDeg;
+}
+
+function angleToLateral(angleDeg: number, distance: number): number {
+  const rad = safeAngle(angleDeg) * RAD_PER_DEG;
+  return Math.tan(rad) * distance;
+}
+
+function distanceAwareAngles(
+  distance: number | undefined,
+  baseAngles: { on: number; ok: number },
+): { on: number; ok: number } {
+  const sanitizedBase = {
+    on: safeAngle(baseAngles.on),
+    ok: Math.max(safeAngle(baseAngles.ok), safeAngle(baseAngles.on)),
+  };
+
+  if (!Number.isFinite(distance) || distance === undefined || distance <= EPSILON) {
+    return sanitizedBase;
+  }
+
+  const safeDistance = Math.max(distance, MIN_SCALING_DISTANCE_M);
+  const baseOnLateral = angleToLateral(sanitizedBase.on, DISTANCE_REFERENCE_M) || BASE_LATERAL_ON_M;
+  const baseOkLateral = Math.max(
+    angleToLateral(sanitizedBase.ok, DISTANCE_REFERENCE_M),
+    angleToLateral(sanitizedBase.on, DISTANCE_REFERENCE_M),
+    BASE_LATERAL_OK_M,
+  );
+  const toAngle = (lateral: number) => {
+    if (!Number.isFinite(lateral) || lateral <= 0) {
+      return 0;
+    }
+    const rad = Math.atan2(lateral, safeDistance);
+    return Math.max(0, rad * DEG_PER_RAD);
+  };
+
+  const on = toAngle(baseOnLateral);
+  const ok = Math.max(on + ANGLE_TOLERANCE, toAngle(baseOkLateral));
+
+  if (on <= 0 && ok <= 0) {
+    return sanitizedBase;
+  }
+
+  return {
+    on: on > 0 ? on : sanitizedBase.on,
+    ok: ok > 0 ? ok : Math.max(sanitizedBase.ok, sanitizedBase.on + ANGLE_TOLERANCE),
+  };
+}
 
 function isFinitePoint(point: Partial<Point2D> | undefined | null): point is Point2D {
   if (!point) {
@@ -87,19 +158,6 @@ function vectorLength(vec: Point2D): number {
   return Math.hypot(vec.x, vec.y);
 }
 
-function clampCosine(value: number): number {
-  if (!Number.isFinite(value)) {
-    return 1;
-  }
-  if (value > 1) {
-    return 1;
-  }
-  if (value < -1) {
-    return -1;
-  }
-  return value;
-}
-
 function sanitizePoint(point: Partial<Point2D> | null | undefined, H?: number[][]): Point2D | null {
   if (!isFinitePoint(point)) {
     return null;
@@ -129,7 +187,7 @@ function classifyPace(ratio: number, bounds: { soft: number; firm: number }): 't
 }
 
 export function evaluatePutt(input: Partial<PuttEvalInput>): PuttEval {
-  const thresholds = { ...DEFAULT_ANGLE, ...(input.angle ?? {}) };
+  const baseAngle = { ...DEFAULT_ANGLE, ...(input.angle ?? {}) };
   const paceBounds = { ...DEFAULT_PACE, ...(input.pace ?? {}) };
 
   const start = sanitizePoint(input.startPx, input.H);
@@ -137,10 +195,14 @@ export function evaluatePutt(input: Partial<PuttEvalInput>): PuttEval {
   const hole = sanitizePoint(input.holePx, input.H);
 
   let angleDeg = 0;
+  let signedAngleDeg = 0;
   let angleClass: PuttEval['angleClass'] = 'unknown';
   let paceClass: PuttEval['paceClass'] = 'unknown';
   let holeDist: number | undefined;
   let endDist: number | undefined;
+  let lateralMissCm: number | undefined;
+  let aimAdjustCm: number | undefined;
+  let thresholds = { ...baseAngle };
 
   if (start && end) {
     const stroke = subtract(end, start);
@@ -152,13 +214,18 @@ export function evaluatePutt(input: Partial<PuttEvalInput>): PuttEval {
         const targetLength = vectorLength(target);
         if (Number.isFinite(targetLength) && targetLength > EPSILON) {
           holeDist = targetLength;
+          thresholds = distanceAwareAngles(holeDist, baseAngle);
           const dot = stroke.x * target.x + stroke.y * target.y;
           const denom = strokeLength * targetLength;
           if (Number.isFinite(denom) && denom > EPSILON) {
-            const cosTheta = clampCosine(dot / denom);
-            const angle = Math.acos(cosTheta);
-            if (Number.isFinite(angle)) {
-              angleDeg = Math.abs((angle * 180) / Math.PI);
+            const cross = stroke.x * target.y - stroke.y * target.x;
+            const angleRad = Math.atan2(cross, dot);
+            if (Number.isFinite(angleRad)) {
+              signedAngleDeg = angleRad * DEG_PER_RAD;
+              if (!Number.isFinite(signedAngleDeg)) {
+                signedAngleDeg = 0;
+              }
+              angleDeg = Math.abs(signedAngleDeg);
               if (!Number.isFinite(angleDeg)) {
                 angleDeg = 0;
               } else {
@@ -170,6 +237,15 @@ export function evaluatePutt(input: Partial<PuttEvalInput>): PuttEval {
           if (Number.isFinite(ratio) && targetLength > EPSILON) {
             paceClass = classifyPace(ratio, paceBounds);
           }
+
+          if (Number.isFinite(signedAngleDeg) && Number.isFinite(holeDist) && holeDist > EPSILON) {
+            const angleRad = signedAngleDeg * RAD_PER_DEG;
+            const lateralMeters = Math.tan(angleRad) * holeDist;
+            if (Number.isFinite(lateralMeters)) {
+              lateralMissCm = lateralMeters * 100;
+              aimAdjustCm = -lateralMissCm;
+            }
+          }
         }
       }
     }
@@ -178,15 +254,22 @@ export function evaluatePutt(input: Partial<PuttEvalInput>): PuttEval {
   if (!Number.isFinite(angleDeg) || angleDeg < 0) {
     angleDeg = 0;
   }
+  if (!Number.isFinite(signedAngleDeg)) {
+    signedAngleDeg = 0;
+  }
   if (angleDeg > 180) {
     angleDeg = 180;
   }
 
   return {
     angleDeg,
+    signedAngleDeg,
     angleClass,
     paceClass,
     holeDist_m: Number.isFinite(holeDist ?? Number.NaN) ? holeDist : undefined,
     endDist_m: Number.isFinite(endDist ?? Number.NaN) ? endDist : undefined,
+    lateralMiss_cm: Number.isFinite(lateralMissCm ?? Number.NaN) ? lateralMissCm : undefined,
+    aimAdjust_cm: Number.isFinite(aimAdjustCm ?? Number.NaN) ? aimAdjustCm : undefined,
+    angleThresholdsDeg: thresholds,
   };
 }
