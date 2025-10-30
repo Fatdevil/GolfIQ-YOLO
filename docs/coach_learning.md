@@ -11,7 +11,8 @@ so that future ML models can slot into the same `PlayerProfile` and `CoachPolicy
   * Rolling adherence and adoption scores.
   * Rolling strokes-gained lifts per focus.
   * Risk preference and advice tone/verbosity hints.
-* Opt-in status for coach learning is stored separately under `coach.profile.privacy`.
+* Opt-in status for coach learning is stored separately under `privacy.coachLearning.optIn` (with a
+  legacy read of `coach.profile.privacy` for older builds).
 * Persistence uses `shared/core/pstore.ts` which dynamically selects AsyncStorage (React Native),
   falling back to `localStorage` or in-memory storage on the web/Node.
 
@@ -42,7 +43,17 @@ opt-in are true. QA tests interact with the in-memory FastAPI store located in
   allows normal/aggressive guidance once SG lifts and adherence trend positively.
 
 `shared/caddie/advice.ts` passes the active profile through the policy so the advice engine respects
-style/verbosity hints and risk overrides whenever `coach.learning.enabled` is true.
+style/verbosity hints and risk overrides whenever the effective learning gate is active.
+
+## Privacy & gate semantics
+
+The effective gate for all learning behaviour is `rc.coach.learningEnabled && userOptIn`.
+
+* When the gate is **off**, the app does not read, write, or mutate the persisted coach profile. HUD
+  advice falls back to the default tone/verbosity and baseline risk, and the training scheduler uses
+  the RC default or any manual focus the golfer selects.
+* When the gate is **on**, profile updates, CoachPolicy ranking, and advice style/risk customisation
+  are enabled. Remote sync still requires `coach.sync.enabled` in addition to the user opt-in.
 
 ## Metrics and telemetry
 

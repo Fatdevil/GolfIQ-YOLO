@@ -33,7 +33,8 @@ export interface SyncOptions {
 }
 
 const STORAGE_KEY = 'coach.profile.v1';
-const PRIVACY_KEY = 'coach.profile.privacy';
+const LEGACY_PRIVACY_KEY = 'coach.profile.privacy';
+const COACH_OPTIN_KEY = 'privacy.coachLearning.optIn';
 const PROFILE_VERSION = '1.0';
 const TRAINING_FOCUS_VALUES: readonly TrainingFocus[] = [
   'long-drive',
@@ -346,10 +347,16 @@ export async function resetPlayerProfile(id: string): Promise<PlayerProfile> {
 
 export async function setCoachLearningOptIn(value: boolean): Promise<void> {
   privacyOptInCache = value;
+  const serialized = value ? '1' : '0';
   try {
-    await setItem(PRIVACY_KEY, value ? '1' : '0');
+    await setItem(COACH_OPTIN_KEY, serialized);
   } catch {
     // ignore persistence failure
+  }
+  try {
+    await setItem(LEGACY_PRIVACY_KEY, serialized);
+  } catch {
+    // ignore legacy persistence failure
   }
 }
 
@@ -357,18 +364,35 @@ export async function isCoachLearningOptedIn(): Promise<boolean> {
   if (privacyOptInCache !== null) {
     return privacyOptInCache;
   }
-  try {
-    const raw = await getItem(PRIVACY_KEY);
-    if (typeof raw === 'string') {
-      const normalized = raw.trim().toLowerCase();
-      privacyOptInCache = ['1', 'true', 'yes', 'on'].includes(normalized);
-      return privacyOptInCache;
+  const readFlag = async (key: string): Promise<boolean | null> => {
+    try {
+      const raw = await getItem(key);
+      if (typeof raw === 'string') {
+        const normalized = raw.trim().toLowerCase();
+        return ['1', 'true', 'yes', 'on'].includes(normalized);
+      }
+    } catch {
+      // ignore storage errors
     }
-  } catch {
-    // ignore
+    return null;
+  };
+  const current = await readFlag(COACH_OPTIN_KEY);
+  if (current !== null) {
+    privacyOptInCache = current;
+    return current;
+  }
+  const legacy = await readFlag(LEGACY_PRIVACY_KEY);
+  if (legacy !== null) {
+    privacyOptInCache = legacy;
+    return legacy;
   }
   privacyOptInCache = false;
   return false;
+}
+
+export async function isCoachLearningActive(rc: { coach?: { learningEnabled?: boolean } }): Promise<boolean> {
+  const optIn = await isCoachLearningOptedIn();
+  return Boolean(rc?.coach?.learningEnabled) && optIn;
 }
 
 export async function pullRemoteProfile(id: string, options?: SyncOptions): Promise<PlayerProfile | null> {

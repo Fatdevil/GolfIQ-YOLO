@@ -19,6 +19,7 @@ import type { Drill, Plan, TrainingFocus } from '../../../../shared/training/typ
 import { loadTrainingPacks, getPlansByFocus } from '../../../../shared/training/content_loader';
 import { getCoachProvider } from '../../../../shared/coach/provider';
 import {
+  isCoachLearningActive,
   loadPlayerProfile,
   resolveProfileId,
   savePlayerProfile,
@@ -216,7 +217,7 @@ const GoalsPanel: React.FC = () => {
     () => rc.trainingFocusDefault ?? 'approach',
     [rc],
   );
-  const coachLearningEnabled = rc.coach.learningEnabled;
+  const [learningActive, setLearningActive] = useState(false);
   const [selectedFocus, setSelectedFocus] = useState<TrainingFocus>(defaultFocus);
   const [profileId, setProfileId] = useState<string | null>(null);
   const [profile, setProfile] = useState<PlayerProfile | null>(null);
@@ -243,7 +244,25 @@ const GoalsPanel: React.FC = () => {
   const [coachPlanId, setCoachPlanId] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!coachLearningEnabled) {
+    let cancelled = false;
+    (async () => {
+      const active = await isCoachLearningActive(rc);
+      if (cancelled) {
+        return;
+      }
+      setLearningActive(active);
+      if (!active) {
+        setProfile(null);
+        setProfileId(null);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [rc]);
+
+  useEffect(() => {
+    if (!learningActive) {
       setProfile(null);
       setProfileId(null);
       return;
@@ -271,7 +290,7 @@ const GoalsPanel: React.FC = () => {
     return () => {
       cancelled = true;
     };
-  }, [coachLearningEnabled]);
+  }, [learningActive]);
 
   useEffect(() => {
     let cancelled = false;
@@ -449,7 +468,7 @@ const GoalsPanel: React.FC = () => {
 
   const applySessionOutcome = useCallback(
     async (session: SessionState, completed: boolean) => {
-      if (!coachLearningEnabled || !profileId) {
+      if (!learningActive || !profileId) {
         return;
       }
       try {
@@ -464,7 +483,7 @@ const GoalsPanel: React.FC = () => {
         // ignore profile persistence errors
       }
     },
-    [coachLearningEnabled, profile, profileId],
+    [learningActive, profile, profileId],
   );
 
   const handleCompleteSession = useCallback(
@@ -546,11 +565,11 @@ const GoalsPanel: React.FC = () => {
   }, []);
 
   const coachRecommendation = useMemo(() => {
-    if (!coachLearningEnabled || !profile) {
+    if (!learningActive || !profile) {
       return null;
     }
-    return recommendPlan(plansByFocus, profile, defaultFocus);
-  }, [coachLearningEnabled, defaultFocus, plansByFocus, profile]);
+    return recommendPlan(plansByFocus, profile, defaultFocus, { learningActive });
+  }, [learningActive, defaultFocus, plansByFocus, profile]);
 
   useEffect(() => {
     if (!coachRecommendation) {

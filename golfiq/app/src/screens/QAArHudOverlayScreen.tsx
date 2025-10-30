@@ -134,6 +134,7 @@ import {
   type ShotPhase,
 } from '../../../../shared/sg/engine';
 import {
+  isCoachLearningActive,
   loadPlayerProfile,
   resolveProfileId as resolveCoachProfileId,
   savePlayerProfile,
@@ -1788,8 +1789,7 @@ const QAArHudOverlayScreen: React.FC = () => {
   const mcSliderMetricsRef = useRef<{ left: number }>({ left: 0 });
   const lastMcTelemetryRef = useRef<string | null>(null);
   const lastSpokenPlanRef = useRef<string | null>(null);
-  const rcDefaults = useMemo(() => getCaddieRc(), []);
-  const [coachLearningEnabled, setCoachLearningEnabled] = useState(rcDefaults.coach.learningEnabled);
+  const [learningActive, setLearningActive] = useState(false);
   const [coachProfile, setCoachProfile] = useState<PlayerProfile | null>(null);
   const [coachProfileId, setCoachProfileId] = useState<string | null>(null);
   const lastProfileUpdateShotRef = useRef<string | null>(null);
@@ -2052,9 +2052,16 @@ const QAArHudOverlayScreen: React.FC = () => {
     resumePendingUploads().catch(() => {});
   }, []);
   useEffect(() => {
-    if (!coachLearningEnabled) {
+    if (!learningActive) {
       setCoachProfile(null);
       setCoachProfileId(null);
+      setCoachStyle((prev) => ({
+        ...prev,
+        tone: defaultCoachStyle.tone,
+        verbosity: defaultCoachStyle.verbosity,
+      }));
+      setCaddieRiskMode('normal');
+      lastProfileUpdateShotRef.current = null;
       return;
     }
     let cancelled = false;
@@ -2078,9 +2085,9 @@ const QAArHudOverlayScreen: React.FC = () => {
     return () => {
       cancelled = true;
     };
-  }, [coachLearningEnabled]);
+  }, [learningActive]);
   useEffect(() => {
-    if (!coachProfile) {
+    if (!learningActive || !coachProfile) {
       return;
     }
     setCoachStyle((prev) => ({
@@ -2092,7 +2099,7 @@ const QAArHudOverlayScreen: React.FC = () => {
       const next = pickRisk(coachProfile);
       return next;
     });
-  }, [coachProfile]);
+  }, [coachProfile, learningActive]);
   const searchResults = useMemo(() => {
     if (!courses.length) {
       return [] as CourseSearchResult[];
@@ -2704,7 +2711,7 @@ const QAArHudOverlayScreen: React.FC = () => {
   }, [overlayOrigin, qaBag, shotSession]);
   useEffect(() => {
     if (
-      !coachLearningEnabled ||
+      !learningActive ||
       !coachProfileId ||
       !shotSession ||
       !shotSummary ||
@@ -2737,13 +2744,7 @@ const QAArHudOverlayScreen: React.FC = () => {
       }
     };
     void updateProfile();
-  }, [
-    coachLearningEnabled,
-    coachProfile,
-    coachProfileId,
-    shotSession,
-    shotSummary,
-  ]);
+  }, [learningActive, coachProfile, coachProfileId, shotSession, shotSummary]);
 
   useEffect(() => {
     if (!shotSession || !shotSummary?.feedback) {
@@ -3140,13 +3141,13 @@ const QAArHudOverlayScreen: React.FC = () => {
       },
       style: coachStyle,
       coachProfile,
-      learningEnabled: coachLearningEnabled,
+      learningActive,
     });
   }, [
     caddieAdviceRolloutEnabled,
     caddiePlan,
     caddiePlayerModel,
-    coachLearningEnabled,
+    learningActive,
     coachProfile,
     coachStyle,
     plannerResult,
@@ -3315,13 +3316,16 @@ const QAArHudOverlayScreen: React.FC = () => {
     let cancelled = false;
     (async () => {
       const rc = getCaddieRc();
+      const active = await isCoachLearningActive(rc);
       let deviceId = 'unknown-device';
       try {
         deviceId = await resolveDeviceId();
       } catch (error) {
         // ignore
       }
-      setCoachLearningEnabled(rc.coach.learningEnabled);
+      if (!cancelled) {
+        setLearningActive(active);
+      }
       const mcEnabled =
         rc.mc.kill === true ? false : rc.mc.enabled && inRollout(deviceId, rc.mc.percent);
       const adviceEnabled =

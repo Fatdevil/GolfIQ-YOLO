@@ -35,6 +35,10 @@ export interface PlanRecommendation {
   plan: Plan | null;
 }
 
+export interface RecommendationOptions {
+  learningActive?: boolean;
+}
+
 type DrillIndex = Record<string, Drill>;
 
 const DEFAULT_WEEKLY_OFFSETS = [1, 4];
@@ -180,8 +184,10 @@ export const generatePlanSessions = (
 export function recommendFocus(
   profile: PlayerProfile | null | undefined,
   fallback: TrainingFocus,
+  options?: RecommendationOptions,
 ): TrainingFocus {
-  if (!profile) {
+  const useLearning = options?.learningActive !== undefined ? options.learningActive : true;
+  if (!profile || !useLearning) {
     return fallback;
   }
   const ranked = rankFocus(profile);
@@ -195,8 +201,9 @@ export function recommendPlan(
   plansByFocus: Partial<Record<TrainingFocus, Plan[]>>,
   profile: PlayerProfile | null | undefined,
   fallback: TrainingFocus,
+  options?: RecommendationOptions,
 ): PlanRecommendation {
-  const focus = recommendFocus(profile, fallback);
+  const focus = recommendFocus(profile, fallback, options);
   const plans = plansByFocus[focus] ?? [];
   return { focus, plan: plans.length ? plans[0] : null };
 }

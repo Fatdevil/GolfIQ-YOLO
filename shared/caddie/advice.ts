@@ -41,7 +41,7 @@ export interface AdviceCtx {
   focus?: TrainingFocus;
   persona?: CoachPersona;
   coachProfile?: PlayerProfile | null;
-  learningEnabled?: boolean;
+  learningActive?: boolean;
 }
 
 type SeverityRank = Record<Advice["severity"], number>;
@@ -126,9 +126,10 @@ const applyRiskOverride = (baseRisk: number, mode: 'safe' | 'normal' | 'aggressi
 
 export function advise(inputCtx: AdviceCtx): Advice[] {
   const rc = getCaddieRc();
+  const profile = inputCtx.coachProfile ?? null;
+  const gate = Boolean(rc.coach.learningEnabled && inputCtx.learningActive && profile);
   let ctx = inputCtx;
-  if (rc.coach.learningEnabled && inputCtx.learningEnabled !== false && inputCtx.coachProfile) {
-    const profile = inputCtx.coachProfile;
+  if (gate && profile) {
     const style = pickAdviceStyle(profile);
     const riskMode = pickRisk(profile, {
       hazardDensity: computeHazardDensity(inputCtx),
