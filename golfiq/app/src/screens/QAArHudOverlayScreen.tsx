@@ -69,6 +69,8 @@ import {
   type CalibrationHealth,
   type HomographySnapshot,
 } from '../../../../shared/cv/calibration';
+import { headingToUnit } from '../../../../shared/caddie/geometry';
+import { playsLikeDistance, type PlaysLikeInput, type PlaysLikeResult } from '../../../../shared/caddie/playslike';
 import { computePlaysLike, type PlanOut } from '../../../../shared/playslike/aggregate';
 import { addShot as addRoundShot, getActiveRound as getActiveRoundState } from '../../../../shared/round/round_store';
 import { resumePendingUploads, uploadRoundRun } from '../../../../shared/runs/uploader';
@@ -131,6 +133,11 @@ import {
   puttFeedbackVisible as computePuttFeedbackVisible,
   puttOverrideEnabled,
 } from '../../../../shared/greeniq/visibility';
+import {
+  emitCaddiePlaysLikeTelemetry,
+  isCaddieTelemetryEnabled,
+  type TelemetryEmitter,
+} from '../../../../shared/telemetry/caddie';
 import { emitGreenIqTelemetry } from '../../../../shared/telemetry/greeniq';
 import { buildGhostTelemetryKey } from './utils/ghostTelemetry';
 import CalibrationWizard from './CalibrationWizard';
@@ -494,8 +501,6 @@ const showToast = (message: string): void => {
   }
   Alert.alert('Caddie', message);
 };
-
-type TelemetryEmitter = (event: string, data: Record<string, unknown>) => void;
 
 type HazardDirection = 'LEFT' | 'RIGHT';
 
@@ -2150,6 +2155,16 @@ const QAArHudOverlayScreen: React.FC = () => {
   const camera = useMemo(() => createCameraStub({ fps: 15 }), []);
   const defaultQaBag = useMemo(() => defaultBag(), []);
   const formatDelta = useCallback((value: number) => (value >= 0 ? `+${value.toFixed(1)}` : value.toFixed(1)), []);
+  const formatPercent = useCallback((value: number) => {
+    if (!Number.isFinite(value)) {
+      return '0%';
+    }
+    const percent = Math.round(value * 100);
+    if (percent === 0) {
+      return '0%';
+    }
+    return percent > 0 ? `+${percent}%` : `${percent}%`;
+  }, []);
   const formatSg = useCallback((value: number | null | undefined) => {
     if (!Number.isFinite(value ?? Number.NaN)) {
       return 'n/a';
@@ -2809,6 +2824,96 @@ const QAArHudOverlayScreen: React.FC = () => {
     return `${prefix}${bucket}% tempo next time`;
   }, [puttEval, puttPaceRatio]);
   const holeComplete = shotSession?.hole?.completed === true;
+  const playsLikeHud = useMemo(() => {
+    const rawCandidate =
+      finiteOrNull(pinMetrics?.distance) ?? finiteOrNull(shotSession?.baseDistance);
+    const raw = rawCandidate ?? 0;
+    if (!(raw > 0)) {
+      return null;
+    }
+    const headingCandidate =
+      finiteOrNull(pinMetrics?.bearing) ?? finiteOrNull(shotSession?.headingDeg) ?? 0;
+    const elev = finiteOrNull(plannerInputs.slope_dh_m) ?? 0;
+    const temp = finiteOrNull(plannerInputs.temperatureC) ?? 15;
+    const windSpeed = finiteOrNull(plannerInputs.wind_mps);
+    const windFrom = finiteOrNull(plannerInputs.wind_from_deg);
+
+    let windVec: { x: number; y: number } | undefined;
+    if (windSpeed !== null && windFrom !== null) {
+      const toDeg = (windFrom + 180) % 360;
+      const unit = headingToUnit(toDeg);
+      windVec = {
+        x: unit.x * windSpeed,
+        y: unit.y * windSpeed,
+      };
+    }
+
+    const inputPayload: PlaysLikeInput = {
+      rawDist_m: raw,
+      elevDiff_m: elev,
+      temp_C: temp,
+      heading_deg: headingCandidate,
+    };
+    if (windVec) {
+      inputPayload.wind_mps = windVec;
+    }
+
+    const result: PlaysLikeResult = playsLikeDistance(inputPayload);
+
+    return { input: inputPayload, result };
+  }, [
+    pinMetrics?.bearing,
+    pinMetrics?.distance,
+    plannerInputs.slope_dh_m,
+    plannerInputs.temperatureC,
+    plannerInputs.wind_from_deg,
+    plannerInputs.wind_mps,
+    shotSession?.baseDistance,
+    shotSession?.headingDeg,
+  ]);
+  const playsLikeInput = playsLikeHud?.input ?? null;
+  const playsLikeResult = playsLikeHud?.result ?? null;
+  const playsLikeDisplay = useMemo(() => {
+    if (!playsLikeResult) {
+      return null;
+    }
+    if (!(playsLikeResult.distance_m > 0)) {
+      return null;
+    }
+    if (tournamentSafe && !holeComplete) {
+      return null;
+    }
+    const distanceLabel = `${playsLikeResult.distance_m.toFixed(0)} m`;
+    const factorLabel = formatPercent(playsLikeResult.factor - 1);
+    const breakdown = playsLikeResult.breakdown;
+    const breakdownText = `wind ${formatPercent(breakdown.wind)}, elev ${formatPercent(
+      breakdown.elev,
+    )}, temp ${formatPercent(breakdown.temp)}`;
+    return { distanceLabel, factorLabel, breakdownText };
+  }, [formatPercent, holeComplete, playsLikeResult, tournamentSafe]);
+  useEffect(() => {
+    if (!shotSession || !playsLikeResult || !playsLikeInput) {
+      return;
+    }
+    if (!isCaddieTelemetryEnabled()) {
+      return;
+    }
+    if (!shotSession.shotId) {
+      return;
+    }
+    if (lastPlaysLikeTelemetryShotRef.current === shotSession.shotId) {
+      return;
+    }
+    emitCaddiePlaysLikeTelemetry(telemetryRef.current, {
+      rawDist_m: playsLikeInput.rawDist_m,
+      distance_m: playsLikeResult.distance_m,
+      factor: playsLikeResult.factor,
+      elevDiff_m: playsLikeInput.elevDiff_m,
+      temp_C: playsLikeInput.temp_C,
+      headwind_mps: playsLikeResult.meta.headwind_mps,
+    });
+    lastPlaysLikeTelemetryShotRef.current = shotSession.shotId;
+  }, [playsLikeInput, playsLikeResult, shotSession]);
   const overrideEnabled = puttOverrideEnabled(tournamentSafe);
   const puttFeedbackVisible = useMemo(() => {
     if (!puttEval) {
@@ -3456,6 +3561,7 @@ const QAArHudOverlayScreen: React.FC = () => {
   const lastLocationFixRef = useRef<LocationFix | null>(null);
   const landingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastFeedbackShotRef = useRef<string | null>(null);
+  const lastPlaysLikeTelemetryShotRef = useRef<string | null>(null);
   const ghostProgressRef = useRef<Animated.Value | null>(null);
   if (!ghostProgressRef.current) {
     ghostProgressRef.current = new Animated.Value(0);
@@ -5088,6 +5194,14 @@ const QAArHudOverlayScreen: React.FC = () => {
                   </>
                 ) : null}
               </View>
+              {playsLikeDisplay ? (
+                <View style={styles.playsLikeCard}>
+                  <Text style={styles.playsLikeTitle}>
+                    Plays-Like: {playsLikeDisplay.distanceLabel} (factor {playsLikeDisplay.factorLabel})
+                  </Text>
+                  <Text style={styles.playsLikeSubtitle}>{playsLikeDisplay.breakdownText}</Text>
+                </View>
+              ) : null}
               {shotSummary ? (
                 <View style={styles.resultCard}>
                   <Text style={styles.resultCardTitle}>Result</Text>
@@ -5805,6 +5919,24 @@ const styles = StyleSheet.create({
   plannerClub: {
     color: '#facc15',
     fontWeight: '600',
+  },
+  playsLikeCard: {
+    marginTop: 8,
+    backgroundColor: '#0f172a',
+    borderRadius: 10,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: '#1f2937',
+    gap: 4,
+  },
+  playsLikeTitle: {
+    color: '#f8fafc',
+    fontWeight: '600',
+    fontSize: 14,
+  },
+  playsLikeSubtitle: {
+    color: '#cbd5f5',
+    fontSize: 12,
   },
   resultCard: {
     backgroundColor: '#0b1120',
