@@ -1418,6 +1418,9 @@ const MapOverlay: React.FC<MapOverlayProps> = ({
       if (longPressTriggeredRef.current) {
         longPressTriggeredRef.current = false;
         clearLongPress();
+        if (onLongPressPin) {
+          onLongPressPin();
+        }
         return;
       }
       clearLongPress();
@@ -1431,7 +1434,16 @@ const MapOverlay: React.FC<MapOverlayProps> = ({
       const localY = center.y - relativeY / scale;
       onSelectLanding({ x: localX, y: localY });
     },
-    [center.x, center.y, clearLongPress, markLandingActive, onSelectLanding, scale, size],
+    [
+      center.x,
+      center.y,
+      clearLongPress,
+      markLandingActive,
+      onLongPressPin,
+      onSelectLanding,
+      scale,
+      size,
+    ],
   );
 
   const handleGrant = useCallback(() => {
@@ -1443,7 +1455,6 @@ const MapOverlay: React.FC<MapOverlayProps> = ({
     longPressTriggeredRef.current = false;
     setLongPress(() => {
       longPressTriggeredRef.current = true;
-      onLongPressPin();
     }, 650);
   }, [clearLongPress, onLongPressPin, pinDropEnabled, setLongPress]);
 
@@ -1462,6 +1473,11 @@ const MapOverlay: React.FC<MapOverlayProps> = ({
       onResponderTerminate={handleTerminate}
     >
       <View style={styles.mapBackground} />
+      {pinDropEnabled ? (
+        <View style={styles.mapCupHint} pointerEvents="none">
+          <Text style={styles.mapCupHintText}>Tap·hold to confirm cup</Text>
+        </View>
+      ) : null}
       {data.features.map((feature) =>
         feature.segments.map((segment, idx) => {
           const start = toScreen(segment.start);
@@ -2729,18 +2745,29 @@ const QAArHudOverlayScreen: React.FC = () => {
       result.angleClass,
       result.paceClass,
       Number.isFinite(result.angleDeg) ? result.angleDeg.toFixed(2) : 'nan',
+      Number.isFinite(result.signedAngleDeg) ? result.signedAngleDeg.toFixed(2) : 'nan',
       result.holeDist_m !== undefined ? result.holeDist_m.toFixed(3) : 'none',
       result.endDist_m !== undefined ? result.endDist_m.toFixed(3) : 'none',
+      result.angleThresholdsDeg
+        ? `${result.angleThresholdsDeg.on.toFixed(3)}/${result.angleThresholdsDeg.ok.toFixed(3)}`
+        : 'thr-none',
+      result.aimAdjust_cm !== undefined ? result.aimAdjust_cm.toFixed(1) : 'aim-none',
     ].join('|');
     if (emitter && fingerprint !== lastPuttTelemetryRef.current) {
       emitGreenIqTelemetry(emitter, {
         angleDeg: Number.isFinite(result.angleDeg)
           ? Number(result.angleDeg.toFixed(2))
           : 0,
+        signedAngleDeg: Number.isFinite(result.signedAngleDeg)
+          ? Number(result.signedAngleDeg.toFixed(2))
+          : 0,
         angleClass: result.angleClass,
         paceClass: result.paceClass,
         holeDist_m: result.holeDist_m,
         endDist_m: result.endDist_m,
+        aimAdjust_cm: result.aimAdjust_cm,
+        lateralMiss_cm: result.lateralMiss_cm,
+        thresholds: result.angleThresholdsDeg,
       });
       lastPuttTelemetryRef.current = fingerprint;
     }
@@ -2805,6 +2832,27 @@ const QAArHudOverlayScreen: React.FC = () => {
         return 'unknown';
     }
   }, [puttEval?.angleClass]);
+  const puttAngleSignedLabel = useMemo(() => {
+    const angle = puttEval?.signedAngleDeg;
+    if (!Number.isFinite(angle)) {
+      return null;
+    }
+    const magnitude = Math.abs(angle ?? 0);
+    const sign = angle && angle < 0 ? '−' : angle && angle > 0 ? '+' : '±';
+    const direction = angle && angle !== 0 ? (angle > 0 ? 'R' : 'L') : '';
+    return `${sign}${magnitude.toFixed(1)}°${direction ? ` ${direction}` : ''}`;
+  }, [puttEval?.signedAngleDeg]);
+  const puttAngleThresholdHint = useMemo(() => {
+    const thresholds = puttEval?.angleThresholdsDeg;
+    if (!thresholds) {
+      return null;
+    }
+    const { on, ok } = thresholds;
+    if (!Number.isFinite(on) || !Number.isFinite(ok)) {
+      return null;
+    }
+    return `on ≤ ${on.toFixed(2)}° · ok ≤ ${ok.toFixed(2)}°`;
+  }, [puttEval?.angleThresholdsDeg]);
   const puttPaceLabel = useMemo(() => {
     switch (puttEval?.paceClass) {
       case 'too_soft':
@@ -2817,6 +2865,36 @@ const QAArHudOverlayScreen: React.FC = () => {
         return 'unknown';
     }
   }, [puttEval?.paceClass]);
+  const puttLateralMiss = useMemo(() => {
+    if (puttEval?.lateralMiss_cm === undefined) {
+      return null;
+    }
+    const miss = puttEval.lateralMiss_cm;
+    if (!Number.isFinite(miss)) {
+      return null;
+    }
+    if (Math.abs(miss) < 0.5) {
+      return 'Miss: center';
+    }
+    const direction = miss > 0 ? 'R' : 'L';
+    const precision = Math.abs(miss) >= 10 ? 0 : 1;
+    return `Miss: ${Math.abs(miss).toFixed(precision)} cm ${direction}`;
+  }, [puttEval?.lateralMiss_cm]);
+  const puttAimSuggestion = useMemo(() => {
+    if (puttEval?.aimAdjust_cm === undefined) {
+      return null;
+    }
+    const adjust = puttEval.aimAdjust_cm;
+    if (!Number.isFinite(adjust)) {
+      return null;
+    }
+    if (Math.abs(adjust) < 0.5) {
+      return 'Aim adjust: center';
+    }
+    const direction = adjust < 0 ? 'L' : 'R';
+    const precision = Math.abs(adjust) >= 10 ? 0 : 1;
+    return `Aim adjust: ${Math.abs(adjust).toFixed(precision)} cm ${direction}`;
+  }, [puttEval?.aimAdjust_cm]);
   const puttFeedbackStatus = useMemo(() => {
     if (!shotSession || shotSession.phase !== 'putt') {
       return 'Hit a putt to unlock feedback.';
@@ -5071,12 +5149,19 @@ const QAArHudOverlayScreen: React.FC = () => {
                   {puttEval && puttFeedbackVisible ? (
                     <>
                       <Text style={styles.greeniqMetric}>
-                        Start-line: {puttEval.angleDeg.toFixed(1)}° ({puttAngleLabel})
+                        Start-line: {puttAngleSignedLabel ?? `${puttEval.angleDeg.toFixed(1)}°`} ({puttAngleLabel})
+                        {puttAngleThresholdHint ? ` · ${puttAngleThresholdHint}` : ''}
                       </Text>
                       <Text style={styles.greeniqMetric}>
                         Pace: {puttPaceLabel}
                         {puttTempoHint ? ` · ${puttTempoHint}` : ''}
                       </Text>
+                      {puttLateralMiss ? (
+                        <Text style={styles.greeniqMetric}>{puttLateralMiss}</Text>
+                      ) : null}
+                      {puttAimSuggestion ? (
+                        <Text style={styles.greeniqMetric}>{puttAimSuggestion}</Text>
+                      ) : null}
                       {puttEval.holeDist_m !== undefined && puttEval.endDist_m !== undefined ? (
                         <Text style={styles.greeniqMeta}>
                           Hole {puttEval.holeDist_m.toFixed(2)} m · End {puttEval.endDist_m.toFixed(2)} m
@@ -6566,6 +6651,23 @@ const styles = StyleSheet.create({
   mapBackground: {
     ...StyleSheet.absoluteFillObject,
     backgroundColor: '#0b1120',
+  },
+  mapCupHint: {
+    position: 'absolute',
+    top: 12,
+    right: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 999,
+    backgroundColor: '#1f2937cc',
+    borderWidth: 1,
+    borderColor: '#334155',
+  },
+  mapCupHintText: {
+    color: '#f8fafc',
+    fontSize: 10,
+    fontWeight: '600',
+    letterSpacing: 0.5,
   },
   offlineBadge: {
     position: 'absolute',
