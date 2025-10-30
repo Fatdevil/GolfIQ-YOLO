@@ -31,6 +31,7 @@ export interface CaddieRC {
   coachPersonaDefault?: string;
   green: CaddieGreenConfig;
   coach: CoachLearningConfig;
+  riskMax?: number;
 }
 
 export type CaddieRc = CaddieRC;
@@ -55,6 +56,7 @@ const DEFAULT_RC: CaddieRC = {
     syncEnabled: false,
     decayHalfLifeDays: 14,
   },
+  riskMax: 0.42,
 };
 
 const TRAINING_FOCUS_VALUES: readonly TrainingFocus[] = [
@@ -124,6 +126,20 @@ function coercePositiveNumber(value: unknown, fallback: number): number {
   return numeric;
 }
 
+function coerceUnitInterval(value: unknown, fallback: number): number {
+  const numeric = typeof value === "number" ? value : Number(value);
+  if (!Number.isFinite(numeric)) {
+    return fallback;
+  }
+  if (numeric <= 0) {
+    return 0;
+  }
+  if (numeric >= 1) {
+    return 1;
+  }
+  return numeric;
+}
+
 function normalizeTrainingFocus(value: unknown): TrainingFocus | undefined {
   if (typeof value !== "string") {
     return undefined;
@@ -179,6 +195,10 @@ export function readCaddieRC(get: (key: string, defaultValue?: unknown) => unkno
     get("coach.decay.halfLifeDays", fallback.coach.decayHalfLifeDays),
     fallback.coach.decayHalfLifeDays,
   );
+  const riskMax = coerceUnitInterval(
+    get("caddie.risk.max", get("riskMax", fallback.riskMax ?? 0.42)),
+    fallback.riskMax ?? 0.42,
+  );
   return {
     mc,
     advice,
@@ -195,6 +215,7 @@ export function readCaddieRC(get: (key: string, defaultValue?: unknown) => unkno
       syncEnabled: coachSyncEnabled,
       decayHalfLifeDays: coachDecayHalfLifeDays,
     },
+    riskMax,
   };
 }
 

@@ -13,6 +13,8 @@ import math
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
 
+from .health_utils import safe_delta, safe_rate
+
 router = APIRouter(prefix="/caddie", tags=["caddie"])
 
 
@@ -37,9 +39,12 @@ class CaddieMcHealth(BaseModel):
     enabledPct: float = Field(..., ge=0.0, le=100.0)
     adoptRate: float = Field(..., ge=0.0, le=1.0)
     hazardRate: float = Field(..., ge=0.0, le=1.0)
+    hazardRateTee: float = Field(..., ge=0.0, le=1.0)
+    hazardRateApproach: float = Field(..., ge=0.0, le=1.0)
     fairwayRate: float = Field(..., ge=0.0, le=1.0)
     avgLongErr: float
     avgLatErr: float
+    evLift: float
     ab: CaddieFeatureAb | None = None
 
 
@@ -283,11 +288,17 @@ def caddie_health(
 
     plan_total = 0
     advice_counter: Counter[str] = Counter()
-    mc_events = 0
-    hazard_sum = 0.0
-    fairway_sum = 0.0
+    hazard_hits_total = 0.0
+    mc_samples_total = 0.0
+    hazard_hits_by_kind: Dict[str, float] = {"tee": 0.0, "approach": 0.0}
+    samples_by_kind: Dict[str, float] = {"tee": 0.0, "approach": 0.0}
+    success_hits_total = 0.0
     long_sum = 0.0
+    long_weight_total = 0.0
     lat_sum = 0.0
+    lat_weight_total = 0.0
+    ev_sum_by_group: Dict[str, float] = {"control": 0.0, "enforced": 0.0}
+    ev_count_by_group: Dict[str, int] = {"control": 0, "enforced": 0}
     tts_events = 0
     chars_sum = 0.0
     sg_totals: List[float] = []
@@ -481,11 +492,50 @@ def caddie_health(
                 last_plan_context = None
                 last_plan_ts = None
             elif name == "hud.caddie.mc":
-                mc_events += 1
-                hazard_sum += float(data.get("pHazard") or 0.0)
-                fairway_sum += float(data.get("pFairway") or 0.0)
-                long_sum += float(data.get("expLongMiss_m") or 0.0)
-                lat_sum += float(data.get("expLatMiss_m") or 0.0)
+                hazard_rate = _finite_float(data.get("hazardRate"))
+                if hazard_rate is None:
+                    hazard_rate = 0.0
+                success_rate = _finite_float(data.get("successRate"))
+                if success_rate is None:
+                    success_rate = 0.0
+                ev_value = _finite_float(data.get("ev"))
+                if ev_value is None:
+                    ev_value = 0.0
+                long_mean = _finite_float(data.get("expectedLongMiss_m"))
+                lat_mean = _finite_float(data.get("expectedLatMiss_m"))
+                samples_raw = data.get("samples")
+                try:
+                    samples_value = float(samples_raw)
+                except (TypeError, ValueError):
+                    samples_value = 0.0
+                if samples_value < 0.0:
+                    samples_value = 0.0
+                if samples_value > 0.0:
+                    mc_samples_total += samples_value
+                    hazard_hits_total += hazard_rate * samples_value
+                    success_hits_total += success_rate * samples_value
+                    if long_mean is not None:
+                        long_sum += long_mean * samples_value
+                        long_weight_total += samples_value
+                    if lat_mean is not None:
+                        lat_sum += lat_mean * samples_value
+                        lat_weight_total += samples_value
+                    kind = data.get("kind")
+                    if isinstance(kind, str) and kind in hazard_hits_by_kind:
+                        hazard_hits_by_kind[kind] += hazard_rate * samples_value
+                        samples_by_kind[kind] += samples_value
+                else:
+                    if long_mean is not None:
+                        long_sum += long_mean
+                        long_weight_total += 1.0
+                    if lat_mean is not None:
+                        lat_sum += lat_mean
+                        lat_weight_total += 1.0
+                if run_rollout["mc"] is None:
+                    run_rollout["mc"] = True
+                group_key = "enforced" if run_rollout.get("mc") else "control"
+                ev_sum_by_group[group_key] += ev_value
+                ev_count_by_group[group_key] += 1
             elif name == "hud.caddie.tts":
                 tts_events += 1
                 chars = data.get("chars")
@@ -536,11 +586,6 @@ def caddie_health(
                 for focus_key, value in run_focus_totals.items():
                     focus_sg_history.setdefault(focus_key, []).append((run_dt, value))
 
-    def safe_div(num: float, den: float) -> float:
-        if den <= 0:
-            return 0.0
-        return num / den
-
     def clamp_unit(value: float) -> float:
         if value < 0.0:
             return 0.0
@@ -553,8 +598,8 @@ def caddie_health(
         adopts = int(raw.get("adopts", 0))
         sg_total = float(raw.get("sg_total", 0.0))
         rounds = int(raw.get("rounds", 0))
-        adopt_rate = clamp_unit(safe_div(float(adopts), float(plans)))
-        sg_per_round = safe_div(sg_total, float(rounds))
+        adopt_rate = clamp_unit(safe_rate(float(adopts), float(plans)))
+        sg_per_round = safe_rate(sg_total, float(rounds))
         return FeatureAbGroup(
             plans=plans,
             adopts=adopts,
@@ -569,8 +614,8 @@ def caddie_health(
         plays = int(raw.get("plays", 0))
         sg_total = float(raw.get("sg_total", 0.0))
         rounds = int(raw.get("rounds", 0))
-        play_rate = clamp_unit(safe_div(float(plays), float(plans)))
-        sg_per_round = safe_div(sg_total, float(rounds))
+        play_rate = clamp_unit(safe_rate(float(plays), float(plans)))
+        sg_per_round = safe_rate(sg_total, float(rounds))
         return TtsAbGroup(
             plans=plans,
             plays=plays,
@@ -587,8 +632,16 @@ def caddie_health(
         control=mc_control_group,
         enforced=mc_enforced_group,
         delta=FeatureAbDelta(
-            adoptRate=mc_enforced_group.adoptRate - mc_control_group.adoptRate,
-            sgPerRound=mc_enforced_group.sgPerRound - mc_control_group.sgPerRound,
+            adoptRate=safe_delta(
+                mc_enforced_group.adoptRate,
+                mc_control_group.adoptRate,
+                bound=1.0,
+            ),
+            sgPerRound=safe_delta(
+                mc_enforced_group.sgPerRound,
+                mc_control_group.sgPerRound,
+                bound=5.0,
+            ),
         ),
     )
 
@@ -598,9 +651,16 @@ def caddie_health(
         control=advice_control_group,
         enforced=advice_enforced_group,
         delta=FeatureAbDelta(
-            adoptRate=advice_enforced_group.adoptRate - advice_control_group.adoptRate,
-            sgPerRound=advice_enforced_group.sgPerRound
-            - advice_control_group.sgPerRound,
+            adoptRate=safe_delta(
+                advice_enforced_group.adoptRate,
+                advice_control_group.adoptRate,
+                bound=1.0,
+            ),
+            sgPerRound=safe_delta(
+                advice_enforced_group.sgPerRound,
+                advice_control_group.sgPerRound,
+                bound=5.0,
+            ),
         ),
     )
 
@@ -610,23 +670,47 @@ def caddie_health(
         control=tts_control_group,
         enforced=tts_enforced_group,
         delta=TtsAbDelta(
-            playRate=tts_enforced_group.playRate - tts_control_group.playRate,
-            sgPerRound=tts_enforced_group.sgPerRound - tts_control_group.sgPerRound,
+            playRate=safe_delta(
+                tts_enforced_group.playRate,
+                tts_control_group.playRate,
+                bound=1.0,
+            ),
+            sgPerRound=safe_delta(
+                tts_enforced_group.sgPerRound,
+                tts_control_group.sgPerRound,
+                bound=5.0,
+            ),
         ),
     )
 
-    mc_enabled_pct = safe_div(mc_enforced_group.plans * 100.0, float(plan_total))
+    mc_enabled_pct = safe_rate(
+        float(mc_enforced_group.plans) * 100.0, float(plan_total)
+    )
     mc_adopt_rate = mc_enforced_group.adoptRate
-    mc_hazard_rate = safe_div(hazard_sum, float(mc_events))
-    mc_fairway_rate = safe_div(fairway_sum, float(mc_events))
-    mc_long_err = safe_div(long_sum, float(mc_events))
-    mc_lat_err = safe_div(lat_sum, float(mc_events))
+    mc_hazard_rate = safe_rate(hazard_hits_total, mc_samples_total)
+    mc_hazard_rate_tee = safe_rate(hazard_hits_by_kind["tee"], samples_by_kind["tee"])
+    mc_hazard_rate_approach = safe_rate(
+        hazard_hits_by_kind["approach"], samples_by_kind["approach"]
+    )
+    mc_success_rate = safe_rate(success_hits_total, mc_samples_total)
+    mc_long_err = safe_rate(long_sum, long_weight_total)
+    mc_lat_err = safe_rate(lat_sum, lat_weight_total)
+    mc_ev_control = safe_rate(
+        ev_sum_by_group["control"], float(ev_count_by_group["control"])
+    )
+    mc_ev_enforced = safe_rate(
+        ev_sum_by_group["enforced"], float(ev_count_by_group["enforced"])
+    )
+    if ev_count_by_group["enforced"] > 0 and ev_count_by_group["control"] > 0:
+        mc_ev_lift = safe_delta(mc_ev_enforced, mc_ev_control)
+    else:
+        mc_ev_lift = 0.0
 
     advice_adopt_rate = advice_enforced_group.adoptRate
     top_advice = [text for text, _ in advice_counter.most_common(3)]
 
-    tts_play_rate = safe_div(float(tts_events), float(plan_total))
-    tts_avg_chars = safe_div(chars_sum, float(tts_events))
+    tts_play_rate = safe_rate(float(tts_events), float(plan_total))
+    tts_avg_chars = safe_rate(chars_sum, float(tts_events))
 
     sg_mean = (sum(sg_totals) / len(sg_totals)) if sg_totals else None
     sg_median = _median(sg_totals)
@@ -652,7 +736,7 @@ def caddie_health(
         raw = focus_adoption.get(key, {"plans": 0, "adopts": 0})
         plans = int(raw.get("plans", 0)) if isinstance(raw, dict) else 0
         adopts = int(raw.get("adopts", 0)) if isinstance(raw, dict) else 0
-        rate = clamp_unit(safe_div(float(adopts), float(plans))) if plans else 0.0
+        rate = clamp_unit(safe_rate(float(adopts), float(plans))) if plans else 0.0
         focus_adoption_summary[key] = FocusAdoption(
             plans=plans,
             adopts=adopts,
@@ -677,9 +761,12 @@ def caddie_health(
             enabledPct=mc_enabled_pct,
             adoptRate=mc_adopt_rate,
             hazardRate=mc_hazard_rate,
-            fairwayRate=mc_fairway_rate,
+            hazardRateTee=mc_hazard_rate_tee,
+            hazardRateApproach=mc_hazard_rate_approach,
+            fairwayRate=mc_success_rate,
             avgLongErr=mc_long_err,
             avgLatErr=mc_lat_err,
+            evLift=mc_ev_lift,
             ab=mc_ab,
         ),
         advice=CaddieAdviceHealth(

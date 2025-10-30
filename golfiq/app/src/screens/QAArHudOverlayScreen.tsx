@@ -182,20 +182,6 @@ type PlannerInputKey =
   | 'wind_from_deg'
   | 'slope_dh_m';
 
-const clampPct = (value: number): number => Math.max(0, Math.min(100, Math.round(value)));
-
-const Bar = ({ pct, good }: { pct: number; good?: boolean }) => (
-  <View style={styles.mcMiniBarTrack}>
-    <View
-      style={[
-        styles.mcMiniBarFill,
-        { width: `${clampPct(pct)}%` },
-        good ? styles.mcMiniBarFillPositive : styles.mcMiniBarFillNegative,
-      ]}
-    />
-  </View>
-);
-
 const normalizeRcBoolean = (value: unknown): boolean => {
   if (value === true) {
     return true;
@@ -1788,6 +1774,7 @@ const QAArHudOverlayScreen: React.FC = () => {
   const [mcSliderWidth, setMcSliderWidth] = useState(1);
   const mcSliderMetricsRef = useRef<{ left: number }>({ left: 0 });
   const lastMcTelemetryRef = useRef<string | null>(null);
+  const [riskReasonsOpen, setRiskReasonsOpen] = useState(false);
   const lastSpokenPlanRef = useRef<string | null>(null);
   const [learningActive, setLearningActive] = useState(false);
   const [coachProfile, setCoachProfile] = useState<PlayerProfile | null>(null);
@@ -2937,12 +2924,19 @@ const QAArHudOverlayScreen: React.FC = () => {
     Math.max(0, mcSliderWidth - sliderHandleSize),
   );
   const mcResult = caddiePlan?.mc ?? null;
-  const mcFairwayPct = mcResult ? Math.round(clamp01(mcResult.pFairway) * 100) : 0;
-  const mcHazardPct = mcResult ? Math.round(clamp01(mcResult.pHazard) * 100) : 0;
-  const mcGreenPct =
-    mcResult && typeof mcResult.pGreen === 'number'
-      ? Math.round(clamp01(mcResult.pGreen) * 100)
-      : null;
+  const mcHazardPct = mcResult ? Math.round(clamp01(mcResult.hazardRate) * 100) : 0;
+  const mcSuccessPct = mcResult ? Math.round(clamp01(mcResult.successRate) * 100) : 0;
+  const mcEvText = mcResult ? `${mcResult.ev >= 0 ? '+' : ''}${mcResult.ev.toFixed(2)}` : '+0.00';
+  const mcDistanceToPin = mcResult ? Math.round(mcResult.expectedDistanceToPin) : null;
+  const riskReasons = caddiePlan?.riskFactors ?? [];
+  const riskPercent = caddiePlan ? Math.round(clamp01(caddiePlan.risk) * 100) : 0;
+  const riskPillStyle = caddiePlan
+    ? caddiePlan.risk < 0.15
+      ? styles.mcRiskPillSafe
+      : caddiePlan.risk < 0.35
+        ? styles.mcRiskPillWarn
+        : styles.mcRiskPillDanger
+    : styles.mcRiskPillSafe;
   const caddieTips = useMemo(
     () =>
       caddiePlan
@@ -2958,6 +2952,9 @@ const QAArHudOverlayScreen: React.FC = () => {
         : [],
     [caddiePlan, caddiePlayerModel.tuningActive, caddieRiskMode, coachStyle],
   );
+  useEffect(() => {
+    setRiskReasonsOpen(false);
+  }, [caddiePlan?.club, caddiePlan?.aimDeg, mcResult?.samples]);
   const voiceEnabled = coachStyle.format === 'tts';
   const voiceLang = resolveVoiceLanguage(coachStyle);
   const voiceRate = resolveVoiceRate(coachStyle, voiceLang);
@@ -3069,24 +3066,39 @@ const QAArHudOverlayScreen: React.FC = () => {
     const key = [
       caddiePlan?.club ?? 'NA',
       mcResult.samples,
-      mcResult.scoreProxy.toFixed(3),
+      mcResult.hazardRate.toFixed(3),
+      mcResult.ev.toFixed(3),
       signedAim.toFixed(1),
     ].join('|');
     if (lastMcTelemetryRef.current === key) {
       return;
     }
     lastMcTelemetryRef.current = key;
+    const reasonsPayload = Array.isArray(mcResult.reasons)
+      ? mcResult.reasons.slice(0, 3).map((reason) => ({
+          kind: reason.kind,
+          label: reason.label,
+          value: Number.isFinite(reason.value ?? NaN) ? Number(reason.value) : 0,
+        }))
+      : [];
     emitTelemetry('hud.caddie.mc', {
       samples: mcResult.samples,
-      pFairway: Number(mcResult.pFairway.toFixed(3)),
-      pHazard: Number(mcResult.pHazard.toFixed(3)),
-      scoreProxy: Number(mcResult.scoreProxy.toFixed(3)),
+      hazardRate: Number(mcResult.hazardRate.toFixed(4)),
+      successRate: Number(mcResult.successRate.toFixed(4)),
+      ev: Number(mcResult.ev.toFixed(3)),
+      expectedDistanceToPin_m: Number(mcResult.expectedDistanceToPin.toFixed(1)),
+      expectedLatMiss_m: Number(mcResult.expectedLatMiss_m.toFixed(2)),
+      expectedLongMiss_m: Number(mcResult.expectedLongMiss_m.toFixed(2)),
       club: caddiePlan?.club ?? 'NA',
       aimDeg: signedAim,
-      expLongMiss_m: Number(mcResult.expLongMiss_m.toFixed(2)),
-      expLatMiss_m: Number(mcResult.expLatMiss_m.toFixed(2)),
+      riskPercent,
+      reasons: reasonsPayload,
+      hazardBreakdown: { ...mcResult.hazardBreakdown },
+      targetBreakdown: { ...mcResult.targetBreakdown },
+      riskFactors: riskReasons,
+      kind: caddiePlan?.kind ?? 'unknown',
     });
-  }, [caddiePlan, caddieMcActive, emitTelemetry, mcResult]);
+  }, [caddiePlan, caddieMcActive, emitTelemetry, mcResult, riskPercent, riskReasons]);
   const caddieAdvices = useMemo<Advice[]>(() => {
     if (!caddieAdviceRolloutEnabled || !caddiePlan) {
       return [];
@@ -4691,40 +4703,65 @@ const QAArHudOverlayScreen: React.FC = () => {
               ) : null}
               {caddieMcActive && mcResult ? (
                 <View style={styles.mcStatsBlock}>
-                  <View style={styles.mcMiniBarBlock}>
-                    <View style={styles.mcMiniBarLabelRow}>
-                      <Text style={styles.mcMiniBarLabel}>Fairway</Text>
-                      <Text style={styles.mcMiniBarLabel}>{mcFairwayPct}%</Text>
+                  <View style={styles.mcRiskRow}>
+                    <View style={[styles.mcRiskPill, riskPillStyle]}>
+                      <Text style={styles.mcRiskPillText}>Risk {riskPercent}%</Text>
                     </View>
-                    <Bar pct={mcFairwayPct} good />
-                  </View>
-                  <View style={styles.mcMiniBarBlock}>
-                    <View style={styles.mcMiniBarLabelRow}>
-                      <Text style={styles.mcMiniBarLabel}>Hazard</Text>
-                      <Text style={styles.mcMiniBarLabel}>{mcHazardPct}%</Text>
-                    </View>
-                    <Bar pct={mcHazardPct} />
-                  </View>
-                  {mcGreenPct !== null ? (
-                    <View style={styles.mcMiniBarBlock}>
-                      <View style={styles.mcMiniBarLabelRow}>
-                        <Text style={styles.mcMiniBarLabel}>Green</Text>
-                        <Text style={styles.mcMiniBarLabel}>{mcGreenPct}%</Text>
+                    {riskReasons.length ? (
+                      <View style={styles.mcWhyWrapper}>
+                        <TouchableOpacity
+                          onPress={() => setRiskReasonsOpen((prev) => !prev)}
+                          style={styles.mcWhyButton}
+                        >
+                          <Text style={styles.mcWhyButtonText}>Why?</Text>
+                        </TouchableOpacity>
+                        {riskReasonsOpen ? (
+                          <View style={styles.mcWhyPopover}>
+                            {riskReasons.slice(0, 2).map((reason, index) => (
+                              <Text key={`risk-reason-${index}`} style={styles.mcWhyText}>
+                                {reason}
+                              </Text>
+                            ))}
+                          </View>
+                        ) : null}
                       </View>
-                      <Bar pct={mcGreenPct} good />
+                    ) : null}
+                  </View>
+                  <View style={styles.mcMetricRow}>
+                    <View style={[styles.mcMetricCard, styles.mcMetricCardWarn]}>
+                      <Text style={styles.mcMetricLabel}>Hazard</Text>
+                      <Text style={styles.mcMetricValue}>{mcHazardPct}%</Text>
                     </View>
-                  ) : null}
+                    <View style={[styles.mcMetricCard, styles.mcMetricCardGood]}>
+                      <Text style={styles.mcMetricLabel}>Success</Text>
+                      <Text style={styles.mcMetricValue}>{mcSuccessPct}%</Text>
+                    </View>
+                    <View style={styles.mcMetricCard}>
+                      <Text style={styles.mcMetricLabel}>EV</Text>
+                      <Text
+                        style={[
+                          styles.mcMetricValue,
+                          mcResult.ev >= 0 ? styles.mcMetricPositive : styles.mcMetricNegative,
+                        ]}
+                      >
+                        {mcEvText}
+                      </Text>
+                    </View>
+                  </View>
                   <Text style={styles.mcMissHeading}>exp miss (vs aim line)</Text>
                   <View style={styles.mcMissRow}>
                     <Text style={styles.mcMissLabel}>Long</Text>
                     <Text style={styles.mcMissValue}>
-                      {formatSignedMeters(mcResult.expLongMiss_m)}
+                      {formatSignedMeters(mcResult.expectedLongMiss_m)}
                     </Text>
                     <Text style={styles.mcMissLabel}>Lat</Text>
                     <Text style={styles.mcMissValue}>
-                      {formatSignedMeters(mcResult.expLatMiss_m)}
+                      {formatSignedMeters(mcResult.expectedLatMiss_m)}
                     </Text>
                   </View>
+                  {mcDistanceToPin !== null ? (
+                    <Text style={styles.mcDistanceText}>Avg distance to pin {mcDistanceToPin} m</Text>
+                  ) : null}
                 </View>
               ) : null}
             </View>
@@ -5969,35 +6006,108 @@ const styles = StyleSheet.create({
     borderTopColor: '#1e293b',
     gap: 6,
   },
-  mcMiniBarBlock: {
-    gap: 4,
-  },
-  mcMiniBarLabelRow: {
+  mcRiskRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    gap: 8,
   },
-  mcMiniBarLabel: {
-    color: '#cbd5f5',
+  mcRiskPill: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 999,
+  },
+  mcRiskPillText: {
+    color: '#0f172a',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  mcRiskPillSafe: {
+    backgroundColor: '#22c55e',
+  },
+  mcRiskPillWarn: {
+    backgroundColor: '#facc15',
+  },
+  mcRiskPillDanger: {
+    backgroundColor: '#ef4444',
+  },
+  mcWhyWrapper: {
+    position: 'relative',
+  },
+  mcWhyButton: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: '#334155',
+    backgroundColor: '#0f172a',
+  },
+  mcWhyButtonText: {
+    color: '#f8fafc',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  mcWhyPopover: {
+    position: 'absolute',
+    top: 32,
+    right: 0,
+    minWidth: 160,
+    backgroundColor: '#0f172a',
+    borderWidth: 1,
+    borderColor: '#1e293b',
+    borderRadius: 10,
+    padding: 10,
+    gap: 6,
+    shadowColor: '#000',
+    shadowOpacity: 0.3,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 4,
+    zIndex: 10,
+  },
+  mcWhyText: {
+    color: '#f8fafc',
+    fontSize: 12,
+    lineHeight: 16,
+  },
+  mcMetricRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 8,
+  },
+  mcMetricCard: {
+    flex: 1,
+    borderRadius: 10,
+    backgroundColor: '#111827',
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    borderWidth: 1,
+    borderColor: '#1e293b',
+    gap: 2,
+  },
+  mcMetricCardGood: {
+    borderColor: '#14532d',
+    backgroundColor: '#052e16',
+  },
+  mcMetricCardWarn: {
+    borderColor: '#713f12',
+    backgroundColor: '#422006',
+  },
+  mcMetricLabel: {
+    color: '#94a3b8',
     fontSize: 11,
     fontWeight: '600',
   },
-  mcMiniBarTrack: {
-    height: 4,
-    width: '100%',
-    backgroundColor: '#1e293b',
-    borderRadius: 2,
-    overflow: 'hidden',
+  mcMetricValue: {
+    color: '#f8fafc',
+    fontSize: 16,
+    fontWeight: '700',
   },
-  mcMiniBarFill: {
-    height: '100%',
-    borderRadius: 2,
+  mcMetricPositive: {
+    color: '#4ade80',
   },
-  mcMiniBarFillPositive: {
-    backgroundColor: '#16a34a',
-  },
-  mcMiniBarFillNegative: {
-    backgroundColor: '#ef4444',
+  mcMetricNegative: {
+    color: '#fca5a5',
   },
   mcMissHeading: {
     color: '#94a3b8',
@@ -6020,6 +6130,10 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '600',
     fontVariant: ['tabular-nums'],
+  },
+  mcDistanceText: {
+    color: '#94a3b8',
+    fontSize: 11,
   },
   caddieApplyButton: {
     marginTop: 4,
