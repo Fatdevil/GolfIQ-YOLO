@@ -111,6 +111,7 @@ import {
   type RiskMode as CaddieRiskMode,
   type ShotPlan as CaddieShotPlan,
 } from '../../../../shared/caddie/strategy';
+import type { TrainingFocus } from '../../../../shared/training/types';
 import {
   defaultCoachStyle,
   loadCoachStyle,
@@ -132,6 +133,15 @@ import {
   computeSG,
   type ShotPhase,
 } from '../../../../shared/sg/engine';
+import {
+  isCoachLearningActive,
+  loadPlayerProfile,
+  resolveProfileId as resolveCoachProfileId,
+  savePlayerProfile,
+  updateFromRound,
+  type PlayerProfile,
+} from '../../../../shared/coach/profile';
+import { pickRisk } from '../../../../shared/coach/policy';
 
 type FeatureKind = 'green' | 'fairway' | 'bunker' | 'hazard' | 'cartpath' | 'other';
 
@@ -1779,6 +1789,10 @@ const QAArHudOverlayScreen: React.FC = () => {
   const mcSliderMetricsRef = useRef<{ left: number }>({ left: 0 });
   const lastMcTelemetryRef = useRef<string | null>(null);
   const lastSpokenPlanRef = useRef<string | null>(null);
+  const [learningActive, setLearningActive] = useState(false);
+  const [coachProfile, setCoachProfile] = useState<PlayerProfile | null>(null);
+  const [coachProfileId, setCoachProfileId] = useState<string | null>(null);
+  const lastProfileUpdateShotRef = useRef<string | null>(null);
   const tournamentSafe = useMemo(() => readTournamentSafe(), []);
   const greenHintsEnabled = useMemo(
     () => !tournamentSafe && rcGreenSectionsEnabled,
@@ -2037,6 +2051,55 @@ const QAArHudOverlayScreen: React.FC = () => {
   useEffect(() => {
     resumePendingUploads().catch(() => {});
   }, []);
+  useEffect(() => {
+    if (!learningActive) {
+      setCoachProfile(null);
+      setCoachProfileId(null);
+      setCoachStyle((prev) => ({
+        ...prev,
+        tone: defaultCoachStyle.tone,
+        verbosity: defaultCoachStyle.verbosity,
+      }));
+      setCaddieRiskMode('normal');
+      lastProfileUpdateShotRef.current = null;
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const id = await resolveCoachProfileId();
+        if (cancelled) {
+          return;
+        }
+        setCoachProfileId(id);
+        const profile = await loadPlayerProfile(id);
+        if (!cancelled) {
+          setCoachProfile(profile);
+        }
+      } catch {
+        if (!cancelled) {
+          setCoachProfile(null);
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [learningActive]);
+  useEffect(() => {
+    if (!learningActive || !coachProfile) {
+      return;
+    }
+    setCoachStyle((prev) => ({
+      ...prev,
+      tone: coachProfile.style.tone,
+      verbosity: coachProfile.style.verbosity,
+    }));
+    setCaddieRiskMode((prev) => {
+      const next = pickRisk(coachProfile);
+      return next;
+    });
+  }, [coachProfile, learningActive]);
   const searchResults = useMemo(() => {
     if (!courses.length) {
       return [] as CourseSearchResult[];
@@ -2646,6 +2709,42 @@ const QAArHudOverlayScreen: React.FC = () => {
       planAdopted: shotSession.planAdopted,
     };
   }, [overlayOrigin, qaBag, shotSession]);
+  useEffect(() => {
+    if (
+      !learningActive ||
+      !coachProfileId ||
+      !shotSession ||
+      !shotSummary ||
+      !shotSession.landing ||
+      lastProfileUpdateShotRef.current === shotSession.shotId
+    ) {
+      return;
+    }
+    const updateProfile = async () => {
+      try {
+        const current = coachProfile ?? (await loadPlayerProfile(coachProfileId));
+        const sgLift: Record<TrainingFocus, number> = {
+          'long-drive': 0,
+          tee: shotSummary.sg.tee ?? 0,
+          approach: shotSummary.sg.approach ?? 0,
+          wedge: 0,
+          short: shotSummary.sg.short ?? 0,
+          putt: shotSummary.sg.putt ?? 0,
+          recovery: 0,
+        };
+        const nextProfile = updateFromRound(current, {
+          adopt: shotSummary.planAdopted,
+          sgLift,
+        });
+        setCoachProfile(nextProfile);
+        lastProfileUpdateShotRef.current = shotSession.shotId;
+        await savePlayerProfile(nextProfile);
+      } catch {
+        // ignore profile update failures
+      }
+    };
+    void updateProfile();
+  }, [learningActive, coachProfile, coachProfileId, shotSession, shotSummary]);
 
   useEffect(() => {
     if (!shotSession || !shotSummary?.feedback) {
@@ -3041,11 +3140,15 @@ const QAArHudOverlayScreen: React.FC = () => {
         streak: { bogey: 0, birdie: 0 },
       },
       style: coachStyle,
+      coachProfile,
+      learningActive,
     });
   }, [
     caddieAdviceRolloutEnabled,
     caddiePlan,
     caddiePlayerModel,
+    learningActive,
+    coachProfile,
     coachStyle,
     plannerResult,
   ]);
@@ -3213,11 +3316,15 @@ const QAArHudOverlayScreen: React.FC = () => {
     let cancelled = false;
     (async () => {
       const rc = getCaddieRc();
+      const active = await isCoachLearningActive(rc);
       let deviceId = 'unknown-device';
       try {
         deviceId = await resolveDeviceId();
       } catch (error) {
         // ignore
+      }
+      if (!cancelled) {
+        setLearningActive(active);
       }
       const mcEnabled =
         rc.mc.kill === true ? false : rc.mc.enabled && inRollout(deviceId, rc.mc.percent);

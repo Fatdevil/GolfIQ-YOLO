@@ -1,5 +1,8 @@
-import type { CoachPersona, TrainingFocus } from "../training/types";
+import type { PlayerProfile } from "../coach/profile";
 import { getCoachProvider } from "../coach/provider";
+import { pickAdviceStyle, pickRisk } from "../coach/policy";
+import type { CoachPersona, TrainingFocus } from "../training/types";
+import { getCaddieRc } from "./rc";
 import type { CoachStyle } from "./style";
 
 export type AdviceType = "club_adjustment" | "execution_cue" | "mental" | "risk";
@@ -37,6 +40,8 @@ export interface AdviceCtx {
   style: CoachStyle;
   focus?: TrainingFocus;
   persona?: CoachPersona;
+  coachProfile?: PlayerProfile | null;
+  learningActive?: boolean;
 }
 
 type SeverityRank = Record<Advice["severity"], number>;
@@ -97,7 +102,52 @@ const hasBadShotStreak = (
   return recent.every((entry) => isBadShot(entry));
 };
 
-export function advise(ctx: AdviceCtx): Advice[] {
+const computeHazardDensity = (ctx: AdviceCtx): number => {
+  let hazards = 0;
+  if (ctx.plan.hazardLeftOfAim) {
+    hazards += 1;
+  }
+  if (ctx.plan.hazardRightOfAim) {
+    hazards += 1;
+  }
+  return hazards > 0 ? hazards / 2 : 0;
+};
+
+const applyRiskOverride = (baseRisk: number, mode: 'safe' | 'normal' | 'aggressive'): number => {
+  const clamped = clampNumber(baseRisk);
+  if (mode === 'safe') {
+    return Math.min(clamped, 0.35);
+  }
+  if (mode === 'aggressive') {
+    return Math.max(clamped, 0.6);
+  }
+  return clamped;
+};
+
+export function advise(inputCtx: AdviceCtx): Advice[] {
+  const rc = getCaddieRc();
+  const profile = inputCtx.coachProfile ?? null;
+  const gate = Boolean(rc.coach.learningEnabled && inputCtx.learningActive && profile);
+  let ctx = inputCtx;
+  if (gate && profile) {
+    const style = pickAdviceStyle(profile);
+    const riskMode = pickRisk(profile, {
+      hazardDensity: computeHazardDensity(inputCtx),
+      planRisk: inputCtx.plan.risk,
+    });
+    ctx = {
+      ...inputCtx,
+      style: {
+        ...inputCtx.style,
+        tone: style.tone,
+        verbosity: style.verbosity,
+      },
+      plan: {
+        ...inputCtx.plan,
+        risk: applyRiskOverride(inputCtx.plan.risk, riskMode),
+      },
+    };
+  }
   const advices: Advice[] = [];
   const seen = new Map<string, Advice>();
   const headWind = clampNumber(ctx.wind.head_mps);

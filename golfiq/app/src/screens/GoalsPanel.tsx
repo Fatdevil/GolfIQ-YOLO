@@ -18,8 +18,16 @@ import { API_BASE } from '../../lib/api';
 import type { Drill, Plan, TrainingFocus } from '../../../../shared/training/types';
 import { loadTrainingPacks, getPlansByFocus } from '../../../../shared/training/content_loader';
 import { getCoachProvider } from '../../../../shared/coach/provider';
+import {
+  isCoachLearningActive,
+  loadPlayerProfile,
+  resolveProfileId,
+  savePlayerProfile,
+  updateFromPractice,
+  type PlayerProfile,
+} from '../../../../shared/coach/profile';
 import { getCaddieRc } from '../../../../shared/caddie/rc';
-import { generatePlanSessions } from '../../../../shared/training/scheduler';
+import { generatePlanSessions, recommendPlan } from '../../../../shared/training/scheduler';
 import SessionList, {
   type SessionState,
 } from './Practice/SessionList';
@@ -83,11 +91,29 @@ const styles = StyleSheet.create({
     padding: 16,
     marginBottom: 12,
   },
+  cardHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+  },
   cardTitle: {
     color: '#f1f5f9',
     fontSize: 18,
     fontWeight: '600',
     marginBottom: 4,
+  },
+  coachBadge: {
+    backgroundColor: '#1d4ed8',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  coachBadgeText: {
+    color: '#bfdbfe',
+    fontSize: 11,
+    fontWeight: '700',
+    textTransform: 'uppercase',
   },
   cardMeta: {
     color: '#94a3b8',
@@ -191,7 +217,10 @@ const GoalsPanel: React.FC = () => {
     () => rc.trainingFocusDefault ?? 'approach',
     [rc],
   );
+  const [learningActive, setLearningActive] = useState(false);
   const [selectedFocus, setSelectedFocus] = useState<TrainingFocus>(defaultFocus);
+  const [profileId, setProfileId] = useState<string | null>(null);
+  const [profile, setProfile] = useState<PlayerProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [plansByFocus, setPlansByFocus] = useState<Record<TrainingFocus, Plan[]>>({
@@ -211,6 +240,57 @@ const GoalsPanel: React.FC = () => {
   const [trendLoading, setTrendLoading] = useState(false);
   const [trendError, setTrendError] = useState<string | null>(null);
   const [activePlan, setActivePlan] = useState<Plan | null>(null);
+  const [manualFocus, setManualFocus] = useState(false);
+  const [coachPlanId, setCoachPlanId] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const active = await isCoachLearningActive(rc);
+      if (cancelled) {
+        return;
+      }
+      setLearningActive(active);
+      if (!active) {
+        setProfile(null);
+        setProfileId(null);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [rc]);
+
+  useEffect(() => {
+    if (!learningActive) {
+      setProfile(null);
+      setProfileId(null);
+      return;
+    }
+    let cancelled = false;
+    const bootstrapProfile = async () => {
+      try {
+        const id = await resolveProfileId();
+        if (cancelled) {
+          return;
+        }
+        setProfileId(id);
+        const loaded = await loadPlayerProfile(id);
+        if (!cancelled) {
+          setProfile(loaded);
+          setManualFocus(false);
+        }
+      } catch {
+        if (!cancelled) {
+          setProfile(null);
+        }
+      }
+    };
+    bootstrapProfile();
+    return () => {
+      cancelled = true;
+    };
+  }, [learningActive]);
 
   useEffect(() => {
     let cancelled = false;
@@ -357,6 +437,7 @@ const GoalsPanel: React.FC = () => {
   }, [sessions, remindersEnabled, syncReminders, activePlan]);
 
   const handleFocusSelect = useCallback((focus: TrainingFocus) => {
+    setManualFocus(true);
     setSelectedFocus(focus);
   }, []);
 
@@ -385,6 +466,26 @@ const GoalsPanel: React.FC = () => {
     );
   }, []);
 
+  const applySessionOutcome = useCallback(
+    async (session: SessionState, completed: boolean) => {
+      if (!learningActive || !profileId) {
+        return;
+      }
+      try {
+        const currentProfile = profile ?? (await loadPlayerProfile(profileId));
+        const nextProfile = updateFromPractice(currentProfile, {
+          focus: session.focus,
+          completed,
+        });
+        setProfile(nextProfile);
+        await savePlayerProfile(nextProfile);
+      } catch {
+        // ignore profile persistence errors
+      }
+    },
+    [learningActive, profile, profileId],
+  );
+
   const handleCompleteSession = useCallback(
     (session: SessionState) => {
       updateSessionStatus(session.id, 'completed');
@@ -393,8 +494,9 @@ const GoalsPanel: React.FC = () => {
         sessionId: session.id,
         planId: session.planId,
       });
+      void applySessionOutcome(session, true);
     },
-    [updateSessionStatus],
+    [applySessionOutcome, updateSessionStatus],
   );
 
   const handleSkipSession = useCallback(
@@ -405,8 +507,9 @@ const GoalsPanel: React.FC = () => {
         sessionId: session.id,
         planId: session.planId,
       });
+      void applySessionOutcome(session, false);
     },
-    [updateSessionStatus],
+    [applySessionOutcome, updateSessionStatus],
   );
 
   const handleStartPlan = useCallback(
@@ -461,10 +564,23 @@ const GoalsPanel: React.FC = () => {
     setRemindersEnabled(value);
   }, []);
 
-  const recommendedPlanId = useMemo(() => {
-    const provider = getCoachProvider();
-    return provider.getPracticePlan?.(selectedFocus) ?? null;
-  }, [selectedFocus]);
+  const coachRecommendation = useMemo(() => {
+    if (!learningActive || !profile) {
+      return null;
+    }
+    return recommendPlan(plansByFocus, profile, defaultFocus, { learningActive });
+  }, [learningActive, defaultFocus, plansByFocus, profile]);
+
+  useEffect(() => {
+    if (!coachRecommendation) {
+      setCoachPlanId(null);
+      return;
+    }
+    setCoachPlanId(coachRecommendation.plan?.id ?? null);
+    if (!manualFocus && coachRecommendation.focus !== selectedFocus) {
+      setSelectedFocus(coachRecommendation.focus);
+    }
+  }, [coachRecommendation, manualFocus, selectedFocus]);
 
   const plans = plansByFocus[selectedFocus] ?? [];
   const selectedTrend = trend[selectedFocus];
@@ -527,15 +643,21 @@ const GoalsPanel: React.FC = () => {
       )}
       {!loading &&
         plans.map((plan) => {
-          const isRecommended = plan.id === recommendedPlanId;
+          const isCoachSuggested = plan.id === coachPlanId;
           return (
             <View key={plan.id} style={styles.card}>
-              <Text style={styles.cardTitle}>{plan.name}</Text>
+              <View style={styles.cardHeaderRow}>
+                <Text style={styles.cardTitle}>{plan.name}</Text>
+                {isCoachSuggested && (
+                  <View style={styles.coachBadge}>
+                    <Text style={styles.coachBadgeText}>Suggested by Coach</Text>
+                  </View>
+                )}
+              </View>
               <Text style={styles.cardMeta}>
                 Version {plan.version}
                 {plan.schedule ? ` • ${plan.schedule}` : ''}
                 {plan.estTotalMin ? ` • ~${plan.estTotalMin} min` : ''}
-                {isRecommended ? ' • Rekommenderad' : ''}
               </Text>
               {plan.drills.map((item) => {
                 const drill = drillIndex[item.id];

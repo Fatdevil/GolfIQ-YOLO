@@ -21,6 +21,7 @@ from server.retention.sweeper import sweep_retention_once, sweep_upload_retentio
 from .routes.bench import router as bench_router
 from .routes.bundle import router as bundle_router
 from .routes.bundle_index import router as bundle_index_router
+from .routes.coach_profile import router as coach_profile_router
 from .routes.caddie_health import router as caddie_health_router
 from .routes.caddie_recommend import router as caddie_router
 from .routes.calibrate import router as calibrate_router
@@ -107,6 +108,7 @@ app.include_router(coach_router)
 app.include_router(coach_feedback_router)
 app.include_router(legacy_calibrate.router)
 app.include_router(calibrate_router)
+app.include_router(coach_profile_router)
 app.include_router(caddie_router)
 app.include_router(caddie_health_router)
 app.include_router(bundle_router)

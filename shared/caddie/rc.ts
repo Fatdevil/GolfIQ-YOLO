@@ -30,9 +30,16 @@ export interface CaddieRC {
   trainingFocusDefault?: TrainingFocus;
   coachPersonaDefault?: string;
   green: CaddieGreenConfig;
+  coach: CoachLearningConfig;
 }
 
 export type CaddieRc = CaddieRC;
+
+export interface CoachLearningConfig {
+  learningEnabled: boolean;
+  syncEnabled: boolean;
+  decayHalfLifeDays: number;
+}
 
 const DEFAULT_RC: CaddieRC = {
   mc: { enabled: false, percent: 0, kill: false },
@@ -42,6 +49,11 @@ const DEFAULT_RC: CaddieRC = {
   green: {
     sections: { enabled: true },
     pinDrop: { enabled: true },
+  },
+  coach: {
+    learningEnabled: true,
+    syncEnabled: false,
+    decayHalfLifeDays: 14,
   },
 };
 
@@ -104,6 +116,14 @@ function coercePercent(value: unknown, fallback: number): number {
   return clampRolloutPercent(value);
 }
 
+function coercePositiveNumber(value: unknown, fallback: number): number {
+  const numeric = typeof value === "number" ? value : Number(value);
+  if (!Number.isFinite(numeric) || numeric <= 0) {
+    return fallback;
+  }
+  return numeric;
+}
+
 function normalizeTrainingFocus(value: unknown): TrainingFocus | undefined {
   if (typeof value !== "string") {
     return undefined;
@@ -149,6 +169,16 @@ export function readCaddieRC(get: (key: string, defaultValue?: unknown) => unkno
   const greenPinDropEnabled = normalizeBoolean(
     get("rc.green.pinDrop.enabled", fallback.green.pinDrop.enabled),
   );
+  const coachLearningEnabled = normalizeBoolean(
+    get("coach.learning.enabled", fallback.coach.learningEnabled),
+  );
+  const coachSyncEnabled = normalizeBoolean(
+    get("coach.sync.enabled", fallback.coach.syncEnabled),
+  );
+  const coachDecayHalfLifeDays = coercePositiveNumber(
+    get("coach.decay.halfLifeDays", fallback.coach.decayHalfLifeDays),
+    fallback.coach.decayHalfLifeDays,
+  );
   return {
     mc,
     advice,
@@ -159,6 +189,11 @@ export function readCaddieRC(get: (key: string, defaultValue?: unknown) => unkno
     green: {
       sections: { enabled: greenSectionsEnabled },
       pinDrop: { enabled: greenPinDropEnabled },
+    },
+    coach: {
+      learningEnabled: coachLearningEnabled,
+      syncEnabled: coachSyncEnabled,
+      decayHalfLifeDays: coachDecayHalfLifeDays,
     },
   };
 }
