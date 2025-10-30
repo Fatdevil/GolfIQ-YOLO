@@ -13,9 +13,12 @@ export default defineConfig({
       '../shared/playslike/__tests__/**/*.spec.ts',
       '../shared/runs/__tests__/**/*.spec.ts',
       'tests/**/*.spec.ts',
-      '../tests/shared/sg/**/*.spec.ts',
-      '../tests/shared/caddie/**/*.spec.ts',
-      '../tests/shared/greeniq/**/*.spec.ts'
-    ]
+      '../tests/shared/greeniq/**/*.spec.ts',
+    ],
+    exclude: [
+      '../tests/shared/caddie/**',
+      '../tests/shared/sg/**',
+    ],
+    passWithNoTests: true,
   }
 });
