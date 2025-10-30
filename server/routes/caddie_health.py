@@ -13,6 +13,8 @@ import math
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
 
+from .health_utils import safe_delta, safe_rate
+
 router = APIRouter(prefix="/caddie", tags=["caddie"])
 
 
@@ -584,20 +586,6 @@ def caddie_health(
                 for focus_key, value in run_focus_totals.items():
                     focus_sg_history.setdefault(focus_key, []).append((run_dt, value))
 
-    def safe_rate(numer: float, denom: float) -> float:
-        try:
-            denom_float = float(denom)
-        except (TypeError, ValueError):
-            return 0.0
-        if denom_float <= 0.0:
-            return 0.0
-        return float(numer) / denom_float
-
-    def safe_delta(a: float | None, b: float | None) -> float:
-        if a is None or b is None:
-            return 0.0
-        return float(a) - float(b)
-
     def clamp_unit(value: float) -> float:
         if value < 0.0:
             return 0.0
@@ -645,10 +633,14 @@ def caddie_health(
         enforced=mc_enforced_group,
         delta=FeatureAbDelta(
             adoptRate=safe_delta(
-                mc_enforced_group.adoptRate, mc_control_group.adoptRate
+                mc_enforced_group.adoptRate,
+                mc_control_group.adoptRate,
+                bound=1.0,
             ),
             sgPerRound=safe_delta(
-                mc_enforced_group.sgPerRound, mc_control_group.sgPerRound
+                mc_enforced_group.sgPerRound,
+                mc_control_group.sgPerRound,
+                bound=5.0,
             ),
         ),
     )
@@ -660,11 +652,14 @@ def caddie_health(
         enforced=advice_enforced_group,
         delta=FeatureAbDelta(
             adoptRate=safe_delta(
-                advice_enforced_group.adoptRate, advice_control_group.adoptRate
+                advice_enforced_group.adoptRate,
+                advice_control_group.adoptRate,
+                bound=1.0,
             ),
             sgPerRound=safe_delta(
                 advice_enforced_group.sgPerRound,
                 advice_control_group.sgPerRound,
+                bound=5.0,
             ),
         ),
     )
@@ -676,10 +671,14 @@ def caddie_health(
         enforced=tts_enforced_group,
         delta=TtsAbDelta(
             playRate=safe_delta(
-                tts_enforced_group.playRate, tts_control_group.playRate
+                tts_enforced_group.playRate,
+                tts_control_group.playRate,
+                bound=1.0,
             ),
             sgPerRound=safe_delta(
-                tts_enforced_group.sgPerRound, tts_control_group.sgPerRound
+                tts_enforced_group.sgPerRound,
+                tts_control_group.sgPerRound,
+                bound=5.0,
             ),
         ),
     )
@@ -702,7 +701,10 @@ def caddie_health(
     mc_ev_enforced = safe_rate(
         ev_sum_by_group["enforced"], float(ev_count_by_group["enforced"])
     )
-    mc_ev_lift = safe_delta(mc_ev_enforced, mc_ev_control)
+    if ev_count_by_group["enforced"] > 0 and ev_count_by_group["control"] > 0:
+        mc_ev_lift = safe_delta(mc_ev_enforced, mc_ev_control)
+    else:
+        mc_ev_lift = 0.0
 
     advice_adopt_rate = advice_enforced_group.adoptRate
     top_advice = [text for text, _ in advice_counter.most_common(3)]

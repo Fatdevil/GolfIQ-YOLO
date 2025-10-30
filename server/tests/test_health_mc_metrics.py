@@ -123,7 +123,9 @@ def test_health_mc_metrics_breakdowns(monkeypatch, tmp_path):
 
     ev_enforced = (0.32 + 0.4) / 2
     ev_control = 0.1
-    assert mc["evLift"] == pytest.approx(ev_enforced - ev_control)
+    expected_delta = ev_enforced - ev_control
+    assert expected_delta > 0.25
+    assert mc["evLift"] == pytest.approx(0.25)
 
 
 def test_health_mc_metrics_weighted_rates(monkeypatch, tmp_path):
@@ -178,6 +180,44 @@ def test_health_mc_metrics_weighted_rates(monkeypatch, tmp_path):
     assert mc["fairwayRate"] == pytest.approx(0.84)
     assert mc["avgLongErr"] == pytest.approx(0.2)
     assert mc["avgLatErr"] == pytest.approx(0.35)
+
+
+def test_health_mc_metrics_simple_rate(monkeypatch, tmp_path):
+    monkeypatch.setenv("RUNS_DATA_DIR", str(tmp_path))
+
+    events = [
+        {
+            "event": "hud.caddie.rollout",
+            "data": {"mc": True, "advice": False, "tts": False},
+        },
+        {
+            "event": "hud.caddie.plan",
+            "data": {"mcUsed": True, "hadAdvice": False, "ttsUsed": False},
+        },
+        {
+            "event": "hud.caddie.mc",
+            "data": {
+                "samples": 10,
+                "hazardRate": 0.4,
+                "successRate": 0.6,
+                "expectedLongMiss_m": 1.0,
+                "expectedLatMiss_m": -0.2,
+                "ev": 0.05,
+                "kind": "approach",
+            },
+        },
+    ]
+
+    _write_run(tmp_path, "run-simple", events)
+
+    client = TestClient(app)
+    response = client.get("/caddie/health", params={"since": "1h"})
+    assert response.status_code == 200
+
+    mc = response.json()["mc"]
+    assert mc["hazardRate"] == pytest.approx(0.4)
+    assert mc["hazardRateApproach"] == pytest.approx(0.4)
+    assert mc["hazardRateTee"] == pytest.approx(0.0)
 
 
 def test_health_mc_metrics_empty(monkeypatch, tmp_path):
