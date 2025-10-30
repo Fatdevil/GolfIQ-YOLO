@@ -7,9 +7,10 @@ import type {
   GreenSection,
 } from "../arhud/bundle_client";
 import { CLUB_SEQUENCE, type ClubId } from "../playslike/bag";
+import { getCaddieRc } from "./rc";
+import { runMonteCarloV1_5, type McPolygon, type McResult, type McTarget } from "./mc";
 import { ellipseOverlapRisk, lateralWindOffset, sampleEllipsePoints, type RiskFeature } from "./risk";
 import { buildPlayerModel, type PlayerModel } from "./player_model";
-import { runSim, type BundleFeature as SimFeature, type SimOut } from "./sim";
 
 const EARTH_RADIUS_M = 6_378_137;
 
@@ -23,6 +24,7 @@ export interface ShotPlan {
   aimDirection: "LEFT" | "RIGHT" | "STRAIGHT";
   reason: string;
   risk: number;
+  ev?: number;
   landing: { distance_m: number; lateral_m: number };
   aim: { lateral_m: number };
   mode: RiskMode;
@@ -31,7 +33,8 @@ export interface ShotPlan {
   headwind_mps: number;
   windDrift_m: number;
   tuningActive: boolean;
-  mc?: (SimOut & { samples: number }) | null;
+  mc?: McResult | null;
+  riskFactors?: string[];
   greenSection?: GreenSection | null;
   fatSide?: FatSide | null;
 }
@@ -312,7 +315,15 @@ const computeGreenYRange = (
   return { min, max };
 };
 
-type DomType = "fairway" | "green" | "hazard" | "water" | "bunker" | "cartpath" | null;
+type DomType =
+  | "fairway"
+  | "green"
+  | "hazard"
+  | "water"
+  | "bunker"
+  | "cartpath"
+  | "green_target"
+  | null;
 
 const normalizeFeatureType = (raw: any): DomType => {
   const p = (
@@ -334,6 +345,9 @@ const normalizeFeatureType = (raw: any): DomType => {
     hazard: "hazard",
     penalty: "hazard",
     penalty_area: "hazard",
+    green_target: "green_target",
+    green_section: "green_target",
+    target: "green_target",
     cartpath: "cartpath",
     cart_path: "cartpath",
     path: "cartpath",
@@ -358,12 +372,20 @@ const hazardPenalty = (type: DomType): number => {
   return 0.4;
 };
 
+type PreparedTarget = {
+  id: string | null;
+  rings: { x: number; y: number }[][];
+  section: GreenSection | null;
+  priority: number | null;
+};
+
 type PreparedFeatures = {
   hazards: RiskFeature[];
   fairways: { x: number; y: number }[][];
   greens: PreparedGreen[];
   greenRings: { x: number; y: number }[][];
   cartpaths: { x: number; y: number }[][];
+  greenTargets: PreparedTarget[];
 };
 
 const DEFAULT_GREEN_SECTIONS: readonly GreenSection[] = [
@@ -394,7 +416,8 @@ type TeeCandidate = {
   centerX: number;
   sigmaLong: number;
   sigmaLat: number;
-  sim?: SimOut;
+  mc?: McResult | null;
+  ev?: number;
 };
 
 type ApproachCandidate = {
@@ -407,10 +430,16 @@ type ApproachCandidate = {
   centerX: number;
   sigmaLong: number;
   sigmaLat: number;
-  sim?: SimOut;
+  mc?: McResult | null;
+  ev?: number;
 };
 
-const SIM_EPSILON = 1e-6;
+type CandidateWithMc = {
+  aimOffset: number;
+  aimDir: "LEFT" | "RIGHT" | "STRAIGHT";
+  mc?: McResult | null;
+  ev?: number;
+};
 
 const normalizeSamples = (samples?: number): number => {
   const value = Number(samples);
@@ -424,25 +453,227 @@ const normalizeSamples = (samples?: number): number => {
   return Math.max(32, Math.min(5000, rounded));
 };
 
-const isBetterSim = (
-  candidate: SimOut,
-  incumbent: SimOut,
-  rangeFitCandidate: number,
-  rangeFitIncumbent: number,
-): boolean => {
-  if (candidate.scoreProxy < incumbent.scoreProxy - SIM_EPSILON) {
-    return true;
+const DEFAULT_RISK_GATE = 0.42;
+
+const readRiskGate = (): number => {
+  try {
+    const rc = getCaddieRc();
+    const raw = rc?.riskMax;
+    if (Number.isFinite(raw ?? NaN)) {
+      return clamp01(Number(raw));
+    }
+  } catch (error) {
+    // ignore and fallback
   }
-  if (candidate.scoreProxy > incumbent.scoreProxy + SIM_EPSILON) {
+  return DEFAULT_RISK_GATE;
+};
+
+const toMcHazards = (features: RiskFeature[]): McPolygon[] => {
+  const hazards: McPolygon[] = [];
+  for (const feature of features) {
+    if (!feature || feature.kind !== "polygon") {
+      continue;
+    }
+    if (!feature.rings || !feature.rings.length) {
+      continue;
+    }
+    hazards.push({
+      id: feature.id ?? null,
+      rings: feature.rings,
+      penalty: feature.penalty,
+    });
+  }
+  return hazards;
+};
+
+const toMcTargets = (
+  targets: PreparedTarget[],
+  fallback: { x: number; y: number }[][],
+): McTarget[] => {
+  const out: McTarget[] = [];
+  for (const target of targets) {
+    if (!target || !target.rings || !target.rings.length) {
+      continue;
+    }
+    out.push({
+      id: target.id,
+      rings: target.rings,
+      section: target.section ?? undefined,
+      priority: target.priority ?? undefined,
+    });
+  }
+  if (!out.length && fallback.length) {
+    out.push({ id: "green", rings: fallback, section: undefined, priority: undefined });
+  }
+  return out;
+};
+
+const formatMcReasons = (mc: McResult | null | undefined, limit = 2): string[] => {
+  if (!mc || !Array.isArray(mc.reasons) || !mc.reasons.length) {
+    return [];
+  }
+  const reasons: string[] = [];
+  for (const reason of mc.reasons) {
+    if (!reason || typeof reason.label !== "string") {
+      continue;
+    }
+    const label = reason.label.trim();
+    if (!label || reasons.includes(label)) {
+      continue;
+    }
+    reasons.push(label);
+    if (reasons.length >= limit) {
+      break;
+    }
+  }
+  return reasons;
+};
+
+const OPPOSITE_AIM_THRESHOLD = 0.5;
+
+const hazardDirection = (mc: McResult | null | undefined): "left" | "right" | null => {
+  if (!mc || !Array.isArray(mc.reasons)) {
+    return null;
+  }
+  for (const reason of mc.reasons) {
+    if (!reason || reason.kind !== "hazard") {
+      continue;
+    }
+    const directionRaw = reason.meta?.direction;
+    if (directionRaw === "left" || directionRaw === "right") {
+      return directionRaw;
+    }
+  }
+  return null;
+};
+
+const aimOpposesHazard = (offset: number, direction: "left" | "right"): boolean => {
+  if (!Number.isFinite(offset)) {
     return false;
   }
-  if (candidate.pFairway > incumbent.pFairway + SIM_EPSILON) {
-    return true;
+  if (direction === "right") {
+    return offset <= -OPPOSITE_AIM_THRESHOLD;
   }
-  if (candidate.pFairway + SIM_EPSILON < incumbent.pFairway) {
-    return false;
+  return offset >= OPPOSITE_AIM_THRESHOLD;
+};
+
+const evToleranceByMode: Record<RiskMode, number> = {
+  safe: 0.65,
+  normal: 0.32,
+  aggressive: 0.36,
+};
+
+const adjustCandidateForHazard = <T extends CandidateWithMc>(
+  pool: T[],
+  best: T,
+  riskGate: number,
+  riskMode: RiskMode,
+): T => {
+  if (!pool.length) {
+    return best;
   }
-  return rangeFitCandidate < rangeFitIncumbent - SIM_EPSILON;
+  const bestMc = best.mc;
+  if (!bestMc) {
+    return best;
+  }
+  let direction = hazardDirection(bestMc);
+  if (!direction) {
+    let safest: { hazard: number; offset: number } | null = null;
+    for (const candidate of pool) {
+      if (!candidate?.mc) {
+        continue;
+      }
+      const hazard = Number(candidate.mc.hazardRate ?? NaN);
+      if (!Number.isFinite(hazard)) {
+        continue;
+      }
+      if (!safest || hazard < safest.hazard) {
+        safest = { hazard, offset: candidate.aimOffset };
+      }
+    }
+    if (safest) {
+      if (safest.offset <= -OPPOSITE_AIM_THRESHOLD) {
+        direction = "right";
+      } else if (safest.offset >= OPPOSITE_AIM_THRESHOLD) {
+        direction = "left";
+      }
+    }
+  }
+  if (!direction) {
+    return best;
+  }
+  if (aimOpposesHazard(best.aimOffset, direction)) {
+    return best;
+  }
+  const bestHazard = Number(bestMc.hazardRate ?? NaN);
+  if (!Number.isFinite(bestHazard)) {
+    return best;
+  }
+  const hazardRates = pool
+    .map((candidate) => Number(candidate.mc?.hazardRate ?? NaN))
+    .filter((value) => Number.isFinite(value));
+  if (!hazardRates.length) {
+    return best;
+  }
+  const minHazard = Math.min(...hazardRates);
+  const hazardImprovementThreshold = Math.max(0.0005, riskGate * 0.005);
+  if (bestHazard <= minHazard + hazardImprovementThreshold) {
+    return best;
+  }
+  const evBest = Number(best.ev ?? Number.NEGATIVE_INFINITY);
+  if (!Number.isFinite(evBest)) {
+    return best;
+  }
+  const evTolerance = evToleranceByMode[riskMode] ?? 0.25;
+  const options = pool
+    .filter((candidate) => {
+      if (!candidate || candidate === best) {
+        return false;
+      }
+      if (!candidate.mc) {
+        return false;
+      }
+      const candidateHazard = Number(candidate.mc.hazardRate ?? NaN);
+      if (!Number.isFinite(candidateHazard) || candidateHazard > riskGate + 1e-6) {
+        return false;
+      }
+      if (!aimOpposesHazard(candidate.aimOffset, direction)) {
+        return false;
+      }
+      if (bestHazard - candidateHazard <= hazardImprovementThreshold) {
+        return false;
+      }
+      const candidateEv = Number(candidate.ev ?? Number.NEGATIVE_INFINITY);
+      if (!Number.isFinite(candidateEv)) {
+        return false;
+      }
+      return candidateEv >= evBest - evTolerance;
+    })
+    .sort((a, b) => {
+      const hazardA = Number(a.mc?.hazardRate ?? NaN);
+      const hazardB = Number(b.mc?.hazardRate ?? NaN);
+      if (Number.isFinite(hazardA) && Number.isFinite(hazardB) && Math.abs(hazardA - hazardB) > 1e-3) {
+        return hazardA - hazardB;
+      }
+      if (riskMode === "safe") {
+        const magnitudeDelta = Math.abs(b.aimOffset) - Math.abs(a.aimOffset);
+        if (Math.abs(magnitudeDelta) > 1e-3) {
+          return magnitudeDelta;
+        }
+      } else if (riskMode === "aggressive") {
+        const magnitudeDelta = Math.abs(a.aimOffset) - Math.abs(b.aimOffset);
+        if (Math.abs(magnitudeDelta) > 1e-3) {
+          return magnitudeDelta;
+        }
+      }
+      const evA = Number(a.ev ?? Number.NEGATIVE_INFINITY);
+      const evB = Number(b.ev ?? Number.NEGATIVE_INFINITY);
+      if (Number.isFinite(evA) && Number.isFinite(evB) && evA !== evB) {
+        return evB - evA;
+      }
+      return Math.abs(a.aimOffset) - Math.abs(b.aimOffset);
+    });
+  return options[0] ?? best;
 };
 
 const normalizeGreenMeta = (meta: GreenInfo | null | undefined): GreenInfo | null => {
@@ -471,10 +702,62 @@ const normalizeGreenMeta = (meta: GreenInfo | null | undefined): GreenInfo | nul
     Number.isFinite(meta.pin.lon)
       ? { lat: meta.pin.lat, lon: meta.pin.lon, ts: meta.pin.ts ?? null }
       : null;
+  const targets: {
+    id: string | null;
+    section: GreenSection | null;
+    priority: number | null;
+    rings: [number, number][][];
+  }[] = [];
+  if (Array.isArray(meta.targets)) {
+    for (const target of meta.targets) {
+      if (!target || !Array.isArray(target.rings)) {
+        continue;
+      }
+      const rings: [number, number][][] = [];
+      for (const ring of target.rings) {
+        if (!Array.isArray(ring)) {
+          continue;
+        }
+        const normalizedRing: [number, number][] = [];
+        for (const point of ring) {
+          if (!Array.isArray(point) || point.length < 2) {
+            continue;
+          }
+          const lon = Number(point[0]);
+          const lat = Number(point[1]);
+          if (!Number.isFinite(lat) || !Number.isFinite(lon)) {
+            continue;
+          }
+          normalizedRing.push([lon, lat]);
+        }
+        if (normalizedRing.length) {
+          rings.push(normalizedRing);
+        }
+      }
+      if (!rings.length) {
+        continue;
+      }
+      const sectionNormalized = target.section ?? null;
+      const sectionValue =
+        sectionNormalized === "front" || sectionNormalized === "middle" || sectionNormalized === "back"
+          ? sectionNormalized
+          : null;
+      const priorityValue = Number.isFinite(target.priority ?? NaN)
+        ? Number(target.priority)
+        : null;
+      targets.push({
+        id: target.id ?? null,
+        section: sectionValue,
+        priority: priorityValue,
+        rings,
+      });
+    }
+  }
   return {
     sections,
     fatSide,
     pin,
+    targets: targets.length ? targets : undefined,
   };
 };
 
@@ -494,13 +777,14 @@ const resolveGreenMeta = (
 
 const prepareFeatures = (bundle: CourseBundle | null, frame: Frame | null): PreparedFeatures => {
   if (!bundle || !frame || !Array.isArray(bundle.features)) {
-    return { hazards: [], fairways: [], greens: [], greenRings: [], cartpaths: [] };
+    return { hazards: [], fairways: [], greens: [], greenRings: [], cartpaths: [], greenTargets: [] };
   }
   const hazards: RiskFeature[] = [];
   const fairways: { x: number; y: number }[][] = [];
   const greens: PreparedGreen[] = [];
   const greenRings: { x: number; y: number }[][] = [];
   const cartpaths: { x: number; y: number }[][] = [];
+  const greenTargets: PreparedTarget[] = [];
   for (const raw of bundle.features as CourseFeature[]) {
     if (!raw || typeof raw !== "object") {
       continue;
@@ -535,6 +819,31 @@ const prepareFeatures = (bundle: CourseBundle | null, frame: Frame | null): Prep
       if (rings.length) {
         hazards.push({ kind: "polygon", rings, penalty: hazardPenalty(domType) });
       }
+    } else if (domType === "green_target" && isPoly) {
+      const rings = collectPolygonRings(frame, raw.geometry ?? {});
+      if (rings.length) {
+        const sectionRaw =
+          raw?.properties?.section ?? raw?.properties?.segment ?? raw?.properties?.label ?? null;
+        const sectionNormalized =
+          typeof sectionRaw === "string" ? sectionRaw.trim().toLowerCase() : "";
+        const section =
+          sectionNormalized === "front" || sectionNormalized === "middle" || sectionNormalized === "back"
+            ? (sectionNormalized as GreenSection)
+            : null;
+        const priorityRaw = raw?.properties?.priority ?? raw?.properties?.order ?? raw?.properties?.rank;
+        const priorityValue =
+          typeof priorityRaw === "number"
+            ? priorityRaw
+            : typeof priorityRaw === "string"
+              ? Number(priorityRaw)
+              : null;
+        greenTargets.push({
+          id: typeof raw.id === "string" ? raw.id : null,
+          rings,
+          section,
+          priority: Number.isFinite(priorityValue ?? NaN) ? Number(priorityValue) : null,
+        });
+      }
     } else if (domType === "cartpath" && isLine) {
       const lines = collectPolylines(frame, raw.geometry ?? {});
       for (const line of lines) {
@@ -544,27 +853,51 @@ const prepareFeatures = (bundle: CourseBundle | null, frame: Frame | null): Prep
       continue;
     }
   }
-  return { hazards, fairways, greens, greenRings, cartpaths };
-};
-
-const buildSimFeatures = (prepared: PreparedFeatures): SimFeature[] => {
-  const features: SimFeature[] = [];
-  for (const fairway of prepared.fairways) {
-    if (fairway && fairway.length) {
-      features.push({ kind: "fairway", rings: [fairway] });
+  for (const green of greens) {
+    const targetMeta = green.meta?.targets;
+    if (!Array.isArray(targetMeta)) {
+      continue;
+    }
+    for (const target of targetMeta) {
+      if (!target || !Array.isArray(target.rings)) {
+        continue;
+      }
+      const localRings: { x: number; y: number }[][] = [];
+      for (const ring of target.rings) {
+        if (!Array.isArray(ring)) {
+          continue;
+        }
+        const localRing: { x: number; y: number }[] = [];
+        for (const point of ring) {
+          if (!Array.isArray(point) || point.length < 2) {
+            continue;
+          }
+          const lon = Number(point[0]);
+          const lat = Number(point[1]);
+          if (!Number.isFinite(lat) || !Number.isFinite(lon)) {
+            continue;
+          }
+          const converted = toFramePoint(frame, [lon, lat]);
+          if (converted) {
+            localRing.push(converted);
+          }
+        }
+        if (localRing.length >= 3) {
+          localRings.push(localRing);
+        }
+      }
+      if (!localRings.length) {
+        continue;
+      }
+      greenTargets.push({
+        id: target.id ?? green.id ?? null,
+        rings: localRings,
+        section: target.section ?? null,
+        priority: target.priority ?? null,
+      });
     }
   }
-  for (const green of prepared.greenRings) {
-    if (green && green.length) {
-      features.push({ kind: "green", rings: [green] });
-    }
-  }
-  for (const hazard of prepared.hazards) {
-    if (hazard?.kind === "polygon" && hazard.rings && hazard.rings.length) {
-      features.push({ kind: "hazard", rings: hazard.rings });
-    }
-  }
-  return features;
+  return { hazards, fairways, greens, greenRings, cartpaths, greenTargets };
 };
 
 const ringContains = (point: { x: number; y: number }, ring: { x: number; y: number }[]): boolean => {
@@ -1010,40 +1343,52 @@ const planTeeShotInternal = (args: TeePlanArgs, options: TeeMcOptions): ShotPlan
     return a.distance - b.distance;
   });
   let best = candidates[0];
-  let mcResult: (SimOut & { samples: number }) | null = null;
+  let mcResult: McResult | null = null;
   if (options.useMC) {
     const sampleCount = normalizeSamples(options.samples);
-    const simFeatures = buildSimFeatures(prepared);
-    const limit = Math.min(5, candidates.length);
-    let bestSim: SimOut | null = null;
-    for (let i = 0; i < limit; i += 1) {
+    const mcHazards = toMcHazards(prepared.hazards);
+    const riskGate = readRiskGate();
+    const evaluated: TeeCandidate[] = [];
+    for (let i = 0; i < candidates.length; i += 1) {
       const candidate = candidates[i];
-      const sim = runSim({
+      const mc = runMonteCarloV1_5({
         samples: sampleCount,
         seed: options.seed !== undefined ? options.seed + i : undefined,
-        windCross_mps: wind.cross,
-        windHead_mps: wind.head,
-        longSigma_m: candidate.sigmaLong,
-        latSigma_m: candidate.sigmaLat,
         range_m: candidate.distance,
-        aimDeg: candidate.aimDegSigned,
-        features: simFeatures,
+        aimOffset_m: candidate.aimOffset,
+        sigmaLong_m: candidate.sigmaLong,
+        sigmaLat_m: candidate.sigmaLat,
+        wind: { cross: wind.cross, head: wind.head },
+        hazards: mcHazards,
+        greenTargets: [],
+        pin: frame.pin,
       });
-      candidate.sim = sim;
-      if (!bestSim) {
-        bestSim = sim;
-        best = candidate;
-        continue;
-      }
-      const candidateFit = Math.abs(candidate.remaining - idealRemaining);
-      const incumbentFit = Math.abs(best.remaining - idealRemaining);
-      if (isBetterSim(sim, bestSim, candidateFit, incumbentFit)) {
-        bestSim = sim;
-        best = candidate;
-      }
+      candidate.mc = mc;
+      candidate.ev = mc.ev;
+      evaluated.push(candidate);
     }
-    if (bestSim) {
-      mcResult = { ...bestSim, samples: sampleCount };
+    const safe = evaluated.filter((candidate) => {
+      const hazardRate = candidate.mc?.hazardRate ?? 1;
+      return hazardRate <= riskGate;
+    });
+    const pool = (safe.length ? safe : evaluated).slice();
+    pool.sort((a, b) => {
+      const aEv = Number.isFinite(a.ev ?? NaN) ? Number(a.ev) : Number.NEGATIVE_INFINITY;
+      const bEv = Number.isFinite(b.ev ?? NaN) ? Number(b.ev) : Number.NEGATIVE_INFINITY;
+      if (aEv !== bEv) {
+        return bEv - aEv;
+      }
+      const aHazard = a.mc?.hazardRate ?? 1;
+      const bHazard = b.mc?.hazardRate ?? 1;
+      if (aHazard !== bHazard) {
+        return aHazard - bHazard;
+      }
+      return Math.abs(a.remaining - idealRemaining) - Math.abs(b.remaining - idealRemaining);
+    });
+    if (pool.length) {
+      const selected = adjustCandidateForHazard(pool, pool[0], riskGate, args.riskMode);
+      best = selected;
+      mcResult = selected.mc ?? null;
     }
   }
   const targetLocal = {
@@ -1064,8 +1409,9 @@ const planTeeShotInternal = (args: TeePlanArgs, options: TeeMcOptions): ShotPlan
     reasonParts.push(`Expected lateral drift ${best.centerX.toFixed(1)} m.`);
   }
   if (mcResult) {
+    const evText = `${mcResult.ev >= 0 ? "+" : ""}${mcResult.ev.toFixed(2)}`;
     reasonParts.push(
-      `MC fairway ${(mcResult.pFairway * 100).toFixed(0)}%, hazard ${(mcResult.pHazard * 100).toFixed(0)}%.`,
+      `MC hazard ${(mcResult.hazardRate * 100).toFixed(0)}%, success ${(mcResult.successRate * 100).toFixed(0)}%, EV ${evText}.`,
     );
   } else {
     const riskPercent = Math.round(best.risk * 100);
@@ -1078,7 +1424,8 @@ const planTeeShotInternal = (args: TeePlanArgs, options: TeeMcOptions): ShotPlan
     aimDeg: best.aimDeg,
     aimDirection: best.aimDir,
     reason: reasonParts.join(" "),
-    risk: mcResult ? mcResult.scoreProxy : best.combined,
+    risk: mcResult ? mcResult.hazardRate : best.combined,
+    ev: mcResult?.ev,
     landing: { distance_m: best.distance, lateral_m: best.centerX },
     aim: { lateral_m: best.aimOffset },
     mode: args.riskMode,
@@ -1088,6 +1435,7 @@ const planTeeShotInternal = (args: TeePlanArgs, options: TeeMcOptions): ShotPlan
     windDrift_m: best.centerX - best.aimOffset,
     tuningActive: args.player.tuningActive,
     mc: options.useMC ? mcResult : null,
+    riskFactors: options.useMC ? formatMcReasons(mcResult) : undefined,
   };
 };
 
@@ -1196,40 +1544,50 @@ const planApproachInternal = (args: ApproachPlanArgs, options: ApproachMcOptions
     return a.aimOffset - b.aimOffset;
   });
   let best = candidates[0];
-  let mcResult: (SimOut & { samples: number }) | null = null;
+  let mcResult: McResult | null = null;
   if (options.useMC) {
     const sampleCount = normalizeSamples(options.samples);
-    const simFeatures = buildSimFeatures(prepared);
-    const limit = Math.min(3, candidates.length);
-    let bestSim: SimOut | null = null;
-    for (let i = 0; i < limit; i += 1) {
+    const mcHazards = toMcHazards(prepared.hazards);
+    const mcTargets = toMcTargets(prepared.greenTargets, prepared.greenRings);
+    const riskGate = readRiskGate();
+    const evaluated: ApproachCandidate[] = [];
+    for (let i = 0; i < candidates.length; i += 1) {
       const candidate = candidates[i];
-      const sim = runSim({
+      const mc = runMonteCarloV1_5({
         samples: sampleCount,
         seed: options.seed !== undefined ? options.seed + i : undefined,
-        windCross_mps: wind.cross,
-        windHead_mps: wind.head,
-        longSigma_m: candidate.sigmaLong,
-        latSigma_m: candidate.sigmaLat,
         range_m: rangeForSim,
-        aimDeg: candidate.aimDegSigned,
-        features: simFeatures,
+        aimOffset_m: candidate.aimOffset,
+        sigmaLong_m: candidate.sigmaLong,
+        sigmaLat_m: candidate.sigmaLat,
+        wind: { cross: wind.cross, head: wind.head },
+        hazards: mcHazards,
+        greenTargets: mcTargets,
+        pin: frame.pin,
       });
-      candidate.sim = sim;
-      if (!bestSim) {
-        bestSim = sim;
-        best = candidate;
-        continue;
-      }
-      const candidateFit = Math.abs(candidate.aimOffset);
-      const incumbentFit = Math.abs(best.aimOffset);
-      if (isBetterSim(sim, bestSim, candidateFit, incumbentFit)) {
-        bestSim = sim;
-        best = candidate;
-      }
+      candidate.mc = mc;
+      candidate.ev = mc.ev;
+      evaluated.push(candidate);
     }
-    if (bestSim) {
-      mcResult = { ...bestSim, samples: sampleCount };
+    const safe = evaluated.filter((candidate) => (candidate.mc?.hazardRate ?? 1) <= riskGate);
+    const pool = (safe.length ? safe : evaluated).slice();
+    pool.sort((a, b) => {
+      const aEv = Number.isFinite(a.ev ?? NaN) ? Number(a.ev) : Number.NEGATIVE_INFINITY;
+      const bEv = Number.isFinite(b.ev ?? NaN) ? Number(b.ev) : Number.NEGATIVE_INFINITY;
+      if (aEv !== bEv) {
+        return bEv - aEv;
+      }
+      const aHazard = a.mc?.hazardRate ?? 1;
+      const bHazard = b.mc?.hazardRate ?? 1;
+      if (aHazard !== bHazard) {
+        return aHazard - bHazard;
+      }
+      return Math.abs(a.aimOffset) - Math.abs(b.aimOffset);
+    });
+    if (pool.length) {
+      const selected = adjustCandidateForHazard(pool, pool[0], riskGate, args.riskMode);
+      best = selected;
+      mcResult = selected.mc ?? null;
     }
   }
   const targetLocal = { x: best.aimOffset, y: distance };
@@ -1243,16 +1601,14 @@ const planApproachInternal = (args: ApproachPlanArgs, options: ApproachMcOptions
   } else {
     reasonParts.push("Play center of green.");
   }
-  const riskValue = mcResult ? mcResult.scoreProxy : best.combined;
+  const riskValue = mcResult ? mcResult.hazardRate : best.combined;
   const missLabel = riskValue > 0.4 ? "High risk – bail out." : `Risk ≈ ${Math.round(riskValue * 100)}%.`;
   reasonParts.push(missLabel);
   if (mcResult) {
-    const mcParts: string[] = [];
-    if (typeof mcResult.pGreen === "number") {
-      mcParts.push(`green ${(mcResult.pGreen * 100).toFixed(0)}%`);
-    }
-    mcParts.push(`hazard ${(mcResult.pHazard * 100).toFixed(0)}%`);
-    reasonParts.push(`MC ${mcParts.join(", ")}.`);
+    const evText = `${mcResult.ev >= 0 ? "+" : ""}${mcResult.ev.toFixed(2)}`;
+    reasonParts.push(
+      `MC hazard ${(mcResult.hazardRate * 100).toFixed(0)}%, success ${(mcResult.successRate * 100).toFixed(0)}%, EV ${evText}.`,
+    );
   }
   return {
     kind: "approach",
@@ -1262,6 +1618,7 @@ const planApproachInternal = (args: ApproachPlanArgs, options: ApproachMcOptions
     aimDirection: best.aimDir,
     reason: reasonParts.join(" "),
     risk: riskValue,
+    ev: mcResult?.ev,
     landing: { distance_m: distance, lateral_m: best.centerX },
     aim: { lateral_m: best.aimOffset },
     mode: args.riskMode,
@@ -1271,6 +1628,7 @@ const planApproachInternal = (args: ApproachPlanArgs, options: ApproachMcOptions
     windDrift_m: best.centerX - best.aimOffset,
     tuningActive: args.player.tuningActive,
     mc: options.useMC ? mcResult : null,
+    riskFactors: options.useMC ? formatMcReasons(mcResult) : undefined,
     greenSection: selectedSection ?? null,
     fatSide: fatSide ?? null,
   };

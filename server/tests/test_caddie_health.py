@@ -68,10 +68,12 @@ def test_caddie_health_snapshot(monkeypatch, tmp_path, since):
             "event": "hud.caddie.mc",
             "data": {
                 "samples": 800,
-                "pFairway": 0.62,
-                "pHazard": 0.18,
-                "expLongMiss_m": 0.4,
-                "expLatMiss_m": -0.15,
+                "hazardRate": 0.18,
+                "successRate": 0.62,
+                "ev": 0.42,
+                "expectedLongMiss_m": 0.4,
+                "expectedLatMiss_m": -0.15,
+                "kind": "tee",
             },
         },
         {
@@ -101,9 +103,12 @@ def test_caddie_health_snapshot(monkeypatch, tmp_path, since):
     assert "since" in payload
     assert payload["mc"]["enabledPct"] == pytest.approx(100.0)
     assert payload["mc"]["hazardRate"] == pytest.approx(0.18)
+    assert payload["mc"]["hazardRateTee"] == pytest.approx(0.18)
+    assert payload["mc"]["hazardRateApproach"] == pytest.approx(0.0)
     assert payload["mc"]["fairwayRate"] == pytest.approx(0.62)
     assert payload["mc"]["avgLongErr"] == pytest.approx(0.4)
     assert payload["mc"]["avgLatErr"] == pytest.approx(-0.15)
+    assert payload["mc"]["evLift"] == pytest.approx(0.0)
     assert payload["mc"]["adoptRate"] == pytest.approx(1.0)
     assert payload["advice"]["adoptRate"] == pytest.approx(1.0)
     assert payload["advice"]["topAdvice"][0] == "+1 club"
@@ -125,9 +130,12 @@ def test_caddie_health_handles_empty_runs(monkeypatch, tmp_path):
     assert payload["mc"]["enabledPct"] == 0.0
     assert payload["mc"]["adoptRate"] == 0.0
     assert payload["mc"]["hazardRate"] == 0.0
+    assert payload["mc"]["hazardRateTee"] == 0.0
+    assert payload["mc"]["hazardRateApproach"] == 0.0
     assert payload["mc"]["fairwayRate"] == 0.0
     assert payload["mc"]["avgLongErr"] == 0.0
     assert payload["mc"]["avgLatErr"] == 0.0
+    assert payload["mc"]["evLift"] == 0.0
     assert payload["mc"]["ab"]["control"]["plans"] == 0
     assert payload["advice"]["adoptRate"] == 0.0
     assert payload["advice"]["topAdvice"] == []

@@ -37,9 +37,12 @@ class CaddieMcHealth(BaseModel):
     enabledPct: float = Field(..., ge=0.0, le=100.0)
     adoptRate: float = Field(..., ge=0.0, le=1.0)
     hazardRate: float = Field(..., ge=0.0, le=1.0)
+    hazardRateTee: float = Field(..., ge=0.0, le=1.0)
+    hazardRateApproach: float = Field(..., ge=0.0, le=1.0)
     fairwayRate: float = Field(..., ge=0.0, le=1.0)
     avgLongErr: float
     avgLatErr: float
+    evLift: float
     ab: CaddieFeatureAb | None = None
 
 
@@ -285,9 +288,13 @@ def caddie_health(
     advice_counter: Counter[str] = Counter()
     mc_events = 0
     hazard_sum = 0.0
-    fairway_sum = 0.0
+    hazard_sum_by_kind: Dict[str, float] = {"tee": 0.0, "approach": 0.0}
+    hazard_events_by_kind: Dict[str, int] = {"tee": 0, "approach": 0}
+    success_sum = 0.0
     long_sum = 0.0
     lat_sum = 0.0
+    ev_sum_by_group: Dict[str, float] = {"control": 0.0, "enforced": 0.0}
+    ev_count_by_group: Dict[str, int] = {"control": 0, "enforced": 0}
     tts_events = 0
     chars_sum = 0.0
     sg_totals: List[float] = []
@@ -482,10 +489,24 @@ def caddie_health(
                 last_plan_ts = None
             elif name == "hud.caddie.mc":
                 mc_events += 1
-                hazard_sum += float(data.get("pHazard") or 0.0)
-                fairway_sum += float(data.get("pFairway") or 0.0)
-                long_sum += float(data.get("expLongMiss_m") or 0.0)
-                lat_sum += float(data.get("expLatMiss_m") or 0.0)
+                hazard_rate = float(data.get("hazardRate") or 0.0)
+                success_rate = float(data.get("successRate") or 0.0)
+                ev_value = float(data.get("ev") or 0.0)
+                long_mean = float(data.get("expectedLongMiss_m") or 0.0)
+                lat_mean = float(data.get("expectedLatMiss_m") or 0.0)
+                hazard_sum += hazard_rate
+                success_sum += success_rate
+                long_sum += long_mean
+                lat_sum += lat_mean
+                kind = data.get("kind")
+                if isinstance(kind, str) and kind in hazard_sum_by_kind:
+                    hazard_sum_by_kind[kind] += hazard_rate
+                    hazard_events_by_kind[kind] += 1
+                if run_rollout["mc"] is None:
+                    run_rollout["mc"] = True
+                group_key = "enforced" if run_rollout.get("mc") else "control"
+                ev_sum_by_group[group_key] += ev_value
+                ev_count_by_group[group_key] += 1
             elif name == "hud.caddie.tts":
                 tts_events += 1
                 chars = data.get("chars")
@@ -618,9 +639,20 @@ def caddie_health(
     mc_enabled_pct = safe_div(mc_enforced_group.plans * 100.0, float(plan_total))
     mc_adopt_rate = mc_enforced_group.adoptRate
     mc_hazard_rate = safe_div(hazard_sum, float(mc_events))
-    mc_fairway_rate = safe_div(fairway_sum, float(mc_events))
+    mc_hazard_rate_tee = safe_div(
+        hazard_sum_by_kind["tee"], float(hazard_events_by_kind["tee"])
+    )
+    mc_hazard_rate_approach = safe_div(
+        hazard_sum_by_kind["approach"], float(hazard_events_by_kind["approach"])
+    )
+    mc_success_rate = safe_div(success_sum, float(mc_events))
     mc_long_err = safe_div(long_sum, float(mc_events))
     mc_lat_err = safe_div(lat_sum, float(mc_events))
+    mc_ev_control = safe_div(ev_sum_by_group["control"], float(ev_count_by_group["control"]))
+    mc_ev_enforced = safe_div(
+        ev_sum_by_group["enforced"], float(ev_count_by_group["enforced"])
+    )
+    mc_ev_lift = mc_ev_enforced - mc_ev_control
 
     advice_adopt_rate = advice_enforced_group.adoptRate
     top_advice = [text for text, _ in advice_counter.most_common(3)]
@@ -677,9 +709,12 @@ def caddie_health(
             enabledPct=mc_enabled_pct,
             adoptRate=mc_adopt_rate,
             hazardRate=mc_hazard_rate,
-            fairwayRate=mc_fairway_rate,
+            hazardRateTee=mc_hazard_rate_tee,
+            hazardRateApproach=mc_hazard_rate_approach,
+            fairwayRate=mc_success_rate,
             avgLongErr=mc_long_err,
             avgLatErr=mc_lat_err,
+            evLift=mc_ev_lift,
             ab=mc_ab,
         ),
         advice=CaddieAdviceHealth(

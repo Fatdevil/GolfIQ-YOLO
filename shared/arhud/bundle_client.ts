@@ -14,10 +14,18 @@ export type GreenPin = {
   ts?: string | null;
 };
 
+export type GreenTarget = {
+  id?: string | null;
+  section: GreenSection | null;
+  priority: number | null;
+  rings: [number, number][][];
+};
+
 export type GreenInfo = {
   sections: GreenSection[];
   fatSide: FatSide | null;
   pin: GreenPin | null;
+  targets?: GreenTarget[];
 };
 
 export type CourseFeature = {
@@ -175,11 +183,121 @@ function normalizePin(value: unknown): GreenPin | null {
   return { lat, lon, ts: null };
 }
 
+function normalizeCoordinatePair(value: unknown): [number, number] | null {
+  if (!Array.isArray(value) || value.length < 2) {
+    return null;
+  }
+  const lon = Number((value as unknown[])[0]);
+  const lat = Number((value as unknown[])[1]);
+  if (!Number.isFinite(lat) || !Number.isFinite(lon)) {
+    return null;
+  }
+  if (lat < GREEN_PIN_LAT_MIN || lat > GREEN_PIN_LAT_MAX) {
+    return null;
+  }
+  if (lon < GREEN_PIN_LON_MIN || lon > GREEN_PIN_LON_MAX) {
+    return null;
+  }
+  return [lon, lat];
+}
+
+function normalizeCoordinateRing(value: unknown): [number, number][] | null {
+  if (!Array.isArray(value)) {
+    return null;
+  }
+  const points: [number, number][] = [];
+  for (const entry of value as unknown[]) {
+    const pair = normalizeCoordinatePair(entry);
+    if (!pair) {
+      continue;
+    }
+    points.push(pair);
+  }
+  return points.length ? points : null;
+}
+
+function normalizeCoordinateRings(value: unknown): [number, number][][] {
+  const rings: [number, number][][] = [];
+  const pushRing = (candidate: unknown) => {
+    const ring = normalizeCoordinateRing(candidate);
+    if (ring && ring.length >= 3) {
+      rings.push(ring);
+    }
+  };
+  if (!value) {
+    return rings;
+  }
+  if (Array.isArray(value)) {
+    for (const entry of value) {
+      if (Array.isArray(entry) && entry.length && Array.isArray(entry[0])) {
+        // Multi-polygon handling
+        const nested = normalizeCoordinateRings(entry);
+        for (const ring of nested) {
+          rings.push(ring);
+        }
+      } else {
+        pushRing(entry);
+      }
+    }
+  }
+  return rings;
+}
+
+function normalizeGreenTargets(value: unknown): GreenTarget[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  const targets: GreenTarget[] = [];
+  for (const entry of value) {
+    if (!entry || typeof entry !== 'object') {
+      continue;
+    }
+    const record = entry as Record<string, unknown>;
+    const section = normalizeSection(record.section ?? record.label);
+    const priorityRaw = record.priority ?? record.order ?? record.rank;
+    const priority = Number.isFinite(priorityRaw as number)
+      ? Number(priorityRaw)
+      : typeof priorityRaw === 'string'
+        ? Number(priorityRaw)
+        : NaN;
+    let rings: [number, number][][] = [];
+    if (record.geometry && typeof record.geometry === 'object') {
+      const geometry = record.geometry as Record<string, unknown> & { coordinates?: unknown };
+      rings = normalizeCoordinateRings(geometry.coordinates);
+    }
+    if (!rings.length && Array.isArray(record.coordinates)) {
+      rings = normalizeCoordinateRings(record.coordinates);
+    }
+    if (!rings.length && Array.isArray(record.rings)) {
+      rings = normalizeCoordinateRings(record.rings);
+    }
+    if (!rings.length && Array.isArray(record.polygon)) {
+      rings = normalizeCoordinateRings(record.polygon);
+    }
+    if (!rings.length) {
+      continue;
+    }
+    const id = typeof record.id === 'string' ? record.id : typeof record.targetId === 'string' ? record.targetId : null;
+    targets.push({
+      id,
+      section: section ?? null,
+      priority: Number.isFinite(priority) ? Number(priority) : null,
+      rings,
+    });
+  }
+  return targets;
+}
+
 function normalizeGreenInfo(raw: unknown): GreenInfo | null {
   if (!raw || typeof raw !== 'object') {
     return null;
   }
-  const record = raw as Record<string, unknown> & { sections?: unknown; fatSide?: unknown; pin?: unknown };
+  const record = raw as Record<string, unknown> & {
+    sections?: unknown;
+    fatSide?: unknown;
+    pin?: unknown;
+    targets?: unknown;
+  };
   const sectionsRaw = record.sections;
   const sections: GreenSection[] = [];
   if (Array.isArray(sectionsRaw)) {
@@ -192,7 +310,9 @@ function normalizeGreenInfo(raw: unknown): GreenInfo | null {
   }
   const fatSide = normalizeFatSide(record.fatSide);
   const pin = normalizePin(record.pin);
-  if (!sections.length && fatSide === null && !pin) {
+  const targetsRaw = record.targets ?? (record as Record<string, unknown>)['green_targets'];
+  const targets = normalizeGreenTargets(targetsRaw);
+  if (!sections.length && fatSide === null && !pin && !targets.length) {
     return null;
   }
   if (!sections.length) {
@@ -202,6 +322,7 @@ function normalizeGreenInfo(raw: unknown): GreenInfo | null {
     sections,
     fatSide,
     pin,
+    targets: targets.length ? targets : undefined,
   };
 }
 
@@ -252,10 +373,19 @@ function parseBundle(json: unknown): CourseBundle {
     }
     const greenInfo = normalizeGreenInfo(rawGreen);
     if (greenInfo) {
+      const targets = Array.isArray(greenInfo.targets)
+        ? greenInfo.targets.map((target) => ({
+            id: target.id ?? null,
+            section: target.section ?? null,
+            priority: target.priority ?? null,
+            rings: target.rings.map((ring) => ring.map((point) => [...point] as [number, number])),
+          }))
+        : undefined;
       normalized.green = {
         sections: [...greenInfo.sections],
         fatSide: greenInfo.fatSide,
         pin: greenInfo.pin ? { ...greenInfo.pin } : null,
+        targets,
       };
       if (id) {
         greensById[id] = normalized.green;
