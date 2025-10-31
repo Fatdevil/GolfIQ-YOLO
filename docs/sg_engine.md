@@ -6,9 +6,11 @@ strokes gained (SG) engine. The implementation lives entirely in TypeScript unde
 ## Method Overview
 
 * **Baselines** – `loadDefaultBaselines()` returns a `BaselineSet` with smooth, monotone
-  expectations for each lie (`tee`, `fairway`, `rough`, `sand`, `recovery`, `green`). The functions
-  clamp their inputs, treat non-finite numbers as zero distance, and interpolate linearly between
-  documented anchor points.
+  expectations for each lie (`tee`, `fairway`, `rough`, `sand`, `recovery`, dedicated `short-game`,
+  and `green`). The functions clamp their inputs, treat non-finite numbers as zero distance, and
+  interpolate linearly between documented anchor points. `expStrokesFromDistance` routes distances
+  to the putting curve ≤ 20 m, the short-game curve for 20–35 m off-green shots, and the fairway
+  (approach) curve beyond 35 m.
 * **Per-shot SG** – For each shot event we evaluate the baseline at the start lie/distance and at
   the subsequent lie/distance. SG for the stroke is `E_start - 1 - E_next` (the final stroke uses
   `0` for the next expectation when the ball is holed).

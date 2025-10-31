@@ -227,6 +227,14 @@ export type BaselinePoint = {
   strokes: number;
 };
 
+const clampDistance = (value: number): number => {
+  if (!Number.isFinite(value)) {
+    return 0;
+  }
+  const numeric = Number(value);
+  return numeric >= 0 ? numeric : 0;
+};
+
 const sanitizeBaselinePoints = (points: readonly BaselinePoint[]): BaselinePoint[] => {
   const sorted = points
     .map((point) => ({
@@ -356,12 +364,32 @@ const buildLieBaseline = (key: keyof Omit<LieBaselineRow, 'distance_m'>): SGBase
 
 const DEFAULT_GREEN_BASELINE = loadDefaultPuttingBaseline();
 
+const SHORT_GAME_BASELINE_POINTS: readonly BaselinePoint[] = [
+  // Dedicated short-game expectations for off-green chips and pitches.
+  // Slightly higher than fairway values at the same distance to reflect the
+  // additional difficulty of lies inside 35 m that are not on the putting
+  // surface while remaining smooth and monotone.
+  { distance_m: 0, strokes: 0 },
+  { distance_m: 1, strokes: 1.4 },
+  { distance_m: 2, strokes: 2.2 },
+  { distance_m: 5, strokes: 2.9 },
+  { distance_m: 10, strokes: 3.35 },
+  { distance_m: 15, strokes: 3.55 },
+  { distance_m: 20, strokes: 3.6 },
+  { distance_m: 25, strokes: 3.7 },
+  { distance_m: 30, strokes: 3.8 },
+  { distance_m: 35, strokes: 3.9 },
+];
+
+const DEFAULT_SHORT_BASELINE = createPiecewiseBaseline(SHORT_GAME_BASELINE_POINTS);
+
 export type BaselineSet = {
   tee: SGBaselineFn;
   fairway: SGBaselineFn;
   rough: SGBaselineFn;
   sand: SGBaselineFn;
   recovery: SGBaselineFn;
+  short: SGBaselineFn;
   green: SGBaselineFn;
 };
 
@@ -377,6 +405,7 @@ const ensureBaselines = (): BaselineSet => {
     rough: buildLieBaseline('rough'),
     sand: buildLieBaseline('sand'),
     recovery: buildLieBaseline('recovery'),
+    short: DEFAULT_SHORT_BASELINE,
     green: DEFAULT_GREEN_BASELINE,
   };
   return cachedBaselines;
@@ -386,27 +415,24 @@ export function loadDefaultBaselines(): BaselineSet {
   return ensureBaselines();
 }
 
-const clampDistance = (value: number): number => {
-  if (!Number.isFinite(value)) {
-    return 0;
-  }
-  const numeric = Number(value);
-  return numeric >= 0 ? numeric : 0;
-};
-
 export const expStrokes_Tee = (distanceM: number): number => ensureBaselines().tee(distanceM);
 
 export const expStrokes_Approach = (distanceM: number): number =>
   ensureBaselines().fairway(distanceM);
 
-export const expStrokes_Short = (distanceM: number): number => ensureBaselines().fairway(distanceM);
+export const expStrokes_Short = (distanceM: number): number => ensureBaselines().short(distanceM);
 
 export const expStrokes_Putt = (distanceM: number): number => ensureBaselines().green(distanceM);
+
+export const SHORT_GAME_MAX_DISTANCE = 35;
 
 export const expStrokesFromDistance = (distanceM: number): number => {
   const dist = clampDistance(distanceM);
   if (dist <= PUTTING_BASELINE_MAX_DISTANCE) {
     return expStrokes_Putt(dist);
+  }
+  if (dist <= SHORT_GAME_MAX_DISTANCE) {
+    return expStrokes_Short(dist);
   }
   return expStrokes_Approach(dist);
 };
