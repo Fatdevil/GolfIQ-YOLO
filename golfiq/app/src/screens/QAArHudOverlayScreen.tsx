@@ -70,6 +70,7 @@ import {
   type HomographySnapshot,
 } from '../../../../shared/cv/calibration';
 import { headingToUnit } from '../../../../shared/caddie/geometry';
+import type { McResult } from '../../../../shared/caddie/mc';
 import { playsLikeDistance, type PlaysLikeInput, type PlaysLikeResult } from '../../../../shared/caddie/playslike';
 import { computePlaysLike, type PlanOut } from '../../../../shared/playslike/aggregate';
 import { addShot as addRoundShot, getActiveRound as getActiveRoundState } from '../../../../shared/round/round_store';
@@ -110,9 +111,15 @@ import {
   planApproachMC,
   planTeeShot,
   planTeeShotMC,
+  chooseStrategy,
+  type HazardRates as StrategyHazardRates,
+  type Dispersion as StrategyDispersion,
+  type StrategyDecision,
+  type StrategyInput,
   type RiskMode as CaddieRiskMode,
   type ShotPlan as CaddieShotPlan,
 } from '../../../../shared/caddie/strategy';
+import type { RiskProfile } from '../../../../shared/caddie/strategy_profiles';
 import type { TrainingFocus } from '../../../../shared/training/types';
 import {
   defaultCoachStyle,
@@ -136,6 +143,7 @@ import {
 } from '../../../../shared/greeniq/visibility';
 import {
   emitCaddiePlaysLikeTelemetry,
+  emitCaddieStrategyTelemetry,
   isCaddieTelemetryEnabled,
   type TelemetryEmitter,
 } from '../../../../shared/telemetry/caddie';
@@ -328,6 +336,108 @@ const VOICE_LANGUAGE_TO_COACH: Record<'sv-SE' | 'en-US', CoachStyle['language']>
 const EARTH_RADIUS_M = 6_378_137;
 
 const clamp01 = (value: number): number => Math.max(0, Math.min(1, value));
+
+const STRATEGY_PROFILE_OPTIONS: ReadonlyArray<{ key: RiskProfile; label: string }> = [
+  { key: 'conservative', label: 'Conservative' },
+  { key: 'neutral', label: 'Neutral' },
+  { key: 'aggressive', label: 'Aggressive' },
+] as const;
+
+const HAZARD_WATER_KEYWORDS = ['water', 'pond', 'lake', 'river', 'creek'];
+const HAZARD_BUNKER_KEYWORDS = ['bunker', 'sand'];
+const HAZARD_ROUGH_KEYWORDS = ['rough', 'native', 'brush', 'waste'];
+const HAZARD_OB_KEYWORDS = ['ob', 'out', 'boundary', 'cartpath', 'road'];
+
+const clampProbability = (value: number): number => clamp01(Number.isFinite(value) ? value : 0);
+
+type StrategyHazardSummary = {
+  hazard: StrategyHazardRates;
+  dangerSide: 'left' | 'right' | null;
+};
+
+const summarizeStrategyHazards = (mc: McResult | null | undefined): StrategyHazardSummary => {
+  const hazard: StrategyHazardRates = {
+    water: 0,
+    bunker: 0,
+    rough: 0,
+    ob: 0,
+    fairway: 0,
+  };
+  if (!mc || !Number.isFinite(mc.samples) || mc.samples <= 0) {
+    return { hazard, dangerSide: null };
+  }
+  const denom = mc.samples > 0 ? mc.samples : 1;
+  const hazardEntries = Object.entries(mc.hazardBreakdown ?? {});
+  for (const [key, hitsRaw] of hazardEntries) {
+    const hits = Number(hitsRaw);
+    if (!(hits > 0)) {
+      continue;
+    }
+    const rate = hits / denom;
+    const label = (key ?? '').toString().toLowerCase();
+    if (HAZARD_WATER_KEYWORDS.some((term) => label.includes(term))) {
+      hazard.water += rate;
+      continue;
+    }
+    if (HAZARD_BUNKER_KEYWORDS.some((term) => label.includes(term))) {
+      hazard.bunker += rate;
+      continue;
+    }
+    if (HAZARD_OB_KEYWORDS.some((term) => label.includes(term))) {
+      hazard.ob += rate;
+      continue;
+    }
+    if (HAZARD_ROUGH_KEYWORDS.some((term) => label.includes(term))) {
+      hazard.rough += rate;
+      continue;
+    }
+    hazard.rough += rate * 0.5;
+  }
+
+  const targetEntries = Object.entries(mc.targetBreakdown ?? {});
+  for (const [key, hitsRaw] of targetEntries) {
+    const hits = Number(hitsRaw);
+    if (!(hits > 0)) {
+      continue;
+    }
+    const label = (key ?? '').toString().toLowerCase();
+    if (label.includes('fairway')) {
+      hazard.fairway += hits / denom;
+    }
+  }
+
+  hazard.water = clampProbability(hazard.water);
+  hazard.bunker = clampProbability(hazard.bunker);
+  hazard.rough = clampProbability(hazard.rough);
+  hazard.ob = clampProbability(hazard.ob);
+  hazard.fairway = clampProbability(hazard.fairway);
+
+  let dangerSide: 'left' | 'right' | null = null;
+  let bestRate = 0;
+  for (const reason of mc.reasons ?? []) {
+    if (reason?.kind !== 'hazard') {
+      continue;
+    }
+    const direction = String(reason.meta?.direction ?? '').toLowerCase();
+    const rate = typeof reason.value === 'number' ? reason.value : 0;
+    if ((direction === 'left' || direction === 'right') && rate > bestRate) {
+      bestRate = rate;
+      dangerSide = direction;
+    }
+  }
+  if (!dangerSide && hazard.water + hazard.ob > 0.05) {
+    dangerSide = 'left';
+  }
+  return { hazard, dangerSide };
+};
+
+const formatStrategySigned = (value: number): string => {
+  if (!Number.isFinite(value)) {
+    return '+0.00';
+  }
+  const rounded = Number(value);
+  return `${rounded >= 0 ? '+' : ''}${rounded.toFixed(2)}`;
+};
 
 const clampVoiceValue = (value: number, min: number, max: number): number => Math.min(max, Math.max(min, value));
 
@@ -1933,6 +2043,7 @@ const QAArHudOverlayScreen: React.FC = () => {
   const [landingState, setLandingState] = useState<AutoLandingState>('IDLE');
   const [coachStyle, setCoachStyle] = useState<CoachStyle>(defaultCoachStyle);
   const [caddieRiskMode, setCaddieRiskMode] = useState<CaddieRiskMode>('normal');
+  const [strategyProfile, setStrategyProfile] = useState<RiskProfile>('neutral');
   const [caddieGoForGreen, setCaddieGoForGreen] = useState(false);
   const [caddieUseMC, setCaddieUseMC] = useState(true);
   const [caddieSamples, setCaddieSamples] = useState(800);
@@ -1948,6 +2059,7 @@ const QAArHudOverlayScreen: React.FC = () => {
   const lastPuttTelemetryRef = useRef<string | null>(null);
   const lastBreakTelemetryRef = useRef<string | null>(null);
   const telemetryRef = useRef<TelemetryEmitter | null>(null);
+  const lastStrategyTelemetryRef = useRef<string | null>(null);
   const tournamentSafe = useMemo(() => readTournamentSafe(), []);
   const [puttFeedbackOverride, setPuttFeedbackOverride] = useState(false);
   const [puttHintsEnabled, setPuttHintsEnabled] = useState(!tournamentSafe);
@@ -3076,6 +3188,120 @@ const QAArHudOverlayScreen: React.FC = () => {
     )}, temp ${formatPercent(breakdown.temp)}`;
     return { distanceLabel, factorLabel, breakdownText };
   }, [formatPercent, holeComplete, playsLikeResult, tournamentSafe]);
+  const strategyComputation = useMemo<
+    | {
+        decision: StrategyDecision;
+        input: StrategyInput;
+        hazard: StrategyHazardRates;
+        dispersion: StrategyDispersion;
+        playsLikeFactor: number;
+      }
+    | null
+  >(() => {
+    const rawCandidate = (() => {
+      const playsLikeRaw = playsLikeInput?.rawDist_m;
+      if (Number.isFinite(playsLikeRaw) && (playsLikeRaw ?? 0) > 0) {
+        return Number(playsLikeRaw);
+      }
+      const base = shotSession?.baseDistance;
+      if (Number.isFinite(base) && (base ?? 0) > 0) {
+        return Number(base);
+      }
+      return 0;
+    })();
+    if (!(rawCandidate > 0)) {
+      return null;
+    }
+    const factorCandidate = (() => {
+      if (playsLikeResult && Number.isFinite(playsLikeResult.factor) && playsLikeResult.factor > 0) {
+        return playsLikeResult.factor;
+      }
+      if (
+        playsLikeResult &&
+        Number.isFinite(playsLikeResult.distance_m) &&
+        playsLikeResult.distance_m > 0
+      ) {
+        return playsLikeResult.distance_m / rawCandidate;
+      }
+      return 1;
+    })();
+
+    const { hazard, dangerSide } = summarizeStrategyHazards(caddiePlan?.mc ?? null);
+
+    const clubValue = caddiePlan?.club ?? shotSession?.plan?.clubSuggested ?? null;
+    const isClubIdValue = (value: string | null | undefined): value is ClubId =>
+      Boolean(value && (CLUB_SEQUENCE as readonly string[]).includes(value));
+    const clubStats = isClubIdValue(clubValue) ? caddiePlayerModel.clubs[clubValue] : undefined;
+
+    const sigmaLong = Number.isFinite(clubStats?.sigma_long_m)
+      ? Number(clubStats?.sigma_long_m)
+      : 12;
+    const sigmaLat = Number.isFinite(clubStats?.sigma_lat_m)
+      ? Number(clubStats?.sigma_lat_m)
+      : Math.max(4, sigmaLong * 0.55);
+
+    const dispersion: StrategyDispersion = {
+      sigma_m: sigmaLong,
+      lateralSigma_m: sigmaLat,
+    };
+
+    const laneWidth = Math.max(12, Math.max(dispersion.lateralSigma_m ?? sigmaLong * 0.55, 4) * 3);
+
+    const input: StrategyInput = {
+      rawDist_m: rawCandidate,
+      playsLikeFactor: factorCandidate,
+      hazard,
+      dispersion,
+      laneWidth_m: laneWidth,
+      profile: strategyProfile,
+      dangerSide,
+    };
+
+    const decision = chooseStrategy(input);
+    return { decision, input, hazard, dispersion, playsLikeFactor: factorCandidate };
+  }, [
+    caddiePlan?.club,
+    caddiePlan?.mc,
+    caddiePlayerModel,
+    playsLikeInput?.rawDist_m,
+    playsLikeResult?.distance_m,
+    playsLikeResult?.factor,
+    shotSession?.baseDistance,
+    shotSession?.plan?.clubSuggested,
+    strategyProfile,
+  ]);
+  const strategyAllowed = !tournamentSafe || holeComplete;
+  const strategyDisplay = useMemo(() => {
+    if (!strategyAllowed || !strategyComputation) {
+      return null;
+    }
+    const decision = strategyComputation.decision;
+    const profileLabel =
+      STRATEGY_PROFILE_OPTIONS.find((option) => option.key === decision.profile)?.label ?? 'Neutral';
+    const offset = decision.recommended.offset_m;
+    const aimSegment =
+      Math.abs(offset) < 0.5
+        ? 'Aim center'
+        : `Aim ${Math.abs(offset).toFixed(0)} m ${offset > 0 ? 'right' : 'left'}`;
+    const factorDelta = strategyComputation.playsLikeFactor - 1;
+    const hasFactor = Number.isFinite(strategyComputation.playsLikeFactor) && Math.abs(factorDelta) >= 0.0005;
+    const carrySegment = hasFactor
+      ? `Carry ${decision.recommended.carry_m.toFixed(0)} m (PL ${formatPercent(factorDelta)})`
+      : `Carry ${decision.recommended.carry_m.toFixed(0)} m`;
+    const headline = `${profileLabel} → ${[aimSegment, carrySegment].join(' · ')}`;
+    const breakdownParts = [
+      `haz ${formatStrategySigned(decision.breakdown.hazards)}`,
+      `fw ${formatStrategySigned(decision.breakdown.fairway)}`,
+      `dist ${formatStrategySigned(decision.breakdown.distance)}`,
+    ];
+    if (Math.abs(decision.breakdown.bias) >= 0.01) {
+      breakdownParts.push(`bias ${formatStrategySigned(decision.breakdown.bias)}`);
+    }
+    return {
+      headline,
+      breakdown: breakdownParts.join(', '),
+    };
+  }, [formatPercent, strategyAllowed, strategyComputation]);
   const puttingSgSummary = useMemo<
     | {
         headline: string;
@@ -3146,6 +3372,35 @@ const QAArHudOverlayScreen: React.FC = () => {
     });
     lastPlaysLikeTelemetryShotRef.current = shotSession.shotId;
   }, [playsLikeInput, playsLikeResult, shotSession]);
+  useEffect(() => {
+    if (!strategyComputation) {
+      return;
+    }
+    if (!shotSession?.shotId) {
+      return;
+    }
+    if (!isCaddieTelemetryEnabled()) {
+      return;
+    }
+    if (tournamentSafe && !holeComplete) {
+      return;
+    }
+    const key = `${shotSession.shotId}-${strategyComputation.decision.profile}`;
+    if (lastStrategyTelemetryRef.current === key) {
+      return;
+    }
+    emitCaddieStrategyTelemetry(telemetryRef.current, {
+      profile: strategyComputation.decision.profile,
+      offset_m: strategyComputation.decision.recommended.offset_m,
+      carry_m: strategyComputation.decision.recommended.carry_m,
+      evScore: strategyComputation.decision.evScore,
+      hazard: strategyComputation.input.hazard,
+      fairway: strategyComputation.input.hazard.fairway,
+      sigma_m: strategyComputation.input.dispersion.sigma_m,
+      lateralSigma_m: strategyComputation.input.dispersion.lateralSigma_m,
+    });
+    lastStrategyTelemetryRef.current = key;
+  }, [holeComplete, shotSession?.shotId, strategyComputation, tournamentSafe]);
   const overrideEnabled = puttOverrideEnabled(tournamentSafe);
   const breakTelemetryEnabled = !tournamentSafe && puttHintsEnabled;
   const puttFeedbackVisible = useMemo(() => {
@@ -5376,6 +5631,39 @@ const QAArHudOverlayScreen: React.FC = () => {
                   ))}
                 </View>
               ) : null}
+              {strategyAllowed && strategyDisplay ? (
+                <View style={styles.strategyBlock}>
+                  <View style={styles.strategyHeader}>
+                    <Text style={styles.strategyLabel}>Strategy</Text>
+                    <View style={styles.strategySelector}>
+                      {STRATEGY_PROFILE_OPTIONS.map((option) => {
+                        const active = strategyProfile === option.key;
+                        return (
+                          <TouchableOpacity
+                            key={option.key}
+                            onPress={() => setStrategyProfile(option.key)}
+                            style={[
+                              styles.strategyProfileButton,
+                              active ? styles.strategyProfileButtonActive : null,
+                            ]}
+                          >
+                            <Text
+                              style={[
+                                styles.strategyProfileButtonText,
+                                active ? styles.strategyProfileButtonTextActive : null,
+                              ]}
+                            >
+                              {option.label}
+                            </Text>
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </View>
+                  </View>
+                  <Text style={styles.strategyRecommendation}>{strategyDisplay.headline}</Text>
+                  <Text style={styles.strategyBreakdown}>{strategyDisplay.breakdown}</Text>
+                </View>
+              ) : null}
               {caddieMcActive && mcResult ? (
                 <View style={styles.mcStatsBlock}>
                   <View style={styles.mcRiskRow}>
@@ -6788,6 +7076,55 @@ const styles = StyleSheet.create({
     color: '#f8fafc',
     fontSize: 14,
     fontWeight: '700',
+  },
+  strategyBlock: {
+    marginTop: 4,
+    paddingTop: 8,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: '#1e293b',
+    gap: 4,
+  },
+  strategyHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+  },
+  strategyLabel: {
+    color: '#cbd5f5',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  strategySelector: {
+    flexDirection: 'row',
+    backgroundColor: '#111827',
+    borderRadius: 6,
+    overflow: 'hidden',
+  },
+  strategyProfileButton: {
+    paddingVertical: 4,
+    paddingHorizontal: 10,
+  },
+  strategyProfileButtonActive: {
+    backgroundColor: '#2563eb',
+  },
+  strategyProfileButtonText: {
+    color: '#94a3b8',
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  strategyProfileButtonTextActive: {
+    color: '#f8fafc',
+  },
+  strategyRecommendation: {
+    color: '#f8fafc',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  strategyBreakdown: {
+    color: '#94a3b8',
+    fontSize: 11,
+    fontWeight: '500',
   },
   greenSectionRow: {
     flexDirection: 'row',

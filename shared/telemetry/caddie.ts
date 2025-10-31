@@ -1,3 +1,6 @@
+import type { HazardRates } from "../caddie/strategy";
+import type { RiskProfile } from "../caddie/strategy_profiles";
+
 export type TelemetryEmitter = (event: string, data: Record<string, unknown>) => void;
 
 export type CaddiePlaysLikeEvent = {
@@ -7,6 +10,17 @@ export type CaddiePlaysLikeEvent = {
   elevDiff_m: number;
   temp_C: number;
   headwind_mps: number;
+};
+
+export type CaddieStrategyEvent = {
+  profile: RiskProfile;
+  offset_m: number;
+  carry_m: number;
+  evScore: number;
+  hazard: HazardRates;
+  fairway: number;
+  sigma_m: number;
+  lateralSigma_m?: number;
 };
 
 let playsLikeTelemetryEnabled = false;
@@ -31,6 +45,23 @@ export function emitCaddiePlaysLikeTelemetry(
   }
   try {
     emitter("caddie.playslike.v1", payload);
+  } catch (error) {
+    // ignore emitter failures
+  }
+}
+
+export function emitCaddieStrategyTelemetry(
+  emitter: TelemetryEmitter | null | undefined,
+  payload: CaddieStrategyEvent,
+): void {
+  if (!playsLikeTelemetryEnabled) {
+    return;
+  }
+  if (typeof emitter !== "function") {
+    return;
+  }
+  try {
+    emitter("caddie.strategy.v1", payload);
   } catch (error) {
     // ignore emitter failures
   }
