@@ -128,6 +128,7 @@ import { getCaddieRc } from '../../../../shared/caddie/rc';
 import { inRollout } from '../../../../shared/caddie/rollout';
 import { caddieTipToText, advicesToText } from '../../../../shared/caddie/text';
 import { speak as speakTip, stop as stopSpeech } from '../../../../shared/tts/speak';
+import { breakHint } from '../../../../shared/greeniq/break';
 import { evaluatePutt, type PuttEval } from '../../../../shared/greeniq/putt_eval';
 import {
   puttFeedbackVisible as computePuttFeedbackVisible,
@@ -138,7 +139,11 @@ import {
   isCaddieTelemetryEnabled,
   type TelemetryEmitter,
 } from '../../../../shared/telemetry/caddie';
-import { emitGreenIqTelemetry } from '../../../../shared/telemetry/greeniq';
+import {
+  emitGreenIqBreakTelemetry,
+  emitGreenIqTelemetry,
+  type GreenIqBreakHintEvent,
+} from '../../../../shared/telemetry/greeniq';
 import { buildGhostTelemetryKey } from './utils/ghostTelemetry';
 import CalibrationWizard from './CalibrationWizard';
 import {
@@ -582,6 +587,18 @@ type ShotSummary = {
     total: number;
   } | null;
   planAdopted: boolean;
+};
+
+type PlanGreenIqExtras = {
+  greeniq?: { stimp?: number; slope_pct?: number };
+  green?: { stimp?: number; slope_pct?: number };
+  stimp?: number;
+  slope_pct?: number;
+};
+
+type BreakHintUiState = {
+  line: string;
+  telemetry: GreenIqBreakHintEvent;
 };
 
 type AutoPickPrompt = {
@@ -1809,9 +1826,11 @@ const QAArHudOverlayScreen: React.FC = () => {
   const [coachProfileId, setCoachProfileId] = useState<string | null>(null);
   const lastProfileUpdateShotRef = useRef<string | null>(null);
   const lastPuttTelemetryRef = useRef<string | null>(null);
+  const lastBreakTelemetryRef = useRef<string | null>(null);
   const telemetryRef = useRef<TelemetryEmitter | null>(null);
   const tournamentSafe = useMemo(() => readTournamentSafe(), []);
   const [puttFeedbackOverride, setPuttFeedbackOverride] = useState(false);
+  const [puttHintsEnabled, setPuttHintsEnabled] = useState(!tournamentSafe);
   const greenHintsEnabled = useMemo(
     () => !tournamentSafe && rcGreenSectionsEnabled,
     [rcGreenSectionsEnabled, tournamentSafe],
@@ -1832,6 +1851,11 @@ const QAArHudOverlayScreen: React.FC = () => {
     { key: string; mcUsed: boolean; hadAdvice: boolean; ttsUsed: boolean } | null
   >(null);
   const planAdoptedRef = useRef(false);
+  useEffect(() => {
+    if (tournamentSafe) {
+      setPuttHintsEnabled(false);
+    }
+  }, [tournamentSafe]);
   useEffect(() => {
     let mounted = true;
     (async () => {
@@ -2669,6 +2693,7 @@ const QAArHudOverlayScreen: React.FC = () => {
     planAdoptedRef.current = false;
     lastPlanContextRef.current = null;
   }, [createShotPayload, emitTelemetry, shotSession]);
+  const planWithGreenIq = shotSession?.plan as (PlanOut & PlanGreenIqExtras) | undefined;
   const shotSummary = useMemo<ShotSummary | null>(() => {
     if (!shotSession || !shotSession.landing) {
       return null;
@@ -2823,6 +2848,46 @@ const QAArHudOverlayScreen: React.FC = () => {
     const prefix = puttEval.paceClass === 'too_soft' ? '+' : '−';
     return `${prefix}${bucket}% tempo next time`;
   }, [puttEval, puttPaceRatio]);
+  const sessionStimp = useMemo(() => {
+    if (!planWithGreenIq) {
+      return null;
+    }
+    const candidates = [
+      planWithGreenIq.greeniq?.stimp,
+      planWithGreenIq.green?.stimp,
+      planWithGreenIq.stimp,
+    ];
+    for (const candidate of candidates) {
+      if (Number.isFinite(candidate) && Number(candidate) > 0) {
+        return Number(candidate);
+      }
+    }
+    return null;
+  }, [planWithGreenIq]);
+  const sessionSlopePct = useMemo(() => {
+    if (!planWithGreenIq) {
+      return null;
+    }
+    const slopeCandidates = [
+      planWithGreenIq.greeniq?.slope_pct,
+      planWithGreenIq.green?.slope_pct,
+      planWithGreenIq.slope_pct,
+    ];
+    for (const candidate of slopeCandidates) {
+      if (Number.isFinite(candidate)) {
+        return Number(candidate);
+      }
+    }
+    const slopeMeters = planWithGreenIq.breakdown?.slope_m;
+    const distance = puttEval?.holeDist_m;
+    if (!Number.isFinite(slopeMeters) || !Number.isFinite(distance) || !distance) {
+      return null;
+    }
+    if (Math.abs(Number(distance)) < 1e-6) {
+      return null;
+    }
+    return (Number(slopeMeters) / Number(distance)) * 100;
+  }, [planWithGreenIq, puttEval?.holeDist_m]);
   const holeComplete = shotSession?.hole?.completed === true;
   const playsLikeHud = useMemo(() => {
     const rawCandidate =
@@ -2915,6 +2980,7 @@ const QAArHudOverlayScreen: React.FC = () => {
     lastPlaysLikeTelemetryShotRef.current = shotSession.shotId;
   }, [playsLikeInput, playsLikeResult, shotSession]);
   const overrideEnabled = puttOverrideEnabled(tournamentSafe);
+  const breakTelemetryEnabled = !tournamentSafe && puttHintsEnabled;
   const puttFeedbackVisible = useMemo(() => {
     if (!puttEval) {
       return false;
@@ -3000,6 +3066,126 @@ const QAArHudOverlayScreen: React.FC = () => {
     const precision = Math.abs(adjust) >= 10 ? 0 : 1;
     return `Aim adjust: ${Math.abs(adjust).toFixed(precision)} cm ${direction}`;
   }, [puttEval?.aimAdjust_cm]);
+  const puttBreakHint = useMemo<BreakHintUiState | null>(() => {
+    if (!puttHintsEnabled) {
+      return null;
+    }
+    if (!puttFeedbackVisible || !holeComplete) {
+      return null;
+    }
+    if (!puttEval) {
+      return null;
+    }
+    const distance = Number(puttEval.holeDist_m);
+    if (!Number.isFinite(distance) || distance <= 0) {
+      return null;
+    }
+    const signedAngle = Number.isFinite(puttEval.signedAngleDeg)
+      ? Number(puttEval.signedAngleDeg)
+      : Number(puttEval.angleDeg);
+    if (!Number.isFinite(signedAngle)) {
+      return null;
+    }
+    const pace = Number.isFinite(puttPaceRatio ?? Number.NaN)
+      ? Number(puttPaceRatio)
+      : 1;
+    const slopeInput = sessionSlopePct ?? undefined;
+    const stimpInput = sessionStimp ?? undefined;
+
+    const hint = breakHint({
+      length_m: distance,
+      angleDeg: signedAngle,
+      paceRatio: pace,
+      slope_pct: slopeInput,
+      stimp: stimpInput,
+    });
+
+    const aimText = (() => {
+      if (hint.aimSide === 'unknown') {
+        return 'Aim feel it out';
+      }
+      if (hint.aimSide === 'center') {
+        return 'Aim center';
+      }
+      if (hint.aimCm === null) {
+        return `Aim slightly ${hint.aimSide}`;
+      }
+      const magnitude = Math.abs(hint.aimCm);
+      if (magnitude < 0.5) {
+        return 'Aim center';
+      }
+      const precision = magnitude >= 10 ? 0 : 1;
+      return `Aim ${magnitude.toFixed(precision)} cm ${hint.aimSide}`;
+    })();
+
+    const tempoText = (() => {
+      const ratioDelta = Number.isFinite(puttPaceRatio ?? Number.NaN)
+        ? Math.abs(Number(puttPaceRatio) - 1) * 100
+        : null;
+      const rounded = ratioDelta !== null ? Math.max(1, Math.round(ratioDelta)) : null;
+      switch (hint.tempoHint) {
+        case 'firmer':
+          return rounded !== null ? `+${rounded}% tempo` : 'Hit it firmer';
+        case 'softer':
+          return rounded !== null ? `−${rounded}% tempo` : 'Dial it softer';
+        default:
+          return 'Tempo good';
+      }
+    })();
+
+    const confidenceLabel = `${hint.confidence.charAt(0).toUpperCase()}${hint.confidence.slice(1)}`;
+    const segments = [aimText];
+    if (tempoText) {
+      segments.push(tempoText);
+    }
+    const line = `Hint (${confidenceLabel}): ${segments.join(' · ')}`;
+
+    const telemetry: GreenIqBreakHintEvent = {
+      length_m: distance,
+      angleDeg: signedAngle,
+      paceRatio: pace,
+      aimCm: hint.aimCm,
+      aimSide: hint.aimSide,
+      tempoHint: hint.tempoHint,
+      confidence: hint.confidence,
+    };
+    if (slopeInput !== undefined) {
+      telemetry.slope_pct = slopeInput;
+    }
+    if (stimpInput !== undefined) {
+      telemetry.stimp = stimpInput;
+    }
+
+    return { line, telemetry };
+  }, [
+    holeComplete,
+    puttEval,
+    puttFeedbackVisible,
+    puttHintsEnabled,
+    puttPaceRatio,
+    sessionSlopePct,
+    sessionStimp,
+  ]);
+  useEffect(() => {
+    if (!breakTelemetryEnabled) {
+      lastBreakTelemetryRef.current = null;
+      return;
+    }
+    if (!puttBreakHint) {
+      return;
+    }
+    const emitter = telemetryRef.current;
+    if (!emitter) {
+      return;
+    }
+    const shotId = shotSession?.shotId ?? 'none';
+    const fingerprint = `${shotId}|${JSON.stringify(puttBreakHint.telemetry)}`;
+    if (fingerprint === lastBreakTelemetryRef.current) {
+      return;
+    }
+    emitGreenIqBreakTelemetry(emitter, puttBreakHint.telemetry, { enabled: true });
+    lastBreakTelemetryRef.current = fingerprint;
+  }, [breakTelemetryEnabled, puttBreakHint, shotSession?.shotId]);
   const puttFeedbackStatus = useMemo(() => {
     if (!shotSession || shotSession.phase !== 'putt') {
       return 'Hit a putt to unlock feedback.';
@@ -5244,20 +5430,32 @@ const QAArHudOverlayScreen: React.FC = () => {
                   <View style={styles.greeniqHeader}>
                     <Text style={styles.greeniqTitle}>GreenIQ feedback</Text>
                     <View style={styles.greeniqToggleRow}>
-                      <Text style={styles.greeniqToggleLabel}>
-                        {tournamentSafe
-                          ? 'Tournament-safe'
-                          : puttFeedbackOverride
-                            ? 'Override on'
-                            : 'Override off'}
-                      </Text>
-                      <Switch
-                        disabled={!overrideEnabled}
-                        value={puttFeedbackOverride}
-                        onValueChange={overrideEnabled ? setPuttFeedbackOverride : undefined}
-                        thumbColor={puttFeedbackOverride ? '#22c55e' : '#cbd5f5'}
-                        trackColor={{ false: '#1e293b', true: '#14532d' }}
-                      />
+                      <View style={styles.greeniqToggleGroup}>
+                        <Text style={styles.greeniqToggleLabel}>
+                          {tournamentSafe
+                            ? 'Tournament-safe'
+                            : puttFeedbackOverride
+                              ? 'Override on'
+                              : 'Override off'}
+                        </Text>
+                        <Switch
+                          disabled={!overrideEnabled}
+                          value={puttFeedbackOverride}
+                          onValueChange={overrideEnabled ? setPuttFeedbackOverride : undefined}
+                          thumbColor={puttFeedbackOverride ? '#22c55e' : '#cbd5f5'}
+                          trackColor={{ false: '#1e293b', true: '#14532d' }}
+                        />
+                      </View>
+                      <View style={[styles.greeniqToggleGroup, styles.greeniqToggleGroupSpacing]}>
+                        <Text style={styles.greeniqToggleLabel}>Hints</Text>
+                        <Switch
+                          disabled={tournamentSafe}
+                          value={puttHintsEnabled}
+                          onValueChange={tournamentSafe ? undefined : setPuttHintsEnabled}
+                          thumbColor={puttHintsEnabled ? '#22c55e' : '#cbd5f5'}
+                          trackColor={{ false: '#1e293b', true: '#14532d' }}
+                        />
+                      </View>
                     </View>
                   </View>
                   {puttEval && puttFeedbackVisible ? (
@@ -5275,6 +5473,9 @@ const QAArHudOverlayScreen: React.FC = () => {
                       ) : null}
                       {puttAimSuggestion ? (
                         <Text style={styles.greeniqMetric}>{puttAimSuggestion}</Text>
+                      ) : null}
+                      {puttBreakHint ? (
+                        <Text style={styles.greeniqMetric}>{puttBreakHint.line}</Text>
                       ) : null}
                       {puttEval.holeDist_m !== undefined && puttEval.endDist_m !== undefined ? (
                         <Text style={styles.greeniqMeta}>
@@ -6009,6 +6210,13 @@ const styles = StyleSheet.create({
   greeniqToggleRow: {
     flexDirection: 'row',
     alignItems: 'center',
+  },
+  greeniqToggleGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  greeniqToggleGroupSpacing: {
+    marginLeft: 12,
   },
   greeniqToggleLabel: {
     color: '#94a3b8',

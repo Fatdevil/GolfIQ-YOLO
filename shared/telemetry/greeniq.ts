@@ -12,6 +12,18 @@ export type GreenIqPuttFeedbackEvent = {
 
 type TelemetryEmitter = (event: string, data: Record<string, unknown>) => void;
 
+export type GreenIqBreakHintEvent = {
+  length_m: number;
+  angleDeg: number;
+  paceRatio: number;
+  slope_pct?: number;
+  stimp?: number;
+  aimCm?: number | null;
+  aimSide: 'left' | 'right' | 'center' | 'unknown';
+  tempoHint: 'softer' | 'firmer' | 'good';
+  confidence: 'low' | 'med' | 'high';
+};
+
 export function emitGreenIqTelemetry(
   emitter: TelemetryEmitter | null | undefined,
   payload: GreenIqPuttFeedbackEvent,
@@ -22,6 +34,24 @@ export function emitGreenIqTelemetry(
   try {
     emitter('greeniq.putt_feedback.v1', payload);
   } catch (error) {
+    // ignore emitter failures
+  }
+}
+
+export function emitGreenIqBreakTelemetry(
+  emitter: TelemetryEmitter | null | undefined,
+  payload: GreenIqBreakHintEvent,
+  options?: { enabled?: boolean },
+): void {
+  if (!options?.enabled) {
+    return;
+  }
+  if (typeof emitter !== 'function') {
+    return;
+  }
+  try {
+    emitter('greeniq.break.v1', payload);
+  } catch {
     // ignore emitter failures
   }
 }
