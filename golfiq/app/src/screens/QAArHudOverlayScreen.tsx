@@ -221,6 +221,8 @@ import {
   type TelemetryEmitter,
 } from '../../../../shared/telemetry/caddie';
 import { emitRecenterTelemetry, setRecenterTelemetryEnabled } from '../../../../shared/telemetry/arhud';
+import { WatchBridge } from '../../../../shared/watch/bridge';
+import type { WatchHUDStateV1 } from '../../../../shared/watch/types';
 import {
   emitGreenIqBreakTelemetry,
   emitGreenIqTelemetry,
@@ -310,6 +312,47 @@ const normalizeRcBoolean = (value: unknown): boolean => {
       return false;
     }
     return ['1', 'true', 'yes', 'on'].includes(normalized);
+  }
+  return false;
+};
+
+const WATCH_HUD_ENV_KEYS = [
+  'ENABLE_WATCH_HUD',
+  'WATCH_HUD',
+  'EXPO_PUBLIC_ENABLE_WATCH_HUD',
+  'EXPO_PUBLIC_WATCH_HUD',
+] as const;
+
+const WATCH_HUD_RC_KEYS = ['watch.hud.enabled', 'hud.watch.enabled', 'enableWatchHUD'] as const;
+
+const WATCH_HUD_SEND_MIN_INTERVAL_MS = 1000;
+const WATCH_HUD_FMB_OFFSET_M = 6;
+
+const readWatchHudEnabled = (): boolean => {
+  if (typeof globalThis === 'undefined') {
+    return false;
+  }
+  const holder = globalThis as {
+    RC?: Record<string, unknown>;
+    process?: { env?: Record<string, string | undefined> };
+  };
+  const env = holder.process?.env;
+  if (env) {
+    for (const key of WATCH_HUD_ENV_KEYS) {
+      const value = env[key];
+      if (value !== undefined && normalizeRcBoolean(value)) {
+        return true;
+      }
+    }
+  }
+  const rc = holder.RC;
+  if (rc && typeof rc === 'object') {
+    const record = rc as Record<string, unknown>;
+    for (const key of WATCH_HUD_RC_KEYS) {
+      if (key in record && normalizeRcBoolean(record[key])) {
+        return true;
+      }
+    }
   }
   return false;
 };
@@ -2259,10 +2302,13 @@ const CoursePicker: React.FC<CoursePickerProps> = ({
 
 const QAArHudOverlayScreen: React.FC = () => {
   const qaEnabled = qaHudEnabled();
+  const watchHudEnabled = useMemo(() => readWatchHudEnabled(), []);
   const autoCourseRef = useRef<AutoCourseController | null>(null);
   if (!autoCourseRef.current) {
     autoCourseRef.current = new AutoCourseController();
   }
+  const watchHudSendAttemptRef = useRef(0);
+  const watchHudLastSuccessRef = useRef<{ ts: number; fingerprint: string } | null>(null);
   const bundleStore = useMemo(() => new BundleStore(), []);
   const bundleBaseUrl = useMemo(() => `${resolveBundleQaBase()}/bundle/course`, []);
   const bundleClient = useMemo(
@@ -3706,6 +3752,96 @@ const QAArHudOverlayScreen: React.FC = () => {
       breakdown: breakdownParts.join(', '),
     };
   }, [formatPercent, strategyAllowed, strategyComputation]);
+  useEffect(() => {
+    if (!watchHudEnabled || !qaEnabled) {
+      return;
+    }
+    const middleDistance =
+      finiteOrNull(pinMetrics?.distance) ?? finiteOrNull(shotSession?.baseDistance) ?? null;
+    if (!middleDistance || middleDistance <= 0) {
+      return;
+    }
+    const frontDistance = Math.max(0, middleDistance - WATCH_HUD_FMB_OFFSET_M);
+    const backDistance = Math.max(middleDistance + WATCH_HUD_FMB_OFFSET_M, frontDistance);
+    let playsLikePct = 0;
+    if (playsLikeResult) {
+      if (Number.isFinite(playsLikeResult.factor)) {
+        playsLikePct = (playsLikeResult.factor - 1) * 100;
+      } else if (Number.isFinite(playsLikeResult.distance_m) && middleDistance > 0) {
+        playsLikePct = (playsLikeResult.distance_m / middleDistance - 1) * 100;
+      }
+    }
+    if (!Number.isFinite(playsLikePct)) {
+      playsLikePct = 0;
+    }
+    const windSpeed = Number.isFinite(plannerInputs.wind_mps)
+      ? Number(plannerInputs.wind_mps)
+      : 0;
+    const rawWindDeg = Number.isFinite(plannerInputs.wind_from_deg)
+      ? Number(plannerInputs.wind_from_deg)
+      : 0;
+    const windDeg = ((rawWindDeg % 360) + 360) % 360;
+    const payload: WatchHUDStateV1 = {
+      v: 1,
+      ts: Date.now(),
+      fmb: {
+        front: Number(frontDistance.toFixed(1)),
+        middle: Number(middleDistance.toFixed(1)),
+        back: Number(backDistance.toFixed(1)),
+      },
+      playsLikePct: Number(playsLikePct.toFixed(2)),
+      wind: {
+        mps: Number(windSpeed.toFixed(2)),
+        deg: windDeg,
+      },
+      tournamentSafe,
+    };
+    if (!tournamentSafe && strategyComputation) {
+      payload.strategy = {
+        profile: strategyComputation.decision.profile,
+        offset_m: strategyComputation.decision.recommended.offset_m,
+        carry_m: strategyComputation.decision.recommended.carry_m,
+      };
+    }
+    const fingerprint = JSON.stringify({
+      fmb: payload.fmb,
+      playsLikePct: payload.playsLikePct,
+      wind: payload.wind,
+      strategy: payload.strategy,
+      tournamentSafe: payload.tournamentSafe,
+    });
+    const now = Date.now();
+    if (now - watchHudSendAttemptRef.current < WATCH_HUD_SEND_MIN_INTERVAL_MS) {
+      return;
+    }
+    const lastSuccess = watchHudLastSuccessRef.current;
+    if (
+      lastSuccess &&
+      lastSuccess.fingerprint === fingerprint &&
+      now - lastSuccess.ts < WATCH_HUD_SEND_MIN_INTERVAL_MS
+    ) {
+      return;
+    }
+    watchHudSendAttemptRef.current = now;
+    void (async () => {
+      const ts = Date.now();
+      const sent = await WatchBridge.sendHUD({ ...payload, ts });
+      if (sent) {
+        watchHudLastSuccessRef.current = { ts, fingerprint };
+      }
+    })();
+  }, [
+    watchHudEnabled,
+    qaEnabled,
+    pinMetrics?.distance,
+    shotSession?.baseDistance,
+    playsLikeResult?.factor,
+    playsLikeResult?.distance_m,
+    plannerInputs.wind_mps,
+    plannerInputs.wind_from_deg,
+    tournamentSafe,
+    strategyComputation,
+  ]);
   const holeSgSummary = useMemo<
     | { headline: string; breakdown: string }
     | null
