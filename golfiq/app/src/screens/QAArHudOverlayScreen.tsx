@@ -70,6 +70,7 @@ import {
   type HomographySnapshot,
 } from '../../../../shared/cv/calibration';
 import { headingToUnit } from '../../../../shared/caddie/geometry';
+import { inferDangerSide, type HazardLabel } from '../../../../shared/caddie/hazards';
 import type { McResult } from '../../../../shared/caddie/mc';
 import { playsLikeDistance, type PlaysLikeInput, type PlaysLikeResult } from '../../../../shared/caddie/playslike';
 import { computePlaysLike, type PlanOut } from '../../../../shared/playslike/aggregate';
@@ -368,13 +369,16 @@ const summarizeStrategyHazards = (mc: McResult | null | undefined): StrategyHaza
   }
   const denom = mc.samples > 0 ? mc.samples : 1;
   const hazardEntries = Object.entries(mc.hazardBreakdown ?? {});
+  const labels: HazardLabel[] = [];
   for (const [key, hitsRaw] of hazardEntries) {
     const hits = Number(hitsRaw);
     if (!(hits > 0)) {
       continue;
     }
     const rate = hits / denom;
-    const label = (key ?? '').toString().toLowerCase();
+    const rawLabel = (key ?? '').toString();
+    labels.push({ name: rawLabel, rate });
+    const label = rawLabel.toLowerCase();
     if (HAZARD_WATER_KEYWORDS.some((term) => label.includes(term))) {
       hazard.water += rate;
       continue;
@@ -411,23 +415,11 @@ const summarizeStrategyHazards = (mc: McResult | null | undefined): StrategyHaza
   hazard.rough = clampProbability(hazard.rough);
   hazard.ob = clampProbability(hazard.ob);
   hazard.fairway = clampProbability(hazard.fairway);
-
-  let dangerSide: 'left' | 'right' | null = null;
-  let bestRate = 0;
-  for (const reason of mc.reasons ?? []) {
-    if (reason?.kind !== 'hazard') {
-      continue;
-    }
-    const direction = String(reason.meta?.direction ?? '').toLowerCase();
-    const rate = typeof reason.value === 'number' ? reason.value : 0;
-    if ((direction === 'left' || direction === 'right') && rate > bestRate) {
-      bestRate = rate;
-      dangerSide = direction;
-    }
-  }
-  if (!dangerSide && hazard.water + hazard.ob > 0.05) {
-    dangerSide = 'left';
-  }
+  const dangerSide = inferDangerSide({
+    reasons: mc?.reasons,
+    breakdown: labels,
+    rates: hazard,
+  });
   return { hazard, dangerSide };
 };
 

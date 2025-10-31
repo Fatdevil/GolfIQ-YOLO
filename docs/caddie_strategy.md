@@ -45,7 +45,9 @@ EV wins with deterministic tie-breakers (smaller absolute offset, then carry clo
 ## Fat-side Bias
 
 The engine determines a dominant hazard side from MC rates (or an explicit override) and requires a
-minimum `fatSideBias_m` buffer in that direction. Any candidate that fails to clear the buffer
+minimum `fatSideBias_m` buffer in that direction. Danger side is inferred from MC hazard reasons
+when directional metadata is present; otherwise we scan hazard labels for keywords. If no side can
+be inferred confidently, no fat-side bias is applied. Any candidate that fails to clear the buffer
 receives an extra penalty that scales with hazard severity and lateral dispersion, nudging the aim
 further toward the fat side.
 

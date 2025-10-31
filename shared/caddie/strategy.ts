@@ -1772,11 +1772,7 @@ const resolveDangerSign = (input: StrategyInput): -1 | 0 | 1 => {
   if (input.dangerSide === 'right') {
     return 1;
   }
-  const directional = clamp01(input.hazard.water + input.hazard.ob);
-  if (directional <= 0.01) {
-    return 0;
-  }
-  return -1;
+  return 0;
 };
 
 const normalizeDispersion = (dispersion: Dispersion): Dispersion => {
