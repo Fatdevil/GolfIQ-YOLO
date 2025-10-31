@@ -152,6 +152,11 @@ import {
   type ShotPhase,
 } from '../../../../shared/sg/engine';
 import {
+  holePuttingSG,
+  InvalidPuttSequenceError,
+  type PuttEvent,
+} from '../../../../shared/sg/putting';
+import {
   isCoachLearningActive,
   loadPlayerProfile,
   resolveProfileId as resolveCoachProfileId,
@@ -937,6 +942,121 @@ function computeLandingOutcome(
   const holed = endDist <= HOLED_THRESHOLD_M;
   return { carry, landGeo, endDist, holed };
 }
+
+const PUTT_EVENT_TOLERANCE = 1e-4;
+const PUTT_SOURCE_KEYS = ['putts', 'puttEvents', 'putt_events'] as const;
+const PUTT_START_KEYS = ['start_m', 'start', 'startDist_m', 'distance_start_m'] as const;
+const PUTT_END_KEYS = ['end_m', 'end', 'endDist_m', 'distance_end_m'] as const;
+const PUTT_HOLED_KEYS = ['holed', 'isHoled', 'made'] as const;
+
+type UnknownRecord = Record<string, unknown>;
+
+const pickNumeric = (record: UnknownRecord, keys: readonly string[]): number | null => {
+  for (const key of keys) {
+    if (key in record) {
+      const value = Number(record[key]);
+      if (Number.isFinite(value)) {
+        return value;
+      }
+    }
+  }
+  return null;
+};
+
+const readHoledFlag = (record: UnknownRecord): boolean | null => {
+  for (const key of PUTT_HOLED_KEYS) {
+    if (key in record) {
+      const value = record[key];
+      if (typeof value === 'boolean') {
+        return value;
+      }
+      if (typeof value === 'number') {
+        return value !== 0;
+      }
+      if (typeof value === 'string') {
+        const normalized = value.trim().toLowerCase();
+        if (normalized === 'true' || normalized === '1' || normalized === 'yes' || normalized === 'y') {
+          return true;
+        }
+        if (normalized === 'false' || normalized === '0' || normalized === 'no' || normalized === 'n') {
+          return false;
+        }
+      }
+    }
+  }
+  return null;
+};
+
+const normalizePuttEventRecord = (raw: unknown): PuttEvent | null => {
+  if (!raw || typeof raw !== 'object') {
+    return null;
+  }
+  const record = raw as UnknownRecord;
+  const start = pickNumeric(record, PUTT_START_KEYS);
+  const end = pickNumeric(record, PUTT_END_KEYS);
+  if (start === null || end === null) {
+    return null;
+  }
+  const holed = readHoledFlag(record);
+  return {
+    start_m: Math.max(0, start),
+    end_m: Math.max(0, end),
+    holed: holed ?? false,
+  };
+};
+
+const normalizePuttArray = (input: unknown): PuttEvent[] => {
+  if (!Array.isArray(input)) {
+    return [];
+  }
+  const events: PuttEvent[] = [];
+  for (const raw of input) {
+    const event = normalizePuttEventRecord(raw);
+    if (event) {
+      events.push(event);
+    }
+  }
+  if (!events.length) {
+    return [];
+  }
+  const lastIndex = events.length - 1;
+  const last = events[lastIndex];
+  if (!last.holed && last.end_m <= PUTT_EVENT_TOLERANCE) {
+    events[lastIndex] = { ...last, holed: true, end_m: 0 };
+  } else if (last.holed && last.end_m <= PUTT_EVENT_TOLERANCE) {
+    events[lastIndex] = { ...last, end_m: 0 };
+  }
+  return events;
+};
+
+const extractHolePuttEvents = (source: unknown): PuttEvent[] => {
+  if (!source || typeof source !== 'object') {
+    return [];
+  }
+  const record = source as UnknownRecord;
+  const candidates: unknown[] = [];
+  const holeRaw = record.hole;
+  if (holeRaw && typeof holeRaw === 'object') {
+    const holeRecord = holeRaw as UnknownRecord;
+    for (const key of PUTT_SOURCE_KEYS) {
+      if (key in holeRecord) {
+        candidates.push(holeRecord[key]);
+      }
+    }
+  }
+  for (const key of PUTT_SOURCE_KEYS) {
+    if (key in record) {
+      candidates.push(record[key]);
+    }
+  }
+  for (const candidate of candidates) {
+    const events = normalizePuttArray(candidate);
+    if (events.length) {
+      return events;
+    }
+  }
+  return [];
+};
 
 function directionFromBearing(bearing: number, heading: number): HazardDirection {
   const delta = ((bearing - heading + 540) % 360) - 180;
@@ -2956,6 +3076,53 @@ const QAArHudOverlayScreen: React.FC = () => {
     )}, temp ${formatPercent(breakdown.temp)}`;
     return { distanceLabel, factorLabel, breakdownText };
   }, [formatPercent, holeComplete, playsLikeResult, tournamentSafe]);
+  const puttingSgSummary = useMemo<
+    | {
+        headline: string;
+        expectedLabel: string | null;
+        perPuttLabel: string | null;
+      }
+    | null
+  >(() => {
+    if (!holeComplete) {
+      return null;
+    }
+    const events = extractHolePuttEvents(shotSession);
+    if (!events.length) {
+      return null;
+    }
+    try {
+      const sgResult = holePuttingSG(events);
+      if (!Number.isFinite(sgResult.total)) {
+        return null;
+      }
+      const totalLabel = formatSg(sgResult.total);
+      if (totalLabel === 'n/a') {
+        return null;
+      }
+      const strokes = events.length;
+      const strokeLabel = strokes === 1 ? '1 putt' : `${strokes} putts`;
+      const startBaseline = sgResult.baseline.start[0];
+      const expectedLabel = Number.isFinite(startBaseline ?? Number.NaN)
+        ? `E: ${Number(startBaseline).toFixed(2)} → ${strokes}`
+        : null;
+      const perPuttContribs = sgResult.perPutt
+        .map((value) => formatSg(value))
+        .filter((value) => value !== 'n/a');
+      const perPuttLabel =
+        perPuttContribs.length > 1 ? `Putt SG: ${perPuttContribs.join(', ')}` : null;
+      return {
+        headline: `Putting SG: ${totalLabel} (${strokeLabel})`,
+        expectedLabel,
+        perPuttLabel,
+      };
+    } catch (error) {
+      if (error instanceof InvalidPuttSequenceError) {
+        return null;
+      }
+      throw error;
+    }
+  }, [formatSg, holeComplete, shotSession]);
   useEffect(() => {
     if (!shotSession || !playsLikeResult || !playsLikeInput) {
       return;
@@ -5388,6 +5555,17 @@ const QAArHudOverlayScreen: React.FC = () => {
                   <Text style={styles.playsLikeSubtitle}>{playsLikeDisplay.breakdownText}</Text>
                 </View>
               ) : null}
+              {puttingSgSummary ? (
+                <View style={styles.puttingSgCard}>
+                  <Text style={styles.puttingSgTitle}>{puttingSgSummary.headline}</Text>
+                  {puttingSgSummary.expectedLabel ? (
+                    <Text style={styles.puttingSgSubtitle}>{puttingSgSummary.expectedLabel}</Text>
+                  ) : null}
+                  {puttingSgSummary.perPuttLabel ? (
+                    <Text style={styles.puttingSgSubtitle}>{puttingSgSummary.perPuttLabel}</Text>
+                  ) : null}
+                </View>
+              ) : null}
               {shotSummary ? (
                 <View style={styles.resultCard}>
                   <Text style={styles.resultCardTitle}>Result</Text>
@@ -6136,6 +6314,24 @@ const styles = StyleSheet.create({
     fontSize: 14,
   },
   playsLikeSubtitle: {
+    color: '#cbd5f5',
+    fontSize: 12,
+  },
+  puttingSgCard: {
+    marginTop: 8,
+    backgroundColor: '#111827',
+    borderRadius: 10,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: '#1f2937',
+    gap: 4,
+  },
+  puttingSgTitle: {
+    color: '#f8fafc',
+    fontWeight: '600',
+    fontSize: 14,
+  },
+  puttingSgSubtitle: {
     color: '#cbd5f5',
     fontSize: 12,
   },
