@@ -178,6 +178,13 @@ import {
   InvalidPuttSequenceError,
   type PuttEvent,
 } from '../../../../shared/sg/putting';
+import { loadDefaultBaselines } from '../../../../shared/sg/baseline';
+import {
+  holeSG,
+  isHoleSGInvalid,
+  type Phase as HolePhase,
+  type ShotEvent as HoleShotEvent,
+} from '../../../../shared/sg/hole';
 import {
   isCoachLearningActive,
   loadPlayerProfile,
@@ -1214,6 +1221,169 @@ const extractHolePuttEvents = (source: unknown): PuttEvent[] => {
     }
   }
   return [];
+};
+
+const SHOT_SOURCE_KEYS = ['shotEvents', 'shots', 'strokes', 'strokeEvents', 'holeShots'] as const;
+const SHOT_START_KEYS = ['start_m', 'start', 'startDist_m', 'distance_start_m', 'start_distance_m'] as const;
+const SHOT_END_KEYS = ['end_m', 'end', 'endDist_m', 'distance_end_m', 'end_distance_m', 'nextStart_m'] as const;
+const SHOT_START_LIE_KEYS = [
+  'startLie',
+  'start_lie',
+  'lie_start',
+  'fromLie',
+  'from_lie',
+  'from',
+  'lie',
+] as const;
+const SHOT_END_LIE_KEYS = [
+  'endLie',
+  'end_lie',
+  'lie_end',
+  'toLie',
+  'to_lie',
+  'nextLie',
+  'next_lie',
+  'landingLie',
+  'resultLie',
+] as const;
+
+const parseLieToken = (value: unknown): HoleShotEvent['startLie'] | null => {
+  if (typeof value !== 'string') {
+    return null;
+  }
+  const token = value.trim().toLowerCase();
+  if (!token) {
+    return null;
+  }
+  if (token.startsWith('tee')) {
+    return 'tee';
+  }
+  if (token.includes('fairway') || token === 'fw' || token === 'fringe') {
+    return 'fairway';
+  }
+  if (token.includes('rough') || token === 'r') {
+    return 'rough';
+  }
+  if (token.includes('bunker') || token.includes('sand') || token.includes('trap')) {
+    return 'sand';
+  }
+  if (token.includes('green') || token.includes('putt')) {
+    return 'green';
+  }
+  if (token.includes('recover') || token.includes('punch') || token.includes('escape') || token.includes('penalty')) {
+    return 'recovery';
+  }
+  return null;
+};
+
+const pickLie = (record: UnknownRecord, keys: readonly string[]): HoleShotEvent['startLie'] | null => {
+  for (const key of keys) {
+    if (key in record) {
+      const lie = parseLieToken(record[key]);
+      if (lie) {
+        return lie;
+      }
+    }
+  }
+  return null;
+};
+
+const normalizeShotEventRecord = (raw: unknown): HoleShotEvent | null => {
+  if (!raw || typeof raw !== 'object') {
+    return null;
+  }
+  const record = raw as UnknownRecord;
+  const start = pickNumeric(record, SHOT_START_KEYS);
+  const end = pickNumeric(record, SHOT_END_KEYS);
+  const startLie = pickLie(record, SHOT_START_LIE_KEYS);
+  let endLie = pickLie(record, SHOT_END_LIE_KEYS);
+  const holed = readHoledFlag(record) ?? false;
+
+  if (start === null || !startLie) {
+    return null;
+  }
+
+  let endDistance = end ?? null;
+  if (holed && (endDistance === null || Math.abs(endDistance) <= PUTT_EVENT_TOLERANCE)) {
+    endDistance = 0;
+    endLie = 'green';
+  }
+
+  if (endDistance === null) {
+    return null;
+  }
+
+  if (!endLie) {
+    endLie = holed ? 'green' : startLie;
+  }
+
+  return {
+    start_m: Math.max(0, start),
+    end_m: Math.max(0, endDistance),
+    startLie,
+    endLie,
+    holed,
+  };
+};
+
+const normalizeShotEvents = (input: unknown): HoleShotEvent[] => {
+  if (!Array.isArray(input)) {
+    return [];
+  }
+  const events: HoleShotEvent[] = [];
+  for (const raw of input) {
+    const event = normalizeShotEventRecord(raw);
+    if (event) {
+      events.push(event);
+    }
+  }
+  if (!events.length) {
+    return [];
+  }
+  const lastIndex = events.length - 1;
+  const last = events[lastIndex];
+  if (!last.holed && last.end_m <= PUTT_EVENT_TOLERANCE) {
+    events[lastIndex] = { ...last, holed: true, end_m: 0, endLie: 'green' };
+  } else if (last.holed && last.end_m <= PUTT_EVENT_TOLERANCE) {
+    events[lastIndex] = { ...last, end_m: 0 };
+  }
+  return events;
+};
+
+const extractHoleShotEvents = (source: unknown): HoleShotEvent[] => {
+  if (!source || typeof source !== 'object') {
+    return [];
+  }
+  const record = source as UnknownRecord;
+  const candidates: unknown[] = [];
+  const holeRaw = record.hole;
+  if (holeRaw && typeof holeRaw === 'object') {
+    const holeRecord = holeRaw as UnknownRecord;
+    for (const key of SHOT_SOURCE_KEYS) {
+      if (key in holeRecord) {
+        candidates.push(holeRecord[key]);
+      }
+    }
+  }
+  for (const key of SHOT_SOURCE_KEYS) {
+    if (key in record) {
+      candidates.push(record[key]);
+    }
+  }
+  for (const candidate of candidates) {
+    const events = normalizeShotEvents(candidate);
+    if (events.length) {
+      return events;
+    }
+  }
+  return [];
+};
+
+const HOLE_PHASE_LABELS: Record<HolePhase, string> = {
+  Tee: 'Tee',
+  Approach: 'Approach',
+  ShortGame: 'Short',
+  Putting: 'Put',
 };
 
 function directionFromBearing(bearing: number, heading: number): HazardDirection {
@@ -2540,6 +2710,7 @@ const QAArHudOverlayScreen: React.FC = () => {
   }, [playerLatLon?.lat, playerLatLon?.lon]);
   const camera = useMemo(() => createCameraStub({ fps: 15 }), []);
   const defaultQaBag = useMemo(() => defaultBag(), []);
+  const sgBaselines = useMemo(() => loadDefaultBaselines(), []);
   const formatDelta = useCallback((value: number) => (value >= 0 ? `+${value.toFixed(1)}` : value.toFixed(1)), []);
   const formatPercent = useCallback((value: number) => {
     if (!Number.isFinite(value)) {
@@ -3251,6 +3422,7 @@ const QAArHudOverlayScreen: React.FC = () => {
     return (Number(slopeMeters) / Number(distance)) * 100;
   }, [planWithGreenIq, puttEval?.holeDist_m]);
   const holeComplete = shotSession?.hole?.completed === true;
+  const holeSgAllowed = !tournamentSafe || holeComplete;
   const playsLikeHud = useMemo(() => {
     const rawCandidate =
       finiteOrNull(pinMetrics?.distance) ?? finiteOrNull(shotSession?.baseDistance);
@@ -3432,6 +3604,50 @@ const QAArHudOverlayScreen: React.FC = () => {
       breakdown: breakdownParts.join(', '),
     };
   }, [formatPercent, strategyAllowed, strategyComputation]);
+  const holeSgSummary = useMemo<
+    | { headline: string; breakdown: string }
+    | null
+  >(() => {
+    if (!holeSgAllowed) {
+      return null;
+    }
+    if (!holeComplete) {
+      return null;
+    }
+    const events = extractHoleShotEvents(shotSession);
+    if (!events.length) {
+      return null;
+    }
+    const sgResult = holeSG(events, sgBaselines);
+    if (!Number.isFinite(sgResult.total) || !sgResult.shots.length) {
+      return null;
+    }
+    if (isHoleSGInvalid(sgResult)) {
+      return null;
+    }
+    const totalLabel = formatSg(sgResult.total);
+    if (totalLabel === 'n/a') {
+      return null;
+    }
+    const phaseOrder: readonly HolePhase[] = ['Tee', 'Approach', 'ShortGame', 'Putting'];
+    const breakdownParts = phaseOrder
+      .map((phase) => {
+        const formatted = formatSg(sgResult.byPhase[phase]);
+        if (formatted === 'n/a') {
+          return null;
+        }
+        return `${HOLE_PHASE_LABELS[phase]} ${formatted}`;
+      })
+      .filter((part): part is string => Boolean(part));
+    if (!breakdownParts.length) {
+      return null;
+    }
+    return {
+      headline: `Hole SG: ${totalLabel}`,
+      breakdown: breakdownParts.join(' · '),
+    };
+  }, [formatSg, holeComplete, holeSgAllowed, sgBaselines, shotSession]);
+
   const puttingSgSummary = useMemo<
     | {
         headline: string;
@@ -6228,6 +6444,12 @@ const QAArHudOverlayScreen: React.FC = () => {
                   <Text style={styles.playsLikeSubtitle}>{playsLikeDisplay.breakdownText}</Text>
                 </View>
               ) : null}
+              {holeSgSummary ? (
+                <View style={styles.holeSgCard}>
+                  <Text style={styles.holeSgTitle}>{holeSgSummary.headline}</Text>
+                  <Text style={styles.holeSgSubtitle}>{holeSgSummary.breakdown}</Text>
+                </View>
+              ) : null}
               {puttingSgSummary ? (
                 <View style={styles.puttingSgCard}>
                   <Text style={styles.puttingSgTitle}>{puttingSgSummary.headline}</Text>
@@ -7005,6 +7227,24 @@ const styles = StyleSheet.create({
     fontSize: 14,
   },
   puttingSgSubtitle: {
+    color: '#cbd5f5',
+    fontSize: 12,
+  },
+  holeSgCard: {
+    marginTop: 8,
+    backgroundColor: '#111827',
+    borderRadius: 10,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: '#1f2937',
+    gap: 4,
+  },
+  holeSgTitle: {
+    color: '#f8fafc',
+    fontWeight: '600',
+    fontSize: 14,
+  },
+  holeSgSubtitle: {
     color: '#cbd5f5',
     fontSize: 12,
   },
