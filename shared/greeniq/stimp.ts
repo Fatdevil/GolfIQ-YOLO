@@ -72,3 +72,20 @@ export const estimateStimp = (
     medianRollout_m: central,
   };
 };
+
+const sanitizePositive = (value: number | undefined, fallback: number): number => {
+  if (!Number.isFinite(value)) {
+    return fallback;
+  }
+  const numeric = Number(value);
+  return numeric > 0 ? numeric : fallback;
+};
+
+export const stimpFactor = (stimp?: number, baseline: number = DEFAULT_STIMP): number => {
+  const safeBaseline = sanitizePositive(baseline, DEFAULT_STIMP);
+  const safeStimp = sanitizePositive(stimp, safeBaseline);
+  if (safeStimp <= 0) {
+    return 1;
+  }
+  return safeBaseline / safeStimp;
+};
