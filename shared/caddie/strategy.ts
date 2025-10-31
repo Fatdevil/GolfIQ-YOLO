@@ -11,6 +11,7 @@ import { getCaddieRc } from "./rc";
 import { runMonteCarloV1_5, type McPolygon, type McResult, type McTarget } from "./mc";
 import { ellipseOverlapRisk, lateralWindOffset, sampleEllipsePoints, type RiskFeature } from "./risk";
 import { buildPlayerModel, type PlayerModel } from "./player_model";
+import { STRATEGY_DEFAULTS, type RiskProfile, type StrategyWeights } from "./strategy_profiles";
 
 const EARTH_RADIUS_M = 6_378_137;
 
@@ -1656,3 +1657,320 @@ export const __test__ = {
   prepareFeatures,
   buildFrame,
 };
+
+export type HazardRates = {
+  water: number;
+  bunker: number;
+  rough: number;
+  ob: number;
+  fairway: number;
+};
+
+export type Dispersion = {
+  sigma_m: number;
+  lateralSigma_m?: number;
+};
+
+export type TargetLane = {
+  offset_m: number;
+  carry_m: number;
+};
+
+type StrategyBounds = {
+  minCarry_m?: number;
+  maxCarry_m?: number;
+  maxOffset_m?: number;
+};
+
+export type StrategyInput = {
+  rawDist_m: number;
+  playsLikeFactor: number;
+  hazard: HazardRates;
+  dispersion: Dispersion;
+  laneWidth_m: number;
+  profile: RiskProfile;
+  bounds?: StrategyBounds;
+  dangerSide?: 'left' | 'right' | null;
+};
+
+export type StrategyDecision = {
+  profile: RiskProfile;
+  recommended: TargetLane;
+  evScore: number;
+  breakdown: {
+    distance: number;
+    hazards: number;
+    fairway: number;
+    bias: number;
+  };
+};
+
+type ScoreResult = {
+  ev: number;
+  breakdown: StrategyDecision['breakdown'];
+};
+
+const STRATEGY_OFFSET_STEPS = [-12, -8, -4, 0, 4, 8, 12] as const;
+const STRATEGY_CARRY_STEPS = [-10, 0, 10] as const;
+
+const roundKey = (value: number): number => Math.round(value * 100);
+
+const sanitizeFinite = (value: number | null | undefined, fallback = 0): number => {
+  if (!Number.isFinite(value ?? Number.NaN)) {
+    return fallback;
+  }
+  return Number(value);
+};
+
+const sanitizeDistance = (value: number | null | undefined, fallback = 0): number => {
+  const numeric = sanitizeFinite(value, fallback);
+  if (!(numeric > 0)) {
+    return fallback;
+  }
+  return numeric;
+};
+
+const sanitizeProbability = (value: number | null | undefined): number => clamp01(Number(value ?? 0));
+
+const dedupeNumbers = (values: number[]): number[] => {
+  const seen = new Set<number>();
+  const result: number[] = [];
+  for (const value of values) {
+    if (!Number.isFinite(value)) {
+      continue;
+    }
+    const key = roundKey(value);
+    if (seen.has(key)) {
+      continue;
+    }
+    seen.add(key);
+    result.push(Number(value));
+  }
+  if (!result.length) {
+    result.push(0);
+  }
+  return result;
+};
+
+const clampBounds = (value: number, min: number, max: number): number => {
+  if (!Number.isFinite(value)) {
+    return min;
+  }
+  if (value < min) {
+    return min;
+  }
+  if (value > max) {
+    return max;
+  }
+  return value;
+};
+
+const resolveDangerSign = (input: StrategyInput): -1 | 0 | 1 => {
+  if (input.dangerSide === 'left') {
+    return -1;
+  }
+  if (input.dangerSide === 'right') {
+    return 1;
+  }
+  return 0;
+};
+
+const normalizeDispersion = (dispersion: Dispersion): Dispersion => {
+  const sigma = sanitizeDistance(dispersion?.sigma_m, 12);
+  const lateral = sanitizeFinite(dispersion?.lateralSigma_m);
+  const lateralSigma = lateral && lateral > 0 ? lateral : Math.max(4, sigma * 0.55);
+  return {
+    sigma_m: sigma,
+    lateralSigma_m: lateralSigma,
+  };
+};
+
+const normalizeHazards = (hazard: HazardRates): HazardRates => ({
+  water: sanitizeProbability(hazard?.water),
+  bunker: sanitizeProbability(hazard?.bunker),
+  rough: sanitizeProbability(hazard?.rough),
+  ob: sanitizeProbability(hazard?.ob),
+  fairway: sanitizeProbability(hazard?.fairway),
+});
+
+const normalizeLaneWidth = (value: number): number => {
+  const numeric = sanitizeDistance(value, 20);
+  return numeric > 0 ? numeric : 20;
+};
+
+const createOffsetCandidates = (input: StrategyInput): number[] => {
+  const bounds = input.bounds;
+  const maxOffsetBound = bounds && Number.isFinite(bounds.maxOffset_m ?? Number.NaN)
+    ? Math.abs(Number(bounds.maxOffset_m))
+    : Number.NaN;
+  const laneHalf = normalizeLaneWidth(input.laneWidth_m) / 2;
+  const maxOffset = Number.isFinite(maxOffsetBound) && maxOffsetBound > 0 ? maxOffsetBound : laneHalf;
+  const values = STRATEGY_OFFSET_STEPS.map((step) => clampBounds(step, -maxOffset, maxOffset));
+  values.push(-maxOffset, maxOffset, 0);
+  return dedupeNumbers(values).sort((a, b) => a - b);
+};
+
+const createCarryCandidates = (baseCarry: number, bounds: StrategyBounds | undefined): number[] => {
+  const minCarryBound = bounds && Number.isFinite(bounds.minCarry_m ?? Number.NaN)
+    ? Number(bounds.minCarry_m)
+    : Number.NaN;
+  const maxCarryBound = bounds && Number.isFinite(bounds.maxCarry_m ?? Number.NaN)
+    ? Number(bounds.maxCarry_m)
+    : Number.NaN;
+  const minCarry = Number.isFinite(minCarryBound) ? Math.max(0, minCarryBound) : 0;
+  const inferredMax = Number.isFinite(maxCarryBound) && maxCarryBound > 0 ? maxCarryBound : baseCarry + 30;
+  const maxCarry = Math.max(minCarry, inferredMax);
+  const candidates = STRATEGY_CARRY_STEPS.map((step) => clampBounds(baseCarry + step, minCarry, maxCarry));
+  candidates.push(clampBounds(baseCarry, minCarry, maxCarry));
+  return dedupeNumbers(candidates).sort((a, b) => a - b);
+};
+
+export function scoreEV(input: StrategyInput, lane: TargetLane, weights: StrategyWeights): ScoreResult {
+  const hazards = normalizeHazards(input.hazard);
+  const dispersion = normalizeDispersion(input.dispersion);
+  const laneWidth = normalizeLaneWidth(input.laneWidth_m);
+  const baseRaw = sanitizeDistance(input.rawDist_m, 0);
+  const factor = sanitizeDistance(input.playsLikeFactor, 1) || 1;
+  const targetCarry = sanitizeDistance(baseRaw * factor || baseRaw, baseRaw);
+
+  const carry = sanitizeDistance(lane.carry_m, targetCarry);
+  const offset = sanitizeFinite(lane.offset_m, 0);
+
+  const diff = Math.abs(carry - targetCarry);
+  const closeness = targetCarry > 0 ? Math.max(0, 1 - diff / Math.max(targetCarry, 1)) : 0;
+  const distanceReward = weights.distanceReward * targetCarry * closeness;
+
+  const hazardPenalty =
+    hazards.water * weights.hazardWater +
+    hazards.bunker * weights.hazardBunker +
+    hazards.rough * weights.hazardRough +
+    hazards.ob * weights.hazardOB;
+
+  const fairwayBonus = hazards.fairway * weights.fairwayBonus;
+
+  const dangerSign = resolveDangerSign(input);
+  const fatSide = Math.max(0, weights.fatSideBias_m);
+  const lateralSigma = sanitizeFinite(dispersion.lateralSigma_m, dispersion.sigma_m);
+  let biasPenalty = 0;
+  if (dangerSign !== 0 && fatSide > 0) {
+    const offsetAway = dangerSign < 0 ? offset : -offset;
+    const shortfall = fatSide - offsetAway;
+    if (shortfall > 0) {
+      const normalized = Math.min(shortfall / Math.max(fatSide, 1), 1);
+      const hazardDirectional = clamp01(hazards.water + hazards.ob);
+      const dispersionFactor = 1 + Math.min(lateralSigma / Math.max(laneWidth / 2, 1), 1.5);
+      biasPenalty = normalized * hazardDirectional * dispersionFactor;
+    }
+  }
+
+  const hazardsComponent = -hazardPenalty;
+  const biasComponent = -biasPenalty;
+  const breakdown = {
+    distance: distanceReward,
+    hazards: hazardsComponent,
+    fairway: fairwayBonus,
+    bias: biasComponent,
+  } as const;
+  const ev = distanceReward + hazardsComponent + fairwayBonus + biasComponent;
+  return {
+    ev: Number.isFinite(ev) ? ev : Number.NEGATIVE_INFINITY,
+    breakdown,
+  };
+}
+
+export function chooseStrategy(input: StrategyInput): StrategyDecision {
+  const profile: RiskProfile = STRATEGY_DEFAULTS[input.profile] ? input.profile : 'neutral';
+  const weights = STRATEGY_DEFAULTS[profile];
+  const normalizedInput: StrategyInput = {
+    ...input,
+    profile,
+    hazard: normalizeHazards(input.hazard),
+    dispersion: normalizeDispersion(input.dispersion),
+    laneWidth_m: normalizeLaneWidth(input.laneWidth_m),
+    rawDist_m: sanitizeDistance(input.rawDist_m, 0),
+    playsLikeFactor: sanitizeDistance(input.playsLikeFactor, 1) || 1,
+    dangerSide: input.dangerSide ?? null,
+  };
+
+  const baseCarry = sanitizeDistance(
+    normalizedInput.rawDist_m * normalizedInput.playsLikeFactor || normalizedInput.rawDist_m,
+    normalizedInput.rawDist_m,
+  );
+
+  const offsets = createOffsetCandidates(normalizedInput);
+  const carries = createCarryCandidates(baseCarry, normalizedInput.bounds);
+
+  const candidates: TargetLane[] = [];
+  for (const offset of offsets) {
+    for (const carry of carries) {
+      candidates.push({ offset_m: offset, carry_m: carry });
+    }
+  }
+
+  if (!candidates.length) {
+    const fallback: TargetLane = { offset_m: 0, carry_m: baseCarry || normalizedInput.rawDist_m };
+    const score = scoreEV(normalizedInput, fallback, weights);
+    return {
+      profile,
+      recommended: fallback,
+      evScore: score.ev,
+      breakdown: score.breakdown,
+    };
+  }
+
+  let bestLane: TargetLane | null = null;
+  let bestScore = Number.NEGATIVE_INFINITY;
+  let bestBreakdown: StrategyDecision['breakdown'] = {
+    distance: 0,
+    hazards: 0,
+    fairway: 0,
+    bias: 0,
+  };
+
+  const targetCarry = baseCarry || normalizedInput.rawDist_m;
+
+  for (const lane of candidates) {
+    const { ev, breakdown } = scoreEV(normalizedInput, lane, weights);
+    if (ev > bestScore + 1e-6) {
+      bestScore = ev;
+      bestLane = lane;
+      bestBreakdown = breakdown;
+      continue;
+    }
+    if (Math.abs(ev - bestScore) <= 1e-6 && bestLane) {
+      const currentOffset = Math.abs(lane.offset_m);
+      const bestOffset = Math.abs(bestLane.offset_m);
+      if (currentOffset < bestOffset - 1e-3) {
+        bestLane = lane;
+        bestBreakdown = breakdown;
+        continue;
+      }
+      if (Math.abs(currentOffset - bestOffset) <= 1e-3) {
+        const currentCarryDiff = Math.abs(lane.carry_m - targetCarry);
+        const bestCarryDiff = Math.abs(bestLane.carry_m - targetCarry);
+        if (currentCarryDiff < bestCarryDiff - 1e-3) {
+          bestLane = lane;
+          bestBreakdown = breakdown;
+        }
+      }
+    }
+  }
+
+  if (!bestLane) {
+    const fallback: TargetLane = { offset_m: 0, carry_m: targetCarry };
+    const { ev, breakdown } = scoreEV(normalizedInput, fallback, weights);
+    return {
+      profile,
+      recommended: fallback,
+      evScore: ev,
+      breakdown,
+    };
+  }
+
+  return {
+    profile,
+    recommended: bestLane,
+    evScore: bestScore,
+    breakdown: bestBreakdown,
+  };
+}
