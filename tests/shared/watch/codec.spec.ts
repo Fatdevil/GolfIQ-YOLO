@@ -1,7 +1,7 @@
 import { Buffer } from 'node:buffer';
 import { describe, expect, it } from 'vitest';
 
-import { decodeHUD, encodeHUD } from '../../../shared/watch/codec';
+import { decodeHUD, encodeHUD, encodeHUDBase64 } from '../../../shared/watch/codec';
 import type { WatchHUDStateV1 } from '../../../shared/watch/types';
 
 const baseState: WatchHUDStateV1 = {
@@ -43,5 +43,11 @@ describe('watch HUD codec', () => {
     const payload = { ...baseState, v: 2 } as Record<string, unknown>;
     const encoded = toBytes(JSON.stringify(payload));
     expect(() => decodeHUD(encoded)).toThrow(/Unsupported HUD payload version/);
+  });
+
+  it('generates consistent base64 payloads', () => {
+    const encoded = encodeHUD(baseState);
+    const b64 = encodeHUDBase64(baseState);
+    expect(b64).toEqual(Buffer.from(encoded).toString('base64'));
   });
 });

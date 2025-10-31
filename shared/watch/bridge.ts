@@ -1,68 +1,40 @@
-import { NativeModules, Platform } from 'react-native';
-
-import { encodeHUD } from './codec';
-import type { WatchHUDStateV1 } from './types';
+import { encodeHUDBase64, type WatchHUDStateV1 } from './codec';
 
 type NativeWatchConnectorModule = {
   isCapable(): Promise<boolean>;
-  sendHUD(base64Payload: string): Promise<boolean>;
+  sendHUD(payloadBase64: string): Promise<boolean>;
 };
 
-const getNativeModule = (): NativeWatchConnectorModule | null => {
-  if (Platform.OS !== 'android') {
+function tryRequireReactNative(): any | null {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    return require('react-native');
+  } catch {
     return null;
   }
-  const modules = NativeModules as { WatchConnector?: NativeWatchConnectorModule };
-  const module = modules.WatchConnector;
-  if (!module || typeof module.isCapable !== 'function' || typeof module.sendHUD !== 'function') {
+}
+
+function getNativeModule(): NativeWatchConnectorModule | null {
+  const RN = tryRequireReactNative();
+  const isAndroid = RN?.Platform?.OS === 'android';
+  const mod = RN?.NativeModules?.WatchConnector;
+  if (!isAndroid || !mod) {
     return null;
   }
-  return module;
-};
-
-const maybeBufferFrom = (value: Uint8Array): string | null => {
-  const globalBuffer = (globalThis as { Buffer?: { from: (data: Uint8Array) => { toString(encoding: string): string } } }).Buffer;
-  if (!globalBuffer?.from) {
+  if (typeof mod.isCapable !== 'function' || typeof mod.sendHUD !== 'function') {
     return null;
   }
-  return globalBuffer.from(value).toString('base64');
-};
-
-const BASE64_ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=';
-
-const toBase64 = (value: Uint8Array): string => {
-  const bufferResult = maybeBufferFrom(value);
-  if (bufferResult) {
-    return bufferResult;
-  }
-  let output = '';
-  for (let i = 0; i < value.length; i += 3) {
-    const byte1 = value[i] ?? 0;
-    const byte2 = value[i + 1] ?? 0;
-    const byte3 = value[i + 2] ?? 0;
-
-    const segment = (byte1 << 16) | (byte2 << 8) | byte3;
-    const enc1 = (segment >> 18) & 0x3f;
-    const enc2 = (segment >> 12) & 0x3f;
-    const enc3 = (segment >> 6) & 0x3f;
-    const enc4 = segment & 0x3f;
-
-    output += BASE64_ALPHABET.charAt(enc1);
-    output += BASE64_ALPHABET.charAt(enc2);
-    output += i + 1 < value.length ? BASE64_ALPHABET.charAt(enc3) : '=';
-    output += i + 2 < value.length ? BASE64_ALPHABET.charAt(enc4) : '=';
-  }
-  return output;
-};
+  return mod as NativeWatchConnectorModule;
+}
 
 export const WatchBridge = {
   async isCapable(): Promise<boolean> {
-    const module = getNativeModule();
-    if (!module) {
+    const mod = getNativeModule();
+    if (!mod) {
       return false;
     }
     try {
-      const result = await module.isCapable();
+      const result = await mod.isCapable();
       return result === true;
     } catch (error) {
       console.warn('[WatchBridge] isCapable failed', error);
@@ -70,14 +42,13 @@ export const WatchBridge = {
     }
   },
   async sendHUD(state: WatchHUDStateV1): Promise<boolean> {
-    const module = getNativeModule();
-    if (!module) {
+    const mod = getNativeModule();
+    if (!mod) {
       return false;
     }
     try {
-      const payload = encodeHUD(state);
-      const base64Payload = toBase64(payload);
-      const result = await module.sendHUD(base64Payload);
+      const base64Payload = encodeHUDBase64(state);
+      const result = await mod.sendHUD(base64Payload);
       return result === true;
     } catch (error) {
       console.warn('[WatchBridge] sendHUD failed', error);

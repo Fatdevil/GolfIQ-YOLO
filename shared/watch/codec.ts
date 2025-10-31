@@ -1,4 +1,5 @@
 import type { WatchHUDStateV1 } from './types';
+export type { WatchHUDStateV1 } from './types';
 
 const STRATEGY_PROFILES = new Set<WatchHUDStateV1['strategy'] extends infer T
   ? T extends { profile: infer P }
@@ -143,4 +144,41 @@ export function decodeHUD(buffer: Uint8Array): WatchHUDStateV1 {
     ...(strategy ? { strategy } : {}),
     tournamentSafe: record.tournamentSafe === true,
   };
+}
+
+export function encodeHUDBase64(state: WatchHUDStateV1): string {
+  const bytes = encodeHUD(state);
+  let binary = '';
+  for (let i = 0; i < bytes.length; i += 1) {
+    binary += String.fromCharCode(bytes[i] ?? 0);
+  }
+  // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+  // @ts-ignore - Buffer may not exist in browser builds
+  const btoaFn: (x: string) => string = typeof (globalThis as any).btoa === 'function'
+    ? (globalThis as any).btoa.bind(globalThis)
+    : (x: string) => {
+        const bufferCtor = (globalThis as {
+          Buffer?: { from(data: string, encoding: string): { toString(enc: string): string } };
+        }).Buffer;
+        if (bufferCtor?.from) {
+          return bufferCtor.from(x, 'binary').toString('base64');
+        }
+        let output = '';
+        const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=';
+        for (let i = 0; i < x.length; i += 3) {
+          const char1 = x.charCodeAt(i);
+          const char2 = x.charCodeAt(i + 1);
+          const char3 = x.charCodeAt(i + 2);
+          const enc1 = char1 >> 2;
+          const enc2 = ((char1 & 3) << 4) | (char2 >> 4);
+          const enc3 = Number.isNaN(char2) ? 64 : (((char2 & 15) << 2) | (char3 >> 6));
+          const enc4 = Number.isNaN(char3) ? 64 : (char3 & 63);
+          output += alphabet.charAt(enc1);
+          output += alphabet.charAt(enc2);
+          output += alphabet.charAt(enc3);
+          output += alphabet.charAt(enc4);
+        }
+        return output;
+      };
+  return btoaFn(binary);
 }
