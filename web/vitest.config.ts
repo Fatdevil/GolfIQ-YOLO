@@ -1,5 +1,5 @@
 import path from 'node:path';
-import { defineConfig } from 'vitest/config';
+import { defineConfig, configDefaults } from 'vitest/config';
 
 export default defineConfig({
   resolve: {
@@ -17,7 +17,10 @@ export default defineConfig({
       '../tests/shared/greeniq/**/*.spec.ts',
       '../tests/shared/sg/**/*.spec.ts',
     ],
-    exclude: [],
+    exclude: [
+      // Extend Vitest defaults; add repo-specific excludes below.
+      ...configDefaults.exclude,
+    ],
     passWithNoTests: true,
   }
 });
