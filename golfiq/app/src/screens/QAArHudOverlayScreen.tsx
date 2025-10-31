@@ -60,6 +60,18 @@ import {
 } from '../../../../shared/arhud/location';
 import { lockExposure, lockWhiteBalance, unlockAll } from '../../../../shared/arhud/camera';
 import { createCameraStub, type CameraFrame } from '../../../../shared/arhud/native/camera_stub';
+import {
+  diffRad,
+  rad,
+  deg,
+  wrapRad,
+  YawEkf,
+  RecenterController,
+  type RecenterStatus,
+  type LockState,
+  type Quality,
+} from '../../../../shared/arhud';
+import { now as performanceNow } from '../../../../shared/arhud/native/clock';
 import { subscribeHeading } from '../../../../shared/arhud/native/heading';
 import { qaHudEnabled } from '../../../../shared/arhud/native/qa_gate';
 import {
@@ -148,6 +160,7 @@ import {
   isCaddieTelemetryEnabled,
   type TelemetryEmitter,
 } from '../../../../shared/telemetry/caddie';
+import { emitRecenterTelemetry, setRecenterTelemetryEnabled } from '../../../../shared/telemetry/arhud';
 import {
   emitGreenIqBreakTelemetry,
   emitGreenIqTelemetry,
@@ -753,6 +766,49 @@ function formatSearchDistance(distKm: number | null | undefined): string {
     return `${km.toFixed(1)} km`;
   }
   return `${Math.round(km * 1000)} m`;
+}
+
+type QaImuSample = {
+  gyroZ: number;
+  magYaw: number;
+  magQuality: number;
+};
+
+type QaImuStub = {
+  sample: (nowMs: number) => QaImuSample;
+};
+
+function createQaImuStub(): QaImuStub {
+  let yaw = 0;
+  let lastTimestamp = 0;
+  const gyroBias = (0.45 * Math.PI) / 180; // ~0.45°/s bias
+
+  return {
+    sample: (nowMs: number) => {
+      const timestamp = Number.isFinite(nowMs) ? nowMs : lastTimestamp;
+      if (lastTimestamp === 0) {
+        lastTimestamp = timestamp;
+      }
+      const dt = Math.max(0, (timestamp - lastTimestamp) / 1000);
+      lastTimestamp = timestamp;
+
+      const baseRate = ((Math.sin(timestamp / 2500) + 0.3 * Math.sin(timestamp / 1800)) * Math.PI) / 720;
+      yaw = wrapRad(yaw + baseRate * dt);
+
+      const magNoise =
+        ((Math.sin(timestamp / 900) + 0.4 * Math.cos(timestamp / 600)) * Math.PI) / 10800;
+      const magYaw = wrapRad(yaw + magNoise);
+      const qualityRaw = 0.75 + 0.25 * Math.sin(timestamp / 5200 + 1.1);
+      const magQuality = Math.max(0.35, Math.min(1, qualityRaw));
+      const gyroNoise = ((Math.sin(timestamp / 1200) + Math.cos(timestamp / 3100)) * Math.PI) / 1440;
+
+      return {
+        gyroZ: baseRate + gyroBias + gyroNoise,
+        magYaw,
+        magQuality,
+      };
+    },
+  };
 }
 
 let lastSelectedCourseMemory: string | null = null;
@@ -2052,7 +2108,89 @@ const QAArHudOverlayScreen: React.FC = () => {
   const lastBreakTelemetryRef = useRef<string | null>(null);
   const telemetryRef = useRef<TelemetryEmitter | null>(null);
   const lastStrategyTelemetryRef = useRef<string | null>(null);
+  const imuRef = useRef<QaImuStub | null>(null);
+  if (!imuRef.current) {
+    imuRef.current = createQaImuStub();
+  }
+  const ekfRef = useRef<YawEkf | null>(null);
+  if (!ekfRef.current) {
+    ekfRef.current = new YawEkf();
+  }
+  const recenterRef = useRef<RecenterController | null>(null);
+  if (!recenterRef.current) {
+    recenterRef.current = new RecenterController();
+  }
+  const [recenterStatus, setRecenterStatus] = useState<RecenterStatus>(
+    recenterRef.current.status,
+  );
+  const recenterMetricsRef = useRef<{ sumErr: number; sumSq: number; count: number }>({
+    sumErr: 0,
+    sumSq: 0,
+    count: 0,
+  });
+  const recenterPrevStateRef = useRef<LockState>(recenterRef.current.status.state);
+  const ekfInitialisedRef = useRef(false);
+  const magSampleRef = useRef<{ yaw: number; quality: number; timestamp: number } | null>(null);
+  const lastMagUpdateRef = useRef(0);
+  const lastFrameTsRef = useRef<number | null>(null);
+  const animationHandleRef = useRef<number | ReturnType<typeof setTimeout> | null>(null);
+  const lockScaleAnimRef = useRef<Animated.Value | null>(null);
+  if (!lockScaleAnimRef.current) {
+    lockScaleAnimRef.current = new Animated.Value(0);
+  }
+  const lockScaleAnim = lockScaleAnimRef.current;
   const tournamentSafe = useMemo(() => readTournamentSafe(), []);
+  const lockScale = useMemo(
+    () => lockScaleAnim.interpolate({ inputRange: [0, 1], outputRange: [1, 1.05] }),
+    [lockScaleAnim],
+  );
+  const recenterStatusText = useMemo(() => {
+    switch (recenterStatus.state) {
+      case 'locked':
+        return 'Locked ✓';
+      case 'seeking':
+        return `Seeking ${(recenterStatus.elapsedMs / 1000).toFixed(1)}s…`;
+      case 'timeout':
+        return 'Timeout · Retry';
+      case 'idle':
+      default:
+        return 'Idle';
+    }
+  }, [recenterStatus]);
+  const recenterStatusMeta = useMemo(() => {
+    const qualityLabel = recenterStatus.quality.toUpperCase();
+    const errorLabel = `${recenterStatus.errorDeg.toFixed(1)}°`;
+    if (recenterStatus.state === 'locked') {
+      const lockTime = (recenterStatus.elapsedMs / 1000).toFixed(2);
+      return `${qualityLabel} • ${errorLabel} • ${lockTime}s`;
+    }
+    return `${qualityLabel} • ${errorLabel}`;
+  }, [recenterStatus]);
+  const recenterPillColors = useMemo(() => {
+    const qualityColors: Record<Quality, string> = {
+      poor: '#ef4444',
+      fair: '#facc15',
+      good: '#22c55e',
+      excellent: '#38bdf8',
+    };
+    const stateBackground: Record<LockState, string> = {
+      idle: '#1f2937',
+      seeking: '#1e3a8a',
+      locked: '#065f46',
+      timeout: '#7c2d12',
+    };
+    const stateBorder: Record<LockState, string> = {
+      idle: '#334155',
+      seeking: qualityColors[recenterStatus.quality],
+      locked: '#22c55e',
+      timeout: '#f97316',
+    };
+    return {
+      backgroundColor: stateBackground[recenterStatus.state],
+      borderColor: stateBorder[recenterStatus.state],
+      accentColor: qualityColors[recenterStatus.quality],
+    };
+  }, [recenterStatus]);
   const [puttFeedbackOverride, setPuttFeedbackOverride] = useState(false);
   const [puttHintsEnabled, setPuttHintsEnabled] = useState(!tournamentSafe);
   const greenHintsEnabled = useMemo(
@@ -4194,6 +4332,58 @@ const QAArHudOverlayScreen: React.FC = () => {
   }, [qaEnabled]);
 
   useEffect(() => {
+    if (qaEnabled && !tournamentSafe) {
+      setRecenterTelemetryEnabled(true);
+    } else {
+      setRecenterTelemetryEnabled(false);
+    }
+    return () => {
+      setRecenterTelemetryEnabled(false);
+    };
+  }, [qaEnabled, tournamentSafe]);
+
+  useEffect(() => {
+    const previous = recenterPrevStateRef.current;
+    const current = recenterStatus.state;
+    if (previous !== current) {
+      if (current === 'locked') {
+        if (typeof lockScaleAnim.stopAnimation === 'function') {
+          lockScaleAnim.stopAnimation();
+        }
+        lockScaleAnim.setValue(0);
+        Animated.spring(lockScaleAnim, {
+          toValue: 1,
+          speed: 18,
+          bounciness: 8,
+          useNativeDriver: true,
+        }).start();
+      } else {
+        if (typeof lockScaleAnim.stopAnimation === 'function') {
+          lockScaleAnim.stopAnimation();
+        }
+        lockScaleAnim.setValue(0);
+      }
+
+      if (current === 'locked' || current === 'timeout') {
+        const stats = recenterMetricsRef.current;
+        const avgErr = stats.count > 0 ? stats.sumErr / stats.count : 0;
+        const rmsErr = stats.count > 0 ? Math.sqrt(stats.sumSq / stats.count) : 0;
+        emitRecenterTelemetry(telemetryRef.current, {
+          lockMs: recenterStatus.elapsedMs,
+          outcome: current,
+          avgErrDeg: Number.isFinite(avgErr) ? avgErr : 0,
+          rmsErrDeg: Number.isFinite(rmsErr) ? rmsErr : 0,
+        });
+      }
+
+      if (current === 'seeking') {
+        recenterMetricsRef.current = { sumErr: 0, sumSq: 0, count: 0 };
+      }
+    }
+    recenterPrevStateRef.current = current;
+  }, [lockScaleAnim, recenterStatus]);
+
+  useEffect(() => {
     bundleRef.current = bundle;
   }, [bundle]);
 
@@ -4426,6 +4616,34 @@ const QAArHudOverlayScreen: React.FC = () => {
     emitTelemetry('hud.auto_land.rejected', { reason: 'adjust' });
     startLandingTimeout();
   }, [emitTelemetry, startLandingTimeout, setMarkLandingArmed]);
+
+  const handleRecenter = useCallback(() => {
+    if (tournamentSafe) {
+      return;
+    }
+    const controller = recenterRef.current;
+    const ekf = ekfRef.current;
+    if (!controller || !ekf) {
+      return;
+    }
+    const nowTs = performanceNow();
+    let yawRef = ekfInitialisedRef.current ? ekf.yaw : rad(heading);
+    if (!ekfInitialisedRef.current) {
+      if (!Number.isFinite(yawRef)) {
+        yawRef = 0;
+      }
+      ekf.reset(yawRef);
+      ekfInitialisedRef.current = true;
+    }
+    controller.start(nowTs, yawRef);
+    recenterMetricsRef.current = { sumErr: 0, sumSq: 0, count: 0 };
+    setRecenterStatus(controller.status);
+    recenterPrevStateRef.current = controller.status.state;
+    if (typeof lockScaleAnim.stopAnimation === 'function') {
+      lockScaleAnim.stopAnimation();
+    }
+    lockScaleAnim.setValue(0);
+  }, [heading, lockScaleAnim, tournamentSafe]);
 
   const handleAutoLandingDismiss = useCallback(() => {
     landingHeuristicsRef.current.reject('dismiss');
@@ -4685,12 +4903,154 @@ const QAArHudOverlayScreen: React.FC = () => {
       return undefined;
     }
     const unsubscribe = subscribeHeading((value) => {
-      setHeading(value);
+      if (!Number.isFinite(value)) {
+        return;
+      }
+      const normalized = ((value % 360) + 360) % 360;
+      if (!ekfInitialisedRef.current) {
+        setHeading(normalized);
+      }
+      magSampleRef.current = {
+        yaw: rad(value),
+        quality: 1,
+        timestamp: performanceNow(),
+      };
     });
     return () => {
       if (typeof unsubscribe === 'function') {
         unsubscribe();
       }
+    };
+  }, [qaEnabled]);
+
+  useEffect(() => {
+    if (!qaEnabled) {
+      const controller = recenterRef.current;
+      if (controller) {
+        controller.cancel(performanceNow());
+        setRecenterStatus(controller.status);
+      }
+      recenterMetricsRef.current = { sumErr: 0, sumSq: 0, count: 0 };
+      ekfInitialisedRef.current = false;
+      magSampleRef.current = null;
+      lastMagUpdateRef.current = 0;
+      return;
+    }
+
+    let mounted = true;
+    const ekf = ekfRef.current ?? new YawEkf();
+    if (!ekfRef.current) {
+      ekfRef.current = ekf;
+    }
+    const controller = recenterRef.current ?? new RecenterController();
+    if (!recenterRef.current) {
+      recenterRef.current = controller;
+    }
+    const sensor = imuRef.current ?? createQaImuStub();
+    if (!imuRef.current) {
+      imuRef.current = sensor;
+    }
+
+    const schedule = (cb: (ts: number) => void) => {
+      if (typeof requestAnimationFrame === 'function') {
+        return requestAnimationFrame(cb);
+      }
+      return setTimeout(() => cb(performanceNow()), 16);
+    };
+
+    const cancel = (handle: number | ReturnType<typeof setTimeout> | null) => {
+      if (handle === null) {
+        return;
+      }
+      if (typeof cancelAnimationFrame === 'function' && typeof handle === 'number') {
+        cancelAnimationFrame(handle);
+      } else {
+        clearTimeout(handle as ReturnType<typeof setTimeout>);
+      }
+    };
+
+    const step = (timestamp: number) => {
+      if (!mounted) {
+        return;
+      }
+      const nowTs = performanceNow();
+      const lastFrame = lastFrameTsRef.current ?? timestamp;
+      const dt = Math.max(0, (timestamp - lastFrame) / 1000);
+      lastFrameTsRef.current = timestamp;
+
+      const sample = sensor.sample(nowTs);
+      const existing = magSampleRef.current;
+      if (!existing || nowTs - existing.timestamp > 200) {
+        magSampleRef.current = {
+          yaw: sample.magYaw,
+          quality: sample.magQuality,
+          timestamp: nowTs,
+        };
+      }
+
+      const mag = magSampleRef.current;
+
+      if (!ekfInitialisedRef.current && mag) {
+        ekf.reset(mag.yaw);
+        ekfInitialisedRef.current = true;
+        lastMagUpdateRef.current = mag.timestamp;
+        setHeading(((deg(mag.yaw) % 360) + 360) % 360);
+      }
+
+      if (ekfInitialisedRef.current) {
+        if (dt > 0 && Number.isFinite(sample.gyroZ)) {
+          ekf.predict(sample.gyroZ, dt);
+        }
+
+        if (mag && mag.timestamp > lastMagUpdateRef.current) {
+          ekf.update(mag.yaw, mag.quality);
+          lastMagUpdateRef.current = mag.timestamp;
+        }
+
+        const yaw = ekf.yaw;
+        const yawDeg = ((deg(yaw) % 360) + 360) % 360;
+        setHeading((prev) => {
+          if (!Number.isFinite(prev)) {
+            return yawDeg;
+          }
+          const change = Math.abs(deg(diffRad(rad(yawDeg), rad(prev))));
+          return change < 0.05 ? prev : yawDeg;
+        });
+
+        const nextStatus = controller.sample(nowTs, yaw);
+        if (nextStatus.state === 'seeking') {
+          const stats = recenterMetricsRef.current;
+          stats.sumErr += nextStatus.errorDeg;
+          stats.sumSq += nextStatus.errorDeg * nextStatus.errorDeg;
+          stats.count += 1;
+        }
+
+        setRecenterStatus((prev) => {
+          if (
+            prev.state === nextStatus.state &&
+            prev.quality === nextStatus.quality &&
+            Math.abs(prev.elapsedMs - nextStatus.elapsedMs) < 1 &&
+            Math.abs(prev.errorDeg - nextStatus.errorDeg) < 0.05
+          ) {
+            return prev;
+          }
+          return nextStatus;
+        });
+      }
+
+      animationHandleRef.current = schedule(step);
+    };
+
+    animationHandleRef.current = schedule(step);
+
+    return () => {
+      mounted = false;
+      cancel(animationHandleRef.current);
+      animationHandleRef.current = null;
+      lastFrameTsRef.current = null;
+      magSampleRef.current = null;
+      lastMagUpdateRef.current = 0;
+      ekfInitialisedRef.current = false;
     };
   }, [qaEnabled]);
 
@@ -5227,6 +5587,39 @@ const QAArHudOverlayScreen: React.FC = () => {
             </View>
           </>
         ) : null}
+        <Text style={[styles.sectionTitle, styles.sectionTitleSpacing]}>Heading lock</Text>
+        <View style={styles.recenterRow}>
+          <TouchableOpacity
+            onPress={handleRecenter}
+            disabled={tournamentSafe}
+            style={[
+              styles.recenterButton,
+              tournamentSafe ? styles.recenterButtonDisabled : null,
+            ]}
+          >
+            <Text style={styles.recenterButtonText}>Re-center</Text>
+          </TouchableOpacity>
+          <Animated.View
+            style={[
+              styles.recenterStatusPill,
+              {
+                backgroundColor: recenterPillColors.backgroundColor,
+                borderColor: recenterPillColors.borderColor,
+              },
+              { transform: [{ scale: lockScale }] },
+            ]}
+          >
+            <Text style={styles.recenterStatusLabel}>{recenterStatusText}</Text>
+            <Text
+              style={[
+                styles.recenterStatusMeta,
+                { color: recenterPillColors.accentColor },
+              ]}
+            >
+              {recenterStatusMeta}
+            </Text>
+          </Animated.View>
+        </View>
         <View style={styles.calloutRow}>
           {pinDropUiEnabled ? (
             <View style={styles.calloutCard}>
@@ -7495,6 +7888,44 @@ const styles = StyleSheet.create({
   calibrationDeltaText: {
     color: '#facc15',
     fontSize: 11,
+  },
+  recenterRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginTop: 12,
+  },
+  recenterButton: {
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 999,
+    backgroundColor: '#2563eb',
+  },
+  recenterButtonDisabled: {
+    backgroundColor: '#1f2937',
+  },
+  recenterButtonText: {
+    color: '#f8fafc',
+    fontWeight: '600',
+  },
+  recenterStatusPill: {
+    flex: 1,
+    borderRadius: 999,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderWidth: 1,
+    backgroundColor: '#1f2937',
+  },
+  recenterStatusLabel: {
+    color: '#e2e8f0',
+    fontWeight: '700',
+    fontSize: 13,
+  },
+  recenterStatusMeta: {
+    marginTop: 2,
+    fontSize: 11,
+    color: '#94a3b8',
+    fontVariant: ['tabular-nums'],
   },
   sectionTitleSpacing: {
     marginTop: 12,
