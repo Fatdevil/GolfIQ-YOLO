@@ -1,13 +1,32 @@
 repos:
+  - repo: local
+    hooks:
+      - id: block-binary-assets
+        name: Block binary asset extensions
+        entry: python
+        language: python
+        pass_filenames: true
+        files: "\\.(?:png|jpe?g|mp4|onnx|tflite|pt|pdf|zip|ttf|otf|woff2?|keystore)$"
+        args:
+          - -c
+          - |
+            import sys
+
+            blocked = sys.argv[1:]
+            if blocked:
+                joined = "\n".join(blocked)
+                message = (
+                    "Binary-like files are blocked in this repo. "
+                    "Use Git LFS or an alternative branch for media artifacts.\n"
+                    f"Blocked files:\n{joined}"
+                )
+                raise SystemExit(message)
   - repo: https://github.com/psf/black
-    rev: 24.8.0
+    rev: 24.4.2
     hooks:
       - id: black
-  - repo: https://github.com/pycqa/isort
-    rev: 5.13.2
-    hooks:
-      - id: isort
+        language_version: python3
   - repo: https://github.com/pycqa/flake8
-    rev: 7.1.1
+    rev: 7.1.0
     hooks:
       - id: flake8
