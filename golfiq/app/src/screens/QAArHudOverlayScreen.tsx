@@ -31,6 +31,9 @@ import {
   type BundleIndexEntry,
   type CourseBundle,
 } from '../../../../shared/arhud/bundle_client';
+import { BundleClient } from '../../../../shared/bundles/client';
+import { BundleStore } from '../../../../shared/bundles/store';
+import type { BundleResult, BundleStatus } from '../../../../shared/bundles/types';
 import { searchCourses, type CourseSearchResult } from '../../../../shared/arhud/course_search';
 import {
   AutoCourseController,
@@ -118,6 +121,63 @@ import {
   saveLearnedDispersion,
   type DispersionSnapshot,
 } from '../../../../shared/caddie/player_model';
+
+type BundleQaGlobal = typeof globalThis & {
+  ARHUD_BUNDLE_BASE?: string;
+  API_BASE?: string;
+  EXPO_PUBLIC_API_BASE?: string;
+};
+
+const BUNDLE_BASE_FALLBACK = 'http://localhost:8000';
+const WARNING_STATUSES: readonly BundleStatus[] = ['stale', 'invalid', 'error', 'missing'];
+
+function resolveBundleQaBase(): string {
+  const globalObject = globalThis as BundleQaGlobal;
+  const env =
+    typeof process !== 'undefined'
+      ? ((process as { env?: Record<string, string | undefined> }).env ?? {})
+      : {};
+  const base =
+    globalObject.ARHUD_BUNDLE_BASE ??
+    env.ARHUD_BUNDLE_BASE ??
+    globalObject.API_BASE ??
+    env.API_BASE ??
+    globalObject.EXPO_PUBLIC_API_BASE ??
+    env.EXPO_PUBLIC_API_BASE ??
+    BUNDLE_BASE_FALLBACK;
+  return base.trim().replace(/\/$/, '');
+}
+
+function formatBundleSize(bytes: number | undefined): string | null {
+  if (typeof bytes !== 'number' || !Number.isFinite(bytes) || bytes < 0) {
+    return null;
+  }
+  if (bytes === 0) {
+    return '0.0 MB';
+  }
+  const megabytes = bytes / (1024 * 1024);
+  if (megabytes >= 1) {
+    return `${megabytes >= 10 ? megabytes.toFixed(1) : megabytes.toFixed(2)} MB`;
+  }
+  const kilobytes = bytes / 1024;
+  return `${kilobytes >= 10 ? kilobytes.toFixed(1) : kilobytes.toFixed(2)} KB`;
+}
+
+function formatEtag(etag: string | undefined): string | null {
+  if (!etag) {
+    return null;
+  }
+  const trimmed = etag.trim();
+  const withoutQuotes = trimmed.replace(/^"|"$/g, '');
+  return withoutQuotes || trimmed;
+}
+
+function formatStatusLabel(status: BundleStatus | undefined): string {
+  if (!status) {
+    return '—';
+  }
+  return status.charAt(0).toUpperCase() + status.slice(1);
+}
 import { learnDispersion, type ClubDispersion } from '../../../../shared/caddie/dispersion';
 import {
   planApproach,
@@ -2203,6 +2263,17 @@ const QAArHudOverlayScreen: React.FC = () => {
   if (!autoCourseRef.current) {
     autoCourseRef.current = new AutoCourseController();
   }
+  const bundleStore = useMemo(() => new BundleStore(), []);
+  const bundleBaseUrl = useMemo(() => `${resolveBundleQaBase()}/bundle/course`, []);
+  const bundleClient = useMemo(
+    () =>
+      new BundleClient(bundleStore, {
+        baseUrl: bundleBaseUrl,
+        ttlDefaultSec: 3600,
+        telemetryEnabled: false,
+      }),
+    [bundleStore, bundleBaseUrl],
+  );
   const [courses, setCourses] = useState<BundleIndexEntry[]>([]);
   const [coursesLoading, setCoursesLoading] = useState(false);
   const [coursesError, setCoursesError] = useState<string | null>(null);
@@ -2212,6 +2283,8 @@ const QAArHudOverlayScreen: React.FC = () => {
   const [bundle, setBundle] = useState<CourseBundle | null>(null);
   const [bundleLoading, setBundleLoading] = useState(false);
   const [bundleError, setBundleError] = useState<string | null>(null);
+  const [bundleQaResult, setBundleQaResult] = useState<BundleResult | null>(null);
+  const [bundleQaRefreshing, setBundleQaRefreshing] = useState(false);
   const [offline, setOffline] = useState(false);
   const [roundShareUploading, setRoundShareUploading] = useState(false);
   const [roundShareMessage, setRoundShareMessage] = useState<string | null>(null);
@@ -2327,6 +2400,35 @@ const QAArHudOverlayScreen: React.FC = () => {
         return 'Idle';
     }
   }, [recenterStatus]);
+  const bundleSummary = useMemo(() => {
+    if (!bundleQaResult) {
+      return bundleQaRefreshing ? 'Bundle: Loading…' : 'Bundle: —';
+    }
+    const manifest = bundleQaResult.manifest;
+    let text = `Bundle: ${formatStatusLabel(bundleQaResult.status)}`;
+    if (manifest) {
+      text += ` · v${manifest.v}`;
+      const sizeText = formatBundleSize(manifest.sizeBytes);
+      if (sizeText) {
+        text += ` · ${sizeText}`;
+      }
+      const etagText = formatEtag(manifest.etag);
+      if (etagText) {
+        text += ` (ETag ${etagText})`;
+      }
+    }
+    return text;
+  }, [bundleQaRefreshing, bundleQaResult]);
+  const bundleWarningActive = useMemo(
+    () => (bundleQaResult ? WARNING_STATUSES.includes(bundleQaResult.status) : false),
+    [bundleQaResult],
+  );
+  const bundleWarningLabel = bundleWarningActive
+    ? bundleQaRefreshing
+      ? '⚠️ Refreshing…'
+      : '⚠️ Tap to refresh'
+    : null;
+  const bundleQaDisabled = !qaEnabled || !selectedCourseId || bundleQaRefreshing;
   const recenterStatusMeta = useMemo(() => {
     const qualityLabel = recenterStatus.quality.toUpperCase();
     const errorLabel = `${recenterStatus.errorDeg.toFixed(1)}°`;
@@ -5115,6 +5217,64 @@ const QAArHudOverlayScreen: React.FC = () => {
   }, [qaEnabled, selectedCourseId]);
 
   useEffect(() => {
+    if (!qaEnabled || !selectedCourseId) {
+      setBundleQaResult(null);
+      setBundleQaRefreshing(false);
+      return;
+    }
+    let cancelled = false;
+    setBundleQaRefreshing(true);
+    (async () => {
+      try {
+        const result = await bundleClient.ensure(selectedCourseId);
+        if (cancelled) {
+          return;
+        }
+        setBundleQaResult(result);
+      } catch (error) {
+        if (cancelled) {
+          return;
+        }
+        setBundleQaResult((prev) => ({
+          status: 'error',
+          manifest: prev?.manifest,
+          path: prev?.path,
+          reason: error instanceof Error ? error.message : 'Failed to load bundle',
+        }));
+      } finally {
+        if (!cancelled) {
+          setBundleQaRefreshing(false);
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [bundleClient, qaEnabled, selectedCourseId]);
+
+  const handleBundleQaRefresh = useCallback(() => {
+    if (!selectedCourseId || bundleQaRefreshing) {
+      return;
+    }
+    setBundleQaRefreshing(true);
+    (async () => {
+      try {
+        const result = await bundleClient.refresh(selectedCourseId);
+        setBundleQaResult(result);
+      } catch (error) {
+        setBundleQaResult((prev) => ({
+          status: 'error',
+          manifest: prev?.manifest,
+          path: prev?.path,
+          reason: error instanceof Error ? error.message : 'Failed to refresh bundle',
+        }));
+      } finally {
+        setBundleQaRefreshing(false);
+      }
+    })();
+  }, [bundleClient, bundleQaRefreshing, selectedCourseId]);
+
+  useEffect(() => {
     if (!qaEnabled) {
       return undefined;
     }
@@ -6650,6 +6810,27 @@ const QAArHudOverlayScreen: React.FC = () => {
             </View>
           ) : null}
         </View>
+        <TouchableOpacity
+          style={[styles.bundleQaCard, bundleQaDisabled ? styles.bundleQaDisabled : null]}
+          onPress={handleBundleQaRefresh}
+          disabled={bundleQaDisabled}
+          activeOpacity={0.7}
+        >
+          <View style={styles.bundleQaRow}>
+            <Text
+              style={[
+                styles.bundleQaText,
+                bundleWarningActive ? styles.bundleQaTextWarning : null,
+              ]}
+            >
+              {bundleSummary}
+            </Text>
+            {bundleQaRefreshing ? <ActivityIndicator size="small" color="#60a5fa" /> : null}
+          </View>
+          {bundleWarningLabel ? (
+            <Text style={styles.bundleQaWarningText}>{bundleWarningLabel}</Text>
+          ) : null}
+        </TouchableOpacity>
         <Text style={[styles.sectionTitle, styles.sectionTitleSpacing]}>Bundle</Text>
         {bundleLoading ? <ActivityIndicator size="small" color="#60a5fa" /> : null}
         {bundleError ? <Text style={styles.errorText}>{bundleError}</Text> : null}
@@ -8169,6 +8350,36 @@ const styles = StyleSheet.create({
   },
   sectionTitleSpacing: {
     marginTop: 12,
+  },
+  bundleQaCard: {
+    backgroundColor: '#111827',
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    marginBottom: 12,
+    gap: 6,
+  },
+  bundleQaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  bundleQaText: {
+    color: '#e2e8f0',
+    fontSize: 13,
+    fontWeight: '600',
+    flexShrink: 1,
+  },
+  bundleQaTextWarning: {
+    color: '#facc15',
+  },
+  bundleQaWarningText: {
+    color: '#facc15',
+    fontSize: 12,
+  },
+  bundleQaDisabled: {
+    opacity: 0.6,
   },
   bundleDetails: {
     gap: 4,
