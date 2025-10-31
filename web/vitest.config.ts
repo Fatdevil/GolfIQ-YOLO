@@ -15,8 +15,9 @@ export default defineConfig({
       'tests/**/*.spec.ts',
       '../tests/shared/caddie/playslike.spec.ts',
       '../tests/shared/greeniq/**/*.spec.ts',
+      '../tests/shared/sg/**/*.spec.ts',
     ],
-    exclude: ['../tests/shared/sg/**'],
+    exclude: [],
     passWithNoTests: true,
   }
 });

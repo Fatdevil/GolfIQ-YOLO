@@ -7,7 +7,7 @@ describe('computeSG', () => {
     const result = computeSG({
       phase: 'approach',
       startDist_m: 150,
-      endDist_m: 6,
+      endDist_m: 3,
     });
 
     expect(result.total).toBeGreaterThan(0);
