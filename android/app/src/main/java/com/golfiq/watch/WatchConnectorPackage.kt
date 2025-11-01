@@ -7,7 +7,10 @@ import com.facebook.react.uimanager.ViewManager
 
 class WatchConnectorPackage : ReactPackage {
     override fun createNativeModules(reactContext: ReactApplicationContext): List<NativeModule> {
-        return listOf(WatchConnectorModule(reactContext))
+        return listOf(
+            WatchConnectorModule(reactContext),
+            VectorWatchBridgeModule(reactContext),
+        )
     }
 
     override fun createViewManagers(reactContext: ReactApplicationContext): List<ViewManager<*, *>> {
