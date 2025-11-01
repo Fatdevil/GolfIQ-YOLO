@@ -22,4 +22,11 @@ export type WatchDiag = {
     ts: number;
     bytes: number;
   };
+  throttle: {
+    windowMs: number;
+  };
+  trailing: {
+    queued: boolean;
+    etaAt: number | null;
+  };
 };

@@ -195,6 +195,36 @@ function sendHUDDebounced(
   return sendNow(state);
 }
 
+async function flushPending(): Promise<boolean> {
+  if (!pendingPromise || !pendingState) {
+    return false;
+  }
+  const stateToSend = pendingState;
+  const resolvePending = pendingResolve;
+  const windowForSend = pendingWindowMs;
+  pendingState = null;
+  pendingResolve = null;
+  pendingPromise = null;
+  pendingWindowMs = DEFAULT_DEBOUNCE_MS;
+  if (pendingTimer) {
+    clearTimeout(pendingTimer);
+    pendingTimer = null;
+  }
+  if (inFlight) {
+    try {
+      await inFlight;
+    } catch {
+      // ignore errors from the in-flight attempt; we'll still flush the trailing payload
+    }
+  }
+  const ok = await sendNow(stateToSend);
+  nextAllowedAt = lastSentAt + windowForSend;
+  if (resolvePending) {
+    resolvePending(ok);
+  }
+  return ok;
+}
+
 export const WatchBridge = {
   async isCapable(): Promise<boolean> {
     const mod = getNativeModule();
@@ -220,5 +250,8 @@ export const WatchBridge = {
   },
   getCapabilities(): WatchDiag['capability'] {
     return detectCapabilities();
+  },
+  flush(): Promise<boolean> {
+    return flushPending();
   },
 };
