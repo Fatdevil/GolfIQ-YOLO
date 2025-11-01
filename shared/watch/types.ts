@@ -11,3 +11,15 @@ export type WatchHUDStateV1 = {
   };
   tournamentSafe: boolean;
 };
+
+export type WatchDiag = {
+  capability: {
+    android: boolean;
+    ios: boolean;
+  };
+  lastSend: {
+    ok: boolean;
+    ts: number;
+    bytes: number;
+  };
+};

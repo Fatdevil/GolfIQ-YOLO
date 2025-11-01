@@ -222,7 +222,7 @@ import {
 } from '../../../../shared/telemetry/caddie';
 import { emitRecenterTelemetry, setRecenterTelemetryEnabled } from '../../../../shared/telemetry/arhud';
 import { WatchBridge } from '../../../../shared/watch/bridge';
-import type { WatchHUDStateV1 } from '../../../../shared/watch/types';
+import type { WatchDiag, WatchHUDStateV1 } from '../../../../shared/watch/types';
 import {
   emitGreenIqBreakTelemetry,
   emitGreenIqTelemetry,
@@ -355,6 +355,30 @@ const readWatchHudEnabled = (): boolean => {
     }
   }
   return false;
+};
+
+const formatRelativeTime = (ts: number, now: number): string => {
+  if (!ts) {
+    return 'never';
+  }
+  const delta = Math.max(0, now - ts);
+  if (delta < 1000) {
+    return 'just now';
+  }
+  if (delta < 60_000) {
+    const seconds = Math.floor(delta / 1000);
+    return `${seconds}s ago`;
+  }
+  if (delta < 3_600_000) {
+    const minutes = Math.floor(delta / 60_000);
+    return `${minutes}m ago`;
+  }
+  if (delta < 86_400_000) {
+    const hours = Math.floor(delta / 3_600_000);
+    return `${hours}h ago`;
+  }
+  const days = Math.floor(delta / 86_400_000);
+  return `${days}d ago`;
 };
 
 const readTournamentSafe = (): boolean => {
@@ -2309,6 +2333,25 @@ const QAArHudOverlayScreen: React.FC = () => {
   }
   const watchHudSendAttemptRef = useRef(0);
   const watchHudLastSuccessRef = useRef<{ ts: number; fingerprint: string } | null>(null);
+  const watchPayloadRef = useRef<WatchHUDStateV1 | null>(null);
+  const [watchPayloadReady, setWatchPayloadReady] = useState(false);
+  const commitWatchPayload = useCallback((payload: WatchHUDStateV1 | null) => {
+    watchPayloadRef.current = payload;
+    setWatchPayloadReady((prev) => {
+      const next = Boolean(payload);
+      return prev === next ? prev : next;
+    });
+  }, []);
+  const [watchAutoSend, setWatchAutoSend] = useState(true);
+  const [watchDiag, setWatchDiag] = useState<WatchDiag>(() => ({
+    capability: WatchBridge.getCapabilities(),
+    lastSend: WatchBridge.getLastStatus(),
+  }));
+  const [watchDiagExpanded, setWatchDiagExpanded] = useState(false);
+  const [watchDiagClock, setWatchDiagClock] = useState(Date.now());
+  const syncWatchLastStatus = useCallback(() => {
+    setWatchDiag((prev) => ({ ...prev, lastSend: WatchBridge.getLastStatus() }));
+  }, []);
   const bundleStore = useMemo(() => new BundleStore(), []);
   const bundleBaseUrl = useMemo(() => `${resolveBundleQaBase()}/bundle/course`, []);
   const bundleClient = useMemo(
@@ -2358,6 +2401,66 @@ const QAArHudOverlayScreen: React.FC = () => {
   });
   const [plannerResult, setPlannerResult] = useState<PlanOut | null>(null);
   const [shotSession, setShotSession] = useState<ShotSessionState | null>(null);
+  useEffect(() => {
+    if (!watchDiagExpanded) {
+      return;
+    }
+    setWatchDiagClock(Date.now());
+    const timer = setInterval(() => {
+      setWatchDiagClock(Date.now());
+    }, 1000);
+    return () => {
+      clearInterval(timer);
+    };
+  }, [watchDiagExpanded]);
+  useEffect(() => {
+    setWatchDiag((prev) => ({ ...prev, capability: WatchBridge.getCapabilities() }));
+  }, [watchHudEnabled, qaEnabled]);
+  const notifyWatch = useCallback((message: string) => {
+    if (Platform.OS === 'android') {
+      ToastAndroid.show(message, ToastAndroid.SHORT);
+    } else {
+      Alert.alert('Watch HUD', message);
+    }
+  }, []);
+  const handleWatchSendNow = useCallback(async () => {
+    const payload = watchPayloadRef.current;
+    if (!payload) {
+      notifyWatch('No HUD payload ready');
+      return;
+    }
+    const ts = Date.now();
+    const sent = await WatchBridge.sendHUD({ ...payload, ts });
+    syncWatchLastStatus();
+    notifyWatch(sent ? 'Watch HUD payload sent' : 'Watch HUD send failed');
+  }, [notifyWatch, syncWatchLastStatus]);
+  const handleWatchToggleAutoSend = useCallback(() => {
+    setWatchAutoSend((prev) => !prev);
+  }, []);
+  const watchCapabilityLabel = useMemo(() => {
+    const capability = watchDiag.capability;
+    const androidLabel = capability.android ? '✓' : '✕';
+    const iosLabel = capability.ios ? '✓' : '✕';
+    return `Android ${androidLabel} · iOS ${iosLabel}`;
+  }, [watchDiag.capability]);
+  const watchLastSendSummary = useMemo(() => {
+    const { ok, ts, bytes } = watchDiag.lastSend;
+    if (!ts) {
+      return 'No attempts yet';
+    }
+    const status = ok ? 'OK' : 'Fail';
+    const ago = formatRelativeTime(ts, watchDiagClock);
+    return `${status} · ${ago} · ${bytes} B`;
+  }, [watchDiag.lastSend, watchDiagClock]);
+  const watchLastSendTone = useMemo(() => {
+    if (!watchDiag.lastSend.ts) {
+      return styles.watchStatusIdle;
+    }
+    return watchDiag.lastSend.ok ? styles.watchStatusOk : styles.watchStatusFail;
+  }, [watchDiag.lastSend]);
+  const watchAutoSendStatus = watchAutoSend ? 'Auto-send enabled' : 'Auto-send paused';
+  const watchAutoSendTone = watchAutoSend ? styles.watchStatusOk : styles.watchStatusWarn;
+  const watchSendDisabled = !watchPayloadReady;
   const [markLandingArmed, setMarkLandingArmed] = useState(false);
   const [puttEval, setPuttEval] = useState<PuttEval | null>(null);
   const [qaBag, setQaBag] = useState<Bag>(() => effectiveBag());
@@ -3754,11 +3857,13 @@ const QAArHudOverlayScreen: React.FC = () => {
   }, [formatPercent, strategyAllowed, strategyComputation]);
   useEffect(() => {
     if (!watchHudEnabled || !qaEnabled) {
+      commitWatchPayload(null);
       return;
     }
     const middleDistance =
       finiteOrNull(pinMetrics?.distance) ?? finiteOrNull(shotSession?.baseDistance) ?? null;
     if (!middleDistance || middleDistance <= 0) {
+      commitWatchPayload(null);
       return;
     }
     const frontDistance = Math.max(0, middleDistance - WATCH_HUD_FMB_OFFSET_M);
@@ -3803,6 +3908,10 @@ const QAArHudOverlayScreen: React.FC = () => {
         carry_m: strategyComputation.decision.recommended.carry_m,
       };
     }
+    commitWatchPayload(payload);
+    if (!watchAutoSend) {
+      return;
+    }
     const fingerprint = JSON.stringify({
       fmb: payload.fmb,
       playsLikePct: payload.playsLikePct,
@@ -3826,6 +3935,7 @@ const QAArHudOverlayScreen: React.FC = () => {
     void (async () => {
       const ts = Date.now();
       const sent = await WatchBridge.sendHUD({ ...payload, ts });
+      syncWatchLastStatus();
       if (sent) {
         watchHudLastSuccessRef.current = { ts, fingerprint };
       }
@@ -3841,6 +3951,9 @@ const QAArHudOverlayScreen: React.FC = () => {
     plannerInputs.wind_from_deg,
     tournamentSafe,
     strategyComputation,
+    commitWatchPayload,
+    watchAutoSend,
+    syncWatchLastStatus,
   ]);
   const holeSgSummary = useMemo<
     | { headline: string; breakdown: string }
@@ -6058,6 +6171,44 @@ const QAArHudOverlayScreen: React.FC = () => {
         </View>
       </View>
       <View style={styles.statusPanel}>
+        <View style={styles.watchCard}>
+          <TouchableOpacity
+            onPress={() => setWatchDiagExpanded((prev) => !prev)}
+            style={styles.watchCardHeader}
+          >
+            <Text style={styles.watchCardTitle}>Watch HUD</Text>
+            <Text style={styles.watchCardChevron}>{watchDiagExpanded ? '▾' : '▸'}</Text>
+          </TouchableOpacity>
+          {watchDiagExpanded ? (
+            <View style={styles.watchCardBody}>
+              <View style={styles.watchRow}>
+                <Text style={styles.watchRowLabel}>Capability</Text>
+                <Text style={styles.watchRowValue}>{watchCapabilityLabel}</Text>
+              </View>
+              <View style={styles.watchRow}>
+                <Text style={styles.watchRowLabel}>Last send</Text>
+                <Text style={[styles.watchRowValue, watchLastSendTone]}>{watchLastSendSummary}</Text>
+              </View>
+              <View style={styles.watchButtonsRow}>
+                <TouchableOpacity
+                  onPress={handleWatchSendNow}
+                  style={[
+                    styles.watchButton,
+                    styles.watchButtonPrimary,
+                    watchSendDisabled ? styles.watchButtonDisabled : null,
+                  ]}
+                  disabled={watchSendDisabled}
+                >
+                  <Text style={styles.watchButtonText}>Send now</Text>
+                </TouchableOpacity>
+                <TouchableOpacity onPress={handleWatchToggleAutoSend} style={styles.watchButton}>
+                  <Text style={styles.watchButtonText}>Toggle auto-send</Text>
+                </TouchableOpacity>
+              </View>
+              <Text style={[styles.watchStatusText, watchAutoSendTone]}>{watchAutoSendStatus}</Text>
+            </View>
+          ) : null}
+        </View>
         <View style={styles.calibrationChipRow}>
           <View style={[styles.calibrationChip, calibrationChipToneStyle]}>
             <Text style={styles.calibrationChipLabel}>{`Calibration: ${calibrationHealthLabel}`}</Text>
@@ -7307,6 +7458,87 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     padding: 12,
     gap: 8,
+  },
+  watchCard: {
+    backgroundColor: '#0b1120',
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderWidth: 1,
+    borderColor: '#1f2937',
+    gap: 8,
+  },
+  watchCardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  watchCardTitle: {
+    color: '#f8fafc',
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  watchCardChevron: {
+    color: '#94a3b8',
+    fontSize: 16,
+  },
+  watchCardBody: {
+    gap: 10,
+  },
+  watchRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  watchRowLabel: {
+    color: '#cbd5f5',
+    fontSize: 13,
+  },
+  watchRowValue: {
+    color: '#f8fafc',
+    fontSize: 13,
+    textAlign: 'right',
+    flexShrink: 1,
+    fontVariant: ['tabular-nums'],
+  },
+  watchButtonsRow: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  watchButton: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 10,
+    borderRadius: 8,
+    backgroundColor: '#1f2937',
+  },
+  watchButtonPrimary: {
+    backgroundColor: '#2563eb',
+  },
+  watchButtonDisabled: {
+    opacity: 0.5,
+  },
+  watchButtonText: {
+    color: '#f8fafc',
+    fontWeight: '600',
+  },
+  watchStatusText: {
+    fontSize: 12,
+    color: '#94a3b8',
+  },
+  watchStatusOk: {
+    color: '#34d399',
+  },
+  watchStatusFail: {
+    color: '#f87171',
+  },
+  watchStatusWarn: {
+    color: '#fbbf24',
+  },
+  watchStatusIdle: {
+    color: '#94a3b8',
   },
   calibrationChipRow: {
     flexDirection: 'row',
