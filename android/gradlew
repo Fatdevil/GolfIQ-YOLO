@@ -2,7 +2,7 @@
 set -eu
 
 DIR="$(CDPATH= cd -- "$(dirname "$0")" && pwd)"
-DIST_VERSION="8.4"
+DIST_VERSION="8.7"
 DIST_BASE="$DIR/.gradle-dist"
 DIST_DIR="$DIST_BASE/gradle-${DIST_VERSION}"
 GRADLE_BIN="$DIST_DIR/bin/gradle"
