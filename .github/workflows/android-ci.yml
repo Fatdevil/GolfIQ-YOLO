@@ -27,20 +27,23 @@ jobs:
         uses: gradle/gradle-build-action@v3
         with:
           gradle-version: "8.7"
+          build-root-directory: android
           arguments: |
-            -p android build -x lint --stacktrace
+            :app:assembleDebug :wear:assembleDebug -S --warning-mode all
       - name: Unit tests
         uses: gradle/gradle-build-action@v3
         with:
           gradle-version: "8.7"
+          build-root-directory: android
           arguments: |
-            -p android test --stacktrace
+            test --stacktrace
       - name: Lint
         uses: gradle/gradle-build-action@v3
         with:
           gradle-version: "8.7"
+          build-root-directory: android
           arguments: |
-            -p android lint --stacktrace
+            lint --stacktrace
       - name: Upload reports (no binaries)
         uses: actions/upload-artifact@v4
         with:

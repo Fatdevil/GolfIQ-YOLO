@@ -17,7 +17,15 @@ dependencyResolutionManagement {
 }
 
 rootProject.name = "GolfIQBench"
-include(":bench")
-project(":bench").projectDir = File(rootDir, "bench")
+
+include(":app")
+project(":app").projectDir = File(rootDir, "app")
+
 include(":wear")
 project(":wear").projectDir = File(rootDir, "wear")
+
+val includeBench = providers.environmentVariable("INCLUDE_BENCH").orNull == "true"
+if (includeBench) {
+    include(":bench")
+    project(":bench").projectDir = File(rootDir, "bench")
+}
