@@ -23,3 +23,5 @@ jobs:
         run: npm --prefix web run typecheck
       - name: Build (web)
         run: npm --prefix web run build
+      - name: Unit tests (web)
+        run: npm --prefix web run test:unit

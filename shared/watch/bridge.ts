@@ -5,6 +5,16 @@ type NativeWatchConnectorModule = {
   sendHUD(payloadBase64: string): Promise<boolean>;
 };
 
+type AndroidNativeModule = {
+  isCapable: () => Promise<boolean>;
+  sendHUD: (payloadBase64: string) => Promise<boolean>;
+};
+
+type IOSNativeModule = {
+  isCapable: () => Promise<boolean>;
+  sendHUDB64: (payloadBase64: string) => Promise<boolean>;
+};
+
 function tryRequireReactNative(): any | null {
   try {
     // eslint-disable-next-line @typescript-eslint/no-var-requires
@@ -16,15 +26,39 @@ function tryRequireReactNative(): any | null {
 
 function getNativeModule(): NativeWatchConnectorModule | null {
   const RN = tryRequireReactNative();
-  const isAndroid = RN?.Platform?.OS === 'android';
-  const mod = RN?.NativeModules?.WatchConnector;
-  if (!isAndroid || !mod) {
+  const platform: string | undefined = RN?.Platform?.OS;
+  const nativeModules = RN?.NativeModules;
+
+  if (!platform || !nativeModules) {
     return null;
   }
-  if (typeof mod.isCapable !== 'function' || typeof mod.sendHUD !== 'function') {
-    return null;
+
+  if (platform === 'android') {
+    const mod: AndroidNativeModule | undefined = nativeModules.WatchConnector;
+    if (!mod) {
+      return null;
+    }
+    if (typeof mod.isCapable !== 'function' || typeof mod.sendHUD !== 'function') {
+      return null;
+    }
+    return mod;
   }
-  return mod as NativeWatchConnectorModule;
+
+  if (platform === 'ios') {
+    const mod: IOSNativeModule | undefined = nativeModules.WatchConnectorIOS;
+    if (!mod) {
+      return null;
+    }
+    if (typeof mod.isCapable !== 'function' || typeof mod.sendHUDB64 !== 'function') {
+      return null;
+    }
+    return {
+      isCapable: () => mod.isCapable(),
+      sendHUD: (payloadBase64: string) => mod.sendHUDB64(payloadBase64),
+    };
+  }
+
+  return null;
 }
 
 export const WatchBridge = {
