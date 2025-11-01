@@ -14,10 +14,23 @@ const baseState: WatchHUDStateV1 = {
 type BridgeConfig = {
   platform?: 'android' | 'ios' | 'web';
   nativeModules?: Record<string, unknown>;
+  codecMock?: (state: WatchHUDStateV1) => string;
 };
 
 const createBridge = async (config: BridgeConfig = {}) => {
   vi.resetModules();
+  if (config.codecMock) {
+    const codec = config.codecMock;
+    vi.doMock(
+      '../../../shared/watch/codec',
+      () => ({
+        encodeHUDBase64: vi.fn((state: WatchHUDStateV1) => codec(state)),
+      }),
+      { virtual: true },
+    );
+  } else {
+    vi.doUnmock('../../../shared/watch/codec');
+  }
   vi.doMock(
     'react-native',
     () => ({
@@ -73,8 +86,12 @@ describe('WatchBridge diagnostics', () => {
     expect(status.ts).toBeGreaterThan(0);
   });
 
-  it('debounces rapid send requests', async () => {
-    const sendHUD = vi.fn().mockResolvedValue(true);
+  it('suppresses sends until the throttle window elapses', async () => {
+    const callTimes: number[] = [];
+    const sendHUD = vi.fn().mockImplementation(() => {
+      callTimes.push(Date.now());
+      return Promise.resolve(true);
+    });
     const WatchBridge = await createBridge({
       platform: 'android',
       nativeModules: {
@@ -86,18 +103,122 @@ describe('WatchBridge diagnostics', () => {
     });
     vi.useFakeTimers();
     vi.setSystemTime(0);
+
     const first = WatchBridge.sendHUDDebounced(baseState, { minIntervalMs: 500 });
-    const second = WatchBridge.sendHUDDebounced(baseState, { minIntervalMs: 500 });
-    expect(first).toBe(second);
-    expect(sendHUD).toHaveBeenCalledTimes(1);
     await first;
-    vi.advanceTimersByTime(400);
-    const third = WatchBridge.sendHUDDebounced(baseState, { minIntervalMs: 500 });
-    expect(third).toBe(second);
     expect(sendHUD).toHaveBeenCalledTimes(1);
-    vi.advanceTimersByTime(200);
-    const fourth = WatchBridge.sendHUDDebounced(baseState, { minIntervalMs: 500 });
+    expect(callTimes[0]).toBe(0);
+
+    vi.advanceTimersByTime(400);
+    const second = WatchBridge.sendHUDDebounced(baseState, { minIntervalMs: 500 });
+    vi.advanceTimersByTime(50);
+    const third = WatchBridge.sendHUDDebounced(baseState, { minIntervalMs: 500 });
+    expect(second).toBe(third);
+    expect(sendHUD).toHaveBeenCalledTimes(1);
+
+    vi.advanceTimersByTime(100);
+    await second;
+
     expect(sendHUD).toHaveBeenCalledTimes(2);
-    await fourth;
+    expect(callTimes[1]).toBeGreaterThanOrEqual(500);
+    expect(callTimes[1]).toBeLessThan(520);
+  });
+
+  it('coalesces trailing calls and sends the freshest payload', async () => {
+    const encodeCalls: WatchHUDStateV1[] = [];
+    const encodeHUDBase64 = (state: WatchHUDStateV1) => {
+      encodeCalls.push(state);
+      return 'payload';
+    };
+    const sendHUD = vi.fn().mockResolvedValue(true);
+    const WatchBridge = await createBridge({
+      platform: 'android',
+      codecMock: encodeHUDBase64,
+      nativeModules: {
+        WatchConnector: {
+          isCapable: vi.fn().mockResolvedValue(true),
+          sendHUD,
+        },
+      },
+    });
+    vi.useFakeTimers();
+    vi.setSystemTime(0);
+
+    const base = { ...baseState, playsLikePct: 1 };
+    const stateA = { ...base, playsLikePct: 2 };
+    const stateB = { ...base, playsLikePct: 3 };
+    const stateC = { ...base, playsLikePct: 4 };
+
+    const first = WatchBridge.sendHUDDebounced(base, { minIntervalMs: 500 });
+    await first;
+    expect(sendHUD).toHaveBeenCalledTimes(1);
+
+    vi.advanceTimersByTime(100);
+    const trailing = WatchBridge.sendHUDDebounced(stateA, { minIntervalMs: 500 });
+    vi.advanceTimersByTime(100);
+    const trailingTwo = WatchBridge.sendHUDDebounced(stateB, { minIntervalMs: 500 });
+    vi.advanceTimersByTime(100);
+    const trailingThree = WatchBridge.sendHUDDebounced(stateC, { minIntervalMs: 500 });
+
+    expect(trailing).toBe(trailingTwo);
+    expect(trailingTwo).toBe(trailingThree);
+    expect(sendHUD).toHaveBeenCalledTimes(1);
+
+    vi.advanceTimersByTime(200);
+    await trailing;
+
+    expect(sendHUD).toHaveBeenCalledTimes(2);
+    expect(encodeCalls).toHaveLength(2);
+    expect(encodeCalls[1]).toEqual(stateC);
+  });
+
+  it('keeps trailing send scheduled while the first request is in flight', async () => {
+    let resolveFirst: ((value: boolean) => void) | null = null;
+    let firstCall = true;
+    const callTimes: number[] = [];
+    const sendHUD = vi.fn().mockImplementation(() => {
+      callTimes.push(Date.now());
+      if (firstCall) {
+        firstCall = false;
+        return new Promise<boolean>((resolve) => {
+          resolveFirst = resolve;
+        });
+      }
+      return Promise.resolve(true);
+    });
+    const WatchBridge = await createBridge({
+      platform: 'android',
+      nativeModules: {
+        WatchConnector: {
+          isCapable: vi.fn().mockResolvedValue(true),
+          sendHUD,
+        },
+      },
+    });
+    vi.useFakeTimers();
+    vi.setSystemTime(0);
+
+    const first = WatchBridge.sendHUDDebounced(baseState, { minIntervalMs: 500 });
+    vi.advanceTimersByTime(100);
+    const trailing = WatchBridge.sendHUDDebounced({ ...baseState, playsLikePct: 6 }, { minIntervalMs: 500 });
+    vi.advanceTimersByTime(100);
+    const trailingTwo = WatchBridge.sendHUDDebounced({ ...baseState, playsLikePct: 7 }, { minIntervalMs: 500 });
+
+    expect(trailing).toBe(trailingTwo);
+    expect(sendHUD).toHaveBeenCalledTimes(1);
+
+    resolveFirst?.(true);
+    await first;
+    expect(sendHUD).toHaveBeenCalledTimes(1);
+
+    vi.advanceTimersByTime(299);
+    expect(sendHUD).toHaveBeenCalledTimes(1);
+
+    vi.advanceTimersByTime(1);
+    await trailing;
+
+    expect(sendHUD).toHaveBeenCalledTimes(2);
+    expect(callTimes[0]).toBe(0);
+    expect(callTimes[1]).toBeGreaterThanOrEqual(500);
   });
 });

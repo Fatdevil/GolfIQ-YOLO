@@ -21,8 +21,15 @@ type LastStatus = WatchDiag['lastSend'];
 const DEFAULT_DEBOUNCE_MS = 250;
 
 let lastStatus: LastStatus = { ok: false, ts: 0, bytes: 0 };
-let lastSendPromise: Promise<boolean> | null = null;
-let lastSendScheduledAt = 0;
+
+let inFlight: Promise<boolean> | null = null;
+let lastSentAt = 0;
+let nextAllowedAt = 0;
+let pendingTimer: ReturnType<typeof setTimeout> | null = null;
+let pendingState: WatchHUDStateV1 | null = null;
+let pendingPromise: Promise<boolean> | null = null;
+let pendingResolve: ((ok: boolean) => void) | null = null;
+let pendingWindowMs = DEFAULT_DEBOUNCE_MS;
 
 function tryRequireReactNative(): any | null {
   try {
@@ -123,24 +130,69 @@ async function sendHUDInternal(state: WatchHUDStateV1): Promise<boolean> {
   }
 }
 
-function sendHUDDebouncedInternal(
+async function sendNow(state: WatchHUDStateV1): Promise<boolean> {
+  lastSentAt = Date.now();
+  return (inFlight = sendHUDInternal(state).finally(() => {
+    inFlight = null;
+  }));
+}
+
+function scheduleTrailing(
+  atMs: number,
+  state: WatchHUDStateV1,
+  windowMs: number,
+): Promise<boolean> {
+  pendingState = state;
+  if (!pendingPromise) {
+    pendingPromise = new Promise<boolean>((resolve) => {
+      pendingResolve = resolve;
+    });
+    pendingWindowMs = windowMs;
+  } else {
+    pendingWindowMs = Math.max(pendingWindowMs, windowMs);
+  }
+  if (pendingTimer) {
+    clearTimeout(pendingTimer);
+  }
+  const delay = Math.max(0, atMs - Date.now());
+  pendingTimer = setTimeout(async () => {
+    pendingTimer = null;
+    const stateToSend = pendingState!;
+    pendingState = null;
+    const windowForSend = pendingWindowMs;
+    const ok = await sendNow(stateToSend);
+    const resolve = pendingResolve!;
+    pendingResolve = null;
+    nextAllowedAt = lastSentAt + windowForSend;
+    pendingWindowMs = DEFAULT_DEBOUNCE_MS;
+    pendingPromise = null;
+    resolve(ok);
+  }, delay);
+  return pendingPromise!;
+}
+
+function sendHUDDebounced(
   state: WatchHUDStateV1,
   minIntervalMs: number = DEFAULT_DEBOUNCE_MS,
 ): Promise<boolean> {
   const now = Date.now();
-  if (lastSendPromise && now - lastSendScheduledAt < minIntervalMs) {
-    return lastSendPromise;
+  const windowMs = Math.max(0, minIntervalMs);
+
+  if (windowMs !== DEFAULT_DEBOUNCE_MS) {
+    nextAllowedAt = Math.max(nextAllowedAt, lastSentAt + windowMs);
   }
-  lastSendScheduledAt = now;
-  const basePromise = sendHUDInternal(state);
-  const wrappedPromise = basePromise.finally(() => {
-    if (lastSendPromise === wrappedPromise) {
-      lastSendPromise = null;
-      lastSendScheduledAt = 0;
-    }
-  });
-  lastSendPromise = wrappedPromise;
-  return wrappedPromise;
+
+  if (inFlight) {
+    const at = Math.max(nextAllowedAt || lastSentAt + windowMs, now + windowMs);
+    return scheduleTrailing(at, state, windowMs);
+  }
+
+  if (now < nextAllowedAt) {
+    return scheduleTrailing(nextAllowedAt, state, windowMs);
+  }
+
+  nextAllowedAt = now + windowMs;
+  return sendNow(state);
 }
 
 export const WatchBridge = {
@@ -161,7 +213,7 @@ export const WatchBridge = {
     return sendHUDInternal(state);
   },
   sendHUDDebounced(state: WatchHUDStateV1, options?: { minIntervalMs?: number }): Promise<boolean> {
-    return sendHUDDebouncedInternal(state, options?.minIntervalMs);
+    return sendHUDDebounced(state, options?.minIntervalMs);
   },
   getLastStatus(): LastStatus {
     return { ...lastStatus };
