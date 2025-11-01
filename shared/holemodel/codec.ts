@@ -1,84 +1,74 @@
-import { type HoleModel, type Point, type Polygon, type BoundingBox } from './types.js'
+import { type HoleModel, type HoleRef, type Point } from './types.js'
 
-type ValidationError = { path: string; message: string }
+const isNum = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v)
+const isStr = (v: unknown): v is string => typeof v === 'string'
 
-const isNumber = (value: unknown): value is number =>
-  typeof value === 'number' && Number.isFinite(value)
-
-const isPoint = (value: unknown): value is Point =>
-  typeof value === 'object' && value !== null &&
-  isNumber((value as Point).lat) && isNumber((value as Point).lon)
-
-const isBoundingBox = (value: unknown): value is BoundingBox => {
-  if (typeof value !== 'object' || value === null) return false
-  const bbox = value as BoundingBox
-  return (
-    isNumber(bbox.minLat) &&
-    isNumber(bbox.minLon) &&
-    isNumber(bbox.maxLat) &&
-    isNumber(bbox.maxLon) &&
-    bbox.minLat <= bbox.maxLat &&
-    bbox.minLon <= bbox.maxLon
-  )
+const asStr = (v: unknown, ctx: string): string => {
+  if (isStr(v)) return v
+  if (isNum(v)) return String(v)
+  throw new Error(`${ctx} must be a string`)
 }
 
-const isPolygon = (value: unknown): value is Polygon =>
-  Array.isArray(value) && value.length >= 3 && value.every(isPoint)
+const isPointObj = (v: any): v is Point =>
+  v && typeof v === 'object' && isNum(v.x) && isNum(v.y)
 
-const assert = (condition: boolean, error: ValidationError): void => {
-  if (!condition) {
-    const err = new Error(`${error.path}: ${error.message}`)
-    err.name = 'HoleModelValidationError'
-    throw err
-  }
+const isTuple2 = (v: any): v is [number, number] =>
+  Array.isArray(v) && v.length === 2 && isNum(v[0]) && isNum(v[1])
+
+const toPoint = (v: unknown, ctx: string): Point => {
+  if (isPointObj(v)) return v
+  if (isTuple2(v)) return { x: v[0], y: v[1] }
+  throw new Error(`${ctx} must be {x,y} or [x,y]`)
 }
 
-export const parseHoleModel = (input: string | object): HoleModel => {
-  let data: unknown
-  if (typeof input === 'string') {
-    data = JSON.parse(input)
-  } else {
-    data = input
+export function parseHoleModel(input: unknown): HoleModel {
+  const data = typeof input === 'string' ? JSON.parse(input) : input
+  if (data === null || typeof data !== 'object') {
+    throw new Error('HoleModel must be an object or JSON string')
+  }
+  const o: any = data
+
+  const model: HoleModel = {
+    id: asStr(o.id, 'HoleModel.id'),
+    version: isNum(o.version) ? o.version : undefined,
+    holes: [],
   }
 
-  assert(typeof data === 'object' && data !== null, { path: 'root', message: 'expected object' })
-  const model = data as Record<string, unknown>
+  const holes = Array.isArray(o.holes) ? o.holes : []
+  for (let i = 0; i < holes.length; i++) {
+    const h = holes[i] as unknown
+    if (!h || typeof h !== 'object') throw new Error(`holes[${i}] must be object`)
+    const hh: any = h
 
-  const id = model.id
-  assert(typeof id === 'string' && id.length > 0, {
-    path: 'id',
-    message: 'expected non-empty string',
+    const hole: HoleRef = {
+      id: asStr(hh.id, `holes[${i}].id`),
+      fmb: {
+        front: toPoint(hh.fmb?.front ?? hh.front, `holes[${i}].fmb.front`),
+        middle: toPoint(hh.fmb?.middle ?? hh.middle, `holes[${i}].fmb.middle`),
+        back: toPoint(hh.fmb?.back ?? hh.back, `holes[${i}].fmb.back`),
+      },
+    }
+    model.holes.push(hole)
+  }
+  return model
+}
+
+export function stringifyHoleModel(m: HoleModel): string {
+  return JSON.stringify({
+    id: m.id,
+    version: m.version,
+    holes: m.holes.map((h) => ({
+      id: h.id,
+      fmb: { front: h.fmb.front, middle: h.fmb.middle, back: h.fmb.back },
+    })),
   })
-
-  const bbox = model.bbox
-  assert(isBoundingBox(bbox), { path: 'bbox', message: 'invalid bounding box' })
-
-  const parsePolygonArray = (value: unknown, path: string): Polygon[] => {
-    assert(Array.isArray(value), { path, message: 'expected array' })
-    return (value as unknown[]).map((polygon, index) => {
-      assert(isPolygon(polygon), { path: `${path}[${index}]`, message: 'invalid polygon' })
-      return (polygon as Polygon).map((point) => ({ ...point }))
-    })
-  }
-
-  const fairways = parsePolygonArray(model.fairways, 'fairways')
-  const greens = parsePolygonArray(model.greens, 'greens')
-  const bunkers = parsePolygonArray(model.bunkers, 'bunkers')
-
-  let pin: Point | undefined
-  if (model.pin !== undefined) {
-    assert(isPoint(model.pin), { path: 'pin', message: 'invalid point' })
-    pin = { ...(model.pin as Point) }
-  }
-
-  return {
-    id,
-    bbox: { ...(bbox as BoundingBox) },
-    fairways,
-    greens,
-    bunkers,
-    pin,
-  }
 }
 
-export const serializeHoleModel = (model: HoleModel): string => JSON.stringify(model)
+export function isHoleModel(x: unknown): x is HoleModel {
+  try {
+    parseHoleModel(x)
+    return true
+  } catch {
+    return false
+  }
+}

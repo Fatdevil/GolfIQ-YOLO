@@ -1,22 +1,23 @@
 import { type HoleModel, type Point, type Polygon } from './types.js'
 
 const sqDist = (a: Point, b: Point): number => {
-  const dLat = a.lat - b.lat
-  const dLon = a.lon - b.lon
-  return dLat * dLat + dLon * dLon
+  const dx = a.x - b.x
+  const dy = a.y - b.y
+  return dx * dx + dy * dy
 }
 
 const sqSegDist = (p: Point, a: Point, b: Point): number => {
-  if (a.lat === b.lat && a.lon === b.lon) return sqDist(p, a)
+  if (a.x === b.x && a.y === b.y) return sqDist(p, a)
 
+  const denom = sqDist(b, a)
   const t =
-    ((p.lat - a.lat) * (b.lat - a.lat) + (p.lon - a.lon) * (b.lon - a.lon)) /
-    (sqDist(b, a))
+    ((p.x - a.x) * (b.x - a.x) + (p.y - a.y) * (b.y - a.y)) /
+    (denom === 0 ? 1 : denom)
   const clamped = Math.max(0, Math.min(1, t))
 
   const proj: Point = {
-    lat: a.lat + (b.lat - a.lat) * clamped,
-    lon: a.lon + (b.lon - a.lon) * clamped,
+    x: a.x + (b.x - a.x) * clamped,
+    y: a.y + (b.y - a.y) * clamped,
   }
   return sqDist(p, proj)
 }
@@ -84,7 +85,12 @@ export const simplifyPolygon = (polygon: Polygon, tolerance = 1e-6): Polygon => 
 
 export const simplifyHoleModel = (model: HoleModel, tolerance = 1e-6): HoleModel => ({
   ...model,
-  fairways: model.fairways.map((p) => simplifyPolygon(p, tolerance)),
-  greens: model.greens.map((p) => simplifyPolygon(p, tolerance)),
-  bunkers: model.bunkers.map((p) => simplifyPolygon(p, tolerance)),
+  holes: model.holes.map((hole) => ({
+    ...hole,
+    fmb: {
+      front: { ...hole.fmb.front },
+      middle: { ...hole.fmb.middle },
+      back: { ...hole.fmb.back },
+    },
+  })),
 })
