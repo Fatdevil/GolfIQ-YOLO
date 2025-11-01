@@ -1,0 +1,23 @@
+#!/usr/bin/env sh
+set -eu
+
+DIR="$(CDPATH= cd -- "$(dirname "$0")" && pwd)"
+DIST_VERSION="8.4"
+DIST_BASE="$DIR/.gradle-dist"
+DIST_DIR="$DIST_BASE/gradle-${DIST_VERSION}"
+GRADLE_BIN="$DIST_DIR/bin/gradle"
+
+if [ ! -x "$GRADLE_BIN" ]; then
+  mkdir -p "$DIST_BASE"
+  TMP_ZIP="$(mktemp "$DIR/gradle-dist-XXXXXX.zip")"
+  trap 'rm -f "$TMP_ZIP"' EXIT
+  echo "Gradle ${DIST_VERSION} distribution missing; downloading..." >&2
+  curl -sSL "https://services.gradle.org/distributions/gradle-${DIST_VERSION}-bin.zip" -o "$TMP_ZIP"
+  unzip -q "$TMP_ZIP" -d "$DIST_BASE"
+  rm -f "$TMP_ZIP"
+  trap - EXIT
+  chmod +x "$GRADLE_BIN"
+fi
+
+export GRADLE_USER_HOME="${GRADLE_USER_HOME:-$DIR/.gradle}" 
+exec "$GRADLE_BIN" "$@"

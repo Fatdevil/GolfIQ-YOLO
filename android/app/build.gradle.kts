@@ -4,15 +4,16 @@ plugins {
 }
 
 android {
-    namespace = "com.golfiq"
+    namespace = "com.golfiq.app"
     compileSdk = 34
 
     defaultConfig {
-        applicationId = "com.golfiq"
-        minSdk = 28
+        applicationId = "com.golfiq.app"
+        minSdk = 24
         targetSdk = 34
         versionCode = 1
         versionName = "1.0"
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
     compileOptions {
