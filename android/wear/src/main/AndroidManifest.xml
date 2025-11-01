@@ -46,7 +46,7 @@
             android:name="com.golfiq.wear.tile.HudTileService"
             android:label="@string/hud_tile_label"
             android:exported="true"
-            android:permission="com.google.android.gms.wearable.permission.BIND_TILE_PROVIDER">
+            android:permission="com.google.android.wearable.permission.BIND_TILE_PROVIDER">
             <intent-filter>
                 <action android:name="androidx.wear.tiles.action.BIND_TILE_PROVIDER" />
             </intent-filter>

@@ -5,7 +5,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.material.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
@@ -14,6 +13,7 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.unit.toSize
+import androidx.wear.compose.material.MaterialTheme
 import com.golfiq.wear.model.HoleModel
 import com.golfiq.wear.model.HolePoint
 
@@ -25,31 +25,33 @@ fun HoleMapScreen(
   tournamentSafe: Boolean,
   onTargetChanged: (HolePoint) -> Unit,
 ) {
-  Box(
-    modifier = Modifier
-      .fillMaxSize()
-      .background(MaterialTheme.colors.background)
-  ) {
-    hole?.let { holeModel ->
-      Canvas(
-        modifier = Modifier
-          .fillMaxSize()
-          .pointerInput(holeModel) {
-            val canvasSize = size.toSize()
-            detectTapGestures { offset ->
-              if (canvasSize.width == 0f || canvasSize.height == 0f) return@detectTapGestures
-              val bbox = holeModel.bbox
-              val fracX = (offset.x / canvasSize.width).coerceIn(0f, 1f)
-              val fracY = (offset.y / canvasSize.height).coerceIn(0f, 1f)
-              val lat = bbox.minLat + (bbox.maxLat - bbox.minLat) * fracY
-              val lon = bbox.minLon + (bbox.maxLon - bbox.minLon) * fracX
-              onTargetChanged(HolePoint(lat, lon))
+  MaterialTheme {
+    Box(
+      modifier = Modifier
+        .fillMaxSize()
+        .background(MaterialTheme.colors.surface)
+    ) {
+      hole?.let { holeModel ->
+        Canvas(
+          modifier = Modifier
+            .fillMaxSize()
+            .pointerInput(holeModel) {
+              val canvasSize = size.toSize()
+              detectTapGestures { offset ->
+                if (canvasSize.width == 0f || canvasSize.height == 0f) return@detectTapGestures
+                val bbox = holeModel.bbox
+                val fracX = (offset.x / canvasSize.width).coerceIn(0f, 1f)
+                val fracY = (offset.y / canvasSize.height).coerceIn(0f, 1f)
+                val lat = bbox.minLat + (bbox.maxLat - bbox.minLat) * fracY
+                val lon = bbox.minLon + (bbox.maxLon - bbox.minLon) * fracX
+                onTargetChanged(HolePoint(lat, lon))
+              }
             }
-          }
-      ) {
-        drawHole(holeModel, tournamentSafe)
-        player?.let { drawMarker(it, Color.Blue, holeModel) }
-        target?.let { drawMarker(it, Color(0xFFFF9800), holeModel) }
+        ) {
+          drawHole(holeModel, tournamentSafe)
+          player?.let { drawMarker(it, Color.Blue, holeModel) }
+          target?.let { drawMarker(it, Color(0xFFFF9800), holeModel) }
+        }
       }
     }
   }

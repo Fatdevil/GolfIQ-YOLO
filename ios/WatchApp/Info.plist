@@ -8,5 +8,7 @@
 <string>com.golfiq.watchapp</string>
 <key>WKCompanionAppBundleIdentifier</key>
 <string>com.golfiq.app</string>
+<key>NSLocationWhenInUseUsageDescription</key>
+<string>GolfIQ shows distance to the green and nearby targets while you play.</string>
 </dict>
 </plist>
