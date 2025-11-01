@@ -25,6 +25,12 @@ android {
         }
     }
 
+    packaging {
+        resources {
+            excludes += "/META-INF/{AL2.0,LGPL2.1}"
+        }
+    }
+
     buildFeatures {
         compose = true
     }
@@ -51,8 +57,8 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.6.2")
     implementation("androidx.wear.compose:compose-material:1.3.0")
     implementation("androidx.wear:wear:1.3.0")
-    implementation("androidx.wear.tiles:tiles:1.2.0")
-    implementation("androidx.wear.tiles:tiles-material:1.2.0")
+    implementation("androidx.wear.tiles:tiles:1.3.0")
+    implementation("androidx.wear.tiles:tiles-material:1.3.0")
     implementation("androidx.concurrent:concurrent-futures:1.1.0")
     implementation("com.google.android.gms:play-services-wearable:18.1.0")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.1")

@@ -6,12 +6,13 @@ import com.golfiq.wear.HudCodec
 import com.golfiq.wear.HudState
 import com.google.android.gms.wearable.DataEvent
 import com.google.android.gms.wearable.DataEventBuffer
+import com.google.android.gms.wearable.DataMapItem
 import com.google.android.gms.wearable.WearableListenerService
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
-private const val HUD_DATA_PATH = "/golfiq/hud/v1"
+private const val HUD_DATA_PATH_PREFIX = "/golfiq/hud/v1"
 private const val TAG = "HudDataLayer"
 
 object HudStateRepository {
@@ -40,12 +41,19 @@ class HudDataLayerListener : WearableListenerService() {
             for (event in buffer) {
                 if (event.type != DataEvent.TYPE_CHANGED) continue
                 val dataItem = event.dataItem
-                if (dataItem.uri.path != HUD_DATA_PATH) continue
-                val bytes = dataItem.data
-                if (bytes != null) {
-                    HudStateRepository.updateFromBytes(bytes)
+                val path = dataItem.uri.path.orEmpty()
+                if (!path.startsWith(HUD_DATA_PATH_PREFIX)) continue
+
+                val payload = runCatching {
+                    DataMapItem.fromDataItem(dataItem)
+                        .dataMap
+                        .getByteArray("payload")
+                }.getOrNull()
+
+                if (payload != null) {
+                    HudStateRepository.updateFromBytes(payload)
                 } else {
-                    Log.w(TAG, "HUD payload missing data bytes")
+                    Log.w(TAG, "HUD payload missing byte payload for $path")
                 }
             }
         }
