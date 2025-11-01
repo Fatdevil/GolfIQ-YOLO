@@ -27,7 +27,9 @@ deterministic (last-write-wins) and avoids timers or background tasks so the
 module stays CI- and tournament-safe.
 
 WCSession is created/activated on the main thread; RN module returns
-`requiresMainQueueSetup = true` and `methodQueue = main`.
+`requiresMainQueueSetup = true` and `methodQueue = main`. Capability checks and
+HUD sends wait until the session reports `.activated`, queuing work until the
+delegate confirms activation.
 
 ## Tournament-safe rule
 

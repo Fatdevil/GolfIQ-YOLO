@@ -10,6 +10,8 @@ class WatchConnectorIOS: NSObject, RCTBridgeModule, WCSessionDelegate {
   @objc var methodQueue: DispatchQueue { DispatchQueue.main }
 
   private let session = WCSession.isSupported() ? WCSession.default : nil
+  private var activationBlocks: [(() -> Void)] = []
+  private var activationReady = false
 
   override init() {
     super.init()
@@ -30,17 +32,29 @@ class WatchConnectorIOS: NSObject, RCTBridgeModule, WCSessionDelegate {
     }
   }
 
+  private func whenActivated(_ block: @escaping () -> Void) {
+    withSession { s in
+      if s.activationState == .activated || self.activationReady {
+        block()
+      } else {
+        self.activationBlocks.append(block)
+        if s.activationState == .notActivated {
+          s.activate()
+        }
+      }
+    }
+  }
+
   @objc
   func isCapable(
     _ resolve: @escaping RCTPromiseResolveBlock,
     rejecter reject: @escaping RCTPromiseRejectBlock
   ) {
-    guard session != nil else {
-      resolve(false)
-      return
-    }
-
-    withSession { s in
+    whenActivated { [weak self] in
+      guard let s = self?.session else {
+        resolve(false)
+        return
+      }
       resolve(s.isPaired && s.isWatchAppInstalled)
     }
   }
@@ -51,17 +65,17 @@ class WatchConnectorIOS: NSObject, RCTBridgeModule, WCSessionDelegate {
     resolver resolve: @escaping RCTPromiseResolveBlock,
     rejecter reject: @escaping RCTPromiseRejectBlock
   ) {
-    guard session != nil else {
-      resolve(false)
-      return
-    }
-
     guard let data = Data(base64Encoded: base64 as String) else {
       resolve(false)
       return
     }
 
-    withSession { s in
+    whenActivated { [weak self] in
+      guard let s = self?.session else {
+        resolve(false)
+        return
+      }
+
       do {
         var context = s.applicationContext
         context["golfiq_hud_v1"] = data
@@ -77,7 +91,14 @@ class WatchConnectorIOS: NSObject, RCTBridgeModule, WCSessionDelegate {
     _ session: WCSession,
     activationDidCompleteWith activationState: WCSessionActivationState,
     error: Error?
-  ) {}
+  ) {
+    activationReady = activationState == .activated
+    if activationReady {
+      let blocks = activationBlocks
+      activationBlocks.removeAll()
+      blocks.forEach { $0() }
+    }
+  }
 
   func sessionDidBecomeInactive(_ session: WCSession) {}
 
