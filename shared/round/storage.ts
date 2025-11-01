@@ -70,6 +70,7 @@ function parseShot(raw: any, holeNumber: number, fallbackSeq: number): ShotEvent
     const record = raw as Record<string, unknown>;
     const idValue = record.id;
     if (typeof idValue !== 'string' || !idValue) {
+      console.warn?.('round.storage: dropping shot with invalid id');
       return null;
     }
     const start = asGeoPoint(record.start);
@@ -111,6 +112,7 @@ function parseShot(raw: any, holeNumber: number, fallbackSeq: number): ShotEvent
     }
     return shot;
   } catch {
+    console.warn?.('round.storage: dropping incompatible shot');
     return null;
   }
 }
@@ -165,6 +167,23 @@ function hydrateRound(payload: unknown): RoundState | null {
             })
           ),
           sgTotal: Number.isFinite(Number(holeValue.sgTotal)) ? Number(holeValue.sgTotal) : undefined,
+          strokes: Number.isFinite(Number(holeValue.strokes)) ? Number(holeValue.strokes) : undefined,
+          putts: Number.isFinite(Number(holeValue.putts)) ? Number(holeValue.putts) : undefined,
+          penalties: Number.isFinite(Number(holeValue.penalties)) ? Number(holeValue.penalties) : undefined,
+          fir:
+            typeof holeValue.fir === 'boolean'
+              ? (holeValue.fir as boolean)
+              : holeValue.fir === null
+                ? null
+                : undefined,
+          gir:
+            typeof holeValue.gir === 'boolean'
+              ? (holeValue.gir as boolean)
+              : holeValue.gir === null
+                ? null
+                : undefined,
+          manualScore: Number.isFinite(Number(holeValue.manualScore)) ? Number(holeValue.manualScore) : undefined,
+          manualPutts: Number.isFinite(Number(holeValue.manualPutts)) ? Number(holeValue.manualPutts) : undefined,
         };
       }
     }
@@ -245,7 +264,7 @@ class AsyncStorageRoundStore implements RoundStore {
     const holes: RoundState['holes'] = {};
     for (let idx = 0; idx < holeCount; idx += 1) {
       const hole = idx + 1;
-      holes[hole] = { hole, par: DEFAULT_PAR, shots: [] };
+      holes[hole] = { hole, par: DEFAULT_PAR, shots: [], strokes: 0, putts: 0, penalties: 0, fir: null, gir: null };
     }
     const round: RoundState = {
       id: typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'

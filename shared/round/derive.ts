@@ -2,7 +2,7 @@ import { loadDefaultBaselines, loadDefaultPuttingBaseline, type BaselineSet } fr
 import type { GeoPoint, HoleState, Lie, RoundState, ShotEvent } from './types';
 
 const EARTH_RADIUS_M = 6_371_000;
-const JITTER_M = 1.5;
+export const JITTER_M = 1.5;
 const REPEAT_WINDOW_MS = 5_000;
 
 const lieToBaseline: Record<Lie, keyof BaselineSet> = {
@@ -127,6 +127,12 @@ export function updateHoleDerivations({ hole, round, baselines }: DeriveContext)
   const baselineSet = baselines ?? loadDefaultBaselines();
   const nextShots: ShotEvent[] = [];
   let totalSG = 0;
+  let strokes = 0;
+  let putts = 0;
+  let penalties = 0;
+  let fir: boolean | null = hole.par >= 4 ? false : null;
+  let gir: boolean | null = null;
+  let reachedGreenAt: number | null = null;
 
   for (let idx = 0; idx < hole.shots.length; idx += 1) {
     const shot = hole.shots[idx];
@@ -165,13 +171,57 @@ export function updateHoleDerivations({ hole, round, baselines }: DeriveContext)
     } else {
       clone.sg = undefined;
     }
+    strokes += 1;
+    if (clone.kind === 'Penalty') {
+      penalties += 1;
+    }
+    if (clone.kind === 'Putt' || clone.startLie === 'Green') {
+      putts += 1;
+    }
+    if (clone.seq === 1 && fir !== null) {
+      fir = clone.endLie === 'Fairway';
+    }
+    if (reachedGreenAt === null) {
+      const reached = clone.endLie === 'Green' || clone.kind === 'Putt' || clone.startLie === 'Green';
+      if (reached) {
+        reachedGreenAt = strokes;
+      }
+    }
     nextShots.push(clone);
+  }
+
+  if (hole.manualScore !== undefined && Number.isFinite(hole.manualScore)) {
+    strokes = Math.max(0, Math.floor(hole.manualScore));
+  }
+  if (hole.manualPutts !== undefined && Number.isFinite(hole.manualPutts)) {
+    putts = Math.max(0, Math.floor(hole.manualPutts));
+  }
+
+  if (nextShots.length === 0) {
+    fir = null;
+    gir = hole.manualScore !== undefined ? hole.manualScore <= Math.max(0, hole.par - 2) : null;
+  } else if (reachedGreenAt !== null) {
+    const girLimit = hole.par - 2;
+    if (girLimit <= 0) {
+      gir = true;
+    } else {
+      gir = reachedGreenAt <= girLimit;
+    }
+  } else if (hole.shots.length === 0) {
+    gir = null;
+  } else {
+    gir = false;
   }
 
   return {
     ...hole,
     shots: nextShots,
     sgTotal: nextShots.length ? totalSG : undefined,
+    strokes: nextShots.length ? strokes : hole.manualScore,
+    putts: nextShots.length ? putts : hole.manualPutts,
+    penalties: nextShots.length ? penalties : hole.penalties,
+    fir,
+    gir,
   };
 }
 
