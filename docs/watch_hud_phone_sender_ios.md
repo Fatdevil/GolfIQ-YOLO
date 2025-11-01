@@ -17,13 +17,17 @@ If any prerequisite fails, the bridge resolves `false` so React Native UI can fa
 back gracefully. This matches the Android behaviour and remains safe when the
 bridge is imported on the web (dynamic `require('react-native')`).
 
-`WatchBridge.sendHUD(...)` additionally requires `WCSession.isReachable` so we only
-attempt a transfer when the watch app is currently reachable. When unreachable or
-if the payload cannot be encoded, the promise resolves `false` without throwing.
+`WatchBridge.sendHUD(...)` writes the payload into the phone's WatchConnectivity
+application context. As long as the payload can be base64-decoded, the module
+attempts the update and resolves `true`; failures (such as an unavailable
+session) resolve `false` without throwing.
 
 The payload is sent using `updateApplicationContext`. This keeps the exchange
 deterministic (last-write-wins) and avoids timers or background tasks so the
 module stays CI- and tournament-safe.
+
+WCSession is created/activated on the main thread; RN module returns
+`requiresMainQueueSetup = true` and `methodQueue = main`.
 
 ## Tournament-safe rule
 

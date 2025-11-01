@@ -3,35 +3,46 @@ import React
 import WatchConnectivity
 
 @objc(WatchConnectorIOS)
-class WatchConnectorIOS: NSObject, WCSessionDelegate {
-  private let session: WCSession?
+class WatchConnectorIOS: NSObject, RCTBridgeModule, WCSessionDelegate {
+  static func moduleName() -> String! { "WatchConnectorIOS" }
+
+  @objc static func requiresMainQueueSetup() -> Bool { true }
+  @objc var methodQueue: DispatchQueue { DispatchQueue.main }
+
+  private let session = WCSession.isSupported() ? WCSession.default : nil
 
   override init() {
-    if WCSession.isSupported() {
-      session = WCSession.default
-    } else {
-      session = nil
-    }
     super.init()
-    session?.delegate = self
-    if session?.activationState == .notActivated {
-      session?.activate()
+    if let s = session {
+      s.delegate = self
+      if s.activationState == .notActivated {
+        DispatchQueue.main.async { s.activate() }
+      }
+    }
+  }
+
+  private func withSession(_ block: @escaping (WCSession) -> Void) {
+    guard let s = session else { return }
+    if Thread.isMainThread {
+      block(s)
+    } else {
+      DispatchQueue.main.async { block(s) }
     }
   }
 
   @objc
-  static func requiresMainQueueSetup() -> Bool {
-    return false
-  }
-
-  @objc
-  func isCapable(_ resolve: @escaping RCTPromiseResolveBlock, rejecter reject: @escaping RCTPromiseRejectBlock) {
-    guard let session = session else {
+  func isCapable(
+    _ resolve: @escaping RCTPromiseResolveBlock,
+    rejecter reject: @escaping RCTPromiseRejectBlock
+  ) {
+    guard session != nil else {
       resolve(false)
       return
     }
-    let ok = session.isPaired && session.isWatchAppInstalled
-    resolve(ok)
+
+    withSession { s in
+      resolve(s.isPaired && s.isWatchAppInstalled)
+    }
   }
 
   @objc
@@ -40,20 +51,25 @@ class WatchConnectorIOS: NSObject, WCSessionDelegate {
     resolver resolve: @escaping RCTPromiseResolveBlock,
     rejecter reject: @escaping RCTPromiseRejectBlock
   ) {
-    guard
-      let session = session,
-      session.isReachable,
-      let data = Data(base64Encoded: base64 as String)
-    else {
+    guard session != nil else {
       resolve(false)
       return
     }
 
-    do {
-      try session.updateApplicationContext(["golfiq_hud_v1": data])
-      resolve(true)
-    } catch {
+    guard let data = Data(base64Encoded: base64 as String) else {
       resolve(false)
+      return
+    }
+
+    withSession { s in
+      do {
+        var context = s.applicationContext
+        context["golfiq_hud_v1"] = data
+        try s.updateApplicationContext(context)
+        resolve(true)
+      } catch {
+        resolve(false)
+      }
     }
   }
 
@@ -66,6 +82,8 @@ class WatchConnectorIOS: NSObject, WCSessionDelegate {
   func sessionDidBecomeInactive(_ session: WCSession) {}
 
   func sessionDidDeactivate(_ session: WCSession) {
-    session.activate()
+    DispatchQueue.main.async {
+      session.activate()
+    }
   }
 }
