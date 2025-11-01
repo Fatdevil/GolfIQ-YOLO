@@ -16,6 +16,7 @@ export default defineConfig({
       '../tests/shared/caddie/**/*.spec.ts',
       '../tests/shared/greeniq/**/*.spec.ts',
       '../tests/shared/sg/**/*.spec.ts',
+      '../tests/shared/follow/**/*.spec.ts',
     ],
     exclude: [
       // Extend Vitest defaults; add repo-specific excludes below.

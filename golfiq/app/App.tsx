@@ -8,12 +8,13 @@ import FeedbackModal from './src/components/FeedbackModal';
 import { QaSummaryProvider } from './src/context/QaSummaryContext';
 import QAArHudScreen from './src/screens/QAArHudScreen';
 import QABenchScreen from './src/screens/QABenchScreen';
+import FollowScreen from './src/screens/FollowScreen';
 import { qaHudEnabled } from '../../shared/arhud/native/qa_gate';
 import { cleanupDispersionV1 } from '../../shared/caddie/migrations';
 import { QALauncher } from './qa/QALauncher';
 import { isQAMode } from './qa/QAGate';
 
-type TabKey = 'cal' | 'rec' | 'cam' | 'about' | 'qaHud' | 'qaBench';
+type TabKey = 'cal' | 'rec' | 'cam' | 'follow' | 'about' | 'qaHud' | 'qaBench';
 
 export default function App(){
   const qaEnabled = qaHudEnabled();
@@ -46,6 +47,8 @@ export default function App(){
         return <RecordSwingScreen/>;
       case 'cam':
         return <CameraInferScreen/>;
+      case 'follow':
+        return <FollowScreen/>;
       case 'about':
         return <AboutDiagnostics/>;
       case 'qaHud':
@@ -70,6 +73,9 @@ export default function App(){
             </TouchableOpacity>
             <TouchableOpacity onPress={()=>setTab('cam')} style={[styles.tab, tab==='cam' && styles.tabActive]}>
               <Text style={styles.tabText}>Kamera</Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={()=>setTab('follow')} style={[styles.tab, tab==='follow' && styles.tabActive]}>
+              <Text style={styles.tabText}>Follow</Text>
             </TouchableOpacity>
             <TouchableOpacity onPress={()=>setTab('about')} style={[styles.tab, tab==='about' && styles.tabActive]}>
               <Text style={styles.tabText}>About</Text>
