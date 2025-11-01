@@ -2355,11 +2355,16 @@ const QAArHudOverlayScreen: React.FC = () => {
   const [watchDiagExpanded, setWatchDiagExpanded] = useState(false);
   const [watchDiagClock, setWatchDiagClock] = useState(Date.now());
   const updateWatchTrailing = useCallback((queued: boolean, etaAt: number | null) => {
+    const effectiveQueued = queued || WatchBridge.hasPending();
+    const effectiveEtaAt = effectiveQueued ? etaAt : null;
     setWatchDiag((prev) => {
-      if (prev.trailing.queued === queued && prev.trailing.etaAt === etaAt) {
+      if (
+        prev.trailing.queued === effectiveQueued &&
+        prev.trailing.etaAt === effectiveEtaAt
+      ) {
         return prev;
       }
-      return { ...prev, trailing: { queued, etaAt } };
+      return { ...prev, trailing: { queued: effectiveQueued, etaAt: effectiveEtaAt } };
     });
   }, []);
   const syncWatchLastStatus = useCallback(() => {
@@ -2368,6 +2373,11 @@ const QAArHudOverlayScreen: React.FC = () => {
   useEffect(() => {
     watchLastSendRef.current = watchDiag.lastSend.ts;
   }, [watchDiag.lastSend.ts]);
+  useEffect(() => {
+    return () => {
+      WatchBridge.cancelPending('hud-unmounted');
+    };
+  }, []);
   const bundleStore = useMemo(() => new BundleStore(), []);
   const bundleBaseUrl = useMemo(() => `${resolveBundleQaBase()}/bundle/course`, []);
   const bundleClient = useMemo(
@@ -2475,6 +2485,7 @@ const QAArHudOverlayScreen: React.FC = () => {
     setWatchAutoSend((prev) => {
       const next = !prev;
       if (!next) {
+        WatchBridge.cancelPending('autosend-off');
         updateWatchTrailing(false, null);
       }
       return next;

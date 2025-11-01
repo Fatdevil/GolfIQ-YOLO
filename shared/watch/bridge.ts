@@ -171,6 +171,10 @@ function scheduleTrailing(
   return pendingPromise!;
 }
 
+export function hasPending(): boolean {
+  return Boolean(pendingTimer || pendingPromise);
+}
+
 function sendHUDDebounced(
   state: WatchHUDStateV1,
   minIntervalMs: number = DEFAULT_DEBOUNCE_MS,
@@ -225,6 +229,30 @@ async function flushPending(): Promise<boolean> {
   return ok;
 }
 
+export function cancelPending(reason: string = 'user-disabled'): boolean {
+  void reason;
+  const hadPending = Boolean(pendingTimer || pendingPromise || pendingState);
+  const windowForPending = pendingWindowMs;
+  if (pendingTimer) {
+    clearTimeout(pendingTimer);
+    pendingTimer = null;
+  }
+  const resolve = pendingResolve;
+  pendingResolve = null;
+  pendingPromise = null;
+  pendingState = null;
+  pendingWindowMs = DEFAULT_DEBOUNCE_MS;
+  if (resolve) {
+    resolve(false);
+  }
+  if (hadPending) {
+    const now = Date.now();
+    nextAllowedAt = now;
+    lastSentAt = Math.min(lastSentAt, now - windowForPending);
+  }
+  return hadPending;
+}
+
 export const WatchBridge = {
   async isCapable(): Promise<boolean> {
     const mod = getNativeModule();
@@ -254,4 +282,6 @@ export const WatchBridge = {
   flush(): Promise<boolean> {
     return flushPending();
   },
+  cancelPending,
+  hasPending,
 };
