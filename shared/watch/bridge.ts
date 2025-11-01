@@ -171,6 +171,10 @@ function scheduleTrailing(
   return pendingPromise!;
 }
 
+export function hasPending(): boolean {
+  return Boolean(pendingTimer || pendingPromise);
+}
+
 function sendHUDDebounced(
   state: WatchHUDStateV1,
   minIntervalMs: number = DEFAULT_DEBOUNCE_MS,
@@ -193,6 +197,60 @@ function sendHUDDebounced(
 
   nextAllowedAt = now + windowMs;
   return sendNow(state);
+}
+
+async function flushPending(): Promise<boolean> {
+  if (!pendingPromise || !pendingState) {
+    return false;
+  }
+  const stateToSend = pendingState;
+  const resolvePending = pendingResolve;
+  const windowForSend = pendingWindowMs;
+  pendingState = null;
+  pendingResolve = null;
+  pendingPromise = null;
+  pendingWindowMs = DEFAULT_DEBOUNCE_MS;
+  if (pendingTimer) {
+    clearTimeout(pendingTimer);
+    pendingTimer = null;
+  }
+  if (inFlight) {
+    try {
+      await inFlight;
+    } catch {
+      // ignore errors from the in-flight attempt; we'll still flush the trailing payload
+    }
+  }
+  const ok = await sendNow(stateToSend);
+  nextAllowedAt = lastSentAt + windowForSend;
+  if (resolvePending) {
+    resolvePending(ok);
+  }
+  return ok;
+}
+
+export function cancelPending(reason: string = 'user-disabled'): boolean {
+  void reason;
+  const hadPending = Boolean(pendingTimer || pendingPromise || pendingState);
+  const windowForPending = pendingWindowMs;
+  if (pendingTimer) {
+    clearTimeout(pendingTimer);
+    pendingTimer = null;
+  }
+  const resolve = pendingResolve;
+  pendingResolve = null;
+  pendingPromise = null;
+  pendingState = null;
+  pendingWindowMs = DEFAULT_DEBOUNCE_MS;
+  if (resolve) {
+    resolve(false);
+  }
+  if (hadPending) {
+    const now = Date.now();
+    nextAllowedAt = now;
+    lastSentAt = Math.min(lastSentAt, now - windowForPending);
+  }
+  return hadPending;
 }
 
 export const WatchBridge = {
@@ -221,4 +279,9 @@ export const WatchBridge = {
   getCapabilities(): WatchDiag['capability'] {
     return detectCapabilities();
   },
+  flush(): Promise<boolean> {
+    return flushPending();
+  },
+  cancelPending,
+  hasPending,
 };

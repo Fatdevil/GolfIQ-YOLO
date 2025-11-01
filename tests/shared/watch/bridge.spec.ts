@@ -221,4 +221,142 @@ describe('WatchBridge diagnostics', () => {
     expect(callTimes[0]).toBe(0);
     expect(callTimes[1]).toBeGreaterThanOrEqual(500);
   });
+
+  it('flush sends the pending payload immediately', async () => {
+    const callTimes: number[] = [];
+    const sendHUD = vi.fn().mockImplementation(() => {
+      callTimes.push(Date.now());
+      return Promise.resolve(true);
+    });
+    const WatchBridge = await createBridge({
+      platform: 'android',
+      nativeModules: {
+        WatchConnector: {
+          isCapable: vi.fn().mockResolvedValue(true),
+          sendHUD,
+        },
+      },
+    });
+    vi.useFakeTimers();
+    vi.setSystemTime(0);
+
+    await WatchBridge.sendHUDDebounced(baseState, { minIntervalMs: 500 });
+    expect(sendHUD).toHaveBeenCalledTimes(1);
+
+    vi.advanceTimersByTime(100);
+    const trailing = WatchBridge.sendHUDDebounced({ ...baseState, playsLikePct: 11 }, { minIntervalMs: 500 });
+    expect(sendHUD).toHaveBeenCalledTimes(1);
+
+    await expect(WatchBridge.flush()).resolves.toBe(true);
+    expect(sendHUD).toHaveBeenCalledTimes(2);
+    expect(callTimes[1]).toBe(100);
+    await trailing;
+  });
+
+  it('flush waits for the active send before dispatching the trailing payload', async () => {
+    let resolveFirst: ((value: boolean) => void) | null = null;
+    const callTimes: number[] = [];
+    const sendHUD = vi.fn().mockImplementation(() => {
+      callTimes.push(Date.now());
+      if (!resolveFirst) {
+        return new Promise<boolean>((resolve) => {
+          resolveFirst = resolve;
+        });
+      }
+      return Promise.resolve(true);
+    });
+    const WatchBridge = await createBridge({
+      platform: 'android',
+      nativeModules: {
+        WatchConnector: {
+          isCapable: vi.fn().mockResolvedValue(true),
+          sendHUD,
+        },
+      },
+    });
+    vi.useFakeTimers();
+    vi.setSystemTime(0);
+
+    const first = WatchBridge.sendHUDDebounced(baseState, { minIntervalMs: 500 });
+    expect(sendHUD).toHaveBeenCalledTimes(1);
+
+    vi.advanceTimersByTime(100);
+    const trailing = WatchBridge.sendHUDDebounced({ ...baseState, playsLikePct: 9 }, { minIntervalMs: 500 });
+    const flushPromise = WatchBridge.flush();
+
+    await Promise.resolve();
+    expect(sendHUD).toHaveBeenCalledTimes(1);
+
+    resolveFirst?.(true);
+    await first;
+    await expect(flushPromise).resolves.toBe(true);
+    expect(sendHUD).toHaveBeenCalledTimes(2);
+    expect(callTimes[1]).toBe(100);
+    await trailing;
+  });
+
+  it('cancels pending trailing send when autosend turns off', async () => {
+    const base = { ...baseState, ts: 0 };
+    const stateA = { ...base, playsLikePct: 8 };
+    const stateB = { ...base, playsLikePct: 9 };
+    const sendHUD = vi.fn().mockResolvedValue(true);
+    const WatchBridge = await createBridge({
+      platform: 'android',
+      nativeModules: {
+        WatchConnector: {
+          isCapable: vi.fn().mockResolvedValue(true),
+          sendHUD,
+        },
+      },
+    });
+    vi.useFakeTimers();
+    vi.setSystemTime(0);
+
+    await WatchBridge.sendHUDDebounced(stateA, { minIntervalMs: 500 });
+    expect(sendHUD).toHaveBeenCalledTimes(1);
+
+    vi.advanceTimersByTime(100);
+    const trailing = WatchBridge.sendHUDDebounced(stateB, { minIntervalMs: 500 });
+    expect(WatchBridge.hasPending()).toBe(true);
+
+    expect(WatchBridge.cancelPending('autosend-off')).toBe(true);
+    await Promise.resolve();
+    expect(WatchBridge.hasPending()).toBe(false);
+
+    vi.advanceTimersByTime(600);
+    expect(sendHUD).toHaveBeenCalledTimes(1);
+    await expect(trailing).resolves.toBe(false);
+    vi.useRealTimers();
+  });
+
+  it('allows immediate send after cancel', async () => {
+    const base = { ...baseState, ts: 0 };
+    const stateA = { ...base, playsLikePct: 12 };
+    const stateB = { ...base, playsLikePct: 13 };
+    const stateC = { ...base, playsLikePct: 14 };
+    const sendHUD = vi.fn().mockResolvedValue(true);
+    const WatchBridge = await createBridge({
+      platform: 'android',
+      nativeModules: {
+        WatchConnector: {
+          isCapable: vi.fn().mockResolvedValue(true),
+          sendHUD,
+        },
+      },
+    });
+    vi.useFakeTimers();
+    vi.setSystemTime(0);
+
+    await WatchBridge.sendHUDDebounced(stateA, { minIntervalMs: 500 });
+    expect(sendHUD).toHaveBeenCalledTimes(1);
+
+    vi.advanceTimersByTime(100);
+    const trailing = WatchBridge.sendHUDDebounced(stateB, { minIntervalMs: 500 });
+    expect(WatchBridge.cancelPending('toggle')).toBe(true);
+
+    await WatchBridge.sendHUDDebounced(stateC, { minIntervalMs: 500 });
+    expect(sendHUD).toHaveBeenCalledTimes(2);
+    await expect(trailing).resolves.toBe(false);
+    vi.useRealTimers();
+  });
 });
