@@ -30,6 +30,10 @@ android {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
         }
     }
+
+    testOptions {
+        unitTests.isReturnDefaultValues = true
+    }
 }
 
 dependencies {
@@ -46,4 +50,8 @@ dependencies {
     implementation("com.gorisse.thomas.sceneform:sceneform:1.23.0")
     implementation("io.sentry:sentry-android:7.13.0")
     implementation("com.facebook.react:react-android:0.73.0")
+
+    testImplementation("junit:junit:4.13.2")
+    testImplementation("com.google.truth:truth:1.1.5")
+    testImplementation(kotlin("test"))
 }

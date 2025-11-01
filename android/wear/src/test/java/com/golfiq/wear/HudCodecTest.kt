@@ -1,6 +1,6 @@
 package com.golfiq.wear
 
-import org.junit.Assert.assertEquals
+import com.google.common.truth.Truth.assertThat
 import org.junit.Test
 
 class HudCodecTest {
@@ -22,7 +22,7 @@ class HudCodecTest {
         val encoded = HudCodec.encode(state)
         val decoded = HudCodec.decode(encoded)
 
-        assertEquals(state, decoded)
+        assertThat(decoded).isEqualTo(state)
     }
 
     @Test
@@ -39,6 +39,6 @@ class HudCodecTest {
         val encoded = HudCodec.encode(state)
         val decoded = HudCodec.decode(encoded)
 
-        assertEquals(state, decoded)
+        assertThat(decoded).isEqualTo(state)
     }
 }

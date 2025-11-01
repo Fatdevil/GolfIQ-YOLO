@@ -2,9 +2,9 @@ package com.golfiq.wear
 
 import com.golfiq.wear.data.HudStateRepository
 import com.golfiq.wear.ui.HudViewModel
+import com.google.common.truth.Truth.assertThat
 import kotlinx.coroutines.test.runTest
 import org.junit.After
-import org.junit.Assert.assertEquals
 import org.junit.Before
 import org.junit.Test
 
@@ -22,7 +22,7 @@ class HudViewModelTest {
     @Test
     fun updatesStateOnNewBytes() = runTest {
         val viewModel = HudViewModel()
-        assertEquals(HudState.EMPTY, viewModel.hudState.value)
+        assertThat(viewModel.hudState.value).isEqualTo(HudState.EMPTY)
 
         val state = HudState(
             timestamp = 1716402000000L,
@@ -39,6 +39,6 @@ class HudViewModelTest {
 
         viewModel.onPayload(HudCodec.encode(state))
 
-        assertEquals(state, viewModel.hudState.value)
+        assertThat(viewModel.hudState.value).isEqualTo(state)
     }
 }
