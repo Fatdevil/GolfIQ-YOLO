@@ -19,5 +19,49 @@ if [ ! -x "$GRADLE_BIN" ]; then
   chmod +x "$GRADLE_BIN"
 fi
 
-export GRADLE_USER_HOME="${GRADLE_USER_HOME:-$DIR/.gradle}" 
+SDK_ROOT="$DIR/.android-sdk"
+CMDLINE_DIR="$SDK_ROOT/cmdline-tools/latest"
+SDKMANAGER="$CMDLINE_DIR/bin/sdkmanager"
+
+ensure_sdkmanager() {
+  if [ -x "$SDKMANAGER" ]; then
+    return 0
+  fi
+  mkdir -p "$SDK_ROOT/cmdline-tools"
+  TMP_ZIP="$(mktemp "$DIR/cmdline-tools-XXXXXX.zip")"
+  trap 'rm -f "$TMP_ZIP"' EXIT
+  echo "Android command-line tools missing; downloading..." >&2
+  curl -sSL "https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip" -o "$TMP_ZIP"
+  TMP_DIR="$(mktemp -d "$DIR/cmdline-tools-XXXXXX")"
+  unzip -q "$TMP_ZIP" -d "$TMP_DIR"
+  rm -f "$TMP_ZIP"
+  rm -rf "$SDK_ROOT/cmdline-tools/latest"
+  mv "$TMP_DIR/cmdline-tools" "$SDK_ROOT/cmdline-tools/latest"
+  rm -rf "$TMP_DIR"
+  trap - EXIT
+}
+
+ensure_sdk_components() {
+  PLATFORM_DIR="$SDK_ROOT/platforms/android-34"
+  BUILDTOOLS_DIR="$SDK_ROOT/build-tools/34.0.0"
+  PLATFORM_TOOLS_DIR="$SDK_ROOT/platform-tools"
+  if [ -d "$PLATFORM_DIR" ] && [ -d "$BUILDTOOLS_DIR" ] && [ -d "$PLATFORM_TOOLS_DIR" ]; then
+    return 0
+  fi
+  echo "Installing required Android SDK components..." >&2
+  yes | "$SDKMANAGER" --sdk_root="$SDK_ROOT" --licenses >/dev/null
+  yes | "$SDKMANAGER" --sdk_root="$SDK_ROOT" \
+    "platforms;android-34" \
+    "platform-tools" \
+    "build-tools;34.0.0"
+}
+
+ensure_sdkmanager
+ensure_sdk_components
+
+export ANDROID_HOME="$SDK_ROOT"
+export ANDROID_SDK_ROOT="$SDK_ROOT"
+export ANDROID_PREFS_ROOT="${ANDROID_PREFS_ROOT:-$DIR/.android-prefs}"
+export GRADLE_USER_HOME="${GRADLE_USER_HOME:-$DIR/.gradle}"
+
 exec "$GRADLE_BIN" "$@"

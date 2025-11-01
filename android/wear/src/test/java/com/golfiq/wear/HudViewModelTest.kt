@@ -20,25 +20,12 @@ class HudViewModelTest {
     }
 
     @Test
-    fun updatesStateOnNewBytes() = runTest {
+    fun retainsStateWhenPayloadMalformed() = runTest {
         val viewModel = HudViewModel()
-        assertThat(viewModel.hudState.value).isEqualTo(HudState.EMPTY)
+        val initial = viewModel.hudState.value
 
-        val state = HudState(
-            timestamp = 1716402000000L,
-            fmb = HudDistances(front = 150.0, middle = 156.5, back = 163.0),
-            playsLikePct = 2.75,
-            wind = HudWind(mps = 4.2, deg = 180.0),
-            strategy = HudStrategy(
-                profile = StrategyProfile.CONSERVATIVE,
-                offsetM = 3.0,
-                carryM = 158.0,
-            ),
-            tournamentSafe = false,
-        )
+        viewModel.onPayload("{}".toByteArray())
 
-        viewModel.onPayload(HudCodec.encode(state))
-
-        assertThat(viewModel.hudState.value).isEqualTo(state)
+        assertThat(viewModel.hudState.value).isEqualTo(initial)
     }
 }

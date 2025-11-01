@@ -6,6 +6,6 @@ import org.junit.Test
 class WearSmokeTest {
     @Test
     fun sanity() {
-        assertThat(2 + 2).isEqualTo(4)
+        assertThat(true).isTrue()
     }
 }

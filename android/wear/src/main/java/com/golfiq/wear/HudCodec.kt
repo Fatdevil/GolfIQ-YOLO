@@ -59,13 +59,32 @@ object HudCodec {
 
     fun decode(bytes: ByteArray): HudState {
         val json = JSONObject(String(bytes, StandardCharsets.UTF_8))
-        val version = json.optInt("v", VERSION)
+        val version = when (val rawVersion = json.opt("v")) {
+            is Number -> rawVersion.toInt()
+            is String -> rawVersion.toIntOrNull() ?: VERSION
+            else -> VERSION
+        }
         require(version == VERSION) { "Unsupported HUD payload version: $version" }
 
-        val fmbJson = json.getJSONObject("fmb")
-        val windJson = json.getJSONObject("wind")
+        val fmbJson = when (val rawFmb = json.opt("fmb")) {
+            is JSONObject -> rawFmb
+            is String -> JSONObject(rawFmb)
+            JSONObject.NULL -> null
+            else -> null
+        } ?: throw IllegalArgumentException("Missing fmb distances")
+        val windJson = when (val rawWind = json.opt("wind")) {
+            is JSONObject -> rawWind
+            is String -> JSONObject(rawWind)
+            JSONObject.NULL -> null
+            else -> null
+        } ?: throw IllegalArgumentException("Missing wind data")
         val strategy = if (json.has("strategy") && !json.isNull("strategy")) {
-            val strategyJson = json.getJSONObject("strategy")
+            val strategyJson = when (val rawStrategy = json.opt("strategy")) {
+                is JSONObject -> rawStrategy
+                is String -> JSONObject(rawStrategy)
+                JSONObject.NULL -> null
+                else -> null
+            } ?: throw IllegalArgumentException("Invalid strategy payload")
             val profileWire = strategyJson.getString("profile")
             val profile = StrategyProfile.fromWireName(profileWire)
                 ?: throw IllegalArgumentException("Unknown strategy profile: $profileWire")
