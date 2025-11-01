@@ -10,7 +10,7 @@ export type Lie = 'Tee' | 'Fairway' | 'Rough' | 'Sand' | 'Recovery' | 'Green' | 
 
 export type ShotKind = 'Full' | 'Chip' | 'Pitch' | 'Putt' | 'Recovery' | 'Penalty';
 
-export type ShotEvent = {
+export interface ShotEvent {
   id: UUID;
   hole: number;
   seq: number;
@@ -24,7 +24,7 @@ export type ShotEvent = {
   toPinEnd_m?: number;
   sg?: number;
   kind: ShotKind;
-};
+}
 
 export type HoleState = {
   hole: number;

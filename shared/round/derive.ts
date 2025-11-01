@@ -58,6 +58,44 @@ function shouldCoalesce(previous: ShotEvent | undefined, current: ShotEvent): bo
   return distance <= JITTER_M;
 }
 
+export type CarryUpdate = {
+  carry_m: number;
+  setEnd: boolean;
+  end?: GeoPoint;
+  endLie?: Lie;
+  toPinEnd_m?: number;
+};
+
+export function inferCarryFromNext(
+  prev: ShotEvent,
+  nextStart: GeoPoint,
+  nextLie: Lie,
+  nextToPinStart_m: number,
+  jitter_m: number,
+  shouldCoalesceFn: (p: ShotEvent, n: ShotEvent) => boolean
+): CarryUpdate {
+  const basePoint: GeoPoint = prev.end ?? prev.start;
+  const raw = distanceMeters(basePoint, nextStart);
+  const syntheticNext: ShotEvent = {
+    ...prev,
+    start: nextStart,
+    startLie: nextLie,
+  };
+  const coalesced = raw <= jitter_m || shouldCoalesceFn(prev, syntheticNext);
+
+  if (coalesced) {
+    return { carry_m: 0, setEnd: false };
+  }
+
+  return {
+    carry_m: raw,
+    setEnd: true,
+    end: nextStart,
+    endLie: nextLie,
+    toPinEnd_m: prev.toPinEnd_m ?? nextToPinStart_m,
+  };
+}
+
 function computeShotSG(shot: ShotEvent, baselines: BaselineSet): number | undefined {
   if (shot.kind === 'Penalty') {
     return -1;
@@ -105,14 +143,20 @@ export function updateHoleDerivations({ hole, round, baselines }: DeriveContext)
       }
     }
     if (prev) {
-      if (!prev.end) {
-        prev.end = clone.start;
-        prev.endLie = clone.startLie;
-        prev.toPinEnd_m = clone.toPinStart_m;
+      const update = inferCarryFromNext(
+        prev,
+        clone.start,
+        clone.startLie,
+        clone.toPinStart_m ?? 0,
+        JITTER_M,
+        shouldCoalesce
+      );
+      prev.carry_m = update.carry_m;
+      if (update.setEnd) {
+        prev.end = update.end;
+        prev.endLie = update.endLie ?? prev.endLie;
+        prev.toPinEnd_m = update.toPinEnd_m ?? prev.toPinEnd_m;
       }
-      const basePoint = prev.end ?? prev.start;
-      const carry = distanceMeters(basePoint, clone.start);
-      prev.carry_m = carry <= JITTER_M || shouldCoalesce(prev, clone) ? 0 : carry;
     }
     const sg = computeShotSG(clone, baselineSet);
     if (Number.isFinite(sg ?? NaN)) {

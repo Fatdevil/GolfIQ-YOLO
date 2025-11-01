@@ -1,4 +1,4 @@
-import type { RoundState } from './types';
+import type { GeoPoint, Lie, RoundState, ShotEvent, ShotKind } from './types';
 
 export interface RoundStore {
   loadActive(): Promise<RoundState | null>;
@@ -31,6 +31,90 @@ const FALLBACK_STORAGE: AsyncStorageLike = (() => {
 
 const DEFAULT_PAR = 4;
 
+const isNum = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
+
+function asGeoPoint(value: any): GeoPoint {
+  if (value && typeof value === 'object' && isNum(value.lat) && isNum(value.lon)) {
+    const ts = isNum(value.ts) ? value.ts : Date.now();
+    return { lat: value.lat, lon: value.lon, ts };
+  }
+  throw new Error('Invalid GeoPoint');
+}
+
+function asLie(value: any): Lie {
+  const lies: Lie[] = ['Tee', 'Fairway', 'Rough', 'Sand', 'Recovery', 'Green', 'Penalty'];
+  if (typeof value === 'string' && lies.includes(value as Lie)) {
+    return value as Lie;
+  }
+  throw new Error('Invalid Lie');
+}
+
+function asShotKind(value: any): ShotKind {
+  const kinds: ShotKind[] = ['Full', 'Chip', 'Pitch', 'Putt', 'Recovery', 'Penalty'];
+  if (typeof value === 'string' && kinds.includes(value as ShotKind)) {
+    return value as ShotKind;
+  }
+  throw new Error('Invalid ShotKind');
+}
+
+function asOptionalNumber(value: unknown): number | undefined {
+  const num = Number(value);
+  return Number.isFinite(num) ? num : undefined;
+}
+
+function parseShot(raw: any, holeNumber: number, fallbackSeq: number): ShotEvent | null {
+  if (!raw || typeof raw !== 'object') {
+    return null;
+  }
+  try {
+    const record = raw as Record<string, unknown>;
+    const idValue = record.id;
+    if (typeof idValue !== 'string' || !idValue) {
+      return null;
+    }
+    const start = asGeoPoint(record.start);
+    const startLie = asLie(record.startLie);
+    const kind = asShotKind(record.kind);
+    const seqValue = Number(record.seq);
+    const shot: ShotEvent = {
+      id: idValue,
+      hole: Number.isFinite(Number(record.hole)) ? Number(record.hole) : holeNumber,
+      seq: Number.isFinite(seqValue) ? seqValue : fallbackSeq,
+      start,
+      startLie,
+      kind,
+    };
+    if (typeof record.club === 'string' && record.club) {
+      shot.club = record.club;
+    }
+    if (record.end) {
+      shot.end = asGeoPoint(record.end);
+    }
+    if (record.endLie !== undefined) {
+      shot.endLie = asLie(record.endLie);
+    }
+    const carry = asOptionalNumber(record.carry_m);
+    if (carry !== undefined) {
+      shot.carry_m = carry;
+    }
+    const toPinStart = asOptionalNumber(record.toPinStart_m);
+    if (toPinStart !== undefined) {
+      shot.toPinStart_m = toPinStart;
+    }
+    const toPinEnd = asOptionalNumber(record.toPinEnd_m);
+    if (toPinEnd !== undefined) {
+      shot.toPinEnd_m = toPinEnd;
+    }
+    const sg = asOptionalNumber(record.sg);
+    if (sg !== undefined) {
+      shot.sg = sg;
+    }
+    return shot;
+  } catch {
+    return null;
+  }
+}
+
 function clone<T>(value: T): T {
   return JSON.parse(JSON.stringify(value)) as T;
 }
@@ -58,16 +142,28 @@ function hydrateRound(payload: unknown): RoundState | null {
           continue;
         }
         const holeValue = value as Record<string, unknown>;
-        const shots = Array.isArray(holeValue.shots) ? (holeValue.shots as RoundState['holes'][number]['shots']) : [];
+        const shotsInput = Array.isArray(holeValue.shots) ? holeValue.shots : [];
+        const shots: ShotEvent[] = [];
+        for (let idx = 0; idx < shotsInput.length; idx += 1) {
+          const parsed = parseShot(shotsInput[idx], holeNumber, idx + 1);
+          if (parsed) {
+            shots.push(parsed);
+          }
+        }
         holes[holeNumber] = {
           hole: holeNumber,
           par: Number.isFinite(Number(holeValue.par)) ? Number(holeValue.par) : DEFAULT_PAR,
           index: Number.isFinite(Number(holeValue.index)) ? Number(holeValue.index) : undefined,
-          pin: holeValue.pin && typeof holeValue.pin === 'object' ? clone(holeValue.pin) : undefined,
-          shots: shots.map((shot, idx) => ({
-            ...(shot as RoundState['holes'][number]['shots'][number]),
-            seq: Number((shot as Record<string, unknown>).seq ?? idx + 1),
-          })),
+          pin:
+            holeValue.pin && typeof holeValue.pin === 'object' && isNum((holeValue.pin as any).lat) && isNum((holeValue.pin as any).lon)
+              ? { lat: (holeValue.pin as any).lat, lon: (holeValue.pin as any).lon }
+              : undefined,
+          shots: shots.map(
+            (shot, idx): ShotEvent => ({
+              ...shot,
+              seq: Number.isFinite(Number(shot.seq)) ? shot.seq : idx + 1,
+            })
+          ),
           sgTotal: Number.isFinite(Number(holeValue.sgTotal)) ? Number(holeValue.sgTotal) : undefined,
         };
       }

@@ -135,7 +135,8 @@ export const RoundRecorder = {
       throw new Error('Cannot hole out without shots.');
     }
     const last = hole.shots[hole.shots.length - 1];
-    const updatedShots = [...hole.shots.slice(0, -1), { ...last, end: loc, endLie: 'Green', toPinEnd_m: 0 }];
+    const finishedShot: ShotEvent = { ...last, end: loc, endLie: 'Green', toPinEnd_m: 0 };
+    const updatedShots: ShotEvent[] = [...hole.shots.slice(0, -1), finishedShot];
     const updated = applyHole(round, holeNo, { ...hole, shots: updatedShots });
     await persist(updated);
   },
@@ -164,7 +165,9 @@ export const RoundRecorder = {
     if (!hole.shots.length) {
       return;
     }
-    const trimmed = hole.shots.slice(0, -1).map((shot, idx) => ({ ...shot, seq: idx + 1 }));
+    const trimmed: ShotEvent[] = hole.shots
+      .slice(0, -1)
+      .map((shot, idx): ShotEvent => ({ ...shot, seq: idx + 1 }));
     const updated = applyHole(round, holeNo, { ...hole, shots: trimmed });
     await persist(updated);
   },

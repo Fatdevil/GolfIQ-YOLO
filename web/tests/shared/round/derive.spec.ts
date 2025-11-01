@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { distanceMeters, updateHoleDerivations } from '../../../../shared/round/derive';
+import { distanceMeters, inferCarryFromNext, updateHoleDerivations } from '../../../../shared/round/derive';
 import type { HoleState, RoundState, ShotEvent } from '../../../../shared/round/types';
 import { holeSG, type ShotEvent as SGShot } from '../../../../shared/sg/hole';
 
@@ -126,4 +126,36 @@ test('pin override updates toPin metrics', () => {
   const distB = derivedB.shots[0].toPinStart_m ?? 0;
   assert.notEqual(Math.round(distA), Math.round(distB));
   assert(Math.abs(distB - distanceMeters(shot.start, pinB)) < 0.5);
+});
+
+test('computes carry from previous start when prev.end missing', () => {
+  const prev: ShotEvent = {
+    id: 'prev',
+    hole: 1,
+    seq: 1,
+    start: { lat: 0, lon: 0, ts: 1_000 },
+    startLie: 'Fairway',
+    kind: 'Full',
+  };
+  const nextStart = { lat: 0.0009, lon: 0.0009, ts: 2_000 };
+  const update = inferCarryFromNext(prev, nextStart, 'Rough', 142, 0.1, () => false);
+  assert.equal(update.setEnd, true);
+  assert(update.carry_m > 0);
+  assert.equal(update.endLie, 'Rough');
+});
+
+test('coalesced carry leaves previous end untouched', () => {
+  const prev: ShotEvent = {
+    id: 'prev',
+    hole: 1,
+    seq: 1,
+    start: { lat: 0, lon: 0, ts: 1_000 },
+    startLie: 'Fairway',
+    kind: 'Full',
+  };
+  const nextStart = { lat: 0.000001, lon: 0.000001, ts: 1_200 };
+  const update = inferCarryFromNext(prev, nextStart, 'Fairway', 150, 1.5, () => true);
+  assert.equal(update.carry_m, 0);
+  assert.equal(update.setEnd, false);
+  assert.equal(update.end, undefined);
 });
