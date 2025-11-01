@@ -19,3 +19,5 @@ dependencyResolutionManagement {
 rootProject.name = "GolfIQBench"
 include(":bench")
 project(":bench").projectDir = File(rootDir, "bench")
+include(":wear")
+project(":wear").projectDir = File(rootDir, "wear")
