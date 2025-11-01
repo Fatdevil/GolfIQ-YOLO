@@ -23,24 +23,12 @@ jobs:
         run: |
           echo "sdk.dir=$ANDROID_SDK_ROOT" > android/local.properties
           cat android/local.properties
-      - name: Build
-        uses: gradle/gradle-build-action@v3
-        with:
-          gradle-version: "8.7"
-          arguments: |
-            -p android build -x lint --stacktrace
+      - name: Build app & wear
+        run: ./gradlew -p android :app:assembleDebug :wear:assembleDebug -S --warning-mode all
       - name: Unit tests
-        uses: gradle/gradle-build-action@v3
-        with:
-          gradle-version: "8.7"
-          arguments: |
-            -p android test --stacktrace
+        run: ./gradlew -p android :app:testDebugUnitTest :wear:testDebugUnitTest -S --warning-mode all
       - name: Lint
-        uses: gradle/gradle-build-action@v3
-        with:
-          gradle-version: "8.7"
-          arguments: |
-            -p android lint --stacktrace
+        run: ./gradlew -p android lint -S --warning-mode all
       - name: Upload reports (no binaries)
         uses: actions/upload-artifact@v4
         with:
