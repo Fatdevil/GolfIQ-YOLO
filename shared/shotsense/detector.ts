@@ -46,8 +46,11 @@ const magnitude3 = (x: number, y: number, z: number) => Math.sqrt(x * x + y * y 
 const clampHz = (hz: number) =>
   Number.isFinite(hz) ? Math.max(20, Math.min(200, Math.round(hz))) : 80;
 
+const msToSamples = (ms: number, hz: number) =>
+  Math.max(1, Math.round((ms * hz) / 1000));
+
 export class ShotDetector {
-  private opts: Required<DetectorOpts>;
+  private readonly opts: Required<DetectorOpts>;
   private sampleHz: number;
   private frameDtMs: number;
   private minSwingWinSamples: number;
@@ -86,8 +89,9 @@ export class ShotDetector {
       return;
     }
     this.sampleHz = next;
-    this.opts = { ...this.opts, sampleHz: this.sampleHz };
+    this.opts.sampleHz = this.sampleHz;
     this.recomputeSampleWindows();
+    (this as any).resetRollingPeaks?.();
   }
 
   pushIMU(frame: IMUFrame): ShotSenseEvent[] {
@@ -385,13 +389,12 @@ export class ShotDetector {
 
   private recomputeSampleWindows(): void {
     this.frameDtMs = 1000 / this.sampleHz;
-    const toSamples = (durationMs: number) =>
-      Math.max(1, Math.round((durationMs * this.sampleHz) / 1000));
-    this.minSwingWinSamples = toSamples(this.opts.minSwingWindow_ms);
-    this.debounceSamples = toSamples(this.opts.debounce_ms);
+    this.minSwingWinSamples = msToSamples(this.opts.minSwingWindow_ms, this.sampleHz);
+    this.debounceSamples = msToSamples(this.opts.debounce_ms, this.sampleHz);
     const settleTargetMs = Math.max(80, Math.round(this.frameDtMs * 6));
-    this.settleSamples = toSamples(settleTargetMs);
+    this.settleSamples = msToSamples(settleTargetMs, this.sampleHz);
   }
 }
 
 export type { DetectorOpts, GpsContext, IMUFrame, ShotCandidate, ShotSenseEvent } from './types';
+export { msToSamples };

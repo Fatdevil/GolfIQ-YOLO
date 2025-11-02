@@ -23,7 +23,7 @@ export class ShotSenseService {
       return;
     }
 
-    this.ensureHz(batch.hz);
+    this.ensureDetectorHz(batch.hz);
 
     if (this.queue.length >= MAX_QUEUE_SIZE) {
       this.queue.shift();
@@ -124,8 +124,12 @@ export class ShotSenseService {
     }
   }
 
-  private ensureHz(hz: number | null | undefined): void {
-    const next = Math.round(hz ?? this.currentHz);
+  private ensureDetectorHz(hz: number | null | undefined): void {
+    if (!Number.isFinite(hz)) {
+      return;
+    }
+
+    const next = Math.round(hz as number);
     if (Math.abs(next - this.currentHz) <= HZ_TOL) {
       return;
     }
