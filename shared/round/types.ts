@@ -36,8 +36,11 @@ export type HoleState = {
   strokes?: number;
   putts?: number;
   penalties?: number;
-  fir?: boolean | null;
-  gir?: boolean | null;
+  metrics?: {
+    fir: boolean | null;
+    gir: boolean | null;
+    reachedGreenAt: number | null;
+  };
   manualScore?: number;
   manualPutts?: number;
 };

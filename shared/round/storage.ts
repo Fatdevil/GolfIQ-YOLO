@@ -152,6 +152,13 @@ function hydrateRound(payload: unknown): RoundState | null {
             shots.push(parsed);
           }
         }
+        const metricsRecord =
+          holeValue.metrics && typeof holeValue.metrics === 'object'
+            ? (holeValue.metrics as Record<string, unknown>)
+            : null;
+        const firValue = metricsRecord?.fir ?? holeValue.fir;
+        const girValue = metricsRecord?.gir ?? holeValue.gir;
+        const reachedValue = metricsRecord?.reachedGreenAt;
         holes[holeNumber] = {
           hole: holeNumber,
           par: Number.isFinite(Number(holeValue.par)) ? Number(holeValue.par) : DEFAULT_PAR,
@@ -170,18 +177,11 @@ function hydrateRound(payload: unknown): RoundState | null {
           strokes: Number.isFinite(Number(holeValue.strokes)) ? Number(holeValue.strokes) : undefined,
           putts: Number.isFinite(Number(holeValue.putts)) ? Number(holeValue.putts) : undefined,
           penalties: Number.isFinite(Number(holeValue.penalties)) ? Number(holeValue.penalties) : undefined,
-          fir:
-            typeof holeValue.fir === 'boolean'
-              ? (holeValue.fir as boolean)
-              : holeValue.fir === null
-                ? null
-                : undefined,
-          gir:
-            typeof holeValue.gir === 'boolean'
-              ? (holeValue.gir as boolean)
-              : holeValue.gir === null
-                ? null
-                : undefined,
+          metrics: {
+            fir: typeof firValue === 'boolean' ? (firValue as boolean) : firValue === null ? null : null,
+            gir: typeof girValue === 'boolean' ? (girValue as boolean) : girValue === null ? null : null,
+            reachedGreenAt: Number.isFinite(Number(reachedValue)) ? Number(reachedValue) : null,
+          },
           manualScore: Number.isFinite(Number(holeValue.manualScore)) ? Number(holeValue.manualScore) : undefined,
           manualPutts: Number.isFinite(Number(holeValue.manualPutts)) ? Number(holeValue.manualPutts) : undefined,
         };
@@ -264,7 +264,15 @@ class AsyncStorageRoundStore implements RoundStore {
     const holes: RoundState['holes'] = {};
     for (let idx = 0; idx < holeCount; idx += 1) {
       const hole = idx + 1;
-      holes[hole] = { hole, par: DEFAULT_PAR, shots: [], strokes: 0, putts: 0, penalties: 0, fir: null, gir: null };
+      holes[hole] = {
+        hole,
+        par: DEFAULT_PAR,
+        shots: [],
+        strokes: 0,
+        putts: 0,
+        penalties: 0,
+        metrics: { fir: null, gir: null, reachedGreenAt: null },
+      };
     }
     const round: RoundState = {
       id: typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'

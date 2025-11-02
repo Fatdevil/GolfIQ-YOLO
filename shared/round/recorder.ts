@@ -1,4 +1,4 @@
-import { JITTER_M, distanceMeters, updateHoleDerivations } from './derive';
+import { JITTER_M, distanceMeters, deriveHoleState } from './derive';
 import { getRoundStore } from './storage';
 import type { GeoPoint, HoleState, Lie, RoundState, ShotEvent, ShotKind } from './types';
 
@@ -47,7 +47,7 @@ function resolveHole(round: RoundState, holeNumber?: number): [number, HoleState
 }
 
 function applyHole(round: RoundState, holeNumber: number, hole: HoleState): RoundState {
-  const updatedHole = updateHoleDerivations({ round: { ...round, holes: { ...round.holes, [holeNumber]: hole } }, hole });
+  const updatedHole = deriveHoleState({ round: { ...round, holes: { ...round.holes, [holeNumber]: hole } }, hole });
   return {
     ...round,
     holes: {
