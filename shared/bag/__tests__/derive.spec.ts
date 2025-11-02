@@ -153,6 +153,10 @@ describe('buildBagStats', () => {
     const samples = getClubSamples([round]);
     expect(stats.updatedAt).toBe(123456);
     const sevenIron = stats.clubs['7i'];
+    expect(sevenIron).toBeDefined();
+    if (!sevenIron) {
+      throw new Error('expected 7i stats');
+    }
     expect(sevenIron.samples).toBe(4);
     expect(sevenIron.meanCarry_m).toBeGreaterThan(145);
     expect(sevenIron.meanCarry_m).toBeLessThan(152);
@@ -160,6 +164,10 @@ describe('buildBagStats', () => {
     expect(samples['7i'].usage.approach).toBe(3);
     expect(samples['7i'].usage.outliers).toBe(1);
     const pw = stats.clubs['PW'];
+    expect(pw).toBeDefined();
+    if (!pw) {
+      throw new Error('expected PW stats');
+    }
     expect(pw.samples).toBe(2);
     expect(pw.p25_m).toBeGreaterThan(55);
     expect(pw.p75_m).toBeLessThan(130);
@@ -174,6 +182,10 @@ describe('buildBagStats', () => {
     const round = buildRound([...baseShots, ...extraShots]);
     const bag = buildBagStats([round], { updatedAt: 0 });
     const sevenIron = bag.clubs['7i'];
+    expect(sevenIron).toBeDefined();
+    if (!sevenIron) {
+      throw new Error('expected 7i stats');
+    }
     expect(sevenIron.samples).toBe(4);
     expect(sevenIron.sgPerShot).toBeCloseTo(0.1, 2);
   });

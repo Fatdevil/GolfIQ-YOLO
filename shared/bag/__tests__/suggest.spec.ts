@@ -1,16 +1,17 @@
 import { describe, expect, it } from 'vitest';
 
-import type { BagStats, ClubStats } from '../types';
+import type { BagStats, ClubId, ClubStats } from '../types';
 import { approachSuggestion, nextTeeSuggestion } from '../suggest';
 
-function makeClub(partial: Partial<ClubStats>): ClubStats {
+function mkClub(club: ClubId, partial: Partial<ClubStats> = {}): ClubStats {
+  const baseP50 = partial.p50_m ?? 150;
   return {
-    club: partial.club ?? '7i',
+    club,
     samples: partial.samples ?? 6,
-    meanCarry_m: partial.meanCarry_m ?? 150,
-    p25_m: partial.p25_m ?? 145,
-    p50_m: partial.p50_m ?? 150,
-    p75_m: partial.p75_m ?? 155,
+    meanCarry_m: partial.meanCarry_m ?? baseP50,
+    p25_m: partial.p25_m ?? baseP50 - 5,
+    p50_m: baseP50,
+    p75_m: partial.p75_m ?? baseP50 + 5,
     std_m: partial.std_m ?? 5,
     sgPerShot: partial.sgPerShot ?? 0,
   } satisfies ClubStats;
@@ -19,12 +20,12 @@ function makeClub(partial: Partial<ClubStats>): ClubStats {
 const SYNTH_BAG: BagStats = {
   updatedAt: 0,
   clubs: {
-    D: makeClub({ club: 'D', p25_m: 230, p50_m: 240, p75_m: 255 }),
-    '3W': makeClub({ club: '3W', p25_m: 210, p50_m: 220, p75_m: 232 }),
-    '5i': makeClub({ club: '5i', p25_m: 170, p50_m: 180, p75_m: 188 }),
-    '7i': makeClub({ club: '7i', p25_m: 150, p50_m: 160, p75_m: 168 }),
-    '9i': makeClub({ club: '9i', p25_m: 130, p50_m: 138, p75_m: 144 }),
-    Putter: makeClub({ club: 'Putter', p25_m: 5, p50_m: 6, p75_m: 7 }),
+    D: mkClub('D', { p25_m: 230, p50_m: 240, p75_m: 255 }),
+    '3W': mkClub('3W', { p25_m: 210, p50_m: 220, p75_m: 232 }),
+    '5i': mkClub('5i', { p25_m: 170, p50_m: 180, p75_m: 188 }),
+    '7i': mkClub('7i', { p25_m: 150, p50_m: 160, p75_m: 168 }),
+    '9i': mkClub('9i', { p25_m: 130, p50_m: 138, p75_m: 144 }),
+    Putter: mkClub('Putter', { p25_m: 5, p50_m: 6, p75_m: 7 }),
   },
 };
 
@@ -36,16 +37,30 @@ describe('bag suggestions', () => {
     expect(suggestion?.p75_m).toBeCloseTo(255, 5);
   });
 
-  it('selects middle iron for par 3 without yardage', () => {
+  it('defaults to the longest club when yardage is missing', () => {
     const suggestion = nextTeeSuggestion({ bag: SYNTH_BAG, holePar: 3 });
     expect(suggestion).not.toBeNull();
-    expect(suggestion?.club).toBe('9i');
+    expect(suggestion?.club).toBe('D');
   });
 
   it('returns null when insufficient data', () => {
     const empty: BagStats = { updatedAt: 0, clubs: {} };
     expect(nextTeeSuggestion({ bag: empty, holePar: 4 })).toBeNull();
     expect(approachSuggestion({ bag: empty, distanceToPin_m: 140 })).toBeNull();
+  });
+
+  it('when yardage is unknown, nextTeeSuggestion picks the longest candidate (not wedge)', () => {
+    const bag: BagStats = {
+      updatedAt: Date.now(),
+      clubs: {
+        '7i': mkClub('7i', { p50_m: 145 }),
+        D: mkClub('D', { p50_m: 235 }),
+        SW: mkClub('SW', { p50_m: 85 }),
+        Putter: mkClub('Putter', { p50_m: 0 }),
+      },
+    };
+    const suggestion = nextTeeSuggestion({ bag, holePar: 5, nextHoleYardage_m: undefined });
+    expect(suggestion?.club).toBe('D');
   });
 
   it('selects closest club for approaches', () => {
@@ -59,7 +74,7 @@ describe('bag suggestions', () => {
     const bag: BagStats = {
       updatedAt: 0,
       clubs: {
-        Putter: makeClub({ club: 'Putter', samples: 20, p25_m: 2, p50_m: 3, p75_m: 4 }),
+        Putter: mkClub('Putter', { samples: 20, p25_m: 2, p50_m: 3, p75_m: 4 }),
       },
     };
     expect(nextTeeSuggestion({ bag, holePar: 4 })).toBeNull();

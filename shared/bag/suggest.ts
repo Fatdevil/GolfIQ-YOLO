@@ -1,4 +1,5 @@
 import type { BagStats, ClubId, ClubStats } from './types';
+import { isClubStats } from './types';
 
 const MIN_SAMPLES = 3;
 const PUTTER_ID: ClubId = 'Putter';
@@ -72,13 +73,15 @@ export function nextTeeSuggestion(input: TeeSuggestionInput): TeeSuggestion {
   if (!bag || !bag.clubs) {
     return null;
   }
-  const target = isFiniteNumber(nextHoleYardage_m) ? (nextHoleYardage_m as number) : undefined;
-  const stats = Object.values(bag.clubs);
+  const stats = Object.values(bag.clubs).filter(isClubStats);
   const candidates = sortClubs(stats).filter(isCandidate);
   if (!candidates.length) {
     return null;
   }
-  const desired = target ?? (input.holePar >= 4 ? candidates[0].p50_m! : candidates[0].p50_m! * 0.5);
+  const longest = candidates[candidates.length - 1];
+  const desired = isFiniteNumber(nextHoleYardage_m)
+    ? (nextHoleYardage_m as number)
+    : longest.p50_m!;
   const match = findBestMatch(desired, candidates);
   if (!match) {
     return null;
@@ -94,7 +97,7 @@ export function approachSuggestion(input: ApproachSuggestionInput): ApproachSugg
   if (!bag || !bag.clubs || !isFiniteNumber(distanceToPin_m)) {
     return null;
   }
-  const stats = Object.values(bag.clubs);
+  const stats = Object.values(bag.clubs).filter(isClubStats);
   const candidates = sortClubs(stats).filter(isCandidate);
   if (!candidates.length) {
     return null;
