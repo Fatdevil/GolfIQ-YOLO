@@ -16,6 +16,7 @@ import {
 } from '../../../../shared/telemetry/follow';
 import { WatchBridge } from '../../../../shared/watch/bridge';
 import type { WatchHUDStateV1 } from '../../../../shared/watch/types';
+import { shotSense } from '../modules/shotsense/ShotSenseService';
 
 export type UseFollowLoopOptions = {
   roundId: string;
@@ -364,6 +365,13 @@ export function useFollowLoop(options: UseFollowLoopOptions): UseFollowLoopState
         playsLikePct: options.playsLikePct ?? null,
         tournamentSafe: options.tournamentSafe,
         ts: now,
+      });
+      const gpsTs = Number.isFinite(point.ts ?? NaN) ? Number(point.ts) : now;
+      shotSense.pushGPS({
+        ts: gpsTs,
+        speed_mps: speed,
+        distToGreen_m: distances.middle,
+        onGreen: patchedFollow.phase !== 'advance' && patchedFollow.enterGreenAt !== null,
       });
       setSnapshot(snapshotPayload);
       if (watchAutoSend) {

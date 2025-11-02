@@ -14,6 +14,7 @@ import { qaHudEnabled } from '../../shared/arhud/native/qa_gate';
 import { cleanupDispersionV1 } from '../../shared/caddie/migrations';
 import { QALauncher } from './qa/QALauncher';
 import { isQAMode } from './qa/QAGate';
+import { initWatchIMUReceiver, teardownWatchIMUReceiver } from './src/bridge/WatchBridge+Sense';
 
 type TabKey = 'cal' | 'rec' | 'cam' | 'follow' | 'event' | 'about' | 'qaHud' | 'qaBench';
 
@@ -25,6 +26,13 @@ export default function App(){
   useEffect(() => {
     // fire-and-forget; idempotent via cleanup flag
     cleanupDispersionV1().catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    initWatchIMUReceiver();
+    return () => {
+      teardownWatchIMUReceiver();
+    };
   }, []);
 
   useEffect(() => {

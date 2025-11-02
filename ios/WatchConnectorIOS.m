@@ -1,6 +1,7 @@
 #import <React/RCTBridgeModule.h>
+#import <React/RCTEventEmitter.h>
 
-@interface RCT_EXTERN_MODULE(WatchConnectorIOS, NSObject)
+@interface RCT_EXTERN_MODULE(WatchConnectorIOS, RCTEventEmitter)
 
 + (BOOL)requiresMainQueueSetup
 {

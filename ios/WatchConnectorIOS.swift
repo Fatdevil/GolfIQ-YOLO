@@ -3,15 +3,16 @@ import React
 import WatchConnectivity
 
 @objc(WatchConnectorIOS)
-class WatchConnectorIOS: NSObject, RCTBridgeModule, WCSessionDelegate {
-  static func moduleName() -> String! { "WatchConnectorIOS" }
-
-  @objc static func requiresMainQueueSetup() -> Bool { true }
-  @objc var methodQueue: DispatchQueue { DispatchQueue.main }
-
+class WatchConnectorIOS: RCTEventEmitter, WCSessionDelegate {
   private let session = WCSession.isSupported() ? WCSession.default : nil
   private var activationBlocks: [(() -> Void)] = []
   private var activationReady = false
+  private var hasListeners = false
+  private let imuEventName = "watch.imu.v1"
+
+  override class func requiresMainQueueSetup() -> Bool { true }
+
+  override func methodQueue() -> DispatchQueue! { DispatchQueue.main }
 
   override init() {
     super.init()
@@ -21,6 +22,18 @@ class WatchConnectorIOS: NSObject, RCTBridgeModule, WCSessionDelegate {
         DispatchQueue.main.async { s.activate() }
       }
     }
+  }
+
+  override func supportedEvents() -> [String]! {
+    [imuEventName]
+  }
+
+  override func startObserving() {
+    hasListeners = true
+  }
+
+  override func stopObserving() {
+    hasListeners = false
   }
 
   private func withSession(_ block: @escaping (WCSession) -> Void) {
@@ -133,6 +146,20 @@ class WatchConnectorIOS: NSObject, RCTBridgeModule, WCSessionDelegate {
   func sessionDidDeactivate(_ session: WCSession) {
     DispatchQueue.main.async {
       session.activate()
+    }
+  }
+
+  func session(_ session: WCSession, didReceiveMessageData messageData: Data) {
+    guard hasListeners else { return }
+    let base64 = messageData.base64EncodedString()
+    let emit = {
+      guard self.hasListeners else { return }
+      self.sendEvent(withName: self.imuEventName, body: ["b64": base64])
+    }
+    if Thread.isMainThread {
+      emit()
+    } else {
+      DispatchQueue.main.async(execute: emit)
     }
   }
 
