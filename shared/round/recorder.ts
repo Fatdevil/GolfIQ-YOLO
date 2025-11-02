@@ -7,6 +7,7 @@ const COALESCE_WINDOW_MS = 3_000;
 
 let loaded = false;
 let activeRound: RoundState | null = null;
+const listeners = new Set<(round: RoundState | null) => void>();
 
 function cloneRound(state: RoundState | null): RoundState | null {
   return state ? (JSON.parse(JSON.stringify(state)) as RoundState) : null;
@@ -74,6 +75,7 @@ function buildShot(hole: number, seq: number, args: {
   club?: string;
   kind: ShotKind;
   toPinStart_m?: number;
+  playsLikePct?: number;
 }): ShotEvent {
   return {
     id: ensureId(),
@@ -84,6 +86,7 @@ function buildShot(hole: number, seq: number, args: {
     club: args.club,
     kind: args.kind,
     toPinStart_m: Number.isFinite(Number(args.toPinStart_m)) ? Number(args.toPinStart_m) : undefined,
+    playsLikePct: Number.isFinite(Number(args.playsLikePct)) ? Number(args.playsLikePct) : undefined,
   };
 }
 
@@ -93,12 +96,21 @@ type AddShotArgs = {
   startLie: Lie;
   club?: string;
   toPinStart_m?: number;
+  playsLikePct?: number;
   force?: boolean;
 };
 
 async function persist(state: RoundState | null): Promise<void> {
   await getRoundStore().save(state);
   activeRound = cloneRound(state);
+  const snapshot = cloneRound(activeRound);
+  for (const listener of listeners) {
+    try {
+      listener(snapshot);
+    } catch {
+      // ignore listener failures
+    }
+  }
 }
 
 function normalizeTimestamp(ts: number | undefined): number {
@@ -151,6 +163,14 @@ export const RoundRecorder = {
     return loadActive();
   },
 
+  subscribe(listener: (round: RoundState | null) => void): () => void {
+    listeners.add(listener);
+    listener(cloneRound(activeRound));
+    return () => {
+      listeners.delete(listener);
+    };
+  },
+
   async setPin(holeNumber: number, pin: { lat: number; lon: number }): Promise<void> {
     const round = await ensureActiveRound();
     const [holeNo, hole] = resolveHole(round, holeNumber);
@@ -171,6 +191,7 @@ export const RoundRecorder = {
       club: shot.club,
       kind: shot.kind,
       toPinStart_m: shot.toPinStart_m,
+      playsLikePct: shot.playsLikePct,
     });
 
     if (previous) {
@@ -188,6 +209,9 @@ export const RoundRecorder = {
           startLie: shot.startLie,
           club: shot.club ?? previous.club,
           toPinStart_m: Number.isFinite(Number(shot.toPinStart_m)) ? Number(shot.toPinStart_m) : previous.toPinStart_m,
+          playsLikePct: Number.isFinite(Number(shot.playsLikePct))
+            ? Number(shot.playsLikePct)
+            : previous.playsLikePct,
         };
         const nextShots = [...hole.shots.slice(0, -1), mutatedPrev];
         const updated = applyHole(round, holeNo, { ...hole, shots: nextShots });
@@ -327,4 +351,5 @@ export const RoundRecorder = {
 export function __resetRoundRecorderForTests(): void {
   loaded = false;
   activeRound = null;
+  listeners.clear();
 }

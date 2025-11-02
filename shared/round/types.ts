@@ -23,6 +23,7 @@ export interface ShotEvent {
   toPinStart_m?: number;
   toPinEnd_m?: number;
   sg?: number;
+  playsLikePct?: number;
   kind: ShotKind;
 }
 
