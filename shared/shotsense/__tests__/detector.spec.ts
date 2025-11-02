@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { ShotDetector } from '../detector';
 import type { GpsContext, IMUFrame, ShotSenseEvent } from '../types';
+import { ShotSenseService } from '../../../golfiq/app/src/shotsense/ShotSenseService';
 
 const SAMPLE_HZ = 100;
 const DT = Math.round(1000 / SAMPLE_HZ);
@@ -233,5 +234,31 @@ describe('ShotDetector', () => {
     const detected = events.filter((evt) => evt.kind === 'ShotDetected');
     expect(detected).toHaveLength(1);
     expect(detected[0]?.at.strength).toBeGreaterThan(0.75);
+  });
+
+  it('adapts sample windows when sampleHz changes', () => {
+    const detector = new ShotDetector({ sampleHz: 100, minSwingWindow_ms: 300 });
+    const before = (detector as any).minSwingWinSamples;
+    detector.setSampleHz(50);
+    const after = (detector as any).minSwingWinSamples;
+    expect(after).toBeLessThan(before);
+  });
+
+  it('ShotSenseService reconfigures on incoming hz', () => {
+    const originalDev = (globalThis as any).__DEV__;
+    (globalThis as any).__DEV__ = false;
+    try {
+      const service = new ShotSenseService();
+      (service as any).ensureHz(50);
+      expect((service as any).currentHz).toBe(50);
+      (service as any).ensureHz(100);
+      expect((service as any).currentHz).toBe(100);
+    } finally {
+      if (originalDev === undefined) {
+        delete (globalThis as any).__DEV__;
+      } else {
+        (globalThis as any).__DEV__ = originalDev;
+      }
+    }
   });
 });

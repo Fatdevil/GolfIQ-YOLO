@@ -5,17 +5,25 @@ import type { GpsContext } from '../../../../shared/shotsense/types';
 type ShotSenseListener = (ts: number, strength: number) => void;
 
 const MAX_QUEUE_SIZE = 6;
+const HZ_TOL = 1;
 
 export class ShotSenseService {
-  private readonly detector = new ShotDetector();
+  private detector: ShotDetector;
   private readonly listeners: ShotSenseListener[] = [];
   private readonly queue: IMUBatchV1[] = [];
   private draining = false;
+  private currentHz = 80;
+
+  constructor() {
+    this.detector = new ShotDetector({ sampleHz: this.currentHz });
+  }
 
   pushIMUBatch(batch: IMUBatchV1 | null | undefined): void {
     if (!batch || batch.v !== 1) {
       return;
     }
+
+    this.ensureHz(batch.hz);
 
     if (this.queue.length >= MAX_QUEUE_SIZE) {
       this.queue.shift();
@@ -113,6 +121,24 @@ export class ShotSenseService {
       } catch (error) {
         console.warn('[ShotSense] listener error', error);
       }
+    }
+  }
+
+  private ensureHz(hz: number | null | undefined): void {
+    const next = Math.round(hz ?? this.currentHz);
+    if (Math.abs(next - this.currentHz) <= HZ_TOL) {
+      return;
+    }
+
+    this.currentHz = next;
+    if (typeof (this.detector as any).setSampleHz === 'function') {
+      this.detector.setSampleHz(this.currentHz);
+    } else {
+      this.detector = new ShotDetector({ sampleHz: this.currentHz });
+    }
+
+    if (__DEV__) {
+      console.log('[ShotSense] detector hz ->', this.currentHz);
     }
   }
 }
