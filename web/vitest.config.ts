@@ -10,6 +10,7 @@ export default defineConfig({
   test: {
     include: [
       'src/__tests__/**/*.spec.ts',
+      'src/overlay/**/*.spec.tsx',
       '../shared/playslike/__tests__/**/*.spec.ts',
       '../shared/runs/__tests__/**/*.spec.ts',
       'tests/**/*.spec.ts',

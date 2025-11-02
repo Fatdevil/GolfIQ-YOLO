@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Modal,
@@ -8,6 +8,7 @@ import {
   Text,
   TouchableOpacity,
   View,
+  type LayoutChangeEvent,
 } from 'react-native';
 
 import RoundWizard, { type WizardStartPayload } from './RoundWizard';
@@ -21,9 +22,16 @@ import { loadDefaultBaselines } from '../../../../shared/sg/baseline';
 import { recordRoundFinish } from '../../../../shared/telemetry/round';
 import { notifyRoundSaved } from '../watch/bridge';
 import type { ShareCardMeta } from '../components/summary/ShareCard';
+import OverlayControls from '../components/overlay/OverlayControls';
+import VectorHole from '../components/overlay/VectorHole';
+import type { BagStats } from '../../../../shared/bag/types';
+import { loadBagStats } from '../../../../shared/bag/storage';
+import type { VectorHoleModel } from '../../../../shared/overlay/vector';
+import type { XY } from '../../../../shared/overlay/geom';
 
 const EMPTY_HOLES: HoleRef[] = [];
 const BASELINES = loadDefaultBaselines();
+const EMPTY_BAG: BagStats = { updatedAt: 0, clubs: {} };
 
 type Mode = 'wizard' | 'tracking' | 'summary';
 
@@ -224,6 +232,13 @@ type TrackingViewProps = {
 };
 
 function TrackingView({ round, meta, finishDisabled, onFinishPress }: TrackingViewProps): JSX.Element {
+  const [bagStats, setBagStats] = useState<BagStats | null>(null);
+  const [overlaySize, setOverlaySize] = useState<{ w: number; h: number }>({ w: 0, h: 0 });
+  const [overlayEnabled, setOverlayEnabled] = useState<boolean>(!(meta?.tournamentSafe ?? true));
+  const [showCorridor, setShowCorridor] = useState<boolean>(true);
+  const [showRing, setShowRing] = useState<boolean>(true);
+  const [showLabels, setShowLabels] = useState<boolean>(false);
+
   const telemetryEmitter = useMemo(() => resolveTelemetryEmitter(), []);
   const {
     followState,
@@ -245,6 +260,60 @@ function TrackingView({ round, meta, finishDisabled, onFinishPress }: TrackingVi
   });
 
   const autoAdvanceLabel = followState?.autoAdvanceEnabled ? 'On' : 'Off';
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const stats = await loadBagStats();
+        if (!cancelled) {
+          setBagStats(stats);
+        }
+      } catch {
+        if (!cancelled) {
+          setBagStats(null);
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const tournamentSafe = meta?.tournamentSafe ?? true;
+
+  useEffect(() => {
+    if (tournamentSafe) {
+      setOverlayEnabled(false);
+      setShowLabels(false);
+    }
+  }, [tournamentSafe]);
+
+  useEffect(() => {
+    if (!overlayEnabled && showLabels) {
+      setShowLabels(false);
+    }
+  }, [overlayEnabled, showLabels]);
+
+  const handleOverlayLayout = useCallback((event: LayoutChangeEvent) => {
+    const { width, height } = event.nativeEvent.layout ?? {};
+    if (!Number.isFinite(width) || !Number.isFinite(height)) {
+      return;
+    }
+    setOverlaySize((prev) => {
+      if (prev.w === width && prev.h === height) {
+        return prev;
+      }
+      return { w: width, h: height };
+    });
+  }, []);
+
+  const overlayBag: BagStats = bagStats ?? EMPTY_BAG;
+  const vectorHoleModel: VectorHoleModel | null = null;
+  const teeVector: XY | null = null;
+  const targetVector: XY | null = null;
+  const labelsAllowed = overlayEnabled && showLabels && !tournamentSafe;
+  const overlayActive = overlayEnabled && overlaySize.w > 0 && overlaySize.h > 0;
 
   return (
     <SafeAreaView style={styles.trackContainer}>
@@ -286,6 +355,41 @@ function TrackingView({ round, meta, finishDisabled, onFinishPress }: TrackingVi
           <View style={styles.headingSection}>
             <View style={[styles.headingArrow, { transform: [{ rotate: `${snapshot?.headingDeg ?? 0}deg` }] }]} />
             <Text style={styles.headingText}>{Math.round(snapshot?.headingDeg ?? 0)}°</Text>
+          </View>
+          <View style={styles.overlayCard}>
+            <View style={styles.overlayCanvas} onLayout={handleOverlayLayout}>
+              {overlayActive && vectorHoleModel && teeVector && targetVector ? (
+                <VectorHole
+                  holeModel={vectorHoleModel}
+                  teeXY={teeVector}
+                  targetXY={targetVector}
+                  bag={overlayBag}
+                  showCorridor={showCorridor}
+                  showRing={showRing}
+                  labelsAllowed={labelsAllowed}
+                  size={overlaySize}
+                />
+              ) : (
+                <View style={styles.overlayPlaceholder}>
+                  <Text style={styles.overlayPlaceholderText}>
+                    {overlayEnabled
+                      ? 'Vector overlay unavailable for this hole.'
+                      : 'Enable Vector Overlay to preview aim guidance.'}
+                  </Text>
+                </View>
+              )}
+            </View>
+            <OverlayControls
+              enabled={overlayEnabled}
+              showCorridor={showCorridor}
+              showRing={showRing}
+              showLabels={showLabels}
+              labelsAvailable={!tournamentSafe}
+              onToggleEnabled={(value) => setOverlayEnabled(value)}
+              onToggleCorridor={(value) => setShowCorridor(value)}
+              onToggleRing={(value) => setShowRing(value)}
+              onToggleLabels={(value) => setShowLabels(value)}
+            />
           </View>
           <View style={styles.buttonRow}>
             <TouchableOpacity onPress={() => void manualPrev()} style={styles.button}>
@@ -350,6 +454,30 @@ const styles = StyleSheet.create({
     borderBottomColor: '#4da3ff',
   },
   headingText: { color: '#4da3ff', fontSize: 16, fontWeight: '600' },
+  overlayCard: {
+    backgroundColor: '#0f1524',
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(59, 130, 246, 0.18)',
+    overflow: 'hidden',
+  },
+  overlayCanvas: {
+    width: '100%',
+    aspectRatio: 1.6,
+    backgroundColor: '#070d1a',
+  },
+  overlayPlaceholder: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 32,
+    paddingHorizontal: 24,
+  },
+  overlayPlaceholderText: {
+    color: '#64748b',
+    fontSize: 12,
+    textAlign: 'center',
+  },
   buttonRow: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 16 },
   button: {
     flex: 1,
