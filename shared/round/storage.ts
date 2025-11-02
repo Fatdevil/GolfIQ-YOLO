@@ -110,6 +110,10 @@ function parseShot(raw: any, holeNumber: number, fallbackSeq: number): ShotEvent
     if (sg !== undefined) {
       shot.sg = sg;
     }
+    const playsLikePct = asOptionalNumber((record as Record<string, unknown>).playsLikePct);
+    if (playsLikePct !== undefined) {
+      shot.playsLikePct = playsLikePct;
+    }
     return shot;
   } catch {
     console.warn?.('round.storage: dropping incompatible shot');
