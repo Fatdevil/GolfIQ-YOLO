@@ -247,6 +247,8 @@ function TrackingView({ round, meta, finishDisabled, onFinishPress }: TrackingVi
     watchAutoSend,
     setWatchAutoSend,
     setAutoAdvance,
+    autoMode,
+    setAutoMode,
     manualNext,
     manualPrev,
     recenter,
@@ -259,7 +261,11 @@ function TrackingView({ round, meta, finishDisabled, onFinishPress }: TrackingVi
     telemetryEmitter,
   });
 
-  const autoAdvanceLabel = followState?.autoAdvanceEnabled ? 'On' : 'Off';
+  const autoAdvanceLabel = followState?.autoAdvanceEnabled
+    ? autoMode === 'v2'
+      ? 'On (v2)'
+      : 'On (v1)'
+    : 'Off';
 
   useEffect(() => {
     let cancelled = false;
@@ -407,6 +413,31 @@ function TrackingView({ round, meta, finishDisabled, onFinishPress }: TrackingVi
             <Switch value={Boolean(followState?.autoAdvanceEnabled)} onValueChange={(value) => void setAutoAdvance(value)} />
           </View>
           <View style={styles.toggleRowTrack}>
+            <Text style={styles.toggleLabel}>Auto Mode</Text>
+            <View style={styles.modeToggleGroup}>
+              <TouchableOpacity
+                onPress={() => void setAutoMode('v1')}
+                style={[styles.modeToggleOption, autoMode === 'v1' && styles.modeToggleOptionActive]}
+              >
+                <Text
+                  style={[styles.modeToggleOptionLabel, autoMode === 'v1' && styles.modeToggleOptionLabelActive]}
+                >
+                  v1 legacy
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={() => void setAutoMode('v2')}
+                style={[styles.modeToggleOption, autoMode === 'v2' && styles.modeToggleOptionActive]}
+              >
+                <Text
+                  style={[styles.modeToggleOptionLabel, autoMode === 'v2' && styles.modeToggleOptionLabelActive]}
+                >
+                  v2 geometry
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+          <View style={styles.toggleRowTrack}>
             <Text style={styles.toggleLabel}>Watch Auto-Send</Text>
             <Switch value={watchAutoSend} onValueChange={setWatchAutoSend} />
           </View>
@@ -498,6 +529,11 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
   toggleLabel: { color: '#fff', fontSize: 16 },
+  modeToggleGroup: { flexDirection: 'row', gap: 8 },
+  modeToggleOption: { paddingVertical: 8, paddingHorizontal: 12, borderRadius: 10, backgroundColor: '#1f2a43' },
+  modeToggleOptionActive: { backgroundColor: '#4da3ff' },
+  modeToggleOptionLabel: { color: '#8ea0c9', fontWeight: '600' },
+  modeToggleOptionLabelActive: { color: '#0a0f1d' },
   modalBackdrop: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.6)',

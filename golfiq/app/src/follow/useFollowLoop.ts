@@ -6,7 +6,14 @@ import { buildSnapshot } from '../../../../shared/follow/snapshot';
 import { FollowStateMachine } from '../../../../shared/follow/state';
 import { haversine, shouldUpdate, shortArcDiff } from '../../../../shared/follow/geo';
 import type { FollowSnapshot, FollowState, GeoPoint, HoleRef } from '../../../../shared/follow/types';
-import { recordFollowTick, setFollowTelemetryEmitter } from '../../../../shared/telemetry/follow';
+import { stepAutoV2, type AutoInput, type AutoState } from '../../../../shared/follow/auto';
+import { RoundRecorder } from '../../../../shared/round/recorder';
+import {
+  recordAutoEvent,
+  recordFollowTick,
+  recordHoleSnap,
+  setFollowTelemetryEmitter,
+} from '../../../../shared/telemetry/follow';
 import { WatchBridge } from '../../../../shared/watch/bridge';
 import type { WatchHUDStateV1 } from '../../../../shared/watch/types';
 
@@ -26,6 +33,8 @@ export type UseFollowLoopState = {
   watchAutoSend: boolean;
   setWatchAutoSend: (next: boolean) => void;
   setAutoAdvance: (next: boolean) => Promise<void>;
+  autoMode: 'v1' | 'v2';
+  setAutoMode: (mode: 'v1' | 'v2') => Promise<void>;
   manualNext: () => Promise<void>;
   manualPrev: () => Promise<void>;
   recenter: () => void;
@@ -34,6 +43,20 @@ export type UseFollowLoopState = {
 type HeadingSample = { value: number; ts: number };
 
 type SendStats = { count: number; startedAt: number };
+
+type MaybeGeo = { lat?: number | null; lon?: number | null } | null | undefined;
+
+const toLatLon = (point: MaybeGeo): { lat: number; lon: number } | null => {
+  if (!point) {
+    return null;
+  }
+  const lat = Number(point.lat);
+  const lon = Number(point.lon);
+  if (!Number.isFinite(lat) || !Number.isFinite(lon)) {
+    return null;
+  }
+  return { lat, lon };
+};
 
 function toWatchPayload(snapshot: FollowSnapshot): WatchHUDStateV1 {
   return {
@@ -57,8 +80,178 @@ export function useFollowLoop(options: UseFollowLoopOptions): UseFollowLoopState
   const cadenceRef = useRef<number>(0);
   const sendStatsRef = useRef<SendStats>({ count: 0, startedAt: Date.now() });
   const lastCancelRef = useRef<boolean>(false);
+  const autoStateRef = useRef<AutoState | null>(null);
+  const autoModeRef = useRef<'v1' | 'v2'>('v2');
+  const [autoMode, setAutoModeState] = useState<'v1' | 'v2'>('v2');
+  const autoEnabledRef = useRef<boolean>(true);
 
   const holesMemo = useMemo(() => options.holes.slice(), [options.holes]);
+
+  const resolveHoleNumber = useCallback((hole: HoleRef | null): number | null => {
+    if (!hole) {
+      return null;
+    }
+    if (Number.isFinite(hole.number)) {
+      return Number(hole.number);
+    }
+    if (typeof hole.id === 'string') {
+      const parsed = Number.parseInt(hole.id.replace(/[^0-9]/g, ''), 10);
+      if (Number.isFinite(parsed)) {
+        return parsed;
+      }
+    }
+    return null;
+  }, []);
+
+  const toAutoHole = useCallback(
+    (hole: HoleRef | null): AutoInput['hole'] | null => {
+      if (!hole) {
+        return null;
+      }
+      const holeNumber = resolveHoleNumber(hole);
+      if (holeNumber === null) {
+        return null;
+      }
+      const greenMid = toLatLon(hole.middle);
+      if (!greenMid) {
+        return null;
+      }
+      const holeWithTee = hole as HoleRef & { tee?: MaybeGeo };
+      const teePoint = toLatLon(holeWithTee.tee);
+      const autoHole: AutoInput['hole'] = {
+        id: holeNumber,
+        par: 4,
+        green: {
+          mid: greenMid,
+          radius_m: 20,
+        },
+      } satisfies AutoInput['hole'];
+      if (teePoint) {
+        autoHole.tee = teePoint;
+      }
+      return autoHole;
+    },
+    [resolveHoleNumber],
+  );
+
+  const toAutoNeighbor = useCallback(
+    (hole: HoleRef | null): AutoInput['next'] | null => {
+      const base = toAutoHole(hole);
+      if (!base) {
+        return null;
+      }
+      const neighbor: NonNullable<AutoInput['next']> = {
+        id: base.id,
+        green: base.green,
+      } satisfies NonNullable<AutoInput['next']>;
+      if (base.tee) {
+        neighbor.tee = base.tee;
+      }
+      return neighbor;
+    },
+    [toAutoHole],
+  );
+
+  const patchFollowState = useCallback(
+    (state: FollowState): FollowState => {
+      if (autoModeRef.current === 'v2') {
+        return { ...state, autoAdvanceEnabled: autoEnabledRef.current };
+      }
+      return state;
+    },
+    [],
+  );
+
+  const runAutoStep = useCallback(
+    async (
+      current: FollowState,
+      point: GeoPoint,
+      headingDeg: number | null,
+      speed: number,
+      now: number,
+    ): Promise<FollowState> => {
+      const machine = machineRef.current;
+      if (!machine) {
+        return current;
+      }
+      const autoHole = toAutoHole(current.hole);
+      if (!autoHole) {
+        autoStateRef.current = null;
+        return current;
+      }
+      const index = Number.isFinite(current.holeIndex) ? Number(current.holeIndex) : -1;
+      const nextRef = index >= 0 ? holesMemo[index + 1] ?? null : null;
+      const prevRef = index >= 0 ? holesMemo[index - 1] ?? null : null;
+      const autoInput: AutoInput = {
+        pos: {
+          lat: Number(point.lat),
+          lon: Number(point.lon),
+          ts: Number.isFinite(point.ts ?? NaN) ? Number(point.ts) : now,
+          speed_mps: speed,
+          headingDeg: headingDeg ?? undefined,
+        },
+        hole: autoHole,
+      };
+      const nextNeighbor = toAutoNeighbor(nextRef);
+      if (nextNeighbor) {
+        autoInput.next = nextNeighbor;
+      }
+      const prevNeighbor = toAutoNeighbor(prevRef);
+      if (prevNeighbor) {
+        autoInput.prev = prevNeighbor;
+      }
+
+      let base = autoStateRef.current;
+      if (!base) {
+        base = { stableHoleId: autoHole.id, atTeeBox: null };
+      } else {
+        const valid = new Set<number>([autoHole.id]);
+        if (nextNeighbor) {
+          valid.add(nextNeighbor.id);
+        }
+        if (prevNeighbor) {
+          valid.add(prevNeighbor.id);
+        }
+        if (!valid.has(base.stableHoleId)) {
+          base = { stableHoleId: autoHole.id, atTeeBox: null };
+        }
+      }
+
+      const nextState = stepAutoV2(base, autoInput);
+      autoStateRef.current = nextState;
+
+      if (!base.reachedGreenAt && nextState.reachedGreenAt) {
+        recordHoleSnap({ holeId: autoHole.id, kind: 'green' });
+      }
+      const nextTeeLock = nextState.atTeeBox?.holeId ?? null;
+      if (nextTeeLock && nextTeeLock !== base.atTeeBox?.holeId) {
+        recordHoleSnap({ holeId: nextTeeLock, kind: 'tee' });
+      }
+
+      let followResult = current;
+      const prevStable = base.stableHoleId;
+      const targetStable = nextState.stableHoleId;
+      if (targetStable !== prevStable) {
+        const reason = nextTeeLock === targetStable ? 'teeLock' : 'leaveGreen';
+        if (nextNeighbor && targetStable === nextNeighbor.id) {
+          recordAutoEvent({ from: prevStable, to: targetStable, reason });
+          await RoundRecorder.nextHole();
+          const updated = await machine.manualNext(now);
+          autoStateRef.current = { stableHoleId: targetStable, atTeeBox: nextState.atTeeBox ?? null };
+          followResult = updated;
+        } else if (prevNeighbor && targetStable === prevNeighbor.id) {
+          recordAutoEvent({ from: prevStable, to: targetStable, reason });
+          await RoundRecorder.prevHole();
+          const updated = await machine.manualPrev(now);
+          autoStateRef.current = { stableHoleId: targetStable, atTeeBox: nextState.atTeeBox ?? null };
+          followResult = updated;
+        }
+      }
+
+      return followResult;
+    },
+    [holesMemo, toAutoHole, toAutoNeighbor],
+  );
 
   useEffect(() => {
     setFollowTelemetryEmitter(options.telemetryEmitter ?? null);
@@ -69,19 +262,28 @@ export function useFollowLoop(options: UseFollowLoopOptions): UseFollowLoopState
 
   useEffect(() => {
     let cancelled = false;
-    FollowStateMachine.create({ roundId: options.roundId, holes: holesMemo }).then((machine) => {
+    const autoAdvanceEnabled = autoModeRef.current === 'v2' ? false : undefined;
+    FollowStateMachine.create({ roundId: options.roundId, holes: holesMemo, autoAdvanceEnabled }).then((machine) => {
       if (cancelled) {
         return;
       }
       machineRef.current = machine;
-      setFollowState(machine.snapshot);
+      const snapshot = machine.snapshot;
+      autoEnabledRef.current = snapshot.autoAdvanceEnabled !== false;
+      if (autoModeRef.current === 'v2') {
+        void machine.setAutoAdvance(false);
+      }
+      setFollowState(patchFollowState(snapshot));
+      const currentHoleNumber = resolveHoleNumber(snapshot.hole);
+      autoStateRef.current = currentHoleNumber ? { stableHoleId: currentHoleNumber, atTeeBox: null } : null;
     });
     return () => {
       cancelled = true;
       machineRef.current = null;
       setFollowState(null);
+      autoStateRef.current = null;
     };
-  }, [holesMemo, options.roundId]);
+  }, [holesMemo, options.roundId, patchFollowState, resolveHoleNumber]);
 
   const evaluateSendStats = useCallback(() => {
     const stats = sendStatsRef.current;
@@ -115,24 +317,48 @@ export function useFollowLoop(options: UseFollowLoopOptions): UseFollowLoopState
         return;
       }
       cadenceRef.current = now;
-      const { state, autoAdvanced } = await machine.tick({
+      const { state: machineState, autoAdvanced } = await machine.tick({
         position: point,
         headingDeg: heading,
         speedMps: speed,
         now,
       });
-      setFollowState(state);
-      if (!state.hole) {
+      let follow = machineState;
+      let autoAdvancedV2 = false;
+      if (autoModeRef.current === 'v2') {
+        if (autoEnabledRef.current) {
+          const beforeHoleNumber = resolveHoleNumber(follow.hole);
+          follow = await runAutoStep(
+            follow,
+            point,
+            Number.isFinite(heading) ? heading : null,
+            speed,
+            now,
+          );
+          const afterHoleNumber = resolveHoleNumber(follow.hole);
+          autoAdvancedV2 = Boolean(
+            beforeHoleNumber !== null && afterHoleNumber !== null && beforeHoleNumber !== afterHoleNumber,
+          );
+        } else {
+          const currentHoleNumber = resolveHoleNumber(follow.hole);
+          autoStateRef.current = currentHoleNumber ? { stableHoleId: currentHoleNumber, atTeeBox: null } : null;
+        }
+      } else {
+        autoStateRef.current = null;
+      }
+      const patchedFollow = patchFollowState(follow);
+      setFollowState(patchedFollow);
+      if (!patchedFollow.hole) {
         setSnapshot(null);
         return;
       }
       const distances = {
-        front: haversine(point, state.hole.front),
-        middle: haversine(point, state.hole.middle),
-        back: haversine(point, state.hole.back),
+        front: haversine(point, patchedFollow.hole.front),
+        middle: haversine(point, patchedFollow.hole.middle),
+        back: haversine(point, patchedFollow.hole.back),
       };
       const snapshotPayload = buildSnapshot({
-        hole: state.hole,
+        hole: patchedFollow.hole,
         distances,
         headingDeg: heading,
         playsLikePct: options.playsLikePct ?? null,
@@ -156,14 +382,22 @@ export function useFollowLoop(options: UseFollowLoopOptions): UseFollowLoopState
       recordFollowTick({
         latencyMs,
         freq,
-        autoAdvanceFired: autoAdvanced,
-        overrideUsed: Boolean(state.overrideTs && now - state.overrideTs < 10_000),
+        autoAdvanceFired: autoAdvanced || autoAdvancedV2,
+        overrideUsed: Boolean(patchedFollow.overrideTs && now - patchedFollow.overrideTs < 10_000),
         rpmSends: evaluateSendStats(),
         canceledQueued: lastCancelRef.current,
       });
       lastCancelRef.current = false;
     },
-    [evaluateSendStats, options.playsLikePct, options.tournamentSafe, watchAutoSend],
+    [
+      evaluateSendStats,
+      options.playsLikePct,
+      options.tournamentSafe,
+      watchAutoSend,
+      runAutoStep,
+      patchFollowState,
+      resolveHoleNumber,
+    ],
   );
 
   useEffect(() => {
@@ -209,32 +443,90 @@ export function useFollowLoop(options: UseFollowLoopOptions): UseFollowLoopState
     }
   }, [watchAutoSend]);
 
-  const setAutoAdvance = useCallback(async (next: boolean) => {
-    const machine = machineRef.current;
-    if (!machine) {
-      return;
-    }
-    const updated = await machine.setAutoAdvance(next);
-    setFollowState(updated);
-  }, []);
+  const setAutoAdvance = useCallback(
+    async (next: boolean) => {
+      autoEnabledRef.current = next;
+      const machine = machineRef.current;
+      if (!machine) {
+        setFollowState((prev) => (prev ? { ...prev, autoAdvanceEnabled: next } : prev));
+        return;
+      }
+      if (autoModeRef.current === 'v1') {
+        const updated = await machine.setAutoAdvance(next);
+        setFollowState(patchFollowState(updated));
+      } else {
+        await machine.setAutoAdvance(false);
+        setFollowState((prev) => (prev ? { ...prev, autoAdvanceEnabled: next } : prev));
+      }
+    },
+    [patchFollowState],
+  );
 
   const manualNext = useCallback(async () => {
     const machine = machineRef.current;
     if (!machine) {
       return;
     }
+    const before = machine.snapshot;
+    const beforeHole = resolveHoleNumber(before.hole);
+    await RoundRecorder.nextHole();
     const updated = await machine.manualNext();
-    setFollowState(updated);
-  }, []);
+    const patched = patchFollowState(updated);
+    setFollowState(patched);
+    const afterHole = resolveHoleNumber(updated.hole);
+    if (beforeHole !== null && afterHole !== null && beforeHole !== afterHole) {
+      recordAutoEvent({ from: beforeHole, to: afterHole, reason: 'manual' });
+    }
+    autoStateRef.current = afterHole ? { stableHoleId: afterHole, atTeeBox: null } : null;
+  }, [patchFollowState, resolveHoleNumber]);
 
   const manualPrev = useCallback(async () => {
     const machine = machineRef.current;
     if (!machine) {
       return;
     }
+    const before = machine.snapshot;
+    const beforeHole = resolveHoleNumber(before.hole);
+    await RoundRecorder.prevHole();
     const updated = await machine.manualPrev();
-    setFollowState(updated);
-  }, []);
+    const patched = patchFollowState(updated);
+    setFollowState(patched);
+    const afterHole = resolveHoleNumber(updated.hole);
+    if (beforeHole !== null && afterHole !== null && beforeHole !== afterHole) {
+      recordAutoEvent({ from: beforeHole, to: afterHole, reason: 'manual' });
+    }
+    autoStateRef.current = afterHole ? { stableHoleId: afterHole, atTeeBox: null } : null;
+  }, [patchFollowState, resolveHoleNumber]);
+
+  const setAutoMode = useCallback(
+    async (mode: 'v1' | 'v2') => {
+      if (mode === autoModeRef.current) {
+        return;
+      }
+      autoModeRef.current = mode;
+      setAutoModeState(mode);
+      const machine = machineRef.current;
+      if (!machine) {
+        return;
+      }
+      if (mode === 'v1') {
+        const updated = await machine.setAutoAdvance(autoEnabledRef.current);
+        setFollowState(patchFollowState(updated));
+        autoStateRef.current = null;
+      } else {
+        await machine.setAutoAdvance(false);
+        setFollowState((prev) => {
+          if (!prev) {
+            return prev;
+          }
+          return { ...prev, autoAdvanceEnabled: autoEnabledRef.current };
+        });
+        const holeNumber = resolveHoleNumber(machine.snapshot.hole);
+        autoStateRef.current = holeNumber ? { stableHoleId: holeNumber, atTeeBox: null } : null;
+      }
+    },
+    [patchFollowState, resolveHoleNumber],
+  );
 
   const recenter = useCallback(() => {
     headingRef.current = null;
@@ -247,6 +539,8 @@ export function useFollowLoop(options: UseFollowLoopOptions): UseFollowLoopState
     watchAutoSend,
     setWatchAutoSend: setWatchAutoSendState,
     setAutoAdvance,
+    autoMode,
+    setAutoMode,
     manualNext,
     manualPrev,
     recenter,
