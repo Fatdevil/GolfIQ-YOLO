@@ -44,6 +44,20 @@ type HeadingSample = { value: number; ts: number };
 
 type SendStats = { count: number; startedAt: number };
 
+type MaybeGeo = { lat?: number | null; lon?: number | null } | null | undefined;
+
+const toLatLon = (point: MaybeGeo): { lat: number; lon: number } | null => {
+  if (!point) {
+    return null;
+  }
+  const lat = Number(point.lat);
+  const lon = Number(point.lon);
+  if (!Number.isFinite(lat) || !Number.isFinite(lon)) {
+    return null;
+  }
+  return { lat, lon };
+};
+
 function toWatchPayload(snapshot: FollowSnapshot): WatchHUDStateV1 {
   return {
     v: 1,
@@ -98,15 +112,24 @@ export function useFollowLoop(options: UseFollowLoopOptions): UseFollowLoopState
       if (holeNumber === null) {
         return null;
       }
-      return {
+      const greenMid = toLatLon(hole.middle);
+      if (!greenMid) {
+        return null;
+      }
+      const holeWithTee = hole as HoleRef & { tee?: MaybeGeo };
+      const teePoint = toLatLon(holeWithTee.tee);
+      const autoHole: AutoInput['hole'] = {
         id: holeNumber,
         par: 4,
         green: {
-          mid: { lat: Number(hole.middle.lat), lon: Number(hole.middle.lon) },
+          mid: greenMid,
           radius_m: 20,
         },
-        tee: { lat: Number(hole.front.lat), lon: Number(hole.front.lon) },
       } satisfies AutoInput['hole'];
+      if (teePoint) {
+        autoHole.tee = teePoint;
+      }
+      return autoHole;
     },
     [resolveHoleNumber],
   );
@@ -117,11 +140,14 @@ export function useFollowLoop(options: UseFollowLoopOptions): UseFollowLoopState
       if (!base) {
         return null;
       }
-      return {
+      const neighbor: NonNullable<AutoInput['next']> = {
         id: base.id,
-        tee: base.tee,
         green: base.green,
       } satisfies NonNullable<AutoInput['next']>;
+      if (base.tee) {
+        neighbor.tee = base.tee;
+      }
+      return neighbor;
     },
     [toAutoHole],
   );

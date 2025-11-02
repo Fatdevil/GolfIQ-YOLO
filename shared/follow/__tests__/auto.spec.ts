@@ -101,7 +101,10 @@ describe('stepAutoV2', () => {
   });
 
   it('locks to next tee box when aligned', () => {
-    const heading = bearing(hole2.tee, hole2.green!.mid);
+    if (!hole2.tee || !hole2.green?.mid) {
+      throw new Error('expected tee and green for hole2');
+    }
+    const heading = bearing(hole2.tee, hole2.green.mid);
     let state: AutoState = { stableHoleId: 1 };
     const approach: AutoInput = {
       pos: { lat: hole2.tee.lat + 0.00005, lon: hole2.tee.lon, ts: 60_000, speed_mps: 0.4, headingDeg: heading },
@@ -114,7 +117,10 @@ describe('stepAutoV2', () => {
   });
 
   it('locks to previous tee when backtracking', () => {
-    const heading = bearing(hole0.tee, hole0.green!.mid);
+    if (!hole0.tee || !hole0.green?.mid) {
+      throw new Error('expected tee and green for hole0');
+    }
+    const heading = bearing(hole0.tee, hole0.green.mid);
     const initial: AutoState = { stableHoleId: 2 };
     const backtrack: AutoInput = {
       pos: { lat: hole0.tee.lat + 0.00005, lon: hole0.tee.lon + 0.00002, ts: 90_000, speed_mps: 0.5, headingDeg: heading },
@@ -128,7 +134,10 @@ describe('stepAutoV2', () => {
   });
 
   it('maintains tee lock until outside release radius', () => {
-    const heading = bearing(hole2.tee, hole2.green!.mid);
+    if (!hole2.tee || !hole2.green?.mid) {
+      throw new Error('expected tee and green for hole2');
+    }
+    const heading = bearing(hole2.tee, hole2.green.mid);
     let state: AutoState = { stableHoleId: 1 };
     state = stepAutoV2(state, {
       pos: { lat: hole2.tee.lat + 0.00005, lon: hole2.tee.lon, ts: 100_000, speed_mps: 0.4, headingDeg: heading },
@@ -155,5 +164,94 @@ describe('stepAutoV2', () => {
     state = stepAutoV2(state, farAway, DEFAULT_OPTS);
     expect(state.atTeeBox).toBeNull();
     expect(state.stableHoleId).toBe(2);
+  });
+
+  it('skips tee lock when tee missing but still advances via green exit', () => {
+    const holeNoTee: HoleConfig = {
+      id: 1,
+      par: 4,
+      green: { mid: { lat: 0, lon: 0 }, radius_m: 12 },
+    };
+    const nextNoTee: NextConfig = {
+      id: 2,
+    };
+
+    let state: AutoState = { stableHoleId: 1 };
+    state = stepAutoV2(
+      state,
+      {
+        pos: { lat: 0.00001, lon: 0.00001, ts: 1_000, speed_mps: 0.2 },
+        hole: holeNoTee,
+        next: nextNoTee,
+      },
+      DEFAULT_OPTS,
+    );
+    expect(state.reachedGreenAt).toBe(1_000);
+
+    state = stepAutoV2(
+      state,
+      {
+        pos: { lat: 0.00001, lon: 0.00001, ts: 4_500, speed_mps: 0.2 },
+        hole: holeNoTee,
+        next: nextNoTee,
+      },
+      DEFAULT_OPTS,
+    );
+    expect(state.reachedGreenAt).toBe(1_000);
+
+    state = stepAutoV2(
+      state,
+      {
+        pos: { lat: 0.0007, lon: 0.0002, ts: 12_000, speed_mps: 1.1 },
+        hole: holeNoTee,
+        next: nextNoTee,
+      },
+      DEFAULT_OPTS,
+    );
+    expect(state.leftGreenAt).toBe(12_000);
+
+    state = stepAutoV2(
+      state,
+      {
+        pos: { lat: 0.0012, lon: 0.0006, ts: 23_000, speed_mps: 1.2 },
+        hole: holeNoTee,
+        next: nextNoTee,
+      },
+      DEFAULT_OPTS,
+    );
+    expect(state.stableHoleId).toBe(2);
+    expect(state.atTeeBox).toBeNull();
+  });
+
+  it('only tee-locks when real tee is provided', () => {
+    if (!hole2.tee || !hole2.green?.mid) {
+      throw new Error('expected tee and green for hole2');
+    }
+    const heading = bearing(hole2.tee, hole2.green.mid);
+    let state: AutoState = { stableHoleId: 1 };
+
+    state = stepAutoV2(
+      state,
+      {
+        pos: { lat: hole2.tee.lat + 0.00005, lon: hole2.tee.lon, ts: 40_000, speed_mps: 0.4, headingDeg: heading },
+        hole: { ...hole1, tee: undefined },
+        next: { id: hole2.id },
+      },
+      DEFAULT_OPTS,
+    );
+    expect(state.stableHoleId).toBe(1);
+    expect(state.atTeeBox).toBeNull();
+
+    state = stepAutoV2(
+      state,
+      {
+        pos: { lat: hole2.tee.lat + 0.00005, lon: hole2.tee.lon, ts: 50_000, speed_mps: 0.4, headingDeg: heading },
+        hole: hole1,
+        next: hole2,
+      },
+      DEFAULT_OPTS,
+    );
+    expect(state.stableHoleId).toBe(2);
+    expect(state.atTeeBox).toEqual({ holeId: 2, ts: 50_000 });
   });
 });

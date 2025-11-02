@@ -15,16 +15,16 @@ export type AutoInput = {
       mid: { lat: number; lon: number };
       radius_m: number;
     };
-    tee: { lat: number; lon: number };
+    tee?: { lat: number; lon: number };
   };
   next?: {
     id: number;
-    tee: { lat: number; lon: number };
+    tee?: { lat: number; lon: number };
     green?: { mid: { lat: number; lon: number }; radius_m?: number };
   };
   prev?: {
     id: number;
-    tee: { lat: number; lon: number };
+    tee?: { lat: number; lon: number };
     green?: { mid: { lat: number; lon: number }; radius_m?: number };
   };
 };
@@ -153,7 +153,7 @@ export function stepAutoV2(state: AutoState, input: AutoInput, opts?: StepAutoOp
   );
 
   const teeCandidates: TeeCandidate[] = [];
-  if (input.next) {
+  if (input.next?.tee) {
     teeCandidates.push({
       holeId: Number(input.next.id),
       tee: input.next.tee,
@@ -162,7 +162,7 @@ export function stepAutoV2(state: AutoState, input: AutoInput, opts?: StepAutoOp
       kind: 'next',
     });
   }
-  if (input.prev) {
+  if (input.prev?.tee) {
     teeCandidates.push({
       holeId: Number(input.prev.id),
       tee: input.prev.tee,
@@ -178,7 +178,12 @@ export function stepAutoV2(state: AutoState, input: AutoInput, opts?: StepAutoOp
     if (distance > config.tee_r) {
       continue;
     }
-    const teeBearing = resolveBearing(candidate, candidate.kind === 'next' ? input.next?.green?.mid ?? null : input.prev?.green?.mid ?? null);
+    const teeBearing = resolveBearing(
+      candidate,
+      candidate.kind === 'next'
+        ? input.next?.green?.mid ?? null
+        : input.prev?.green?.mid ?? null,
+    );
     if (heading === null || teeBearing === null) {
       continue;
     }
