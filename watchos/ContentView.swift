@@ -24,6 +24,19 @@ struct ContentView: View {
             }
         }
         .padding()
+        .overlay(alignment: .bottom) {
+            if let toast = model.toast {
+                Text(toast)
+                    .font(.footnote)
+                    .fontWeight(.semibold)
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 6)
+                    .background(Color.black.opacity(0.75))
+                    .cornerRadius(12)
+                    .padding(.bottom, 12)
+            }
+        }
     }
 
     private func fmbRow(for hud: HUD) -> some View {

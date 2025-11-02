@@ -49,7 +49,7 @@ describe('RoundRecorder', () => {
   beforeEach(async () => {
     __resetRoundRecorderForTests();
     setRoundStore(new MemoryStore());
-    await RoundRecorder.startRound('course', 1, false);
+    await RoundRecorder.startRound('course', 1, 1_000, false);
   });
 
   it('derives carry and strokes gained after sequential shots', async () => {
@@ -113,11 +113,29 @@ describe('RoundRecorder', () => {
 
     await RoundRecorder.addShot(1, {
       kind: 'Putt',
-      start: gp(37.00032, -122.00003, 1_900),
+      start: gp(37.0006, -122.0005, 1_900),
       startLie: 'Green',
     });
     round = await RoundRecorder.resumeRound();
     expect(round.holes[1]?.shots.length).toBe(3);
     expect(round.holes[1]?.shots.at(-1)?.seq).toBe(3);
+  });
+
+  it('preserves finished rounds after reload', async () => {
+    await RoundRecorder.addShot(1, {
+      kind: 'Full',
+      start: gp(37.0, -122.0, 1_000),
+      startLie: 'Tee',
+      toPinStart_m: 180,
+    });
+    const finished = await RoundRecorder.finishRound(9_000);
+    expect(finished.finishedAt).toBe(9_000);
+    const active = await RoundRecorder.getActiveRound();
+    expect(active).toBeNull();
+
+    __resetRoundRecorderForTests();
+    const stored = await RoundRecorder.getStoredRound();
+    expect(stored?.finishedAt).toBe(9_000);
+    expect(stored?.holes[1]?.shots.length).toBe(1);
   });
 });

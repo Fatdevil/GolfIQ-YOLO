@@ -34,6 +34,9 @@ async function ensureActiveRound(): Promise<RoundState> {
   if (!activeRound) {
     throw new Error('No active round.');
   }
+  if (activeRound.finishedAt) {
+    throw new Error('Round already finished.');
+  }
   return activeRound;
 }
 
@@ -98,25 +101,54 @@ async function persist(state: RoundState | null): Promise<void> {
   activeRound = cloneRound(state);
 }
 
-async function startNewRound(courseId: string, holeCount: number, tournamentSafe: boolean): Promise<RoundState> {
+function normalizeTimestamp(ts: number | undefined): number {
+  if (Number.isFinite(Number(ts))) {
+    return Math.max(0, Math.floor(Number(ts)));
+  }
+  return Date.now();
+}
+
+async function startNewRound(
+  courseId: string,
+  holeCount: number,
+  startedAt: number | undefined,
+  tournamentSafe: boolean,
+): Promise<RoundState> {
   const store = getRoundStore();
-  const round = await store.newRound(courseId, holeCount, Date.now(), tournamentSafe);
+  const round = await store.newRound(courseId, holeCount, normalizeTimestamp(startedAt), tournamentSafe);
   activeRound = round;
   loaded = true;
   return cloneRound(round)!;
 }
 
 export const RoundRecorder = {
-  async startRound(courseId: string, holeCount = DEFAULT_HOLES, tournamentSafe = false): Promise<RoundState> {
-    return startNewRound(courseId, holeCount, tournamentSafe);
+  async startRound(
+    courseId: string,
+    holeCount = DEFAULT_HOLES,
+    startedAt: number | undefined = Date.now(),
+    tournamentSafe = false,
+  ): Promise<RoundState> {
+    return startNewRound(courseId, holeCount, startedAt, tournamentSafe);
   },
 
   async resumeRound(): Promise<RoundState> {
-    const round = await loadActive();
+    const round = await this.getActiveRound();
     if (!round) {
       throw new Error('No round to resume.');
     }
     return round;
+  },
+
+  async getActiveRound(): Promise<RoundState | null> {
+    const round = await loadActive();
+    if (!round || round.finishedAt) {
+      return null;
+    }
+    return round;
+  },
+
+  async getStoredRound(): Promise<RoundState | null> {
+    return loadActive();
   },
 
   async setPin(holeNumber: number, pin: { lat: number; lon: number }): Promise<void> {
@@ -229,6 +261,18 @@ export const RoundRecorder = {
     const nextScore = Math.max(0, Math.floor(Number(strokes)));
     const updated = applyHole(round, holeNo, { ...hole, manualScore: nextScore });
     await persist(updated);
+  },
+
+  async finishRound(finishedAt?: number): Promise<RoundState> {
+    const round = await ensureActiveRound();
+    const timestamp = normalizeTimestamp(finishedAt);
+    const completed: RoundState = { ...round, finishedAt: timestamp };
+    await persist(completed);
+    return cloneRound(completed)!;
+  },
+
+  async clearRound(): Promise<void> {
+    await persist(null);
   },
 
   async advanceHole(): Promise<void> {

@@ -31,6 +31,11 @@ export const sendTargetPos = (lat: number, lon: number) => {
   module.sendTargetPosition(lat, lon)
 }
 
+export const notifyRoundSaved = () => {
+  if (!module?.notifyRoundSaved) return
+  module.notifyRoundSaved()
+}
+
 export const subscribeTargetMoved = (listener: TargetListener) => {
   const subscription = emitter.addListener('WatchTargetMoved', listener)
   return () => subscription.remove()
