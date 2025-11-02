@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import type { RoundState, ShotEvent } from '../../round/types';
-import { buildBagStats, deriveBag, interquartileRange, median, medianAbsoluteDeviation, quantile, standardDeviation } from '../derive';
+import { buildBagStats, getClubSamples, interquartileRange, median, medianAbsoluteDeviation, quantile, standardDeviation } from '../derive';
 
 function makeShot(partial: Partial<ShotEvent>): ShotEvent {
   return {
@@ -149,7 +149,8 @@ describe('buildBagStats', () => {
 
   it('trims outliers and neutralizes carries', () => {
     const round = buildRound(baseShots);
-    const { stats, samples } = deriveBag([round], { updatedAt: 123456 });
+    const stats = buildBagStats([round], { updatedAt: 123456 });
+    const samples = getClubSamples([round]);
     expect(stats.updatedAt).toBe(123456);
     const sevenIron = stats.clubs['7i'];
     expect(sevenIron.samples).toBe(4);
@@ -171,7 +172,7 @@ describe('buildBagStats', () => {
       makeShot({ id: 'z', carry_m: 150, kind: 'Full' }),
     ];
     const round = buildRound([...baseShots, ...extraShots]);
-    const bag = buildBagStats([round]);
+    const bag = buildBagStats([round], { updatedAt: 0 });
     const sevenIron = bag.clubs['7i'];
     expect(sevenIron.samples).toBe(4);
     expect(sevenIron.sgPerShot).toBeCloseTo(0.1, 2);
