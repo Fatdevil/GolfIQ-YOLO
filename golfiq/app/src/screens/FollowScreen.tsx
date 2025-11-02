@@ -164,8 +164,8 @@ export default function FollowScreen(): JSX.Element {
     if (mode === 'wizard') {
       return <RoundWizard onStart={handleStart} onResume={handleResume} />;
     }
-    if (mode === 'summary' && summary && meta) {
-      return <RoundSummaryScreen summary={summary} meta={meta} onDone={handleSummaryDone} />;
+    if (mode === 'summary' && summary && meta && round) {
+      return <RoundSummaryScreen summary={summary} meta={meta} round={round} onDone={handleSummaryDone} />;
     }
     if (mode === 'tracking' && round) {
       return (
