@@ -121,3 +121,89 @@ describe('computeLeaderboard', () => {
   });
 });
 
+describe('computeLeaderboard net scaling', () => {
+  function makeEvent(format: 'net' | 'gross' | 'stableford', holes: { start: number; end: number }) {
+    return {
+      id: 'E',
+      name: 'Test',
+      format,
+      holes,
+      participants: {},
+      createdAt: Date.now(),
+    } as EventState;
+  }
+
+  it('derives net for 9-hole round by scaling full HCP x 9/18', () => {
+    const ev = makeEvent('net', { start: 1, end: 9 });
+    ev.participants = {
+      A: {
+        id: 'A',
+        name: 'Alice',
+        hcp: 18,
+        rounds: {
+          R1: {
+            v: 1,
+            roundId: 'R1',
+            player: { id: 'A', name: 'Alice' },
+            courseId: 'C',
+            holes: { start: 1, end: 9 },
+            gross: 45,
+            holesBreakdown: [],
+          },
+        },
+      },
+    };
+    const rows = computeLeaderboard(ev);
+    expect(rows[0].net).toBe(36);
+  });
+
+  it('derives net for 12-hole event using event range when round.holes is 1..18', () => {
+    const ev = makeEvent('net', { start: 1, end: 12 });
+    ev.participants = {
+      B: {
+        id: 'B',
+        name: 'Bob',
+        hcp: 24,
+        rounds: {
+          R2: {
+            v: 1,
+            roundId: 'R2',
+            player: { id: 'B', name: 'Bob' },
+            courseId: 'C',
+            holes: { start: 1, end: 18 },
+            gross: 60,
+            holesBreakdown: [],
+          },
+        },
+      },
+    };
+    const rows = computeLeaderboard(ev);
+    expect(rows[0].net).toBe(44);
+  });
+
+  it('uses provided net if present (no scaling)', () => {
+    const ev = makeEvent('net', { start: 1, end: 9 });
+    ev.participants = {
+      C: {
+        id: 'C',
+        name: 'Cara',
+        hcp: 18,
+        rounds: {
+          R3: {
+            v: 1,
+            roundId: 'R3',
+            player: { id: 'C', name: 'Cara' },
+            courseId: 'C',
+            holes: { start: 1, end: 9 },
+            gross: 44,
+            net: 37,
+            holesBreakdown: [],
+          },
+        },
+      },
+    };
+    const rows = computeLeaderboard(ev);
+    expect(rows[0].net).toBe(37);
+  });
+});
+

@@ -39,6 +39,23 @@ type AugmentedRow = LeaderRow & {
 
 const DEFAULT_PAR = 4;
 
+const rangeLen = (r?: { start: number; end: number }): number | undefined =>
+  r && Number.isFinite(r.start) && Number.isFinite(r.end) && r.end >= r.start
+    ? Math.floor(r.end) - Math.floor(r.start) + 1
+    : undefined;
+
+function scaledHcp(
+  fullHcp: number,
+  roundHoles?: { start: number; end: number },
+  eventHoles?: { start: number; end: number },
+): number {
+  const rh = rangeLen(roundHoles);
+  const eh = rangeLen(eventHoles);
+  const holesUsed = eh ?? rh ?? 18;
+  const factor = Math.max(1, Math.min(18, holesUsed)) / 18;
+  return fullHcp * factor;
+}
+
 function buildHoleOrder(range: { start: number; end: number }): number[] {
   const start = Math.max(1, Math.floor(range.start));
   const end = Math.max(start, Math.floor(range.end));
@@ -168,7 +185,11 @@ function resolveParticipantHcp(participant: Participant, rounds: SharedRoundV1[]
   return undefined;
 }
 
-function aggregateParticipant(participant: Participant, holeIndex: Map<number, number>): AugmentedRow {
+function aggregateParticipant(
+  participant: Participant,
+  holeIndex: Map<number, number>,
+  event?: EventState,
+): AugmentedRow {
   const rounds = Object.values(participant.rounds ?? {});
   rounds.sort((a, b) => a.roundId.localeCompare(b.roundId));
 
@@ -202,7 +223,9 @@ function aggregateParticipant(participant: Participant, holeIndex: Map<number, n
       netTotal += Number(round.net);
       hasNet = true;
     } else if (Number.isFinite(round.gross) && Number.isFinite(resolvedHcp ?? NaN)) {
-      netTotal += Number(round.gross) - Number(resolvedHcp);
+      const adjHcp = scaledHcp(Number(resolvedHcp), round.holes, event?.holes);
+      const adj = Math.round(adjHcp);
+      netTotal += Number(round.gross) - adj;
       hasNet = true;
     }
 
@@ -283,7 +306,7 @@ export function computeLeaderboard(event: EventState): LeaderRow[] {
     return [];
   }
 
-  const augmented = participants.map((participant) => aggregateParticipant(participant, holeIndex));
+  const augmented = participants.map((participant) => aggregateParticipant(participant, holeIndex, event));
 
   augmented.sort((a, b) => compareRows(a, b, event.format));
 
