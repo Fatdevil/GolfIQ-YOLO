@@ -315,6 +315,14 @@ export default function EventDashboardScreen(): JSX.Element {
   const [joinCodeInput, setJoinCodeInput] = useState('');
   const cloudSubscription = useRef<{ id: string; unsubscribe: () => void } | null>(null);
 
+  const persistEvent = useCallback(async (next: DashboardEventState | null) => {
+    if (!next) {
+      await removeItem(STORAGE_KEY);
+      return;
+    }
+    await setItem(STORAGE_KEY, JSON.stringify(next));
+  }, []);
+
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -518,14 +526,6 @@ export default function EventDashboardScreen(): JSX.Element {
     }
   }, [currentRows, event, tab]);
 
-  const persistEvent = useCallback(async (next: DashboardEventState | null) => {
-    if (!next) {
-      await removeItem(STORAGE_KEY);
-      return;
-    }
-    await setItem(STORAGE_KEY, JSON.stringify(next));
-  }, []);
-
   const finalizeRound = useCallback(
     async (round: SharedRoundV1, details?: { name?: string; hcp?: number }) => {
       setEvent((prev) => {
@@ -582,6 +582,7 @@ export default function EventDashboardScreen(): JSX.Element {
         hcp: resolvedHcp,
       });
       if (eventsCloudAvailable && event.cloud?.id && event.cloud.goLive) {
+        const eventId = event.cloud.id;
         const payload: SharedRoundV1 = {
           ...round,
           player: {
@@ -590,9 +591,18 @@ export default function EventDashboardScreen(): JSX.Element {
             hcp: resolvedHcp,
           },
         };
-        void postLiveRound(event.cloud.id, payload).catch(() => {
-          setCloudError('Unable to sync round to cloud');
-        });
+        void (async () => {
+          try {
+            const result = await postLiveRound(eventId, payload);
+            if (!result.ok) {
+              setCloudError(result.reason ?? 'Unable to sync round to cloud');
+            } else {
+              setCloudError(null);
+            }
+          } catch (error) {
+            setCloudError(error instanceof Error ? error.message : 'Unable to sync round to cloud');
+          }
+        })();
       }
     },
     [event, finalizeRound, requestParticipantDetails],

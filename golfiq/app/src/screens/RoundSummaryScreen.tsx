@@ -189,8 +189,12 @@ export default function RoundSummaryScreen({ summary, meta, round, onDone }: Rou
     setLiveStatus(null);
     try {
       const payload = buildSharedRound(round, summary);
-      await postLiveRound(liveTarget.eventId, payload);
-      setLiveStatus('Posted to live event');
+      const result = await postLiveRound(liveTarget.eventId, payload);
+      if (result.ok) {
+        setLiveStatus('Posted to live event');
+      } else {
+        setLiveError(result.reason ?? 'Unable to post to live event');
+      }
     } catch (error) {
       setLiveError(error instanceof Error ? error.message : 'Unable to post to live event');
     } finally {

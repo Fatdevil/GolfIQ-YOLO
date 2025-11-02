@@ -3,6 +3,7 @@ import type { RealtimeChannel } from '@supabase/supabase-js';
 import { scaleHandicapForRound, type EventFormat } from '../../../../shared/event/models';
 import type { SharedRoundV1 } from '../../../../shared/event/payload';
 import { cloudEnabled, ensureSupabaseSession, supa } from './supabase';
+import { CloudSyncError, upsertOrThrow } from './supabaseSafe';
 import {
   __resetMockSupabase,
   __setMockUser,
@@ -17,6 +18,13 @@ export type WatchEventCallback = (rounds: SharedRoundV1[]) => void;
 
 export type LiveEventHandle = {
   unsubscribe: () => Promise<void> | void;
+};
+
+export type PostSharedRoundResult = {
+  ok: boolean;
+  reason?: string;
+  status?: number;
+  code?: string;
 };
 
 type EventMetadata = {
@@ -59,7 +67,7 @@ type EventsApi = {
     courseId?: string | null;
   } | null>;
   watchEvent: (eventId: string, onChange: WatchEventCallback) => Promise<() => void>;
-  postSharedRound: (eventId: string, payload: SharedRoundV1) => Promise<void>;
+  postSharedRound: (eventId: string, payload: SharedRoundV1) => Promise<PostSharedRoundResult>;
 };
 
 const realEventsApi: EventsApi | null = (() => {
@@ -158,9 +166,11 @@ const realEventsApi: EventsApi | null = (() => {
       if (error || !data) {
         throw new Error(error?.message ?? 'Unable to create live event');
       }
-      await supa
-        .from('event_members')
-        .upsert({ event_id: data.id, member: userId });
+      await upsertOrThrow(
+        'event_members',
+        { event_id: data.id, member: userId },
+        { onConflict: 'event_id,member', returning: 'minimal' },
+      );
       eventMetaCache.set(data.id, { id: data.id, holes, format });
       return { id: data.id, joinCode: String(data.join_code) };
     } catch (error) {
@@ -194,9 +204,11 @@ const realEventsApi: EventsApi | null = (() => {
       if (error || !data) {
         return null;
       }
-      await supa
-        .from('event_members')
-        .upsert({ event_id: data.id, member: userId });
+      await upsertOrThrow(
+        'event_members',
+        { event_id: data.id, member: userId },
+        { onConflict: 'event_id,member', returning: 'minimal' },
+      );
       eventMetaCache.set(data.id, {
         id: data.id,
         holes: data.holes as { start: number; end: number } | null,
@@ -276,10 +288,13 @@ const realEventsApi: EventsApi | null = (() => {
     };
   }
 
-  async function postSharedRound(eventId: string, payload: SharedRoundV1): Promise<void> {
+  async function postSharedRound(
+    eventId: string,
+    payload: SharedRoundV1,
+  ): Promise<PostSharedRoundResult> {
     const userId = await ensureUser();
     if (!userId) {
-      throw new Error('Sign in to post rounds');
+      return { ok: false, reason: 'Sign in to post rounds' };
     }
     const meta = (await loadEventMetadata(eventId)) ?? { id: eventId };
     const hcp = Number.isFinite(payload.player?.hcp ?? NaN) ? Number(payload.player?.hcp) : undefined;
@@ -302,7 +317,8 @@ const realEventsApi: EventsApi | null = (() => {
       : [];
 
     try {
-      await supa.from('event_rounds').upsert(
+      await upsertOrThrow(
+        'event_rounds',
         {
           event_id: eventId,
           participant_id: payload.player.id,
@@ -316,13 +332,17 @@ const realEventsApi: EventsApi | null = (() => {
           holes_breakdown: breakdown,
           owner: userId,
         },
-        { onConflict: 'event_id,round_id,participant_id' },
+        { onConflict: 'event_id,round_id,participant_id', returning: 'minimal' },
       );
+      return { ok: true };
     } catch (error) {
-      if (error instanceof Error) {
-        throw error;
+      if (error instanceof CloudSyncError) {
+        return { ok: false, reason: error.message, status: error.status, code: error.code };
       }
-      throw new Error('Unable to share round');
+      if (error instanceof Error) {
+        return { ok: false, reason: error.message };
+      }
+      return { ok: false, reason: 'Unable to share round' };
     }
   }
 
@@ -342,7 +362,22 @@ function useMockEvents(): EventsApi {
     createEvent: mockCreateEvent,
     joinEvent: mockJoinEvent,
     watchEvent: mockWatchEvent,
-    postSharedRound: mockPostSharedRound,
+    postSharedRound: async (eventId, payload) => {
+      try {
+        await mockPostSharedRound(eventId, payload);
+        return { ok: true };
+      } catch (error) {
+        if (error instanceof Error) {
+          return {
+            ok: false,
+            reason: error.message,
+            status: (error as Error & { status?: number }).status,
+            code: (error as Error & { code?: string }).code,
+          };
+        }
+        return { ok: false, reason: 'Unable to share round' };
+      }
+    },
   };
 }
 
@@ -371,8 +406,11 @@ export async function watchEvent(eventId: string, onChange: WatchEventCallback):
   return activeEventsApi.watchEvent(eventId, onChange);
 }
 
-export async function postSharedRound(eventId: string, payload: SharedRoundV1): Promise<void> {
-  await activeEventsApi.postSharedRound(eventId, payload);
+export async function postSharedRound(
+  eventId: string,
+  payload: SharedRoundV1,
+): Promise<PostSharedRoundResult> {
+  return activeEventsApi.postSharedRound(eventId, payload);
 }
 
 export const __mock = {

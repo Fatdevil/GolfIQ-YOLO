@@ -2,6 +2,7 @@ import type { RoundSummary } from '../../../../shared/round/summary';
 import type { RoundState } from '../../../../shared/round/types';
 import { cloudEnabled, ensureSupabaseSession, supa } from './supabase';
 import { listRounds as mockListRounds, pushRound as mockPushRound } from './mockSupabase';
+import { CloudSyncError, upsertOrThrow } from './supabaseSafe';
 
 export type CloudRoundRow = {
   id: string;
@@ -21,15 +22,22 @@ export type CloudRoundRow = {
   updatedAt: number;
 };
 
+export type PushRoundResult = {
+  ok: boolean;
+  reason?: string;
+  status?: number;
+  code?: string;
+};
+
 const realRoundsApi = (() => {
   if (!cloudEnabled || !supa) {
     return null;
   }
 
-  async function pushRound(round: RoundState, summary: RoundSummary): Promise<void> {
+  async function pushRound(round: RoundState, summary: RoundSummary): Promise<PushRoundResult> {
     const session = await ensureSupabaseSession();
     if (!session) {
-      throw new Error('Sign in to back up rounds');
+      return { ok: false, reason: 'Sign in to back up rounds' };
     }
     const holeNumbers = summary.holes.map((hole) => hole.hole);
     const start = holeNumbers.length ? Math.min(...holeNumbers) : 1;
@@ -61,9 +69,18 @@ const realRoundsApi = (() => {
       summary: summaryPayload,
     };
 
-    await supa
-      .from('rounds')
-      .upsert(body, { onConflict: 'id' });
+    try {
+      await upsertOrThrow('rounds', body, { onConflict: 'id', returning: 'minimal' });
+      return { ok: true };
+    } catch (error) {
+      if (error instanceof CloudSyncError) {
+        return { ok: false, reason: error.message, status: error.status, code: error.code };
+      }
+      if (error instanceof Error) {
+        return { ok: false, reason: error.message };
+      }
+      return { ok: false, reason: 'Unable to back up round' };
+    }
   }
 
   async function listRounds(): Promise<CloudRoundRow[]> {
@@ -105,7 +122,22 @@ const realRoundsApi = (() => {
 })();
 
 const activeRoundsApi = realRoundsApi ?? {
-  pushRound: mockPushRound,
+  pushRound: async (round: RoundState, summary: RoundSummary): Promise<PushRoundResult> => {
+    try {
+      await mockPushRound(round, summary);
+      return { ok: true };
+    } catch (error) {
+      if (error instanceof Error) {
+        return {
+          ok: false,
+          reason: error.message,
+          status: (error as Error & { status?: number }).status,
+          code: (error as Error & { code?: string }).code,
+        };
+      }
+      return { ok: false, reason: 'Unable to back up round' };
+    }
+  },
   listRounds: async (): Promise<CloudRoundRow[]> => {
     const rows = await mockListRounds();
     return rows.map((row) => ({
@@ -136,8 +168,8 @@ const activeRoundsApi = realRoundsApi ?? {
 
 export const roundsCloudAvailable = Boolean(realRoundsApi);
 
-export async function pushRound(round: RoundState, summary: RoundSummary): Promise<void> {
-  await activeRoundsApi.pushRound(round, summary);
+export async function pushRound(round: RoundState, summary: RoundSummary): Promise<PushRoundResult> {
+  return activeRoundsApi.pushRound(round, summary);
 }
 
 export async function listRounds(): Promise<CloudRoundRow[]> {

@@ -1,5 +1,7 @@
 import { EventEmitter } from 'events';
 
+import type { PostgrestError } from '@supabase/supabase-js';
+
 import type { SharedRoundV1 } from '../../../../shared/event/payload';
 import { scaleHandicapForRound, type EventFormat } from '../../../../shared/event/models';
 import type { RoundSummary } from '../../../../shared/round/summary';
@@ -53,6 +55,28 @@ const watchers = new EventEmitter();
 
 let currentUserId = 'mock-user-host';
 
+type MockDbError = { message: string; status?: number; code?: string };
+
+const pendingUpsertErrors = new Map<string, MockDbError[]>();
+
+function queueUpsertError(table: string, error: MockDbError): void {
+  const queue = pendingUpsertErrors.get(table) ?? [];
+  queue.push(error);
+  pendingUpsertErrors.set(table, queue);
+}
+
+function consumeUpsertError(table: string): MockDbError | undefined {
+  const queue = pendingUpsertErrors.get(table);
+  if (!queue || queue.length === 0) {
+    return undefined;
+  }
+  const next = queue.shift();
+  if (!queue.length) {
+    pendingUpsertErrors.delete(table);
+  }
+  return next;
+}
+
 const WATCH_EVENT = 'watch-event';
 
 function cloneRound(round: MockEventRound): SharedRoundV1 {
@@ -96,6 +120,7 @@ export function __resetMockSupabase(): void {
   rounds.clear();
   watchers.removeAllListeners();
   currentUserId = 'mock-user-host';
+  pendingUpsertErrors.clear();
 }
 
 export async function ensureUser(): Promise<string> {
@@ -154,6 +179,13 @@ export async function postSharedRound(eventId: string, payload: SharedRoundV1): 
   if (!event || !event.members.has(currentUserId)) {
     throw new Error('Not a member of this event');
   }
+  const pendingError = consumeUpsertError('event_rounds');
+  if (pendingError) {
+    const err = new Error(pendingError.message);
+    (err as Error & { status?: number; code?: string }).status = pendingError.status;
+    (err as Error & { status?: number; code?: string }).code = pendingError.code;
+    throw err;
+  }
   const map = eventRounds.get(eventId) ?? new Map<string, MockEventRound>();
   eventRounds.set(eventId, map);
 
@@ -199,6 +231,13 @@ export async function watchEvent(
 }
 
 export async function pushRound(round: RoundState, summary: RoundSummary): Promise<void> {
+  const pendingError = consumeUpsertError('rounds');
+  if (pendingError) {
+    const err = new Error(pendingError.message);
+    (err as Error & { status?: number; code?: string }).status = pendingError.status;
+    (err as Error & { status?: number; code?: string }).code = pendingError.code;
+    throw err;
+  }
   const holeNumbers = summary.holes.map((hole) => hole.hole);
   const start = holeNumbers.length ? Math.min(...holeNumbers) : 1;
   const end = holeNumbers.length ? Math.max(...holeNumbers) : start;
@@ -217,4 +256,68 @@ export async function pushRound(round: RoundState, summary: RoundSummary): Promi
 export async function listRounds(): Promise<MockRoundBackup[]> {
   return Array.from(rounds.values()).filter((entry) => entry.owner === currentUserId);
 }
+
+function asPostgrestError(error: MockDbError): PostgrestError {
+  return {
+    message: error.message,
+    details: null,
+    hint: null,
+    code: error.code ?? null,
+  } as PostgrestError;
+}
+
+type SelectResult<T> = { data: T[] | null; error: PostgrestError | null; status: number | null };
+
+function createSelectPromise<T>(result: SelectResult<T>): SelectBuilder<T> {
+  const promise = Promise.resolve(result) as SelectBuilder<T>;
+  (promise as SelectBuilder<T>).eq = () => promise;
+  return promise;
+}
+
+type SelectBuilder<T> = Promise<SelectResult<T>> & { eq: (column: string, value: unknown) => SelectBuilder<T> };
+
+function buildData<T>(row: Record<string, unknown>, returning: 'minimal' | 'representation'): T[] | null {
+  if (returning === 'minimal') {
+    return null;
+  }
+  return [row] as unknown as T[];
+}
+
+const mockSupabaseClient = {
+  from<T = any>(table: string) {
+    return {
+      async upsert(
+        row: Record<string, unknown>,
+        opts?: { onConflict?: string; returning?: 'minimal' | 'representation' },
+      ): Promise<SelectResult<T>> {
+        const pending = consumeUpsertError(table);
+        if (pending) {
+          return { data: null, error: asPostgrestError(pending), status: pending.status ?? null };
+        }
+        const returning = opts?.returning ?? 'representation';
+        return { data: buildData<T>(row, returning), error: null, status: 201 };
+      },
+      async insert(row: Record<string, unknown>): Promise<SelectResult<T>> {
+        const pending = consumeUpsertError(table);
+        if (pending) {
+          return { data: null, error: asPostgrestError(pending), status: pending.status ?? null };
+        }
+        return { data: buildData<T>(row, 'representation'), error: null, status: 201 };
+      },
+      select(): SelectBuilder<T> {
+        return createSelectPromise<T>({ data: [], error: null, status: 200 });
+      },
+    };
+  },
+};
+
+export const mockSupa = {
+  client: mockSupabaseClient,
+  setNextUpsertError(table: string, error: MockDbError): void {
+    queueUpsertError(table, error);
+  },
+  reset(): void {
+    pendingUpsertErrors.clear();
+  },
+};
 

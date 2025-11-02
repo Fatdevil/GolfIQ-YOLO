@@ -1,7 +1,21 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 
+import '../setupSupabaseMock';
+
 import type { SharedRoundV1 } from '../../shared/event/payload';
-import { __mock, createEvent, joinEvent, postSharedRound, watchEvent } from '../../golfiq/app/src/cloud/eventsSync';
+import {
+  __mock,
+  createEvent,
+  joinEvent,
+  postSharedRound,
+  watchEvent,
+} from '../../golfiq/app/src/cloud/eventsSync';
+import { mockSupa } from '../../golfiq/app/src/cloud/mockSupabase';
+import {
+  CloudSyncError,
+  __setSupabaseClientForTests,
+  upsertOrThrow,
+} from '../../golfiq/app/src/cloud/supabaseSafe';
 
 function sampleRound(playerId: string, roundId: string, options: { gross: number; hcp?: number; holes?: { start: number; end: number }; net?: number }): SharedRoundV1 {
   return {
@@ -29,7 +43,7 @@ describe('events cloud sync (mock backend)', () => {
 
   it('auto-enrolls host as member when creating event', async () => {
     const { id } = await createEvent('Club Night', { start: 1, end: 18 }, 'gross');
-    await expect(postSharedRound(id, sampleRound('host', 'round-1', { gross: 72 }))).resolves.toBeUndefined();
+    await expect(postSharedRound(id, sampleRound('host', 'round-1', { gross: 72 }))).resolves.toEqual({ ok: true });
   });
 
   it('joinEvent adds a member using join code', async () => {
@@ -37,7 +51,7 @@ describe('events cloud sync (mock backend)', () => {
     __mock.setUser('guest');
     const joined = await joinEvent(joinCode);
     expect(joined?.id).toBe(id);
-    await expect(postSharedRound(id, sampleRound('guest', 'round-2', { gross: 70 }))).resolves.toBeUndefined();
+    await expect(postSharedRound(id, sampleRound('guest', 'round-2', { gross: 70 }))).resolves.toEqual({ ok: true });
   });
 
   it('scales handicap for partial rounds when posting shared rounds', async () => {
@@ -80,3 +94,41 @@ describe('events cloud sync (mock backend)', () => {
     }
   });
 });
+  it('throws CloudSyncError with code/status on RLS error', async () => {
+    mockSupa.reset();
+    __setSupabaseClientForTests(mockSupa.client);
+    try {
+      mockSupa.setNextUpsertError('event_rounds', {
+        message: 'RLS denied',
+        status: 401,
+        code: '42501',
+      });
+      await expect(upsertOrThrow('event_rounds', { foo: 'bar' })).rejects.toBeInstanceOf(CloudSyncError);
+      mockSupa.setNextUpsertError('event_rounds', {
+        message: 'RLS denied',
+        status: 401,
+        code: '42501',
+      });
+      await expect(upsertOrThrow('event_rounds', { foo: 'bar' })).rejects.toMatchObject({
+        message: 'RLS denied',
+        status: 401,
+        code: '42501',
+      });
+    } finally {
+      __setSupabaseClientForTests(null);
+    }
+  });
+
+  it('postSharedRound returns {ok:false} when backend rejects', async () => {
+    const { id } = await createEvent('League Fail', { start: 1, end: 18 }, 'gross');
+    mockSupa.setNextUpsertError('event_rounds', {
+      message: 'Bad row',
+      status: 400,
+      code: '22P02',
+    });
+    const result = await postSharedRound(id, sampleRound('host', 'round-err', { gross: 80 }));
+    expect(result.ok).toBe(false);
+    expect(result.reason).toMatch(/Bad row/);
+    expect(result.status).toBe(400);
+    expect(result.code).toBe('22P02');
+  });
