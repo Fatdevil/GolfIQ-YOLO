@@ -71,7 +71,8 @@ class WatchConnectorModule(reactContext: ReactApplicationContext) :
         val payload = jsonPayload.toByteArray(Charsets.UTF_8)
         val request = PutDataMapRequest.create(OVERLAY_PATH).apply {
             dataMap.putByteArray("payload", payload)
-        }.asPutDataRequest()
+            dataMap.putLong("ts", System.currentTimeMillis())
+        }.asPutDataRequest().setUrgent()
         Wearable.getDataClient(context)
             .putDataItem(request)
             .addOnSuccessListener { promise.resolve(true) }

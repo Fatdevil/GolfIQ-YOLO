@@ -4,11 +4,14 @@ import android.util.Log
 import androidx.annotation.VisibleForTesting
 import com.google.android.gms.wearable.DataEvent
 import com.google.android.gms.wearable.DataEventBuffer
+import com.google.android.gms.wearable.DataItem
+import com.google.android.gms.wearable.DataMap
 import com.google.android.gms.wearable.DataMapItem
 import com.google.android.gms.wearable.WearableListenerService
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlin.text.Charsets
 
 private const val OVERLAY_PATH_PREFIX = "/golfiq/overlay/v1"
 private const val TAG = "WearOverlay"
@@ -36,6 +39,13 @@ object OverlayRepository {
 }
 
 class WearConnector : WearableListenerService() {
+    private fun extractOverlayPayload(item: DataItem): ByteArray? {
+        return runCatching {
+            val dataMap = DataMapItem.fromDataItem(item).dataMap
+            extractOverlayPayload(dataMap)
+        }.getOrNull()
+    }
+
     override fun onDataChanged(dataEvents: DataEventBuffer) {
         dataEvents.use { buffer ->
             for (event in buffer) {
@@ -43,10 +53,8 @@ class WearConnector : WearableListenerService() {
                 val item = event.dataItem
                 val path = item.uri.path.orEmpty()
                 if (!path.startsWith(OVERLAY_PATH_PREFIX)) continue
-                val payload = item.data?.takeIf { it.isNotEmpty() }
-                    ?: runCatching {
-                        DataMapItem.fromDataItem(item).dataMap.getByteArray("payload")
-                    }.getOrNull()
+
+                val payload = extractOverlayPayload(item)
 
                 if (payload != null) {
                     OverlayRepository.updateFromBytes(payload)
@@ -56,4 +64,10 @@ class WearConnector : WearableListenerService() {
             }
         }
     }
+}
+
+@VisibleForTesting
+internal fun extractOverlayPayload(dataMap: DataMap): ByteArray? {
+    return dataMap.getByteArray("payload")
+        ?: dataMap.getString("payload")?.toByteArray(Charsets.UTF_8)
 }
