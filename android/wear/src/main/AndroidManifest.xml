@@ -43,6 +43,19 @@
         </service>
 
         <service
+            android:name="com.golfiq.wear.overlay.WearConnector"
+            android:exported="true"
+            android:permission="com.google.android.gms.wearable.permission.BIND_LISTENER">
+            <intent-filter>
+                <action android:name="com.google.android.gms.wearable.DATA_CHANGED" />
+                <data
+                    android:scheme="wear"
+                    android:host="*"
+                    android:pathPrefix="/golfiq/overlay/v1" />
+            </intent-filter>
+        </service>
+
+        <service
             android:name="com.golfiq.wear.tile.HudTileService"
             android:label="@string/hud_tile_label"
             android:exported="true"

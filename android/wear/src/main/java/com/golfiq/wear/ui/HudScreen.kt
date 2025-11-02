@@ -1,6 +1,7 @@
 package com.golfiq.wear.ui
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -21,6 +22,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.wear.compose.material.Text
 import com.golfiq.wear.HudState
 import com.golfiq.wear.HudStrategy
+import com.golfiq.wear.overlay.WearOverlay
 import java.util.Locale
 import kotlin.math.absoluteValue
 import kotlin.math.roundToInt
@@ -28,7 +30,11 @@ import kotlin.math.roundToInt
 @Composable
 fun HudRoute(viewModel: HudViewModel = viewModel()) {
     val hudState by viewModel.hudState.collectAsStateWithLifecycle(initialValue = HudState.EMPTY)
-    HudScreen(state = hudState)
+    val overlay by viewModel.overlayState.collectAsStateWithLifecycle(initialValue = null)
+    Box(modifier = Modifier.fillMaxSize()) {
+        WearOverlay(snapshot = overlay)
+        HudScreen(state = hudState, modifier = Modifier.fillMaxSize())
+    }
 }
 
 @Composable

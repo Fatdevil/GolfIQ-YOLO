@@ -1,19 +1,23 @@
 import { encodeHUDBase64, type WatchHUDStateV1 } from './codec';
+import { hashOverlaySnapshot, type OverlaySnapshotV1 } from '../overlay/transport';
 import type { WatchDiag } from './types';
 
 type NativeWatchConnectorModule = {
   isCapable(): Promise<boolean>;
   sendHUD(payloadBase64: string): Promise<boolean>;
+  sendOverlayJSON?(jsonPayload: string): Promise<boolean>;
 };
 
 type AndroidNativeModule = {
   isCapable: () => Promise<boolean>;
   sendHUD: (payloadBase64: string) => Promise<boolean>;
+  sendOverlayJSON?: (jsonPayload: string) => Promise<boolean>;
 };
 
 type IOSNativeModule = {
   isCapable: () => Promise<boolean>;
   sendHUDB64: (payloadBase64: string) => Promise<boolean>;
+  sendOverlayJSON?: (jsonPayload: string) => Promise<boolean>;
 };
 
 type LastStatus = WatchDiag['lastSend'];
@@ -79,6 +83,9 @@ function getNativeModule(): NativeWatchConnectorModule | null {
     return {
       isCapable: () => mod.isCapable(),
       sendHUD: (payloadBase64: string) => mod.sendHUDB64(payloadBase64),
+      sendOverlayJSON: mod.sendOverlayJSON
+        ? (jsonPayload: string) => mod.sendOverlayJSON!(jsonPayload)
+        : undefined,
     };
   }
 
@@ -100,6 +107,38 @@ function detectCapabilities(): WatchDiag['capability'] {
     iosModule && typeof iosModule.isCapable === 'function' && typeof iosModule.sendHUDB64 === 'function',
   );
   return { android, ios };
+}
+
+type OverlayModule = {
+  sendOverlayJSON: (jsonPayload: string) => Promise<boolean>;
+};
+
+function getOverlayModule(): OverlayModule | null {
+  const RN = tryRequireReactNative();
+  const platform: string | undefined = RN?.Platform?.OS;
+  const nativeModules = RN?.NativeModules;
+
+  if (!platform || !nativeModules) {
+    return null;
+  }
+
+  if (platform === 'android') {
+    const mod: AndroidNativeModule | undefined = nativeModules.WatchConnector;
+    if (mod?.sendOverlayJSON && typeof mod.sendOverlayJSON === 'function') {
+      return { sendOverlayJSON: mod.sendOverlayJSON };
+    }
+    return null;
+  }
+
+  if (platform === 'ios') {
+    const mod: IOSNativeModule | undefined = nativeModules.WatchConnectorIOS;
+    if (mod?.sendOverlayJSON && typeof mod.sendOverlayJSON === 'function') {
+      return { sendOverlayJSON: (json: string) => mod.sendOverlayJSON!(json) };
+    }
+    return null;
+  }
+
+  return null;
 }
 
 async function sendHUDInternal(state: WatchHUDStateV1): Promise<boolean> {
@@ -173,6 +212,89 @@ function scheduleTrailing(
 
 export function hasPending(): boolean {
   return Boolean(pendingTimer || pendingPromise);
+}
+
+async function sendOverlaySnapshotInternal(snapshot: OverlaySnapshotV1): Promise<boolean> {
+  const module = getOverlayModule();
+  if (!module) {
+    return false;
+  }
+  try {
+    const payload = JSON.stringify(snapshot);
+    const result = await module.sendOverlayJSON(payload);
+    return result === true;
+  } catch (error) {
+    console.warn('[WatchBridge] sendOverlayJSON failed', error);
+    return false;
+  }
+}
+
+const OVERLAY_MIN_INTERVAL_MS = 2000;
+
+type OverlayPending = {
+  snapshot: OverlaySnapshotV1;
+  hash: string;
+};
+
+const overlayState: {
+  lastSentAt: number;
+  lastHash: string | null;
+  pending: OverlayPending | null;
+  timer: ReturnType<typeof setTimeout> | null;
+} = {
+  lastSentAt: 0,
+  lastHash: null,
+  pending: null,
+  timer: null,
+};
+
+function flushOverlay(): void {
+  const payload = overlayState.pending;
+  overlayState.pending = null;
+  overlayState.timer = null;
+  if (!payload) {
+    return;
+  }
+  void sendOverlaySnapshotInternal(payload.snapshot).then((ok) => {
+    if (ok) {
+      overlayState.lastHash = payload.hash;
+      overlayState.lastSentAt = Date.now();
+    }
+  });
+}
+
+function scheduleOverlay(snapshot: OverlaySnapshotV1, hash: string, minIntervalMs: number): void {
+  if (overlayState.lastHash === hash || overlayState.pending?.hash === hash) {
+    return;
+  }
+  overlayState.pending = { snapshot, hash };
+  const now = Date.now();
+  const elapsed = now - overlayState.lastSentAt;
+  const delay = Math.max(0, minIntervalMs - elapsed);
+  if (delay === 0 && !overlayState.timer) {
+    flushOverlay();
+    return;
+  }
+  if (!overlayState.timer) {
+    overlayState.timer = setTimeout(flushOverlay, delay);
+  }
+}
+
+export function resetOverlayThrottle(): void {
+  if (overlayState.timer) {
+    clearTimeout(overlayState.timer);
+    overlayState.timer = null;
+  }
+  overlayState.pending = null;
+}
+
+function queueOverlaySnapshotInternal(
+  snapshot: OverlaySnapshotV1,
+  options?: { minIntervalMs?: number },
+): void {
+  const minInterval = Math.max(options?.minIntervalMs ?? OVERLAY_MIN_INTERVAL_MS, 0);
+  const hash = hashOverlaySnapshot(snapshot);
+  scheduleOverlay(snapshot, hash, minInterval);
 }
 
 function sendHUDDebounced(
@@ -284,4 +406,22 @@ export const WatchBridge = {
   },
   cancelPending,
   hasPending,
+  async sendOverlaySnapshot(snapshot: OverlaySnapshotV1): Promise<boolean> {
+    const hash = hashOverlaySnapshot(snapshot);
+    if (overlayState.lastHash === hash && !overlayState.pending) {
+      return true;
+    }
+    const ok = await sendOverlaySnapshotInternal(snapshot);
+    if (ok) {
+      overlayState.lastHash = hash;
+      overlayState.lastSentAt = Date.now();
+    }
+    return ok;
+  },
+  queueOverlaySnapshot(snapshot: OverlaySnapshotV1, options?: { minIntervalMs?: number }): void {
+    queueOverlaySnapshotInternal(snapshot, options);
+  },
+  resetOverlayThrottle,
 };
+
+export { queueOverlaySnapshotInternal as queueOverlaySnapshot };

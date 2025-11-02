@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useEffect, useMemo } from 'react';
 import { StyleSheet } from 'react-native';
 import Svg, { G, Path, Text as SvgText } from 'react-native-svg';
 
@@ -8,6 +8,8 @@ import {
   computeVectorOverlayGeometry,
   type VectorHoleModel,
 } from '../../../../../shared/overlay/vector';
+import { normalizeOverlay } from '../../../../../shared/overlay/transport';
+import { WatchBridge } from '../../../../../shared/watch/bridge';
 
 type VectorHoleProps = {
   holeModel: VectorHoleModel | null;
@@ -65,6 +67,28 @@ export default function VectorHole({
       }),
     [bag, club, holeModel, size, targetXY, teeXY],
   );
+
+  useEffect(() => {
+    if (!geometry) {
+      const emptySnapshot = normalizeOverlay([], [], size, false);
+      WatchBridge.queueOverlaySnapshot(emptySnapshot, { minIntervalMs: 2000 });
+      return;
+    }
+
+    const { overlay } = geometry;
+    const normalized = normalizeOverlay(
+      showRing ? overlay.ring : [],
+      showCorridor ? overlay.corridor : [],
+      size,
+      labelsAllowed && showRing,
+      labelsAllowed ? overlay.meta : undefined,
+    );
+    WatchBridge.queueOverlaySnapshot(normalized, { minIntervalMs: 2000 });
+  }, [geometry, labelsAllowed, showCorridor, showRing, size]);
+
+  useEffect(() => () => {
+    WatchBridge.resetOverlayThrottle();
+  }, []);
 
   if (!geometry) {
     return null;

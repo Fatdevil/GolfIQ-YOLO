@@ -78,4 +78,5 @@ dependencies {
     testImplementation("com.google.truth:truth:1.1.5")
     testImplementation(kotlin("test"))
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.8.1")
+    testImplementation("org.json:json:20231013")
 }
