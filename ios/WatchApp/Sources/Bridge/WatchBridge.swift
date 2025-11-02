@@ -3,6 +3,8 @@ import SwiftUI
 import WatchConnectivity
 
 final class WatchBridge: NSObject, ObservableObject {
+  static let shared = WatchBridge()
+
   @Published private(set) var currentHole: HoleModel?
   @Published private(set) var playerLocation: HolePoint?
   @Published private(set) var targetLocation: HolePoint?
@@ -12,13 +14,16 @@ final class WatchBridge: NSObject, ObservableObject {
   private let holeStore = HoleModelStore()
   private let session = WCSession.isSupported() ? WCSession.default : nil
   private let redrawSubject = PassthroughSubject<Date, Never>()
+  private let overlaySubject = CurrentValueSubject<OverlaySnapshotV1DTO?, Never>(nil)
+  private let overlayDecoder = JSONDecoder()
 
   private var lastUpdate = Date.distantPast
   private var isMoving = false
 
   var redrawPublisher: AnyPublisher<Date, Never> { redrawSubject.eraseToAnyPublisher() }
+  var overlayPublisher: AnyPublisher<OverlaySnapshotV1DTO?, Never> { overlaySubject.eraseToAnyPublisher() }
 
-  override init() {
+  override private init() {
     super.init()
     holeStore.$model.assign(to: &$currentHole)
     session?.delegate = self
@@ -58,6 +63,28 @@ final class WatchBridge: NSObject, ObservableObject {
     redrawSubject.send(Date())
   }
 
+  private func applyOverlay(data: Data?) {
+    guard let data else {
+      overlaySubject.send(nil)
+      return
+    }
+    do {
+      let snapshot = try overlayDecoder.decode(OverlaySnapshotV1DTO.self, from: data)
+      overlaySubject.send(snapshot)
+    } catch {
+      NSLog("[WatchBridge] Failed to decode overlay snapshot: %@", error.localizedDescription)
+    }
+  }
+
+  private func handleApplicationContext(_ context: [String: Any]) {
+    let payload = context["golfiq_overlay_v1"]
+    if let data = payload as? Data {
+      applyOverlay(data: data)
+    } else if let json = payload as? String {
+      applyOverlay(data: json.data(using: .utf8))
+    }
+  }
+
   private func shouldUpdate(isMovement: Bool) -> Bool {
     let now = Date()
     let interval: TimeInterval = isMovement ? 1 : 3
@@ -78,7 +105,11 @@ extension WatchBridge: WCSessionDelegate {
     _ session: WCSession,
     activationDidCompleteWith activationState: WCSessionActivationState,
     error: Error?
-  ) {}
+  ) {
+    if activationState == .activated {
+      handleApplicationContext(session.receivedApplicationContext)
+    }
+  }
 
   func session(_ session: WCSession, didReceiveMessage message: [String: Any]) {
     guard let type = message["type"] as? String else { return }
@@ -95,6 +126,13 @@ extension WatchBridge: WCSessionDelegate {
     default:
       break
     }
+  }
+
+  func session(
+    _ session: WCSession,
+    didReceiveApplicationContext applicationContext: [String: Any]
+  ) {
+    handleApplicationContext(applicationContext)
   }
 
   func sessionReachabilityDidChange(_ session: WCSession) {}

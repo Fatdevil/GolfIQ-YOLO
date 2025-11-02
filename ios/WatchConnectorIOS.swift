@@ -87,6 +87,34 @@ class WatchConnectorIOS: NSObject, RCTBridgeModule, WCSessionDelegate {
     }
   }
 
+  @objc
+  func sendOverlayJSON(
+    _ json: NSString,
+    resolver resolve: @escaping RCTPromiseResolveBlock,
+    rejecter reject: @escaping RCTPromiseRejectBlock
+  ) {
+    guard let data = (json as String).data(using: .utf8) else {
+      resolve(false)
+      return
+    }
+
+    whenActivated { [weak self] in
+      guard let s = self?.session else {
+        resolve(false)
+        return
+      }
+
+      do {
+        var context = s.applicationContext
+        context["golfiq_overlay_v1"] = data
+        try s.updateApplicationContext(context)
+        resolve(true)
+      } catch {
+        resolve(false)
+      }
+    }
+  }
+
   func session(
     _ session: WCSession,
     activationDidCompleteWith activationState: WCSessionActivationState,

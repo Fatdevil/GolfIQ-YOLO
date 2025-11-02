@@ -9,8 +9,10 @@ import com.facebook.react.module.annotations.ReactModule
 import com.google.android.gms.common.ConnectionResult
 import com.google.android.gms.common.GoogleApiAvailability
 import com.google.android.gms.wearable.CapabilityClient
+import com.google.android.gms.wearable.PutDataMapRequest
 import com.google.android.gms.wearable.PutDataRequest
 import com.google.android.gms.wearable.Wearable
+import kotlin.text.Charsets
 
 @ReactModule(name = WatchConnectorModule.NAME)
 class WatchConnectorModule(reactContext: ReactApplicationContext) :
@@ -58,9 +60,29 @@ class WatchConnectorModule(reactContext: ReactApplicationContext) :
             .addOnFailureListener { error -> promise.reject("send_failure", error) }
     }
 
+    @ReactMethod
+    fun sendOverlayJSON(jsonPayload: String, promise: Promise) {
+        val context = reactApplicationContext
+        val availability = GoogleApiAvailability.getInstance().isGooglePlayServicesAvailable(context)
+        if (availability != ConnectionResult.SUCCESS) {
+            promise.resolve(false)
+            return
+        }
+        val payload = jsonPayload.toByteArray(Charsets.UTF_8)
+        val request = PutDataMapRequest.create(OVERLAY_PATH).apply {
+            dataMap.putByteArray("payload", payload)
+            dataMap.putLong("ts", System.currentTimeMillis())
+        }.asPutDataRequest().setUrgent()
+        Wearable.getDataClient(context)
+            .putDataItem(request)
+            .addOnSuccessListener { promise.resolve(true) }
+            .addOnFailureListener { error -> promise.reject("overlay_send_failure", error) }
+    }
+
     companion object {
         const val NAME: String = "WatchConnector"
         private const val CAPABILITY = "golfiq_watch_hud"
         private const val DATA_PATH = "/golfiq/hud/v1"
+        private const val OVERLAY_PATH = "/golfiq/overlay/v1"
     }
 }
