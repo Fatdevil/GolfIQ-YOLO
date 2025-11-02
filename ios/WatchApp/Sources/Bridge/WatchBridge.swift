@@ -123,6 +123,13 @@ extension WatchBridge: WCSessionDelegate {
     case "targetPos":
       guard let lat = message["lat"] as? Double, let lon = message["lon"] as? Double else { return }
       updateTarget(lat: lat, lon: lon)
+    case "shotsense_control":
+      let enabled = (message["enabled"] as? Bool) ?? false
+      if enabled {
+        WatchSenseController.shared.startIfNeeded()
+      } else {
+        WatchSenseController.shared.stop()
+      }
     default:
       break
     }
