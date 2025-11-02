@@ -9,7 +9,7 @@ function isFiniteNumber(value: unknown): value is number {
   return typeof value === 'number' && Number.isFinite(value);
 }
 
-function isClubStats(value: unknown): value is ClubStats {
+function isStoredClubStats(value: unknown): value is ClubStats {
   if (!value || typeof value !== 'object') {
     return false;
   }
@@ -36,9 +36,9 @@ function hydrateBagStats(input: unknown): BagStats | null {
   if (!clubsInput || typeof clubsInput !== 'object') {
     return null;
   }
-  const clubs: Record<ClubId, ClubStats> = {} as Record<ClubId, ClubStats>;
+  const clubs: Partial<Record<ClubId, ClubStats>> = {};
   for (const [key, value] of Object.entries(clubsInput as Record<string, unknown>)) {
-    if (!isClubStats(value)) {
+    if (!isStoredClubStats(value)) {
       continue;
     }
     const stats = value as ClubStats;

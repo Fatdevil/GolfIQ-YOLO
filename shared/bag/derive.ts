@@ -237,7 +237,14 @@ export interface BuildBagStatsOptions {
   updatedAt?: number;
 }
 
-export function deriveBag(rounds: RoundState[], opts: BuildBagStatsOptions = {}): BagDerivation {
+function resolveUpdatedAt(opts?: BuildBagStatsOptions): number {
+  if (opts && Number.isFinite(Number(opts.updatedAt))) {
+    return Number(opts.updatedAt);
+  }
+  return 0;
+}
+
+function deriveBag(rounds: RoundState[], opts: BuildBagStatsOptions = {}): BagDerivation {
   const samplesByClub = gatherSamples(rounds);
   const clubSamples: Record<ClubId, ClubSamples> = {} as Record<ClubId, ClubSamples>;
   const clubStats: Record<ClubId, ClubStats> = {} as Record<ClubId, ClubStats>;
@@ -249,7 +256,7 @@ export function deriveBag(rounds: RoundState[], opts: BuildBagStatsOptions = {})
     clubSamples[club] = sample;
     clubStats[club] = buildClubStats(sample);
   }
-  const updatedAt = isFiniteNumber(opts.updatedAt) ? Number(opts.updatedAt) : Date.now();
+  const updatedAt = resolveUpdatedAt(opts);
   return {
     stats: { updatedAt, clubs: clubStats },
     samples: clubSamples,

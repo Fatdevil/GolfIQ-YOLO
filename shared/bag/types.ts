@@ -29,8 +29,11 @@ export interface ClubStats {
 
 export interface BagStats {
   updatedAt: number;
-  clubs: Record<ClubId, ClubStats>;
+  clubs: Partial<Record<ClubId, ClubStats>>;
 }
+
+export const isClubStats = (c: any): c is ClubStats =>
+  c && typeof c === 'object' && Number.isFinite(c.p50_m ?? NaN) && c.club !== 'Putter';
 
 export interface ClubUsageBreakdown {
   tee: number;
