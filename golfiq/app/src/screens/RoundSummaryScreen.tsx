@@ -1,8 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import {
   ActivityIndicator,
-  Linking,
-  Platform,
+  Modal,
   ScrollView,
   StyleSheet,
   Text,
@@ -10,60 +9,20 @@ import {
   View,
 } from 'react-native';
 import * as Clipboard from 'expo-clipboard';
+import QRCode from 'react-native-qrcode-svg';
 
 import type { RoundSummary } from '../../../../shared/round/summary';
+import type { RoundState } from '../../../../shared/round/types';
+import { encodeSharedRoundV1, type SharedRoundV1 } from '../../../../shared/event/payload';
+import { tryShareSvg } from '../lib/share';
 import { render as renderShareCard, type ShareCardMeta } from '../components/summary/ShareCard';
 
 type RoundSummaryScreenProps = {
   summary: RoundSummary;
   meta: ShareCardMeta;
+  round: RoundState;
   onDone: () => void;
 };
-
-type ExpoSharingModule = typeof import('expo-sharing');
-type ExpoFileSystemModule = typeof import('expo-file-system');
-
-async function tryShareSvg(dataUri: string, svgRaw: string): Promise<{ ok: boolean; msg: string }> {
-  if (Platform.OS === 'web') {
-    try {
-      await Linking.openURL(dataUri);
-      return { ok: true, msg: 'Opened share card in new tab' };
-    } catch {
-      // fallthrough to clipboard
-    }
-    await Clipboard.setStringAsync(svgRaw);
-    return { ok: true, msg: 'Copied SVG to clipboard' };
-  }
-
-  let Sharing: ExpoSharingModule | null = null;
-  let FileSystem: ExpoFileSystemModule | null = null;
-  try {
-    Sharing = await import('expo-sharing');
-  } catch {
-    Sharing = null;
-  }
-  try {
-    FileSystem = await import('expo-file-system');
-  } catch {
-    FileSystem = null;
-  }
-
-  const available = !!Sharing?.isAvailableAsync && (await Sharing.isAvailableAsync());
-
-  if (available && FileSystem?.writeAsStringAsync) {
-    const path = `${FileSystem.cacheDirectory ?? ''}golfiq-summary.svg`;
-    const encoding = FileSystem?.EncodingType?.UTF8 ?? 'utf8';
-    await FileSystem.writeAsStringAsync(path, svgRaw, { encoding });
-    await Sharing.shareAsync(path, {
-      mimeType: 'image/svg+xml',
-      dialogTitle: 'Share Round Summary',
-    });
-    return { ok: true, msg: 'Shared summary card' };
-  }
-
-  await Clipboard.setStringAsync(svgRaw);
-  return { ok: true, msg: 'Sharing not available — copied SVG to clipboard' };
-}
 
 function formatSigned(value: number): string {
   if (!Number.isFinite(value)) {
@@ -86,9 +45,36 @@ function formatNumber(value: number | null | undefined, decimals = 1): string {
   return Number(value).toFixed(decimals);
 }
 
-export default function RoundSummaryScreen({ summary, meta, onDone }: RoundSummaryScreenProps): JSX.Element {
+function buildSharedRound(round: RoundState, summary: RoundSummary): SharedRoundV1 {
+  const holeNumbers = summary.holes.map((hole) => hole.hole);
+  const start = holeNumbers.length ? Math.min(...holeNumbers) : 1;
+  const end = holeNumbers.length ? Math.max(...holeNumbers) : start;
+  return {
+    v: 1,
+    roundId: round.id,
+    player: {
+      id: round.id,
+      name: undefined,
+    },
+    courseId: round.courseId,
+    holes: { start, end },
+    gross: summary.strokes,
+    sg: summary.phases.total,
+    holesBreakdown: summary.holes.map((hole) => ({
+      h: hole.hole,
+      strokes: hole.strokes,
+      net: Number.isFinite(hole.par) ? hole.strokes - Number(hole.par) : undefined,
+      sg: Number.isFinite(hole.sg ?? NaN) ? Number(hole.sg) : undefined,
+    })),
+  };
+}
+
+export default function RoundSummaryScreen({ summary, meta, round, onDone }: RoundSummaryScreenProps): JSX.Element {
   const [shareBusy, setShareBusy] = useState(false);
   const [shareMessage, setShareMessage] = useState<string | null>(null);
+  const [qrVisible, setQrVisible] = useState(false);
+  const [qrValue, setQrValue] = useState<string | null>(null);
+  const [qrMessage, setQrMessage] = useState<string | null>(null);
 
   const phaseBars = useMemo(() => {
     const rows = [
@@ -113,7 +99,7 @@ export default function RoundSummaryScreen({ summary, meta, onDone }: RoundSumma
     try {
       const svg = shareCard;
       const dataUri = `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
-      const { msg } = await tryShareSvg(dataUri, svg);
+      const { msg } = await tryShareSvg(dataUri, svg, { dialogTitle: 'Share Round Summary' });
       setShareMessage(msg);
     } catch {
       setShareMessage('Unable to share right now. Try again.');
@@ -122,8 +108,34 @@ export default function RoundSummaryScreen({ summary, meta, onDone }: RoundSumma
     }
   };
 
+  const handleOpenQr = () => {
+    try {
+      const shared = buildSharedRound(round, summary);
+      const encoded = encodeSharedRoundV1(shared);
+      setQrValue(encoded);
+      setQrMessage(null);
+      setQrVisible(true);
+    } catch {
+      setQrMessage('Unable to build QR payload.');
+      setQrVisible(true);
+    }
+  };
+
+  const handleCopyQr = async () => {
+    if (!qrValue) {
+      return;
+    }
+    try {
+      await Clipboard.setStringAsync(qrValue);
+      setQrMessage('Copied payload to clipboard');
+    } catch {
+      setQrMessage('Copy failed. Try again.');
+    }
+  };
+
   return (
-    <ScrollView contentContainerStyle={styles.container}>
+    <>
+      <ScrollView contentContainerStyle={styles.container}>
       <View style={styles.hero}>
         <View>
           <Text style={styles.heroLabel}>Total SG</Text>
@@ -212,16 +224,35 @@ export default function RoundSummaryScreen({ summary, meta, onDone }: RoundSumma
           </View>
         ))}
       </View>
-      <View style={styles.actions}>
-        <TouchableOpacity style={styles.shareButton} onPress={handleShare} disabled={shareBusy}>
-          {shareBusy ? <ActivityIndicator color="#0b1221" /> : <Text style={styles.shareLabel}>Share SVG Card</Text>}
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.doneButton} onPress={onDone}>
-          <Text style={styles.doneLabel}>Done</Text>
-        </TouchableOpacity>
+        <View style={styles.actions}>
+          <TouchableOpacity style={styles.shareButton} onPress={handleShare} disabled={shareBusy}>
+            {shareBusy ? <ActivityIndicator color="#0b1221" /> : <Text style={styles.shareLabel}>Share SVG Card</Text>}
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.qrButton} onPress={handleOpenQr}>
+            <Text style={styles.qrLabel}>Share → QR</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.doneButton} onPress={onDone}>
+            <Text style={styles.doneLabel}>Done</Text>
+          </TouchableOpacity>
+        </View>
         {shareMessage ? <Text style={styles.shareMessage}>{shareMessage}</Text> : null}
-      </View>
-    </ScrollView>
+      </ScrollView>
+      <Modal visible={qrVisible} transparent animationType="fade" onRequestClose={() => setQrVisible(false)}>
+        <View style={styles.qrBackdrop}>
+          <View style={styles.qrCard}>
+            <Text style={styles.qrTitle}>Round QR Payload</Text>
+            {qrValue ? <QRCode value={qrValue} size={280} /> : <ActivityIndicator color="#0b1221" />}
+            <TouchableOpacity style={styles.qrCopyButton} onPress={handleCopyQr} disabled={!qrValue}>
+              <Text style={styles.qrCopyLabel}>Copy JSON</Text>
+            </TouchableOpacity>
+            {qrMessage ? <Text style={styles.qrMessage}>{qrMessage}</Text> : null}
+            <TouchableOpacity style={styles.qrCloseButton} onPress={() => setQrVisible(false)}>
+              <Text style={styles.qrCloseLabel}>Close</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+    </>
   );
 }
 
@@ -346,9 +377,12 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
   },
   actions: {
+    marginTop: 8,
+    flexDirection: 'row',
     gap: 12,
   },
   shareButton: {
+    flex: 1,
     backgroundColor: '#4da3ff',
     paddingVertical: 16,
     borderRadius: 16,
@@ -359,7 +393,22 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     fontSize: 16,
   },
+  qrButton: {
+    flex: 1,
+    backgroundColor: '#0b1221',
+    paddingVertical: 16,
+    borderRadius: 16,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#4da3ff',
+  },
+  qrLabel: {
+    color: '#ffffff',
+    fontWeight: '700',
+    fontSize: 16,
+  },
   doneButton: {
+    flexBasis: 96,
     backgroundColor: '#1f2a43',
     paddingVertical: 14,
     borderRadius: 16,
@@ -373,5 +422,53 @@ const styles = StyleSheet.create({
   shareMessage: {
     color: '#8ea0c9',
     textAlign: 'center',
+    marginTop: 12,
+  },
+  qrBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(10, 15, 29, 0.75)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 24,
+  },
+  qrCard: {
+    width: '100%',
+    maxWidth: 360,
+    borderRadius: 18,
+    backgroundColor: '#ffffff',
+    padding: 24,
+    alignItems: 'center',
+    gap: 16,
+  },
+  qrTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#0b1221',
+  },
+  qrCopyButton: {
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+    borderRadius: 12,
+    backgroundColor: '#4da3ff',
+  },
+  qrCopyLabel: {
+    color: '#0b1221',
+    fontWeight: '600',
+    fontSize: 15,
+  },
+  qrMessage: {
+    fontSize: 14,
+    color: '#0b1221',
+  },
+  qrCloseButton: {
+    paddingVertical: 10,
+    paddingHorizontal: 24,
+    borderRadius: 12,
+    backgroundColor: '#0b1221',
+  },
+  qrCloseLabel: {
+    color: '#ffffff',
+    fontWeight: '600',
+    fontSize: 15,
   },
 });

@@ -9,12 +9,13 @@ import { QaSummaryProvider } from './src/context/QaSummaryContext';
 import QAArHudScreen from './src/screens/QAArHudScreen';
 import QABenchScreen from './src/screens/QABenchScreen';
 import FollowScreen from './src/screens/FollowScreen';
+import EventDashboardScreen from './src/screens/EventDashboardScreen';
 import { qaHudEnabled } from '../../shared/arhud/native/qa_gate';
 import { cleanupDispersionV1 } from '../../shared/caddie/migrations';
 import { QALauncher } from './qa/QALauncher';
 import { isQAMode } from './qa/QAGate';
 
-type TabKey = 'cal' | 'rec' | 'cam' | 'follow' | 'about' | 'qaHud' | 'qaBench';
+type TabKey = 'cal' | 'rec' | 'cam' | 'follow' | 'event' | 'about' | 'qaHud' | 'qaBench';
 
 export default function App(){
   const qaEnabled = qaHudEnabled();
@@ -49,6 +50,8 @@ export default function App(){
         return <CameraInferScreen/>;
       case 'follow':
         return <FollowScreen/>;
+      case 'event':
+        return <EventDashboardScreen/>;
       case 'about':
         return <AboutDiagnostics/>;
       case 'qaHud':
@@ -79,6 +82,9 @@ export default function App(){
             </TouchableOpacity>
             <TouchableOpacity onPress={()=>setTab('about')} style={[styles.tab, tab==='about' && styles.tabActive]}>
               <Text style={styles.tabText}>About</Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={()=>setTab('event')} style={[styles.tab, tab==='event' && styles.tabActive]}>
+              <Text style={styles.tabText}>Events</Text>
             </TouchableOpacity>
             {qaTabs.map(({ key, label }) => (
               <TouchableOpacity
