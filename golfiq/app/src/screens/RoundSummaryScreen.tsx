@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Modal,
@@ -14,8 +14,10 @@ import QRCode from 'react-native-qrcode-svg';
 import type { RoundSummary } from '../../../../shared/round/summary';
 import type { RoundState } from '../../../../shared/round/types';
 import { encodeSharedRoundV1, type SharedRoundV1 } from '../../../../shared/event/payload';
+import { getItem } from '../../../../shared/core/pstore';
 import { tryShareSvg } from '../lib/share';
 import { render as renderShareCard, type ShareCardMeta } from '../components/summary/ShareCard';
+import { eventsCloudAvailable, postSharedRound as postLiveRound } from '../cloud/eventsSync';
 
 type RoundSummaryScreenProps = {
   summary: RoundSummary;
@@ -75,6 +77,10 @@ export default function RoundSummaryScreen({ summary, meta, round, onDone }: Rou
   const [qrVisible, setQrVisible] = useState(false);
   const [qrValue, setQrValue] = useState<string | null>(null);
   const [qrMessage, setQrMessage] = useState<string | null>(null);
+  const [liveTarget, setLiveTarget] = useState<{ eventId: string; joinCode?: string | null } | null>(null);
+  const [liveBusy, setLiveBusy] = useState(false);
+  const [liveStatus, setLiveStatus] = useState<string | null>(null);
+  const [liveError, setLiveError] = useState<string | null>(null);
 
   const phaseBars = useMemo(() => {
     const rows = [
@@ -92,6 +98,47 @@ export default function RoundSummaryScreen({ summary, meta, round, onDone }: Rou
   }, [summary.phases.arg, summary.phases.app, summary.phases.ott, summary.phases.putt]);
 
   const shareCard = useMemo(() => renderShareCard(summary, meta), [meta, summary]);
+
+  useEffect(() => {
+    if (!eventsCloudAvailable) {
+      setLiveTarget(null);
+      setLiveStatus(null);
+      setLiveError(null);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const raw = await getItem('@events/dashboard.v1');
+        if (!raw) {
+          if (!cancelled) {
+            setLiveTarget(null);
+          }
+          return;
+        }
+        const parsed = JSON.parse(raw) as { cloud?: { id?: string; joinCode?: string; goLive?: boolean } };
+        const cloud = parsed?.cloud;
+        if (cloud && typeof cloud.id === 'string' && cloud.goLive) {
+          if (!cancelled) {
+            setLiveTarget({ eventId: cloud.id, joinCode: typeof cloud.joinCode === 'string' ? cloud.joinCode : undefined });
+          }
+        } else if (!cancelled) {
+          setLiveTarget(null);
+          setLiveStatus(null);
+          setLiveError(null);
+        }
+      } catch {
+        if (!cancelled) {
+          setLiveTarget(null);
+          setLiveStatus(null);
+          setLiveError(null);
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const handleShare = async () => {
     setShareBusy(true);
@@ -132,6 +179,24 @@ export default function RoundSummaryScreen({ summary, meta, round, onDone }: Rou
       setQrMessage('Copy failed. Try again.');
     }
   };
+
+  const handlePostLive = useCallback(async () => {
+    if (!liveTarget) {
+      return;
+    }
+    setLiveBusy(true);
+    setLiveError(null);
+    setLiveStatus(null);
+    try {
+      const payload = buildSharedRound(round, summary);
+      await postLiveRound(liveTarget.eventId, payload);
+      setLiveStatus('Posted to live event');
+    } catch (error) {
+      setLiveError(error instanceof Error ? error.message : 'Unable to post to live event');
+    } finally {
+      setLiveBusy(false);
+    }
+  }, [liveTarget, round, summary]);
 
   return (
     <>
@@ -231,10 +296,25 @@ export default function RoundSummaryScreen({ summary, meta, round, onDone }: Rou
           <TouchableOpacity style={styles.qrButton} onPress={handleOpenQr}>
             <Text style={styles.qrLabel}>Share → QR</Text>
           </TouchableOpacity>
+          {eventsCloudAvailable && liveTarget ? (
+            <TouchableOpacity
+              style={[styles.liveButton, liveBusy && styles.liveButtonDisabled]}
+              onPress={handlePostLive}
+              disabled={liveBusy}
+            >
+              {liveBusy ? (
+                <ActivityIndicator color="#4da3ff" />
+              ) : (
+                <Text style={styles.liveButtonLabel}>Post to Live Event</Text>
+              )}
+            </TouchableOpacity>
+          ) : null}
           <TouchableOpacity style={styles.doneButton} onPress={onDone}>
             <Text style={styles.doneLabel}>Done</Text>
           </TouchableOpacity>
         </View>
+        {liveError ? <Text style={styles.liveError}>{liveError}</Text> : null}
+        {liveStatus ? <Text style={styles.liveStatus}>{liveStatus}</Text> : null}
         {shareMessage ? <Text style={styles.shareMessage}>{shareMessage}</Text> : null}
       </ScrollView>
       <Modal visible={qrVisible} transparent animationType="fade" onRequestClose={() => setQrVisible(false)}>
@@ -379,6 +459,7 @@ const styles = StyleSheet.create({
   actions: {
     marginTop: 8,
     flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: 12,
   },
   shareButton: {
@@ -407,6 +488,23 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     fontSize: 16,
   },
+  liveButton: {
+    flex: 1,
+    backgroundColor: '#0b1221',
+    borderRadius: 16,
+    paddingVertical: 16,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#4da3ff',
+  },
+  liveButtonDisabled: {
+    opacity: 0.6,
+  },
+  liveButtonLabel: {
+    color: '#4da3ff',
+    fontWeight: '700',
+    fontSize: 16,
+  },
   doneButton: {
     flexBasis: 96,
     backgroundColor: '#1f2a43',
@@ -418,6 +516,16 @@ const styles = StyleSheet.create({
     color: '#ffffff',
     fontWeight: '600',
     fontSize: 16,
+  },
+  liveStatus: {
+    color: '#4da3ff',
+    textAlign: 'center',
+    marginTop: 8,
+  },
+  liveError: {
+    color: '#ff7b7b',
+    textAlign: 'center',
+    marginTop: 8,
   },
   shareMessage: {
     color: '#8ea0c9',
