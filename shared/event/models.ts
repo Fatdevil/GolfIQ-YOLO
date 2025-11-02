@@ -44,7 +44,7 @@ const rangeLen = (r?: { start: number; end: number }): number | undefined =>
     ? Math.floor(r.end) - Math.floor(r.start) + 1
     : undefined;
 
-function scaledHcp(
+export function scaleHandicapForRound(
   fullHcp: number,
   roundHoles?: { start: number; end: number },
   eventHoles?: { start: number; end: number },
@@ -223,7 +223,7 @@ function aggregateParticipant(
       netTotal += Number(round.net);
       hasNet = true;
     } else if (Number.isFinite(round.gross) && Number.isFinite(resolvedHcp ?? NaN)) {
-      const adjHcp = scaledHcp(Number(resolvedHcp), round.holes, event?.holes);
+      const adjHcp = scaleHandicapForRound(Number(resolvedHcp), round.holes, event?.holes);
       const adj = Math.round(adjHcp);
       netTotal += Number(round.gross) - adj;
       hasNet = true;

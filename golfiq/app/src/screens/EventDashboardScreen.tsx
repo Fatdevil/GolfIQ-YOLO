@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -10,7 +10,9 @@ import {
   TextInput,
   TouchableOpacity,
   View,
+  Switch,
 } from 'react-native';
+import QRCode from 'react-native-qrcode-svg';
 
 import { getItem, removeItem, setItem } from '../../../../shared/core/pstore';
 import { decodeSharedRoundV1, type SharedRoundV1 } from '../../../../shared/event/payload';
@@ -24,6 +26,14 @@ import {
 import { tryShareSvg } from '../lib/share';
 import { renderEventBoardSVG } from '../components/event/LeaderboardShare';
 import { scanCode, subscribeToScanRequests, type ScanSession } from '../modules/qr/scan';
+import {
+  createEvent as createLiveEvent,
+  ensureUser as ensureCloudUser,
+  eventsCloudAvailable,
+  joinEvent as joinLiveEvent,
+  postSharedRound as postLiveRound,
+  watchEvent as watchLiveEvent,
+} from '../cloud/eventsSync';
 
 type LeaderboardTab = 'gross' | 'net' | 'stableford' | 'sg';
 
@@ -40,6 +50,14 @@ type EditParticipantState = {
   name: string;
   hcp: string;
 };
+
+type CloudInfo = {
+  id: string;
+  joinCode?: string | null;
+  goLive?: boolean;
+};
+
+type DashboardEventState = EventState & { cloud?: CloudInfo };
 
 const STORAGE_KEY = '@events/dashboard.v1';
 
@@ -64,6 +82,99 @@ function sanitizeNumber(value: string, fallback: number): number {
   return parsed;
 }
 
+function roundsEqual(a: SharedRoundV1 | undefined, b: SharedRoundV1): boolean {
+  if (!a) {
+    return false;
+  }
+  const grossMatch = Number.isFinite(a.gross ?? NaN) ? Number(a.gross) === Number(b.gross) : a.gross === b.gross;
+  const netMatch = Number.isFinite(a.net ?? NaN) ? Number(a.net) === Number(b.net) : a.net === b.net;
+  const sgMatch = Number.isFinite(a.sg ?? NaN) ? Number(a.sg) === Number(b.sg) : a.sg === b.sg;
+  const holesMatch = a.holes?.start === b.holes?.start && a.holes?.end === b.holes?.end;
+  const breakdownA = Array.isArray(a.holesBreakdown) ? a.holesBreakdown : [];
+  const breakdownB = Array.isArray(b.holesBreakdown) ? b.holesBreakdown : [];
+  const breakdownMatch =
+    breakdownA.length === breakdownB.length &&
+    breakdownA.every((entry, idx) => {
+      const other = breakdownB[idx];
+      return (
+        entry.h === other?.h &&
+        entry.strokes === other?.strokes &&
+        (entry.net ?? null) === (other?.net ?? null) &&
+        (entry.sg ?? null) === (other?.sg ?? null)
+      );
+    });
+  const playerNameMatch = (a.player?.name ?? '').trim() === (b.player?.name ?? '').trim();
+  const playerHcpMatch =
+    Number.isFinite(a.player?.hcp ?? NaN) && Number.isFinite(b.player?.hcp ?? NaN)
+      ? Number(a.player?.hcp) === Number(b.player?.hcp)
+      : (a.player?.hcp ?? undefined) === (b.player?.hcp ?? undefined);
+  return (
+    a.roundId === b.roundId &&
+    grossMatch &&
+    netMatch &&
+    sgMatch &&
+    holesMatch &&
+    breakdownMatch &&
+    playerNameMatch &&
+    playerHcpMatch &&
+    (a.courseId ?? '') === (b.courseId ?? '')
+  );
+}
+
+function applyRoundToEvent(
+  event: DashboardEventState,
+  round: SharedRoundV1,
+  details?: { name?: string; hcp?: number },
+): DashboardEventState {
+  const participants = event.participants ?? {};
+  const existing = participants[round.player.id];
+  const resolvedName = (details?.name ?? existing?.name ?? round.player.name ?? `Player ${round.player.id.slice(0, 6)}`).trim();
+  const resolvedHcp = Number.isFinite(details?.hcp ?? NaN)
+    ? Number(details?.hcp)
+    : Number.isFinite(existing?.hcp ?? NaN)
+      ? Number(existing?.hcp)
+      : Number.isFinite(round.player.hcp ?? NaN)
+        ? Number(round.player.hcp)
+        : undefined;
+  const storedRound: SharedRoundV1 = {
+    ...round,
+    player: {
+      ...round.player,
+      name: resolvedName,
+      hcp: resolvedHcp,
+    },
+  };
+  const existingRound = existing?.rounds?.[round.roundId];
+  const unchanged =
+    existing &&
+    existing.name === resolvedName &&
+    ((existing.hcp ?? undefined) === (resolvedHcp ?? undefined) ||
+      (!Number.isFinite(existing.hcp ?? NaN) && !Number.isFinite(resolvedHcp ?? NaN))) &&
+    roundsEqual(existingRound, storedRound);
+  if (unchanged) {
+    return event;
+  }
+  const nextParticipant: Participant = existing
+    ? {
+        ...existing,
+        name: resolvedName,
+        hcp: resolvedHcp,
+        rounds: { ...existing.rounds, [round.roundId]: storedRound },
+      }
+    : {
+        id: storedRound.player.id,
+        name: resolvedName,
+        hcp: resolvedHcp,
+        rounds: { [round.roundId]: storedRound },
+      };
+  const nextParticipants = { ...participants, [nextParticipant.id]: nextParticipant };
+  return {
+    ...event,
+    participants: nextParticipants,
+    courseId: event.courseId ?? storedRound.courseId,
+  } satisfies DashboardEventState;
+}
+
 function sanitizeParticipant(raw: Participant): Participant {
   return {
     id: raw.id,
@@ -73,7 +184,7 @@ function sanitizeParticipant(raw: Participant): Participant {
   };
 }
 
-function sanitizeEvent(raw: unknown): EventState | null {
+function sanitizeEvent(raw: unknown): DashboardEventState | null {
   if (!raw || typeof raw !== 'object') {
     return null;
   }
@@ -85,7 +196,10 @@ function sanitizeEvent(raw: unknown): EventState | null {
   const holes = record.holes && typeof record.holes === 'object' ? (record.holes as { start?: unknown; end?: unknown }) : null;
   const start = Number.isFinite(Number(holes?.start)) ? Number(holes?.start) : 1;
   const end = Number.isFinite(Number(holes?.end)) ? Number(holes?.end) : start;
-  const participantsRaw = record.participants && typeof record.participants === 'object' ? (record.participants as Record<string, Participant>) : {};
+  const participantsRaw =
+    record.participants && typeof record.participants === 'object'
+      ? (record.participants as Record<string, Participant>)
+      : {};
   if (!id || !name || !formatValid) {
     return null;
   }
@@ -95,6 +209,15 @@ function sanitizeEvent(raw: unknown): EventState | null {
       participants[key] = sanitizeParticipant(participant);
     }
   }
+  const cloudRaw = record.cloud && typeof record.cloud === 'object' ? (record.cloud as Record<string, unknown>) : null;
+  let cloud: CloudInfo | undefined;
+  if (cloudRaw && typeof cloudRaw.id === 'string' && cloudRaw.id.trim()) {
+    cloud = {
+      id: cloudRaw.id,
+      joinCode: typeof cloudRaw.joinCode === 'string' ? cloudRaw.joinCode : undefined,
+      goLive: typeof cloudRaw.goLive === 'boolean' ? cloudRaw.goLive : undefined,
+    } satisfies CloudInfo;
+  }
   return {
     id,
     name,
@@ -103,7 +226,8 @@ function sanitizeEvent(raw: unknown): EventState | null {
     holes: { start, end },
     participants,
     createdAt: Number.isFinite(Number(record.createdAt)) ? Number(record.createdAt) : Date.now(),
-  };
+    ...(cloud ? { cloud } : {}),
+  } satisfies DashboardEventState;
 }
 
 function formatLeaderboardValue(row: LeaderRow, tab: LeaderboardTab): string {
@@ -165,7 +289,7 @@ function rankRows(rows: LeaderRow[], tab: LeaderboardTab): LeaderRow[] {
 }
 
 export default function EventDashboardScreen(): JSX.Element {
-  const [event, setEvent] = useState<EventState | null>(null);
+  const [event, setEvent] = useState<DashboardEventState | null>(null);
   const [loading, setLoading] = useState(true);
   const [status, setStatus] = useState<string | null>(null);
   const [form, setForm] = useState<FormState>({
@@ -184,6 +308,20 @@ export default function EventDashboardScreen(): JSX.Element {
   const [scanSession, setScanSession] = useState<ScanSession | null>(null);
   const [scanned, setScanned] = useState(false);
   const [ScannerComponent, setScannerComponent] = useState<React.ComponentType<any> | null>(null);
+  const [cloudUser, setCloudUser] = useState<string | null>(null);
+  const [cloudCheckingUser, setCloudCheckingUser] = useState(false);
+  const [cloudBusy, setCloudBusy] = useState(false);
+  const [cloudError, setCloudError] = useState<string | null>(null);
+  const [joinCodeInput, setJoinCodeInput] = useState('');
+  const cloudSubscription = useRef<{ id: string; unsubscribe: () => void } | null>(null);
+
+  const persistEvent = useCallback(async (next: DashboardEventState | null) => {
+    if (!next) {
+      await removeItem(STORAGE_KEY);
+      return;
+    }
+    await setItem(STORAGE_KEY, JSON.stringify(next));
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -216,6 +354,33 @@ export default function EventDashboardScreen(): JSX.Element {
   }, []);
 
   useEffect(() => {
+    if (!eventsCloudAvailable) {
+      return;
+    }
+    let cancelled = false;
+    setCloudCheckingUser(true);
+    ensureCloudUser()
+      .then((id) => {
+        if (!cancelled) {
+          setCloudUser(id);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setCloudUser(null);
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setCloudCheckingUser(false);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
     if (Platform.OS === 'web') {
       return;
     }
@@ -241,6 +406,91 @@ export default function EventDashboardScreen(): JSX.Element {
       setScanned(false);
       setScanSession(session);
     });
+  }, []);
+
+  useEffect(() => {
+    if (!eventsCloudAvailable) {
+      return;
+    }
+    const eventId = event?.cloud?.id;
+    const goLive = event?.cloud?.goLive;
+    const current = cloudSubscription.current;
+    if (!goLive || !eventId) {
+      if (current) {
+        current.unsubscribe();
+        cloudSubscription.current = null;
+      }
+      setCloudBusy(false);
+      return;
+    }
+    if (current && current.id === eventId) {
+      return;
+    }
+    if (current) {
+      current.unsubscribe();
+      cloudSubscription.current = null;
+    }
+    let cancelled = false;
+    setCloudBusy(true);
+    setCloudError(null);
+    watchLiveEvent(eventId, (rounds) => {
+      if (cancelled || rounds.length === 0) {
+        return;
+      }
+      setEvent((prev) => {
+        if (!prev) {
+          return prev;
+        }
+        let next = prev;
+        let changed = false;
+        for (const remoteRound of rounds) {
+          const updated = applyRoundToEvent(next, remoteRound, {
+            name: remoteRound.player.name ?? undefined,
+            hcp: Number.isFinite(remoteRound.player.hcp ?? NaN)
+              ? Number(remoteRound.player.hcp)
+              : undefined,
+          });
+          if (updated !== next) {
+            next = updated;
+            changed = true;
+          }
+        }
+        if (changed) {
+          void persistEvent(next);
+          return next;
+        }
+        return prev;
+      });
+    })
+      .then((unsubscribe) => {
+        if (cancelled) {
+          unsubscribe();
+          setCloudBusy(false);
+          return;
+        }
+        cloudSubscription.current = { id: eventId, unsubscribe };
+        setCloudBusy(false);
+      })
+      .catch((error) => {
+        if (!cancelled) {
+          setCloudError(error instanceof Error ? error.message : 'Unable to subscribe to live updates');
+          setCloudBusy(false);
+        }
+      });
+    return () => {
+      cancelled = true;
+      setCloudBusy(false);
+    };
+  }, [event?.cloud?.id, event?.cloud?.goLive, persistEvent]);
+
+  useEffect(() => {
+    return () => {
+      if (cloudSubscription.current) {
+        cloudSubscription.current.unsubscribe();
+        cloudSubscription.current = null;
+      }
+      setCloudBusy(false);
+    };
   }, []);
 
   const leaderboards = useMemo(() => {
@@ -276,57 +526,16 @@ export default function EventDashboardScreen(): JSX.Element {
     }
   }, [currentRows, event, tab]);
 
-  const persistEvent = useCallback(async (next: EventState | null) => {
-    if (!next) {
-      await removeItem(STORAGE_KEY);
-      return;
-    }
-    await setItem(STORAGE_KEY, JSON.stringify(next));
-  }, []);
-
   const finalizeRound = useCallback(
     async (round: SharedRoundV1, details?: { name?: string; hcp?: number }) => {
       setEvent((prev) => {
         if (!prev) {
           return prev;
         }
-        const participants = { ...prev.participants };
-        const existing = participants[round.player.id];
-        const name = (details?.name ?? existing?.name ?? round.player.name ?? `Player ${round.player.id.slice(0, 6)}`).trim();
-        const hcp = Number.isFinite(details?.hcp ?? NaN)
-          ? Number(details?.hcp)
-          : Number.isFinite(existing?.hcp ?? NaN)
-            ? Number(existing?.hcp)
-            : Number.isFinite(round.player.hcp ?? NaN)
-              ? Number(round.player.hcp)
-              : undefined;
-        const storedRound: SharedRoundV1 = {
-          ...round,
-          player: {
-            ...round.player,
-            name,
-            hcp,
-          },
-        };
-        const nextParticipant: Participant = existing
-          ? {
-              ...existing,
-              name,
-              hcp,
-              rounds: { ...existing.rounds, [round.roundId]: storedRound },
-            }
-          : {
-              id: storedRound.player.id,
-              name,
-              hcp,
-              rounds: { [round.roundId]: storedRound },
-            };
-        participants[nextParticipant.id] = nextParticipant;
-        const next: EventState = {
-          ...prev,
-          participants,
-          courseId: prev.courseId ?? storedRound.courseId,
-        };
+        const next = applyRoundToEvent(prev, round, details);
+        if (next === prev) {
+          return prev;
+        }
         void persistEvent(next);
         return next;
       });
@@ -364,10 +573,37 @@ export default function EventDashboardScreen(): JSX.Element {
         requestParticipantDetails(round);
         return;
       }
+      const resolvedName = (participant?.name ?? round.player.name ?? '').trim();
+      const resolvedHcp = Number.isFinite(participant?.hcp ?? round.player.hcp ?? NaN)
+        ? Number(participant?.hcp ?? round.player.hcp)
+        : undefined;
       void finalizeRound(round, {
-        name: participant?.name ?? round.player.name,
-        hcp: Number(participant?.hcp ?? round.player.hcp),
+        name: resolvedName,
+        hcp: resolvedHcp,
       });
+      if (eventsCloudAvailable && event.cloud?.id && event.cloud.goLive) {
+        const eventId = event.cloud.id;
+        const payload: SharedRoundV1 = {
+          ...round,
+          player: {
+            ...round.player,
+            name: resolvedName,
+            hcp: resolvedHcp,
+          },
+        };
+        void (async () => {
+          try {
+            const result = await postLiveRound(eventId, payload);
+            if (!result.ok) {
+              setCloudError(result.reason ?? 'Unable to sync round to cloud');
+            } else {
+              setCloudError(null);
+            }
+          } catch (error) {
+            setCloudError(error instanceof Error ? error.message : 'Unable to sync round to cloud');
+          }
+        })();
+      }
     },
     [event, finalizeRound, requestParticipantDetails],
   );
@@ -406,6 +642,115 @@ export default function EventDashboardScreen(): JSX.Element {
     processEncodedPayload(pasteValue.trim());
   }, [pasteValue, processEncodedPayload]);
 
+  const handleCreateLiveEvent = useCallback(async () => {
+    if (!event) {
+      setCloudError('Create an event before going live');
+      return;
+    }
+    if (!eventsCloudAvailable) {
+      setCloudError('Cloud sync not configured');
+      return;
+    }
+    setCloudBusy(true);
+    setCloudError(null);
+    try {
+      const ensured = cloudUser ?? (await ensureCloudUser());
+      if (!ensured) {
+        setCloudError('Offline right now. Try again when connected.');
+        return;
+      }
+      const result = await createLiveEvent(event.name, event.holes, event.format);
+      setEvent((prev) => {
+        if (!prev) {
+          return prev;
+        }
+        const cloud: CloudInfo = { id: result.id, joinCode: result.joinCode, goLive: true };
+        const next: DashboardEventState = { ...prev, cloud };
+        void persistEvent(next);
+        return next;
+      });
+      setStatus('Live event created');
+    } catch (error) {
+      setCloudError(error instanceof Error ? error.message : 'Unable to create live event');
+    } finally {
+      setCloudBusy(false);
+    }
+  }, [cloudUser, event, persistEvent]);
+
+  const handleJoinLiveEvent = useCallback(async () => {
+    const code = joinCodeInput.trim();
+    if (!code) {
+      setCloudError('Enter a join code');
+      return;
+    }
+    if (!eventsCloudAvailable) {
+      setCloudError('Cloud sync not configured');
+      return;
+    }
+    setCloudBusy(true);
+    setCloudError(null);
+    try {
+      const ensured = cloudUser ?? (await ensureCloudUser());
+      if (!ensured) {
+        setCloudError('Offline right now. Try again when connected.');
+        return;
+      }
+      const result = await joinLiveEvent(code);
+      if (!result) {
+        setCloudError('Join code not found');
+        return;
+      }
+      setEvent((prev) => {
+        const fallbackHoles = result.holes ?? prev?.holes ?? { start: 1, end: 18 };
+        const resolvedFormat: EventFormat =
+          result.format && (result.format === 'gross' || result.format === 'net' || result.format === 'stableford')
+            ? result.format
+            : prev?.format ?? 'gross';
+        const base: DashboardEventState = prev
+          ? {
+              ...prev,
+              name: prev.name || result.name || prev.name,
+              format: resolvedFormat,
+              holes: prev.holes ?? fallbackHoles,
+              courseId: prev.courseId ?? (result.courseId ?? undefined),
+            }
+          : {
+              id: `event-${Date.now()}`,
+              name: result.name ?? 'Live Event',
+              format: resolvedFormat,
+              holes: fallbackHoles,
+              participants: {},
+              createdAt: Date.now(),
+              courseId: result.courseId ?? undefined,
+            };
+        const cloud: CloudInfo = { id: result.id, joinCode: result.joinCode, goLive: true };
+        const next: DashboardEventState = { ...base, cloud };
+        void persistEvent(next);
+        return next;
+      });
+      setJoinCodeInput('');
+      setStatus('Joined live event');
+    } catch (error) {
+      setCloudError(error instanceof Error ? error.message : 'Unable to join live event');
+    } finally {
+      setCloudBusy(false);
+    }
+  }, [cloudUser, joinCodeInput, persistEvent]);
+
+  const toggleGoLive = useCallback(
+    (value: boolean) => {
+      setEvent((prev) => {
+        if (!prev?.cloud || prev.cloud.goLive === value) {
+          return prev;
+        }
+        const next: DashboardEventState = { ...prev, cloud: { ...prev.cloud, goLive: value } };
+        void persistEvent(next);
+        return next;
+      });
+    },
+    [persistEvent],
+  );
+
   const handleCreateEvent = useCallback(() => {
     setFormError(null);
     const name = form.name.trim();
@@ -416,7 +761,7 @@ export default function EventDashboardScreen(): JSX.Element {
     const start = Math.max(1, sanitizeNumber(form.start, 1));
     const end = Math.max(start, sanitizeNumber(form.end, start));
     const courseId = form.courseId.trim();
-    const nextEvent: EventState = {
+    const nextEvent: DashboardEventState = {
       id: `event-${Date.now()}`,
       name,
       courseId: courseId || undefined,
@@ -543,6 +888,76 @@ export default function EventDashboardScreen(): JSX.Element {
           <TouchableOpacity style={styles.shareButton} onPress={shareLeaderboard} disabled={!currentRows.length}>
             <Text style={styles.shareButtonLabel}>Share Leaderboard</Text>
           </TouchableOpacity>
+          {eventsCloudAvailable ? (
+            <View style={styles.cloudSection}>
+              <View style={styles.cloudHeaderRow}>
+                <Text style={styles.sectionHeading}>Cloud Sync</Text>
+                {cloudBusy ? <ActivityIndicator color="#4da3ff" /> : null}
+              </View>
+              {cloudError ? <Text style={styles.errorText}>{cloudError}</Text> : null}
+              {event.cloud?.id ? (
+                <>
+                  <View style={styles.cloudRow}>
+                    <View style={styles.cloudInfo}>
+                      <Text style={styles.cloudLabel}>Join Code</Text>
+                      <Text style={styles.cloudCode}>{event.cloud.joinCode ?? '—'}</Text>
+                      <Text style={styles.cloudHelp}>Share with players to join</Text>
+                    </View>
+                    {event.cloud.joinCode ? (
+                      <View style={styles.cloudQrBox}>
+                        <QRCode
+                          value={event.cloud.joinCode}
+                          size={96}
+                          backgroundColor="transparent"
+                          color="#ffffff"
+                        />
+                      </View>
+                    ) : null}
+                  </View>
+                  <View style={styles.cloudToggleRow}>
+                    <Text style={styles.cloudLabel}>Go Live</Text>
+                    <Switch
+                      value={Boolean(event.cloud.goLive)}
+                      onValueChange={toggleGoLive}
+                      thumbColor={event.cloud.goLive ? '#0b1221' : '#8ea0c9'}
+                      trackColor={{ false: '#1f2a43', true: '#4da3ff' }}
+                    />
+                  </View>
+                  {!cloudUser && !cloudCheckingUser ? (
+                    <Text style={styles.cloudHelp}>Offline mode: rounds sync when you reconnect.</Text>
+                  ) : null}
+                </>
+              ) : (
+                <>
+                  <TouchableOpacity
+                    style={[styles.cloudPrimaryButton, (cloudBusy || cloudCheckingUser) && styles.buttonDisabled]}
+                    disabled={cloudBusy || cloudCheckingUser}
+                    onPress={handleCreateLiveEvent}
+                  >
+                    <Text style={styles.cloudPrimaryLabel}>Create Live Event</Text>
+                  </TouchableOpacity>
+                  <View style={styles.joinRow}>
+                    <TextInput
+                      style={[styles.input, styles.joinInput]}
+                      placeholder="Enter join code"
+                      placeholderTextColor="#506189"
+                      value={joinCodeInput}
+                      onChangeText={setJoinCodeInput}
+                      autoCapitalize="none"
+                    />
+                    <TouchableOpacity
+                      style={[styles.joinButton, (!joinCodeInput.trim() || cloudBusy) && styles.buttonDisabled]}
+                      disabled={!joinCodeInput.trim() || cloudBusy}
+                      onPress={handleJoinLiveEvent}
+                    >
+                      <Text style={styles.secondaryButtonLabel}>Join</Text>
+                    </TouchableOpacity>
+                  </View>
+                  {cloudCheckingUser ? <Text style={styles.cloudHelp}>Connecting…</Text> : null}
+                </>
+              )}
+            </View>
+          ) : null}
           <View style={styles.participantSection}>
             <Text style={styles.sectionHeading}>Participants</Text>
             {participantsList.length === 0 ? (
@@ -822,6 +1237,9 @@ const styles = StyleSheet.create({
     color: '#ffffff',
     fontWeight: '600',
   },
+  buttonDisabled: {
+    opacity: 0.6,
+  },
   shareButton: {
     marginTop: 12,
     backgroundColor: '#0b1221',
@@ -835,6 +1253,78 @@ const styles = StyleSheet.create({
     color: '#4da3ff',
     fontWeight: '700',
     fontSize: 16,
+  },
+  cloudSection: {
+    marginTop: 16,
+    backgroundColor: '#10172a',
+    borderRadius: 16,
+    padding: 16,
+    gap: 12,
+  },
+  cloudHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  cloudRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  cloudInfo: {
+    flex: 1,
+    gap: 4,
+  },
+  cloudLabel: {
+    color: '#8ea0c9',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  cloudCode: {
+    color: '#ffffff',
+    fontSize: 22,
+    fontWeight: '700',
+    letterSpacing: 2,
+  },
+  cloudHelp: {
+    color: '#6b7a99',
+    fontSize: 12,
+  },
+  cloudQrBox: {
+    backgroundColor: '#0b1221',
+    padding: 12,
+    borderRadius: 12,
+  },
+  cloudToggleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  cloudPrimaryButton: {
+    backgroundColor: '#4da3ff',
+    borderRadius: 14,
+    paddingVertical: 12,
+    alignItems: 'center',
+  },
+  cloudPrimaryLabel: {
+    color: '#0b1221',
+    fontWeight: '700',
+    fontSize: 16,
+  },
+  joinRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  joinInput: {
+    flex: 1,
+  },
+  joinButton: {
+    backgroundColor: '#1f2a43',
+    borderRadius: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
   },
   participantSection: {
     marginTop: 16,
