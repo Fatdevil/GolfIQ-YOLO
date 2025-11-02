@@ -59,6 +59,12 @@ class VectorWatchBridgeModule(private val context: ReactApplicationContext) :
     broadcast("/targetPos", payload)
   }
 
+  @ReactMethod
+  fun notifyRoundSaved() {
+    val payload = JSONObject().put("type", "roundSaved")
+    broadcast("/roundSaved", payload)
+  }
+
   override fun onMessageReceived(messageEvent: MessageEvent) {
     if (messageEvent.path != "/targetMoved") return
     val body = Arguments.createMap()

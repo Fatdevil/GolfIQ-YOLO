@@ -3,8 +3,10 @@ import Foundation
 
 final class WatchHUDModel: ObservableObject {
     @Published private(set) var hud: HUD?
+    @Published private(set) var toast: String?
 
     private let decoder: JSONDecoder
+    private var toastWorkItem: DispatchWorkItem?
 
     init(decoder: JSONDecoder = JSONDecoder()) {
         self.decoder = decoder
@@ -28,6 +30,23 @@ final class WatchHUDModel: ObservableObject {
             DispatchQueue.main.async { [weak self] in
                 self?.hud = snapshot
             }
+        }
+    }
+
+    func showToast(_ message: String) {
+        let workItem = DispatchWorkItem { [weak self] in
+            self?.toast = nil
+        }
+        toastWorkItem?.cancel()
+        toastWorkItem = workItem
+        let setMessage = { [weak self] in
+            self?.toast = message
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2.5, execute: workItem)
+        }
+        if Thread.isMainThread {
+            setMessage()
+        } else {
+            DispatchQueue.main.async(execute: setMessage)
         }
     }
 }

@@ -60,6 +60,14 @@ final class WatchBridgeModule: RCTEventEmitter, WCSessionDelegate {
     )
   }
 
+  @objc
+  func notifyRoundSaved() {
+    guard let session else { return }
+    session.sendMessage([
+      "type": "roundSaved",
+    ], replyHandler: nil, errorHandler: nil)
+  }
+
   func session(_ session: WCSession, didReceiveMessage message: [String: Any]) {
     guard message["type"] as? String == "targetMoved" else { return }
     sendEvent(withName: "WatchTargetMoved", body: [

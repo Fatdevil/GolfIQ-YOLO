@@ -45,7 +45,7 @@ test('round recorder basic flow', async () => {
   __resetRoundRecorderForTests();
   setRoundStore(store);
 
-  const round = await RoundRecorder.startRound('course', 2, true);
+  const round = await RoundRecorder.startRound('course', 2, 1_000, true);
   assert.equal(round.currentHole, 1);
 
   const shot = await RoundRecorder.markHit({ club: '7i', lie: 'Fairway', loc: pt(0.001, 0, 1_000) });

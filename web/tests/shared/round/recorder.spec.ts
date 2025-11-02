@@ -45,7 +45,7 @@ test('recorder maintains homogeneous ShotEvent arrays', async () => {
   __resetRoundRecorderForTests();
   setRoundStore(new MemoryStore());
 
-  await RoundRecorder.startRound('course', 1, false);
+  await RoundRecorder.startRound('course', 1, 1_000, false);
   await RoundRecorder.markHit({ club: '7i', lie: 'Fairway', loc: pt(0, 0, 1_000) });
   await RoundRecorder.markHit({ club: 'PW', lie: 'Rough', loc: pt(0.001, 0.001, 1_500) });
   await RoundRecorder.holeOut(1, pt(0, 0, 1_900));

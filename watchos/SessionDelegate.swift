@@ -52,4 +52,11 @@ final class SessionDelegate: NSObject, WCSessionDelegate {
         guard let data = applicationContext["golfiq_hud_v1"] as? Data else { return }
         model.update(with: data)
     }
+
+    func session(_ session: WCSession, didReceiveMessage message: [String : Any]) {
+        guard let type = message["type"] as? String else { return }
+        if type == "roundSaved" {
+            model.showToast("Round saved")
+        }
+    }
 }
