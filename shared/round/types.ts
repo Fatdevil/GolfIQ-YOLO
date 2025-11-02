@@ -33,6 +33,16 @@ export type HoleState = {
   pin?: { lat: number; lon: number };
   shots: ShotEvent[];
   sgTotal?: number;
+  strokes?: number;
+  putts?: number;
+  penalties?: number;
+  metrics?: {
+    fir: boolean | null;
+    gir: boolean | null;
+    reachedGreenAt: number | null;
+  };
+  manualScore?: number;
+  manualPutts?: number;
 };
 
 export type RoundState = {

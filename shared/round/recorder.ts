@@ -1,8 +1,9 @@
-import { updateHoleDerivations } from './derive';
+import { JITTER_M, distanceMeters, deriveHoleState } from './derive';
 import { getRoundStore } from './storage';
 import type { GeoPoint, HoleState, Lie, RoundState, ShotEvent, ShotKind } from './types';
 
 const DEFAULT_HOLES = 18;
+const COALESCE_WINDOW_MS = 3_000;
 
 let loaded = false;
 let activeRound: RoundState | null = null;
@@ -46,7 +47,7 @@ function resolveHole(round: RoundState, holeNumber?: number): [number, HoleState
 }
 
 function applyHole(round: RoundState, holeNumber: number, hole: HoleState): RoundState {
-  const updatedHole = updateHoleDerivations({ round: { ...round, holes: { ...round.holes, [holeNumber]: hole } }, hole });
+  const updatedHole = deriveHoleState({ round: { ...round, holes: { ...round.holes, [holeNumber]: hole } }, hole });
   return {
     ...round,
     holes: {
@@ -56,22 +57,41 @@ function applyHole(round: RoundState, holeNumber: number, hole: HoleState): Roun
   };
 }
 
+function sanitizeGeoPoint(point: GeoPoint): GeoPoint {
+  return {
+    lat: Number(point.lat),
+    lon: Number(point.lon),
+    ts: Number.isFinite(Number(point.ts)) ? Number(point.ts) : Date.now(),
+  };
+}
+
 function buildShot(hole: number, seq: number, args: {
   loc: GeoPoint;
   lie: Lie;
   club?: string;
   kind: ShotKind;
+  toPinStart_m?: number;
 }): ShotEvent {
   return {
     id: ensureId(),
     hole,
     seq,
-    start: args.loc,
+    start: sanitizeGeoPoint(args.loc),
     startLie: args.lie,
     club: args.club,
     kind: args.kind,
+    toPinStart_m: Number.isFinite(Number(args.toPinStart_m)) ? Number(args.toPinStart_m) : undefined,
   };
 }
+
+type AddShotArgs = {
+  kind: ShotKind;
+  start: GeoPoint;
+  startLie: Lie;
+  club?: string;
+  toPinStart_m?: number;
+  force?: boolean;
+};
 
 async function persist(state: RoundState | null): Promise<void> {
   await getRoundStore().save(state);
@@ -106,26 +126,113 @@ export const RoundRecorder = {
     await persist(updated);
   },
 
+  async addShot(
+    holeNumber: number | undefined,
+    shot: AddShotArgs,
+  ): Promise<{ shot: ShotEvent; coalesced: boolean } | null> {
+    const round = await ensureActiveRound();
+    const [holeNo, hole] = resolveHole(round, holeNumber);
+    const previous = hole.shots.at(-1);
+    const candidate = buildShot(holeNo, hole.shots.length + 1, {
+      loc: shot.start,
+      lie: shot.startLie,
+      club: shot.club,
+      kind: shot.kind,
+      toPinStart_m: shot.toPinStart_m,
+    });
+
+    if (previous) {
+      const deltaMs = candidate.start.ts - previous.start.ts;
+      const distance = distanceMeters(previous.end ?? previous.start, candidate.start);
+      if (
+        deltaMs >= 0 &&
+        deltaMs <= COALESCE_WINDOW_MS &&
+        distance <= JITTER_M &&
+        shot.kind !== 'Penalty'
+      ) {
+        const mutatedPrev: ShotEvent = {
+          ...previous,
+          kind: shot.kind,
+          startLie: shot.startLie,
+          club: shot.club ?? previous.club,
+          toPinStart_m: Number.isFinite(Number(shot.toPinStart_m)) ? Number(shot.toPinStart_m) : previous.toPinStart_m,
+        };
+        const nextShots = [...hole.shots.slice(0, -1), mutatedPrev];
+        const updated = applyHole(round, holeNo, { ...hole, shots: nextShots });
+        await persist(updated);
+        const persisted = activeRound?.holes[holeNo].shots.at(-1);
+        return persisted ? { shot: { ...persisted }, coalesced: true } : null;
+      }
+      if (!shot.force && shot.kind !== 'Penalty' && distance < JITTER_M) {
+        return previous ? { shot: { ...previous }, coalesced: true } : null;
+      }
+    }
+
+    const next = applyHole(round, holeNo, { ...hole, shots: [...hole.shots, candidate] });
+    await persist(next);
+    const persisted = activeRound?.holes[holeNo].shots.at(-1);
+    return persisted ? { shot: { ...persisted }, coalesced: false } : null;
+  },
+
   async markHit(args: { club?: string; lie: Lie; loc: GeoPoint; kind?: ShotEvent['kind'] }): Promise<ShotEvent> {
     const round = await ensureActiveRound();
     const [holeNo, hole] = resolveHole(round);
-    const shot = buildShot(holeNo, hole.shots.length + 1, {
-      loc: args.loc,
-      lie: args.lie,
-      club: args.club,
+    const result = await this.addShot(holeNo, {
       kind: args.kind ?? 'Full',
+      start: args.loc,
+      startLie: args.lie,
+      club: args.club,
     });
-    const updated = applyHole(round, holeNo, { ...hole, shots: [...hole.shots, shot] });
-    await persist(updated);
-    const result = activeRound?.holes[holeNo].shots.at(-1);
     if (!result) {
       throw new Error('Failed to record shot');
     }
-    return { ...result };
+    return result.shot;
   },
 
   async markPutt(args: { loc: GeoPoint }): Promise<ShotEvent> {
     return this.markHit({ loc: args.loc, lie: 'Green', club: 'Putter', kind: 'Putt' });
+  },
+
+  async addPenalty(holeNumber: number | undefined, reason?: 'OB' | 'Drop' | 'PenaltyStroke'): Promise<ShotEvent> {
+    const round = await ensureActiveRound();
+    const [holeNo, hole] = resolveHole(round, holeNumber);
+    const anchor = hole.shots.at(-1)?.end ?? hole.shots.at(-1)?.start;
+    const basePoint: GeoPoint = anchor
+      ? { ...anchor }
+      : { lat: 0, lon: 0, ts: Date.now() };
+    const result = await this.addShot(holeNo, {
+      kind: 'Penalty',
+      start: basePoint,
+      startLie: 'Penalty',
+      force: true,
+    });
+    if (!result) {
+      throw new Error('Failed to add penalty');
+    }
+    if (reason) {
+      (result.shot as ShotEvent & { penaltyReason?: string }).penaltyReason = reason;
+    }
+    return result.shot;
+  },
+
+  async setPuttCount(holeNumber: number, count: number): Promise<void> {
+    const round = await ensureActiveRound();
+    const [holeNo, hole] = resolveHole(round, holeNumber);
+    const nextCount = Math.max(0, Math.floor(Number(count)));
+    const updated = applyHole(round, holeNo, { ...hole, manualPutts: nextCount });
+    await persist(updated);
+  },
+
+  async setManualScore(holeNumber: number, strokes: number): Promise<void> {
+    const round = await ensureActiveRound();
+    const [holeNo, hole] = resolveHole(round, holeNumber);
+    const nextScore = Math.max(0, Math.floor(Number(strokes)));
+    const updated = applyHole(round, holeNo, { ...hole, manualScore: nextScore });
+    await persist(updated);
+  },
+
+  async advanceHole(): Promise<void> {
+    await this.nextHole();
   },
 
   async holeOut(holeNumber: number, loc: GeoPoint): Promise<void> {

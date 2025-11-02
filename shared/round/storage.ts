@@ -70,6 +70,7 @@ function parseShot(raw: any, holeNumber: number, fallbackSeq: number): ShotEvent
     const record = raw as Record<string, unknown>;
     const idValue = record.id;
     if (typeof idValue !== 'string' || !idValue) {
+      console.warn?.('round.storage: dropping shot with invalid id');
       return null;
     }
     const start = asGeoPoint(record.start);
@@ -111,6 +112,7 @@ function parseShot(raw: any, holeNumber: number, fallbackSeq: number): ShotEvent
     }
     return shot;
   } catch {
+    console.warn?.('round.storage: dropping incompatible shot');
     return null;
   }
 }
@@ -150,6 +152,13 @@ function hydrateRound(payload: unknown): RoundState | null {
             shots.push(parsed);
           }
         }
+        const metricsRecord =
+          holeValue.metrics && typeof holeValue.metrics === 'object'
+            ? (holeValue.metrics as Record<string, unknown>)
+            : null;
+        const firValue = metricsRecord?.fir ?? holeValue.fir;
+        const girValue = metricsRecord?.gir ?? holeValue.gir;
+        const reachedValue = metricsRecord?.reachedGreenAt;
         holes[holeNumber] = {
           hole: holeNumber,
           par: Number.isFinite(Number(holeValue.par)) ? Number(holeValue.par) : DEFAULT_PAR,
@@ -165,6 +174,16 @@ function hydrateRound(payload: unknown): RoundState | null {
             })
           ),
           sgTotal: Number.isFinite(Number(holeValue.sgTotal)) ? Number(holeValue.sgTotal) : undefined,
+          strokes: Number.isFinite(Number(holeValue.strokes)) ? Number(holeValue.strokes) : undefined,
+          putts: Number.isFinite(Number(holeValue.putts)) ? Number(holeValue.putts) : undefined,
+          penalties: Number.isFinite(Number(holeValue.penalties)) ? Number(holeValue.penalties) : undefined,
+          metrics: {
+            fir: typeof firValue === 'boolean' ? (firValue as boolean) : firValue === null ? null : null,
+            gir: typeof girValue === 'boolean' ? (girValue as boolean) : girValue === null ? null : null,
+            reachedGreenAt: Number.isFinite(Number(reachedValue)) ? Number(reachedValue) : null,
+          },
+          manualScore: Number.isFinite(Number(holeValue.manualScore)) ? Number(holeValue.manualScore) : undefined,
+          manualPutts: Number.isFinite(Number(holeValue.manualPutts)) ? Number(holeValue.manualPutts) : undefined,
         };
       }
     }
@@ -245,7 +264,15 @@ class AsyncStorageRoundStore implements RoundStore {
     const holes: RoundState['holes'] = {};
     for (let idx = 0; idx < holeCount; idx += 1) {
       const hole = idx + 1;
-      holes[hole] = { hole, par: DEFAULT_PAR, shots: [] };
+      holes[hole] = {
+        hole,
+        par: DEFAULT_PAR,
+        shots: [],
+        strokes: 0,
+        putts: 0,
+        penalties: 0,
+        metrics: { fir: null, gir: null, reachedGreenAt: null },
+      };
     }
     const round: RoundState = {
       id: typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'

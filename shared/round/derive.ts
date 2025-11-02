@@ -2,7 +2,7 @@ import { loadDefaultBaselines, loadDefaultPuttingBaseline, type BaselineSet } fr
 import type { GeoPoint, HoleState, Lie, RoundState, ShotEvent } from './types';
 
 const EARTH_RADIUS_M = 6_371_000;
-const JITTER_M = 1.5;
+export const JITTER_M = 1.5;
 const REPEAT_WINDOW_MS = 5_000;
 
 const lieToBaseline: Record<Lie, keyof BaselineSet> = {
@@ -96,6 +96,12 @@ export function inferCarryFromNext(
   };
 }
 
+export interface HoleMetrics {
+  fir: boolean | null;
+  gir: boolean | null;
+  reachedGreenAt: number | null;
+}
+
 function computeShotSG(shot: ShotEvent, baselines: BaselineSet): number | undefined {
   if (shot.kind === 'Penalty') {
     return -1;
@@ -123,15 +129,87 @@ export type DeriveContext = {
   baselines?: BaselineSet;
 };
 
-export function updateHoleDerivations({ hole, round, baselines }: DeriveContext): HoleState {
+export function updateHoleDerivations(
+  hole: HoleState,
+  par: number,
+  opts: { jitter_m: number; shouldCoalesce: (p: ShotEvent, n: ShotEvent) => boolean }
+): HoleMetrics {
+  const shots = [...hole.shots].sort((a, b) => (a.seq ?? 0) - (b.seq ?? 0));
+
+  for (let i = 1; i < shots.length; i += 1) {
+    const prev = shots[i - 1];
+    const curr = shots[i];
+    if (!prev.end || prev.carry_m == null) {
+      const update = inferCarryFromNext(
+        prev,
+        curr.start,
+        curr.startLie,
+        curr.toPinStart_m ?? 0,
+        opts.jitter_m,
+        opts.shouldCoalesce
+      );
+      prev.carry_m = update.carry_m;
+      if (update.setEnd) {
+        prev.end = update.end!;
+        prev.endLie = update.endLie ?? prev.endLie;
+        prev.toPinEnd_m = update.toPinEnd_m ?? prev.toPinEnd_m;
+      }
+    }
+  }
+
+  let fir: boolean | null = null;
+  if (shots.length > 0) {
+    const tee = shots[0];
+    if (tee.end || shots.length > 1) {
+      fir =
+        tee.endLie === 'Fairway'
+          ? true
+          : tee.endLie
+          ? false
+          : null;
+    }
+  }
+
+  if (par <= 3) {
+    fir = null;
+  }
+
+  let reachedGreenAt: number | null = null;
+  for (let i = 0; i < shots.length; i += 1) {
+    const shot = shots[i];
+    const seq = Number.isFinite(Number(shot.seq)) ? Number(shot.seq) : i + 1;
+    const hitGreen =
+      shot.startLie === 'Green' || shot.kind === 'Putt' || shot.endLie === 'Green';
+    if (hitGreen) {
+      reachedGreenAt =
+        reachedGreenAt == null ? seq : Math.min(reachedGreenAt, seq);
+    }
+  }
+
+  const gir: boolean | null =
+    reachedGreenAt == null ? null : reachedGreenAt <= Math.max(1, par - 2);
+
+  hole.metrics = { ...(hole.metrics ?? {}), fir, gir, reachedGreenAt };
+
+  return { fir, gir, reachedGreenAt };
+}
+
+export function deriveHoleState({ hole, round, baselines }: DeriveContext): HoleState {
   const baselineSet = baselines ?? loadDefaultBaselines();
   const nextShots: ShotEvent[] = [];
   let totalSG = 0;
+  let strokes = 0;
+  let putts = 0;
+  let penalties = 0;
 
   for (let idx = 0; idx < hole.shots.length; idx += 1) {
     const shot = hole.shots[idx];
-    const prev = nextShots[idx - 1];
-    const clone: ShotEvent = { ...shot, seq: idx + 1 };
+    const clone: ShotEvent = {
+      ...shot,
+      seq: Number.isFinite(Number(shot.seq)) ? Number(shot.seq) : idx + 1,
+      start: { ...shot.start },
+      end: shot.end ? { ...shot.end } : undefined,
+    };
     const toPinStart = computeToPin(hole, clone.start, clone.toPinStart_m);
     if (Number.isFinite(toPinStart ?? NaN)) {
       clone.toPinStart_m = toPinStart;
@@ -142,20 +220,21 @@ export function updateHoleDerivations({ hole, round, baselines }: DeriveContext)
         clone.toPinEnd_m = toPinEnd;
       }
     }
-    if (prev) {
-      const update = inferCarryFromNext(
-        prev,
-        clone.start,
-        clone.startLie,
-        clone.toPinStart_m ?? 0,
-        JITTER_M,
-        shouldCoalesce
-      );
-      prev.carry_m = update.carry_m;
-      if (update.setEnd) {
-        prev.end = update.end;
-        prev.endLie = update.endLie ?? prev.endLie;
-        prev.toPinEnd_m = update.toPinEnd_m ?? prev.toPinEnd_m;
+    nextShots.push(clone);
+  }
+
+  const workingHole: HoleState = { ...hole, shots: nextShots };
+  const metrics = updateHoleDerivations(workingHole, workingHole.par, {
+    jitter_m: JITTER_M,
+    shouldCoalesce,
+  });
+
+  for (let idx = 0; idx < nextShots.length; idx += 1) {
+    const clone = nextShots[idx];
+    if (clone.end) {
+      const toPinEnd = computeToPin(hole, clone.end, clone.toPinEnd_m);
+      if (Number.isFinite(toPinEnd ?? NaN)) {
+        clone.toPinEnd_m = toPinEnd;
       }
     }
     const sg = computeShotSG(clone, baselineSet);
@@ -165,13 +244,30 @@ export function updateHoleDerivations({ hole, round, baselines }: DeriveContext)
     } else {
       clone.sg = undefined;
     }
-    nextShots.push(clone);
+    strokes += 1;
+    if (clone.kind === 'Penalty') {
+      penalties += 1;
+    }
+    if (clone.kind === 'Putt' || clone.startLie === 'Green') {
+      putts += 1;
+    }
+  }
+
+  if (hole.manualScore !== undefined && Number.isFinite(hole.manualScore)) {
+    strokes = Math.max(0, Math.floor(hole.manualScore));
+  }
+  if (hole.manualPutts !== undefined && Number.isFinite(hole.manualPutts)) {
+    putts = Math.max(0, Math.floor(hole.manualPutts));
   }
 
   return {
     ...hole,
     shots: nextShots,
     sgTotal: nextShots.length ? totalSG : undefined,
+    strokes: nextShots.length ? strokes : hole.manualScore,
+    putts: nextShots.length ? putts : hole.manualPutts,
+    penalties: nextShots.length ? penalties : hole.penalties,
+    metrics,
   };
 }
 
@@ -180,7 +276,7 @@ export function updateRoundHole(round: RoundState, holeNumber: number, baselines
   if (!hole) {
     return round;
   }
-  const updatedHole = updateHoleDerivations({ round, hole, baselines });
+  const updatedHole = deriveHoleState({ round, hole, baselines });
   return {
     ...round,
     holes: {
