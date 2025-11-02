@@ -135,4 +135,26 @@ class WatchConnectorIOS: NSObject, RCTBridgeModule, WCSessionDelegate {
       session.activate()
     }
   }
+
+  @objc
+  func setSenseStreamingEnabled(
+    _ enabled: NSNumber,
+    resolver resolve: @escaping RCTPromiseResolveBlock,
+    rejecter reject: @escaping RCTPromiseRejectBlock
+  ) {
+    whenActivated { [weak self] in
+      guard let s = self?.session else {
+        resolve(false)
+        return
+      }
+      s.sendMessage(
+        [
+          "type": "shotsense_control",
+          "enabled": enabled.boolValue,
+        ],
+        replyHandler: { _ in resolve(true) },
+        errorHandler: { _ in resolve(false) }
+      )
+    }
+  }
 }

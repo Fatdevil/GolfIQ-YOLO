@@ -401,6 +401,13 @@ export function useFollowLoop(options: UseFollowLoopOptions): UseFollowLoopState
   );
 
   useEffect(() => {
+    void WatchBridge.setSenseStreaming(true);
+    return () => {
+      void WatchBridge.setSenseStreaming(false);
+    };
+  }, []);
+
+  useEffect(() => {
     let subscription: LocationSubscription | null = null;
     let active = true;
     (async () => {

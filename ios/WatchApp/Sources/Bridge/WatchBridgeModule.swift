@@ -68,6 +68,19 @@ final class WatchBridgeModule: RCTEventEmitter, WCSessionDelegate {
     ], replyHandler: nil, errorHandler: nil)
   }
 
+  @objc
+  func setSenseStreamingEnabled(_ enabled: NSNumber) {
+    guard let session else { return }
+    session.sendMessage(
+      [
+        "type": "shotsense_control",
+        "enabled": enabled.boolValue,
+      ],
+      replyHandler: nil,
+      errorHandler: nil
+    )
+  }
+
   func session(_ session: WCSession, didReceiveMessage message: [String: Any]) {
     guard message["type"] as? String == "targetMoved" else { return }
     sendEvent(withName: "WatchTargetMoved", body: [

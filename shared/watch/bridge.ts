@@ -6,18 +6,21 @@ type NativeWatchConnectorModule = {
   isCapable(): Promise<boolean>;
   sendHUD(payloadBase64: string): Promise<boolean>;
   sendOverlayJSON?(jsonPayload: string): Promise<boolean>;
+  setSenseStreamingEnabled?(enabled: boolean): Promise<boolean> | void;
 };
 
 type AndroidNativeModule = {
   isCapable: () => Promise<boolean>;
   sendHUD: (payloadBase64: string) => Promise<boolean>;
   sendOverlayJSON?: (jsonPayload: string) => Promise<boolean>;
+  setSenseStreamingEnabled?: (enabled: boolean) => Promise<boolean>;
 };
 
 type IOSNativeModule = {
   isCapable: () => Promise<boolean>;
   sendHUDB64: (payloadBase64: string) => Promise<boolean>;
   sendOverlayJSON?: (jsonPayload: string) => Promise<boolean>;
+  setSenseStreamingEnabled?: (enabled: boolean) => Promise<boolean>;
 };
 
 type LastStatus = WatchDiag['lastSend'];
@@ -86,6 +89,9 @@ function getNativeModule(): NativeWatchConnectorModule | null {
       sendOverlayJSON: mod.sendOverlayJSON
         ? (jsonPayload: string) => mod.sendOverlayJSON!(jsonPayload)
         : undefined,
+      setSenseStreamingEnabled: mod.setSenseStreamingEnabled
+        ? (enabled: boolean) => mod.setSenseStreamingEnabled!(enabled)
+        : undefined,
     };
   }
 
@@ -139,6 +145,52 @@ function getOverlayModule(): OverlayModule | null {
   }
 
   return null;
+}
+
+async function invokeSenseStreaming(
+  fn: (enabled: boolean) => unknown,
+  enabled: boolean,
+): Promise<boolean> {
+  try {
+    const result = fn(enabled);
+    if (result instanceof Promise) {
+      const resolved = await result;
+      return resolved !== false;
+    }
+    return result !== false;
+  } catch (error) {
+    console.warn('[WatchBridge] setSenseStreamingEnabled failed', error);
+    return false;
+  }
+}
+
+async function setSenseStreamingInternal(enabled: boolean): Promise<boolean> {
+  const mod = getNativeModule();
+  if (mod?.setSenseStreamingEnabled) {
+    return invokeSenseStreaming(mod.setSenseStreamingEnabled.bind(mod), enabled);
+  }
+
+  const RN = tryRequireReactNative();
+  const nativeModules = RN?.NativeModules;
+  if (!nativeModules) {
+    return false;
+  }
+
+  const candidates = [
+    nativeModules.VectorWatchBridge,
+    nativeModules.WatchBridgeModule,
+    nativeModules.WatchConnectorIOS,
+    nativeModules.WatchConnector,
+  ];
+
+  for (const candidate of candidates) {
+    const fn: ((enabled: boolean) => unknown) | undefined = candidate?.setSenseStreamingEnabled;
+    if (typeof fn === 'function') {
+      return invokeSenseStreaming(fn.bind(candidate), enabled);
+    }
+  }
+
+  return false;
 }
 
 async function sendHUDInternal(state: WatchHUDStateV1): Promise<boolean> {
@@ -406,6 +458,9 @@ export const WatchBridge = {
   },
   cancelPending,
   hasPending,
+  setSenseStreaming(enabled: boolean): Promise<boolean> {
+    return setSenseStreamingInternal(enabled);
+  },
   async sendOverlaySnapshot(snapshot: OverlaySnapshotV1): Promise<boolean> {
     const hash = hashOverlaySnapshot(snapshot);
     if (overlayState.lastHash === hash && !overlayState.pending) {
