@@ -1,8 +1,9 @@
 import React, { useMemo, useState } from 'react';
 import {
   ActivityIndicator,
+  Linking,
+  Platform,
   ScrollView,
-  Share,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -21,6 +22,48 @@ type RoundSummaryScreenProps = {
 
 type ExpoSharingModule = typeof import('expo-sharing');
 type ExpoFileSystemModule = typeof import('expo-file-system');
+
+async function tryShareSvg(dataUri: string, svgRaw: string): Promise<{ ok: boolean; msg: string }> {
+  if (Platform.OS === 'web') {
+    try {
+      await Linking.openURL(dataUri);
+      return { ok: true, msg: 'Opened share card in new tab' };
+    } catch {
+      // fallthrough to clipboard
+    }
+    await Clipboard.setStringAsync(svgRaw);
+    return { ok: true, msg: 'Copied SVG to clipboard' };
+  }
+
+  let Sharing: ExpoSharingModule | null = null;
+  let FileSystem: ExpoFileSystemModule | null = null;
+  try {
+    Sharing = await import('expo-sharing');
+  } catch {
+    Sharing = null;
+  }
+  try {
+    FileSystem = await import('expo-file-system');
+  } catch {
+    FileSystem = null;
+  }
+
+  const available = !!Sharing?.isAvailableAsync && (await Sharing.isAvailableAsync());
+
+  if (available && FileSystem?.writeAsStringAsync) {
+    const path = `${FileSystem.cacheDirectory ?? ''}golfiq-summary.svg`;
+    const encoding = FileSystem?.EncodingType?.UTF8 ?? 'utf8';
+    await FileSystem.writeAsStringAsync(path, svgRaw, { encoding });
+    await Sharing.shareAsync(path, {
+      mimeType: 'image/svg+xml',
+      dialogTitle: 'Share Round Summary',
+    });
+    return { ok: true, msg: 'Shared summary card' };
+  }
+
+  await Clipboard.setStringAsync(svgRaw);
+  return { ok: true, msg: 'Sharing not available — copied SVG to clipboard' };
+}
 
 function formatSigned(value: number): string {
   if (!Number.isFinite(value)) {
@@ -68,35 +111,10 @@ export default function RoundSummaryScreen({ summary, meta, onDone }: RoundSumma
     setShareBusy(true);
     setShareMessage(null);
     try {
-      const dataUri = `data:image/svg+xml;utf8,${encodeURIComponent(shareCard)}`;
-      let shared = false;
-      try {
-        const Sharing: ExpoSharingModule = await import('expo-sharing');
-        const FileSystem: ExpoFileSystemModule = await import('expo-file-system');
-        if (Sharing && FileSystem && (await Sharing.isAvailableAsync())) {
-          const fileUri = `${FileSystem.cacheDirectory ?? ''}golfiq-round-${Date.now()}.svg`;
-          await FileSystem.writeAsStringAsync(fileUri, shareCard, { encoding: FileSystem.EncodingType.UTF8 });
-          await Sharing.shareAsync(fileUri, {
-            mimeType: 'image/svg+xml',
-            dialogTitle: 'Share round summary',
-          });
-          shared = true;
-        }
-      } catch {
-        // fall through to platform share
-      }
-      if (!shared) {
-        await Share.share({
-          message: 'GolfIQ round summary',
-          url: dataUri,
-        });
-        try {
-          await Clipboard.setStringAsync(dataUri);
-          setShareMessage('Copied share link to clipboard');
-        } catch {
-          // ignore clipboard failures
-        }
-      }
+      const svg = shareCard;
+      const dataUri = `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
+      const { msg } = await tryShareSvg(dataUri, svg);
+      setShareMessage(msg);
     } catch {
       setShareMessage('Unable to share right now. Try again.');
     } finally {
