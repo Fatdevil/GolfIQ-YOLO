@@ -14,6 +14,7 @@ export default defineConfig({
       '../shared/playslike/__tests__/**/*.spec.ts',
       '../shared/runs/__tests__/**/*.spec.ts',
       '../shared/shotsense/__tests__/**/*.spec.ts',
+      '../shared/telemetry/__tests__/**/*.spec.ts',
       'tests/**/*.spec.ts',
       '../tests/shared/caddie/**/*.spec.ts',
       '../tests/shared/greeniq/**/*.spec.ts',

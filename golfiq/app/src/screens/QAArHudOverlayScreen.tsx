@@ -109,6 +109,7 @@ import {
 } from '../../../../shared/playslike/bag_calibrator';
 import { isTelemetryOptedOut } from '../../../../shared/ops/log_export';
 import { buildShotFeedback, type FeedbackOutput } from '../../../../shared/playslike/feedback';
+import { exportHoleAccuracy } from '../../../../shared/telemetry/shotsenseMetrics';
 import {
   createLandingHeuristics,
   type LandingProposal,
@@ -2497,6 +2498,25 @@ const QAArHudOverlayScreen: React.FC = () => {
     const iosLabel = capability.ios ? '✓' : '✕';
     return `Android ${androidLabel} · iOS ${iosLabel}`;
   }, [watchDiag.capability]);
+  const handlePrintShotSenseAccuracy = useCallback(() => {
+    try {
+      const { text, webDownload } = exportHoleAccuracy();
+      console.log('SS-ACCURACY-NDJSON\n' + text);
+      if (Platform.OS === 'web') {
+        try {
+          webDownload?.();
+        } catch (error) {
+          if (typeof __DEV__ !== 'undefined' && __DEV__) {
+            console.warn('[QAArHudOverlay] ShotSense accuracy download failed', error);
+          }
+        }
+      }
+    } catch (error) {
+      if (typeof __DEV__ !== 'undefined' && __DEV__) {
+        console.warn('[QAArHudOverlay] ShotSense accuracy export failed', error);
+      }
+    }
+  }, []);
   const watchLastSendSummary = useMemo(() => {
     const { ok, ts, bytes } = watchDiag.lastSend;
     if (!ts) {
@@ -6299,20 +6319,21 @@ const QAArHudOverlayScreen: React.FC = () => {
       </View>
       <View style={styles.statusPanel}>
         {__DEV__ ? (
-          <View style={styles.watchCard}>
-            <TouchableOpacity
-              onPress={() => setWatchDiagExpanded((prev) => !prev)}
-              style={styles.watchCardHeader}
-            >
-              <Text style={styles.watchCardTitle}>Watch HUD</Text>
-              <Text style={styles.watchCardChevron}>{watchDiagExpanded ? '▾' : '▸'}</Text>
-            </TouchableOpacity>
-            {watchDiagExpanded ? (
-              <View style={styles.watchCardBody}>
-                <View style={styles.watchRow}>
-                  <Text style={styles.watchRowLabel}>Capability</Text>
-                  <Text style={styles.watchRowValue}>{watchCapabilityLabel}</Text>
-                </View>
+          <>
+            <View style={styles.watchCard}>
+              <TouchableOpacity
+                onPress={() => setWatchDiagExpanded((prev) => !prev)}
+                style={styles.watchCardHeader}
+              >
+                <Text style={styles.watchCardTitle}>Watch HUD</Text>
+                <Text style={styles.watchCardChevron}>{watchDiagExpanded ? '▾' : '▸'}</Text>
+              </TouchableOpacity>
+              {watchDiagExpanded ? (
+                <View style={styles.watchCardBody}>
+                  <View style={styles.watchRow}>
+                    <Text style={styles.watchRowLabel}>Capability</Text>
+                    <Text style={styles.watchRowValue}>{watchCapabilityLabel}</Text>
+                  </View>
                 <View style={styles.watchRow}>
                   <Text style={styles.watchRowLabel}>Last send</Text>
                   <Text style={[styles.watchRowValue, watchLastSendTone]}>{watchLastSendSummary}</Text>
@@ -6344,9 +6365,13 @@ const QAArHudOverlayScreen: React.FC = () => {
                   </TouchableOpacity>
                 </View>
                 <Text style={[styles.watchStatusText, watchAutoSendTone]}>{watchAutoSendStatus}</Text>
-              </View>
-            ) : null}
-          </View>
+                </View>
+              ) : null}
+            </View>
+            <TouchableOpacity onPress={handlePrintShotSenseAccuracy} style={styles.devToolButton}>
+              <Text style={styles.devToolButtonText}>Print ShotSense accuracy</Text>
+            </TouchableOpacity>
+          </>
         ) : null}
         <View style={styles.calibrationChipRow}>
           <View style={[styles.calibrationChip, calibrationChipToneStyle]}>
@@ -7606,6 +7631,20 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#1f2937',
     gap: 8,
+  },
+  devToolButton: {
+    backgroundColor: '#0b1120',
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderWidth: 1,
+    borderColor: '#1f2937',
+    alignItems: 'center',
+  },
+  devToolButtonText: {
+    color: '#38bdf8',
+    fontSize: 14,
+    fontWeight: '600',
   },
   watchCardHeader: {
     flexDirection: 'row',
