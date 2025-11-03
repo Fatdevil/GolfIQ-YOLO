@@ -73,6 +73,7 @@ function buildShot(hole: number, seq: number, args: {
   loc: GeoPoint;
   lie: Lie;
   club?: string;
+  source?: string;
   kind: ShotKind;
   toPinStart_m?: number;
   playsLikePct?: number;
@@ -84,6 +85,7 @@ function buildShot(hole: number, seq: number, args: {
     start: sanitizeGeoPoint(args.loc),
     startLie: args.lie,
     club: args.club,
+    source: args.source,
     kind: args.kind,
     toPinStart_m: Number.isFinite(Number(args.toPinStart_m)) ? Number(args.toPinStart_m) : undefined,
     playsLikePct: Number.isFinite(Number(args.playsLikePct)) ? Number(args.playsLikePct) : undefined,
@@ -95,6 +97,7 @@ type AddShotArgs = {
   start: GeoPoint;
   startLie: Lie;
   club?: string;
+  source?: string;
   toPinStart_m?: number;
   playsLikePct?: number;
   force?: boolean;
@@ -189,6 +192,7 @@ export const RoundRecorder = {
       loc: shot.start,
       lie: shot.startLie,
       club: shot.club,
+      source: shot.source,
       kind: shot.kind,
       toPinStart_m: shot.toPinStart_m,
       playsLikePct: shot.playsLikePct,

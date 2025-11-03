@@ -17,6 +17,7 @@ import {
 import { WatchBridge } from '../../../../shared/watch/bridge';
 import type { WatchHUDStateV1 } from '../../../../shared/watch/types';
 import { shotSense } from '../shotsense/ShotSenseService';
+import { setFollowContext } from './context';
 
 export type UseFollowLoopOptions = {
   roundId: string;
@@ -351,13 +352,31 @@ export function useFollowLoop(options: UseFollowLoopOptions): UseFollowLoopState
       setFollowState(patchedFollow);
       if (!patchedFollow.hole) {
         setSnapshot(null);
+        setFollowContext(null);
         return;
       }
+      const holeNumber = resolveHoleNumber(patchedFollow.hole);
+      const teeLock = autoStateRef.current?.atTeeBox;
+      const isOnTee = Boolean(teeLock && holeNumber && teeLock.holeId === holeNumber && now - teeLock.ts < 120_000);
       const distances = {
         front: haversine(point, patchedFollow.hole.front),
         middle: haversine(point, patchedFollow.hole.middle),
         back: haversine(point, patchedFollow.hole.back),
       };
+      const onGreen = patchedFollow.phase !== 'advance' && patchedFollow.enterGreenAt !== null;
+      if (holeNumber) {
+        const par = Number((patchedFollow.hole as unknown as { par?: number }).par);
+        setFollowContext({
+          holeId: holeNumber,
+          par: Number.isFinite(par) ? par : undefined,
+          pos: { lat: point.lat, lon: point.lon },
+          onGreen,
+          onTee: isOnTee,
+          lie: isOnTee ? 'Tee' : 'Fairway',
+        });
+      } else {
+        setFollowContext(null);
+      }
       const snapshotPayload = buildSnapshot({
         hole: patchedFollow.hole,
         distances,
@@ -371,7 +390,7 @@ export function useFollowLoop(options: UseFollowLoopOptions): UseFollowLoopState
         ts: gpsTs,
         speed_mps: speed,
         distToGreen_m: distances.middle,
-        onGreen: patchedFollow.phase !== 'advance' && patchedFollow.enterGreenAt !== null,
+        onGreen,
       });
       setSnapshot(snapshotPayload);
       if (watchAutoSend) {
@@ -455,6 +474,7 @@ export function useFollowLoop(options: UseFollowLoopOptions): UseFollowLoopState
         subscription.remove();
       }
       lastCancelRef.current = WatchBridge.cancelPending('follow-unmount');
+      setFollowContext(null);
     };
   }, [handlePosition]);
 

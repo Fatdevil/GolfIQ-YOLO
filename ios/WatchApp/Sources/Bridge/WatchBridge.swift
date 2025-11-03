@@ -112,6 +112,9 @@ extension WatchBridge: WCSessionDelegate {
   }
 
   func session(_ session: WCSession, didReceiveMessage message: [String: Any]) {
+    if handleShotSenseAck(message) {
+      return
+    }
     guard let type = message["type"] as? String else { return }
     switch type {
     case "holeModel":

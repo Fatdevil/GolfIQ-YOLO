@@ -36,6 +36,23 @@ export const notifyRoundSaved = () => {
   module.notifyRoundSaved()
 }
 
+export const sendShotSenseAck = (kind: 'pending' | 'confirmed') => {
+  if (!module) return
+  if (typeof module.sendShotSenseAck === 'function') {
+    module.sendShotSenseAck(kind)
+    return
+  }
+  if (typeof module.sendMessage === 'function') {
+    try {
+      module.sendMessage('/shotsense/ack', { kind })
+    } catch (error) {
+      if (typeof __DEV__ !== 'undefined' && __DEV__) {
+        console.warn('[watch/bridge] sendMessage failed', error)
+      }
+    }
+  }
+}
+
 export const subscribeTargetMoved = (listener: TargetListener) => {
   const subscription = emitter.addListener('WatchTargetMoved', listener)
   return () => subscription.remove()
