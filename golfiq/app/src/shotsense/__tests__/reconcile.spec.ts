@@ -1,0 +1,58 @@
+import { afterEach, beforeEach, expect, test, vi } from 'vitest';
+
+import { PostHoleReconciler, __setConfirmHandlerForTest, __setRoundRecorderForTest } from '../PostHoleReconciler';
+import { autoQueue } from '../AutoCaptureQueue';
+
+const HOLE_ID = 5;
+
+beforeEach(() => {
+  autoQueue.finalizeHole(HOLE_ID);
+  __setRoundRecorderForTest(null);
+  __setConfirmHandlerForTest(null);
+});
+
+afterEach(() => {
+  autoQueue.finalizeHole(HOLE_ID);
+  __setRoundRecorderForTest(null);
+  __setConfirmHandlerForTest(null);
+  vi.clearAllMocks();
+});
+
+test('applies accepted shots when user confirms', async () => {
+  const addShot = vi.fn().mockResolvedValue(null as any);
+  __setRoundRecorderForTest({ addShot } as unknown as any);
+  const confirm = vi.fn().mockResolvedValue(true);
+  __setConfirmHandlerForTest(async (hole, shots) => {
+    confirm(hole, shots);
+    return true;
+  });
+
+  autoQueue.enqueue({ ts: 1_000, strength: 0.8, holeId: HOLE_ID, start: { lat: 1, lon: 2 }, lie: 'Fairway' });
+  autoQueue.confirm({ club: '7i' });
+  autoQueue.enqueue({ ts: 3_500, strength: 0.7, holeId: HOLE_ID, start: { lat: 1.1, lon: 2.1 }, lie: 'Rough' });
+  autoQueue.confirm({ club: 'PW' });
+
+  expect(autoQueue.getAcceptedShots(HOLE_ID)).toHaveLength(2);
+  const result = await PostHoleReconciler.reviewAndApply(HOLE_ID);
+
+  expect(confirm).toHaveBeenCalledTimes(1);
+  expect(confirm).toHaveBeenCalledWith(HOLE_ID, expect.arrayContaining([expect.objectContaining({ club: '7i' })]));
+  expect(addShot).toHaveBeenCalledTimes(2);
+  expect(autoQueue.getAcceptedShots(HOLE_ID)).toHaveLength(0);
+  expect(result).toEqual({ applied: 2 });
+  addShot.mockReset();
+});
+
+test('skips when there are no accepted shots', async () => {
+  const addShot = vi.fn().mockResolvedValue(null as any);
+  __setRoundRecorderForTest({ addShot } as unknown as any);
+  const confirm = vi.fn().mockResolvedValue(true);
+  __setConfirmHandlerForTest(confirm);
+
+  const result = await PostHoleReconciler.reviewAndApply(HOLE_ID);
+
+  expect(confirm).not.toHaveBeenCalled();
+  expect(addShot).not.toHaveBeenCalled();
+  expect(result).toEqual({ applied: 0 });
+  addShot.mockReset();
+});

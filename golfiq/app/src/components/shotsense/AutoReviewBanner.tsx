@@ -4,7 +4,6 @@ import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { autoQueue } from '../../shotsense/AutoCaptureQueue';
 import { guessClub } from '../../shotsense/clubGuess';
 import { shotSense } from '../../shotsense/ShotSenseService';
-import { RoundRecorder } from '../../../../shared/round/recorder';
 
 export function AutoReviewBanner(): JSX.Element | null {
   const [shot, setShot] = useState(autoQueue.currentShot());
@@ -26,30 +25,9 @@ export function AutoReviewBanner(): JSX.Element | null {
 
   const suggestion = guessClub(shot);
 
-  const resolveStart = () => {
-    if (!shot.start) {
-      if (__DEV__) {
-        console.warn('[AutoReviewBanner] Missing start position for auto shot');
-      }
-      return null;
-    }
-    return { lat: shot.start.lat, lon: shot.start.lon, ts: shot.ts };
-  };
-
   const handleConfirm = (clubCode?: string) => {
-    const start = resolveStart();
-    if (start) {
-      void RoundRecorder.addShot(shot.holeId, {
-        kind: 'Full',
-        start,
-        startLie: shot.lie ?? 'Fairway',
-        source: 'auto',
-        club: clubCode,
-      }).catch((error) => {
-        if (__DEV__) {
-          console.warn('[AutoReviewBanner] Failed to record auto shot', error);
-        }
-      });
+    if (!shot.start && __DEV__) {
+      console.warn('[AutoReviewBanner] Missing start position for auto shot');
     }
     try {
       shotSense.hapticsAck?.('confirmed');
@@ -58,7 +36,7 @@ export function AutoReviewBanner(): JSX.Element | null {
         console.warn('[AutoReviewBanner] haptics ack failed', error);
       }
     }
-    autoQueue.confirm({});
+    autoQueue.confirm({ club: clubCode });
   };
 
   return (
