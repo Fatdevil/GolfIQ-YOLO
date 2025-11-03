@@ -8,6 +8,11 @@ import type {
   Suggestion,
 } from './types';
 
+const nz = (value: number | undefined, fallback = 0): number =>
+  typeof value === 'number' && Number.isFinite(value) ? value : fallback;
+
+const has = <T>(value: T | undefined): value is T => value !== undefined;
+
 type QuantileKey = 'p50_m' | 'p75_m' | 'p90_m';
 
 type LabelConfig = {
@@ -107,7 +112,7 @@ const computeRollout = (club: ClubId, firmness: PlaysLike['fairwayFirmness']): n
   return base;
 };
 
-const windAdjustment = (wind_mps: number | undefined): number => {
+const windAdjustment = (wind_mps: number): number => {
   if (!Number.isFinite(wind_mps)) {
     return 0;
   }
@@ -115,7 +120,7 @@ const windAdjustment = (wind_mps: number | undefined): number => {
   return wind_mps * WIND_PER_MPS;
 };
 
-const temperatureAdjustment = (temp_c: number | undefined): number => {
+const temperatureAdjustment = (temp_c: number): number => {
   if (!Number.isFinite(temp_c)) {
     return 0;
   }
@@ -125,7 +130,7 @@ const temperatureAdjustment = (temp_c: number | undefined): number => {
   return diff * TEMP_PER_DEG;
 };
 
-const elevationAdjustment = (elevation_m: number | undefined): number => {
+const elevationAdjustment = (elevation_m: number): number => {
   if (!Number.isFinite(elevation_m)) {
     return 0;
   }
@@ -135,9 +140,9 @@ const elevationAdjustment = (elevation_m: number | undefined): number => {
 
 const computeEffectiveDistance = (dist: PlaysLike): number => {
   const base = normalizeDistance(dist.raw_m);
-  const windAdj = windAdjustment(dist.wind_mps);
-  const tempAdj = temperatureAdjustment(dist.temp_c);
-  const elevAdj = elevationAdjustment(dist.elevation_m);
+  const windAdj = windAdjustment(nz(dist.wind_mps));
+  const tempAdj = temperatureAdjustment(nz(dist.temp_c));
+  const elevAdj = elevationAdjustment(nz(dist.elevation_m));
   return Math.max(0, base + windAdj + tempAdj + elevAdj);
 };
 
@@ -356,7 +361,8 @@ export function computeSuggestions(
   for (const { club, stat } of entries) {
     const sigma = LATERAL_SIGMA_M[club] ?? 8;
     const aim = computeAim(haz, sigma);
-    const rollout = computeRollout(club, dist.fairwayFirmness);
+    const firmness = has(dist.fairwayFirmness) ? dist.fairwayFirmness : undefined;
+    const rollout = computeRollout(club, firmness);
 
     for (const config of LABEL_CONFIGS) {
       const carry = stat[config.quantile];

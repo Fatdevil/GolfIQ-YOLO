@@ -99,5 +99,51 @@ describe('computeSuggestions', () => {
 
     expect(carries.every((carry) => carry >= 160 - 1e-6)).toBe(true);
   });
+
+  it('treats missing plays-like modifiers the same as explicit neutral values', () => {
+    const bag = buildBag({
+      '6i': { p50_m: 158, p75_m: 164, p90_m: 170, samples: 14 },
+      '7i': { p50_m: 146, p75_m: 152, p90_m: 158, samples: 18 },
+      '8i': { p50_m: 135, p75_m: 141, p90_m: 147, samples: 18 },
+    });
+
+    const rawOnly: PlaysLike = { raw_m: 150 };
+    const explicitZero: PlaysLike = { raw_m: 150, wind_mps: 0, temp_c: 0, elevation_m: 0 };
+
+    const undefinedSuggestions = computeSuggestions(bag, rawOnly, {}, neutralScore);
+    const zeroSuggestions = computeSuggestions(bag, explicitZero, {}, neutralScore);
+
+    expect(undefinedSuggestions.length).toBeGreaterThan(0);
+    undefinedSuggestions.forEach((entry) => {
+      expect(Number.isFinite(entry.carry_m)).toBe(true);
+      expect(Number.isFinite(entry.rollout_m)).toBe(true);
+      expect(Number.isFinite(entry.expectedSGDelta)).toBe(true);
+      expect(Number.isFinite(entry.riskPenaltyProb)).toBe(true);
+      expect(entry.riskPenaltyProb).toBeGreaterThanOrEqual(0);
+      expect(entry.riskPenaltyProb).toBeLessThanOrEqual(1);
+      expect(Number.isFinite(entry.aim.lateral_m)).toBe(true);
+      expect(Number.isFinite(entry.aim.expectedFairwayProb)).toBe(true);
+    });
+
+    expect(undefinedSuggestions).toEqual(zeroSuggestions);
+  });
+
+  it('defaults hazard probabilities when omitted', () => {
+    const bag = buildBag({
+      D: { p50_m: 230, p75_m: 242, p90_m: 255, samples: 25 },
+      '3W': { p50_m: 215, p75_m: 225, p90_m: 235, samples: 24 },
+      '5W': { p50_m: 205, p75_m: 215, p90_m: 225, samples: 22 },
+    });
+
+    const suggestions = computeSuggestions(bag, { raw_m: 225 }, {}, neutralScore);
+
+    expect(suggestions.length).toBeGreaterThan(0);
+    suggestions.forEach((entry) => {
+      expect(entry.riskPenaltyProb).toBeGreaterThanOrEqual(0);
+      expect(entry.riskPenaltyProb).toBeLessThanOrEqual(1);
+      expect(Number.isFinite(entry.expectedSGDelta)).toBe(true);
+      expect(Number.isFinite(entry.rollout_m)).toBe(true);
+    });
+  });
 });
 
