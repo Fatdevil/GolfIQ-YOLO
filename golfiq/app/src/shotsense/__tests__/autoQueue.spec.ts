@@ -18,6 +18,25 @@ afterEach(() => {
   }
 });
 
+test('dedupes by shot timestamp, not wall clock', () => {
+  const queue = new AutoCaptureQueue();
+  const events: string[] = [];
+
+  queue.on((event) => {
+    if (event.type === 'enqueue') {
+      events.push('enqueue');
+    }
+  });
+
+  const firstTs = 1_000_000;
+  const secondTs = firstTs + 2000;
+
+  queue.enqueue({ ts: firstTs, strength: 0.8, holeId: 1 });
+  queue.enqueue({ ts: secondTs, strength: 0.9, holeId: 1 });
+
+  expect(events).toHaveLength(2);
+});
+
 test('dedupe & ttl', async () => {
   vi.useFakeTimers();
   const queue = new AutoCaptureQueue();

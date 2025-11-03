@@ -8,7 +8,7 @@ const TTL_MS = 15000;
 export class AutoCaptureQueue {
   private current: AutoDetectedShot | undefined;
   private listeners: Listener[] = [];
-  private lastTs = 0;
+  private lastAcceptedShotTs = Number.NEGATIVE_INFINITY;
   private ttlTimer: ReturnType<typeof setTimeout> | null = null;
 
   on(listener: Listener): () => void {
@@ -34,10 +34,10 @@ export class AutoCaptureQueue {
   }
 
   enqueue(shot: Omit<AutoDetectedShot, 'source'>): void {
-    if (Date.now() - this.lastTs < DEDUPE_MS) {
+    if (shot.ts - this.lastAcceptedShotTs < DEDUPE_MS) {
       return;
     }
-    this.lastTs = Date.now();
+    this.lastAcceptedShotTs = shot.ts;
     const currentShot: AutoDetectedShot = { ...shot, source: 'auto' };
     this.current = currentShot;
     if (this.ttlTimer) {
