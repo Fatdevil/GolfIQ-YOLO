@@ -1511,6 +1511,22 @@ const planApproachInternal = (args: ApproachPlanArgs, options: ApproachMcOptions
     riskMode: args.riskMode,
   });
   const candidates: ApproachCandidate[] = [];
+  const respectsFatSide = (candidate: ApproachCandidate | undefined): boolean => {
+    if (!candidate || !fatSide) {
+      return true;
+    }
+    if (Math.abs(candidate.aimOffset) <= OPPOSITE_AIM_THRESHOLD) {
+      return true;
+    }
+    return fatSide === 'L' ? candidate.aimOffset <= 0 : candidate.aimOffset >= 0;
+  };
+  const selectFatSideAware = (list: ApproachCandidate[], fallback: ApproachCandidate): ApproachCandidate => {
+    if (!fatSide) {
+      return fallback;
+    }
+    const preferred = list.find((candidate) => respectsFatSide(candidate));
+    return preferred ?? fallback;
+  };
   for (const aimOffset of AIM_OFFSETS_APPROACH) {
     const biasedOffset = aimOffset + fatBias;
     const centerX = biasedOffset + drift;
@@ -1547,7 +1563,7 @@ const planApproachInternal = (args: ApproachPlanArgs, options: ApproachMcOptions
     }
     return a.aimOffset - b.aimOffset;
   });
-  let best = candidates[0];
+  let best = selectFatSideAware(candidates, candidates[0]);
   let mcResult: McResult | null = null;
   if (options.useMC) {
     const sampleCount = normalizeSamples(options.samples);
@@ -1590,7 +1606,7 @@ const planApproachInternal = (args: ApproachPlanArgs, options: ApproachMcOptions
     });
     if (pool.length) {
       const selected = adjustCandidateForHazard(pool, pool[0], riskGate, args.riskMode);
-      best = selected;
+      best = selectFatSideAware(pool, selected);
       mcResult = selected.mc ?? null;
     }
   }
@@ -1854,17 +1870,21 @@ export function scoreEV(input: StrategyInput, lane: TargetLane, weights: Strateg
   const fairwayBonus = hazards.fairway * weights.fairwayBonus;
 
   const dangerSign = resolveDangerSign(input);
-  const fatSide = Math.max(0, weights.fatSideBias_m);
+  const fatSideBase = Math.max(0, weights.fatSideBias_m);
+  const laneHalf = laneWidth / 2;
+  const hazardDirectional = clamp01(hazards.water + hazards.ob);
+  const hazardBoost = laneHalf * hazardDirectional * (0.5 + hazardDirectional);
+  const fatSideTarget = Math.min(laneHalf, fatSideBase + hazardBoost);
   const lateralSigma = sanitizeFinite(dispersion.lateralSigma_m, dispersion.sigma_m);
   let biasPenalty = 0;
-  if (dangerSign !== 0 && fatSide > 0) {
+  if (dangerSign !== 0 && fatSideTarget > 0) {
     const offsetAway = dangerSign < 0 ? offset : -offset;
-    const shortfall = fatSide - offsetAway;
+    const shortfall = fatSideTarget - offsetAway;
     if (shortfall > 0) {
-      const normalized = Math.min(shortfall / Math.max(fatSide, 1), 1);
-      const hazardDirectional = clamp01(hazards.water + hazards.ob);
+      const normalized = Math.min(shortfall / Math.max(fatSideTarget, 1), 1);
       const dispersionFactor = 1 + Math.min(lateralSigma / Math.max(laneWidth / 2, 1), 1.5);
-      biasPenalty = normalized * hazardDirectional * dispersionFactor;
+      const hazardSeverityBoost = 1 + hazards.water * 6 + hazards.ob * 3;
+      biasPenalty = normalized * hazardDirectional * dispersionFactor * hazardSeverityBoost;
     }
   }
 

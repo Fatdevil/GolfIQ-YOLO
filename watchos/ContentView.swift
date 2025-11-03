@@ -9,6 +9,9 @@ struct ContentView: View {
                 VStack(alignment: .leading, spacing: 12) {
                     fmbRow(for: hud)
                     playsLikeRow(for: hud)
+                    if !hud.tournamentSafe, let hint = hud.caddie {
+                        CaddieMiniCardView(hint: hint)
+                    }
                     if !hud.tournamentSafe, let strategy = hud.strategy {
                         strategyRow(for: strategy)
                     }

@@ -12,6 +12,14 @@ const baseState: WatchHUDStateV1 = {
   wind: { mps: 3.2, deg: 270 },
   strategy: { profile: 'neutral', offset_m: -4, carry_m: 136 },
   tournamentSafe: false,
+  caddie: {
+    club: '7i',
+    carry_m: 152,
+    total_m: 164,
+    aim: { dir: 'R', offset_m: 5 },
+    risk: 'neutral',
+    confidence: 0.72,
+  },
 };
 
 const toBytes = (value: string): Uint8Array => {
@@ -33,10 +41,25 @@ describe('watch HUD codec', () => {
       ...baseState,
       extra: 'ignore-me',
       fmb: { ...baseState.fmb, note: 'redundant' },
+      caddie: { ...baseState.caddie, meta: { foo: 'bar' } },
     } as Record<string, unknown>;
     const encoded = toBytes(JSON.stringify(payload));
     const decoded = decodeHUD(encoded);
     expect(decoded).toEqual(baseState);
+  });
+
+  it('drops invalid caddie hints', () => {
+    const payload = {
+      ...baseState,
+      caddie: {
+        club: '',
+        carry_m: 'nan',
+        risk: 'extreme',
+      },
+    } as Record<string, unknown>;
+    const encoded = toBytes(JSON.stringify(payload));
+    const decoded = decodeHUD(encoded);
+    expect(decoded.caddie).toBeUndefined();
   });
 
   it('guards on unsupported versions', () => {

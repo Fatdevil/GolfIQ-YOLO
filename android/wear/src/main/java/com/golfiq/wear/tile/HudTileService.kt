@@ -13,6 +13,7 @@ import com.golfiq.wear.HudState
 import com.golfiq.wear.data.HudStateRepository
 import com.google.common.util.concurrent.ListenableFuture
 import java.util.Locale
+import kotlin.math.absoluteValue
 import kotlin.math.roundToInt
 
 private const val RESOURCES_VERSION = "1"
@@ -68,6 +69,24 @@ class HudTileService : TileService() {
                     )
                     .build()
             )
+            .apply {
+                if (!state.tournamentSafe && state.caddie != null) {
+                    addContent(
+                        LayoutElementBuilders.Text.Builder()
+                            .setText(formatCaddie(state))
+                            .setFontStyle(
+                                LayoutElementBuilders.FontStyle.Builder()
+                                    .setSize(
+                                        DimensionBuilders.SpProp.Builder()
+                                            .setValue(12f)
+                                            .build()
+                                    )
+                                    .build()
+                            )
+                            .build()
+                    )
+                }
+            }
             .build()
 
         val layout = LayoutElementBuilders.Layout.Builder()
@@ -108,5 +127,24 @@ class HudTileService : TileService() {
         } else {
             String.format(Locale.US, "PL %+.1f%%", state.playsLikePct)
         }
+    }
+
+    private fun formatCaddie(state: HudState): String {
+        val hint = state.caddie ?: return ""
+        val aimSegment = when (hint.aimDir) {
+            "L" -> "L${hint.aimOffsetM?.absoluteValue?.roundToInt()?.let { "${it}m" } ?: ""}"
+            "R" -> "R${hint.aimOffsetM?.absoluteValue?.roundToInt()?.let { "${it}m" } ?: ""}"
+            "C" -> "C"
+            else -> "C"
+        }
+        val riskInitial = hint.risk.firstOrNull()?.uppercaseChar() ?: 'N'
+        return String.format(
+            Locale.US,
+            "🏌  %s • %dm • %s • %c",
+            hint.club,
+            hint.carryM.roundToInt(),
+            aimSegment,
+            riskInitial,
+        )
     }
 }

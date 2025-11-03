@@ -21,8 +21,14 @@ const bufferFrom = getBuffer();
 
 type StrategyProfile = NonNullable<WatchHUDStateV1['strategy']>['profile'];
 
+type CaddieRisk = NonNullable<WatchHUDStateV1['caddie']>['risk'];
+type CaddieAimDir = NonNullable<NonNullable<WatchHUDStateV1['caddie']>['aim']>['dir'];
+
 const isStrategyProfile = (value: unknown): value is StrategyProfile =>
   typeof value === 'string' && STRATEGY_PROFILES.has(value as StrategyProfile);
+
+const CADDIE_RISKS = new Set<CaddieRisk>(['safe', 'neutral', 'aggressive']);
+const CADDIE_AIM_DIRS = new Set<CaddieAimDir>(['L', 'C', 'R']);
 
 const encodeUtf8 = (value: string): Uint8Array => {
   if (TEXT_ENCODER) {
@@ -80,6 +86,66 @@ const sanitizeStrategy = (
   };
 };
 
+const sanitizeCaddie = (raw: unknown): WatchHUDStateV1['caddie'] | undefined => {
+  if (!raw || typeof raw !== 'object') {
+    return undefined;
+  }
+  const record = raw as Record<string, unknown>;
+  const club = typeof record.club === 'string' ? record.club.trim() : '';
+  if (!club) {
+    return undefined;
+  }
+  let carry: number;
+  try {
+    carry = expectFiniteNumber(record.carry_m, 'caddie.carry_m');
+  } catch (error) {
+    return undefined;
+  }
+  const riskRaw = typeof record.risk === 'string' ? record.risk.toLowerCase() : '';
+  const risk = (CADDIE_RISKS.has(riskRaw as CaddieRisk)
+    ? (riskRaw as CaddieRisk)
+    : 'neutral') as CaddieRisk;
+  const hint: WatchHUDStateV1['caddie'] = {
+    club,
+    carry_m: carry,
+    risk,
+  };
+  const totalCandidate = record.total_m;
+  if (totalCandidate !== undefined && totalCandidate !== null) {
+    const total = Number(totalCandidate);
+    if (Number.isFinite(total)) {
+      hint.total_m = total;
+    }
+  }
+  const aimRaw = record.aim;
+  if (aimRaw && typeof aimRaw === 'object') {
+    const aimRecord = aimRaw as Record<string, unknown>;
+    const dirRaw = typeof aimRecord.dir === 'string' ? aimRecord.dir.toUpperCase() : '';
+    if (CADDIE_AIM_DIRS.has(dirRaw as CaddieAimDir)) {
+      const aim: NonNullable<NonNullable<WatchHUDStateV1['caddie']>['aim']> = {
+        dir: dirRaw as CaddieAimDir,
+      };
+      const offsetCandidate = aimRecord.offset_m;
+      if (offsetCandidate !== undefined && offsetCandidate !== null) {
+        const offset = Number(offsetCandidate);
+        if (Number.isFinite(offset)) {
+          aim.offset_m = offset;
+        }
+      }
+      hint.aim = aim;
+    }
+  }
+  const confidenceCandidate = record.confidence;
+  if (confidenceCandidate !== undefined && confidenceCandidate !== null) {
+    const confidence = Number(confidenceCandidate);
+    if (Number.isFinite(confidence)) {
+      const clamped = Math.min(1, Math.max(0, confidence));
+      hint.confidence = clamped;
+    }
+  }
+  return hint;
+};
+
 export function encodeHUD(state: WatchHUDStateV1): Uint8Array {
   const canonical: WatchHUDStateV1 = {
     v: 1,
@@ -100,6 +166,12 @@ export function encodeHUD(state: WatchHUDStateV1): Uint8Array {
     const normalized = sanitizeStrategy(state.strategy);
     if (normalized) {
       canonical.strategy = normalized;
+    }
+  }
+  if (state.caddie) {
+    const normalizedCaddie = sanitizeCaddie(state.caddie);
+    if (normalizedCaddie) {
+      canonical.caddie = normalizedCaddie;
     }
   }
   const json = JSON.stringify(canonical);
@@ -128,6 +200,7 @@ export function decodeHUD(buffer: Uint8Array): WatchHUDStateV1 {
   }
   const fmbRecord = fmbRaw as Record<string, unknown>;
   const strategy = sanitizeStrategy(record.strategy);
+  const caddie = sanitizeCaddie(record.caddie);
   return {
     v: 1,
     ts: expectFiniteNumber(record.ts, 'ts'),
@@ -142,6 +215,7 @@ export function decodeHUD(buffer: Uint8Array): WatchHUDStateV1 {
       deg: expectFiniteNumber((record.wind as Record<string, unknown> | undefined)?.deg, 'wind.deg'),
     },
     ...(strategy ? { strategy } : {}),
+    ...(caddie ? { caddie } : {}),
     tournamentSafe: record.tournamentSafe === true,
   };
 }

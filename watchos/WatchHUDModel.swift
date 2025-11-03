@@ -81,6 +81,46 @@ struct HUD: Decodable, Equatable {
         }
     }
 
+    struct CaddieHint: Decodable, Equatable {
+        struct Aim: Decodable, Equatable {
+            enum Direction: String, Decodable {
+                case L
+                case C
+                case R
+            }
+
+            let dir: Direction
+            let offsetM: Double?
+
+            private enum CodingKeys: String, CodingKey {
+                case dir
+                case offsetM = "offset_m"
+            }
+        }
+
+        enum Risk: String, Decodable {
+            case safe
+            case neutral
+            case aggressive
+        }
+
+        let club: String
+        let carryM: Double
+        let totalM: Double?
+        let aim: Aim?
+        let risk: Risk
+        let confidence: Double?
+
+        private enum CodingKeys: String, CodingKey {
+            case club
+            case carryM = "carry_m"
+            case totalM = "total_m"
+            case aim
+            case risk
+            case confidence
+        }
+    }
+
     let version: Int
     let timestamp: TimeInterval
     let fmb: Distances
@@ -88,6 +128,7 @@ struct HUD: Decodable, Equatable {
     let wind: Wind
     let strategy: Strategy?
     let tournamentSafe: Bool
+    let caddie: CaddieHint?
 
     private enum CodingKeys: String, CodingKey {
         case version = "v"
@@ -97,5 +138,6 @@ struct HUD: Decodable, Equatable {
         case wind
         case strategy
         case tournamentSafe
+        case caddie
     }
 }
