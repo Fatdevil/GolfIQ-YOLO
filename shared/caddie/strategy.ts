@@ -1563,7 +1563,7 @@ const planApproachInternal = (args: ApproachPlanArgs, options: ApproachMcOptions
     }
     return a.aimOffset - b.aimOffset;
   });
-  let best = selectFatSideAware(candidates, candidates[0]);
+  let finalCandidate = selectFatSideAware(candidates, candidates[0]);
   let mcResult: McResult | null = null;
   if (options.useMC) {
     const sampleCount = normalizeSamples(options.samples);
@@ -1606,22 +1606,22 @@ const planApproachInternal = (args: ApproachPlanArgs, options: ApproachMcOptions
     });
     if (pool.length) {
       const selected = adjustCandidateForHazard(pool, pool[0], riskGate, args.riskMode);
-      best = selectFatSideAware(pool, selected);
-      mcResult = selected.mc ?? null;
+      finalCandidate = selectFatSideAware(pool, selected);
+      mcResult = finalCandidate.mc ?? selected.mc ?? null;
     }
   }
-  const targetLocal = { x: best.aimOffset, y: distance };
+  const targetLocal = { x: finalCandidate.aimOffset, y: distance };
   const targetGeo = fromLocal(args.ball, {
     x: targetLocal.x * frame.cos + targetLocal.y * frame.sin,
     y: -targetLocal.x * frame.sin + targetLocal.y * frame.cos,
   });
   const reasonParts: string[] = [];
-  if (best.aimDir !== "STRAIGHT") {
-    reasonParts.push(`Favours ${best.aimDir.toLowerCase()} side of green.`);
+  if (finalCandidate.aimDir !== "STRAIGHT") {
+    reasonParts.push(`Favours ${finalCandidate.aimDir.toLowerCase()} side of green.`);
   } else {
     reasonParts.push("Play center of green.");
   }
-  const riskValue = mcResult ? mcResult.hazardRate : best.combined;
+  const riskValue = mcResult ? mcResult.hazardRate : finalCandidate.combined;
   const missLabel = riskValue > 0.4 ? "High risk – bail out." : `Risk ≈ ${Math.round(riskValue * 100)}%.`;
   reasonParts.push(missLabel);
   if (mcResult) {
@@ -1634,18 +1634,18 @@ const planApproachInternal = (args: ApproachPlanArgs, options: ApproachMcOptions
     kind: "approach",
     club: preferredClub,
     target: targetGeo,
-    aimDeg: best.aimDeg,
-    aimDirection: best.aimDir,
+    aimDeg: finalCandidate.aimDeg,
+    aimDirection: finalCandidate.aimDir,
     reason: reasonParts.join(" "),
     risk: riskValue,
-    ev: mcResult?.ev,
-    landing: { distance_m: distance, lateral_m: best.centerX },
-    aim: { lateral_m: best.aimOffset },
+    ev: mcResult?.ev ?? finalCandidate.ev,
+    landing: { distance_m: distance, lateral_m: finalCandidate.centerX },
+    aim: { lateral_m: finalCandidate.aimOffset },
     mode: args.riskMode,
     carry_m: stats.carry_m,
     crosswind_mps: wind.cross,
     headwind_mps: wind.head,
-    windDrift_m: best.centerX - best.aimOffset,
+    windDrift_m: finalCandidate.centerX - finalCandidate.aimOffset,
     tuningActive: args.player.tuningActive,
     mc: options.useMC ? mcResult : null,
     riskFactors: options.useMC ? formatMcReasons(mcResult) : undefined,
