@@ -2,6 +2,8 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import { chooseStrategy, type StrategyInput } from '../../../shared/caddie/strategy';
+import { gameCtxStore } from '../../../shared/game/context';
+import { defaultGameContext } from '../../../shared/game/types';
 
 const baseInput: StrategyInput = {
   rawDist_m: 150,
@@ -13,7 +15,17 @@ const baseInput: StrategyInput = {
   dangerSide: 'left',
 };
 
+const resetGameContext = () => {
+  gameCtxStore.set({
+    ...defaultGameContext,
+    myScoreToPar: undefined,
+    position: undefined,
+    strokesBehind: undefined,
+  });
+};
+
 test('water hazard increases fat-side aim offset', () => {
+  resetGameContext();
   const conservative = chooseStrategy({ ...baseInput });
   const higherWater = chooseStrategy({
     ...baseInput,
@@ -31,6 +43,7 @@ test('water hazard increases fat-side aim offset', () => {
 });
 
 test('risk profiles adjust offsets and distance preference', () => {
+  resetGameContext();
   const conservative = chooseStrategy({ ...baseInput, profile: 'conservative' });
   const aggressive = chooseStrategy({ ...baseInput, profile: 'aggressive' });
 
@@ -45,6 +58,7 @@ test('risk profiles adjust offsets and distance preference', () => {
 });
 
 test('bounds respected for offset and carry sampling', () => {
+  resetGameContext();
   const bounded = chooseStrategy({
     ...baseInput,
     bounds: { maxOffset_m: 5, minCarry_m: 140, maxCarry_m: 160 },
@@ -56,6 +70,7 @@ test('bounds respected for offset and carry sampling', () => {
 });
 
 test('plays-like factor increases recommended carry', () => {
+  resetGameContext();
   const neutral = chooseStrategy({ ...baseInput, playsLikeFactor: 1.0 });
   const elevated = chooseStrategy({ ...baseInput, playsLikeFactor: 1.08 });
 
@@ -66,6 +81,7 @@ test('plays-like factor increases recommended carry', () => {
 });
 
 test('invalid inputs fall back to safe defaults', () => {
+  resetGameContext();
   const decision = chooseStrategy({
     rawDist_m: Number.NaN,
     playsLikeFactor: Number.NaN,

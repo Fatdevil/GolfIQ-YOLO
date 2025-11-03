@@ -1,3 +1,4 @@
+import { applyGameRiskBias } from '../game/context';
 import type { PlayerProfile, TrainingFocus } from './profile';
 
 export interface FocusScore {
@@ -84,13 +85,13 @@ export function pickRisk(profile: PlayerProfile, ctx: RiskContext = {}): PlayerP
   );
   const avgLift = mean(liftValues);
   if (hazard >= 0.6 || adoption < 0.35) {
-    return 'safe';
+    return applyGameRiskBias('safe');
   }
   if (avgLift > 0.12 && adoption > 0.6 && profile.adherenceScore > 0.6) {
-    return 'aggressive';
+    return applyGameRiskBias('aggressive');
   }
   if (profile.riskPreference === 'aggressive' && adoption > 0.55 && hazard < 0.4) {
-    return 'aggressive';
+    return applyGameRiskBias('aggressive');
   }
-  return adoption >= 0.45 ? 'normal' : 'safe';
+  return applyGameRiskBias(adoption >= 0.45 ? 'normal' : 'safe');
 }

@@ -7,6 +7,7 @@ import type {
   GreenSection,
 } from "../arhud/bundle_client";
 import { CLUB_SEQUENCE, type ClubId } from "../playslike/bag";
+import { applyGameRiskBias, applyGameRiskProfile } from "../game/context";
 import { getCaddieRc } from "./rc";
 import { runMonteCarloV1_5, type McPolygon, type McResult, type McTarget } from "./mc";
 import { ellipseOverlapRisk, lateralWindOffset, sampleEllipsePoints, type RiskFeature } from "./risk";
@@ -1441,14 +1442,16 @@ const planTeeShotInternal = (args: TeePlanArgs, options: TeeMcOptions): ShotPlan
 };
 
 export function planTeeShot(args: TeePlanArgs): ShotPlan {
-  return planTeeShotInternal(args, { useMC: false });
+  const normalized: TeePlanArgs = { ...args, riskMode: applyGameRiskBias(args.riskMode) };
+  return planTeeShotInternal(normalized, { useMC: false });
 }
 
 export function planTeeShotMC(args: TeePlanArgs): ShotPlan {
   if (!args.useMC) {
     return planTeeShot(args);
   }
-  return planTeeShotInternal(args, {
+  const normalized: TeePlanArgs = { ...args, riskMode: applyGameRiskBias(args.riskMode) };
+  return planTeeShotInternal(normalized, {
     useMC: true,
     samples: args.mcSamples,
     seed: args.mcSeed,
@@ -1636,14 +1639,16 @@ const planApproachInternal = (args: ApproachPlanArgs, options: ApproachMcOptions
 };
 
 export function planApproach(args: ApproachPlanArgs): ShotPlan {
-  return planApproachInternal(args, { useMC: false });
+  const normalized: ApproachPlanArgs = { ...args, riskMode: applyGameRiskBias(args.riskMode) };
+  return planApproachInternal(normalized, { useMC: false });
 }
 
 export function planApproachMC(args: ApproachPlanArgs): ShotPlan {
   if (!args.useMC) {
     return planApproach(args);
   }
-  return planApproachInternal(args, {
+  const normalized: ApproachPlanArgs = { ...args, riskMode: applyGameRiskBias(args.riskMode) };
+  return planApproachInternal(normalized, {
     useMC: true,
     samples: args.mcSamples,
     seed: args.mcSeed,
@@ -1879,7 +1884,8 @@ export function scoreEV(input: StrategyInput, lane: TargetLane, weights: Strateg
 }
 
 export function chooseStrategy(input: StrategyInput): StrategyDecision {
-  const profile: RiskProfile = STRATEGY_DEFAULTS[input.profile] ? input.profile : 'neutral';
+  const baseProfile: RiskProfile = STRATEGY_DEFAULTS[input.profile] ? input.profile : 'neutral';
+  const profile = applyGameRiskProfile(baseProfile);
   const weights = STRATEGY_DEFAULTS[profile];
   const normalizedInput: StrategyInput = {
     ...input,
