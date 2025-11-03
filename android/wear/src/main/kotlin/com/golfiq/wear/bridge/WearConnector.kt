@@ -9,6 +9,7 @@ import com.golfiq.wear.model.HoleModel
 import com.golfiq.wear.model.HolePoint
 import com.golfiq.wear.model.HolePolygon
 import com.golfiq.wear.model.HoleUiState
+import com.golfiq.wear.sense.IMUStreamer
 import com.google.android.gms.wearable.MessageClient
 import com.google.android.gms.wearable.MessageEvent
 import com.google.android.gms.wearable.Wearable
@@ -23,6 +24,8 @@ import org.json.JSONObject
 class WearConnector : ViewModel(), MessageClient.OnMessageReceivedListener {
   private var appContext: Context? = null
   private var messageClient: MessageClient? = null
+  private var imuStreamer: IMUStreamer? = null
+  private var senseStreamingEnabled = false
 
   private val _uiState = MutableStateFlow(HoleUiState())
   val uiState: StateFlow<HoleUiState> = _uiState
@@ -34,15 +37,20 @@ class WearConnector : ViewModel(), MessageClient.OnMessageReceivedListener {
     if (appContext == null) {
       appContext = context.applicationContext
       messageClient = Wearable.getMessageClient(context)
+      imuStreamer = IMUStreamer(context.applicationContext)
     }
   }
 
   fun onResume() {
     messageClient?.addListener(this)
+    if (senseStreamingEnabled) {
+      imuStreamer?.start()
+    }
   }
 
   fun onPause() {
     messageClient?.removeListener(this)
+    imuStreamer?.stop()
   }
 
   override fun onMessageReceived(messageEvent: MessageEvent) {
@@ -51,6 +59,7 @@ class WearConnector : ViewModel(), MessageClient.OnMessageReceivedListener {
       "/holeModel" -> applyHoleModel(payload)
       "/playerPos" -> updatePlayer(payload)
       "/targetPos" -> updateTarget(payload)
+      "/golfiq/shotsense/control" -> updateShotSenseControl(payload)
     }
   }
 
@@ -70,6 +79,15 @@ class WearConnector : ViewModel(), MessageClient.OnMessageReceivedListener {
     val point = parsePoint(jsonObject) ?: return
     val safe = jsonObject.optBoolean("tournamentSafe", _uiState.value.tournamentSafe)
     dispatchUpdate { current -> current.copy(target = point, tournamentSafe = safe) }
+  }
+
+  private fun updateShotSenseControl(json: String) {
+    val enabled = try {
+      JSONObject(json).optBoolean("enabled", false)
+    } catch (_: Exception) {
+      false
+    }
+    setSenseStreaming(enabled)
   }
 
   fun emitTargetMoved(point: HolePoint) {
@@ -102,6 +120,21 @@ class WearConnector : ViewModel(), MessageClient.OnMessageReceivedListener {
     viewModelScope.launch {
       _uiState.value = block(_uiState.value)
     }
+  }
+
+  private fun setSenseStreaming(enabled: Boolean) {
+    senseStreamingEnabled = enabled
+    if (enabled) {
+      imuStreamer?.start()
+    } else {
+      imuStreamer?.stop()
+    }
+  }
+
+  override fun onCleared() {
+    imuStreamer?.release()
+    imuStreamer = null
+    super.onCleared()
   }
 
   private fun parseHoleModel(json: String): HoleModel? {

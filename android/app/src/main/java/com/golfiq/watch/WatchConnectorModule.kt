@@ -12,7 +12,9 @@ import com.google.android.gms.wearable.CapabilityClient
 import com.google.android.gms.wearable.PutDataMapRequest
 import com.google.android.gms.wearable.PutDataRequest
 import com.google.android.gms.wearable.Wearable
+import com.google.android.gms.tasks.Tasks
 import kotlin.text.Charsets
+import org.json.JSONObject
 
 @ReactModule(name = WatchConnectorModule.NAME)
 class WatchConnectorModule(reactContext: ReactApplicationContext) :
@@ -79,10 +81,51 @@ class WatchConnectorModule(reactContext: ReactApplicationContext) :
             .addOnFailureListener { error -> promise.reject("overlay_send_failure", error) }
     }
 
+    @ReactMethod
+    fun setSenseStreamingEnabled(enabled: Boolean, promise: Promise) {
+        val context = reactApplicationContext
+        val availability = GoogleApiAvailability.getInstance().isGooglePlayServicesAvailable(context)
+        if (availability != ConnectionResult.SUCCESS) {
+            promise.resolve(false)
+            return
+        }
+
+        val payload = JSONObject()
+            .put("type", "shotsense_control")
+            .put("enabled", enabled)
+            .toString()
+            .toByteArray(Charsets.UTF_8)
+
+        Wearable.getNodeClient(context)
+            .connectedNodes
+            .addOnSuccessListener { nodes ->
+                if (nodes.isEmpty()) {
+                    promise.resolve(false)
+                    return@addOnSuccessListener
+                }
+                val messageClient = Wearable.getMessageClient(context)
+                val tasks = nodes.map { node ->
+                    messageClient.sendMessage(node.id, SHOTSENSE_CONTROL_PATH, payload)
+                }
+                Tasks.whenAllComplete(tasks)
+                    .addOnSuccessListener { results ->
+                        val ok = results.any { it.isSuccessful }
+                        promise.resolve(ok)
+                    }
+                    .addOnFailureListener { error ->
+                        promise.reject("shotsense_control_failure", error)
+                    }
+            }
+            .addOnFailureListener { error ->
+                promise.reject("shotsense_nodes_failure", error)
+            }
+    }
+
     companion object {
         const val NAME: String = "WatchConnector"
         private const val CAPABILITY = "golfiq_watch_hud"
         private const val DATA_PATH = "/golfiq/hud/v1"
         private const val OVERLAY_PATH = "/golfiq/overlay/v1"
+        private const val SHOTSENSE_CONTROL_PATH = "/golfiq/shotsense/control"
     }
 }
