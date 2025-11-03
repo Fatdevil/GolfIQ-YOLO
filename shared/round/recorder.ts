@@ -92,6 +92,14 @@ function buildShot(hole: number, seq: number, args: {
   };
 }
 
+function cloneShotEvent(shot: ShotEvent): ShotEvent {
+  return {
+    ...shot,
+    start: { ...shot.start },
+    end: shot.end ? { ...shot.end } : undefined,
+  };
+}
+
 type AddShotArgs = {
   kind: ShotKind;
   start: GeoPoint;
@@ -288,6 +296,17 @@ export const RoundRecorder = {
     const nextCount = Math.max(0, Math.floor(Number(count)));
     const updated = applyHole(round, holeNo, { ...hole, manualPutts: nextCount });
     await persist(updated);
+  },
+
+  async getHoleShots(
+    holeNumber: number,
+  ): Promise<{ holeId: number; holeIndex: number; shots: ShotEvent[] }> {
+    const round = await ensureActiveRound();
+    const [holeNo, hole] = resolveHole(round, holeNumber);
+    const holeIndex =
+      typeof hole.index === 'number' && Number.isFinite(hole.index) ? (hole.index as number) : hole.hole;
+    const shots = hole.shots.map((shot) => cloneShotEvent(shot));
+    return { holeId: holeNo, holeIndex, shots };
   },
 
   async setManualScore(holeNumber: number, strokes: number): Promise<void> {

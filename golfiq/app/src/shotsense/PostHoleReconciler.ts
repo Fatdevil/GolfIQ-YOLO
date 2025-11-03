@@ -1,4 +1,5 @@
 import { RoundRecorder } from '../../../../shared/round/recorder';
+import { appendHoleAccuracy, computeConfusion } from '../../../../shared/telemetry/shotsenseMetrics';
 import { autoQueue, type AcceptedAutoShot } from './AutoCaptureQueue';
 
 type RoundRecorderLike = Pick<typeof RoundRecorder, 'addShot'>;
@@ -107,6 +108,33 @@ async function applyShots(shots: AcceptedAutoShot[]): Promise<number> {
 
 let confirmHandler: ConfirmHandler = confirmWithAlert;
 
+async function recordHoleAccuracy(holeId: number, autoShots: AcceptedAutoShot[]): Promise<void> {
+  if (!autoShots.length) {
+    return;
+  }
+  if (typeof RoundRecorder.getHoleShots !== 'function') {
+    return;
+  }
+  try {
+    const snapshot = await RoundRecorder.getHoleShots(holeId);
+    const recorded = snapshot.shots.map((shot) => ({ ts: shot.start?.ts ?? Number.NaN, source: shot.source }));
+    const confusion = computeConfusion(
+      autoShots.map((shot) => ({ ts: shot.ts })),
+      recorded,
+    );
+    appendHoleAccuracy({
+      holeId: snapshot.holeId,
+      holeIndex: snapshot.holeIndex,
+      timestamp: Date.now(),
+      ...confusion,
+    });
+  } catch (error) {
+    if (typeof __DEV__ !== 'undefined' && __DEV__) {
+      console.warn('[PostHoleReconciler] failed to capture ShotSense accuracy', error);
+    }
+  }
+}
+
 export const PostHoleReconciler = {
   async reviewAndApply(holeId: number): Promise<{ applied: number }> {
     if (!Number.isFinite(holeId)) {
@@ -119,10 +147,12 @@ export const PostHoleReconciler = {
       }
       const shouldApply = await confirmHandler(holeId, shots);
       if (!shouldApply) {
+        await recordHoleAccuracy(holeId, shots);
         autoQueue.markHoleReviewed(holeId);
         return { applied: 0 };
       }
       const applied = await applyShots(shots);
+      await recordHoleAccuracy(holeId, shots);
       if (applied === shots.length) {
         autoQueue.finalizeHole(holeId);
       }
