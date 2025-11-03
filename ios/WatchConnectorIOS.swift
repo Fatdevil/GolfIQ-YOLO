@@ -9,6 +9,7 @@ class WatchConnectorIOS: RCTEventEmitter, WCSessionDelegate {
   private var activationReady = false
   private var hasListeners = false
   private let imuEventName = "watch.imu.v1"
+  private let messageEventName = "watch.message.v1"
 
   override class func requiresMainQueueSetup() -> Bool { true }
 
@@ -25,7 +26,7 @@ class WatchConnectorIOS: RCTEventEmitter, WCSessionDelegate {
   }
 
   override func supportedEvents() -> [String]! {
-    [imuEventName]
+    [imuEventName, messageEventName]
   }
 
   override func startObserving() {
@@ -182,6 +183,40 @@ class WatchConnectorIOS: RCTEventEmitter, WCSessionDelegate {
         replyHandler: { _ in resolve(true) },
         errorHandler: { _ in resolve(false) }
       )
+    }
+  }
+
+  @objc
+  func sendMessage(
+    _ json: NSString,
+    resolver resolve: @escaping RCTPromiseResolveBlock,
+    rejecter reject: @escaping RCTPromiseRejectBlock
+  ) {
+    guard let data = (json as String).data(using: .utf8) else {
+      resolve(false)
+      return
+    }
+    guard let payload = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+      resolve(false)
+      return
+    }
+    whenActivated { [weak self] in
+      guard let s = self?.session else {
+        resolve(false)
+        return
+      }
+      s.sendMessage(payload, replyHandler: { _ in resolve(true) }, errorHandler: { _ in resolve(false) })
+    }
+  }
+
+  func session(_ session: WCSession, didReceiveMessage message: [String : Any]) {
+    guard hasListeners else { return }
+    guard let type = message["type"] as? String, type == "CADDIE_ACCEPTED_V1" else { return }
+    if let data = try? JSONSerialization.data(withJSONObject: message),
+       let json = String(data: data, encoding: .utf8) {
+      sendEvent(withName: messageEventName, body: ["json": json])
+    } else {
+      sendEvent(withName: messageEventName, body: ["json": ""])
     }
   }
 }

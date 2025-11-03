@@ -231,7 +231,7 @@ import {
 } from '../../../../shared/telemetry/caddie';
 import { emitRecenterTelemetry, setRecenterTelemetryEnabled } from '../../../../shared/telemetry/arhud';
 import { WatchBridge } from '../../../../shared/watch/bridge';
-import type { WatchDiag, WatchHUDStateV1 } from '../../../../shared/watch/types';
+import type { CaddieAdviceV1, WatchDiag, WatchHUDStateV1 } from '../../../../shared/watch/types';
 import {
   emitGreenIqBreakTelemetry,
   emitGreenIqTelemetry,
@@ -3969,6 +3969,27 @@ const QAArHudOverlayScreen: React.FC = () => {
         : undefined,
     };
   }, [caddieHudGateOpen, caddieHudScenarioEligible, caddieHudVm]);
+  useEffect(() => {
+    if (!caddieHudWatchHint) {
+      return;
+    }
+    const advice: CaddieAdviceV1 = {
+      club: caddieHudWatchHint.club,
+      carry_m: caddieHudWatchHint.carry_m,
+      ...(caddieHudWatchHint.aim
+        ? {
+            aim: {
+              dir: caddieHudWatchHint.aim.dir,
+              ...(Number.isFinite(caddieHudWatchHint.aim.offset_m)
+                ? { offset_m: Number(caddieHudWatchHint.aim.offset_m) }
+                : {}),
+            },
+          }
+        : {}),
+      ...(caddieHudWatchHint.risk ? { risk: caddieHudWatchHint.risk } : {}),
+    } satisfies CaddieAdviceV1;
+    void WatchBridge.sendMessage({ type: 'CADDIE_ADVICE_V1', advice });
+  }, [caddieHudWatchHint]);
   useEffect(() => {
     if (caddieHudCardVisible && caddieHudVm && !caddieHudShownRef.current) {
       caddieHudShownRef.current = true;

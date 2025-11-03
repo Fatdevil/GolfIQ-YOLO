@@ -19,11 +19,21 @@ class WearBridgeModule(private val reactContext: ReactApplicationContext) :
     private val broadcastManager = LocalBroadcastManager.getInstance(reactContext)
     private val receiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
-            val bytes = intent?.getByteArrayExtra(WearListenerService.EXTRA_BYTES) ?: return
-            val b64 = Base64.encodeToString(bytes, Base64.NO_WRAP)
-            reactContext
-                .getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter::class.java)
-                .emit(EVENT_NAME, mapOf("b64" to b64))
+            when (intent?.action) {
+                WearListenerService.ACTION_IMU -> {
+                    val bytes = intent.getByteArrayExtra(WearListenerService.EXTRA_BYTES) ?: return
+                    val b64 = Base64.encodeToString(bytes, Base64.NO_WRAP)
+                    reactContext
+                        .getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter::class.java)
+                        .emit(EVENT_IMU, mapOf("b64" to b64))
+                }
+                WearListenerService.ACTION_MESSAGE -> {
+                    val json = intent.getStringExtra(WearListenerService.EXTRA_JSON) ?: return
+                    reactContext
+                        .getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter::class.java)
+                        .emit(EVENT_MESSAGE, mapOf("json" to json))
+                }
+            }
         }
     }
 
@@ -34,10 +44,11 @@ class WearBridgeModule(private val reactContext: ReactApplicationContext) :
     override fun initialize() {
         super.initialize()
         if (!isRegistered) {
-            broadcastManager.registerReceiver(
-                receiver,
-                IntentFilter(WearListenerService.ACTION_IMU),
-            )
+            val filter = IntentFilter().apply {
+                addAction(WearListenerService.ACTION_IMU)
+                addAction(WearListenerService.ACTION_MESSAGE)
+            }
+            broadcastManager.registerReceiver(receiver, filter)
             isRegistered = true
         }
     }
@@ -62,6 +73,7 @@ class WearBridgeModule(private val reactContext: ReactApplicationContext) :
 
     companion object {
         const val NAME = "WearBridgeAndroid"
-        private const val EVENT_NAME = "wear.imu.v1"
+        private const val EVENT_IMU = "wear.imu.v1"
+        private const val EVENT_MESSAGE = "watch.message.v1"
     }
 }

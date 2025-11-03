@@ -8,10 +8,15 @@ struct ContentView: View {
             if let hud = model.hud {
                 VStack(alignment: .leading, spacing: 12) {
                     fmbRow(for: hud)
-                    playsLikeRow(for: hud)
-                    if !hud.tournamentSafe, let hint = hud.caddie {
-                        CaddieMiniCardView(hint: hint)
+                    if let advice = model.advice ?? hud.caddie {
+                        CaddieMiniCardView(hint: advice)
+                        Button("Use club") {
+                            model.acceptAdvice()
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .font(.footnote)
                     }
+                    playsLikeRow(for: hud)
                     if !hud.tournamentSafe, let strategy = hud.strategy {
                         strategyRow(for: strategy)
                     }

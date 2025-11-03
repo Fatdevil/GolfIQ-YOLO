@@ -1,12 +1,13 @@
 import { encodeHUDBase64, type WatchHUDStateV1 } from './codec';
 import { hashOverlaySnapshot, type OverlaySnapshotV1 } from '../overlay/transport';
-import type { WatchDiag } from './types';
+import type { WatchDiag, WatchMsg } from './types';
 
 type NativeWatchConnectorModule = {
   isCapable(): Promise<boolean>;
   sendHUD(payloadBase64: string): Promise<boolean>;
   sendOverlayJSON?(jsonPayload: string): Promise<boolean>;
   setSenseStreamingEnabled?(enabled: boolean): Promise<boolean> | void;
+  sendMessage?(jsonPayload: string): Promise<boolean>;
 };
 
 type AndroidNativeModule = {
@@ -14,6 +15,7 @@ type AndroidNativeModule = {
   sendHUD: (payloadBase64: string) => Promise<boolean>;
   sendOverlayJSON?: (jsonPayload: string) => Promise<boolean>;
   setSenseStreamingEnabled?: (enabled: boolean) => Promise<boolean>;
+  sendMessage?: (jsonPayload: string) => Promise<boolean>;
 };
 
 type IOSNativeModule = {
@@ -21,17 +23,31 @@ type IOSNativeModule = {
   sendHUDB64: (payloadBase64: string) => Promise<boolean>;
   sendOverlayJSON?: (jsonPayload: string) => Promise<boolean>;
   setSenseStreamingEnabled?: (enabled: boolean) => Promise<boolean>;
+  sendMessage?: (jsonPayload: string) => Promise<boolean>;
 };
 
 type LastStatus = WatchDiag['lastSend'];
 
 const DEFAULT_DEBOUNCE_MS = 250;
 
+const WATCH_MESSAGE_EVENT = 'watch.message.v1';
+
+type WatchMessageListener = (msg: WatchMsg) => void;
+
+type AdviceAim = WatchMsg extends { type: 'CADDIE_ADVICE_V1'; advice: infer A }
+  ? A extends { aim?: infer Aim }
+    ? Aim
+    : never
+  : never;
+
+const messageListeners = new Set<WatchMessageListener>();
+let messageSubscription: { remove: () => void } | null = null;
+
 let lastStatus: LastStatus = { ok: false, ts: 0, bytes: 0 };
 
 let inFlight: Promise<boolean> | null = null;
-let lastSentAt = 0;
-let nextAllowedAt = 0;
+let lastSentAt = Number.NEGATIVE_INFINITY;
+let nextAllowedAt = Number.NEGATIVE_INFINITY;
 let pendingTimer: ReturnType<typeof setTimeout> | null = null;
 let pendingState: WatchHUDStateV1 | null = null;
 let pendingPromise: Promise<boolean> | null = null;
@@ -39,6 +55,10 @@ let pendingResolve: ((ok: boolean) => void) | null = null;
 let pendingWindowMs = DEFAULT_DEBOUNCE_MS;
 
 function tryRequireReactNative(): any | null {
+  const globalMock = (globalThis as { __watchBridgeReactNative?: unknown }).__watchBridgeReactNative;
+  if (globalMock && typeof globalMock === 'object') {
+    return globalMock;
+  }
   try {
     // eslint-disable-next-line @typescript-eslint/no-var-requires
     return require('react-native');
@@ -53,6 +73,161 @@ function estimatePayloadBytes(base64: string): number {
   }
   const padding = base64.endsWith('==') ? 2 : base64.endsWith('=') ? 1 : 0;
   return Math.max(0, Math.floor((base64.length * 3) / 4) - padding);
+}
+
+function normalizeAdvicePayload(raw: Record<string, unknown> | null | undefined): WatchMsg | null {
+  if (!raw) {
+    return null;
+  }
+  const club = typeof raw.club === 'string' ? raw.club.trim() : '';
+  if (!club) {
+    return null;
+  }
+  const carryCandidate = raw.carry_m;
+  const carry = typeof carryCandidate === 'number' ? carryCandidate : Number(carryCandidate);
+  if (!Number.isFinite(carry)) {
+    return null;
+  }
+  let aim: AdviceAim | undefined;
+  const aimRaw = raw.aim;
+  if (aimRaw && typeof aimRaw === 'object') {
+    const aimRecord = aimRaw as Record<string, unknown>;
+    const dir = typeof aimRecord.dir === 'string' ? aimRecord.dir.toUpperCase() : '';
+    if (dir === 'L' || dir === 'C' || dir === 'R') {
+      aim = { dir } as AdviceAim;
+      const offsetCandidate = aimRecord.offset_m;
+      if (offsetCandidate !== undefined && offsetCandidate !== null) {
+        const offset = typeof offsetCandidate === 'number' ? offsetCandidate : Number(offsetCandidate);
+        if (Number.isFinite(offset)) {
+          aim = { ...aim, offset_m: Number(offset) } as AdviceAim;
+        }
+      }
+    }
+  }
+  let risk: 'safe' | 'neutral' | 'aggressive' | null | undefined;
+  const riskRaw = raw.risk;
+  if (typeof riskRaw === 'string') {
+    const lower = riskRaw.toLowerCase();
+    if (lower === 'safe' || lower === 'neutral' || lower === 'aggressive') {
+      risk = lower;
+    } else {
+      risk = 'neutral';
+    }
+  }
+  return {
+    type: 'CADDIE_ADVICE_V1',
+    advice: {
+      club,
+      carry_m: Number(carry),
+      ...(aim ? { aim } : {}),
+      ...(risk !== undefined ? { risk } : {}),
+    },
+  } satisfies WatchMsg;
+}
+
+function parseWatchMessage(raw: unknown): WatchMsg | null {
+  if (!raw) {
+    return null;
+  }
+  if (typeof raw === 'string') {
+    try {
+      return parseWatchMessage(JSON.parse(raw));
+    } catch (error) {
+      if (typeof __DEV__ !== 'undefined' && __DEV__) {
+        console.warn('[WatchBridge] failed to parse watch message JSON', error);
+      }
+      return null;
+    }
+  }
+  if (typeof raw !== 'object') {
+    return null;
+  }
+  const record = raw as Record<string, unknown>;
+  if (typeof record.json === 'string') {
+    return parseWatchMessage(record.json);
+  }
+  const type = typeof record.type === 'string' ? record.type : '';
+  if (!type) {
+    return null;
+  }
+  if (type === 'CADDIE_ACCEPTED_V1') {
+    const club = typeof record.club === 'string' ? record.club.trim() : '';
+    if (!club) {
+      return null;
+    }
+    return { type: 'CADDIE_ACCEPTED_V1', club } satisfies WatchMsg;
+  }
+  if (type === 'CADDIE_ADVICE_V1') {
+    const adviceRaw = record.advice && typeof record.advice === 'object' ? (record.advice as Record<string, unknown>) : null;
+    if (adviceRaw) {
+      return normalizeAdvicePayload(adviceRaw);
+    }
+    return normalizeAdvicePayload(record);
+  }
+  return null;
+}
+
+function dispatchWatchMessage(message: WatchMsg): void {
+  if (messageListeners.size === 0) {
+    return;
+  }
+  for (const listener of messageListeners) {
+    try {
+      listener(message);
+    } catch (error) {
+      console.warn('[WatchBridge] watch message listener failed', error);
+    }
+  }
+}
+
+function handleNativeMessageEvent(event: unknown): void {
+  const parsed = parseWatchMessage(event);
+  if (parsed) {
+    dispatchWatchMessage(parsed);
+  }
+}
+
+function teardownMessageSubscription(): void {
+  if (messageSubscription) {
+    messageSubscription.remove();
+    messageSubscription = null;
+  }
+}
+
+function ensureMessageSubscription(): void {
+  if (messageSubscription || messageListeners.size === 0) {
+    return;
+  }
+  const RN = tryRequireReactNative();
+  const platform: string | undefined = RN?.Platform?.OS;
+  if (!RN || !platform) {
+    return;
+  }
+  if (platform === 'ios') {
+    const emitter = RN.NativeEventEmitter ? new RN.NativeEventEmitter(RN.NativeModules?.WatchConnectorIOS) : null;
+    messageSubscription = emitter?.addListener(WATCH_MESSAGE_EVENT, handleNativeMessageEvent) ?? null;
+  } else if (RN.DeviceEventEmitter) {
+    messageSubscription = RN.DeviceEventEmitter.addListener(WATCH_MESSAGE_EVENT, handleNativeMessageEvent);
+  }
+  if (!messageSubscription && typeof __DEV__ !== 'undefined' && __DEV__) {
+    console.warn('[WatchBridge] failed to subscribe to watch messages');
+  }
+}
+
+function registerMessageListener(listener: WatchMessageListener): () => void {
+  if (typeof listener !== 'function') {
+    return () => {
+      /* no-op */
+    };
+  }
+  messageListeners.add(listener);
+  ensureMessageSubscription();
+  return () => {
+    messageListeners.delete(listener);
+    if (messageListeners.size === 0) {
+      teardownMessageSubscription();
+    }
+  };
 }
 
 function getNativeModule(): NativeWatchConnectorModule | null {
@@ -92,6 +267,7 @@ function getNativeModule(): NativeWatchConnectorModule | null {
       setSenseStreamingEnabled: mod.setSenseStreamingEnabled
         ? (enabled: boolean) => mod.setSenseStreamingEnabled!(enabled)
         : undefined,
+      sendMessage: mod.sendMessage ? (jsonPayload: string) => mod.sendMessage!(jsonPayload) : undefined,
     };
   }
 
@@ -191,6 +367,21 @@ async function setSenseStreamingInternal(enabled: boolean): Promise<boolean> {
   }
 
   return false;
+}
+
+async function sendMessageInternal(message: WatchMsg): Promise<boolean> {
+  const mod = getNativeModule();
+  if (!mod?.sendMessage) {
+    return false;
+  }
+  try {
+    const payload = JSON.stringify(message);
+    const result = await mod.sendMessage(payload);
+    return result === true;
+  } catch (error) {
+    console.warn('[WatchBridge] sendMessage failed', error);
+    return false;
+  }
 }
 
 async function sendHUDInternal(state: WatchHUDStateV1): Promise<boolean> {
@@ -361,7 +552,7 @@ function sendHUDDebounced(
   }
 
   if (inFlight) {
-    const at = Math.max(nextAllowedAt || lastSentAt + windowMs, now + windowMs);
+    const at = Math.max(nextAllowedAt, lastSentAt + windowMs, now);
     return scheduleTrailing(at, state, windowMs);
   }
 
@@ -461,6 +652,9 @@ export const WatchBridge = {
   setSenseStreaming(enabled: boolean): Promise<boolean> {
     return setSenseStreamingInternal(enabled);
   },
+  async sendMessage(message: WatchMsg): Promise<boolean> {
+    return sendMessageInternal(message);
+  },
   async sendOverlaySnapshot(snapshot: OverlaySnapshotV1): Promise<boolean> {
     const hash = hashOverlaySnapshot(snapshot);
     if (overlayState.lastHash === hash && !overlayState.pending) {
@@ -477,6 +671,9 @@ export const WatchBridge = {
     queueOverlaySnapshotInternal(snapshot, options);
   },
   resetOverlayThrottle,
+  onMessage(listener: WatchMessageListener): () => void {
+    return registerMessageListener(listener);
+  },
 };
 
 export { queueOverlaySnapshotInternal as queueOverlaySnapshot };

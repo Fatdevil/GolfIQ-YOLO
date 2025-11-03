@@ -31,12 +31,14 @@ const createBridge = async (config: BridgeConfig = {}) => {
   } else {
     vi.doUnmock('../../../shared/watch/codec');
   }
+  const rnMock = {
+    Platform: { OS: config.platform ?? 'web' },
+    NativeModules: config.nativeModules ?? {},
+  };
+  (globalThis as { __watchBridgeReactNative?: unknown }).__watchBridgeReactNative = rnMock;
   vi.doMock(
     'react-native',
-    () => ({
-      Platform: { OS: config.platform ?? 'web' },
-      NativeModules: config.nativeModules ?? {},
-    }),
+    () => rnMock,
     { virtual: true },
   );
   const module = await import('../../../shared/watch/bridge');
@@ -47,6 +49,7 @@ afterEach(() => {
   vi.resetAllMocks();
   vi.resetModules();
   vi.useRealTimers();
+  delete (globalThis as { __watchBridgeReactNative?: unknown }).__watchBridgeReactNative;
 });
 
 describe('WatchBridge (web fallback)', () => {
@@ -358,5 +361,34 @@ describe('WatchBridge diagnostics', () => {
     expect(sendHUD).toHaveBeenCalledTimes(2);
     await expect(trailing).resolves.toBe(false);
     vi.useRealTimers();
+  });
+});
+
+describe('WatchBridge messaging', () => {
+  it('returns false when native module is missing', async () => {
+    const WatchBridge = await createBridge();
+    await expect(WatchBridge.sendMessage({ type: 'CADDIE_ACCEPTED_V1', club: '7i' })).resolves.toBe(false);
+  });
+
+  it('forwards messages to the native module', async () => {
+    const sendMessage = vi.fn().mockResolvedValue(true);
+    const WatchBridge = await createBridge({
+      platform: 'android',
+      nativeModules: {
+        WatchConnector: {
+          isCapable: vi.fn().mockResolvedValue(true),
+          sendHUD: vi.fn().mockResolvedValue(true),
+          sendMessage,
+        },
+      },
+    });
+    await expect(
+      WatchBridge.sendMessage({
+        type: 'CADDIE_ADVICE_V1',
+        advice: { club: '8i', carry_m: 145, risk: 'neutral' },
+      }),
+    ).resolves.toBe(true);
+    expect(sendMessage).toHaveBeenCalledTimes(1);
+    expect(sendMessage.mock.calls[0][0]).toContain('"type":"CADDIE_ADVICE_V1"');
   });
 });

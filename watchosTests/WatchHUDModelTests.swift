@@ -24,4 +24,32 @@ final class WatchHUDModelTests: XCTestCase {
         XCTAssertEqual(strategy.offsetM, -4)
         XCTAssertEqual(strategy.carryM, 136)
     }
+
+    func testAppliesAdvicePayload() {
+        let model = WatchHUDModel()
+        model.applyAdvicePayload([
+            "club": "9i",
+            "carry_m": 135.0,
+            "risk": "safe",
+            "aim": ["dir": "L", "offset_m": 3.5],
+        ])
+        let advice = try XCTUnwrap(model.advice)
+        XCTAssertEqual(advice.club, "9i")
+        XCTAssertEqual(advice.carryM, 135.0)
+        XCTAssertEqual(advice.risk, .safe)
+        XCTAssertEqual(advice.aim?.dir, .L)
+        XCTAssertEqual(advice.aim?.offsetM, 3.5)
+    }
+
+    func testAcceptAdviceSendsMessage() {
+        let model = WatchHUDModel()
+        model.applyAdvicePayload(["club": "8i", "carry_m": 142.0])
+        var captured: [String: Any]?
+        model.registerMessageSender { payload in
+            captured = payload
+        }
+        model.acceptAdvice()
+        XCTAssertEqual(captured?["type"] as? String, "CADDIE_ACCEPTED_V1")
+        XCTAssertEqual(captured?["club"] as? String, "8i")
+    }
 }

@@ -7,12 +7,16 @@ import com.golfiq.wear.HudState
 import com.google.android.gms.wearable.DataEvent
 import com.google.android.gms.wearable.DataEventBuffer
 import com.google.android.gms.wearable.DataMapItem
+import com.google.android.gms.wearable.MessageEvent
 import com.google.android.gms.wearable.WearableListenerService
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import org.json.JSONObject
+import java.nio.charset.StandardCharsets
 
 private const val HUD_DATA_PATH_PREFIX = "/golfiq/hud/v1"
+private const val WATCH_MESSAGE_PATH = "/golfiq/watch/msg"
 private const val TAG = "HudDataLayer"
 
 object HudStateRepository {
@@ -27,6 +31,13 @@ object HudStateRepository {
             .onFailure { error ->
                 Log.w(TAG, "Failed to decode HUD payload", error)
             }
+    }
+
+    fun updateCaddieAdvice(raw: Any?) {
+        val hint = HudCodec.parseAdvice(raw)
+        if (hint != null) {
+            _hudState.value = _hudState.value.copy(caddie = hint)
+        }
     }
 
     @VisibleForTesting
@@ -56,6 +67,30 @@ class HudDataLayerListener : WearableListenerService() {
                     Log.w(TAG, "HUD payload missing byte payload for $path")
                 }
             }
+        }
+    }
+
+    override fun onMessageReceived(messageEvent: MessageEvent) {
+        if (messageEvent.path == WATCH_MESSAGE_PATH) {
+            val payload = try {
+                String(messageEvent.data, StandardCharsets.UTF_8)
+            } catch (_: Exception) {
+                null
+            }
+            if (payload != null) {
+                runCatching { JSONObject(payload) }
+                    .onSuccess { json ->
+                        val type = json.optString("type")
+                        if (type == "CADDIE_ADVICE_V1") {
+                            val adviceRaw = json.opt("advice")
+                            val payload = if (adviceRaw == null || adviceRaw == JSONObject.NULL) json else adviceRaw
+                            HudStateRepository.updateCaddieAdvice(payload)
+                        }
+                    }
+                    .onFailure { error -> Log.w(TAG, "Failed to parse watch message", error) }
+            }
+        } else {
+            super.onMessageReceived(messageEvent)
         }
     }
 }

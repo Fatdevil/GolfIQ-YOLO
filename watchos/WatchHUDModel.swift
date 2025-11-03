@@ -4,9 +4,11 @@ import Foundation
 final class WatchHUDModel: ObservableObject {
     @Published private(set) var hud: HUD?
     @Published private(set) var toast: String?
+    @Published private(set) var advice: HUD.CaddieHint?
 
     private let decoder: JSONDecoder
     private var toastWorkItem: DispatchWorkItem?
+    private var sendMessageHandler: (([String: Any]) -> Void)?
 
     init(decoder: JSONDecoder = JSONDecoder()) {
         self.decoder = decoder
@@ -26,9 +28,15 @@ final class WatchHUDModel: ObservableObject {
     private func publish(_ snapshot: HUD?) {
         if Thread.isMainThread {
             hud = snapshot
+            if let hint = snapshot?.caddie {
+                advice = hint
+            }
         } else {
             DispatchQueue.main.async { [weak self] in
                 self?.hud = snapshot
+                if let hint = snapshot?.caddie {
+                    self?.advice = hint
+                }
             }
         }
     }
@@ -48,6 +56,54 @@ final class WatchHUDModel: ObservableObject {
         } else {
             DispatchQueue.main.async(execute: setMessage)
         }
+    }
+
+    func registerMessageSender(_ handler: @escaping ([String: Any]) -> Void) {
+        sendMessageHandler = handler
+    }
+
+    func updateAdvice(with hint: HUD.CaddieHint) {
+        if Thread.isMainThread {
+            advice = hint
+        } else {
+            DispatchQueue.main.async { [weak self] in
+                self?.advice = hint
+            }
+        }
+    }
+
+    func applyAdvicePayload(_ payload: [String: Any]) {
+        guard let club = payload["club"] as? String, !club.trimmingCharacters(in: .whitespaces).isEmpty else {
+            return
+        }
+        let carryValue = payload["carry_m"]
+        let carry = (carryValue as? NSNumber)?.doubleValue ?? (carryValue as? Double)
+        guard let carryMeters = carry, carryMeters.isFinite else {
+            return
+        }
+        var aim: HUD.CaddieHint.Aim?
+        if let aimRaw = payload["aim"] as? [String: Any], let dirRaw = aimRaw["dir"] as? String,
+           let dir = HUD.CaddieHint.Aim.Direction(rawValue: dirRaw.uppercased()) {
+            let offsetValue = aimRaw["offset_m"]
+            let offset = (offsetValue as? NSNumber)?.doubleValue ?? (offsetValue as? Double)
+            aim = HUD.CaddieHint.Aim(dir: dir, offsetM: offset)
+        }
+        let riskRaw = (payload["risk"] as? String)?.lowercased()
+        let risk = riskRaw.flatMap { HUD.CaddieHint.Risk(rawValue: $0) } ?? .neutral
+        let hint = HUD.CaddieHint(
+            club: club,
+            carryM: carryMeters,
+            totalM: nil,
+            aim: aim,
+            risk: risk,
+            confidence: nil
+        )
+        updateAdvice(with: hint)
+    }
+
+    func acceptAdvice() {
+        guard let current = advice else { return }
+        sendMessageHandler?(["type": "CADDIE_ACCEPTED_V1", "club": current.club])
     }
 }
 
