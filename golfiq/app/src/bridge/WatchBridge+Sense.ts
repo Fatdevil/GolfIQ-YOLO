@@ -1,11 +1,12 @@
 import type { EmitterSubscription } from 'react-native';
-import { NativeEventEmitter, NativeModules } from 'react-native';
+import { DeviceEventEmitter, NativeEventEmitter, NativeModules, Platform } from 'react-native';
 import { Buffer } from 'buffer';
 
 import type { IMUBatchV1 } from '../../../../shared/shotsense/dto';
 import { shotSense } from '../shotsense/ShotSenseService';
 
 const { WatchConnectorIOS } = NativeModules;
+const EVENT_NAME = 'watch.imu.v1';
 
 let subscription: EmitterSubscription | null = null;
 const textDecoder = typeof TextDecoder !== 'undefined' ? new TextDecoder() : null;
@@ -53,12 +54,19 @@ export function onWatchIMUMessageData(bytes: Uint8Array): void {
   }
 }
 
+function subscribe(handler: (evt: { b64?: string } | null) => void): EmitterSubscription {
+  if (Platform.OS === 'ios' && WatchConnectorIOS) {
+    const emitter = new NativeEventEmitter(WatchConnectorIOS);
+    return emitter.addListener(EVENT_NAME, handler);
+  }
+  return DeviceEventEmitter.addListener(EVENT_NAME, handler);
+}
+
 export function initWatchIMUReceiver(): void {
-  if (!WatchConnectorIOS || subscription) {
+  if (subscription) {
     return;
   }
-  const emitter = new NativeEventEmitter(WatchConnectorIOS);
-  subscription = emitter.addListener('watch.imu.v1', (evt) => {
+  subscription = subscribe((evt) => {
     const bytes = decodeLegacyEvent(evt);
     if (bytes) {
       onWatchIMUMessageData(bytes);
