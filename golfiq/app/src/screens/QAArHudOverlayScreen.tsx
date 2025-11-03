@@ -444,6 +444,14 @@ const CADDIE_RISK_LABELS: Record<CaddieRiskMode, string> = {
   normal: 'Normal',
   aggressive: 'Aggro',
 };
+const HUD_RISK_PROFILE_OPTIONS: ReadonlyArray<{
+  key: 'conservative' | 'neutral' | 'aggressive';
+  label: string;
+}> = [
+  { key: 'conservative', label: 'Conservative' },
+  { key: 'neutral', label: 'Neutral' },
+  { key: 'aggressive', label: 'Aggressive' },
+];
 
 const COACH_TONE_OPTIONS: readonly CoachTone[] = ['concise', 'neutral', 'pep'];
 const COACH_TONE_LABELS: Record<CoachTone, string> = {
@@ -2730,6 +2738,7 @@ const QAArHudOverlayScreen: React.FC = () => {
   const [landingState, setLandingState] = useState<AutoLandingState>('IDLE');
   const [coachStyle, setCoachStyle] = useState<CoachStyle>(defaultCoachStyle);
   const [caddieRiskMode, setCaddieRiskMode] = useState<CaddieRiskMode>('normal');
+  const [riskProfile, setRiskProfile] = useState<'conservative' | 'neutral' | 'aggressive'>('neutral');
   const [strategyProfile, setStrategyProfile] = useState<RiskProfile>('neutral');
   const [caddieGoForGreen, setCaddieGoForGreen] = useState(false);
   const [caddieUseMC, setCaddieUseMC] = useState(true);
@@ -4905,6 +4914,7 @@ const QAArHudOverlayScreen: React.FC = () => {
     if (Number.isFinite(plannerInputs.temperatureC)) {
       context.temp_c = Number(plannerInputs.temperatureC);
     }
+    context.riskProfile = riskProfile;
     const hazardRates = caddieHazardSummary.hazard;
     const hazardTotal = clamp01(
       (hazardRates.water ?? 0) +
@@ -4936,7 +4946,14 @@ const QAArHudOverlayScreen: React.FC = () => {
       },
       context,
     } satisfies CaddieHudVM;
-  }, [caddieHazardSummary, caddiePlan, plannerInputs.slope_dh_m, plannerInputs.temperatureC, plannerInputs.wind_mps]);
+  }, [
+    caddieHazardSummary,
+    caddiePlan,
+    plannerInputs.slope_dh_m,
+    plannerInputs.temperatureC,
+    plannerInputs.wind_mps,
+    riskProfile,
+  ]);
   const caddieHudScenarioEligible =
     shotSession?.phase === 'tee' || shotSession?.phase === 'approach';
   const caddieHudWhyLines = useMemo(() => {
@@ -6755,6 +6772,35 @@ const QAArHudOverlayScreen: React.FC = () => {
             disabled={!caddiePlan}
           />
         ) : null}
+        <View style={styles.hudRiskProfileRow}>
+          <Text style={styles.hudRiskProfileLabel}>Risk bias</Text>
+          <View style={styles.hudRiskProfileChips}>
+            {HUD_RISK_PROFILE_OPTIONS.map((option) => {
+              const active = riskProfile === option.key;
+              return (
+                <TouchableOpacity
+                  key={option.key}
+                  onPress={() => setRiskProfile(option.key)}
+                  style={[
+                    styles.hudRiskProfileChip,
+                    active ? styles.hudRiskProfileChipActive : null,
+                  ]}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: active }}
+                >
+                  <Text
+                    style={[
+                      styles.hudRiskProfileChipText,
+                      active ? styles.hudRiskProfileChipTextActive : null,
+                    ]}
+                  >
+                    {option.label}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        </View>
         {__DEV__ ? (
           <>
             <View style={styles.watchCard}>
@@ -8215,6 +8261,42 @@ const styles = StyleSheet.create({
   caddieHudToggleHint: {
     color: '#94a3b8',
     fontSize: 12,
+  },
+  hudRiskProfileRow: {
+    marginTop: 4,
+    gap: 6,
+  },
+  hudRiskProfileLabel: {
+    color: '#94a3b8',
+    fontSize: 11,
+    letterSpacing: 0.6,
+    textTransform: 'uppercase',
+    fontWeight: '600',
+  },
+  hudRiskProfileChips: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+  },
+  hudRiskProfileChip: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: '#1f2937',
+    backgroundColor: '#0b1120',
+  },
+  hudRiskProfileChipActive: {
+    borderColor: '#38bdf8',
+    backgroundColor: '#1d4ed8',
+  },
+  hudRiskProfileChipText: {
+    color: '#cbd5f5',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  hudRiskProfileChipTextActive: {
+    color: '#f8fafc',
   },
   watchCard: {
     backgroundColor: '#0b1120',

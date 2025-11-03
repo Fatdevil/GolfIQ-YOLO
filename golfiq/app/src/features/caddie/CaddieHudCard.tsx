@@ -4,6 +4,8 @@ import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { fmtMeters, fmtPct, nz } from '../../../../shared/caddie/format';
 import type { CaddieHudVM } from '../../../../shared/caddie/selectors';
 
+type HudRiskProfile = 'conservative' | 'neutral' | 'aggressive';
+
 export type CaddieHudCardProps = {
   hud: CaddieHudVM;
   onSelect?: () => void;
@@ -21,6 +23,21 @@ const riskBadgeStyles: Record<CaddieHudVM['best']['risk'], { backgroundColor: st
   safe: { backgroundColor: '#064e3b', color: '#6ee7b7' },
   neutral: { backgroundColor: '#1e293b', color: '#cbd5f5' },
   aggressive: { backgroundColor: '#7f1d1d', color: '#fca5a5' },
+};
+
+const riskProfileLabels: Record<HudRiskProfile, string> = {
+  conservative: 'Conservative',
+  neutral: 'Neutral',
+  aggressive: 'Aggressive',
+};
+
+const riskProfileChipStyles: Record<
+  HudRiskProfile,
+  { backgroundColor: string; borderColor: string; textColor: string }
+> = {
+  conservative: { backgroundColor: '#052e16', borderColor: '#166534', textColor: '#bbf7d0' },
+  neutral: { backgroundColor: '#1e1b4b', borderColor: '#312e81', textColor: '#e0e7ff' },
+  aggressive: { backgroundColor: '#450a0a', borderColor: '#991b1b', textColor: '#fecaca' },
 };
 
 const clamp01 = (value: number | null | undefined): number | null => {
@@ -84,6 +101,8 @@ const CaddieHudCard: React.FC<CaddieHudCardProps> = ({ hud, onSelect, onWhy, dis
   const confidence = clamp01(best.confidence ?? null);
   const riskStyle = riskBadgeStyles[best.risk];
   const contextChips = buildContextChips(hud);
+  const riskProfile = hud.context?.riskProfile ?? null;
+  const riskProfileStyle = riskProfile ? riskProfileChipStyles[riskProfile] : null;
 
   return (
     <View style={styles.card}>
@@ -99,7 +118,22 @@ const CaddieHudCard: React.FC<CaddieHudCardProps> = ({ hud, onSelect, onWhy, dis
             <Text style={styles.aimChipText}>{aim}</Text>
           </View>
         ) : null}
-        <View style={[styles.riskBadge, { backgroundColor: riskStyle.backgroundColor }]}> 
+        {riskProfile && riskProfileStyle ? (
+          <View
+            style={[
+              styles.riskProfileChip,
+              {
+                backgroundColor: riskProfileStyle.backgroundColor,
+                borderColor: riskProfileStyle.borderColor,
+              },
+            ]}
+          >
+            <Text style={[styles.riskProfileChipText, { color: riskProfileStyle.textColor }]}>
+              {riskProfileLabels[riskProfile]}
+            </Text>
+          </View>
+        ) : null}
+        <View style={[styles.riskBadge, { backgroundColor: riskStyle.backgroundColor }]}>
           <Text style={[styles.riskBadgeText, { color: riskStyle.color }]}>{riskLabels[best.risk]}</Text>
         </View>
       </View>
@@ -191,6 +225,16 @@ const styles = StyleSheet.create({
   },
   aimChipText: {
     color: '#bfdbfe',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  riskProfileChip: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 999,
+    borderWidth: 1,
+  },
+  riskProfileChipText: {
     fontSize: 12,
     fontWeight: '600',
   },

@@ -21,6 +21,7 @@ export type CaddieHudVM = {
     temp_c?: number;
     hazardLeft?: number;
     hazardRight?: number;
+    riskProfile?: 'conservative' | 'neutral' | 'aggressive';
   };
 };
 
