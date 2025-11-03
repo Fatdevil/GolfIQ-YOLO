@@ -51,11 +51,11 @@ const msToSamples = (ms: number, hz: number) =>
 
 export class ShotDetector {
   private readonly opts: Required<DetectorOpts>;
-  private sampleHz: number;
-  private frameDtMs: number;
-  private minSwingWinSamples: number;
-  private debounceSamples: number;
-  private settleSamples: number;
+  private sampleHz: number = 80;
+  private frameDtMs: number = 0;
+  private minSwingWinSamples: number = 0;
+  private debounceSamples: number = 0;
+  private settleSamples: number = 0;
   private readonly startGyro: number;
   private readonly startAccel: number;
   private readonly startJerk: number;
