@@ -6,6 +6,18 @@ type RoundRecorderLike = Pick<typeof RoundRecorder, 'addShot'>;
 
 let recorder: RoundRecorderLike = RoundRecorder;
 
+type ReviewDecision = {
+  id: string;
+  accepted?: boolean;
+  club?: string | null;
+  playsLikePct?: number | null;
+};
+
+type ReviewAndApplyArgs = {
+  holeId: number;
+  decisions?: ReviewDecision[];
+};
+
 type AlertLike = {
   alert: (
     title: string,
@@ -75,35 +87,92 @@ async function confirmWithAlert(holeId: number, shots: AcceptedAutoShot[]): Prom
   });
 }
 
-async function applyShots(shots: AcceptedAutoShot[]): Promise<number> {
-  let applied = 0;
-  for (const shot of shots) {
-    const start = shot.start;
-    if (!start) {
-      if (typeof __DEV__ !== 'undefined' && __DEV__) {
-        console.warn('[PostHoleReconciler] Missing start for auto shot', shot);
-      }
-      autoQueue.finalizeShot(shot.holeId, shot.id);
+type NormalizedDecision = {
+  accepted: boolean;
+  club?: string;
+  playsLikePct?: number;
+};
+
+type ApplyOutcome = 'applied' | 'missing-start' | 'failed';
+
+function buildDecisionMap(decisions?: ReviewDecision[] | null): Map<string, NormalizedDecision> {
+  const map = new Map<string, NormalizedDecision>();
+  if (!decisions || !decisions.length) {
+    return map;
+  }
+  for (const decision of decisions) {
+    if (!decision || typeof decision.id !== 'string' || !decision.id.trim()) {
       continue;
     }
-    const lie = shot.lie ?? 'Fairway';
-    try {
-      await recorder.addShot(shot.holeId, {
-        kind: 'Full',
-        start,
-        startLie: lie,
-        source: shot.source,
-        club: shot.club,
-      });
-      autoQueue.finalizeShot(shot.holeId, shot.id);
+    const normalizedId = decision.id.trim();
+    const accepted = decision.accepted !== false;
+    const club = typeof decision.club === 'string' && decision.club.trim() ? decision.club.trim() : undefined;
+    const playsLike = Number(decision.playsLikePct);
+    map.set(normalizedId, {
+      accepted,
+      club,
+      playsLikePct: Number.isFinite(playsLike) ? playsLike : undefined,
+    });
+  }
+  return map;
+}
+
+async function applyShot(shot: AcceptedAutoShot): Promise<ApplyOutcome> {
+  const start = shot.start;
+  if (!start) {
+    if (typeof __DEV__ !== 'undefined' && __DEV__) {
+      console.warn('[PostHoleReconciler] Missing start for auto shot', shot);
+    }
+    autoQueue.finalizeShot(shot.holeId, shot.id);
+    return 'missing-start';
+  }
+  const lie = shot.lie ?? 'Fairway';
+  try {
+    await recorder.addShot(shot.holeId, {
+      kind: 'Full',
+      start,
+      startLie: lie,
+      source: shot.source,
+      club: shot.club,
+      playsLikePct: Number.isFinite(Number(shot.playsLikePct)) ? Number(shot.playsLikePct) : undefined,
+    });
+    autoQueue.finalizeShot(shot.holeId, shot.id);
+    return 'applied';
+  } catch (error) {
+    if (typeof __DEV__ !== 'undefined' && __DEV__) {
+      console.warn('[PostHoleReconciler] Failed to record auto shot', error);
+    }
+    return 'failed';
+  }
+}
+
+async function applyReviewedShots(
+  shots: AcceptedAutoShot[],
+  decisions: Map<string, NormalizedDecision>,
+): Promise<{ applied: number; rejected: number }> {
+  let applied = 0;
+  let rejected = 0;
+  for (const shot of shots) {
+    const decision = decisions.get(shot.id);
+    const accepted = decision ? decision.accepted : true;
+    const normalized: AcceptedAutoShot = {
+      ...shot,
+      club: decision?.club ?? shot.club,
+      playsLikePct: decision?.playsLikePct ?? shot.playsLikePct,
+    };
+    if (!accepted) {
+      autoQueue.finalizeShot(normalized.holeId, normalized.id);
+      rejected += 1;
+      continue;
+    }
+    const outcome = await applyShot(normalized);
+    if (outcome === 'applied') {
       applied += 1;
-    } catch (error) {
-      if (typeof __DEV__ !== 'undefined' && __DEV__) {
-        console.warn('[PostHoleReconciler] Failed to record auto shot', error);
-      }
+    } else if (outcome === 'missing-start') {
+      rejected += 1;
     }
   }
-  return applied;
+  return { applied, rejected };
 }
 
 let confirmHandler: ConfirmHandler = confirmWithAlert;
@@ -122,8 +191,7 @@ async function recordHoleAccuracy(holeId: number, autoShots: AcceptedAutoShot[])
       autoShots.map((shot) => ({ ts: shot.ts })),
       recorded,
     );
-    appendHoleAccuracy({
-      holeId: snapshot.holeId,
+    appendHoleAccuracy(holeId, {
       holeIndex: snapshot.holeIndex,
       timestamp: Date.now(),
       ...confusion,
@@ -136,30 +204,33 @@ async function recordHoleAccuracy(holeId: number, autoShots: AcceptedAutoShot[])
 }
 
 export const PostHoleReconciler = {
-  async reviewAndApply(holeId: number): Promise<{ applied: number }> {
+  async reviewAndApply({ holeId, decisions }: ReviewAndApplyArgs): Promise<{ applied: number; rejected: number }> {
     if (!Number.isFinite(holeId)) {
-      return { applied: 0 };
+      return { applied: 0, rejected: 0 };
     }
     try {
       const shots = autoQueue.getAcceptedShots(holeId);
       if (!shots.length) {
-        return { applied: 0 };
+        return { applied: 0, rejected: 0 };
       }
-      const shouldApply = await confirmHandler(holeId, shots);
-      if (!shouldApply) {
-        await recordHoleAccuracy(holeId, shots);
-        autoQueue.markHoleReviewed(holeId);
-        return { applied: 0 };
+      if (!decisions || decisions.length === 0) {
+        const shouldApply = await confirmHandler(holeId, shots);
+        if (!shouldApply) {
+          await recordHoleAccuracy(holeId, shots);
+          autoQueue.markHoleReviewed(holeId);
+          return { applied: 0, rejected: shots.length };
+        }
       }
-      const applied = await applyShots(shots);
-      await recordHoleAccuracy(holeId, shots);
-      if (applied === shots.length) {
+      const decisionMap = buildDecisionMap(decisions);
+      const { applied, rejected } = await applyReviewedShots(shots, decisionMap);
+      if (!autoQueue.getAcceptedShots(holeId).length) {
         autoQueue.finalizeHole(holeId);
       }
-      return { applied };
+      await recordHoleAccuracy(holeId, shots);
+      return { applied, rejected };
     } catch (error) {
       console.warn('[PostHoleReconciler] reviewAndApply failed', error);
-      return { applied: 0 };
+      return { applied: 0, rejected: 0 };
     }
   },
 };
@@ -167,7 +238,7 @@ export const PostHoleReconciler = {
 export type PostHoleReconcilerType = typeof PostHoleReconciler;
 
 export async function reconcileIfPending(holeId: number): Promise<number> {
-  const { applied } = await PostHoleReconciler.reviewAndApply(holeId);
+  const { applied } = await PostHoleReconciler.reviewAndApply({ holeId });
   return applied;
 }
 

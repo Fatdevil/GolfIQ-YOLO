@@ -25,6 +25,7 @@ export type AcceptedAutoShot = {
   club?: string;
   start?: { lat: number; lon: number; ts: number };
   lie?: AutoDetectedShot['lie'];
+  playsLikePct?: number;
   source: 'auto';
 };
 
@@ -81,7 +82,7 @@ export class AutoCaptureQueue {
     return this.current;
   }
 
-  confirm(patch?: Partial<AutoDetectedShot> & { club?: string }): void {
+  confirm(patch?: Partial<AutoDetectedShot> & { club?: string; playsLikePct?: number }): void {
     if (!this.current) {
       return;
     }
@@ -94,6 +95,10 @@ export class AutoCaptureQueue {
       club: (patch as { club?: string } | undefined)?.club,
       start: start ? { lat: start.lat, lon: start.lon, ts: nextShot.ts } : undefined,
       lie: nextShot.lie,
+      playsLikePct:
+        Number.isFinite((patch as { playsLikePct?: number } | undefined)?.playsLikePct ?? Number.NaN)
+          ? Number((patch as { playsLikePct?: number } | undefined)?.playsLikePct)
+          : undefined,
       source: 'auto',
     };
     const bucket = this.acceptedByHole.get(accepted.holeId) ?? [];
@@ -138,6 +143,7 @@ export class AutoCaptureQueue {
         club: item.shot.club,
         start: item.shot.start ? { ...item.shot.start } : undefined,
         lie: item.shot.lie,
+        playsLikePct: item.shot.playsLikePct,
         source: 'auto',
       }));
   }

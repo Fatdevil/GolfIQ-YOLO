@@ -11,6 +11,7 @@ import {
   Animated,
   Easing,
   LayoutChangeEvent,
+  Modal,
   PanResponder,
   Platform,
   ScrollView,
@@ -89,7 +90,11 @@ import { inferDangerSide, type HazardLabel } from '../../../../shared/caddie/haz
 import type { McResult } from '../../../../shared/caddie/mc';
 import { playsLikeDistance, type PlaysLikeInput, type PlaysLikeResult } from '../../../../shared/caddie/playslike';
 import { computePlaysLike, type PlanOut } from '../../../../shared/playslike/aggregate';
-import { addShot as addRoundShot, getActiveRound as getActiveRoundState } from '../../../../shared/round/round_store';
+import {
+  addShot as addRoundShot,
+  getActiveRound as getActiveRoundState,
+  subscribe as subscribeToRound,
+} from '../../../../shared/round/round_store';
 import { resumePendingUploads, uploadRoundRun } from '../../../../shared/runs/uploader';
 import type { Shot as RoundShot } from '../../../../shared/round/round_types';
 import {
@@ -109,7 +114,9 @@ import {
 } from '../../../../shared/playslike/bag_calibrator';
 import { isTelemetryOptedOut } from '../../../../shared/ops/log_export';
 import { buildShotFeedback, type FeedbackOutput } from '../../../../shared/playslike/feedback';
-import { exportHoleAccuracy } from '../../../../shared/telemetry/shotsenseMetrics';
+import { exportAccuracyNdjson } from '../../../../shared/telemetry/shotsenseMetrics';
+import { autoQueue } from '../shotsense/AutoCaptureQueue';
+import { PostHoleReconciler } from '../shotsense/PostHoleReconciler';
 import {
   createLandingHeuristics,
   type LandingProposal,
@@ -876,6 +883,16 @@ type CaddieRolloutState = {
   };
 };
 
+type ReviewItem = {
+  id: string;
+  holeId: number;
+  ts: number;
+  club: string;
+  accepted: boolean;
+  lie?: string;
+  playsLikePct?: number;
+};
+
 function finiteOrNull(value: unknown): number | null {
   return typeof value === 'number' && Number.isFinite(value) ? value : null;
 }
@@ -892,6 +909,17 @@ function formatDistanceMeters(value: number | null | undefined): string {
     return `${meters.toFixed(0)} m`;
   }
   return `${meters.toFixed(1)} m`;
+}
+
+function formatLieLabel(lie?: string | null): string {
+  if (!lie) {
+    return '—';
+  }
+  const trimmed = lie.trim();
+  if (!trimmed) {
+    return '—';
+  }
+  return trimmed.charAt(0).toUpperCase() + trimmed.slice(1);
 }
 
 function formatSearchDistance(distKm: number | null | undefined): string {
@@ -2430,6 +2458,13 @@ const QAArHudOverlayScreen: React.FC = () => {
   });
   const [plannerResult, setPlannerResult] = useState<PlanOut | null>(null);
   const [shotSession, setShotSession] = useState<ShotSessionState | null>(null);
+  const [activeHoleId, setActiveHoleId] = useState<number | null>(null);
+  const [reviewVisible, setReviewVisible] = useState(false);
+  const [reviewHoleId, setReviewHoleId] = useState<number | null>(null);
+  const [reviewShots, setReviewShots] = useState<ReviewItem[]>([]);
+  const [reviewSaving, setReviewSaving] = useState(false);
+  const [reviewNotice, setReviewNotice] = useState<string | null>(null);
+  const previousHoleRef = useRef<number | null>(null);
   useEffect(() => {
     if (!watchDiagExpanded) {
       return;
@@ -2442,6 +2477,123 @@ const QAArHudOverlayScreen: React.FC = () => {
       clearInterval(timer);
     };
   }, [watchDiagExpanded]);
+  useEffect(() => {
+    const unsubscribe = subscribeToRound((round) => {
+      if (!round || !Array.isArray(round.holes) || !round.holes.length) {
+        setActiveHoleId(null);
+        return;
+      }
+      const index = Math.min(Math.max(round.currentHole, 0), round.holes.length - 1);
+      const hole = round.holes[index];
+      setActiveHoleId(hole ? hole.holeNo : null);
+    });
+    return () => {
+      try {
+        unsubscribe();
+      } catch {
+        // ignore unsubscribe errors
+      }
+    };
+  }, []);
+  const openReviewForHole = useCallback(
+    (holeId: number | null | undefined): boolean => {
+      if (!Number.isFinite(Number(holeId))) {
+        return false;
+      }
+      const normalized = Number(holeId);
+      const shots = autoQueue.getAcceptedShots(normalized);
+      if (!shots.length) {
+        return false;
+      }
+      setReviewNotice(null);
+      setReviewShots(
+        shots.map((shot) => ({
+          id: shot.id,
+          holeId: shot.holeId,
+          ts: shot.ts,
+          club: shot.club ?? '',
+          accepted: true,
+          lie: shot.lie ?? undefined,
+          playsLikePct: shot.playsLikePct,
+        })),
+      );
+      setReviewHoleId(normalized);
+      setReviewVisible(true);
+      return true;
+    },
+    [],
+  );
+  useEffect(() => {
+    if (!qaEnabled) {
+      previousHoleRef.current = activeHoleId ?? null;
+      return;
+    }
+    if (reviewVisible) {
+      previousHoleRef.current = activeHoleId ?? null;
+      return;
+    }
+    const previous = previousHoleRef.current;
+    if (typeof previous === 'number' && Number.isFinite(previous) && previous !== activeHoleId) {
+      openReviewForHole(previous);
+    }
+    previousHoleRef.current = activeHoleId ?? null;
+  }, [activeHoleId, openReviewForHole, qaEnabled, reviewVisible]);
+  const updateReviewShotClub = useCallback((id: string, value: string) => {
+    setReviewShots((prev) => prev.map((item) => (item.id === id ? { ...item, club: value } : item)));
+  }, []);
+  const toggleReviewShot = useCallback((id: string) => {
+    setReviewShots((prev) =>
+      prev.map((item) => (item.id === id ? { ...item, accepted: !item.accepted } : item)),
+    );
+  }, []);
+  const handleReviewCancel = useCallback(() => {
+    if (reviewSaving) {
+      return;
+    }
+    setReviewVisible(false);
+  }, [reviewSaving]);
+  const handleReviewApply = useCallback(async () => {
+    if (typeof reviewHoleId !== 'number' || !Number.isFinite(reviewHoleId)) {
+      setReviewVisible(false);
+      return;
+    }
+    setReviewSaving(true);
+    try {
+      const decisions = reviewShots.map((item) => ({
+        id: item.id,
+        accepted: item.accepted,
+        club: item.club.trim() ? item.club.trim() : undefined,
+        playsLikePct: item.playsLikePct,
+      }));
+      const { applied, rejected } = await PostHoleReconciler.reviewAndApply({
+        holeId: reviewHoleId,
+        decisions,
+      });
+      setReviewVisible(false);
+      setReviewShots([]);
+      setReviewHoleId(null);
+      setReviewNotice(`Applied ${applied} · Rejected ${rejected}`);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unable to apply auto shots';
+      setReviewNotice(message);
+    } finally {
+      setReviewSaving(false);
+    }
+  }, [reviewHoleId, reviewShots, reviewSaving]);
+  const handleReviewOpen = useCallback(() => {
+    setReviewNotice(null);
+    const candidate =
+      typeof reviewHoleId === 'number' && Number.isFinite(reviewHoleId)
+        ? reviewHoleId
+        : previousHoleRef.current ?? activeHoleId;
+    if (!Number.isFinite(Number(candidate)) || candidate === null) {
+      setReviewNotice('No hole selected');
+      return;
+    }
+    if (!openReviewForHole(Number(candidate))) {
+      setReviewNotice('No auto shots pending');
+    }
+  }, [activeHoleId, openReviewForHole, reviewHoleId]);
   useEffect(() => {
     if (!watchAutoSend) {
       updateWatchTrailing(false, null);
@@ -2502,7 +2654,7 @@ const QAArHudOverlayScreen: React.FC = () => {
   }, [watchDiag.capability]);
   const handlePrintShotSenseAccuracy = useCallback(() => {
     try {
-      const { text, webDownload } = exportHoleAccuracy();
+      const { text, webDownload } = exportAccuracyNdjson();
       console.log('SS-ACCURACY-NDJSON\n' + text);
       if (Platform.OS === 'web') {
         try {
@@ -6401,6 +6553,85 @@ const QAArHudOverlayScreen: React.FC = () => {
 
   return (
     <View style={styles.container}>
+      <Modal
+        animationType="slide"
+        visible={reviewVisible}
+        transparent
+        onRequestClose={handleReviewCancel}
+      >
+        <View style={styles.reviewOverlay}>
+          <View style={styles.reviewCard}>
+            <Text style={styles.reviewTitle}>Review &amp; Fill</Text>
+            <ScrollView style={styles.reviewList}>
+              {reviewShots.map((item, index) => (
+                <View
+                  key={item.id}
+                  style={[
+                    styles.reviewShotRow,
+                    !item.accepted ? styles.reviewShotRejected : null,
+                  ]}
+                >
+                  <View style={styles.reviewShotHeader}>
+                    <Text style={styles.reviewShotTitle}>{`Shot ${index + 1}`}</Text>
+                    <TouchableOpacity
+                      onPress={() => toggleReviewShot(item.id)}
+                      style={styles.reviewToggleButton}
+                    >
+                      <Text style={styles.reviewToggleText}>
+                        {item.accepted ? 'Reject' : 'Restore'}
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+                  <View style={styles.reviewFieldRow}>
+                    <Text style={styles.reviewFieldLabel}>Club</Text>
+                    <TextInput
+                      value={item.club}
+                      onChangeText={(text) => updateReviewShotClub(item.id, text)}
+                      editable={item.accepted}
+                      placeholder="Enter club"
+                      placeholderTextColor="#64748b"
+                      style={styles.reviewFieldInput}
+                    />
+                  </View>
+                  <View style={styles.reviewFieldRow}>
+                    <Text style={styles.reviewFieldLabel}>Carry</Text>
+                    <Text style={styles.reviewFieldValue}>—</Text>
+                  </View>
+                  <View style={styles.reviewFieldRow}>
+                    <Text style={styles.reviewFieldLabel}>Start lie</Text>
+                    <Text style={styles.reviewFieldValue}>{formatLieLabel(item.lie)}</Text>
+                  </View>
+                  <View style={styles.reviewFieldRow}>
+                    <Text style={styles.reviewFieldLabel}>End lie</Text>
+                    <Text style={styles.reviewFieldValue}>Unknown</Text>
+                  </View>
+                </View>
+              ))}
+              {!reviewShots.length ? (
+                <Text style={styles.reviewEmpty}>No auto shots pending.</Text>
+              ) : null}
+            </ScrollView>
+            <View style={styles.reviewActions}>
+              <TouchableOpacity
+                onPress={handleReviewCancel}
+                style={styles.reviewSecondaryButton}
+                disabled={reviewSaving}
+              >
+                <Text style={styles.reviewSecondaryText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={handleReviewApply}
+                style={[styles.reviewPrimaryButton, reviewSaving ? styles.reviewPrimaryDisabled : null]}
+                disabled={reviewSaving}
+              >
+                <Text style={styles.reviewPrimaryText}>
+                  {reviewSaving ? 'Saving…' : 'Apply'}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
       <View style={styles.gnssCard}>
         <View style={[styles.gnssBadge, gnssBadgeToneStyle]}>
           <Text style={styles.gnssBadgeText}>{gnssBadgeText}</Text>
@@ -6577,6 +6808,14 @@ const QAArHudOverlayScreen: React.FC = () => {
             <TouchableOpacity onPress={handlePrintShotSenseAccuracy} style={styles.devToolButton}>
               <Text style={styles.devToolButtonText}>Print ShotSense accuracy</Text>
             </TouchableOpacity>
+          </>
+        ) : null}
+        {qaEnabled ? (
+          <>
+            <TouchableOpacity onPress={handleReviewOpen} style={styles.devToolButton}>
+              <Text style={styles.devToolButtonText}>Review &amp; Fill</Text>
+            </TouchableOpacity>
+            {reviewNotice ? <Text style={styles.reviewNotice}>{reviewNotice}</Text> : null}
           </>
         ) : null}
         <View style={styles.calibrationChipRow}>
@@ -7523,6 +7762,133 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 20,
     gap: 16,
+  },
+  reviewOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(15, 23, 42, 0.85)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 24,
+  },
+  reviewCard: {
+    width: '100%',
+    maxWidth: 520,
+    maxHeight: '85%',
+    backgroundColor: '#0b1120',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#1e293b',
+    padding: 16,
+    gap: 12,
+  },
+  reviewTitle: {
+    color: '#f8fafc',
+    fontSize: 18,
+    fontWeight: '700',
+    textAlign: 'center',
+  },
+  reviewList: {
+    flexGrow: 0,
+    marginTop: 8,
+    marginBottom: 16,
+  },
+  reviewShotRow: {
+    marginBottom: 12,
+    padding: 12,
+    borderRadius: 10,
+    backgroundColor: '#1f2937',
+    borderWidth: 1,
+    borderColor: '#334155',
+    gap: 8,
+  },
+  reviewShotRejected: {
+    opacity: 0.6,
+  },
+  reviewShotHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  reviewShotTitle: {
+    color: '#f8fafc',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  reviewToggleButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 999,
+    backgroundColor: '#ef4444',
+  },
+  reviewToggleText: {
+    color: '#0f172a',
+    fontWeight: '600',
+    fontSize: 12,
+  },
+  reviewFieldRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  reviewFieldLabel: {
+    color: '#cbd5f5',
+    fontSize: 13,
+  },
+  reviewFieldInput: {
+    flex: 1,
+    backgroundColor: '#0f172a',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#334155',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    color: '#f8fafc',
+    fontSize: 14,
+  },
+  reviewFieldValue: {
+    color: '#e2e8f0',
+    fontSize: 13,
+  },
+  reviewEmpty: {
+    color: '#94a3b8',
+    textAlign: 'center',
+    paddingVertical: 12,
+  },
+  reviewActions: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: 12,
+  },
+  reviewSecondaryButton: {
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#334155',
+    backgroundColor: '#0f172a',
+  },
+  reviewSecondaryText: {
+    color: '#cbd5f5',
+    fontWeight: '600',
+  },
+  reviewPrimaryButton: {
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 8,
+    backgroundColor: '#2563eb',
+  },
+  reviewPrimaryDisabled: {
+    opacity: 0.7,
+  },
+  reviewPrimaryText: {
+    color: '#f8fafc',
+    fontWeight: '700',
+  },
+  reviewNotice: {
+    color: '#fca5a5',
+    marginTop: 8,
+    fontSize: 12,
   },
   gnssCard: {
     backgroundColor: '#111827',
