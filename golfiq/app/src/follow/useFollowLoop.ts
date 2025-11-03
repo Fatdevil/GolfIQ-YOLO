@@ -16,7 +16,7 @@ import {
 } from '../../../../shared/telemetry/follow';
 import { WatchBridge } from '../../../../shared/watch/bridge';
 import type { WatchHUDStateV1 } from '../../../../shared/watch/types';
-import { shotSense } from '../modules/shotsense/ShotSenseService';
+import { shotSense } from '../shotsense/ShotSenseService';
 
 export type UseFollowLoopOptions = {
   roundId: string;
@@ -413,6 +413,12 @@ export function useFollowLoop(options: UseFollowLoopOptions): UseFollowLoopState
     return () => {
       void WatchBridge.setSenseStreaming(false);
     };
+  }, []);
+
+  useEffect(() => {
+    return shotSense.onDetect((ts, strength) => {
+      console.log('[ShotSense] detected', ts, strength);
+    });
   }, []);
 
   useEffect(() => {

@@ -43,9 +43,19 @@ const clamp01 = (value: number) => Math.max(0, Math.min(1, value));
 
 const magnitude3 = (x: number, y: number, z: number) => Math.sqrt(x * x + y * y + z * z);
 
+const clampHz = (hz: number) =>
+  Number.isFinite(hz) ? Math.max(20, Math.min(200, Math.round(hz))) : 80;
+
+const msToSamples = (ms: number, hz: number) =>
+  Math.max(1, Math.round((ms * hz) / 1000));
+
 export class ShotDetector {
   private readonly opts: Required<DetectorOpts>;
-  private readonly settleMs: number;
+  private sampleHz: number = 80;
+  private frameDtMs: number = 0;
+  private minSwingWinSamples: number = 0;
+  private debounceSamples: number = 0;
+  private settleSamples: number = 0;
   private readonly startGyro: number;
   private readonly startAccel: number;
   private readonly startJerk: number;
@@ -61,15 +71,27 @@ export class ShotDetector {
   private queuedEvent?: ShotSenseEvent;
   private lastGps?: GpsContext;
 
-  constructor(opts?: DetectorOpts) {
+  constructor(opts: DetectorOpts = {}) {
     this.opts = { ...DEFAULT_OPTS, ...opts };
-    const dtMs = 1000 / this.opts.sampleHz;
-    this.settleMs = Math.max(80, Math.round(dtMs * 6));
+    this.sampleHz = clampHz(this.opts.sampleHz);
+    this.opts.sampleHz = this.sampleHz;
+    this.recomputeSampleWindows();
     this.startGyro = this.opts.swingGyroPeak_degps * 0.6;
     this.startAccel = this.opts.swingAccelPeak_ms2 * 0.6;
     this.startJerk = this.opts.jerkThresh_ms3 * 0.6;
     this.maxBufferMs = Math.max(3000, this.opts.minSwingWindow_ms * 4);
     this.gpsRetentionMs = Math.max(5000, this.opts.minMoveAfter_ms * 2);
+  }
+
+  setSampleHz(hz: number): void {
+    const next = clampHz(hz);
+    if (next === this.sampleHz) {
+      return;
+    }
+    this.sampleHz = next;
+    this.opts.sampleHz = this.sampleHz;
+    this.recomputeSampleWindows();
+    (this as any).resetRollingPeaks?.();
   }
 
   pushIMU(frame: IMUFrame): ShotSenseEvent[] {
@@ -197,8 +219,9 @@ export class ShotDetector {
       this.currentBurst.peakJerk = jerk;
     }
 
-    const idleFor = frame.ts - this.currentBurst.lastActiveTs;
-    if (idleFor >= this.settleMs) {
+    const idleMs = frame.ts - this.currentBurst.lastActiveTs;
+    const idleSamples = Math.max(0, Math.round((idleMs * this.sampleHz) / 1000));
+    if (idleSamples >= this.settleSamples) {
       this.maybeEmitCandidate(events);
       this.currentBurst = undefined;
     }
@@ -210,7 +233,8 @@ export class ShotDetector {
     }
 
     const windowMs = this.currentBurst.lastActiveTs - this.currentBurst.startTs;
-    if (windowMs < this.opts.minSwingWindow_ms) {
+    const windowSamples = Math.max(0, Math.round((windowMs * this.sampleHz) / 1000));
+    if (windowSamples < this.minSwingWinSamples) {
       return;
     }
 
@@ -240,6 +264,14 @@ export class ShotDetector {
   }
 
   private handleCandidate(candidate: ShotCandidate, events: ShotSenseEvent[]) {
+    if (this.lastEventTs !== -Infinity) {
+      const sinceLastMs = candidate.ts - this.lastEventTs;
+      const sinceLastSamples = Math.max(0, Math.round((sinceLastMs * this.sampleHz) / 1000));
+      if (sinceLastSamples < this.debounceSamples) {
+        return;
+      }
+    }
+
     if (candidate.ts - this.lastEventTs < this.opts.debounce_ms) {
       return;
     }
@@ -354,6 +386,15 @@ export class ShotDetector {
     const impact = Math.max(accelNorm, jerkNorm);
     return clamp01(0.55 * gyroNorm + 0.45 * impact);
   }
+
+  private recomputeSampleWindows(): void {
+    this.frameDtMs = 1000 / this.sampleHz;
+    this.minSwingWinSamples = msToSamples(this.opts.minSwingWindow_ms, this.sampleHz);
+    this.debounceSamples = msToSamples(this.opts.debounce_ms, this.sampleHz);
+    const settleTargetMs = Math.max(80, Math.round(this.frameDtMs * 6));
+    this.settleSamples = msToSamples(settleTargetMs, this.sampleHz);
+  }
 }
 
 export type { DetectorOpts, GpsContext, IMUFrame, ShotCandidate, ShotSenseEvent } from './types';
+export { msToSamples };

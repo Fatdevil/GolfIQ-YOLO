@@ -234,4 +234,5 @@ describe('ShotDetector', () => {
     expect(detected).toHaveLength(1);
     expect(detected[0]?.at.strength).toBeGreaterThan(0.75);
   });
+
 });
