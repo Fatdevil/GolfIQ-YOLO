@@ -20,6 +20,7 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.wear.compose.material.Text
+import com.golfiq.wear.HudCaddieHint
 import com.golfiq.wear.HudState
 import com.golfiq.wear.HudStrategy
 import com.golfiq.wear.overlay.WearOverlay
@@ -69,6 +70,15 @@ fun HudScreen(state: HudState, modifier: Modifier = Modifier) {
             textAlign = TextAlign.Center,
         )
 
+        if (!state.tournamentSafe && state.caddie != null) {
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = formatCaddie(state.caddie),
+                fontSize = 14.sp,
+                textAlign = TextAlign.Center,
+            )
+        }
+
         if (!state.tournamentSafe && state.strategy != null) {
             Spacer(modifier = Modifier.height(8.dp))
             Text(
@@ -113,6 +123,19 @@ private fun formatWind(state: HudState, hasData: Boolean): String {
     val speed = state.wind.mps
     val direction = state.wind.deg
     return String.format(Locale.US, "%.0fm/s @ %.0f°", speed, direction)
+}
+
+private fun formatCaddie(hint: HudCaddieHint): String {
+    val club = hint.club
+    val carry = hint.carryM.roundToInt()
+    val aimSegment = when (hint.aimDir) {
+        "L" -> "L${hint.aimOffsetM?.absoluteValue?.roundToInt()?.let { "${it}m" } ?: ""}"
+        "R" -> "R${hint.aimOffsetM?.absoluteValue?.roundToInt()?.let { "${it}m" } ?: ""}"
+        "C" -> "C"
+        else -> "C"
+    }
+    val riskInitial = hint.risk.firstOrNull()?.uppercaseChar() ?: 'N'
+    return "🏌  $club • ${carry}m • $aimSegment • $riskInitial"
 }
 
 private fun formatStrategy(strategy: HudStrategy): String {

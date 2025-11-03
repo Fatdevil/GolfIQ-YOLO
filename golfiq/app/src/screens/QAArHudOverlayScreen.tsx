@@ -208,6 +208,7 @@ import { advise, type Advice } from '../../../../shared/caddie/advice';
 import { getCaddieRc } from '../../../../shared/caddie/rc';
 import { inRollout } from '../../../../shared/caddie/rollout';
 import { caddieTipToText, advicesToText } from '../../../../shared/caddie/text';
+import type { CaddieHudVM } from '../../../../shared/caddie/selectors';
 import { speak as speakTip, stop as stopSpeech } from '../../../../shared/tts/speak';
 import { breakHint } from '../../../../shared/greeniq/break';
 import { evaluatePutt, type PuttEval } from '../../../../shared/greeniq/putt_eval';
@@ -231,6 +232,7 @@ import {
 } from '../../../../shared/telemetry/greeniq';
 import { buildGhostTelemetryKey } from './utils/ghostTelemetry';
 import CalibrationWizard from './CalibrationWizard';
+import { CaddieHudCard, CaddieWhySheet } from '../features/caddie';
 import {
   classifyPhase,
   computeSG,
@@ -2580,6 +2582,8 @@ const QAArHudOverlayScreen: React.FC = () => {
   const [caddieGoForGreen, setCaddieGoForGreen] = useState(false);
   const [caddieUseMC, setCaddieUseMC] = useState(true);
   const [caddieSamples, setCaddieSamples] = useState(800);
+  const [caddieHudEnabled, setCaddieHudEnabled] = useState(false);
+  const [caddieHudWhyVisible, setCaddieHudWhyVisible] = useState(false);
   const [mcSliderWidth, setMcSliderWidth] = useState(1);
   const mcSliderMetricsRef = useRef<{ left: number }>({ left: 0 });
   const lastMcTelemetryRef = useRef<string | null>(null);
@@ -2592,6 +2596,7 @@ const QAArHudOverlayScreen: React.FC = () => {
   const lastPuttTelemetryRef = useRef<string | null>(null);
   const lastBreakTelemetryRef = useRef<string | null>(null);
   const telemetryRef = useRef<TelemetryEmitter | null>(null);
+  const caddieHudShownRef = useRef(false);
   const lastStrategyTelemetryRef = useRef<string | null>(null);
   const imuRef = useRef<QaImuStub | null>(null);
   if (!imuRef.current) {
@@ -3766,6 +3771,62 @@ const QAArHudOverlayScreen: React.FC = () => {
     return (Number(slopeMeters) / Number(distance)) * 100;
   }, [planWithGreenIq, puttEval?.holeDist_m]);
   const holeComplete = shotSession?.hole?.completed === true;
+  const caddieHudGateOpen = !tournamentSafe || holeComplete;
+  useEffect(() => {
+    if (!caddieHudGateOpen && caddieHudEnabled) {
+      setCaddieHudEnabled(false);
+    }
+  }, [caddieHudEnabled, caddieHudGateOpen]);
+  const caddieHudCardVisible =
+    caddieHudEnabled && caddieHudGateOpen && caddieHudScenarioEligible && Boolean(caddieHudVm);
+  const caddieHudToggleDisabled = !caddieHudGateOpen;
+  const caddieHudToggleHint = tournamentSafe
+    ? holeComplete
+      ? 'Unlocked (hole complete)'
+      : 'Tournament-safe'
+    : 'QA override';
+  const caddieHudWatchHint = useMemo<WatchHUDStateV1['caddie'] | null>(() => {
+    if (!caddieHudGateOpen || !caddieHudScenarioEligible || !caddieHudVm) {
+      return null;
+    }
+    const aim = caddieHudVm.best.aim;
+    return {
+      club: caddieHudVm.best.clubId,
+      carry_m: caddieHudVm.best.carry_m,
+      total_m: caddieHudVm.best.total_m ?? undefined,
+      aim: aim
+        ? {
+            dir: aim.dir,
+            ...(Number.isFinite(aim.offset_m)
+              ? { offset_m: Number(aim.offset_m) }
+              : {}),
+          }
+        : undefined,
+      risk: caddieHudVm.best.risk,
+      confidence: Number.isFinite(caddieHudVm.best.confidence)
+        ? clamp01(Number(caddieHudVm.best.confidence))
+        : undefined,
+    };
+  }, [caddieHudGateOpen, caddieHudScenarioEligible, caddieHudVm]);
+  useEffect(() => {
+    if (caddieHudCardVisible && caddieHudVm && !caddieHudShownRef.current) {
+      caddieHudShownRef.current = true;
+      emitTelemetry('caddie.hud_shown', {
+        club: caddieHudVm.best.clubId,
+        risk: caddieHudVm.best.risk,
+        confidence: Number.isFinite(caddieHudVm.best.confidence)
+          ? clamp01(Number(caddieHudVm.best.confidence))
+          : null,
+      });
+    } else if (!caddieHudCardVisible) {
+      caddieHudShownRef.current = false;
+    }
+  }, [caddieHudCardVisible, caddieHudVm, emitTelemetry]);
+  useEffect(() => {
+    if (!caddieHudCardVisible && caddieHudWhyVisible) {
+      setCaddieHudWhyVisible(false);
+    }
+  }, [caddieHudCardVisible, caddieHudWhyVisible]);
   const holeSgAllowed = !tournamentSafe || holeComplete;
   const playsLikeHud = useMemo(() => {
     const rawCandidate =
@@ -3872,7 +3933,7 @@ const QAArHudOverlayScreen: React.FC = () => {
       return 1;
     })();
 
-    const { hazard, dangerSide } = summarizeStrategyHazards(caddiePlan?.mc ?? null);
+    const { hazard, dangerSide } = caddieHazardSummary;
 
     const clubValue = caddiePlan?.club ?? shotSession?.plan?.clubSuggested ?? null;
     const isClubIdValue = (value: string | null | undefined): value is ClubId =>
@@ -3907,7 +3968,7 @@ const QAArHudOverlayScreen: React.FC = () => {
     return { decision, input, hazard, dispersion, playsLikeFactor: factorCandidate };
   }, [
     caddiePlan?.club,
-    caddiePlan?.mc,
+    caddieHazardSummary,
     caddiePlayerModel,
     playsLikeInput?.rawDist_m,
     playsLikeResult?.distance_m,
@@ -3998,6 +4059,9 @@ const QAArHudOverlayScreen: React.FC = () => {
       },
       tournamentSafe,
     };
+    if (caddieHudWatchHint) {
+      payload.caddie = caddieHudWatchHint;
+    }
     if (!tournamentSafe && strategyComputation) {
       payload.strategy = {
         profile: strategyComputation.decision.profile,
@@ -4017,6 +4081,7 @@ const QAArHudOverlayScreen: React.FC = () => {
       wind: payload.wind,
       strategy: payload.strategy,
       tournamentSafe: payload.tournamentSafe,
+      caddie: payload.caddie,
     });
     const now = Date.now();
     const lastSuccess = watchHudLastSuccessRef.current;
@@ -4648,6 +4713,108 @@ const QAArHudOverlayScreen: React.FC = () => {
     plannerInputs.wind_mps,
     playerLatLon,
   ]);
+  const caddieHazardSummary = useMemo(
+    () => summarizeStrategyHazards(caddiePlan?.mc ?? null),
+    [caddiePlan?.mc],
+  );
+  const caddieHudVm = useMemo<CaddieHudVM | null>(() => {
+    if (!caddiePlan) {
+      return null;
+    }
+    const rawAimOffset = Number.isFinite(caddiePlan.aim?.lateral_m)
+      ? Number(caddiePlan.aim?.lateral_m)
+      : null;
+    const aimDirection = caddiePlan.aimDirection;
+    let aimDir: 'L' | 'C' | 'R' = 'C';
+    if (aimDirection === 'LEFT') {
+      aimDir = 'L';
+    } else if (aimDirection === 'RIGHT') {
+      aimDir = 'R';
+    }
+    const aimOffset = rawAimOffset !== null ? Math.abs(rawAimOffset) : null;
+    const bestCarry = Number.isFinite(caddiePlan.carry_m)
+      ? Number(caddiePlan.carry_m)
+      : Number.isFinite(caddiePlan.landing.distance_m)
+        ? Number(caddiePlan.landing.distance_m)
+        : 0;
+    const bestTotal = Number.isFinite(caddiePlan.landing.distance_m)
+      ? Number(caddiePlan.landing.distance_m)
+      : null;
+    const mcConfidence = caddiePlan.mc ? clamp01(caddiePlan.mc.successRate) : null;
+    const riskMode: CaddieHudVM['best']['risk'] =
+      caddiePlan.mode === 'normal' ? 'neutral' : (caddiePlan.mode as CaddieHudVM['best']['risk']);
+    const context: CaddieHudVM['context'] = {};
+    if (Number.isFinite(plannerInputs.wind_mps)) {
+      context.wind_mps = Number(plannerInputs.wind_mps);
+    }
+    if (Number.isFinite(plannerInputs.slope_dh_m)) {
+      context.elevation_m = Number(plannerInputs.slope_dh_m);
+    }
+    if (Number.isFinite(plannerInputs.temperatureC)) {
+      context.temp_c = Number(plannerInputs.temperatureC);
+    }
+    const hazardRates = caddieHazardSummary.hazard;
+    const hazardTotal = clamp01(
+      (hazardRates.water ?? 0) +
+        (hazardRates.bunker ?? 0) +
+        (hazardRates.rough ?? 0) +
+        (hazardRates.ob ?? 0),
+    );
+    if (hazardTotal > 0) {
+      if (caddieHazardSummary.dangerSide === 'left') {
+        context.hazardLeft = hazardTotal;
+      } else if (caddieHazardSummary.dangerSide === 'right') {
+        context.hazardRight = hazardTotal;
+      }
+    }
+    return {
+      best: {
+        clubId: caddiePlan.club,
+        carry_m: bestCarry,
+        total_m: bestTotal,
+        aim:
+          aimDir === 'C' && aimOffset === null
+            ? { dir: 'C' }
+            : {
+                dir: aimDir,
+                ...(aimOffset !== null ? { offset_m: aimOffset } : {}),
+              },
+        risk: riskMode,
+        confidence: mcConfidence,
+      },
+      context,
+    } satisfies CaddieHudVM;
+  }, [caddieHazardSummary, caddiePlan, plannerInputs.slope_dh_m, plannerInputs.temperatureC, plannerInputs.wind_mps]);
+  const caddieHudScenarioEligible =
+    shotSession?.phase === 'tee' || shotSession?.phase === 'approach';
+  const caddieHudWhyLines = useMemo(() => {
+    const items: string[] = [];
+    if (caddiePlan?.reason) {
+      items.push(caddiePlan.reason);
+    }
+    if (caddiePlan?.riskFactors) {
+      for (const entry of caddiePlan.riskFactors) {
+        if (entry) {
+          items.push(entry);
+        }
+      }
+    }
+    if (caddiePlan?.mode) {
+      const modeLabel = caddiePlan.mode === 'normal' ? 'neutral' : caddiePlan.mode;
+      items.push(`Risk mode ${modeLabel}`);
+    }
+    return items;
+  }, [caddiePlan?.mode, caddiePlan?.reason, caddiePlan?.riskFactors]);
+  const caddieHudWhyReasons = useMemo(
+    () =>
+      (caddiePlan?.mc?.reasons ?? [])
+        .filter((reason): reason is NonNullable<typeof reason> => Boolean(reason?.label))
+        .map((reason) => ({
+          label: reason.label,
+          value: clamp01(Number.isFinite(reason.value) ? Number(reason.value) : 0),
+        })),
+    [caddiePlan?.mc?.reasons],
+  );
   const greenSectionLabel = useMemo(() => {
     if (!caddiePlan || caddiePlan.kind !== 'approach' || !caddiePlan.greenSection) {
       return null;
@@ -5366,7 +5533,6 @@ const QAArHudOverlayScreen: React.FC = () => {
     emitTelemetry('hud.auto_land.rejected', { reason: 'dismiss' });
     startLandingTimeout();
   }, [emitTelemetry, startLandingTimeout]);
-
   const handleApplyCaddiePlan = useCallback(() => {
     if (!caddiePlan) {
       return;
@@ -5422,6 +5588,23 @@ const QAArHudOverlayScreen: React.FC = () => {
     setPlannerExpanded,
     setPlannerResult,
   ]);
+  const handleCaddieHudSelect = useCallback(() => {
+    if (!caddieHudVm) {
+      return;
+    }
+    emitTelemetry('caddie.hud_accept', {
+      club: caddieHudVm.best.clubId,
+      risk: caddieHudVm.best.risk,
+    });
+    handleApplyCaddiePlan();
+  }, [caddieHudVm, emitTelemetry, handleApplyCaddiePlan]);
+  const handleCaddieHudWhy = useCallback(() => {
+    emitTelemetry('caddie.hud_why_opened', {});
+    setCaddieHudWhyVisible(true);
+  }, [emitTelemetry]);
+  const handleCaddieHudWhyClose = useCallback(() => {
+    setCaddieHudWhyVisible(false);
+  }, []);
 
   useEffect(() => {
     if (!qaEnabled) {
@@ -6318,6 +6501,29 @@ const QAArHudOverlayScreen: React.FC = () => {
         </View>
       </View>
       <View style={styles.statusPanel}>
+        <View style={styles.caddieHudToggleRow}>
+          <View style={styles.caddieHudToggleInfo}>
+            <Text style={styles.sectionTitle}>Caddie HUD</Text>
+            <Text style={styles.caddieHudToggleHint}>{caddieHudToggleHint}</Text>
+          </View>
+          <Switch
+            value={caddieHudEnabled}
+            onValueChange={setCaddieHudEnabled}
+            disabled={caddieHudToggleDisabled}
+          />
+        </View>
+        {caddieHudCardVisible && caddieHudVm ? (
+          <CaddieHudCard
+            hud={caddieHudVm}
+            onSelect={handleCaddieHudSelect}
+            onWhy={
+              caddieHudWhyLines.length || caddieHudWhyReasons.length
+                ? handleCaddieHudWhy
+                : undefined
+            }
+            disabled={!caddiePlan}
+          />
+        ) : null}
         {__DEV__ ? (
           <>
             <View style={styles.watchCard}>
@@ -7298,6 +7504,13 @@ const QAArHudOverlayScreen: React.FC = () => {
           onDismiss={handleCalibrationWizardDismiss}
           onSaved={handleCalibrationWizardSaved}
         />
+        <CaddieWhySheet
+          visible={caddieHudWhyVisible}
+          hud={caddieHudVm}
+          lines={caddieHudWhyLines}
+          reasons={caddieHudWhyReasons}
+          onClose={handleCaddieHudWhyClose}
+        />
       </View>
     </View>
   );
@@ -7622,6 +7835,20 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     padding: 12,
     gap: 8,
+  },
+  caddieHudToggleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  caddieHudToggleInfo: {
+    flex: 1,
+    gap: 4,
+  },
+  caddieHudToggleHint: {
+    color: '#94a3b8',
+    fontSize: 12,
   },
   watchCard: {
     backgroundColor: '#0b1120',

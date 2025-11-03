@@ -32,6 +32,16 @@ data class HudWind(
     val deg: Double,
 )
 
+data class HudCaddieHint(
+    val club: String,
+    val carryM: Double,
+    val totalM: Double?,
+    val aimDir: String?,
+    val aimOffsetM: Double?,
+    val risk: String,
+    val confidence: Double?,
+)
+
 data class HudState(
     val timestamp: Long,
     val fmb: HudDistances,
@@ -39,6 +49,7 @@ data class HudState(
     val wind: HudWind,
     val strategy: HudStrategy?,
     val tournamentSafe: Boolean,
+    val caddie: HudCaddieHint?,
 ) {
     val hasData: Boolean get() = timestamp > 0
 
@@ -50,6 +61,7 @@ data class HudState(
             wind = HudWind(0.0, 0.0),
             strategy = null,
             tournamentSafe = false,
+            caddie = null,
         )
     }
 }
@@ -97,6 +109,68 @@ object HudCodec {
             null
         }
 
+        val caddie = if (json.has("caddie") && !json.isNull("caddie")) {
+            try {
+                val raw = json.opt("caddie")
+                val caddieJson = when (raw) {
+                    is JSONObject -> raw
+                    is String -> JSONObject(raw)
+                    JSONObject.NULL -> null
+                    else -> null
+                }
+                if (caddieJson != null) {
+                    val club = caddieJson.optString("club").orEmpty()
+                    if (club.isBlank() || !caddieJson.has("carry_m")) {
+                        null
+                    } else {
+                        val carry = caddieJson.optDouble("carry_m")
+                        if (!carry.isFinite()) {
+                            null
+                        } else {
+                            val aimJson = when (val aimRaw = caddieJson.opt("aim")) {
+                                is JSONObject -> aimRaw
+                                is String -> JSONObject(aimRaw)
+                                else -> null
+                            }
+                            val aimDir = aimJson?.optString("dir")?.takeIf { it == "L" || it == "C" || it == "R" }
+                            val aimOffset = aimJson?.optDouble("offset_m")?.takeIf { it.isFinite() }
+                            val risk = when (caddieJson.optString("risk")) {
+                                "safe", "neutral", "aggressive" -> caddieJson.optString("risk")
+                                else -> "neutral"
+                            }
+                            val totalRaw = caddieJson.opt("total_m")
+                            val total = when (totalRaw) {
+                                is Number -> totalRaw.toDouble().takeIf { it.isFinite() }
+                                is String -> totalRaw.toDoubleOrNull()
+                                else -> null
+                            }
+                            val confidenceRaw = caddieJson.opt("confidence")
+                            val confidence = when (confidenceRaw) {
+                                is Number -> confidenceRaw.toDouble().takeIf { it.isFinite() }
+                                is String -> confidenceRaw.toDoubleOrNull()
+                                else -> null
+                            }
+                            HudCaddieHint(
+                                club = club,
+                                carryM = carry,
+                                totalM = total,
+                                aimDir = aimDir,
+                                aimOffsetM = aimOffset,
+                                risk = risk,
+                                confidence = confidence,
+                            )
+                        }
+                    }
+                } else {
+                    null
+                }
+            } catch (ignored: Exception) {
+                null
+            }
+        } else {
+            null
+        }
+
         return HudState(
             timestamp = json.getLong("ts"),
             fmb = HudDistances(
@@ -111,6 +185,7 @@ object HudCodec {
             ),
             strategy = strategy,
             tournamentSafe = json.optBoolean("tournamentSafe"),
+            caddie = caddie,
         )
     }
 
@@ -149,6 +224,37 @@ object HudCodec {
         }
         builder.append(",\"tournamentSafe\":")
         builder.append(if (state.tournamentSafe) "true" else "false")
+        state.caddie?.let { hint ->
+            builder.append(",\"caddie\":{")
+            builder.append("\"club\":\"")
+            builder.append(hint.club)
+            builder.append("\",\"carry_m\":")
+            builder.appendNumber(hint.carryM)
+            hint.totalM?.let { total ->
+                builder.append(",\"total_m\":")
+                builder.appendNumber(total)
+            }
+            val aimDir = hint.aimDir
+            if (!aimDir.isNullOrBlank()) {
+                builder.append(",\"aim\":{")
+                builder.append("\"dir\":\"")
+                builder.append(aimDir)
+                builder.append('"')
+                hint.aimOffsetM?.let { offset ->
+                    builder.append(",\"offset_m\":")
+                    builder.appendNumber(offset)
+                }
+                builder.append('}')
+            }
+            builder.append(",\"risk\":\"")
+            builder.append(hint.risk)
+            builder.append('"')
+            hint.confidence?.let { confidence ->
+                builder.append(",\"confidence\":")
+                builder.appendNumber(confidence)
+            }
+            builder.append('}')
+        }
         builder.append('}')
         return builder.toString().toByteArray(StandardCharsets.UTF_8)
     }

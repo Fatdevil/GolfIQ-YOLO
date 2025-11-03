@@ -1,3 +1,12 @@
+export type CaddieHint = {
+  club: string;
+  carry_m: number;
+  total_m?: number | null;
+  aim?: { dir: 'L' | 'C' | 'R'; offset_m?: number | null } | null;
+  risk: 'safe' | 'neutral' | 'aggressive';
+  confidence?: number | null;
+};
+
 export type WatchHUDStateV1 = {
   v: 1;
   ts: number;
@@ -10,6 +19,7 @@ export type WatchHUDStateV1 = {
     carry_m: number;
   };
   tournamentSafe: boolean;
+  caddie?: CaddieHint;
 };
 
 export type WatchDiag = {
