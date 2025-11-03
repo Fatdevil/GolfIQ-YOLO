@@ -240,7 +240,7 @@ export function useFollowLoop(options: UseFollowLoopOptions): UseFollowLoopState
           recordAutoEvent({ from: prevStable, to: targetStable, reason });
           if (Number.isFinite(prevStable)) {
             try {
-              await PostHoleReconciler.reviewAndApply(prevStable);
+              await PostHoleReconciler.reviewAndApply({ holeId: prevStable });
             } catch (error) {
               console.warn('[PostHoleReconciler] review failed during auto advance', error);
             }
@@ -520,7 +520,7 @@ export function useFollowLoop(options: UseFollowLoopOptions): UseFollowLoopState
     const beforeHole = resolveHoleNumber(before.hole);
     if (beforeHole !== null) {
       try {
-        await PostHoleReconciler.reviewAndApply(beforeHole);
+        await PostHoleReconciler.reviewAndApply({ holeId: beforeHole });
       } catch (error) {
         console.warn('[PostHoleReconciler] review failed before manual next', error);
       }

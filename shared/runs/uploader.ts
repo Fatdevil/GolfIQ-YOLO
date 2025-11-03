@@ -11,7 +11,7 @@ const BASE_BACKOFF_MS = 2_000;
 const TASK_TTL_MS = 30 * 60 * 1_000; // 30 minutes
 const DEFAULT_MAX_ATTEMPTS = 6;
 
-export type RunUploadKind = "hud" | "round";
+export type RunUploadKind = "hud" | "round" | "accuracy";
 
 export type UploadReceipt = {
   id: string;
@@ -487,6 +487,23 @@ async function attemptUpload(task: UploadTask): Promise<"success" | "fatal" | "r
     timestamp: Date.now(),
   });
   notifySummary();
+  if (task.kind === "accuracy" && !apiKey) {
+    const now = Date.now();
+    resolvePending(task, { id: task.localId, url: "local://accuracy" });
+    lastSuccessAt = now;
+    lastFailureMessage = null;
+    lastFailureToken = null;
+    emitReliabilityEvent({
+      type: "uploader:success",
+      localId: task.localId,
+      kind: task.kind,
+      attempts: task.attempts,
+      timestamp: now,
+    });
+    notifySummary();
+    activeUploadId = null;
+    return "success";
+  }
   try {
     const response = await fetch(target, {
       method: "POST",
@@ -645,6 +662,10 @@ export async function uploadHudRun(payload: unknown): Promise<UploadReceipt> {
 
 export async function uploadRoundRun(payload: unknown): Promise<UploadReceipt> {
   return enqueue("round", payload);
+}
+
+export async function uploadAccuracyRun(payload: unknown): Promise<UploadReceipt> {
+  return enqueue("accuracy", payload);
 }
 
 export async function resumePendingUploads(): Promise<void> {

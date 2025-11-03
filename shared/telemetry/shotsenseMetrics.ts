@@ -1,6 +1,6 @@
-export type HoleAccuracy = {
+export type HoleAccuracyRow = {
   holeId: number;
-  holeIndex: number;
+  holeIndex?: number;
   timestamp: number;
   tp: number;
   fp: number;
@@ -9,28 +9,28 @@ export type HoleAccuracy = {
 
 const MATCH_WINDOW_MS = 2000;
 
-const rows: HoleAccuracy[] = [];
+const rows: HoleAccuracyRow[] = [];
 
 type AutoShot = { ts: number };
-type RecordedShot = { ts: number; source?: string };
+type ConfirmedShot = { ts: number; source?: string };
 
-type NormalizedRecorded = { ts: number; source: string | undefined; index: number };
+type NormalizedConfirmed = { ts: number; source: string | undefined; index: number };
 
 type Confusion = { tp: number; fp: number; fn: number };
 
-export function computeConfusion(autoAccepted: AutoShot[], recorded: RecordedShot[]): Confusion {
+export function computeConfusion(autoAccepted: AutoShot[], confirmed: ConfirmedShot[]): Confusion {
   const autoShots = autoAccepted
     .map((shot) => Number(shot.ts))
     .filter((ts): ts is number => Number.isFinite(ts))
     .sort((a, b) => a - b);
 
-  const recordedShots: NormalizedRecorded[] = recorded
+  const confirmedShots: NormalizedConfirmed[] = confirmed
     .map((shot, index) => ({
       ts: Number(shot.ts),
       source: shot.source,
       index,
     }))
-    .filter((entry): entry is NormalizedRecorded => Number.isFinite(entry.ts))
+    .filter((entry): entry is NormalizedConfirmed => Number.isFinite(entry.ts))
     .sort((a, b) => a.ts - b.ts);
 
   let tp = 0;
@@ -40,7 +40,7 @@ export function computeConfusion(autoAccepted: AutoShot[], recorded: RecordedSho
   for (const ts of autoShots) {
     let bestIndex = -1;
     let bestDelta = Number.POSITIVE_INFINITY;
-    for (const candidate of recordedShots) {
+    for (const candidate of confirmedShots) {
       if (matched.has(candidate.index)) {
         continue;
       }
@@ -65,7 +65,7 @@ export function computeConfusion(autoAccepted: AutoShot[], recorded: RecordedSho
   }
 
   let fn = 0;
-  for (const shot of recordedShots) {
+  for (const shot of confirmedShots) {
     if (matched.has(shot.index)) {
       continue;
     }
@@ -79,7 +79,31 @@ export function computeConfusion(autoAccepted: AutoShot[], recorded: RecordedSho
   return { tp, fp, fn };
 }
 
-export function appendHoleAccuracy(row: HoleAccuracy): void {
+type AppendHoleAccuracyArgs = {
+  holeIndex?: number | null;
+  timestamp?: number | null;
+  tp: number;
+  fp: number;
+  fn: number;
+};
+
+function clampMetric(value: number): number {
+  if (!Number.isFinite(value)) {
+    return 0;
+  }
+  return Math.max(0, Math.floor(value));
+}
+
+export function appendHoleAccuracy(holeId: number, metrics: AppendHoleAccuracyArgs): void {
+  const timestampCandidate = Number(metrics.timestamp);
+  const row: HoleAccuracyRow = {
+    holeId,
+    holeIndex: Number.isFinite(Number(metrics.holeIndex)) ? Number(metrics.holeIndex) : undefined,
+    timestamp: Number.isFinite(timestampCandidate) ? timestampCandidate : Date.now(),
+    tp: clampMetric(metrics.tp),
+    fp: clampMetric(metrics.fp),
+    fn: clampMetric(metrics.fn),
+  };
   rows.push(row);
   try {
     if (typeof console !== 'undefined' && typeof console.log === 'function') {
@@ -90,7 +114,7 @@ export function appendHoleAccuracy(row: HoleAccuracy): void {
   }
 }
 
-export function exportHoleAccuracy(): { text: string; webDownload?: () => void } {
+export function exportAccuracyNdjson(): { text: string; webDownload?: () => void } {
   const text = rows.map((row) => JSON.stringify(row)).join('\n');
 
   const canDownload =
