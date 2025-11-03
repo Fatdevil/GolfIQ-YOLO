@@ -5,8 +5,9 @@ import { Buffer } from 'buffer';
 import type { IMUBatchV1 } from '../../../../shared/shotsense/dto';
 import { shotSense } from '../shotsense/ShotSenseService';
 
-const { WatchConnectorIOS } = NativeModules;
-const EVENT_NAME = 'watch.imu.v1';
+const { WatchConnectorIOS, WearBridgeAndroid } = NativeModules;
+const EVENT_NAME_IOS = 'watch.imu.v1';
+const EVENT_NAME_ANDROID = 'wear.imu.v1';
 
 let subscription: EmitterSubscription | null = null;
 const textDecoder = typeof TextDecoder !== 'undefined' ? new TextDecoder() : null;
@@ -57,9 +58,14 @@ export function onWatchIMUMessageData(bytes: Uint8Array): void {
 function subscribe(handler: (evt: { b64?: string } | null) => void): EmitterSubscription {
   if (Platform.OS === 'ios' && WatchConnectorIOS) {
     const emitter = new NativeEventEmitter(WatchConnectorIOS);
-    return emitter.addListener(EVENT_NAME, handler);
+    return emitter.addListener(EVENT_NAME_IOS, handler);
   }
-  return DeviceEventEmitter.addListener(EVENT_NAME, handler);
+
+  if (!WearBridgeAndroid && __DEV__) {
+    console.warn('[WatchBridge+Sense] WearBridgeAndroid native module not linked');
+  }
+
+  return DeviceEventEmitter.addListener(EVENT_NAME_ANDROID, handler);
 }
 
 export function initWatchIMUReceiver(): void {
