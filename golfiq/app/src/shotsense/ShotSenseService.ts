@@ -1,11 +1,48 @@
 import { unpackIMUBatch, type IMUBatchV1 } from '../../../../shared/shotsense/dto';
 import { ShotDetector } from '../../../../shared/shotsense/detector';
 import type { GpsContext } from '../../../../shared/shotsense/types';
+import { autoQueue } from './AutoCaptureQueue';
+import { getFollowContext } from '../follow/context';
+
+type AckKind = 'pending' | 'confirmed';
+
+type AckSender = (kind: AckKind) => void;
+
+let cachedAckSender: AckSender | null | undefined;
+
+function resolveAckSender(): AckSender | null {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const bridge = require('../watch/bridge');
+    if (bridge && typeof bridge.sendShotSenseAck === 'function') {
+      return bridge.sendShotSenseAck as AckSender;
+    }
+  } catch (error) {
+    if (typeof __DEV__ !== 'undefined' && __DEV__) {
+      console.warn('[ShotSense] ack sender unavailable', error);
+    }
+  }
+  return null;
+}
+
+function sendAck(kind: AckKind): void {
+  if (cachedAckSender === undefined) {
+    cachedAckSender = resolveAckSender();
+  }
+  try {
+    cachedAckSender?.(kind);
+  } catch (error) {
+    if (typeof __DEV__ !== 'undefined' && __DEV__) {
+      console.warn('[ShotSense] failed to send ack to watch', error);
+    }
+  }
+}
 
 type ShotSenseListener = (ts: number, strength: number) => void;
 
 const MAX_QUEUE_SIZE = 6;
 const HZ_TOL = 1;
+const HOLE_DEDUPE_MS = 2000;
 
 export class ShotSenseService {
   private detector: ShotDetector;
@@ -13,6 +50,9 @@ export class ShotSenseService {
   private readonly queue: IMUBatchV1[] = [];
   private draining = false;
   private currentHz = 80;
+  private lastHoleShot: { holeId: number; ts: number } | null = null;
+
+  hapticsAck?: (kind: AckKind) => void;
 
   constructor() {
     this.detector = new ShotDetector({ sampleHz: this.currentHz });
@@ -100,6 +140,32 @@ export class ShotSenseService {
                 console.log('[ShotSense] detector candidate', ts, strength);
               }
               this.emit(ts, strength);
+              const follow = getFollowContext();
+              if (!follow || !Number.isFinite(follow.holeId)) {
+                continue;
+              }
+              if (
+                this.lastHoleShot &&
+                this.lastHoleShot.holeId === follow.holeId &&
+                Math.abs(ts - this.lastHoleShot.ts) < HOLE_DEDUPE_MS
+              ) {
+                continue;
+              }
+              autoQueue.enqueue({
+                ts,
+                strength,
+                holeId: follow.holeId,
+                start: follow.pos,
+                lie: follow.onTee ? 'Tee' : follow.lie ?? 'Fairway',
+              });
+              this.lastHoleShot = { holeId: follow.holeId, ts };
+              try {
+                this.hapticsAck?.('pending');
+              } catch (error) {
+                if (__DEV__) {
+                  console.warn('[ShotSense] haptics ack failed', error);
+                }
+              }
             }
           }
         } catch (error) {
@@ -148,3 +214,5 @@ export class ShotSenseService {
 }
 
 export const shotSense = new ShotSenseService();
+
+shotSense.hapticsAck = sendAck;

@@ -36,3 +36,12 @@ export type ShotCandidate = {
 };
 
 export type ShotSenseEvent = { kind: 'ShotDetected'; at: ShotCandidate };
+
+export type AutoDetectedShot = {
+  ts: number;
+  strength: number;
+  holeId: number;
+  start?: { lat: number; lon: number } | undefined;
+  lie?: 'Tee' | 'Fairway' | 'Rough' | 'Sand' | 'Recovery' | undefined;
+  source: 'auto';
+};

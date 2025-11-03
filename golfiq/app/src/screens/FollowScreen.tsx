@@ -28,6 +28,7 @@ import type { BagStats } from '../../../../shared/bag/types';
 import { loadBagStats } from '../../../../shared/bag/storage';
 import type { VectorHoleModel } from '../../../../shared/overlay/vector';
 import type { XY } from '../../../../shared/overlay/geom';
+import { AutoReviewBanner } from '../components/shotsense/AutoReviewBanner';
 
 const EMPTY_HOLES: HoleRef[] = [];
 const BASELINES = loadDefaultBaselines();
@@ -443,6 +444,7 @@ function TrackingView({ round, meta, finishDisabled, onFinishPress }: TrackingVi
           </View>
         </View>
       )}
+      <AutoReviewBanner />
     </SafeAreaView>
   );
 }

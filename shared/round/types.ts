@@ -15,6 +15,7 @@ export interface ShotEvent {
   hole: number;
   seq: number;
   club?: string;
+  source?: string;
   start: GeoPoint;
   end?: GeoPoint;
   startLie: Lie;

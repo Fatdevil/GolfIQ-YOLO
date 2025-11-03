@@ -81,6 +81,20 @@ final class WatchBridgeModule: RCTEventEmitter, WCSessionDelegate {
     )
   }
 
+  @objc
+  func sendShotSenseAck(_ kind: NSString) {
+    guard let session else { return }
+    let value = kind as String
+    session.sendMessage(
+      [
+        "type": "shotsense_ack",
+        "kind": value,
+      ],
+      replyHandler: nil,
+      errorHandler: nil
+    )
+  }
+
   func session(_ session: WCSession, didReceiveMessage message: [String: Any]) {
     guard message["type"] as? String == "targetMoved" else { return }
     sendEvent(withName: "WatchTargetMoved", body: [
