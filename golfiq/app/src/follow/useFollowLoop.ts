@@ -17,6 +17,7 @@ import {
 import { WatchBridge } from '../../../../shared/watch/bridge';
 import type { WatchHUDStateV1 } from '../../../../shared/watch/types';
 import { shotSense } from '../shotsense/ShotSenseService';
+import { PostHoleReconciler } from '../shotsense/PostHoleReconciler';
 import { setFollowContext } from './context';
 
 export type UseFollowLoopOptions = {
@@ -237,6 +238,9 @@ export function useFollowLoop(options: UseFollowLoopOptions): UseFollowLoopState
         const reason = nextTeeLock === targetStable ? 'teeLock' : 'leaveGreen';
         if (nextNeighbor && targetStable === nextNeighbor.id) {
           recordAutoEvent({ from: prevStable, to: targetStable, reason });
+          if (Number.isFinite(prevStable)) {
+            await PostHoleReconciler.reviewAndApply(prevStable);
+          }
           await RoundRecorder.nextHole();
           const updated = await machine.manualNext(now);
           autoStateRef.current = { stableHoleId: targetStable, atTeeBox: nextState.atTeeBox ?? null };
@@ -510,6 +514,9 @@ export function useFollowLoop(options: UseFollowLoopOptions): UseFollowLoopState
     }
     const before = machine.snapshot;
     const beforeHole = resolveHoleNumber(before.hole);
+    if (beforeHole !== null) {
+      await PostHoleReconciler.reviewAndApply(beforeHole);
+    }
     await RoundRecorder.nextHole();
     const updated = await machine.manualNext();
     const patched = patchFollowState(updated);
