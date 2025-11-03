@@ -33,12 +33,13 @@ test('applies accepted shots when user confirms', async () => {
   autoQueue.confirm({ club: 'PW' });
 
   expect(autoQueue.getAcceptedShots(HOLE_ID)).toHaveLength(2);
-  await PostHoleReconciler.reviewAndApply(HOLE_ID);
+  const result = await PostHoleReconciler.reviewAndApply(HOLE_ID);
 
   expect(confirm).toHaveBeenCalledTimes(1);
   expect(confirm).toHaveBeenCalledWith(HOLE_ID, expect.arrayContaining([expect.objectContaining({ club: '7i' })]));
   expect(addShot).toHaveBeenCalledTimes(2);
   expect(autoQueue.getAcceptedShots(HOLE_ID)).toHaveLength(0);
+  expect(result).toEqual({ applied: 2 });
   addShot.mockReset();
 });
 
@@ -48,9 +49,10 @@ test('skips when there are no accepted shots', async () => {
   const confirm = vi.fn().mockResolvedValue(true);
   __setConfirmHandlerForTest(confirm);
 
-  await PostHoleReconciler.reviewAndApply(HOLE_ID);
+  const result = await PostHoleReconciler.reviewAndApply(HOLE_ID);
 
   expect(confirm).not.toHaveBeenCalled();
   expect(addShot).not.toHaveBeenCalled();
+  expect(result).toEqual({ applied: 0 });
   addShot.mockReset();
 });

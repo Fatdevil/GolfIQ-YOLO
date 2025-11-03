@@ -166,6 +166,13 @@ export const RoundRecorder = {
     return loadActive();
   },
 
+  getCurrentHoleId(): number {
+    if (!activeRound || activeRound.finishedAt) {
+      return Number.NaN;
+    }
+    return activeRound.currentHole;
+  },
+
   subscribe(listener: (round: RoundState | null) => void): () => void {
     listeners.add(listener);
     listener(cloneRound(activeRound));

@@ -29,6 +29,7 @@ import { loadBagStats } from '../../../../shared/bag/storage';
 import type { VectorHoleModel } from '../../../../shared/overlay/vector';
 import type { XY } from '../../../../shared/overlay/geom';
 import { AutoReviewBanner } from '../components/shotsense/AutoReviewBanner';
+import { reconcileIfPending } from '../components/shotsense/PostHoleReconciler';
 
 const EMPTY_HOLES: HoleRef[] = [];
 const BASELINES = loadDefaultBaselines();
@@ -126,6 +127,12 @@ export default function FollowScreen(): JSX.Element {
     }
     setFinishState((prev) => ({ ...prev, busy: true, error: null }));
     try {
+      const holeId = RoundRecorder.getCurrentHoleId();
+      try {
+        await reconcileIfPending(holeId);
+      } catch (error) {
+        console.warn('[FinishRound] reconcile failed; proceeding anyway', error);
+      }
       const finishedAt = Date.now();
       const finished = await RoundRecorder.finishRound(finishedAt);
       const nextSummary = buildRoundSummary(finished, BASELINES);
@@ -212,6 +219,7 @@ export default function FollowScreen(): JSX.Element {
               </TouchableOpacity>
               <TouchableOpacity
                 style={[styles.modalButton, styles.modalConfirm]}
+                testID="finish-round-confirm"
                 onPress={confirmFinish}
                 disabled={finishState.busy || finishState.loading || !finishState.preview}
               >
@@ -331,6 +339,7 @@ function TrackingView({ round, meta, finishDisabled, onFinishPress }: TrackingVi
           {meta ? <Text style={styles.courseLabel}>{meta.courseName ?? meta.courseId}</Text> : null}
         </View>
         <TouchableOpacity
+          testID="finish-round-button"
           onPress={onFinishPress}
           style={[styles.finishButton, finishDisabled && styles.finishButtonDisabled]}
           disabled={finishDisabled}

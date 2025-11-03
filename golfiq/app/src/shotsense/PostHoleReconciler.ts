@@ -74,14 +74,15 @@ async function confirmWithAlert(holeId: number, shots: AcceptedAutoShot[]): Prom
   });
 }
 
-async function applyShots(shots: AcceptedAutoShot[]): Promise<boolean> {
-  let allApplied = true;
+async function applyShots(shots: AcceptedAutoShot[]): Promise<number> {
+  let applied = 0;
   for (const shot of shots) {
     const start = shot.start;
     if (!start) {
       if (typeof __DEV__ !== 'undefined' && __DEV__) {
         console.warn('[PostHoleReconciler] Missing start for auto shot', shot);
       }
+      autoQueue.finalizeShot(shot.holeId, shot.id);
       continue;
     }
     const lie = shot.lie ?? 'Fairway';
@@ -93,40 +94,52 @@ async function applyShots(shots: AcceptedAutoShot[]): Promise<boolean> {
         source: shot.source,
         club: shot.club,
       });
+      autoQueue.finalizeShot(shot.holeId, shot.id);
+      applied += 1;
     } catch (error) {
-      allApplied = false;
       if (typeof __DEV__ !== 'undefined' && __DEV__) {
         console.warn('[PostHoleReconciler] Failed to record auto shot', error);
       }
     }
   }
-  return allApplied;
+  return applied;
 }
 
 let confirmHandler: ConfirmHandler = confirmWithAlert;
 
 export const PostHoleReconciler = {
-  async reviewAndApply(holeId: number): Promise<void> {
+  async reviewAndApply(holeId: number): Promise<{ applied: number }> {
     if (!Number.isFinite(holeId)) {
-      return;
+      return { applied: 0 };
     }
-    const shots = autoQueue.getAcceptedShots(holeId);
-    if (!shots.length) {
-      return;
-    }
-    const shouldApply = await confirmHandler(holeId, shots);
-    if (!shouldApply) {
-      autoQueue.markHoleReviewed(holeId);
-      return;
-    }
-    const applied = await applyShots(shots);
-    if (applied) {
-      autoQueue.finalizeHole(holeId);
+    try {
+      const shots = autoQueue.getAcceptedShots(holeId);
+      if (!shots.length) {
+        return { applied: 0 };
+      }
+      const shouldApply = await confirmHandler(holeId, shots);
+      if (!shouldApply) {
+        autoQueue.markHoleReviewed(holeId);
+        return { applied: 0 };
+      }
+      const applied = await applyShots(shots);
+      if (applied === shots.length) {
+        autoQueue.finalizeHole(holeId);
+      }
+      return { applied };
+    } catch (error) {
+      console.warn('[PostHoleReconciler] reviewAndApply failed', error);
+      return { applied: 0 };
     }
   },
 };
 
 export type PostHoleReconcilerType = typeof PostHoleReconciler;
+
+export async function reconcileIfPending(holeId: number): Promise<number> {
+  const { applied } = await PostHoleReconciler.reviewAndApply(holeId);
+  return applied;
+}
 
 export function __setRoundRecorderForTest(next: RoundRecorderLike | null): void {
   recorder = next ?? RoundRecorder;

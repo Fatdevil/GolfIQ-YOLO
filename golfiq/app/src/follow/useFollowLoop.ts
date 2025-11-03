@@ -239,7 +239,11 @@ export function useFollowLoop(options: UseFollowLoopOptions): UseFollowLoopState
         if (nextNeighbor && targetStable === nextNeighbor.id) {
           recordAutoEvent({ from: prevStable, to: targetStable, reason });
           if (Number.isFinite(prevStable)) {
-            await PostHoleReconciler.reviewAndApply(prevStable);
+            try {
+              await PostHoleReconciler.reviewAndApply(prevStable);
+            } catch (error) {
+              console.warn('[PostHoleReconciler] review failed during auto advance', error);
+            }
           }
           await RoundRecorder.nextHole();
           const updated = await machine.manualNext(now);
@@ -515,7 +519,11 @@ export function useFollowLoop(options: UseFollowLoopOptions): UseFollowLoopState
     const before = machine.snapshot;
     const beforeHole = resolveHoleNumber(before.hole);
     if (beforeHole !== null) {
-      await PostHoleReconciler.reviewAndApply(beforeHole);
+      try {
+        await PostHoleReconciler.reviewAndApply(beforeHole);
+      } catch (error) {
+        console.warn('[PostHoleReconciler] review failed before manual next', error);
+      }
     }
     await RoundRecorder.nextHole();
     const updated = await machine.manualNext();
