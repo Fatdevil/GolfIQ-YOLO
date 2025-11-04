@@ -1,183 +1,172 @@
 import { RoundRecorder } from '../../../../shared/round/recorder';
+import type { Lie, ShotEvent } from '../../../../shared/round/types';
 import { appendHoleAccuracy, computeConfusion } from '../../../../shared/telemetry/shotsenseMetrics';
+import { recordAutoReconcile } from '../../../../shared/telemetry/round';
 import { autoQueue, type AcceptedAutoShot } from './AutoCaptureQueue';
+
+declare const __DEV__: boolean | undefined;
 
 type RoundRecorderLike = Pick<typeof RoundRecorder, 'addShot'>;
 
-let recorder: RoundRecorderLike = RoundRecorder;
+type CandidateShot = AcceptedAutoShot;
 
-type ReviewDecision = {
+type ReviewPick = {
   id: string;
-  accepted?: boolean;
-  club?: string | null;
-  playsLikePct?: number | null;
+  accept: boolean;
+  club?: string;
 };
 
 type ReviewAndApplyArgs = {
   holeId: number;
-  decisions?: ReviewDecision[];
+  picks?: ReviewPick[];
 };
 
-type AlertLike = {
-  alert: (
-    title: string,
-    message?: string,
-    buttons?: Array<{ text?: string; style?: string; onPress?: (() => void) | undefined }> | undefined,
-    options?: { cancelable?: boolean; onDismiss?: (() => void) | undefined },
-  ) => void;
-};
+type Summary = { applied: number; rejected: number };
 
-let cachedAlert: AlertLike | null | undefined;
-type ConfirmHandler = (holeId: number, shots: AcceptedAutoShot[]) => Promise<boolean>;
+type SanitizedStart = { lat: number; lon: number; ts: number };
 
-async function ensureAlert(): Promise<AlertLike | null> {
-  if (cachedAlert !== undefined) {
-    return cachedAlert;
+type PickMap = Map<string, ReviewPick>;
+
+let recorder: RoundRecorderLike = RoundRecorder;
+
+function sanitizeClub(value: string | undefined): string | undefined {
+  if (typeof value !== 'string') {
+    return undefined;
   }
-  try {
-    const mod = await import('react-native');
-    const candidate = (mod as { Alert?: AlertLike }).Alert;
-    cachedAlert = candidate && typeof candidate.alert === 'function' ? candidate : null;
-  } catch (error) {
-    cachedAlert = null;
-    if (typeof __DEV__ !== 'undefined' && __DEV__) {
-      console.warn('[PostHoleReconciler] Alert unavailable', error);
-    }
-  }
-  return cachedAlert ?? null;
+  const trimmed = value.trim();
+  return trimmed ? trimmed : undefined;
 }
 
-function formatPreview(shots: AcceptedAutoShot[]): string {
-  const clubs = shots
-    .map((shot) => shot.club?.trim())
-    .filter((club): club is string => Boolean(club));
-  if (!clubs.length) {
-    return '';
+function sanitizeLie(lie: CandidateShot['lie']): Lie {
+  if (typeof lie !== 'string') {
+    return 'Fairway';
   }
-  const preview = clubs.slice(0, 2).join(', ');
-  const suffix = clubs.length > 2 ? ', …' : '';
-  return ` (${preview}${suffix})`;
+  const normalized = lie.trim().toLowerCase();
+  switch (normalized) {
+    case 'tee':
+      return 'Tee';
+    case 'rough':
+      return 'Rough';
+    case 'sand':
+      return 'Sand';
+    case 'recovery':
+      return 'Recovery';
+    case 'green':
+      return 'Green';
+    case 'penalty':
+      return 'Penalty';
+    default:
+      return 'Fairway';
+  }
 }
 
-async function confirmWithAlert(holeId: number, shots: AcceptedAutoShot[]): Promise<boolean> {
-  const alert = await ensureAlert();
-  if (!alert) {
-    return false;
+function sanitizeStart(shot: CandidateShot): SanitizedStart | null {
+  if (!shot.start) {
+    return null;
   }
-  return new Promise((resolve) => {
-    alert.alert(
-      'Auto-shots detected',
-      `Apply ${shots.length} shot${shots.length === 1 ? '' : 's'} to Hole ${holeId}?${formatPreview(shots)}`,
-      [
-        {
-          text: 'Skip',
-          style: 'cancel',
-          onPress: () => resolve(false),
-        },
-        {
-          text: 'Apply',
-          onPress: () => resolve(true),
-        },
-      ],
-      {
-        cancelable: true,
-        onDismiss: () => resolve(false),
-      },
-    );
-  });
+  const lat = Number(shot.start.lat);
+  const lon = Number(shot.start.lon);
+  const tsCandidate = Number.isFinite(Number(shot.start.ts)) ? Number(shot.start.ts) : Number(shot.ts);
+  if (!Number.isFinite(lat) || !Number.isFinite(lon)) {
+    return null;
+  }
+  const ts = Number.isFinite(tsCandidate) ? Math.max(0, Math.floor(tsCandidate)) : Date.now();
+  return { lat, lon, ts };
 }
 
-type NormalizedDecision = {
-  accepted: boolean;
-  club?: string;
-  playsLikePct?: number;
-};
-
-type ApplyOutcome = 'applied' | 'missing-start' | 'failed';
-
-function buildDecisionMap(decisions?: ReviewDecision[] | null): Map<string, NormalizedDecision> {
-  const map = new Map<string, NormalizedDecision>();
-  if (!decisions || !decisions.length) {
+function buildPickMap(picks?: ReviewPick[] | null): PickMap {
+  const map: PickMap = new Map();
+  if (!picks || !picks.length) {
     return map;
   }
-  for (const decision of decisions) {
-    if (!decision || typeof decision.id !== 'string' || !decision.id.trim()) {
+  for (const pick of picks) {
+    if (!pick || typeof pick.id !== 'string') {
       continue;
     }
-    const normalizedId = decision.id.trim();
-    const accepted = decision.accepted !== false;
-    const club = typeof decision.club === 'string' && decision.club.trim() ? decision.club.trim() : undefined;
-    const playsLike = Number(decision.playsLikePct);
-    map.set(normalizedId, {
-      accepted,
-      club,
-      playsLikePct: Number.isFinite(playsLike) ? playsLike : undefined,
-    });
+    const id = pick.id.trim();
+    if (!id) {
+      continue;
+    }
+    map.set(id, pick);
   }
   return map;
 }
 
-async function applyShot(shot: AcceptedAutoShot): Promise<ApplyOutcome> {
-  const start = shot.start;
+function buildAutoEvents(autoShots: CandidateShot[]): ShotEvent[] {
+  return autoShots
+    .map((shot, index) => {
+      const start = sanitizeStart(shot);
+      if (!start) {
+        return null;
+      }
+      const playsLike = Number.isFinite(Number(shot.playsLikePct)) ? Number(shot.playsLikePct) : undefined;
+      return {
+        id: shot.id,
+        hole: shot.holeId,
+        seq: index + 1,
+        kind: 'Full',
+        start,
+        startLie: sanitizeLie(shot.lie),
+        source: shot.source,
+        club: sanitizeClub(shot.club),
+        playsLikePct: playsLike,
+      } as ShotEvent;
+    })
+    .filter((shot): shot is ShotEvent => Boolean(shot));
+}
+
+function defaultAcceptState(picks?: ReviewPick[] | null): boolean {
+  if (!picks) {
+    return true;
+  }
+  return picks.length === 0;
+}
+
+export function collectAutoCandidates(holeId: number): CandidateShot[] {
+  if (!Number.isFinite(holeId)) {
+    return [];
+  }
+  const normalized = Math.floor(Number(holeId));
+  if (normalized <= 0) {
+    return [];
+  }
+  return autoQueue.getAcceptedShots(normalized).map((shot) => ({
+    ...shot,
+    start: shot.start ? { ...shot.start } : undefined,
+  }));
+}
+
+async function applyShotCandidate(shot: CandidateShot, club: string | undefined): Promise<boolean> {
+  const start = sanitizeStart(shot);
   if (!start) {
     if (typeof __DEV__ !== 'undefined' && __DEV__) {
       console.warn('[PostHoleReconciler] Missing start for auto shot', shot);
     }
-    autoQueue.finalizeShot(shot.holeId, shot.id);
-    return 'missing-start';
+    return false;
   }
-  const lie = shot.lie ?? 'Fairway';
   try {
     await recorder.addShot(shot.holeId, {
       kind: 'Full',
       start,
-      startLie: lie,
+      startLie: sanitizeLie(shot.lie),
+      club,
       source: shot.source,
-      club: shot.club,
       playsLikePct: Number.isFinite(Number(shot.playsLikePct)) ? Number(shot.playsLikePct) : undefined,
     });
-    autoQueue.finalizeShot(shot.holeId, shot.id);
-    return 'applied';
+    return true;
   } catch (error) {
     if (typeof __DEV__ !== 'undefined' && __DEV__) {
       console.warn('[PostHoleReconciler] Failed to record auto shot', error);
     }
-    return 'failed';
+    return false;
   }
 }
 
-async function applyReviewedShots(
-  shots: AcceptedAutoShot[],
-  decisions: Map<string, NormalizedDecision>,
-): Promise<{ applied: number; rejected: number }> {
-  let applied = 0;
-  let rejected = 0;
-  for (const shot of shots) {
-    const decision = decisions.get(shot.id);
-    const accepted = decision ? decision.accepted : true;
-    const normalized: AcceptedAutoShot = {
-      ...shot,
-      club: decision?.club ?? shot.club,
-      playsLikePct: decision?.playsLikePct ?? shot.playsLikePct,
-    };
-    if (!accepted) {
-      autoQueue.finalizeShot(normalized.holeId, normalized.id);
-      rejected += 1;
-      continue;
-    }
-    const outcome = await applyShot(normalized);
-    if (outcome === 'applied') {
-      applied += 1;
-    } else if (outcome === 'missing-start') {
-      rejected += 1;
-    }
-  }
-  return { applied, rejected };
-}
-
-let confirmHandler: ConfirmHandler = confirmWithAlert;
-
-async function recordHoleAccuracy(holeId: number, autoShots: AcceptedAutoShot[]): Promise<void> {
+async function recordHoleAccuracy(
+  roundId: string | null,
+  holeId: number,
+  autoShots: CandidateShot[],
+): Promise<void> {
   if (!autoShots.length) {
     return;
   }
@@ -186,16 +175,14 @@ async function recordHoleAccuracy(holeId: number, autoShots: AcceptedAutoShot[])
   }
   try {
     const snapshot = await RoundRecorder.getHoleShots(holeId);
-    const recorded = snapshot.shots.map((shot) => ({ ts: shot.start?.ts ?? Number.NaN, source: shot.source }));
-    const confusion = computeConfusion(
-      autoShots.map((shot) => ({ ts: shot.ts })),
-      recorded,
-    );
-    appendHoleAccuracy(holeId, {
-      holeIndex: snapshot.holeIndex,
-      timestamp: Date.now(),
-      ...confusion,
-    });
+    const autoEvents = buildAutoEvents(autoShots);
+    if (!autoEvents.length) {
+      return;
+    }
+    const confusion = computeConfusion(autoEvents, snapshot.shots);
+    if (roundId) {
+      appendHoleAccuracy(roundId, snapshot.holeId ?? holeId, confusion);
+    }
   } catch (error) {
     if (typeof __DEV__ !== 'undefined' && __DEV__) {
       console.warn('[PostHoleReconciler] failed to capture ShotSense accuracy', error);
@@ -204,29 +191,71 @@ async function recordHoleAccuracy(holeId: number, autoShots: AcceptedAutoShot[])
 }
 
 export const PostHoleReconciler = {
-  async reviewAndApply({ holeId, decisions }: ReviewAndApplyArgs): Promise<{ applied: number; rejected: number }> {
+  async reviewAndApply({ holeId, picks }: ReviewAndApplyArgs): Promise<Summary> {
     if (!Number.isFinite(holeId)) {
       return { applied: 0, rejected: 0 };
     }
     try {
-      const shots = autoQueue.getAcceptedShots(holeId);
-      if (!shots.length) {
+      const candidates = collectAutoCandidates(holeId);
+      if (!candidates.length) {
         return { applied: 0, rejected: 0 };
       }
-      if (!decisions || decisions.length === 0) {
-        const shouldApply = await confirmHandler(holeId, shots);
-        if (!shouldApply) {
-          await recordHoleAccuracy(holeId, shots);
-          autoQueue.markHoleReviewed(holeId);
-          return { applied: 0, rejected: shots.length };
+      const map = buildPickMap(picks);
+      const assumeAccept = defaultAcceptState(picks);
+      let applied = 0;
+      let rejected = 0;
+      let finalizedCount = 0;
+      for (const shot of candidates) {
+        const pick = map.get(shot.id);
+        const accept = pick ? pick.accept === true : assumeAccept;
+        const club = sanitizeClub(pick?.club ?? shot.club);
+        if (!accept) {
+          autoQueue.finalizeShot(shot.holeId, shot.id);
+          rejected += 1;
+          finalizedCount += 1;
+          continue;
+        }
+        const outcome = await applyShotCandidate({ ...shot, club }, club);
+        if (outcome) {
+          autoQueue.finalizeShot(shot.holeId, shot.id);
+          applied += 1;
+          finalizedCount += 1;
+        } else {
+          rejected += 1;
         }
       }
-      const decisionMap = buildDecisionMap(decisions);
-      const { applied, rejected } = await applyReviewedShots(shots, decisionMap);
-      if (!autoQueue.getAcceptedShots(holeId).length) {
+      const queueWithPending = autoQueue as typeof autoQueue & {
+        getPendingShots?: (id: number) => CandidateShot[];
+      };
+      const pending = typeof queueWithPending.getPendingShots === 'function'
+        ? queueWithPending.getPendingShots(holeId).length
+        : null;
+      const allFinalized = finalizedCount === candidates.length;
+      if (pending !== null ? pending === 0 : allFinalized) {
         autoQueue.finalizeHole(holeId);
       }
-      await recordHoleAccuracy(holeId, shots);
+
+      let roundId: string | null = null;
+      if (typeof RoundRecorder.getActiveRound === 'function') {
+        try {
+          const round = await RoundRecorder.getActiveRound();
+          if (round && typeof round.id === 'string') {
+            roundId = round.id;
+          }
+        } catch {
+          roundId = null;
+        }
+      }
+
+      await recordHoleAccuracy(roundId, holeId, candidates);
+      if (roundId) {
+        recordAutoReconcile({
+          roundId,
+          hole: Math.max(0, Math.floor(holeId)),
+          applied,
+          rejected,
+        });
+      }
       return { applied, rejected };
     } catch (error) {
       console.warn('[PostHoleReconciler] reviewAndApply failed', error);
@@ -244,8 +273,4 @@ export async function reconcileIfPending(holeId: number): Promise<number> {
 
 export function __setRoundRecorderForTest(next: RoundRecorderLike | null): void {
   recorder = next ?? RoundRecorder;
-}
-
-export function __setConfirmHandlerForTest(next: ConfirmHandler | null): void {
-  confirmHandler = next ?? confirmWithAlert;
 }

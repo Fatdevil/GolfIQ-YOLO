@@ -1,36 +1,49 @@
+import type { ShotEvent } from '../round/types';
+
 export type HoleAccuracyRow = {
-  holeId: number;
-  holeIndex?: number;
-  timestamp: number;
+  roundId: string;
+  hole: number;
   tp: number;
   fp: number;
   fn: number;
+  timestamp: number;
 };
 
 const MATCH_WINDOW_MS = 2000;
 
 const rows: HoleAccuracyRow[] = [];
 
-type AutoShot = { ts: number };
-type ConfirmedShot = { ts: number; source?: string };
-
-type NormalizedConfirmed = { ts: number; source: string | undefined; index: number };
-
 type Confusion = { tp: number; fp: number; fn: number };
 
-export function computeConfusion(autoAccepted: AutoShot[], confirmed: ConfirmedShot[]): Confusion {
+function extractTimestamp(shot: ShotEvent): number | null {
+  if (shot && typeof shot === 'object') {
+    const startTs = (shot.start as { ts?: number } | undefined)?.ts;
+    if (Number.isFinite(Number(startTs))) {
+      return Number(startTs);
+    }
+    const fallback = (shot as { ts?: number }).ts;
+    if (Number.isFinite(Number(fallback))) {
+      return Number(fallback);
+    }
+  }
+  return null;
+}
+
+export function computeConfusion(autoAccepted: ShotEvent[], confirmed: ShotEvent[]): Confusion {
   const autoShots = autoAccepted
-    .map((shot) => Number(shot.ts))
+    .map((shot) => extractTimestamp(shot))
     .filter((ts): ts is number => Number.isFinite(ts))
     .sort((a, b) => a - b);
 
-  const confirmedShots: NormalizedConfirmed[] = confirmed
+  const confirmedShots = confirmed
     .map((shot, index) => ({
-      ts: Number(shot.ts),
-      source: shot.source,
+      ts: extractTimestamp(shot),
+      source: typeof shot.source === 'string' ? shot.source : undefined,
       index,
     }))
-    .filter((entry): entry is NormalizedConfirmed => Number.isFinite(entry.ts))
+    .filter((entry): entry is { ts: number; source: string | undefined; index: number } =>
+      Number.isFinite(entry.ts),
+    )
     .sort((a, b) => a.ts - b.ts);
 
   let tp = 0;
@@ -79,14 +92,6 @@ export function computeConfusion(autoAccepted: AutoShot[], confirmed: ConfirmedS
   return { tp, fp, fn };
 }
 
-type AppendHoleAccuracyArgs = {
-  holeIndex?: number | null;
-  timestamp?: number | null;
-  tp: number;
-  fp: number;
-  fn: number;
-};
-
 function clampMetric(value: number): number {
   if (!Number.isFinite(value)) {
     return 0;
@@ -94,15 +99,32 @@ function clampMetric(value: number): number {
   return Math.max(0, Math.floor(value));
 }
 
-export function appendHoleAccuracy(holeId: number, metrics: AppendHoleAccuracyArgs): void {
-  const timestampCandidate = Number(metrics.timestamp);
+function normalizeHole(hole: number): number {
+  if (!Number.isFinite(hole)) {
+    return 0;
+  }
+  return Math.max(0, Math.floor(hole));
+}
+
+function normalizeRoundId(roundId: string): string {
+  if (typeof roundId !== 'string') {
+    return '';
+  }
+  return roundId.trim();
+}
+
+export function appendHoleAccuracy(
+  roundId: string,
+  hole: number,
+  metrics: { tp: number; fp: number; fn: number },
+): void {
   const row: HoleAccuracyRow = {
-    holeId,
-    holeIndex: Number.isFinite(Number(metrics.holeIndex)) ? Number(metrics.holeIndex) : undefined,
-    timestamp: Number.isFinite(timestampCandidate) ? timestampCandidate : Date.now(),
+    roundId: normalizeRoundId(roundId),
+    hole: normalizeHole(hole),
     tp: clampMetric(metrics.tp),
     fp: clampMetric(metrics.fp),
     fn: clampMetric(metrics.fn),
+    timestamp: Date.now(),
   };
   rows.push(row);
   try {
@@ -114,40 +136,8 @@ export function appendHoleAccuracy(holeId: number, metrics: AppendHoleAccuracyAr
   }
 }
 
-export function exportAccuracyNdjson(): { text: string; webDownload?: () => void } {
-  const text = rows.map((row) => JSON.stringify(row)).join('\n');
-
-  const canDownload =
-    typeof window !== 'undefined' &&
-    typeof document !== 'undefined' &&
-    typeof document.createElement === 'function' &&
-    typeof Blob === 'function' &&
-    typeof URL !== 'undefined' &&
-    typeof URL.createObjectURL === 'function';
-
-  let webDownload: (() => void) | undefined;
-  if (canDownload) {
-    webDownload = () => {
-      try {
-        const blob = new Blob([text], { type: 'application/x-ndjson' });
-        const href = URL.createObjectURL(blob);
-        const anchor = document.createElement('a');
-        anchor.href = href;
-        anchor.download = 'shotsense-accuracy.ndjson';
-        const root = document.body ?? document.documentElement;
-        root.appendChild(anchor);
-        anchor.click();
-        anchor.remove();
-        URL.revokeObjectURL(href);
-      } catch (error) {
-        if (typeof console !== 'undefined' && typeof console.warn === 'function') {
-          console.warn('[shotsenseMetrics] download failed', error);
-        }
-      }
-    };
-  }
-
-  return { text, webDownload };
+export function exportAccuracyNdjson(): string {
+  return rows.map((row) => JSON.stringify(row)).join('\n');
 }
 
 export const __TESTING__ = {

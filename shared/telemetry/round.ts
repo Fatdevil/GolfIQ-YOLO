@@ -19,6 +19,13 @@ export type AutoAdvanceEvent = {
   reason: 'leaveGreen' | 'manual';
 };
 
+export type AutoReconcileEvent = {
+  roundId: string;
+  hole: number;
+  applied: number;
+  rejected: number;
+};
+
 type TelemetryEmitter = (event: string, payload: Record<string, unknown>) => void;
 
 let emitter: TelemetryEmitter | null = null;
@@ -62,6 +69,19 @@ export function recordAutoAdvance(event: AutoAdvanceEvent): void {
     holeFrom: Number.isFinite(event.holeFrom) ? Math.max(0, Math.floor(event.holeFrom)) : 0,
     holeTo: Number.isFinite(event.holeTo) ? Math.max(0, Math.floor(event.holeTo)) : 0,
     reason: event.reason,
+  });
+}
+
+export function recordAutoReconcile(event: AutoReconcileEvent): void {
+  const roundId = typeof event.roundId === 'string' ? event.roundId.trim() : '';
+  if (!roundId) {
+    return;
+  }
+  emit('round.auto.reconcile.v1', {
+    roundId,
+    hole: Number.isFinite(event.hole) ? Math.max(0, Math.floor(event.hole)) : 0,
+    applied: Number.isFinite(event.applied) ? Math.max(0, Math.floor(event.applied)) : 0,
+    rejected: Number.isFinite(event.rejected) ? Math.max(0, Math.floor(event.rejected)) : 0,
   });
 }
 
