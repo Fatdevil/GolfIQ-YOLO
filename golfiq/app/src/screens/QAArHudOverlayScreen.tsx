@@ -115,8 +115,7 @@ import {
 import { isTelemetryOptedOut } from '../../../../shared/ops/log_export';
 import { buildShotFeedback, type FeedbackOutput } from '../../../../shared/playslike/feedback';
 import { exportAccuracyNdjson } from '../../../../shared/telemetry/shotsenseMetrics';
-import { autoQueue } from '../shotsense/AutoCaptureQueue';
-import { PostHoleReconciler } from '../shotsense/PostHoleReconciler';
+import { PostHoleReconciler, collectAutoCandidates } from '../shotsense/PostHoleReconciler';
 import {
   createLandingHeuristics,
   type LandingProposal,
@@ -2509,7 +2508,7 @@ const QAArHudOverlayScreen: React.FC = () => {
         return false;
       }
       const normalized = Number(holeId);
-      const shots = autoQueue.getAcceptedShots(normalized);
+      const shots = collectAutoCandidates(normalized);
       if (!shots.length) {
         return false;
       }
@@ -2518,7 +2517,7 @@ const QAArHudOverlayScreen: React.FC = () => {
         shots.map((shot) => ({
           id: shot.id,
           holeId: shot.holeId,
-          ts: shot.ts,
+          ts: shot.start?.ts ?? shot.ts,
           club: shot.club ?? '',
           accepted: true,
           lie: shot.lie ?? undefined,
@@ -2567,20 +2566,26 @@ const QAArHudOverlayScreen: React.FC = () => {
     }
     setReviewSaving(true);
     try {
-      const decisions = reviewShots.map((item) => ({
+      const picks = reviewShots.map((item) => ({
         id: item.id,
-        accepted: item.accepted,
+        accept: item.accepted,
         club: item.club.trim() ? item.club.trim() : undefined,
-        playsLikePct: item.playsLikePct,
       }));
       const { applied, rejected } = await PostHoleReconciler.reviewAndApply({
         holeId: reviewHoleId,
-        decisions,
+        picks,
       });
       setReviewVisible(false);
       setReviewShots([]);
       setReviewHoleId(null);
       setReviewNotice(`Applied ${applied} · Rejected ${rejected}`);
+      if (Platform.OS === 'android') {
+        try {
+          ToastAndroid.show(`Applied ${applied}, Rejected ${rejected}`, ToastAndroid.SHORT);
+        } catch {
+          // ignore toast failures
+        }
+      }
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unable to apply auto shots';
       setReviewNotice(message);
@@ -2662,17 +2667,8 @@ const QAArHudOverlayScreen: React.FC = () => {
   }, [watchDiag.capability]);
   const handlePrintShotSenseAccuracy = useCallback(() => {
     try {
-      const { text, webDownload } = exportAccuracyNdjson();
+      const text = exportAccuracyNdjson();
       console.log('SS-ACCURACY-NDJSON\n' + text);
-      if (Platform.OS === 'web') {
-        try {
-          webDownload?.();
-        } catch (error) {
-          if (typeof __DEV__ !== 'undefined' && __DEV__) {
-            console.warn('[QAArHudOverlay] ShotSense accuracy download failed', error);
-          }
-        }
-      }
     } catch (error) {
       if (typeof __DEV__ !== 'undefined' && __DEV__) {
         console.warn('[QAArHudOverlay] ShotSense accuracy export failed', error);

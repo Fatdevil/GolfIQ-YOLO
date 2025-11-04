@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 
 import type { RoundState } from '../../../../shared/round/types';
 import { autoQueue } from '../AutoCaptureQueue';
-import { __setConfirmHandlerForTest, __setRoundRecorderForTest, reconcileIfPending } from '../PostHoleReconciler';
+import { __setRoundRecorderForTest, reconcileIfPending } from '../PostHoleReconciler';
 import FollowScreen from '../../screens/FollowScreen';
 
 const HOLE_ID = 18;
@@ -151,12 +151,10 @@ describe('reconcile on finish', () => {
     }));
     autoQueue.markHoleReviewed(HOLE_ID);
     __setRoundRecorderForTest(null);
-    __setConfirmHandlerForTest(async () => true);
   });
 
   afterEach(() => {
     autoQueue.markHoleReviewed(HOLE_ID);
-    __setConfirmHandlerForTest(null);
     __setRoundRecorderForTest(null);
     addShotMock.mockReset();
     finishRoundMock.mockReset();

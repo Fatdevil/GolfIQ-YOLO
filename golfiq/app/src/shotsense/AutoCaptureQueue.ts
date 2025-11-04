@@ -1,5 +1,7 @@
 import { AutoDetectedShot } from '../../../../shared/shotsense/types';
 import { recordAutoEvent } from '../../../../shared/telemetry/shotsense';
+
+declare const __DEV__: boolean | undefined;
 type Listener = (evt: { type: 'enqueue' | 'clear' | 'confirm' | 'dismiss'; shot?: AutoDetectedShot }) => void;
 
 const DEDUPE_MS = 1200;

@@ -249,6 +249,36 @@ export const RoundRecorder = {
     return persisted ? { shot: { ...persisted }, coalesced: false } : null;
   },
 
+  async addShots(shots: ShotEvent[]): Promise<ShotEvent[]> {
+    const recorded: ShotEvent[] = [];
+    for (const shot of shots) {
+      if (!shot || typeof shot !== 'object' || !shot.start) {
+        continue;
+      }
+      const holeNumber = Number(shot.hole);
+      if (!Number.isFinite(holeNumber)) {
+        continue;
+      }
+      try {
+        const result = await this.addShot(holeNumber, {
+          kind: shot.kind ?? 'Full',
+          start: shot.start,
+          startLie: shot.startLie ?? 'Fairway',
+          club: shot.club,
+          source: shot.source,
+          toPinStart_m: shot.toPinStart_m,
+          playsLikePct: shot.playsLikePct,
+        });
+        if (result?.shot) {
+          recorded.push(result.shot);
+        }
+      } catch {
+        // ignore individual shot failures to avoid aborting the rest
+      }
+    }
+    return recorded;
+  },
+
   async markHit(args: { club?: string; lie: Lie; loc: GeoPoint; kind?: ShotEvent['kind'] }): Promise<ShotEvent> {
     const round = await ensureActiveRound();
     const [holeNo, hole] = resolveHole(round);
