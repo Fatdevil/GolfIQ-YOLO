@@ -28,15 +28,11 @@ final class WatchHUDModel: ObservableObject {
     private func publish(_ snapshot: HUD?) {
         if Thread.isMainThread {
             hud = snapshot
-            if let hint = snapshot?.caddie {
-                advice = hint
-            }
+            advice = snapshot?.caddie
         } else {
             DispatchQueue.main.async { [weak self] in
                 self?.hud = snapshot
-                if let hint = snapshot?.caddie {
-                    self?.advice = hint
-                }
+                self?.advice = snapshot?.caddie
             }
         }
     }
