@@ -38,6 +38,31 @@ describe('caddie strategy v1', () => {
     expect(second.evScore).toBeCloseTo(first.evScore, 6);
   });
 
+  it('applies optional risk bias without changing neutral outcomes', () => {
+    const baseline = chooseStrategy(baseInput);
+    const neutral = chooseStrategy(baseInput, { riskProfile: 'neutral' });
+
+    expect(neutral.recommended.offset_m).toBeCloseTo(baseline.recommended.offset_m, 6);
+    expect(neutral.recommended.carry_m).toBeCloseTo(baseline.recommended.carry_m, 6);
+    expect(neutral.evScore).toBeCloseTo(baseline.evScore, 6);
+
+    const aggressive = chooseStrategy(baseInput, { riskProfile: 'aggressive' });
+    const conservative = chooseStrategy(baseInput, { riskProfile: 'conservative' });
+
+    expect(Math.abs(aggressive.recommended.offset_m)).toBeLessThanOrEqual(
+      Math.abs(baseline.recommended.offset_m) + 1e-6,
+    );
+    expect(Math.abs(conservative.recommended.offset_m)).toBeGreaterThanOrEqual(
+      Math.abs(baseline.recommended.offset_m) - 1e-6,
+    );
+    expect(Math.abs(conservative.recommended.offset_m)).toBeGreaterThanOrEqual(
+      Math.abs(aggressive.recommended.offset_m) - 1e-6,
+    );
+    expect(aggressive.recommended.carry_m).toBeGreaterThanOrEqual(
+      baseline.recommended.carry_m - 1e-6,
+    );
+  });
+
   it('respects explicit carry and offset bounds', () => {
     const bounded = compute({ bounds: { minCarry_m: 140, maxCarry_m: 152, maxOffset_m: 5 } });
 
