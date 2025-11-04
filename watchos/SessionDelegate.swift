@@ -13,6 +13,9 @@ final class SessionDelegate: NSObject, WCSessionDelegate {
             self.session = nil
         }
         super.init()
+        model.registerMessageSender { [weak self] payload in
+            self?.sendMessageToPhone(payload)
+        }
         configureSession()
     }
 
@@ -57,6 +60,18 @@ final class SessionDelegate: NSObject, WCSessionDelegate {
         guard let type = message["type"] as? String else { return }
         if type == "roundSaved" {
             model.showToast("Round saved")
+        } else if type == "CADDIE_ADVICE_V1" {
+            if let advice = message["advice"] as? [String: Any] {
+                model.applyAdvicePayload(advice)
+            } else {
+                model.applyAdvicePayload(message)
+            }
+        }
+    }
+
+    private func sendMessageToPhone(_ message: [String: Any]) {
+        withSession { session in
+            session.sendMessage(message, replyHandler: nil, errorHandler: nil)
         }
     }
 }

@@ -23,6 +23,10 @@ export type CaddieStrategyEvent = {
   lateralSigma_m?: number;
 };
 
+export type CaddieWatchAcceptEvent = {
+  club: string;
+};
+
 let playsLikeTelemetryEnabled = false;
 
 export function setEnableCaddieTelemetry(value: boolean): void {
@@ -62,6 +66,21 @@ export function emitCaddieStrategyTelemetry(
   }
   try {
     emitter("caddie.strategy.v1", payload);
+  } catch (error) {
+    // ignore emitter failures
+  }
+}
+
+export function emitCaddieWatchAcceptTelemetry(
+  emitter: TelemetryEmitter | null | undefined,
+  payload: CaddieWatchAcceptEvent,
+): void {
+  if (typeof emitter !== "function") {
+    return;
+  }
+  const club = typeof payload.club === "string" && payload.club.trim() ? payload.club.trim() : "";
+  try {
+    emitter("caddie.watch.accept", { club });
   } catch (error) {
     // ignore emitter failures
   }

@@ -7,6 +7,17 @@ export type CaddieHint = {
   confidence?: number | null;
 };
 
+export type CaddieAdviceV1 = {
+  club: string;
+  carry_m: number;
+  aim?: { dir: 'L' | 'C' | 'R'; offset_m?: number } | null;
+  risk?: 'safe' | 'neutral' | 'aggressive' | null;
+};
+
+export type WatchMsg =
+  | { type: 'CADDIE_ADVICE_V1'; advice: CaddieAdviceV1 }
+  | { type: 'CADDIE_ACCEPTED_V1'; club: string };
+
 export type WatchHUDStateV1 = {
   v: 1;
   ts: number;

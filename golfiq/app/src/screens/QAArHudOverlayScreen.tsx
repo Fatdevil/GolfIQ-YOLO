@@ -231,7 +231,7 @@ import {
 } from '../../../../shared/telemetry/caddie';
 import { emitRecenterTelemetry, setRecenterTelemetryEnabled } from '../../../../shared/telemetry/arhud';
 import { WatchBridge } from '../../../../shared/watch/bridge';
-import type { WatchDiag, WatchHUDStateV1 } from '../../../../shared/watch/types';
+import type { CaddieAdviceV1, WatchDiag, WatchHUDStateV1 } from '../../../../shared/watch/types';
 import {
   emitGreenIqBreakTelemetry,
   emitGreenIqTelemetry,
@@ -3970,6 +3970,27 @@ const QAArHudOverlayScreen: React.FC = () => {
     };
   }, [caddieHudGateOpen, caddieHudScenarioEligible, caddieHudVm]);
   useEffect(() => {
+    if (!caddieHudWatchHint) {
+      return;
+    }
+    const advice: CaddieAdviceV1 = {
+      club: caddieHudWatchHint.club,
+      carry_m: caddieHudWatchHint.carry_m,
+      ...(caddieHudWatchHint.aim
+        ? {
+            aim: {
+              dir: caddieHudWatchHint.aim.dir,
+              ...(Number.isFinite(caddieHudWatchHint.aim.offset_m)
+                ? { offset_m: Number(caddieHudWatchHint.aim.offset_m) }
+                : {}),
+            },
+          }
+        : {}),
+      ...(caddieHudWatchHint.risk ? { risk: caddieHudWatchHint.risk } : {}),
+    } satisfies CaddieAdviceV1;
+    void WatchBridge.sendMessage({ type: 'CADDIE_ADVICE_V1', advice });
+  }, [caddieHudWatchHint]);
+  useEffect(() => {
     if (caddieHudCardVisible && caddieHudVm && !caddieHudShownRef.current) {
       caddieHudShownRef.current = true;
       emitTelemetry('caddie.hud_shown', {
@@ -4147,16 +4168,21 @@ const QAArHudOverlayScreen: React.FC = () => {
     const profileLabel =
       STRATEGY_PROFILE_OPTIONS.find((option) => option.key === decision.profile)?.label ?? 'Neutral';
     const offset = decision.recommended.offset_m;
-    const aimSegment =
-      Math.abs(offset) < 0.5
-        ? 'Aim center'
-        : `Aim ${Math.abs(offset).toFixed(0)} m ${offset > 0 ? 'right' : 'left'}`;
+    const aimSegment = (() => {
+      if (Math.abs(offset) < 0.5) {
+        return 'Aim center';
+      }
+      const direction = offset > 0 ? 'R' : 'L';
+      const magnitude = Math.abs(offset).toFixed(0);
+      const signed = `${offset >= 0 ? '+' : ''}${magnitude}`;
+      return `Aim ${signed} m ${direction}`;
+    })();
     const factorDelta = strategyComputation.playsLikeFactor - 1;
     const hasFactor = Number.isFinite(strategyComputation.playsLikeFactor) && Math.abs(factorDelta) >= 0.0005;
     const carrySegment = hasFactor
       ? `Carry ${decision.recommended.carry_m.toFixed(0)} m (PL ${formatPercent(factorDelta)})`
       : `Carry ${decision.recommended.carry_m.toFixed(0)} m`;
-    const headline = `${profileLabel} → ${[aimSegment, carrySegment].join(' · ')}`;
+    const headline = `Strategy: ${profileLabel} → ${[aimSegment, carrySegment].join(' · ')}`;
     const breakdownParts = [
       `haz ${formatStrategySigned(decision.breakdown.hazards)}`,
       `fw ${formatStrategySigned(decision.breakdown.fairway)}`,
@@ -4167,7 +4193,7 @@ const QAArHudOverlayScreen: React.FC = () => {
     }
     return {
       headline,
-      breakdown: breakdownParts.join(', '),
+      breakdown: breakdownParts.join(' · '),
     };
   }, [formatPercent, strategyAllowed, strategyComputation]);
   useEffect(() => {

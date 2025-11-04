@@ -1,13 +1,13 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterAll, describe, expect, it, vi } from 'vitest';
 
-vi.mock(
-  'react-native',
-  () => ({
-    Platform: { OS: 'ios' },
-    NativeModules: {},
-  }),
-  { virtual: true },
-);
+const rnMock = {
+  Platform: { OS: 'ios' },
+  NativeModules: {},
+};
+
+(globalThis as { __watchBridgeReactNative?: unknown }).__watchBridgeReactNative = rnMock;
+
+vi.mock('react-native', () => rnMock, { virtual: true });
 
 import { WatchBridge } from '../../../shared/watch/bridge';
 import type { WatchHUDStateV1 } from '../../../shared/watch/codec';
@@ -29,4 +29,14 @@ describe('WatchBridge (ios fallback)', () => {
   it('does not attempt to send when native module is missing', async () => {
     await expect(WatchBridge.sendHUD(baseState)).resolves.toBe(false);
   });
+
+  it('returns false when sending messages without native module', async () => {
+    await expect(
+      WatchBridge.sendMessage({ type: 'CADDIE_ADVICE_V1', advice: { club: 'PW', carry_m: 110 } }),
+    ).resolves.toBe(false);
+  });
+});
+
+afterAll(() => {
+  delete (globalThis as { __watchBridgeReactNative?: unknown }).__watchBridgeReactNative;
 });

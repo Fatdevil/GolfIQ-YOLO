@@ -121,11 +121,48 @@ class WatchConnectorModule(reactContext: ReactApplicationContext) :
             }
     }
 
+    @ReactMethod
+    fun sendMessage(jsonPayload: String, promise: Promise) {
+        val context = reactApplicationContext
+        val availability = GoogleApiAvailability.getInstance().isGooglePlayServicesAvailable(context)
+        if (availability != ConnectionResult.SUCCESS) {
+            promise.resolve(false)
+            return
+        }
+
+        val payload = jsonPayload.toByteArray(Charsets.UTF_8)
+
+        Wearable.getNodeClient(context)
+            .connectedNodes
+            .addOnSuccessListener { nodes ->
+                if (nodes.isEmpty()) {
+                    promise.resolve(false)
+                    return@addOnSuccessListener
+                }
+                val messageClient = Wearable.getMessageClient(context)
+                val tasks = nodes.map { node ->
+                    messageClient.sendMessage(node.id, WATCH_MESSAGE_PATH, payload)
+                }
+                Tasks.whenAllComplete(tasks)
+                    .addOnSuccessListener { results ->
+                        val ok = results.any { it.isSuccessful }
+                        promise.resolve(ok)
+                    }
+                    .addOnFailureListener { error ->
+                        promise.reject("watch_message_failure", error)
+                    }
+            }
+            .addOnFailureListener { error ->
+                promise.reject("watch_message_nodes_failure", error)
+            }
+    }
+
     companion object {
         const val NAME: String = "WatchConnector"
         private const val CAPABILITY = "golfiq_watch_hud"
         private const val DATA_PATH = "/golfiq/hud/v1"
         private const val OVERLAY_PATH = "/golfiq/overlay/v1"
         private const val SHOTSENSE_CONTROL_PATH = "/golfiq/shotsense/control"
+        private const val WATCH_MESSAGE_PATH = "/golfiq/watch/msg"
     }
 }

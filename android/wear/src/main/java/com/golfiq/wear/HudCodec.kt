@@ -69,6 +69,67 @@ data class HudState(
 object HudCodec {
     private const val VERSION = 1
 
+    private fun parseCaddieHint(raw: Any?): HudCaddieHint? {
+        if (raw == null || raw == JSONObject.NULL) {
+            return null
+        }
+        return try {
+            val caddieJson = when (raw) {
+                is JSONObject -> raw
+                is String -> JSONObject(raw)
+                else -> return null
+            }
+            val club = caddieJson.optString("club").orEmpty()
+            if (club.isBlank() || !caddieJson.has("carry_m")) {
+                return null
+            }
+            val carry = caddieJson.optDouble("carry_m")
+            if (!carry.isFinite()) {
+                return null
+            }
+            val aimJson = when (val aimRaw = caddieJson.opt("aim")) {
+                is JSONObject -> aimRaw
+                is String -> runCatching { JSONObject(aimRaw) }.getOrNull()
+                else -> null
+            }
+            val aimDir = aimJson?.optString("dir")?.takeIf { it == "L" || it == "C" || it == "R" }
+            val aimOffset = aimJson?.opt("offset_m")?.let { candidate ->
+                when (candidate) {
+                    is Number -> candidate.toDouble().takeIf { it.isFinite() }
+                    is String -> candidate.toDoubleOrNull()
+                    else -> null
+                }
+            }
+            val risk = when (caddieJson.optString("risk")) {
+                "safe", "neutral", "aggressive" -> caddieJson.optString("risk")
+                else -> "neutral"
+            }
+            val total = when (val totalRaw = caddieJson.opt("total_m")) {
+                is Number -> totalRaw.toDouble().takeIf { it.isFinite() }
+                is String -> totalRaw.toDoubleOrNull()
+                else -> null
+            }
+            val confidence = when (val confidenceRaw = caddieJson.opt("confidence")) {
+                is Number -> confidenceRaw.toDouble().takeIf { it.isFinite() }
+                is String -> confidenceRaw.toDoubleOrNull()
+                else -> null
+            }
+            HudCaddieHint(
+                club = club,
+                carryM = carry,
+                totalM = total,
+                aimDir = aimDir,
+                aimOffsetM = aimOffset,
+                risk = risk,
+                confidence = confidence,
+            )
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    fun parseAdvice(raw: Any?): HudCaddieHint? = parseCaddieHint(raw)
+
     fun decode(bytes: ByteArray): HudState {
         val json = JSONObject(String(bytes, StandardCharsets.UTF_8))
         val version = when (val rawVersion = json.opt("v")) {
@@ -109,67 +170,7 @@ object HudCodec {
             null
         }
 
-        val caddie = if (json.has("caddie") && !json.isNull("caddie")) {
-            try {
-                val raw = json.opt("caddie")
-                val caddieJson = when (raw) {
-                    is JSONObject -> raw
-                    is String -> JSONObject(raw)
-                    JSONObject.NULL -> null
-                    else -> null
-                }
-                if (caddieJson != null) {
-                    val club = caddieJson.optString("club").orEmpty()
-                    if (club.isBlank() || !caddieJson.has("carry_m")) {
-                        null
-                    } else {
-                        val carry = caddieJson.optDouble("carry_m")
-                        if (!carry.isFinite()) {
-                            null
-                        } else {
-                            val aimJson = when (val aimRaw = caddieJson.opt("aim")) {
-                                is JSONObject -> aimRaw
-                                is String -> JSONObject(aimRaw)
-                                else -> null
-                            }
-                            val aimDir = aimJson?.optString("dir")?.takeIf { it == "L" || it == "C" || it == "R" }
-                            val aimOffset = aimJson?.optDouble("offset_m")?.takeIf { it.isFinite() }
-                            val risk = when (caddieJson.optString("risk")) {
-                                "safe", "neutral", "aggressive" -> caddieJson.optString("risk")
-                                else -> "neutral"
-                            }
-                            val totalRaw = caddieJson.opt("total_m")
-                            val total = when (totalRaw) {
-                                is Number -> totalRaw.toDouble().takeIf { it.isFinite() }
-                                is String -> totalRaw.toDoubleOrNull()
-                                else -> null
-                            }
-                            val confidenceRaw = caddieJson.opt("confidence")
-                            val confidence = when (confidenceRaw) {
-                                is Number -> confidenceRaw.toDouble().takeIf { it.isFinite() }
-                                is String -> confidenceRaw.toDoubleOrNull()
-                                else -> null
-                            }
-                            HudCaddieHint(
-                                club = club,
-                                carryM = carry,
-                                totalM = total,
-                                aimDir = aimDir,
-                                aimOffsetM = aimOffset,
-                                risk = risk,
-                                confidence = confidence,
-                            )
-                        }
-                    }
-                } else {
-                    null
-                }
-            } catch (ignored: Exception) {
-                null
-            }
-        } else {
-            null
-        }
+        val caddie = parseCaddieHint(json.opt("caddie"))
 
         return HudState(
             timestamp = json.getLong("ts"),

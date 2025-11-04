@@ -15,7 +15,8 @@ import {
   setFollowTelemetryEmitter,
 } from '../../../../shared/telemetry/follow';
 import { WatchBridge } from '../../../../shared/watch/bridge';
-import type { WatchHUDStateV1 } from '../../../../shared/watch/types';
+import type { WatchHUDStateV1, WatchMsg } from '../../../../shared/watch/types';
+import { emitCaddieWatchAcceptTelemetry } from '../../../../shared/telemetry/caddie';
 import { shotSense } from '../shotsense/ShotSenseService';
 import { PostHoleReconciler } from '../shotsense/PostHoleReconciler';
 import { setFollowContext } from './context';
@@ -87,6 +88,9 @@ export function useFollowLoop(options: UseFollowLoopOptions): UseFollowLoopState
   const autoModeRef = useRef<'v1' | 'v2'>('v2');
   const [autoMode, setAutoModeState] = useState<'v1' | 'v2'>('v2');
   const autoEnabledRef = useRef<boolean>(true);
+  const telemetryEmitterRef = useRef<UseFollowLoopOptions['telemetryEmitter'] | null>(
+    options.telemetryEmitter ?? null,
+  );
 
   const holesMemo = useMemo(() => options.holes.slice(), [options.holes]);
 
@@ -264,6 +268,7 @@ export function useFollowLoop(options: UseFollowLoopOptions): UseFollowLoopState
   );
 
   useEffect(() => {
+    telemetryEmitterRef.current = options.telemetryEmitter ?? null;
     setFollowTelemetryEmitter(options.telemetryEmitter ?? null);
     return () => {
       setFollowTelemetryEmitter(null);
@@ -294,6 +299,17 @@ export function useFollowLoop(options: UseFollowLoopOptions): UseFollowLoopState
       autoStateRef.current = null;
     };
   }, [holesMemo, options.roundId, patchFollowState, resolveHoleNumber]);
+
+  useEffect(() => {
+    const unsubscribe = WatchBridge.onMessage((message: WatchMsg) => {
+      if (message.type === 'CADDIE_ACCEPTED_V1') {
+        emitCaddieWatchAcceptTelemetry(telemetryEmitterRef.current, { club: message.club });
+      }
+    });
+    return () => {
+      unsubscribe();
+    };
+  }, []);
 
   const evaluateSendStats = useCallback(() => {
     const stats = sendStatsRef.current;
