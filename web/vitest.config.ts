@@ -21,6 +21,7 @@ export default defineConfig({
       '../tests/shared/game/**/*.spec.ts',
       '../tests/shared/sg/**/*.spec.ts',
       '../tests/shared/follow/**/*.spec.ts',
+      '../tests/shared/sync/**/*.spec.ts',
       '../shared/follow/__tests__/**/*.spec.ts',
       '../shared/round/__tests__/**/*.spec.ts',
       '../tests/shared/round/**/*.spec.ts',
