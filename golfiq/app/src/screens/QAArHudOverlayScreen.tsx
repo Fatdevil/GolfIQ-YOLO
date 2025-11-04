@@ -214,7 +214,7 @@ import { advise, type Advice } from '../../../../shared/caddie/advice';
 import { getCaddieRc } from '../../../../shared/caddie/rc';
 import { inRollout } from '../../../../shared/caddie/rollout';
 import { caddieTipToText, advicesToText } from '../../../../shared/caddie/text';
-import type { CaddieHudVM } from '../../../../shared/caddie/selectors';
+import { withRiskProfile, type CaddieHudVM } from '../../../../shared/caddie/selectors';
 import { speak as speakTip, stop as stopSpeech } from '../../../../shared/tts/speak';
 import { breakHint } from '../../../../shared/greeniq/break';
 import { evaluatePutt, type PuttEval } from '../../../../shared/greeniq/putt_eval';
@@ -4926,17 +4926,16 @@ const QAArHudOverlayScreen: React.FC = () => {
     const mcConfidence = caddiePlan.mc ? clamp01(caddiePlan.mc.successRate) : null;
     const riskMode: CaddieHudVM['best']['risk'] =
       caddiePlan.mode === 'normal' ? 'neutral' : (caddiePlan.mode as CaddieHudVM['best']['risk']);
-    const context: CaddieHudVM['context'] = {};
+    const baseContext: CaddieHudVM['context'] = {};
     if (Number.isFinite(plannerInputs.wind_mps)) {
-      context.wind_mps = Number(plannerInputs.wind_mps);
+      baseContext.wind_mps = Number(plannerInputs.wind_mps);
     }
     if (Number.isFinite(plannerInputs.slope_dh_m)) {
-      context.elevation_m = Number(plannerInputs.slope_dh_m);
+      baseContext.elevation_m = Number(plannerInputs.slope_dh_m);
     }
     if (Number.isFinite(plannerInputs.temperatureC)) {
-      context.temp_c = Number(plannerInputs.temperatureC);
+      baseContext.temp_c = Number(plannerInputs.temperatureC);
     }
-    context.riskProfile = riskProfile;
     const hazardRates = caddieHazardSummary.hazard;
     const hazardTotal = clamp01(
       (hazardRates.water ?? 0) +
@@ -4946,11 +4945,12 @@ const QAArHudOverlayScreen: React.FC = () => {
     );
     if (hazardTotal > 0) {
       if (caddieHazardSummary.dangerSide === 'left') {
-        context.hazardLeft = hazardTotal;
+        baseContext.hazardLeft = hazardTotal;
       } else if (caddieHazardSummary.dangerSide === 'right') {
-        context.hazardRight = hazardTotal;
+        baseContext.hazardRight = hazardTotal;
       }
     }
+    const context = withRiskProfile(baseContext, riskProfile);
     return {
       best: {
         clubId: caddiePlan.club,
@@ -6794,35 +6794,37 @@ const QAArHudOverlayScreen: React.FC = () => {
             disabled={!caddiePlan}
           />
         ) : null}
-        <View style={styles.hudRiskProfileRow}>
-          <Text style={styles.hudRiskProfileLabel}>Risk bias</Text>
-          <View style={styles.hudRiskProfileChips}>
-            {HUD_RISK_PROFILE_OPTIONS.map((option) => {
-              const active = riskProfile === option.key;
-              return (
-                <TouchableOpacity
-                  key={option.key}
-                  onPress={() => setRiskProfile(option.key)}
-                  style={[
-                    styles.hudRiskProfileChip,
-                    active ? styles.hudRiskProfileChipActive : null,
-                  ]}
-                  accessibilityRole="button"
-                  accessibilityState={{ selected: active }}
-                >
-                  <Text
+        {caddieHudGateOpen ? (
+          <View style={styles.hudRiskProfileRow}>
+            <Text style={styles.hudRiskProfileLabel}>Risk bias</Text>
+            <View style={styles.hudRiskProfileChips}>
+              {HUD_RISK_PROFILE_OPTIONS.map((option) => {
+                const active = riskProfile === option.key;
+                return (
+                  <TouchableOpacity
+                    key={option.key}
+                    onPress={() => setRiskProfile(option.key)}
                     style={[
-                      styles.hudRiskProfileChipText,
-                      active ? styles.hudRiskProfileChipTextActive : null,
+                      styles.hudRiskProfileChip,
+                      active ? styles.hudRiskProfileChipActive : null,
                     ]}
+                    accessibilityRole="button"
+                    accessibilityState={{ selected: active }}
                   >
-                    {option.label}
-                  </Text>
-                </TouchableOpacity>
-              );
-            })}
+                    <Text
+                      style={[
+                        styles.hudRiskProfileChipText,
+                        active ? styles.hudRiskProfileChipTextActive : null,
+                      ]}
+                    >
+                      {option.label}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
           </View>
-        </View>
+        ) : null}
         {__DEV__ ? (
           <>
             <View style={styles.watchCard}>
