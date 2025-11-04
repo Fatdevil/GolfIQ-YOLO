@@ -1714,6 +1714,10 @@ export type StrategyInput = {
   dangerSide?: 'left' | 'right' | null;
 };
 
+export type StrategyOptions = {
+  riskProfile?: RiskProfile;
+};
+
 export type StrategyDecision = {
   profile: RiskProfile;
   recommended: TargetLane;
@@ -1729,6 +1733,38 @@ export type StrategyDecision = {
 type ScoreResult = {
   ev: number;
   breakdown: StrategyDecision['breakdown'];
+};
+
+type RiskBiasMultipliers = {
+  hazard: number;
+  distanceReward: number;
+  fatSideBiasDelta: number;
+};
+
+const RISK_BIAS_MULTIPLIERS: Record<RiskProfile, RiskBiasMultipliers> = {
+  conservative: { hazard: 1.25, distanceReward: 0.9, fatSideBiasDelta: 2 },
+  neutral: { hazard: 1, distanceReward: 1, fatSideBiasDelta: 0 },
+  aggressive: { hazard: 0.85, distanceReward: 1.1, fatSideBiasDelta: -2 },
+};
+
+const applyRiskBiasToWeights = (
+  weights: StrategyWeights,
+  riskProfile: RiskProfile,
+): StrategyWeights => {
+  const multipliers = RISK_BIAS_MULTIPLIERS[riskProfile] ?? RISK_BIAS_MULTIPLIERS.neutral;
+  const hazardScale = multipliers.hazard;
+  const distanceScale = multipliers.distanceReward;
+  const fatSideBias = Math.max(0, weights.fatSideBias_m + multipliers.fatSideBiasDelta);
+
+  return {
+    hazardWater: weights.hazardWater * hazardScale,
+    hazardBunker: weights.hazardBunker * hazardScale,
+    hazardRough: weights.hazardRough * hazardScale,
+    hazardOB: weights.hazardOB * hazardScale,
+    fairwayBonus: weights.fairwayBonus,
+    distanceReward: weights.distanceReward * distanceScale,
+    fatSideBias_m: fatSideBias,
+  };
 };
 
 const STRATEGY_OFFSET_STEPS = [-12, -8, -4, 0, 4, 8, 12] as const;
@@ -1893,9 +1929,11 @@ export function scoreEV(input: StrategyInput, lane: TargetLane, weights: Strateg
   };
 }
 
-export function chooseStrategy(input: StrategyInput): StrategyDecision {
+export function chooseStrategy(input: StrategyInput, opts?: StrategyOptions): StrategyDecision {
   const profile: RiskProfile = STRATEGY_DEFAULTS[input.profile] ? input.profile : 'neutral';
   const weights = STRATEGY_DEFAULTS[profile];
+  const riskProfile: RiskProfile = opts?.riskProfile ?? 'neutral';
+  const scoringWeights = applyRiskBiasToWeights(weights, riskProfile);
   const factor = sanitizeFinite(input.playsLikeFactor, 1);
   const normalizedFactor = factor > 0 ? factor : 1;
   const normalizedInput: StrategyInput = {
@@ -1937,7 +1975,7 @@ export function chooseStrategy(input: StrategyInput): StrategyDecision {
 
   if (!candidates.length) {
     const fallback: TargetLane = { offset_m: 0, carry_m: targetCarry || normalizedInput.rawDist_m };
-    const score = scoreEV(normalizedInput, fallback, weights);
+    const score = scoreEV(normalizedInput, fallback, scoringWeights);
     return {
       profile,
       recommended: fallback,
@@ -1956,7 +1994,7 @@ export function chooseStrategy(input: StrategyInput): StrategyDecision {
   };
 
   for (const lane of candidates) {
-    const { ev, breakdown } = scoreEV(normalizedInput, lane, weights);
+    const { ev, breakdown } = scoreEV(normalizedInput, lane, scoringWeights);
     if (ev > bestScore + 1e-6) {
       bestScore = ev;
       bestLane = lane;
@@ -1984,7 +2022,7 @@ export function chooseStrategy(input: StrategyInput): StrategyDecision {
 
   if (!bestLane) {
     const fallback: TargetLane = { offset_m: 0, carry_m: targetCarry };
-    const { ev, breakdown } = scoreEV(normalizedInput, fallback, weights);
+    const { ev, breakdown } = scoreEV(normalizedInput, fallback, scoringWeights);
     return {
       profile,
       recommended: fallback,
