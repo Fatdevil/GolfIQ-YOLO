@@ -8,6 +8,7 @@ import {
   isEnabled as cloudSyncEnabled,
   pushRound as cloudPushRound,
   pushShots as cloudPushShots,
+  deleteShots as cloudDeleteShots,
 } from "../sync/service";
 
 const STORAGE_KEY = "runs.upload.queue.v1";
@@ -132,11 +133,13 @@ let currentSummary: UploadQueueSummary = { ...EMPTY_SUMMARY };
 
 export type CloudSyncTask =
   | { type: "round"; round: RoundState }
-  | { type: "shots"; roundId: string; shots: ShotEvent[] };
+  | { type: "shots"; roundId: string; shots: ShotEvent[] }
+  | { type: "delete_shots"; roundId: string; shotKeys: string[] };
 
 type CloudSyncWorker = {
   pushRound: (round: RoundState) => Promise<void>;
   pushShots: (roundId: string, shots: ShotEvent[]) => Promise<void>;
+  deleteShots: (roundId: string, shotKeys: string[]) => Promise<void>;
 };
 
 const cloudQueue: CloudSyncTask[] = [];
@@ -145,6 +148,7 @@ let cloudFlushTimer: ReturnType<typeof setTimeout> | null = null;
 let cloudWorker: CloudSyncWorker = {
   pushRound: cloudPushRound,
   pushShots: cloudPushShots,
+  deleteShots: cloudDeleteShots,
 };
 
 function scheduleCloudSync(delayMs = 0): void {
@@ -173,8 +177,14 @@ async function flushCloudQueue(): Promise<void> {
       try {
         if (task.type === "round") {
           await cloudWorker.pushRound(task.round);
-        } else if (task.shots.length) {
-          await cloudWorker.pushShots(task.roundId, task.shots);
+        } else if (task.type === "shots") {
+          if (task.shots.length) {
+            await cloudWorker.pushShots(task.roundId, task.shots);
+          }
+        } else if (task.type === "delete_shots") {
+          if (task.shotKeys.length) {
+            await cloudWorker.deleteShots(task.roundId, task.shotKeys);
+          }
         }
       } catch (error) {
         cloudQueue.unshift(task);
@@ -192,6 +202,9 @@ async function flushCloudQueue(): Promise<void> {
 
 export function enqueueSync(task: CloudSyncTask): void {
   if (task.type === "shots" && task.shots.length === 0) {
+    return;
+  }
+  if (task.type === "delete_shots" && task.shotKeys.length === 0) {
     return;
   }
   cloudQueue.push(task);
@@ -825,6 +838,7 @@ export function __resetCloudSyncQueueForTests(): void {
   cloudWorker = {
     pushRound: cloudPushRound,
     pushShots: cloudPushShots,
+    deleteShots: cloudDeleteShots,
   };
 }
 
@@ -833,11 +847,13 @@ export function __setCloudSyncWorkerForTests(worker: Partial<CloudSyncWorker> | 
     cloudWorker = {
       pushRound: worker.pushRound ?? cloudPushRound,
       pushShots: worker.pushShots ?? cloudPushShots,
+      deleteShots: worker.deleteShots ?? cloudDeleteShots,
     };
   } else {
     cloudWorker = {
       pushRound: cloudPushRound,
       pushShots: cloudPushShots,
+      deleteShots: cloudDeleteShots,
     };
   }
 }

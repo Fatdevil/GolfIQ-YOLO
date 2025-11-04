@@ -13,9 +13,10 @@ type RoundDiff = {
   roundChanged: boolean;
   removed: boolean;
   newShots: ShotEvent[];
+  removedShots: string[];
 };
 
-const EMPTY_DIFF: RoundDiff = { roundChanged: false, removed: false, newShots: [] };
+const EMPTY_DIFF: RoundDiff = { roundChanged: false, removed: false, newShots: [], removedShots: [] };
 
 const listeners = new Set<(round: RoundState | null, diff: RoundDiff) => void>();
 
@@ -169,36 +170,69 @@ function shotFingerprint(shot: ShotEvent): string {
   });
 }
 
+function shotKey(hole: number, shot: ShotEvent): string {
+  return shot.id ? `id:${shot.id}` : `seq:${hole}:${shot.seq}`;
+}
+
 function computeDiff(previous: RoundState | null, next: RoundState | null): RoundDiff {
   if (!next) {
-    return previous ? { roundChanged: true, removed: true, newShots: [] } : { ...EMPTY_DIFF };
+    return previous
+      ? { roundChanged: true, removed: true, newShots: [], removedShots: [] }
+      : { ...EMPTY_DIFF };
   }
-  const roundChanged = holeMetaFingerprint(previous) !== holeMetaFingerprint(next);
-  const baseline = new Map<string, string>();
+
+  const prevMap = new Map<string, string>();
   if (previous) {
     for (const hole of Object.values(previous.holes ?? {})) {
       for (const shot of hole.shots ?? []) {
-        const key = shot.id ? `id:${shot.id}` : `seq:${hole.hole}:${shot.seq}`;
-        baseline.set(key, shotFingerprint(shot));
+        prevMap.set(shotKey(hole.hole, shot), shotFingerprint(shot));
       }
     }
   }
+
+  const seen = new Set<string>();
   const newShots: ShotEvent[] = [];
+  let roundChanged = holeMetaFingerprint(previous) !== holeMetaFingerprint(next);
+
   for (const hole of Object.values(next.holes ?? {})) {
     for (const shot of hole.shots ?? []) {
-      const key = shot.id ? `id:${shot.id}` : `seq:${hole.hole}:${shot.seq}`;
+      const key = shotKey(hole.hole, shot);
+      seen.add(key);
       const fingerprint = shotFingerprint(shot);
-      if (baseline.get(key) !== fingerprint) {
+      const prior = prevMap.get(key);
+      if (prior !== fingerprint) {
         newShots.push(cloneShotEvent(shot));
       }
     }
   }
-  return { roundChanged, removed: false, newShots };
+
+  const removedShots: string[] = [];
+  for (const [key] of prevMap) {
+    if (!seen.has(key)) {
+      removedShots.push(key);
+    }
+  }
+
+  return {
+    roundChanged: roundChanged || removedShots.length > 0,
+    removed: removedShots.length > 0,
+    newShots,
+    removedShots,
+  };
+}
+
+export type { RoundDiff };
+
+export function __computeDiffForTests(previous: RoundState | null, next: RoundState | null): RoundDiff {
+  return computeDiff(previous, next);
 }
 
 const cloudSyncListener = (round: RoundState | null, diff: RoundDiff): void => {
   if (!round || !isEnabled()) {
     return;
+  }
+  if (diff.removedShots.length) {
+    enqueueSync({ type: 'delete_shots', roundId: round.id, shotKeys: diff.removedShots });
   }
   if (diff.roundChanged && !diff.removed) {
     enqueueSync({ type: 'round', round });

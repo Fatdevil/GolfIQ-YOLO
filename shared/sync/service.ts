@@ -13,6 +13,10 @@ type SupabaseClientLike = {
     insert?: (payload: unknown) => Promise<{ data: unknown; error: unknown }>;
     select: (...args: unknown[]) => any;
     eq?: (...args: unknown[]) => any;
+    delete?: (...args: unknown[]) => {
+      in?: (column: string, values: unknown[]) => Promise<{ data?: unknown; error: unknown }>;
+      match?: (criteria: Record<string, unknown>) => Promise<{ data?: unknown; error: unknown }>;
+    };
   };
   channel: (name: string) => RealtimeChannelLike;
 };
@@ -57,6 +61,29 @@ let supabaseModulePromise: Promise<SupabaseModuleLike | null> | null = null;
 
 const roundFingerprints = new Map<string, string>();
 const shotFingerprints = new Map<string, string>();
+type TelemetryFn = (event: string, payload?: Record<string, unknown>) => void;
+let telemetry: TelemetryFn | null = null;
+
+function chunk<T>(input: readonly T[], size: number): T[][] {
+  if (size <= 0) {
+    return [Array.from(input)];
+  }
+  const result: T[][] = [];
+  for (let i = 0; i < input.length; i += size) {
+    result.push(Array.from(input.slice(i, i + size)));
+  }
+  return result;
+}
+
+function errorCode(error: unknown): string {
+  if (error && typeof error === "object" && "code" in error) {
+    const value = (error as { code?: unknown }).code;
+    if (typeof value === "string" && value.trim()) {
+      return value;
+    }
+  }
+  return "unknown";
+}
 
 function readEnv(key: string): string | undefined {
   if (typeof process === "undefined") {
@@ -193,9 +220,10 @@ function buildCloudShot(roundId: string, shot: ShotEvent): CloudShot {
   const updatedTs = Number.isFinite(shot.end?.ts ?? NaN)
     ? Number(shot.end?.ts)
     : Number.isFinite(shot.start.ts) ? Number(shot.start.ts) : now();
+  const shotId = shot.id ? String(shot.id) : `${roundId}-${shot.hole}-${shot.seq}`;
   return {
     roundId: String(roundId),
-    id: String(shot.id),
+    id: shotId,
     hole: Number.isFinite(shot.hole) ? Number(shot.hole) : 0,
     seq: Number.isFinite(shot.seq) ? Number(shot.seq) : 0,
     kind: shot.kind,
@@ -223,6 +251,13 @@ function buildCloudShot(roundId: string, shot: ShotEvent): CloudShot {
     playsLikePct: Number.isFinite(shot.playsLikePct ?? NaN) ? Number(shot.playsLikePct) : undefined,
     updatedAt: updatedTs,
   };
+}
+
+function shotFingerprintCacheKey(roundId: string, shot: { id?: string | null; hole: number; seq: number }): string {
+  if (shot.id) {
+    return `${roundId}:id:${shot.id}`;
+  }
+  return `${roundId}:seq:${shot.hole}:${shot.seq}`;
 }
 
 function serializeShot(shot: CloudShot): Record<string, unknown> {
@@ -335,11 +370,16 @@ export async function pushRound(round: RoundState): Promise<void> {
   if (prior === fingerprint) {
     return;
   }
-  roundFingerprints.set(payload.id, fingerprint);
-  await supa.from("round_states").upsert(serializeRound(payload), {
+  const { error } = await supa.from("round_states").upsert(serializeRound(payload), {
     onConflict: "id",
     returning: "minimal",
   });
+  if (error) {
+    const code = errorCode(error);
+    telemetry?.("sync.error.round", { id: payload.id, code });
+    throw new Error(`cloud-sync: round upsert failed (${code})`);
+  }
+  roundFingerprints.set(payload.id, fingerprint);
 }
 
 export async function pushShots(roundId: string, shots: ShotEvent[]): Promise<void> {
@@ -350,29 +390,90 @@ export async function pushShots(roundId: string, shots: ShotEvent[]): Promise<vo
   if (!supa) {
     return;
   }
-  const fresh: CloudShot[] = [];
+  type PendingShot = { payload: CloudShot; fingerprint: string; cacheKey: string };
+  const pending: PendingShot[] = [];
   for (const shot of shots) {
-    if (!shot.id) {
-      continue;
-    }
     const payload = buildCloudShot(roundId, shot);
     const fingerprint = shotFingerprint(payload);
-    const key = `${roundId}:${payload.id}`;
-    if (shotFingerprints.get(key) === fingerprint) {
+    const cacheKey = shotFingerprintCacheKey(roundId, shot);
+    if (shotFingerprints.get(cacheKey) === fingerprint) {
       continue;
     }
-    shotFingerprints.set(key, fingerprint);
-    fresh.push(payload);
+    pending.push({ payload, fingerprint, cacheKey });
   }
-  if (!fresh.length) {
+  if (!pending.length) {
     return;
   }
-  for (let idx = 0; idx < fresh.length; idx += SHOT_BATCH_SIZE) {
-    const batch = fresh.slice(idx, idx + SHOT_BATCH_SIZE).map((shot) => serializeShot(shot));
-    await supa.from("round_shots").upsert(batch, {
+  let hadError = false;
+  for (const batch of chunk(pending, SHOT_BATCH_SIZE)) {
+    const records = batch.map((entry) => serializeShot(entry.payload));
+    const { error } = await supa.from("round_shots").upsert(records, {
       onConflict: "round_id,shot_id",
       returning: "minimal",
     });
+    if (error) {
+      hadError = true;
+      telemetry?.("sync.error.shots", { roundId, code: errorCode(error), n: batch.length });
+      continue;
+    }
+    for (const entry of batch) {
+      shotFingerprints.set(entry.cacheKey, entry.fingerprint);
+    }
+  }
+  if (hadError) {
+    throw new Error(`cloud-sync: shot upsert failed (${roundId})`);
+  }
+}
+
+export async function deleteShots(roundId: string, shotKeys: string[]): Promise<void> {
+  if (!isEnabled() || !shotKeys.length) {
+    return;
+  }
+  const supa = await ensureClient();
+  if (!supa) {
+    return;
+  }
+  const ids = shotKeys
+    .filter((key) => key.startsWith("id:"))
+    .map((key) => key.slice(3))
+    .filter((id) => id.length > 0);
+  const seqKeys = shotKeys
+    .filter((key) => key.startsWith("seq:"))
+    .map((key) => key.slice(4));
+
+  if (ids.length) {
+    const deleter = supa.from("round_shots").delete?.();
+    const response = typeof deleter?.in === "function" ? await deleter.in("shot_id", ids) : { error: null };
+    if (response.error) {
+      telemetry?.("sync.error.delete.ids", { roundId, n: ids.length, code: errorCode(response.error) });
+    } else {
+      for (const id of ids) {
+        shotFingerprints.delete(`${roundId}:id:${id}`);
+      }
+    }
+  }
+
+  for (const seqKey of seqKeys) {
+    const [holeRaw, seqRaw] = seqKey.split(":");
+    const hole = Number(holeRaw);
+    const seq = Number(seqRaw);
+    if (!Number.isFinite(hole) || !Number.isFinite(seq)) {
+      continue;
+    }
+    const deleter = supa.from("round_shots").delete?.();
+    const response = typeof deleter?.match === "function"
+      ? await deleter.match({ round_id: roundId, hole, seq })
+      : { error: null };
+    if (response.error) {
+      telemetry?.("sync.error.delete.seq", {
+        roundId,
+        hole,
+        seq,
+        code: errorCode(response.error),
+      });
+      continue;
+    }
+    shotFingerprints.delete(`${roundId}:seq:${hole}:${seq}`);
   }
 }
 
@@ -439,4 +540,9 @@ export function __resetCloudSyncStateForTests(): void {
   if (!clientOverride) {
     client = null;
   }
+  telemetry = null;
+}
+
+export function __setCloudSyncTelemetryForTests(handler: TelemetryFn | null): void {
+  telemetry = handler;
 }
