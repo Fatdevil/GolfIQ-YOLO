@@ -142,7 +142,6 @@ async function applyShotCandidate(shot: CandidateShot, club: string | undefined)
     if (typeof __DEV__ !== 'undefined' && __DEV__) {
       console.warn('[PostHoleReconciler] Missing start for auto shot', shot);
     }
-    autoQueue.finalizeShot(shot.holeId, shot.id);
     return false;
   }
   try {
@@ -154,7 +153,6 @@ async function applyShotCandidate(shot: CandidateShot, club: string | undefined)
       source: shot.source,
       playsLikePct: Number.isFinite(Number(shot.playsLikePct)) ? Number(shot.playsLikePct) : undefined,
     });
-    autoQueue.finalizeShot(shot.holeId, shot.id);
     return true;
   } catch (error) {
     if (typeof __DEV__ !== 'undefined' && __DEV__) {
@@ -206,6 +204,7 @@ export const PostHoleReconciler = {
       const assumeAccept = defaultAcceptState(picks);
       let applied = 0;
       let rejected = 0;
+      let finalizedCount = 0;
       for (const shot of candidates) {
         const pick = map.get(shot.id);
         const accept = pick ? pick.accept === true : assumeAccept;
@@ -213,16 +212,28 @@ export const PostHoleReconciler = {
         if (!accept) {
           autoQueue.finalizeShot(shot.holeId, shot.id);
           rejected += 1;
+          finalizedCount += 1;
           continue;
         }
         const outcome = await applyShotCandidate({ ...shot, club }, club);
         if (outcome) {
+          autoQueue.finalizeShot(shot.holeId, shot.id);
           applied += 1;
+          finalizedCount += 1;
         } else {
           rejected += 1;
         }
       }
-      autoQueue.finalizeHole(holeId);
+      const queueWithPending = autoQueue as typeof autoQueue & {
+        getPendingShots?: (id: number) => CandidateShot[];
+      };
+      const pending = typeof queueWithPending.getPendingShots === 'function'
+        ? queueWithPending.getPendingShots(holeId).length
+        : null;
+      const allFinalized = finalizedCount === candidates.length;
+      if (pending !== null ? pending === 0 : allFinalized) {
+        autoQueue.finalizeHole(holeId);
+      }
 
       let roundId: string | null = null;
       if (typeof RoundRecorder.getActiveRound === 'function') {
