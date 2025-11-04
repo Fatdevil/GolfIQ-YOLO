@@ -4,6 +4,8 @@ import type { WatchDiag, WatchMsg } from './types';
 
 declare const __DEV__: boolean | undefined;
 
+const DEV = typeof __DEV__ !== 'undefined' && !!__DEV__;
+
 type NativeWatchConnectorModule = {
   isCapable(): Promise<boolean>;
   sendHUD(payloadBase64: string): Promise<boolean>;
@@ -137,7 +139,7 @@ function parseWatchMessage(raw: unknown): WatchMsg | null {
     try {
       return parseWatchMessage(JSON.parse(raw));
     } catch (error) {
-      if (typeof __DEV__ !== 'undefined' && __DEV__) {
+      if (DEV) {
         console.warn('[WatchBridge] failed to parse watch message JSON', error);
       }
       return null;
@@ -213,7 +215,7 @@ function ensureMessageSubscription(): void {
   } else if (RN.DeviceEventEmitter) {
     messageSubscription = RN.DeviceEventEmitter.addListener(WATCH_MESSAGE_EVENT, handleNativeMessageEvent);
   }
-  if (!messageSubscription && typeof __DEV__ !== 'undefined' && __DEV__) {
+  if (!messageSubscription && DEV) {
     console.warn('[WatchBridge] failed to subscribe to watch messages');
   }
 }
@@ -643,7 +645,10 @@ export const WatchBridge = {
     return sendHUDDebounced(state, options?.minIntervalMs);
   },
   getLastStatus(): LastStatus {
-    return { ...lastStatus };
+    const safe = (value: unknown): Record<string, unknown> =>
+      value && typeof value === 'object' ? (value as Record<string, unknown>) : {};
+    const payload = safe(lastStatus) as LastStatus;
+    return { ...payload };
   },
   getCapabilities(): WatchDiag['capability'] {
     return detectCapabilities();
