@@ -3,6 +3,13 @@ import {
   __resetReliabilityEventsForTests,
   emitReliabilityEvent,
 } from "../reliability/events";
+import type { RoundState, ShotEvent } from "../round/types";
+import {
+  isEnabled as cloudSyncEnabled,
+  pushRound as cloudPushRound,
+  pushShots as cloudPushShots,
+  deleteShots as cloudDeleteShots,
+} from "../sync/service";
 
 const STORAGE_KEY = "runs.upload.queue.v1";
 const DEFAULT_BASE = "http://localhost:8000";
@@ -123,6 +130,86 @@ const EMPTY_SUMMARY: UploadQueueSummary = {
   lastSuccessAt: null,
 };
 let currentSummary: UploadQueueSummary = { ...EMPTY_SUMMARY };
+
+export type CloudSyncTask =
+  | { type: "round"; round: RoundState }
+  | { type: "shots"; roundId: string; shots: ShotEvent[] }
+  | { type: "delete_shots"; roundId: string; shotKeys: string[] };
+
+type CloudSyncWorker = {
+  pushRound: (round: RoundState) => Promise<void>;
+  pushShots: (roundId: string, shots: ShotEvent[]) => Promise<void>;
+  deleteShots: (roundId: string, shotKeys: string[]) => Promise<void>;
+};
+
+const cloudQueue: CloudSyncTask[] = [];
+let cloudFlushPromise: Promise<void> | null = null;
+let cloudFlushTimer: ReturnType<typeof setTimeout> | null = null;
+let cloudWorker: CloudSyncWorker = {
+  pushRound: cloudPushRound,
+  pushShots: cloudPushShots,
+  deleteShots: cloudDeleteShots,
+};
+
+function scheduleCloudSync(delayMs = 0): void {
+  if (cloudFlushTimer) {
+    clearTimeout(cloudFlushTimer);
+  }
+  cloudFlushTimer = setTimeout(() => {
+    cloudFlushTimer = null;
+    void flushCloudQueue().catch(() => {
+      // errors handled via requeue logic inside flushCloudQueue
+    });
+  }, Math.max(0, delayMs));
+}
+
+async function flushCloudQueue(): Promise<void> {
+  if (cloudFlushPromise) {
+    return cloudFlushPromise;
+  }
+  cloudFlushPromise = (async () => {
+    while (cloudQueue.length) {
+      if (!cloudSyncEnabled()) {
+        cloudQueue.length = 0;
+        break;
+      }
+      const task = cloudQueue.shift()!;
+      try {
+        if (task.type === "round") {
+          await cloudWorker.pushRound(task.round);
+        } else if (task.type === "shots") {
+          if (task.shots.length) {
+            await cloudWorker.pushShots(task.roundId, task.shots);
+          }
+        } else if (task.type === "delete_shots") {
+          if (task.shotKeys.length) {
+            await cloudWorker.deleteShots(task.roundId, task.shotKeys);
+          }
+        }
+      } catch (error) {
+        cloudQueue.unshift(task);
+        scheduleCloudSync(1_000);
+        throw error instanceof Error ? error : new Error(String(error ?? "cloud-sync"));
+      }
+    }
+  })();
+  try {
+    await cloudFlushPromise;
+  } finally {
+    cloudFlushPromise = null;
+  }
+}
+
+export function enqueueSync(task: CloudSyncTask): void {
+  if (task.type === "shots" && task.shots.length === 0) {
+    return;
+  }
+  if (task.type === "delete_shots" && task.shotKeys.length === 0) {
+    return;
+  }
+  cloudQueue.push(task);
+  scheduleCloudSync(0);
+}
 
 function getGlobal(): GlobalWithOverrides {
   return globalThis as GlobalWithOverrides;
@@ -738,4 +825,39 @@ export function __resetRunsUploadStateForTests(): void {
   summaryListeners.clear();
   pendingResolvers.clear();
   __resetReliabilityEventsForTests();
+  __resetCloudSyncQueueForTests();
+}
+
+export function __resetCloudSyncQueueForTests(): void {
+  if (cloudFlushTimer) {
+    clearTimeout(cloudFlushTimer);
+    cloudFlushTimer = null;
+  }
+  cloudQueue.length = 0;
+  cloudFlushPromise = null;
+  cloudWorker = {
+    pushRound: cloudPushRound,
+    pushShots: cloudPushShots,
+    deleteShots: cloudDeleteShots,
+  };
+}
+
+export function __setCloudSyncWorkerForTests(worker: Partial<CloudSyncWorker> | null): void {
+  if (worker) {
+    cloudWorker = {
+      pushRound: worker.pushRound ?? cloudPushRound,
+      pushShots: worker.pushShots ?? cloudPushShots,
+      deleteShots: worker.deleteShots ?? cloudDeleteShots,
+    };
+  } else {
+    cloudWorker = {
+      pushRound: cloudPushRound,
+      pushShots: cloudPushShots,
+      deleteShots: cloudDeleteShots,
+    };
+  }
+}
+
+export async function __flushCloudSyncQueueForTests(): Promise<void> {
+  await flushCloudQueue();
 }

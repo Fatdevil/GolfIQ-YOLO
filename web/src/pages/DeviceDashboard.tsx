@@ -29,6 +29,19 @@ export default function DeviceDashboardPage() {
   const [configError, setConfigError] = useState<string | null>(null);
   const [configSaving, setConfigSaving] = useState(false);
 
+  const cloudSyncBetaEnabled = useMemo(() => {
+    try {
+      if (!configState.text.trim()) {
+        return false;
+      }
+      const parsed = JSON.parse(configState.text) as Record<string, unknown>;
+      const raw = parsed['cloud.sync.beta'];
+      return raw === true || raw === 'true' || raw === 1;
+    } catch {
+      return false;
+    }
+  }, [configState.text]);
+
   const [adminToken, setAdminToken] = useState<string>(() => {
     if (typeof window === "undefined") return "";
     return window.localStorage.getItem("remoteConfigAdminToken") ?? "";
@@ -178,6 +191,19 @@ export default function DeviceDashboardPage() {
     }
   };
 
+  const updateCloudSyncBeta = (enabled: boolean) => {
+    setConfigState((prev) => {
+      let parsed: Record<string, unknown>;
+      try {
+        parsed = prev.text.trim() ? JSON.parse(prev.text) : {};
+      } catch {
+        parsed = {};
+      }
+      parsed['cloud.sync.beta'] = enabled;
+      return { ...prev, text: JSON.stringify(parsed, null, 2) };
+    });
+  };
+
   return (
     <section className="space-y-8">
       <header className="space-y-1">
@@ -295,6 +321,23 @@ export default function DeviceDashboardPage() {
                 {configState.snapshot?.updatedAt
                   ? new Date(configState.snapshot.updatedAt).toLocaleString()
                   : "—"}
+              </div>
+            </div>
+            <div className="rounded-lg border border-slate-800 bg-slate-950/50 p-3">
+              <div className="text-xs uppercase text-slate-500">QA settings</div>
+              <p className="mt-2 text-xs text-slate-400">
+                Toggle the cloud sync beta flag for QA builds. This writes the <code>cloud.sync.beta</code> key in
+                remote config.
+              </p>
+              <button
+                onClick={() => updateCloudSyncBeta(!cloudSyncBetaEnabled)}
+                className="mt-3 w-full rounded-md border border-emerald-500/40 bg-emerald-500/10 px-3 py-2 text-sm font-semibold text-emerald-200 transition hover:bg-emerald-500/20"
+                type="button"
+              >
+                {cloudSyncBetaEnabled ? 'Disable Cloud Sync (beta)' : 'Enable Cloud Sync (beta)'}
+              </button>
+              <div className="mt-2 text-xs font-mono text-emerald-200">
+                Current state: {cloudSyncBetaEnabled ? 'enabled' : 'disabled'}
               </div>
             </div>
           </div>

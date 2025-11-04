@@ -1,13 +1,24 @@
 import { JITTER_M, distanceMeters, deriveHoleState } from './derive';
 import { getRoundStore } from './storage';
 import type { GeoPoint, HoleState, Lie, RoundState, ShotEvent, ShotKind } from './types';
+import { enqueueSync } from '../runs/uploader';
+import { isEnabled } from '../sync/service';
 
 const DEFAULT_HOLES = 18;
 const COALESCE_WINDOW_MS = 3_000;
 
 let loaded = false;
 let activeRound: RoundState | null = null;
-const listeners = new Set<(round: RoundState | null) => void>();
+type RoundDiff = {
+  roundChanged: boolean;
+  removed: boolean;
+  newShots: ShotEvent[];
+  removedShots: string[];
+};
+
+const EMPTY_DIFF: RoundDiff = { roundChanged: false, removed: false, newShots: [], removedShots: [] };
+
+const listeners = new Set<(round: RoundState | null, diff: RoundDiff) => void>();
 
 function cloneRound(state: RoundState | null): RoundState | null {
   return state ? (JSON.parse(JSON.stringify(state)) as RoundState) : null;
@@ -111,13 +122,137 @@ type AddShotArgs = {
   force?: boolean;
 };
 
+function holeMetaFingerprint(round: RoundState | null): string {
+  if (!round) {
+    return 'null';
+  }
+  const holes: Record<string, unknown> = {};
+  for (const [holeId, hole] of Object.entries(round.holes ?? {})) {
+    holes[holeId] = {
+      par: Number.isFinite(hole.par ?? NaN) ? Number(hole.par) : 4,
+      index: Number.isFinite(hole.index ?? NaN) ? Number(hole.index) : undefined,
+      pin:
+        hole.pin && Number.isFinite(hole.pin.lat ?? NaN) && Number.isFinite(hole.pin.lon ?? NaN)
+          ? { lat: Number(hole.pin.lat), lon: Number(hole.pin.lon) }
+          : undefined,
+      manualScore: Number.isFinite(hole.manualScore ?? NaN) ? Number(hole.manualScore) : undefined,
+      manualPutts: Number.isFinite(hole.manualPutts ?? NaN) ? Number(hole.manualPutts) : undefined,
+    };
+  }
+  return JSON.stringify({
+    id: round.id,
+    courseId: round.courseId,
+    startedAt: round.startedAt,
+    finishedAt: round.finishedAt ?? null,
+    currentHole: round.currentHole,
+    tournamentSafe: round.tournamentSafe,
+    holes,
+  });
+}
+
+function shotFingerprint(shot: ShotEvent): string {
+  return JSON.stringify({
+    id: shot.id,
+    hole: shot.hole,
+    seq: shot.seq,
+    club: shot.club ?? null,
+    source: shot.source ?? null,
+    start: shot.start,
+    end: shot.end ?? null,
+    startLie: shot.startLie,
+    endLie: shot.endLie ?? null,
+    carry_m: shot.carry_m ?? null,
+    toPinStart_m: shot.toPinStart_m ?? null,
+    toPinEnd_m: shot.toPinEnd_m ?? null,
+    sg: shot.sg ?? null,
+    playsLikePct: shot.playsLikePct ?? null,
+    kind: shot.kind,
+  });
+}
+
+function shotKey(hole: number, shot: ShotEvent): string {
+  return shot.id ? `id:${shot.id}` : `seq:${hole}:${shot.seq}`;
+}
+
+function computeDiff(previous: RoundState | null, next: RoundState | null): RoundDiff {
+  if (!next) {
+    return previous
+      ? { roundChanged: true, removed: true, newShots: [], removedShots: [] }
+      : { ...EMPTY_DIFF };
+  }
+
+  const prevMap = new Map<string, string>();
+  if (previous) {
+    for (const hole of Object.values(previous.holes ?? {})) {
+      for (const shot of hole.shots ?? []) {
+        prevMap.set(shotKey(hole.hole, shot), shotFingerprint(shot));
+      }
+    }
+  }
+
+  const seen = new Set<string>();
+  const newShots: ShotEvent[] = [];
+  let roundChanged = holeMetaFingerprint(previous) !== holeMetaFingerprint(next);
+
+  for (const hole of Object.values(next.holes ?? {})) {
+    for (const shot of hole.shots ?? []) {
+      const key = shotKey(hole.hole, shot);
+      seen.add(key);
+      const fingerprint = shotFingerprint(shot);
+      const prior = prevMap.get(key);
+      if (prior !== fingerprint) {
+        newShots.push(cloneShotEvent(shot));
+      }
+    }
+  }
+
+  const removedShots: string[] = [];
+  for (const [key] of prevMap) {
+    if (!seen.has(key)) {
+      removedShots.push(key);
+    }
+  }
+
+  return {
+    roundChanged: roundChanged || removedShots.length > 0,
+    removed: removedShots.length > 0,
+    newShots,
+    removedShots,
+  };
+}
+
+export type { RoundDiff };
+
+export function __computeDiffForTests(previous: RoundState | null, next: RoundState | null): RoundDiff {
+  return computeDiff(previous, next);
+}
+
+const cloudSyncListener = (round: RoundState | null, diff: RoundDiff): void => {
+  if (!round || !isEnabled()) {
+    return;
+  }
+  if (diff.removedShots.length) {
+    enqueueSync({ type: 'delete_shots', roundId: round.id, shotKeys: diff.removedShots });
+  }
+  if (diff.roundChanged && !diff.removed) {
+    enqueueSync({ type: 'round', round });
+  }
+  if (diff.newShots.length) {
+    enqueueSync({ type: 'shots', roundId: round.id, shots: diff.newShots });
+  }
+};
+
+listeners.add(cloudSyncListener);
+
 async function persist(state: RoundState | null): Promise<void> {
+  const previous = cloneRound(activeRound);
   await getRoundStore().save(state);
   activeRound = cloneRound(state);
   const snapshot = cloneRound(activeRound);
+  const diff = computeDiff(previous, snapshot);
   for (const listener of listeners) {
     try {
-      listener(snapshot);
+      listener(snapshot, diff);
     } catch {
       // ignore listener failures
     }
@@ -181,9 +316,14 @@ export const RoundRecorder = {
     return activeRound.currentHole;
   },
 
-  subscribe(listener: (round: RoundState | null) => void): () => void {
+  subscribe(listener: (round: RoundState | null, diff: RoundDiff) => void): () => void {
     listeners.add(listener);
-    listener(cloneRound(activeRound));
+    const snapshot = cloneRound(activeRound);
+    try {
+      listener(snapshot, computeDiff(null, snapshot));
+    } catch {
+      // ignore synchronous listener errors
+    }
     return () => {
       listeners.delete(listener);
     };
@@ -412,4 +552,5 @@ export function __resetRoundRecorderForTests(): void {
   loaded = false;
   activeRound = null;
   listeners.clear();
+  listeners.add(cloudSyncListener);
 }

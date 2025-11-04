@@ -12,6 +12,10 @@ vi.mock('@supabase/supabase-js', () => {
     upsert: vi.fn(async () => ({ data: null, error: null, status: 201 })),
     insert: vi.fn(async () => ({ data: null, error: null, status: 201 })),
     select: vi.fn(() => selectBuilder()),
+    delete: vi.fn(() => ({
+      in: vi.fn(async () => ({ data: null, error: null })),
+      match: vi.fn(async () => ({ data: null, error: null })),
+    })),
   }));
 
   const channel = vi.fn(() => ({
