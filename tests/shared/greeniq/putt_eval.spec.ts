@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 
-import { evaluatePutt, type PuttEval } from '../../../shared/greeniq/putt_eval';
+import {
+  evaluatePutt,
+  evalPace,
+  evalStartLine,
+  type PuttEval,
+} from '../../../shared/greeniq/putt_eval';
 
 const toDegrees = (value: number) => Number(value.toFixed(2));
 
@@ -118,5 +123,37 @@ describe('evaluatePutt', () => {
     expect(Math.sign(leftMiss.signedAngleDeg)).toBe(-1);
     expect(leftMiss.lateralMiss_cm).toBeLessThan(0);
     expect(leftMiss.aimAdjust_cm).toBeGreaterThan(0);
+  });
+});
+
+describe('evalStartLine', () => {
+  it('classifies open, square, and closed start lines', () => {
+    const square = evalStartLine(0, 0.5);
+    expect(square.classification).toBe('square');
+    expect(square.deltaDeg).toBeCloseTo(0.5);
+
+    const open = evalStartLine(0, 2);
+    expect(open.classification).toBe('open');
+    expect(open.deltaDeg).toBeCloseTo(2);
+
+    const closed = evalStartLine(1, -0.2);
+    expect(closed.classification).toBe('closed');
+    expect(closed.deltaDeg).toBeCloseTo(-1.2);
+  });
+});
+
+describe('evalPace', () => {
+  it('classifies pace deltas around the tolerance band', () => {
+    const good = evalPace(10, 10.2);
+    expect(good.classification).toBe('good');
+    expect(good.delta_m).toBeCloseTo(0.2);
+
+    const soft = evalPace(10, 9.5);
+    expect(soft.classification).toBe('too_soft');
+    expect(soft.delta_m).toBeCloseTo(-0.5);
+
+    const firm = evalPace(10, 11);
+    expect(firm.classification).toBe('too_firm');
+    expect(firm.delta_m).toBeCloseTo(1);
   });
 });

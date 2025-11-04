@@ -21,12 +21,65 @@ export type PuttEval = {
   angleThresholdsDeg?: { on: number; ok: number };
 };
 
+export type StartLineClass = 'open' | 'square' | 'closed';
+
+export type StartLineEval = {
+  classification: StartLineClass;
+  deltaDeg: number;
+};
+
+export type PaceClass = 'too_soft' | 'good' | 'too_firm';
+
+export type PaceEval = {
+  classification: PaceClass;
+  delta_m: number;
+};
+
 const DEFAULT_PACE = { soft: 0.85, firm: 1.2 } as const;
 const DEFAULT_ANGLE = { on: 1.0, ok: 2.0 } as const;
 const EPSILON = 1e-6;
 const ANGLE_TOLERANCE = 1e-6;
 const DISTANCE_REFERENCE_M = 3;
 const MIN_SCALING_DISTANCE_M = 0.5;
+
+const START_LINE_SQUARE_TOLERANCE_DEG = 0.75;
+const PACE_GOOD_TOLERANCE_M = 0.3;
+
+function finiteOrZero(value: number | null | undefined): number {
+  return Number.isFinite(value ?? Number.NaN) ? (value as number) : 0;
+}
+
+export function evalStartLine(targetDeg: number, strokeDeg: number): StartLineEval {
+  const target = finiteOrZero(targetDeg);
+  const stroke = finiteOrZero(strokeDeg);
+  const delta = stroke - target;
+  const magnitude = Math.abs(delta);
+
+  if (magnitude <= START_LINE_SQUARE_TOLERANCE_DEG) {
+    return { classification: 'square', deltaDeg: delta };
+  }
+
+  return {
+    classification: delta > 0 ? 'open' : 'closed',
+    deltaDeg: delta,
+  };
+}
+
+export function evalPace(need_m: number, carry_m: number): PaceEval {
+  const need = finiteOrZero(need_m);
+  const carry = finiteOrZero(carry_m);
+  const delta = carry - need;
+  const magnitude = Math.abs(delta);
+
+  if (magnitude <= PACE_GOOD_TOLERANCE_M) {
+    return { classification: 'good', delta_m: delta };
+  }
+
+  return {
+    classification: delta > 0 ? 'too_firm' : 'too_soft',
+    delta_m: delta,
+  };
+}
 
 const RAD_PER_DEG = Math.PI / 180;
 const DEG_PER_RAD = 180 / Math.PI;
