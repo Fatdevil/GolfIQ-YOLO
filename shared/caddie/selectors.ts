@@ -29,3 +29,13 @@ export type RootLike = { caddie?: { currentHud?: CaddieHudVM | null } | null } |
 
 export const selectCaddieHud = (s: RootLike): CaddieHudVM | null =>
   (s?.caddie?.currentHud ?? null) as CaddieHudVM | null;
+
+export function withRiskProfile(
+  context: CaddieHudVM['context'] | undefined,
+  riskProfile: 'conservative' | 'neutral' | 'aggressive',
+): CaddieHudVM['context'] {
+  return {
+    ...(context ?? {}),
+    riskProfile,
+  } satisfies CaddieHudVM['context'];
+}
