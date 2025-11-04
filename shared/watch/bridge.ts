@@ -2,6 +2,8 @@ import { encodeHUDBase64, type WatchHUDStateV1 } from './codec';
 import { hashOverlaySnapshot, type OverlaySnapshotV1 } from '../overlay/transport';
 import type { WatchDiag, WatchMsg } from './types';
 
+declare const __DEV__: boolean | undefined;
+
 type NativeWatchConnectorModule = {
   isCapable(): Promise<boolean>;
   sendHUD(payloadBase64: string): Promise<boolean>;
@@ -99,7 +101,9 @@ function normalizeAdvicePayload(raw: Record<string, unknown> | null | undefined)
       if (offsetCandidate !== undefined && offsetCandidate !== null) {
         const offset = typeof offsetCandidate === 'number' ? offsetCandidate : Number(offsetCandidate);
         if (Number.isFinite(offset)) {
-          aim = { ...aim, offset_m: Number(offset) } as AdviceAim;
+          if (aim && typeof aim === 'object') {
+            (aim as { offset_m?: number }).offset_m = Number(offset);
+          }
         }
       }
     }

@@ -7,7 +7,7 @@ import type {
   GreenSection,
 } from "../arhud/bundle_client";
 import { CLUB_SEQUENCE, type ClubId } from "../playslike/bag";
-import { applyGameRiskBias, applyGameRiskProfile } from "../game/context";
+import { applyGameRiskBias } from "../game/context";
 import { getCaddieRc } from "./rc";
 import { runMonteCarloV1_5, type McPolygon, type McResult, type McTarget } from "./mc";
 import { ellipseOverlapRisk, lateralWindOffset, sampleEllipsePoints, type RiskFeature } from "./risk";
@@ -1732,7 +1732,7 @@ type ScoreResult = {
 };
 
 const STRATEGY_OFFSET_STEPS = [-12, -8, -4, 0, 4, 8, 12] as const;
-const STRATEGY_CARRY_STEPS = [-10, 0, 10] as const;
+const STRATEGY_CARRY_OFFSETS = [-10, 0, 10] as const;
 
 const roundKey = (value: number): number => Math.round(value * 100);
 
@@ -1799,10 +1799,9 @@ const resolveDangerSign = (input: StrategyInput): -1 | 0 | 1 => {
 const normalizeDispersion = (dispersion: Dispersion): Dispersion => {
   const sigma = sanitizeDistance(dispersion?.sigma_m, 12);
   const lateral = sanitizeFinite(dispersion?.lateralSigma_m);
-  const lateralSigma = lateral && lateral > 0 ? lateral : Math.max(4, sigma * 0.55);
   return {
     sigma_m: sigma,
-    lateralSigma_m: lateralSigma,
+    lateralSigma_m: lateral && lateral > 0 ? lateral : undefined,
   };
 };
 
@@ -1821,45 +1820,45 @@ const normalizeLaneWidth = (value: number): number => {
 
 const createOffsetCandidates = (input: StrategyInput): number[] => {
   const bounds = input.bounds;
+  const laneHalf = Math.max(0, normalizeLaneWidth(input.laneWidth_m) / 2);
   const maxOffsetBound = bounds && Number.isFinite(bounds.maxOffset_m ?? Number.NaN)
     ? Math.abs(Number(bounds.maxOffset_m))
     : Number.NaN;
-  const laneHalf = normalizeLaneWidth(input.laneWidth_m) / 2;
-  const maxOffset = Number.isFinite(maxOffsetBound) && maxOffsetBound > 0 ? maxOffsetBound : laneHalf;
+  const hasLaneWidth = laneHalf > 0;
+  let maxOffset = hasLaneWidth ? laneHalf : 0;
+  if (Number.isFinite(maxOffsetBound)) {
+    maxOffset = hasLaneWidth ? Math.min(laneHalf, maxOffsetBound) : maxOffsetBound;
+  }
   const values = STRATEGY_OFFSET_STEPS.map((step) => clampBounds(step, -maxOffset, maxOffset));
-  values.push(-maxOffset, maxOffset, 0);
   return dedupeNumbers(values).sort((a, b) => a - b);
 };
 
-const createCarryCandidates = (baseCarry: number, bounds: StrategyBounds | undefined): number[] => {
+const createCarryCandidates = (targetCarry: number, bounds: StrategyBounds | undefined): number[] => {
   const minCarryBound = bounds && Number.isFinite(bounds.minCarry_m ?? Number.NaN)
-    ? Number(bounds.minCarry_m)
-    : Number.NaN;
+    ? Math.max(0, Number(bounds.minCarry_m))
+    : 0;
   const maxCarryBound = bounds && Number.isFinite(bounds.maxCarry_m ?? Number.NaN)
-    ? Number(bounds.maxCarry_m)
+    ? Math.max(minCarryBound, Number(bounds.maxCarry_m))
     : Number.NaN;
-  const minCarry = Number.isFinite(minCarryBound) ? Math.max(0, minCarryBound) : 0;
-  const inferredMax = Number.isFinite(maxCarryBound) && maxCarryBound > 0 ? maxCarryBound : baseCarry + 30;
-  const maxCarry = Math.max(minCarry, inferredMax);
-  const candidates = STRATEGY_CARRY_STEPS.map((step) => clampBounds(baseCarry + step, minCarry, maxCarry));
-  candidates.push(clampBounds(baseCarry, minCarry, maxCarry));
+  const clampCarry = (value: number): number => {
+    const upper = Number.isFinite(maxCarryBound) ? maxCarryBound : Math.max(minCarryBound, value);
+    return clampBounds(value, minCarryBound, upper);
+  };
+  const candidates = STRATEGY_CARRY_OFFSETS.map((delta) => clampCarry(targetCarry + delta));
   return dedupeNumbers(candidates).sort((a, b) => a - b);
 };
 
 export function scoreEV(input: StrategyInput, lane: TargetLane, weights: StrategyWeights): ScoreResult {
   const hazards = normalizeHazards(input.hazard);
-  const dispersion = normalizeDispersion(input.dispersion);
-  const laneWidth = normalizeLaneWidth(input.laneWidth_m);
   const baseRaw = sanitizeDistance(input.rawDist_m, 0);
-  const factor = sanitizeDistance(input.playsLikeFactor, 1) || 1;
-  const targetCarry = sanitizeDistance(baseRaw * factor || baseRaw, baseRaw);
+  const rawFactor = sanitizeFinite(input.playsLikeFactor, 1);
+  const factor = rawFactor > 0 ? rawFactor : 1;
+  const plCarry = sanitizeDistance(baseRaw * factor, baseRaw);
 
-  const carry = sanitizeDistance(lane.carry_m, targetCarry);
+  const carry = sanitizeDistance(lane.carry_m, plCarry);
   const offset = sanitizeFinite(lane.offset_m, 0);
 
-  const diff = Math.abs(carry - targetCarry);
-  const closeness = targetCarry > 0 ? Math.max(0, 1 - diff / Math.max(targetCarry, 1)) : 0;
-  const distanceReward = weights.distanceReward * targetCarry * closeness;
+  const distanceReward = -weights.distanceReward * Math.abs(carry - plCarry);
 
   const hazardPenalty =
     hazards.water * weights.hazardWater +
@@ -1870,33 +1869,24 @@ export function scoreEV(input: StrategyInput, lane: TargetLane, weights: Strateg
   const fairwayBonus = hazards.fairway * weights.fairwayBonus;
 
   const dangerSign = resolveDangerSign(input);
-  const fatSideBase = Math.max(0, weights.fatSideBias_m);
-  const laneHalf = laneWidth / 2;
-  const hazardDirectional = clamp01(hazards.water + hazards.ob);
-  const hazardBoost = laneHalf * hazardDirectional * (0.5 + hazardDirectional);
-  const fatSideTarget = Math.min(laneHalf, fatSideBase + hazardBoost);
-  const lateralSigma = sanitizeFinite(dispersion.lateralSigma_m, dispersion.sigma_m);
   let biasPenalty = 0;
-  if (dangerSign !== 0 && fatSideTarget > 0) {
+  if (dangerSign !== 0) {
+    const fatSideTarget = Math.max(0, weights.fatSideBias_m);
     const offsetAway = dangerSign < 0 ? offset : -offset;
-    const shortfall = fatSideTarget - offsetAway;
-    if (shortfall > 0) {
-      const normalized = Math.min(shortfall / Math.max(fatSideTarget, 1), 1);
-      const dispersionFactor = 1 + Math.min(lateralSigma / Math.max(laneWidth / 2, 1), 1.5);
-      const hazardSeverityBoost = 1 + hazards.water * 6 + hazards.ob * 3;
-      biasPenalty = normalized * hazardDirectional * dispersionFactor * hazardSeverityBoost;
+    if (offsetAway < fatSideTarget - 1e-3) {
+      biasPenalty = 0.5;
     }
   }
 
-  const hazardsComponent = -hazardPenalty;
-  const biasComponent = -biasPenalty;
   const breakdown = {
     distance: distanceReward,
-    hazards: hazardsComponent,
+    hazards: -hazardPenalty,
     fairway: fairwayBonus,
-    bias: biasComponent,
+    bias: -biasPenalty,
   } as const;
-  const ev = distanceReward + hazardsComponent + fairwayBonus + biasComponent;
+
+  const ev = distanceReward - hazardPenalty + fairwayBonus - biasPenalty;
+
   return {
     ev: Number.isFinite(ev) ? ev : Number.NEGATIVE_INFINITY,
     breakdown,
@@ -1904,9 +1894,10 @@ export function scoreEV(input: StrategyInput, lane: TargetLane, weights: Strateg
 }
 
 export function chooseStrategy(input: StrategyInput): StrategyDecision {
-  const baseProfile: RiskProfile = STRATEGY_DEFAULTS[input.profile] ? input.profile : 'neutral';
-  const profile = applyGameRiskProfile(baseProfile);
+  const profile: RiskProfile = STRATEGY_DEFAULTS[input.profile] ? input.profile : 'neutral';
   const weights = STRATEGY_DEFAULTS[profile];
+  const factor = sanitizeFinite(input.playsLikeFactor, 1);
+  const normalizedFactor = factor > 0 ? factor : 1;
   const normalizedInput: StrategyInput = {
     ...input,
     profile,
@@ -1914,17 +1905,28 @@ export function chooseStrategy(input: StrategyInput): StrategyDecision {
     dispersion: normalizeDispersion(input.dispersion),
     laneWidth_m: normalizeLaneWidth(input.laneWidth_m),
     rawDist_m: sanitizeDistance(input.rawDist_m, 0),
-    playsLikeFactor: sanitizeDistance(input.playsLikeFactor, 1) || 1,
+    playsLikeFactor: normalizedFactor,
     dangerSide: input.dangerSide ?? null,
   };
 
-  const baseCarry = sanitizeDistance(
-    normalizedInput.rawDist_m * normalizedInput.playsLikeFactor || normalizedInput.rawDist_m,
-    normalizedInput.rawDist_m,
-  );
+  const bounds = normalizedInput.bounds;
+  const minCarryBound = bounds && Number.isFinite(bounds.minCarry_m ?? Number.NaN)
+    ? Math.max(0, Number(bounds.minCarry_m))
+    : 0;
+  const maxCarryBound = bounds && Number.isFinite(bounds.maxCarry_m ?? Number.NaN)
+    ? Math.max(minCarryBound, Number(bounds.maxCarry_m))
+    : Number.NaN;
+
+  const rawTarget = normalizedInput.rawDist_m * normalizedInput.playsLikeFactor;
+  const inferredTarget = sanitizeDistance(rawTarget, normalizedInput.rawDist_m);
+  const clampTarget = (value: number): number => {
+    const upper = Number.isFinite(maxCarryBound) ? maxCarryBound : Math.max(minCarryBound, value);
+    return clampBounds(value, minCarryBound, upper);
+  };
+  const targetCarry = clampTarget(inferredTarget);
 
   const offsets = createOffsetCandidates(normalizedInput);
-  const carries = createCarryCandidates(baseCarry, normalizedInput.bounds);
+  const carries = createCarryCandidates(targetCarry, bounds);
 
   const candidates: TargetLane[] = [];
   for (const offset of offsets) {
@@ -1934,7 +1936,7 @@ export function chooseStrategy(input: StrategyInput): StrategyDecision {
   }
 
   if (!candidates.length) {
-    const fallback: TargetLane = { offset_m: 0, carry_m: baseCarry || normalizedInput.rawDist_m };
+    const fallback: TargetLane = { offset_m: 0, carry_m: targetCarry || normalizedInput.rawDist_m };
     const score = scoreEV(normalizedInput, fallback, weights);
     return {
       profile,
@@ -1952,8 +1954,6 @@ export function chooseStrategy(input: StrategyInput): StrategyDecision {
     fairway: 0,
     bias: 0,
   };
-
-  const targetCarry = baseCarry || normalizedInput.rawDist_m;
 
   for (const lane of candidates) {
     const { ev, breakdown } = scoreEV(normalizedInput, lane, weights);

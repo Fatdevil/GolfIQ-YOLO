@@ -1,58 +1,61 @@
 # Caddie Strategy v1
 
-The v1 shot strategy engine combines plays-like distance adjustments with Monte Carlo hazard
-metrics to recommend an aim lane and target carry for three deterministic risk profiles:
-Conservative, Neutral, and Aggressive. The scorer runs entirely in TypeScript and relies on the
-existing plays-like, geometry, and MC v1.5 modules.
+The strategy engine picks a deterministic target lane (aim offset + carry) from a
+small grid and scores each candidate with a linear expected-value model. Inputs
+come from the QA HUD follow loop: raw distance, plays-like factor, Monte Carlo
+lane probabilities, and player dispersion.
 
-## Expected Value Model
+## EV components
 
-For each candidate target lane the engine evaluates a simple expected value (EV):
+For each lane we evaluate:
 
-```
-EV = distanceReward - hazardPenalty + fairwayBonus - biasPenalty
-```
+- **Distance reward** – penalises deviation from the plays-like carry:
+  `distanceReward = -weights.distanceReward * |carry - playsLikeCarry|`.
+- **Hazard penalty** – deducts the weighted water, bunker, rough, and OB
+  probabilities returned by MC v1.5.
+- **Fairway bonus** – awards a linear bonus for the fairway probability.
+- **Fat-side bias** – if the aim is within the profile's `fatSideBias_m` buffer
+  on the danger side (water/OB), subtract a fixed `0.5` to encourage aiming to
+  the fat side.
 
-* **distanceReward** – meters of along-target gain relative to the plays-like carry, scaled by the
-  profile’s `distanceReward` weight. Targets closer to the plays-like distance score higher.
-* **hazardPenalty** – weighted sum of MC hazard probabilities (`water`, `bunker`, `rough`, `ob`).
-* **fairwayBonus** – reward proportional to the MC fairway probability.
-* **biasPenalty** – penalty applied when the aim is inside the profile’s `fatSideBias_m` buffer on
-  the danger side. This encourages aiming away from dominant hazards (fat-side bias).
+The final EV is `distance + fairway - hazard - bias`. Missing or invalid
+probabilities default to zero, and the scorer always returns finite numbers.
 
-All probabilities are clamped to `[0, 1]` and NaN-safe sanitizers keep the scorer deterministic.
+Default weights per profile are defined in
+`shared/caddie/strategy_profiles.ts` so they can be tuned without touching the
+algorithm.
 
-## Risk Profiles
+## Candidate grid
 
-Default weights live in `shared/caddie/strategy_profiles.ts`:
+We clamp the plays-like carry by any explicit bounds and evaluate a 7×3 grid:
 
-| Profile       | Water | Bunker | Rough | OB  | Fairway | Distance | Fat-side bias (m) |
-|---------------|-------|--------|-------|-----|---------|----------|-------------------|
-| Conservative  | 1.60  | 0.80   | 0.60  | 2.20 | 0.45   | 0.0008   | 8 |
-| Neutral       | 1.20  | 0.60   | 0.45  | 1.60 | 0.35   | 0.0010   | 5 |
-| Aggressive    | 0.85  | 0.40   | 0.30  | 1.10 | 0.25   | 0.0015   | 3 |
+- Offsets: `{-12, -8, -4, 0, +4, +8, +12}` metres, clamped to the playable
+  corridor or an explicit `maxOffset_m` bound.
+- Carries: `{PL-10, PL, PL+10}` metres, clamped to `[minCarry_m, maxCarry_m]`
+  when provided.
 
-Conservative profiles strongly penalise hazards and require the largest fat-side buffer. Aggressive
-profiles tolerate more risk and reward longer carries.
+The best EV wins, with deterministic tiebreaks favouring the straighter and
+closer-to-PL options.
 
-## Deterministic Grid Sampling
+## Worked example
 
-`chooseStrategy()` evaluates a fixed grid of offsets `{-12, -8, -4, 0, +4, +8, +12}` meters and carry
-adjustments `{-10, 0, +10}` meters around the plays-like distance. Candidates are clamped to the
-provided bounds (`minCarry`, `maxCarry`, `maxOffset`) and filtered to unique combinations. The best
-EV wins with deterministic tie-breakers (smaller absolute offset, then carry closest to target).
+For a 150 m shot (plays-like factor `1.04`), lane width 28 m, danger left, and
+MC probabilities `{ water: 0.18, bunker: 0.04, rough: 0.12, ob: 0.02, fairway:
+0.52 }`:
 
-## Fat-side Bias
+- **Conservative** → `Aim +7 m R · Carry 156 m (PL +4%)`
+  - Breakdown: `haz -0.33 · fw +0.31 · dist -0.48`
+- **Neutral** → `Aim +5 m R · Carry 156 m (PL +4%)`
+  - Breakdown: `haz -0.26 · fw +0.26 · dist -0.40`
+- **Aggressive** → `Aim +3 m R · Carry 156 m (PL +4%)`
+  - Breakdown: `haz -0.18 · fw +0.31 · dist -0.34`
 
-The engine determines a dominant hazard side from MC rates (or an explicit override) and requires a
-minimum `fatSideBias_m` buffer in that direction. Danger side is inferred from MC hazard reasons
-when directional metadata is present; otherwise we scan hazard labels for keywords. If no side can
-be inferred confidently, no fat-side bias is applied. Any candidate that fails to clear the buffer
-receives an extra penalty that scales with hazard severity and lateral dispersion, nudging the aim
-further toward the fat side.
+(Values are illustrative; the engine is deterministic and will reproduce them
+for the same inputs.)
 
-## Future Work
+## Tournament-safe gating
 
-This is an intentionally lightweight heuristic for QA tooling. Future revisions may consider
-continuous optimisation, richer MC feature sets, or dynamic grids that respond to course geometry
-and player-specific shot patterns.
+The QA HUD only exposes the “Strategy” row when a session is not marked as
+`tournamentSafe` or once the hole is complete. This mirrors the existing
+plays-like and caddie gating – no pre-shot advice appears during
+`tournament-safe` play.
