@@ -17,6 +17,7 @@ import {
 import { WatchBridge } from '../../../../shared/watch/bridge';
 import type { WatchHUDStateV1, WatchMsg } from '../../../../shared/watch/types';
 import { emitCaddieWatchAcceptTelemetry } from '../../../../shared/telemetry/caddie';
+import { autoQueue } from '../shotsense/AutoCaptureQueue';
 import { shotSense } from '../shotsense/ShotSenseService';
 import { PostHoleReconciler } from '../shotsense/PostHoleReconciler';
 import { setFollowContext } from './context';
@@ -28,6 +29,8 @@ export type UseFollowLoopOptions = {
   playsLikePct?: number | null;
   watchAutoSend?: boolean;
   telemetryEmitter?: ((event: string, payload: Record<string, unknown>) => void) | null;
+  watchPrefillEnabled?: boolean;
+  onWatchPrefill?: (payload: { club: string; undo: () => boolean; token: number }) => void;
 };
 
 export type UseFollowLoopState = {
@@ -91,6 +94,13 @@ export function useFollowLoop(options: UseFollowLoopOptions): UseFollowLoopState
   const telemetryEmitterRef = useRef<UseFollowLoopOptions['telemetryEmitter'] | null>(
     options.telemetryEmitter ?? null,
   );
+  const watchPrefillConfigRef = useRef<{
+    enabled: boolean;
+    callback: UseFollowLoopOptions['onWatchPrefill'] | null;
+  }>({
+    enabled: options.watchPrefillEnabled === true,
+    callback: options.onWatchPrefill ?? null,
+  });
 
   const holesMemo = useMemo(() => options.holes.slice(), [options.holes]);
 
@@ -276,6 +286,13 @@ export function useFollowLoop(options: UseFollowLoopOptions): UseFollowLoopState
   }, [options.telemetryEmitter]);
 
   useEffect(() => {
+    watchPrefillConfigRef.current = {
+      enabled: options.watchPrefillEnabled === true,
+      callback: options.onWatchPrefill ?? null,
+    };
+  }, [options.onWatchPrefill, options.watchPrefillEnabled]);
+
+  useEffect(() => {
     let cancelled = false;
     const autoAdvanceEnabled = autoModeRef.current === 'v2' ? false : undefined;
     FollowStateMachine.create({ roundId: options.roundId, holes: holesMemo, autoAdvanceEnabled }).then((machine) => {
@@ -304,6 +321,39 @@ export function useFollowLoop(options: UseFollowLoopOptions): UseFollowLoopState
     const unsubscribe = WatchBridge.onMessage((message: WatchMsg) => {
       if (message.type === 'CADDIE_ACCEPTED_V1') {
         emitCaddieWatchAcceptTelemetry(telemetryEmitterRef.current, { club: message.club });
+        const config = watchPrefillConfigRef.current;
+        if (config.enabled) {
+          const handle = autoQueue.prefillClub(message.club);
+          if (handle) {
+            const emitter = telemetryEmitterRef.current;
+            if (typeof emitter === 'function') {
+              try {
+                emitter('caddie.accept.prefill', { club: handle.club });
+              } catch {
+                // ignore emitter errors
+              }
+            }
+            const undo = (): boolean => {
+              const cleared = autoQueue.clearPrefill(handle.token);
+              if (cleared) {
+                const undoEmitter = telemetryEmitterRef.current;
+                if (typeof undoEmitter === 'function') {
+                  try {
+                    undoEmitter('caddie.accept.undo', { club: handle.club });
+                  } catch {
+                    // ignore emitter errors
+                  }
+                }
+              }
+              return cleared;
+            };
+            try {
+              config.callback?.({ club: handle.club, undo, token: handle.token });
+            } catch {
+              // ignore callback failures
+            }
+          }
+        }
       }
     });
     return () => {

@@ -36,6 +36,16 @@ type StoredAcceptedShot = {
   finalized: boolean;
 };
 
+type PrefillState = { club: string; token: number };
+
+const sanitizeClub = (value: string | null | undefined): string | null => {
+  if (typeof value !== 'string') {
+    return null;
+  }
+  const trimmed = value.trim();
+  return trimmed ? trimmed : null;
+};
+
 export class AutoCaptureQueue {
   private current: AutoDetectedShot | undefined;
   private listeners: Listener[] = [];
@@ -43,6 +53,9 @@ export class AutoCaptureQueue {
   private ttlTimer: ReturnType<typeof setTimeout> | null = null;
   private readonly acceptedByHole = new Map<number, StoredAcceptedShot[]>();
   private readonly reviewedHoles = new Set<number>();
+  private watchPrefill: PrefillState | null = null;
+  private currentPrefill: PrefillState | null = null;
+  private nextPrefillToken = 1;
 
   on(listener: Listener): () => void {
     this.listeners.push(listener);
@@ -66,6 +79,50 @@ export class AutoCaptureQueue {
     });
   }
 
+  prefillClub(club: string | null | undefined): PrefillState | null {
+    const sanitized = sanitizeClub(club);
+    if (!sanitized) {
+      return null;
+    }
+    const token = this.nextPrefillToken++;
+    const state: PrefillState = { club: sanitized, token };
+    this.watchPrefill = state;
+    this.currentPrefill = this.current ? { ...state } : null;
+    return state;
+  }
+
+  clearPrefill(token: number | null | undefined): boolean {
+    const normalized = Number(token);
+    if (!Number.isFinite(normalized) || normalized <= 0) {
+      return false;
+    }
+    const matchesWatch = this.watchPrefill?.token === normalized;
+    const matchesCurrent = this.currentPrefill?.token === normalized;
+    if (!matchesWatch && !matchesCurrent) {
+      return false;
+    }
+    if (matchesWatch) {
+      this.watchPrefill = null;
+    }
+    if (matchesCurrent) {
+      this.currentPrefill = null;
+    }
+    return true;
+  }
+
+  private consumePrefill(token: number | null | undefined): void {
+    const normalized = Number(token);
+    if (!Number.isFinite(normalized) || normalized <= 0) {
+      return;
+    }
+    if (this.watchPrefill?.token === normalized) {
+      this.watchPrefill = null;
+    }
+    if (this.currentPrefill?.token === normalized) {
+      this.currentPrefill = null;
+    }
+  }
+
   enqueue(shot: Omit<AutoDetectedShot, 'source'>): void {
     if (shot.ts - this.lastAcceptedShotTs < DEDUPE_MS) {
       return;
@@ -73,6 +130,7 @@ export class AutoCaptureQueue {
     this.lastAcceptedShotTs = shot.ts;
     const currentShot: AutoDetectedShot = { ...shot, source: 'auto' };
     this.current = currentShot;
+    this.currentPrefill = this.watchPrefill ? { ...this.watchPrefill } : null;
     if (this.ttlTimer) {
       clearTimeout(this.ttlTimer);
     }
@@ -90,11 +148,16 @@ export class AutoCaptureQueue {
     }
     const nextShot: AutoDetectedShot = { ...this.current, ...patch, source: 'auto' };
     const start = nextShot.start;
+    const patchClub = sanitizeClub((patch as { club?: string } | undefined)?.club ?? null) ?? undefined;
+    const fallbackClub =
+      patchClub ?? this.currentPrefill?.club ?? this.watchPrefill?.club ?? undefined;
+    const appliedPrefillToken =
+      !patchClub && fallbackClub ? this.currentPrefill?.token ?? this.watchPrefill?.token ?? null : null;
     const accepted: AcceptedAutoShot = {
       id: ensureId(),
       holeId: nextShot.holeId,
       ts: nextShot.ts,
-      club: (patch as { club?: string } | undefined)?.club,
+      club: fallbackClub,
       start: start ? { lat: start.lat, lon: start.lon, ts: nextShot.ts } : undefined,
       lie: nextShot.lie,
       playsLikePct:
@@ -107,6 +170,10 @@ export class AutoCaptureQueue {
     bucket.push({ shot: accepted, finalized: false });
     this.acceptedByHole.set(accepted.holeId, bucket);
     this.reviewedHoles.delete(accepted.holeId);
+    if (appliedPrefillToken) {
+      this.consumePrefill(appliedPrefillToken);
+    }
+    this.currentPrefill = null;
     this.emit({ type: 'confirm', shot: nextShot });
     this.clear();
   }
@@ -120,15 +187,16 @@ export class AutoCaptureQueue {
   }
 
   clear(): void {
-    if (!this.current) {
-      return;
-    }
+    const hadCurrent = Boolean(this.current);
     this.current = undefined;
+    this.currentPrefill = null;
     if (this.ttlTimer) {
       clearTimeout(this.ttlTimer);
       this.ttlTimer = null;
     }
-    this.emit({ type: 'clear' });
+    if (hadCurrent) {
+      this.emit({ type: 'clear' });
+    }
   }
 
   getAcceptedShots(holeId: number): AcceptedAutoShot[] {
