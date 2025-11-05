@@ -178,23 +178,41 @@ export async function pushHoleScore(args: {
         ? args.scoresHash.trim()
         : null;
 
-    const baseSelect = c
-      .from('event_scores')
-      .select('round_revision, scores_hash')
-      .match({ event_id: args.eventId, user_id: userId, hole_no: args.hole });
+    const baseTable = c.from('event_scores');
+    const selectable =
+      typeof (baseTable as { select?: (cols: string) => any }).select === 'function'
+        ? (baseTable as { select: (cols: string) => any }).select.call(baseTable, 'round_revision, scores_hash')
+        : baseTable;
+
+    const filters = { event_id: args.eventId, user_id: userId, hole_no: args.hole };
+    let filtered: any = selectable;
+    if (typeof filtered?.match === 'function') {
+      filtered = filtered.match(filters);
+    } else if (typeof filtered?.eq === 'function') {
+      filtered = filtered.eq('event_id', args.eventId);
+      if (typeof filtered?.eq === 'function') {
+        filtered = filtered.eq('user_id', userId);
+      }
+      if (typeof filtered?.eq === 'function') {
+        filtered = filtered.eq('hole_no', args.hole);
+      }
+    }
 
     let selectData: unknown = null;
     let selectError: unknown = null;
 
-    if (typeof (baseSelect as { maybeSingle?: () => Promise<any> }).maybeSingle === 'function') {
-      const { data, error } = await (baseSelect as { maybeSingle: () => Promise<any> }).maybeSingle();
+    if (typeof filtered?.maybeSingle === 'function') {
+      const { data, error } = await filtered.maybeSingle();
       selectData = data ?? null;
       selectError = error ?? null;
-    } else {
-      const fallbackQuery = baseSelect as { limit?: (count: number) => Promise<any> };
-      const result = typeof fallbackQuery.limit === 'function' ? await fallbackQuery.limit(1) : { data: null, error: null };
-      selectData = Array.isArray(result?.data) ? result.data[0] ?? null : result?.data ?? null;
-      selectError = result?.error ?? null;
+    } else if (typeof filtered?.single === 'function') {
+      const { data, error } = await filtered.single();
+      selectData = data ?? null;
+      selectError = error ?? null;
+    } else if (typeof filtered?.limit === 'function') {
+      const { data, error } = await filtered.limit(1);
+      selectData = Array.isArray(data) ? data[0] ?? null : data ?? null;
+      selectError = error ?? null;
     }
 
     if (selectError) {
