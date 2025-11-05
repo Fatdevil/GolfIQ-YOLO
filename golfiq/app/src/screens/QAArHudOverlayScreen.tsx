@@ -217,7 +217,12 @@ import { caddieTipToText, advicesToText } from '../../../../shared/caddie/text';
 import { withRiskProfile, type CaddieHudVM } from '../../../../shared/caddie/selectors';
 import { speak as speakTip, stop as stopSpeech } from '../../../../shared/tts/speak';
 import { breakHint } from '../../../../shared/greeniq/break';
-import { evaluatePutt, type PuttEval } from '../../../../shared/greeniq/putt_eval';
+import {
+  evaluatePutt,
+  evalPace,
+  evalStartLine,
+  type PuttEval,
+} from '../../../../shared/greeniq/putt_eval';
 import {
   puttFeedbackVisible as computePuttFeedbackVisible,
   puttOverrideEnabled,
@@ -4550,6 +4555,46 @@ const QAArHudOverlayScreen: React.FC = () => {
         return 'unknown';
     }
   }, [puttEval?.paceClass]);
+  const puttStartLineEval = useMemo(() => {
+    const signedAngle = puttEval?.signedAngleDeg;
+    if (!Number.isFinite(signedAngle ?? Number.NaN)) {
+      return null;
+    }
+    return evalStartLine(0, signedAngle ?? 0);
+  }, [puttEval?.signedAngleDeg]);
+  const puttPaceEval = useMemo(() => {
+    const need = puttEval?.holeDist_m;
+    const carry = puttEval?.endDist_m;
+    if (!Number.isFinite(need ?? Number.NaN) || !Number.isFinite(carry ?? Number.NaN)) {
+      return null;
+    }
+    return evalPace(need ?? 0, carry ?? 0);
+  }, [puttEval?.endDist_m, puttEval?.holeDist_m]);
+  const puttQuickFeedbackBody = useMemo(() => {
+    if (!puttStartLineEval || !puttPaceEval) {
+      return null;
+    }
+
+    const formatSigned = (value: number, unit: 'deg' | 'm'): string => {
+      const magnitude = Math.abs(value);
+      const sign = value > 0 ? '+' : value < 0 ? '−' : '±';
+      if (unit === 'deg') {
+        return `${sign}${magnitude.toFixed(1)}°`;
+      }
+      return `${sign}${magnitude.toFixed(2)} m`;
+    };
+
+    const startLineLabel = `${puttStartLineEval.classification} (${formatSigned(
+      puttStartLineEval.deltaDeg,
+      'deg',
+    )})`;
+    const paceLabel = `${puttPaceEval.classification.replace('_', ' ')} (${formatSigned(
+      puttPaceEval.delta_m,
+      'm',
+    )})`;
+
+    return `start-line ${startLineLabel}, pace ${paceLabel}`;
+  }, [puttPaceEval, puttStartLineEval]);
   const puttLateralMiss = useMemo(() => {
     if (puttEval?.lateralMiss_cm === undefined) {
       return null;
@@ -7659,6 +7704,12 @@ const QAArHudOverlayScreen: React.FC = () => {
                   </View>
                   {puttEval && puttFeedbackVisible ? (
                     <>
+                      {puttQuickFeedbackBody ? (
+                        <View style={styles.puttQuickFeedbackCard}>
+                          <Text style={styles.puttQuickFeedbackTitle}>Putt feedback</Text>
+                          <Text style={styles.puttQuickFeedbackText}>{puttQuickFeedbackBody}</Text>
+                        </View>
+                      ) : null}
                       <Text style={styles.greeniqMetric}>
                         Start-line: {puttAngleSignedLabel ?? `${puttEval.angleDeg.toFixed(1)}°`} ({puttAngleLabel})
                         {puttAngleThresholdHint ? ` · ${puttAngleThresholdHint}` : ''}
@@ -8761,6 +8812,23 @@ const styles = StyleSheet.create({
   greeniqMetric: {
     color: '#e2e8f0',
     fontSize: 14,
+  },
+  puttQuickFeedbackCard: {
+    backgroundColor: '#111827',
+    borderRadius: 10,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: '#1f2937',
+    gap: 4,
+  },
+  puttQuickFeedbackTitle: {
+    color: '#f8fafc',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  puttQuickFeedbackText: {
+    color: '#e2e8f0',
+    fontSize: 13,
   },
   greeniqMeta: {
     color: '#94a3b8',
