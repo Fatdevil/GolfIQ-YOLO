@@ -24,6 +24,8 @@ export type ScoreRow = {
   net: number;
   to_par: number;
   ts: string;
+  round_revision?: number | null;
+  scores_hash?: string | null;
 };
 
 export type LeaderboardRow = {

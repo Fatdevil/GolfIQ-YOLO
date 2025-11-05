@@ -4,6 +4,7 @@ import { appendHoleAccuracy, computeConfusion } from '../../../../shared/telemet
 import { recordAutoReconcile } from '../../../../shared/telemetry/round';
 import { autoQueue, type AcceptedAutoShot } from './AutoCaptureQueue';
 import { pushHoleScore } from '../../../../shared/events/service';
+import { computeRoundRevision, computeScoresHash } from '../../../../shared/events/revision';
 import { getEventContext } from '../../../../shared/events/state';
 import { recordScoreFailed, recordScoreUpserted } from '../../../../shared/events/telemetry';
 
@@ -273,12 +274,16 @@ export const PostHoleReconciler = {
               : Math.max(0, holeState?.shots?.length ?? 0);
           if (activeEvent && participant && attachedRoundId === roundId && gross > 0) {
             try {
+              const roundRevision = computeRoundRevision(roundState ?? null);
+              const scoresHash = computeScoresHash(roundState ?? null);
               await pushHoleScore({
                 eventId: activeEvent.id,
                 roundId,
                 hole: holeNumber,
                 gross,
                 hcpIndex: participant.hcp_index ?? null,
+                roundRevision,
+                scoresHash,
               });
               recordScoreUpserted(activeEvent.id, participant.user_id, holeNumber, gross);
             } catch (pushError) {

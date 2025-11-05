@@ -1,4 +1,10 @@
 import { ensureClient } from '../supabase/client';
+import {
+  enqueueEventResync,
+  observeSyncDrift as observeSyncDriftMetric,
+  observeSyncError,
+  observeSyncSuccess,
+} from './resync';
 import type { Event, Participant, ScoreRow, UUID } from './types';
 
 // --- helpers ---
@@ -10,6 +16,72 @@ async function requireClient() {
 
 function nowIso() {
   return new Date().toISOString();
+}
+
+type RoundResyncJob = {
+  type: 'round_resync';
+  eventId: UUID;
+  userId: UUID | string;
+  reason?: string;
+};
+
+type SyncDriftObservation = {
+  eventId: UUID;
+  userId: UUID | string | null;
+  hole: number;
+  prevRevision: number | null;
+  localRevision: number | null;
+  prevHash: string | null;
+  localHash: string | null;
+};
+
+type SyncHealthObservation = SyncDriftObservation & {
+  status: 'ok' | 'behind' | 'error';
+  error?: unknown;
+};
+
+type SyncIntegrations = {
+  enqueueSync?: (job: RoundResyncJob) => void;
+  observeSyncHealth?: (payload: SyncHealthObservation) => void;
+  observeSyncDrift?: (payload: SyncDriftObservation) => void;
+};
+
+const defaultIntegrations: Required<SyncIntegrations> = {
+  enqueueSync: (job) => {
+    if (job.type === 'round_resync') {
+      enqueueEventResync(job.eventId, job.reason ?? `round resync for ${job.userId}`);
+    }
+  },
+  observeSyncHealth: (payload) => {
+    if (payload.status === 'ok') {
+      observeSyncSuccess();
+      return;
+    }
+    if (payload.status === 'behind') {
+      observeSyncDriftMetric(payload.eventId, {
+        localRevision: payload.localRevision ?? undefined,
+        remoteRevision: payload.prevRevision ?? undefined,
+        localHash: payload.localHash,
+        remoteHash: payload.prevHash,
+      });
+      return;
+    }
+    observeSyncError(payload.eventId, payload.error);
+  },
+  observeSyncDrift: (payload) => {
+    observeSyncDriftMetric(payload.eventId, {
+      localRevision: payload.localRevision ?? undefined,
+      remoteRevision: payload.prevRevision ?? undefined,
+      localHash: payload.localHash,
+      remoteHash: payload.prevHash,
+    });
+  },
+};
+
+let activeIntegrations: Required<SyncIntegrations> = { ...defaultIntegrations };
+
+export function __setEventSyncIntegrationsForTests(overrides: Partial<SyncIntegrations> | null): void {
+  activeIntegrations = { ...defaultIntegrations, ...(overrides ?? {}) };
 }
 
 // Map round -> participant.user_id for this event (never confuse round_id with user_id)
@@ -83,29 +155,170 @@ export async function pushHoleScore(args: {
   hole: number;
   gross: number;
   hcpIndex?: number | null;
-}) {
-  const c = await requireClient();
-  const userId = await resolveUserIdForRound(args.eventId, args.roundId);
-  if (!userId) throw new Error('no participant mapping for round');
+  roundRevision?: number | null;
+  scoresHash?: string | null;
+}): Promise<void> {
+  let userId: string | null = null;
+  let localRevision: number | null = null;
+  let localHash: string | null = null;
+  let prevRevision: number | null = null;
+  let prevHash: string | null = null;
+  try {
+    const c = await requireClient();
+    userId = await resolveUserIdForRound(args.eventId, args.roundId);
+    if (!userId) {
+      throw new Error('no participant mapping for round');
+    }
 
-  const net = args.gross ?? 0;
-  // NOTE: Handicap adjustment is applied at aggregate time (not per hole) to avoid 18× rounding.
-  const to_par = (args.gross ?? 0) - 4;
+    localRevision = Number.isFinite(args.roundRevision as number)
+      ? Math.max(0, Math.floor(Number(args.roundRevision)))
+      : null;
+    localHash =
+      typeof args.scoresHash === 'string' && args.scoresHash.trim()
+        ? args.scoresHash.trim()
+        : null;
 
-  const row: Omit<ScoreRow, 'ts'> & { ts: string } = {
-    event_id: args.eventId,
-    user_id: userId,
-    hole_no: args.hole,
-    gross: args.gross,
-    net,
-    to_par,
-    ts: nowIso(),
-  } as any;
+    const baseTable = c.from('event_scores');
+    const selectable =
+      typeof (baseTable as { select?: (cols: string) => any }).select === 'function'
+        ? (baseTable as { select: (cols: string) => any }).select.call(baseTable, 'round_revision, scores_hash')
+        : baseTable;
 
-  const { error } = await c
-    .from('event_scores')
-    .upsert(row, { onConflict: 'event_id,user_id,hole_no' });
-  if (error) throw new Error('pushHoleScore failed');
+    const filters = { event_id: args.eventId, user_id: userId, hole_no: args.hole };
+    let filtered: any = selectable;
+    if (typeof filtered?.match === 'function') {
+      filtered = filtered.match(filters);
+    } else if (typeof filtered?.eq === 'function') {
+      filtered = filtered.eq('event_id', args.eventId);
+      if (typeof filtered?.eq === 'function') {
+        filtered = filtered.eq('user_id', userId);
+      }
+      if (typeof filtered?.eq === 'function') {
+        filtered = filtered.eq('hole_no', args.hole);
+      }
+    }
+
+    let selectData: unknown = null;
+    let selectError: unknown = null;
+
+    if (typeof filtered?.maybeSingle === 'function') {
+      const { data, error } = await filtered.maybeSingle();
+      selectData = data ?? null;
+      selectError = error ?? null;
+    } else if (typeof filtered?.single === 'function') {
+      const { data, error } = await filtered.single();
+      selectData = data ?? null;
+      selectError = error ?? null;
+    } else if (typeof filtered?.limit === 'function') {
+      const { data, error } = await filtered.limit(1);
+      selectData = Array.isArray(data) ? data[0] ?? null : data ?? null;
+      selectError = error ?? null;
+    }
+
+    if (selectError) {
+      throw selectError instanceof Error ? selectError : new Error('pushHoleScore select failed');
+    }
+
+    const prevRow = selectData && typeof selectData === 'object' ? (selectData as Partial<ScoreRow>) : null;
+
+    const rawPrevRevision = prevRow ? (prevRow as Record<string, unknown>).round_revision : null;
+    if (typeof rawPrevRevision === 'number') {
+      prevRevision = rawPrevRevision;
+    } else if (typeof rawPrevRevision === 'string' && rawPrevRevision.trim()) {
+      const parsed = Number(rawPrevRevision);
+      prevRevision = Number.isFinite(parsed) ? Math.floor(parsed) : null;
+    } else {
+      prevRevision = null;
+    }
+
+    const rawPrevHash = prevRow ? (prevRow as Record<string, unknown>).scores_hash : null;
+    prevHash = typeof rawPrevHash === 'string' && rawPrevHash.trim() ? rawPrevHash.trim() : null;
+
+    const revisionDrift =
+      prevRevision !== null && localRevision !== null && prevRevision !== localRevision;
+    const hashDrift = Boolean(prevHash && localHash && prevHash !== localHash);
+    const remoteAhead =
+      prevRevision !== null && localRevision !== null && prevRevision > localRevision;
+
+    if (remoteAhead) {
+      activeIntegrations.enqueueSync?.({
+        type: 'round_resync',
+        eventId: args.eventId,
+        userId,
+        reason: 'remote_ahead',
+      });
+      activeIntegrations.observeSyncHealth?.({
+        status: 'behind',
+        eventId: args.eventId,
+        userId,
+        hole: args.hole,
+        prevRevision,
+        localRevision,
+        prevHash,
+        localHash,
+      });
+      return;
+    }
+
+    const row: Partial<ScoreRow> & { ts: string } = {
+      event_id: args.eventId,
+      user_id: userId,
+      hole_no: args.hole,
+      gross: args.gross ?? 0,
+      net: args.gross ?? 0,
+      to_par: (args.gross ?? 0) - 4,
+      ts: nowIso(),
+      round_revision: localRevision,
+      scores_hash: localHash,
+    };
+
+    const { error: upsertError } = await c
+      .from('event_scores')
+      .upsert(row, { onConflict: 'event_id,user_id,hole_no', returning: 'minimal' });
+
+    if (upsertError) {
+      throw upsertError instanceof Error ? upsertError : new Error('pushHoleScore upsert failed');
+    }
+
+    if (revisionDrift || hashDrift) {
+      activeIntegrations.observeSyncDrift?.({
+        eventId: args.eventId,
+        userId,
+        hole: args.hole,
+        prevRevision,
+        localRevision,
+        prevHash,
+        localHash,
+      });
+    }
+
+    activeIntegrations.observeSyncHealth?.({
+      status: 'ok',
+      eventId: args.eventId,
+      userId,
+      hole: args.hole,
+      prevRevision,
+      localRevision,
+      prevHash,
+      localHash,
+    });
+  } catch (error) {
+    activeIntegrations.observeSyncHealth?.({
+      status: 'error',
+      eventId: args.eventId,
+      userId,
+      hole: args.hole,
+      prevRevision,
+      localRevision,
+      prevHash,
+      localHash,
+      error,
+    });
+    if (error instanceof Error) {
+      throw error;
+    }
+    throw new Error('pushHoleScore failed');
+  }
 }
 
 // Optional: simple polling subscribe (avoid realtime complexity in v1)
