@@ -6,7 +6,7 @@ import RunsPage from "./pages/Runs";
 import RunDetailPage from "./pages/RunDetail";
 import DeviceDashboardPage from "./pages/DeviceDashboard";
 import FieldRunsPage from "./pages/FieldRuns";
-import AccuracyBoardPage from "./pages/AccuracyBoard";
+import AccuracyDashboardPage from "./pages/accuracy";
 import FeedbackAdminPage from "./pages/FeedbackAdmin";
 import ReplayAnalyzerPage from "./pages/ReplayAnalyzer";
 import Nav from "./components/Nav";
@@ -29,7 +29,7 @@ export default function App() {
           <Route path="/event/:id" element={<EventLeaderboardPage />} />
           <Route path="/field-runs" element={<FieldRunsPage />} />
           <Route path="/device-dashboard" element={<DeviceDashboardPage />} />
-          <Route path="/accuracy" element={<AccuracyBoardPage />} />
+          <Route path="/accuracy" element={<AccuracyDashboardPage />} />
           <Route path="/admin/feedback" element={<FeedbackAdminPage />} />
           {qaReplayEnabled && <Route path="/qa/replay" element={<ReplayAnalyzerPage />} />}
         </Routes>
