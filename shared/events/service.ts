@@ -1,9 +1,9 @@
-import { getSupabase } from '../supabase/client';
+import { ensureClient } from '../supabase/client';
 import type { Event, Participant, ScoreRow, UUID } from './types';
 
 // --- helpers ---
 async function requireClient() {
-  const c = await getSupabase();
+  const c = await ensureClient();
   if (!c) throw new Error('Supabase not configured');
   return c;
 }

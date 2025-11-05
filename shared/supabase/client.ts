@@ -1,13 +1,7 @@
 export type SupabaseClientLike = {
-  from: (table: string) => any;
-  auth?: { getUser?: () => Promise<{ data?: { user?: { id?: string } } }> };
+  from: (t: string) => any;
+  auth?: { getUser?: () => Promise<any> };
 };
-
-// For tests we can inject a stubbed client.
-let injected: SupabaseClientLike | null = null;
-export function setSupabaseClientForTests(c: SupabaseClientLike | null) {
-  injected = c;
-}
 
 const URL_KEYS = [
   'EXPO_PUBLIC_SUPABASE_URL',
@@ -20,26 +14,50 @@ const KEY_KEYS = [
   'VITE_SUPABASE_ANON_KEY',
 ] as const;
 
-function envPick(keys: readonly string[]) {
+function firstTruthy(keys: readonly string[]): string {
   if (typeof process === 'undefined' || !('env' in process)) return '';
   const env = (process as any).env as Record<string, string | undefined>;
-  for (const k of keys) if (env[k]) return env[k]!;
+  for (const key of keys) {
+    const value = env[key];
+    if (value) return value;
+  }
   return '';
 }
 
 let cached: SupabaseClientLike | null = null;
+let override: SupabaseClientLike | null = null;
 
-export async function getSupabase(): Promise<SupabaseClientLike | null> {
-  if (injected) return injected;
+export function setSupabaseClientOverride(c: SupabaseClientLike | null) {
+  override = c;
+}
+
+export async function loadSupabaseModule(): Promise<typeof import('@supabase/supabase-js') | null> {
+  try {
+    return await import('@supabase/supabase-js');
+  } catch {
+    return null;
+  }
+}
+
+function isEnabled(): boolean {
+  return !!(firstTruthy(URL_KEYS) && firstTruthy(KEY_KEYS));
+}
+
+export async function ensureClient(): Promise<SupabaseClientLike | null> {
+  if (override) return override;
   if (cached) return cached;
-  const url = envPick(URL_KEYS);
-  const key = envPick(KEY_KEYS);
+  if (!isEnabled()) return null;
+
+  const mod = await loadSupabaseModule();
+  if (!mod) return null;
+  const url = firstTruthy(URL_KEYS);
+  const key = firstTruthy(KEY_KEYS);
   if (!url || !key) return null;
-  const mod = await import('@supabase/supabase-js');
+
   cached = mod.createClient(url, key) as unknown as SupabaseClientLike;
   return cached;
 }
 
 export function isSupabaseConfigured(): boolean {
-  return !!(envPick(URL_KEYS) && envPick(KEY_KEYS));
+  return isEnabled();
 }

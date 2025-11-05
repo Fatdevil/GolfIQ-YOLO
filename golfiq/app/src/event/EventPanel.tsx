@@ -17,7 +17,7 @@ import {
   recordEventCreated,
   recordEventJoined,
 } from '../../../../shared/events/telemetry';
-import { getSupabase } from '../../../../shared/supabase/client';
+import { ensureClient } from '../../../../shared/supabase/client';
 import { getActiveRound, subscribe as subscribeToRound } from '../../../../shared/round/round_store';
 import type { Round } from '../../../../shared/round/round_types';
 
@@ -56,7 +56,7 @@ const EventPanel: React.FC = () => {
     let active = true;
     (async () => {
       try {
-        const client = await getSupabase();
+        const client = await ensureClient();
         const authUser = await client?.auth?.getUser?.();
         const id = authUser?.data?.user?.id;
         if (active && id && !userId) {

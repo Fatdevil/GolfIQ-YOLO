@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { pollScores, pushHoleScore } from '../../../shared/events/service';
 import type { ScoreRow } from '../../../shared/events/types';
-import { setSupabaseClientForTests } from '../../../shared/supabase/client';
+import { setSupabaseClientOverride } from '../../../shared/supabase/client';
 
 type ParticipantRow = {
   event_id: string;
@@ -101,11 +101,11 @@ describe('events service', () => {
       to_par: 0,
       ts: '2025-01-01T10:00:00Z',
     });
-    setSupabaseClientForTests(supabaseStub as any);
+    setSupabaseClientOverride(supabaseStub as any);
   });
 
   afterEach(() => {
-    setSupabaseClientForTests(null);
+    setSupabaseClientOverride(null);
     vi.useRealTimers();
   });
 

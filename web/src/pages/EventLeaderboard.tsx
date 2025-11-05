@@ -5,7 +5,7 @@ import { aggregateLeaderboard } from "../../../shared/events/scoring";
 import type { Event, LeaderboardRow, Participant, ScoreRow } from "../../../shared/events/types";
 import { listParticipants, pollScores } from "../../../shared/events/service";
 import { recordLeaderboardViewedWeb } from "../../../shared/events/telemetry";
-import { getSupabase, isSupabaseConfigured } from "../../../shared/supabase/client";
+import { ensureClient, isSupabaseConfigured } from "../../../shared/supabase/client";
 
 export default function EventLeaderboardPage() {
   const { id } = useParams<{ id: string }>();
@@ -31,7 +31,7 @@ export default function EventLeaderboardPage() {
         setLoading(false);
         return;
       }
-      const client = await getSupabase();
+      const client = await ensureClient();
       if (!client) {
         setConfigured(false);
         setLoading(false);
