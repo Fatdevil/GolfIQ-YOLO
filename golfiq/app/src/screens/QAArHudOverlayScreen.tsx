@@ -117,6 +117,7 @@ import { buildShotFeedback, type FeedbackOutput } from '../../../../shared/plays
 import { exportAccuracyNdjson } from '../../../../shared/telemetry/shotsenseMetrics';
 import { PostHoleReconciler, collectAutoCandidates } from '../shotsense/PostHoleReconciler';
 import EventPanel from '../event/EventPanel';
+import LearningPanel from '../features/learning/LearningPanel';
 import {
   createLandingHeuristics,
   type LandingProposal,
@@ -129,6 +130,8 @@ import {
   saveLearnedDispersion,
   type DispersionSnapshot,
 } from '../../../../shared/caddie/player_model';
+import { getState as getLearningState } from '../../../../shared/learning/store';
+import type { Suggestion } from '../../../../shared/learning/types';
 
 type BundleQaGlobal = typeof globalThis & {
   ARHUD_BUNDLE_BASE?: string;
@@ -199,8 +202,9 @@ import {
   type StrategyInput,
   type RiskMode as CaddieRiskMode,
   type ShotPlan as CaddieShotPlan,
+  type StrategyRiskOverrides,
 } from '../../../../shared/caddie/strategy';
-import type { RiskProfile } from '../../../../shared/caddie/strategy_profiles';
+import { resolveRiskBiasMultipliers, type RiskProfile } from '../../../../shared/caddie/strategy_profiles';
 import type { TrainingFocus } from '../../../../shared/training/types';
 import {
   defaultCoachStyle,
@@ -231,6 +235,7 @@ import {
 import {
   emitCaddiePlaysLikeTelemetry,
   emitCaddieStrategyTelemetry,
+  emitLearningApplyTelemetry,
   isCaddieTelemetryEnabled,
   type TelemetryEmitter,
 } from '../../../../shared/telemetry/caddie';
@@ -2753,6 +2758,10 @@ const QAArHudOverlayScreen: React.FC = () => {
   const [riskReasonsOpen, setRiskReasonsOpen] = useState(false);
   const lastSpokenPlanRef = useRef<string | null>(null);
   const [learningActive, setLearningActive] = useState(false);
+  const [learningPanelVisible, setLearningPanelVisible] = useState(false);
+  const [learningSuggestions, setLearningSuggestions] = useState<Suggestion[]>([]);
+  const [learningApplied, setLearningApplied] = useState(false);
+  const [learningOverrides, setLearningOverrides] = useState<StrategyRiskOverrides | null>(null);
   const [coachProfile, setCoachProfile] = useState<PlayerProfile | null>(null);
   const [coachProfileId, setCoachProfileId] = useState<string | null>(null);
   const lastProfileUpdateShotRef = useRef<string | null>(null);
@@ -4148,7 +4157,11 @@ const QAArHudOverlayScreen: React.FC = () => {
       dangerSide,
     };
 
-    const decision = chooseStrategy(input);
+    const decision = chooseStrategy(input, {
+      riskProfile: strategyProfile,
+      clubId: isClubIdValue(clubValue) ? clubValue : null,
+      riskOverrides: learningApplied ? learningOverrides : null,
+    });
     return { decision, input, hazard, dispersion, playsLikeFactor: factorCandidate };
   }, [
     caddiePlan?.club,
@@ -4160,6 +4173,8 @@ const QAArHudOverlayScreen: React.FC = () => {
     shotSession?.baseDistance,
     shotSession?.plan?.clubSuggested,
     strategyProfile,
+    learningApplied,
+    learningOverrides,
   ]);
   const strategyAllowed = !tournamentSafe || holeComplete;
   const strategyDisplay = useMemo(() => {
@@ -5478,6 +5493,155 @@ const QAArHudOverlayScreen: React.FC = () => {
   useEffect(() => {
     telemetryRef.current = resolveTelemetryEmitter();
   }, [qaEnabled]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const loadSuggestions = async () => {
+      try {
+        const state = await getLearningState();
+        if (cancelled) {
+          return;
+        }
+        const rows: Suggestion[] = [];
+        const map = state?.suggestions ?? {};
+        for (const clubs of Object.values(map)) {
+          if (!clubs || typeof clubs !== 'object') {
+            continue;
+          }
+          for (const value of Object.values(clubs)) {
+            if (!value || typeof value !== 'object') {
+              continue;
+            }
+            rows.push(value as Suggestion);
+          }
+        }
+        rows.sort((a, b) => b.sampleSize - a.sampleSize || a.clubId.localeCompare(b.clubId));
+        setLearningSuggestions(rows.filter((entry) => entry.sampleSize >= 50));
+      } catch {
+        if (!cancelled) {
+          setLearningSuggestions([]);
+        }
+      }
+    };
+    void loadSuggestions();
+    return () => {
+      cancelled = true;
+    };
+  }, [learningPanelVisible]);
+
+  const computeLearningOverrides = useCallback(
+    (entries: Suggestion[]): StrategyRiskOverrides | null => {
+      if (!entries.length) {
+        return null;
+      }
+      const overrides: StrategyRiskOverrides = {};
+      for (const suggestion of entries) {
+        if (!overrides[suggestion.profile]) {
+          overrides[suggestion.profile] = { byClub: {} };
+        }
+        const bucket = overrides[suggestion.profile]!;
+        if (!bucket.byClub) {
+          bucket.byClub = {};
+        }
+        bucket.byClub[suggestion.clubId] = {
+          hazardDelta: suggestion.hazardDelta,
+          distanceRewardDelta: suggestion.distanceDelta,
+        };
+      }
+      return Object.keys(overrides).length ? overrides : null;
+    },
+    [],
+  );
+
+  const handleLearningApplyToggle = useCallback(
+    (value: boolean) => {
+      if (!value) {
+        setLearningApplied(false);
+        setLearningOverrides(null);
+        return;
+      }
+      if (!learningSuggestions.length) {
+        setLearningApplied(false);
+        setLearningOverrides(null);
+        return;
+      }
+      const overrides = computeLearningOverrides(learningSuggestions);
+      setLearningOverrides(overrides);
+      const applied = Boolean(overrides);
+      setLearningApplied(applied);
+      if (!overrides) {
+        return;
+      }
+      for (const suggestion of learningSuggestions) {
+        const base = resolveRiskBiasMultipliers(suggestion.profile, null);
+        const after = resolveRiskBiasMultipliers(suggestion.profile, {
+          hazardDelta: suggestion.hazardDelta,
+          distanceRewardDelta: suggestion.distanceDelta,
+        });
+        emitLearningApplyTelemetry(telemetryRef.current, {
+          profile: suggestion.profile,
+          club: suggestion.clubId,
+          delta: suggestion.delta,
+          sampleN: suggestion.sampleSize,
+          before: base.hazard,
+          after: after.hazard,
+        });
+      }
+    },
+    [computeLearningOverrides, learningSuggestions],
+  );
+
+  const handleLearningReset = useCallback(
+    (profile: RiskProfile, clubId: string) => {
+      setLearningOverrides((prev) => {
+        if (!prev) {
+          return prev;
+        }
+        const entry = prev[profile];
+        const override = entry?.byClub?.[clubId] ?? null;
+        if (!entry || !override || !entry.byClub) {
+          return prev;
+        }
+        const next: StrategyRiskOverrides = {
+          ...prev,
+          [profile]: {
+            ...entry,
+            byClub: { ...entry.byClub },
+          },
+        };
+        delete next[profile]!.byClub![clubId];
+        if (next[profile]!.byClub && !Object.keys(next[profile]!.byClub!).length && !next[profile]!.default) {
+          delete next[profile];
+        }
+        const clean = Object.keys(next).length ? next : null;
+        const suggestion = learningSuggestions.find(
+          (item) => item.profile === profile && item.clubId === clubId,
+        );
+        const before = resolveRiskBiasMultipliers(profile, override ?? undefined);
+        const base = resolveRiskBiasMultipliers(profile, null);
+        emitLearningApplyTelemetry(telemetryRef.current, {
+          profile,
+          club: clubId,
+          delta: 0,
+          sampleN: suggestion?.sampleSize ?? 0,
+          before: before.hazard,
+          after: base.hazard,
+        });
+        setLearningApplied(Boolean(clean));
+        return clean;
+      });
+    },
+    [learningSuggestions],
+  );
+
+  const learningSuggestionCount = learningSuggestions.length;
+
+  useEffect(() => {
+    if (!learningSuggestionCount && learningApplied) {
+      setLearningApplied(false);
+      setLearningOverrides(null);
+    }
+  }, [learningSuggestionCount, learningApplied]);
 
   useEffect(() => {
     if (qaEnabled && !tournamentSafe) {
@@ -7095,13 +7259,48 @@ const QAArHudOverlayScreen: React.FC = () => {
         ) : null}
         <View style={[styles.caddieContainer, styles.sectionTitleSpacing]}>
           <View style={styles.caddieHeader}>
-            <Text style={styles.sectionTitle}>Caddie</Text>
+            <View style={styles.caddieHeaderLeft}>
+              <Text style={styles.sectionTitle}>Caddie</Text>
+              {qaEnabled ? (
+                <TouchableOpacity
+                  onPress={() => setLearningPanelVisible(true)}
+                  style={[
+                    styles.caddieLearningButton,
+                    learningApplied || learningPanelVisible ? styles.caddieLearningButtonActive : null,
+                  ]}
+                  accessibilityRole="button"
+                >
+                  <Text
+                    style={[
+                      styles.caddieLearningButtonText,
+                      learningApplied || learningPanelVisible ? styles.caddieLearningButtonTextActive : null,
+                    ]}
+                  >
+                    {learningSuggestionCount > 0
+                      ? `Learning (${learningSuggestionCount})`
+                      : 'Learning'}
+                  </Text>
+                </TouchableOpacity>
+              ) : null}
+            </View>
             {caddiePlayerModel.tuningActive ? (
               <View style={styles.caddieBadge}>
                 <Text style={styles.caddieBadgeText}>TUNED</Text>
               </View>
             ) : null}
           </View>
+          {qaEnabled && learningPanelVisible ? (
+            <LearningPanel
+              suggestions={learningSuggestions}
+              applied={learningApplied}
+              overrides={learningOverrides}
+              onToggleApply={handleLearningApplyToggle}
+              onReset={handleLearningReset}
+              onClose={() => {
+                setLearningPanelVisible(false);
+              }}
+            />
+          ) : null}
           <View style={styles.caddieDispersionBlock}>
             <View style={styles.caddieDispersionHeader}>
               <Text style={styles.caddieDispersionTitle}>Dispersion learner</Text>
@@ -8874,6 +9073,28 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+  },
+  caddieHeaderLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  caddieLearningButton: {
+    marginLeft: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 16,
+    backgroundColor: '#1d2640',
+  },
+  caddieLearningButtonActive: {
+    backgroundColor: '#1e3a8a',
+  },
+  caddieLearningButtonText: {
+    color: '#60a5fa',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  caddieLearningButtonTextActive: {
+    color: '#bfdbfe',
   },
   caddieBadge: {
     backgroundColor: '#1f2937',
