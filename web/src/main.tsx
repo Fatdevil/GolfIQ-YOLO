@@ -1,11 +1,14 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
 import { BrowserRouter } from "react-router-dom";
+import { bootstrapSupabase } from "./bootstrap/supabase";
 import App from "./App";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { TempAltDemo } from "./dev/TempAltDemo";
 import "./styles.css";
 import "./sentry";
+
+bootstrapSupabase();
 
 const isTempAltDemo =
   import.meta.env.DEV && new URLSearchParams(window.location.search).get("tempaltDemo") === "1";

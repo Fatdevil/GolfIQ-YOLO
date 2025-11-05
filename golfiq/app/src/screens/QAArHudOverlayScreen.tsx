@@ -116,6 +116,7 @@ import { isTelemetryOptedOut } from '../../../../shared/ops/log_export';
 import { buildShotFeedback, type FeedbackOutput } from '../../../../shared/playslike/feedback';
 import { exportAccuracyNdjson } from '../../../../shared/telemetry/shotsenseMetrics';
 import { PostHoleReconciler, collectAutoCandidates } from '../shotsense/PostHoleReconciler';
+import EventPanel from '../event/EventPanel';
 import {
   createLandingHeuristics,
   type LandingProposal,
@@ -6764,6 +6765,7 @@ const QAArHudOverlayScreen: React.FC = () => {
         onSearchChange={handleSearchChange}
         onSuggestionSelect={handleSuggestionSelect}
       />
+      <EventPanel />
       <View style={styles.autoPickCard}>
         <View style={styles.autoPickRow}>
           <View style={styles.autoPickCopy}>
