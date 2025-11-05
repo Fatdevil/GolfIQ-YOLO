@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
 import { useParams } from "react-router-dom";
 
-import { aggregateLeaderboard } from "../../../shared/events/scoring";
-import type { Event, LeaderboardRow, Participant, ScoreRow } from "../../../shared/events/types";
-import { listParticipants, pollScores } from "../../../shared/events/service";
-import { recordLeaderboardViewedWeb } from "../../../shared/events/telemetry";
-import { ensureClient, isSupabaseConfigured } from "../../../shared/supabase/client";
+import { aggregateLeaderboard } from '@shared/events/scoring';
+import type { Event, LeaderboardRow, Participant, ScoreRow } from '@shared/events/types';
+import { listParticipants, pollScores } from '@shared/events/service';
+import { recordLeaderboardViewedWeb } from '@shared/events/telemetry';
+import { ensureClient, isSupabaseConfigured } from '@shared/supabase/client';
 
 export default function EventLeaderboardPage() {
   const { id } = useParams<{ id: string }>();
