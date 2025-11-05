@@ -4593,7 +4593,7 @@ const QAArHudOverlayScreen: React.FC = () => {
       'm',
     )})`;
 
-    return `start-line ${startLineLabel}, pace ${paceLabel}`;
+    return `Putt feedback: start-line ${startLineLabel}, pace ${paceLabel}`;
   }, [puttPaceEval, puttStartLineEval]);
   const puttLateralMiss = useMemo(() => {
     if (puttEval?.lateralMiss_cm === undefined) {
@@ -7706,7 +7706,6 @@ const QAArHudOverlayScreen: React.FC = () => {
                     <>
                       {puttQuickFeedbackBody ? (
                         <View style={styles.puttQuickFeedbackCard}>
-                          <Text style={styles.puttQuickFeedbackTitle}>Putt feedback</Text>
                           <Text style={styles.puttQuickFeedbackText}>{puttQuickFeedbackBody}</Text>
                         </View>
                       ) : null}
@@ -8820,11 +8819,6 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#1f2937',
     gap: 4,
-  },
-  puttQuickFeedbackTitle: {
-    color: '#f8fafc',
-    fontSize: 14,
-    fontWeight: '600',
   },
   puttQuickFeedbackText: {
     color: '#e2e8f0',
