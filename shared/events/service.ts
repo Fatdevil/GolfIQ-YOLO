@@ -88,10 +88,8 @@ export async function pushHoleScore(args: {
   const userId = await resolveUserIdForRound(args.eventId, args.roundId);
   if (!userId) throw new Error('no participant mapping for round');
 
-  const net = Math.max(
-    0,
-    (args.gross ?? 0) - Math.round((args.hcpIndex ?? 0) * (1 / 18)),
-  );
+  const net = args.gross ?? 0;
+  // NOTE: Handicap adjustment is applied at aggregate time (not per hole) to avoid 18× rounding.
   const to_par = (args.gross ?? 0) - 4;
 
   const row: Omit<ScoreRow, 'ts'> & { ts: string } = {
@@ -147,4 +145,14 @@ export async function fetchEvent(eventId: UUID): Promise<Event | null> {
     return null;
   }
   return row as Event;
+}
+
+export async function listParticipants(eventId: UUID): Promise<Participant[]> {
+  const c = await requireClient();
+  const { data, error } = await c
+    .from('event_participants')
+    .select('*')
+    .eq('event_id', eventId);
+  if (error) throw new Error('listParticipants failed');
+  return (data ?? []) as Participant[];
 }

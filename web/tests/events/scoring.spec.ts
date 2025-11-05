@@ -60,14 +60,18 @@ describe('aggregateLeaderboard', () => {
   it('sums gross, net, and toPar per player', () => {
     const names = { 'user-a': 'Alice', 'user-b': 'Bob' };
     const holes = { 'user-a': 2, 'user-b': 2 };
-    const leaderboard = aggregateLeaderboard(baseRows, names, holes);
+    const hcp = { 'user-a': 0, 'user-b': 0 };
+    const leaderboard = aggregateLeaderboard(baseRows, names, {
+      hcpIndexByUser: hcp,
+      holesPlayedByUser: holes,
+    });
     expect(leaderboard).toEqual([
       {
         user_id: 'user-b',
         display_name: 'Bob',
         holes: 2,
         gross: 8,
-        net: 7,
+        net: 8,
         to_par: 0,
         last_ts: '2025-01-01T10:04:00Z',
       },
@@ -76,7 +80,7 @@ describe('aggregateLeaderboard', () => {
         display_name: 'Alice',
         holes: 2,
         gross: 9,
-        net: 7,
+        net: 9,
         to_par: 1,
         last_ts: '2025-01-01T10:05:00Z',
       },
@@ -86,6 +90,7 @@ describe('aggregateLeaderboard', () => {
   it('sorts by net, then gross, then latest timestamp', () => {
     const names = { 'user-a': 'Alice', 'user-b': 'Bob' };
     const holes = { 'user-a': 2, 'user-b': 2 };
+    const hcp = { 'user-a': 0, 'user-b': 0, 'user-c': 0 };
     const leaderboard = aggregateLeaderboard(
       [
         ...baseRows,
@@ -100,7 +105,10 @@ describe('aggregateLeaderboard', () => {
         },
       ],
       { ...names, 'user-c': 'Cara' },
-      { ...holes, 'user-c': 1 },
+      {
+        hcpIndexByUser: hcp,
+        holesPlayedByUser: { ...holes, 'user-c': 1 },
+      },
     );
     expect(leaderboard.map((row) => row.user_id)).toEqual(['user-c', 'user-b', 'user-a']);
   });
@@ -108,7 +116,29 @@ describe('aggregateLeaderboard', () => {
   it('respects provided holes played map when data missing', () => {
     const names = { 'user-a': 'Alice' };
     const holes = { 'user-a': 5 };
-    const leaderboard = aggregateLeaderboard(baseRows.slice(0, 1), names, holes);
+    const leaderboard = aggregateLeaderboard(baseRows.slice(0, 1), names, {
+      holesPlayedByUser: holes,
+    });
     expect(leaderboard[0].holes).toBe(5);
+  });
+
+  it('applies handicap once at aggregation (no per-hole rounding)', () => {
+    const user = 'user-a';
+    const rows: ScoreRow[] = Array.from({ length: 18 }, (_, index) => ({
+      event_id: 'event-1',
+      user_id: user,
+      hole_no: index + 1,
+      gross: 5,
+      net: 5,
+      to_par: 1,
+      ts: `2025-01-01T00:${index.toString().padStart(2, '0')}:00Z`,
+    }));
+    const leaderboard = aggregateLeaderboard(rows, { [user]: 'Player A' }, {
+      hcpIndexByUser: { [user]: 12 },
+      holesPlayedByUser: { [user]: 18 },
+    });
+    expect(leaderboard[0].gross).toBe(90);
+    expect(leaderboard[0].net).toBe(78);
+    expect(leaderboard[0].to_par).toBe(18);
   });
 });

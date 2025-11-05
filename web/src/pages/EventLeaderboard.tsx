@@ -3,7 +3,7 @@ import { useParams } from "react-router-dom";
 
 import { aggregateLeaderboard } from "../../../shared/events/scoring";
 import type { Event, LeaderboardRow, Participant, ScoreRow } from "../../../shared/events/types";
-import { pollScores } from "../../../shared/events/service";
+import { listParticipants, pollScores } from "../../../shared/events/service";
 import { recordLeaderboardViewedWeb } from "../../../shared/events/telemetry";
 import { getSupabase, isSupabaseConfigured } from "../../../shared/supabase/client";
 
@@ -52,26 +52,23 @@ export default function EventLeaderboardPage() {
         const eventRecord = (Array.isArray(eventRows) ? eventRows[0] : eventRows) as Event;
         setEvent(eventRecord);
 
-        const { data: participantRows } = await client
-          .from("event_participants")
-          .select("event_id,user_id,display_name,hcp_index,round_id")
-          .eq("event_id", id);
+        const participantRows = await listParticipants(eventRecord.id);
 
         const nameMap: Record<string, string> = {};
+        const hcpMap: Record<string, number | undefined | null> = {};
         const participantMap: Record<string, Participant> = {};
-        if (Array.isArray(participantRows)) {
-          for (const row of participantRows) {
-            if (row && typeof row.user_id === "string") {
-              const participant: Participant = {
-                event_id: row.event_id,
-                user_id: row.user_id,
-                display_name: row.display_name ?? "Player",
-                hcp_index: row.hcp_index ?? null,
-                round_id: row.round_id ?? null,
-              };
-              participantMap[row.user_id] = participant;
-              nameMap[row.user_id] = participant.display_name;
-            }
+        for (const row of participantRows) {
+          if (row && typeof row.user_id === "string") {
+            const participant: Participant = {
+              event_id: row.event_id,
+              user_id: row.user_id,
+              display_name: row.display_name ?? "Player",
+              hcp_index: row.hcp_index ?? null,
+              round_id: row.round_id ?? null,
+            };
+            participantMap[row.user_id] = participant;
+            nameMap[row.user_id] = participant.display_name;
+            hcpMap[row.user_id] = participant.hcp_index ?? 0;
           }
         }
         if (active) {
@@ -85,12 +82,12 @@ export default function EventLeaderboardPage() {
           }
           const holesPlayed: Record<string, number> = {};
           for (const row of rows) {
-            const existing = holesPlayed[row.user_id] ?? 0;
-            holesPlayed[row.user_id] = Math.max(existing, row.hole_no);
+            holesPlayed[row.user_id] = (holesPlayed[row.user_id] ?? 0) + 1;
             if (!nameMap[row.user_id]) {
               const known = participantMap[row.user_id];
               if (known) {
                 nameMap[row.user_id] = known.display_name;
+                hcpMap[row.user_id] = known.hcp_index ?? 0;
               }
             }
             if (!participantMap[row.user_id]) {
@@ -102,10 +99,14 @@ export default function EventLeaderboardPage() {
                 round_id: null,
               };
               participantMap[row.user_id] = fallback;
+              hcpMap[row.user_id] = 0;
               setParticipants((prev) => ({ ...prev, [row.user_id]: fallback }));
             }
           }
-          const board = aggregateLeaderboard(rows, nameMap, holesPlayed);
+          const board = aggregateLeaderboard(rows, nameMap, {
+            hcpIndexByUser: hcpMap,
+            holesPlayedByUser: holesPlayed,
+          });
           setLeaderboard(board);
         }, 8000);
       } catch (loadError) {

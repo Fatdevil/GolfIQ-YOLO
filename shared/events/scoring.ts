@@ -12,38 +12,40 @@ export function computeNetSimple(
 export function aggregateLeaderboard(
   rows: ScoreRow[],
   nameByUser: Record<string, string>,
-  holesPlayedByUser: Record<string, number>,
+  opts?: {
+    hcpIndexByUser?: Record<string, number | undefined | null>;
+    holesPlayedByUser?: Record<string, number>;
+  },
 ): LeaderboardRow[] {
-  const acc = new Map<string, LeaderboardRow>();
-  for (const r of rows) {
-    const current =
-      acc.get(r.user_id) ??
-      ({
-        user_id: r.user_id,
-        display_name: nameByUser[r.user_id] ?? 'Player',
-        holes: 0,
-        gross: 0,
-        net: 0,
-        to_par: 0,
-        last_ts: undefined,
-      } satisfies LeaderboardRow);
+  const { hcpIndexByUser = {}, holesPlayedByUser = {} } = opts ?? {};
+  const acc = new Map<string, { gross: number; holes: number; toPar: number; last?: string }>();
 
-    current.holes += 1;
-    current.gross += r.gross;
-    current.net += r.net;
-    current.to_par += r.to_par;
-    if (!current.last_ts || current.last_ts < r.ts) {
-      current.last_ts = r.ts;
+  for (const r of rows) {
+    const entry = acc.get(r.user_id) ?? { gross: 0, holes: 0, toPar: 0, last: undefined };
+    entry.gross += r.gross;
+    entry.holes += 1;
+    entry.toPar += r.to_par;
+    if (!entry.last || entry.last < r.ts) {
+      entry.last = r.ts;
     }
-    acc.set(r.user_id, current);
+    acc.set(r.user_id, entry);
   }
 
-  const out = Array.from(acc.values());
-  for (const row of out) {
-    const holes = holesPlayedByUser[row.user_id];
-    if (typeof holes === 'number') {
-      row.holes = Math.max(row.holes, holes);
-    }
+  const out: LeaderboardRow[] = [];
+  for (const [userId, agg] of acc) {
+    const holes = Math.max(agg.holes, holesPlayedByUser[userId] ?? agg.holes);
+    const gross = agg.gross;
+    const hcp = hcpIndexByUser[userId] ?? 0;
+    const net = computeNetSimple(gross, hcp, holes);
+    out.push({
+      user_id: userId,
+      display_name: nameByUser[userId] ?? 'Player',
+      holes,
+      gross,
+      net,
+      to_par: agg.toPar,
+      last_ts: agg.last,
+    });
   }
 
   return out.sort((a, b) => {

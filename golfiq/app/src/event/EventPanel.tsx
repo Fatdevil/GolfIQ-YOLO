@@ -7,6 +7,7 @@ import {
   createEvent,
   fetchEvent,
   joinEventByCode,
+  listParticipants,
   pollScores,
 } from '../../../../shared/events/service';
 import { setEventContext } from '../../../../shared/events/state';
@@ -38,6 +39,7 @@ const INITIAL_LEADERBOARD: LeaderboardState = { rows: [], updatedAt: 0 };
 const EventPanel: React.FC = () => {
   const [event, setEvent] = useState<Nullable<Event>>(null);
   const [participant, setParticipant] = useState<Nullable<Participant>>(null);
+  const [participantsList, setParticipantsList] = useState<Participant[]>([]);
   const [round, setRound] = useState<Nullable<Round>>(null);
   const [createName, setCreateName] = useState('');
   const [joinCode, setJoinCode] = useState('');
@@ -104,6 +106,34 @@ const EventPanel: React.FC = () => {
   }, [event, participant]);
 
   useEffect(() => {
+    if (!event) {
+      setParticipantsList([]);
+      nameMapRef.current = {};
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const rows = await listParticipants(event.id);
+        if (cancelled) {
+          return;
+        }
+        setParticipantsList(rows);
+        const nextMap: NameMap = {};
+        for (const row of rows) {
+          nextMap[row.user_id] = row.display_name;
+        }
+        nameMapRef.current = nextMap;
+      } catch (listError) {
+        console.warn('[EventPanel] list participants failed', listError);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [event]);
+
+  useEffect(() => {
     return () => {
       setEventContext(null);
       if (pollStopRef.current) {
@@ -129,6 +159,7 @@ const EventPanel: React.FC = () => {
       const created = await createEvent(name);
       setEvent(created);
       setParticipant(null);
+      setParticipantsList([]);
       setJoinCode(created.code ?? '');
       nameMapRef.current = {};
       setLeaderboard(INITIAL_LEADERBOARD);
@@ -161,6 +192,10 @@ const EventPanel: React.FC = () => {
         round_id: participant?.round_id ?? null,
       });
       setParticipant(joined);
+      setParticipantsList((prev) => {
+        const others = prev.filter((p) => p.user_id !== joined.user_id);
+        return [...others, joined];
+      });
       nameMapRef.current = { ...nameMapRef.current, [joined.user_id]: joined.display_name };
       setStatus('Joined event');
       setError(null);
@@ -199,6 +234,9 @@ const EventPanel: React.FC = () => {
       await attachRound(event.id, participant.user_id, round.id);
       const nextParticipant: Participant = { ...participant, round_id: round.id };
       setParticipant(nextParticipant);
+      setParticipantsList((prev) =>
+        prev.map((p) => (p.user_id === nextParticipant.user_id ? nextParticipant : p)),
+      );
       nameMapRef.current = { ...nameMapRef.current, [nextParticipant.user_id]: nextParticipant.display_name };
       recordEventAttachedRound(event.id, participant.user_id, round.id);
       updateStatus('Round attached');
@@ -226,16 +264,22 @@ const EventPanel: React.FC = () => {
           }
           const holesPlayed: Record<string, number> = {};
           for (const row of rows) {
-            const existing = holesPlayed[row.user_id] ?? 0;
-            holesPlayed[row.user_id] = Math.max(existing, row.hole_no);
+            holesPlayed[row.user_id] = (holesPlayed[row.user_id] ?? 0) + 1;
           }
-          const mergedNameMap: NameMap = {
-            ...nameMapRef.current,
-          };
+          const nameByUser: NameMap = { ...nameMapRef.current };
+          const hcpByUser: Record<string, number | undefined | null> = {};
+          for (const item of participantsList) {
+            nameByUser[item.user_id] = item.display_name;
+            hcpByUser[item.user_id] = item.hcp_index ?? 0;
+          }
           if (participant) {
-            mergedNameMap[participant.user_id] = participant.display_name;
+            nameByUser[participant.user_id] = participant.display_name;
+            hcpByUser[participant.user_id] = participant.hcp_index ?? 0;
           }
-          const rowsSorted = aggregateLeaderboard(rows, mergedNameMap, holesPlayed);
+          const rowsSorted = aggregateLeaderboard(rows, nameByUser, {
+            hcpIndexByUser: hcpByUser,
+            holesPlayedByUser: holesPlayed,
+          });
           setLeaderboard({ rows: rowsSorted, updatedAt: Date.now() });
         });
         if (!cancelled) {
@@ -257,7 +301,7 @@ const EventPanel: React.FC = () => {
         pollStopRef.current = null;
       }
     };
-  }, [event, participant, updateStatus]);
+  }, [event, participant, participantsList, updateStatus]);
 
   useEffect(() => {
     if (participant) {

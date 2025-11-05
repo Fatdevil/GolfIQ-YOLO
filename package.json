@@ -13,6 +13,7 @@
     "store:attach": "tsx --tsconfig tsconfig.tools.json tools/attach_to_release.ts"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.45.0",
     "@octokit/rest": "^20.1.1",
     "puppeteer": "^22.15.0"
   },

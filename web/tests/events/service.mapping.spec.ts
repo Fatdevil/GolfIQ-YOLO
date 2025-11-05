@@ -123,6 +123,7 @@ describe('events service', () => {
     expect(payload.user_id).toBe('user-99');
     expect(payload.hole_no).toBe(3);
     expect(payload.gross).toBe(5);
+    expect(payload.net).toBe(5);
   });
 
   it('polls scores and invokes callback with latest rows', async () => {
