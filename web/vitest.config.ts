@@ -18,6 +18,7 @@ export default defineConfig({
       '../shared/caddie/**/*.spec.ts',
       '../shared/learning/**/*.spec.ts',
       'tests/**/*.spec.ts',
+      'tests/**/*.spec.tsx',
       '../tests/shared/caddie/**/*.spec.ts',
       '../tests/shared/greeniq/**/*.spec.ts',
       '../tests/shared/game/**/*.spec.ts',

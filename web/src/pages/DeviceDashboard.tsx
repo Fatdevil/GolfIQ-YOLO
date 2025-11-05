@@ -7,6 +7,7 @@ import {
   RemoteConfigSnapshot,
   RemoteConfigTier,
 } from "../api";
+import SyncHealthBadge from "../components/SyncHealthBadge";
 
 const numberFormatter = new Intl.NumberFormat("en-US");
 
@@ -339,6 +340,7 @@ export default function DeviceDashboardPage() {
               <div className="mt-2 text-xs font-mono text-emerald-200">
                 Current state: {cloudSyncBetaEnabled ? 'enabled' : 'disabled'}
               </div>
+              <SyncHealthBadge />
             </div>
           </div>
         </div>

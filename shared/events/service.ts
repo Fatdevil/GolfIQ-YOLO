@@ -1,4 +1,9 @@
 import { ensureClient } from '../supabase/client';
+import {
+  observeSyncDrift,
+  observeSyncError,
+  observeSyncSuccess,
+} from './resync';
 import type { Event, Participant, ScoreRow, UUID } from './types';
 
 // --- helpers ---
@@ -83,29 +88,94 @@ export async function pushHoleScore(args: {
   hole: number;
   gross: number;
   hcpIndex?: number | null;
-}) {
-  const c = await requireClient();
-  const userId = await resolveUserIdForRound(args.eventId, args.roundId);
-  if (!userId) throw new Error('no participant mapping for round');
+  roundRevision?: number | null;
+  scoresHash?: string | null;
+}): Promise<void> {
+  let reportedError = false;
+  try {
+    const c = await requireClient();
+    const userId = await resolveUserIdForRound(args.eventId, args.roundId);
+    if (!userId) {
+      throw new Error('no participant mapping for round');
+    }
 
-  const net = args.gross ?? 0;
-  // NOTE: Handicap adjustment is applied at aggregate time (not per hole) to avoid 18× rounding.
-  const to_par = (args.gross ?? 0) - 4;
+    const net = args.gross ?? 0;
+    // NOTE: Handicap adjustment is applied at aggregate time (not per hole) to avoid 18× rounding.
+    const to_par = (args.gross ?? 0) - 4;
 
-  const row: Omit<ScoreRow, 'ts'> & { ts: string } = {
-    event_id: args.eventId,
-    user_id: userId,
-    hole_no: args.hole,
-    gross: args.gross,
-    net,
-    to_par,
-    ts: nowIso(),
-  } as any;
+    const normalizedRevision = Number.isFinite(args.roundRevision ?? NaN)
+      ? Math.max(0, Math.floor(Number(args.roundRevision)))
+      : null;
+    const normalizedHash =
+      typeof args.scoresHash === 'string' && args.scoresHash.trim()
+        ? args.scoresHash.trim()
+        : null;
 
-  const { error } = await c
-    .from('event_scores')
-    .upsert(row, { onConflict: 'event_id,user_id,hole_no' });
-  if (error) throw new Error('pushHoleScore failed');
+    const row: Partial<ScoreRow> & { ts: string } = {
+      event_id: args.eventId,
+      user_id: userId,
+      hole_no: args.hole,
+      gross: args.gross,
+      net,
+      to_par,
+      ts: nowIso(),
+      round_revision: normalizedRevision,
+      scores_hash: normalizedHash,
+    };
+
+    const { data, error } = await c
+      .from('event_scores')
+      .upsert(row, {
+        onConflict: 'event_id,user_id,hole_no',
+        returning: 'representation',
+      });
+
+    if (error) {
+      reportedError = true;
+      observeSyncError(args.eventId, error);
+      throw new Error('pushHoleScore failed');
+    }
+
+    const payload = Array.isArray(data) ? (data[0] as Partial<ScoreRow> | undefined) : (data as Partial<ScoreRow> | undefined);
+
+    const remoteRevisionRaw = payload ? (payload as Record<string, unknown>).round_revision : null;
+    const remoteHashRaw = payload ? (payload as Record<string, unknown>).scores_hash : null;
+
+    let remoteRevision: number | null = null;
+    if (typeof remoteRevisionRaw === 'number') {
+      remoteRevision = remoteRevisionRaw;
+    } else if (typeof remoteRevisionRaw === 'string' && remoteRevisionRaw.trim()) {
+      const parsed = Number(remoteRevisionRaw);
+      remoteRevision = Number.isFinite(parsed) ? Math.floor(parsed) : null;
+    }
+
+    const remoteHash =
+      typeof remoteHashRaw === 'string' && remoteHashRaw.trim() ? remoteHashRaw.trim() : null;
+
+    const revisionMismatch =
+      normalizedRevision !== null && (remoteRevision ?? 0) < normalizedRevision;
+    const hashMismatch =
+      Boolean(normalizedHash && remoteHash && remoteHash !== normalizedHash);
+
+    if (revisionMismatch || hashMismatch) {
+      observeSyncDrift(args.eventId, {
+        localRevision: normalizedRevision ?? undefined,
+        remoteRevision: remoteRevision ?? undefined,
+        localHash: normalizedHash,
+        remoteHash,
+      });
+    } else {
+      observeSyncSuccess();
+    }
+  } catch (error) {
+    if (!reportedError) {
+      observeSyncError(args.eventId, error);
+    }
+    if (error instanceof Error) {
+      throw error;
+    }
+    throw new Error('pushHoleScore failed');
+  }
 }
 
 // Optional: simple polling subscribe (avoid realtime complexity in v1)
