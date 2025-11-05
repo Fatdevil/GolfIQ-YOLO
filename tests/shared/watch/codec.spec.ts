@@ -20,6 +20,10 @@ const baseState: WatchHUDStateV1 = {
     risk: 'neutral',
     confidence: 0.72,
   },
+  overlayMini: {
+    fmb: { f: 124, m: 134, b: 144 },
+    pin: { section: 'middle' },
+  },
 };
 
 const toBytes = (value: string): Uint8Array => {
@@ -60,6 +64,19 @@ describe('watch HUD codec', () => {
     const encoded = toBytes(JSON.stringify(payload));
     const decoded = decodeHUD(encoded);
     expect(decoded.caddie).toBeUndefined();
+  });
+
+  it('drops invalid overlay mini payloads', () => {
+    const payload = {
+      ...baseState,
+      overlayMini: {
+        fmb: { f: 'nan', m: 120, b: 130 },
+        pin: { section: 'side' },
+      },
+    } as Record<string, unknown>;
+    const encoded = toBytes(JSON.stringify(payload));
+    const decoded = decodeHUD(encoded);
+    expect(decoded.overlayMini).toBeUndefined();
   });
 
   it('guards on unsupported versions', () => {

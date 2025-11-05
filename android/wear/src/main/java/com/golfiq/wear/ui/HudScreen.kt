@@ -27,6 +27,8 @@ import androidx.wear.compose.material.Text
 import com.golfiq.wear.HudCaddieHint
 import com.golfiq.wear.HudState
 import com.golfiq.wear.HudStrategy
+import com.golfiq.wear.HudOverlayMini
+import com.golfiq.wear.HudOverlayMiniPinSection
 import com.golfiq.wear.overlay.WearOverlay
 import com.google.android.gms.tasks.Tasks
 import com.google.android.gms.wearable.Wearable
@@ -108,6 +110,11 @@ fun HudScreen(
             textAlign = TextAlign.Center,
         )
 
+        state.overlayMini?.let { overlay ->
+            Spacer(modifier = Modifier.height(4.dp))
+            MapRow(overlay = overlay, hasData = state.hasData)
+        }
+
         Text(
             text = "Wind ${formatWind(state, state.hasData)}",
             fontSize = 16.sp,
@@ -123,6 +130,27 @@ fun HudScreen(
             )
         }
     }
+}
+
+@Composable
+private fun MapRow(overlay: HudOverlayMini, hasData: Boolean) {
+    val base = listOf(
+        "F ${formatDistance(overlay.fmb.f, hasData)}",
+        "M ${formatDistance(overlay.fmb.m, hasData)}",
+        "B ${formatDistance(overlay.fmb.b, hasData)}",
+    ).joinToString(" | ")
+    val pinLabel = overlay.pin?.section?.let(::formatPinSection)
+    val text = if (pinLabel != null) {
+        "$base · Pin: $pinLabel"
+    } else {
+        base
+    }
+    Text(
+        text = text,
+        fontSize = 14.sp,
+        textAlign = TextAlign.Center,
+        modifier = Modifier.fillMaxWidth(),
+    )
 }
 
 @Composable
@@ -182,6 +210,14 @@ private fun formatStrategy(strategy: HudStrategy): String {
         String.format(Locale.US, "%+.0fm", strategy.offsetM)
     }
     return "Strategy $profile $carry ($offset)"
+}
+
+private fun formatPinSection(section: HudOverlayMiniPinSection): String {
+    return when (section) {
+        HudOverlayMiniPinSection.FRONT -> "front"
+        HudOverlayMiniPinSection.MIDDLE -> "mid"
+        HudOverlayMiniPinSection.BACK -> "back"
+    }
 }
 
 private const val WATCH_MESSAGE_PATH = "/golfiq/watch/msg"

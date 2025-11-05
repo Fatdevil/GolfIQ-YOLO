@@ -23,12 +23,16 @@ type StrategyProfile = NonNullable<WatchHUDStateV1['strategy']>['profile'];
 
 type CaddieRisk = NonNullable<WatchHUDStateV1['caddie']>['risk'];
 type CaddieAimDir = NonNullable<NonNullable<WatchHUDStateV1['caddie']>['aim']>['dir'];
+type OverlayPinSection = NonNullable<
+  NonNullable<NonNullable<WatchHUDStateV1['overlayMini']>['pin']>
+>['section'];
 
 const isStrategyProfile = (value: unknown): value is StrategyProfile =>
   typeof value === 'string' && STRATEGY_PROFILES.has(value as StrategyProfile);
 
 const CADDIE_RISKS = new Set<CaddieRisk>(['safe', 'neutral', 'aggressive']);
 const CADDIE_AIM_DIRS = new Set<CaddieAimDir>(['L', 'C', 'R']);
+const OVERLAY_PIN_SECTIONS = new Set<OverlayPinSection>(['front', 'middle', 'back']);
 
 const encodeUtf8 = (value: string): Uint8Array => {
   if (TEXT_ENCODER) {
@@ -146,6 +150,39 @@ const sanitizeCaddie = (raw: unknown): WatchHUDStateV1['caddie'] | undefined => 
   return hint;
 };
 
+const sanitizeOverlayMini = (raw: unknown): WatchHUDStateV1['overlayMini'] | undefined => {
+  if (!raw || typeof raw !== 'object') {
+    return undefined;
+  }
+  const record = raw as Record<string, unknown>;
+  const fmbRaw = record.fmb;
+  if (!fmbRaw || typeof fmbRaw !== 'object') {
+    return undefined;
+  }
+  const fmbRecord = fmbRaw as Record<string, unknown>;
+  const f = Number(fmbRecord.f);
+  const m = Number(fmbRecord.m);
+  const b = Number(fmbRecord.b);
+  if (!Number.isFinite(f) || !Number.isFinite(m) || !Number.isFinite(b)) {
+    return undefined;
+  }
+  const overlay: WatchHUDStateV1['overlayMini'] = {
+    fmb: { f, m, b },
+  };
+  const pinRaw = record.pin;
+  if (pinRaw && typeof pinRaw === 'object') {
+    const pinRecord = pinRaw as Record<string, unknown>;
+    const sectionValue = pinRecord.section;
+    if (typeof sectionValue === 'string') {
+      const normalized = sectionValue.toLowerCase();
+      if (OVERLAY_PIN_SECTIONS.has(normalized as OverlayPinSection)) {
+        overlay.pin = { section: normalized as OverlayPinSection };
+      }
+    }
+  }
+  return overlay;
+};
+
 export function encodeHUD(state: WatchHUDStateV1): Uint8Array {
   const canonical: WatchHUDStateV1 = {
     v: 1,
@@ -172,6 +209,12 @@ export function encodeHUD(state: WatchHUDStateV1): Uint8Array {
     const normalizedCaddie = sanitizeCaddie(state.caddie);
     if (normalizedCaddie) {
       canonical.caddie = normalizedCaddie;
+    }
+  }
+  if (state.overlayMini) {
+    const normalizedOverlay = sanitizeOverlayMini(state.overlayMini);
+    if (normalizedOverlay) {
+      canonical.overlayMini = normalizedOverlay;
     }
   }
   const json = JSON.stringify(canonical);
@@ -201,6 +244,7 @@ export function decodeHUD(buffer: Uint8Array): WatchHUDStateV1 {
   const fmbRecord = fmbRaw as Record<string, unknown>;
   const strategy = sanitizeStrategy(record.strategy);
   const caddie = sanitizeCaddie(record.caddie);
+  const overlayMini = sanitizeOverlayMini(record.overlayMini);
   return {
     v: 1,
     ts: expectFiniteNumber(record.ts, 'ts'),
@@ -216,6 +260,7 @@ export function decodeHUD(buffer: Uint8Array): WatchHUDStateV1 {
     },
     ...(strategy ? { strategy } : {}),
     ...(caddie ? { caddie } : {}),
+    ...(overlayMini ? { overlayMini } : {}),
     tournamentSafe: record.tournamentSafe === true,
   };
 }

@@ -18,6 +18,11 @@ export type WatchMsg =
   | { type: 'CADDIE_ADVICE_V1'; advice: CaddieAdviceV1 }
   | { type: 'CADDIE_ACCEPTED_V1'; club: string };
 
+export type WatchOverlayMini = {
+  fmb: { f: number; m: number; b: number };
+  pin?: { section: 'front' | 'middle' | 'back' };
+};
+
 export type WatchHUDStateV1 = {
   v: 1;
   ts: number;
@@ -31,6 +36,7 @@ export type WatchHUDStateV1 = {
   };
   tournamentSafe: boolean;
   caddie?: CaddieHint;
+  overlayMini?: WatchOverlayMini;
 };
 
 export type WatchDiag = {

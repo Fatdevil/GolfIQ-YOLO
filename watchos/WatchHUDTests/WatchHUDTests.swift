@@ -23,6 +23,15 @@ final class WatchHUDTests: XCTestCase {
         XCTAssertNil(model.advice)
     }
 
+    func testOverlayMiniDecode() {
+        let model = WatchHUDModel()
+        let payload = #"{"v":1,"ts":3,"fmb":{"front":150,"middle":155,"back":160},"playsLikePct":1.0,"wind":{"mps":3.0,"deg":90.0},"tournamentSafe":true,"overlayMini":{"fmb":{"f":148,"m":156,"b":164},"pin":{"section":"back"}}}"#
+        model.update(with: Data(payload.utf8))
+        flushMainQueue()
+        XCTAssertEqual(model.hud?.overlayMini?.fmb.f, 148)
+        XCTAssertEqual(model.hud?.overlayMini?.pin?.section, .back)
+    }
+
     private func flushMainQueue() {
         let mainQueueExpectation = expectation(description: "flush main queue")
         DispatchQueue.main.async {

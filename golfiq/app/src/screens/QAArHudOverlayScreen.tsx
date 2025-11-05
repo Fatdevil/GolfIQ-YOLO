@@ -4232,6 +4232,21 @@ const QAArHudOverlayScreen: React.FC = () => {
       ? Number(plannerInputs.wind_from_deg)
       : 0;
     const windDeg = ((rawWindDeg % 360) + 360) % 360;
+    const overlayPinSection = (() => {
+      if (caddiePlan && caddiePlan.kind === 'approach' && caddiePlan.greenSection) {
+        const section = caddiePlan.greenSection;
+        if (section === 'front' || section === 'middle' || section === 'back') {
+          return section;
+        }
+      }
+      if (hudSectionLabel) {
+        const normalized = hudSectionLabel.trim().toLowerCase();
+        if (normalized === 'front' || normalized === 'middle' || normalized === 'back') {
+          return normalized as 'front' | 'middle' | 'back';
+        }
+      }
+      return undefined;
+    })();
     const payload: WatchHUDStateV1 = {
       v: 1,
       ts: Date.now(),
@@ -4247,6 +4262,16 @@ const QAArHudOverlayScreen: React.FC = () => {
       },
       tournamentSafe,
     };
+    if (bundle) {
+      payload.overlayMini = {
+        fmb: {
+          f: Number(frontDistance.toFixed(1)),
+          m: Number(middleDistance.toFixed(1)),
+          b: Number(backDistance.toFixed(1)),
+        },
+        ...(overlayPinSection ? { pin: { section: overlayPinSection } } : {}),
+      };
+    }
     if (caddieHudWatchHint) {
       payload.caddie = caddieHudWatchHint;
     }
@@ -4270,6 +4295,7 @@ const QAArHudOverlayScreen: React.FC = () => {
       strategy: payload.strategy,
       tournamentSafe: payload.tournamentSafe,
       caddie: payload.caddie,
+      overlayMini: payload.overlayMini ?? null,
     });
     const now = Date.now();
     const lastSuccess = watchHudLastSuccessRef.current;
@@ -4348,6 +4374,10 @@ const QAArHudOverlayScreen: React.FC = () => {
     playsLikeResult?.distance_m,
     plannerInputs.wind_mps,
     plannerInputs.wind_from_deg,
+    bundle,
+    caddiePlan?.kind,
+    caddiePlan?.greenSection,
+    hudSectionLabel,
     tournamentSafe,
     strategyComputation,
     commitWatchPayload,
