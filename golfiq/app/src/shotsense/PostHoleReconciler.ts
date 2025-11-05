@@ -1,8 +1,11 @@
 import { RoundRecorder } from '../../../../shared/round/recorder';
-import type { Lie, ShotEvent } from '../../../../shared/round/types';
+import type { Lie, ShotEvent, RoundState } from '../../../../shared/round/types';
 import { appendHoleAccuracy, computeConfusion } from '../../../../shared/telemetry/shotsenseMetrics';
 import { recordAutoReconcile } from '../../../../shared/telemetry/round';
 import { autoQueue, type AcceptedAutoShot } from './AutoCaptureQueue';
+import { pushHoleScore } from '../../../../shared/events/service';
+import { getEventContext } from '../../../../shared/events/state';
+import { recordScoreFailed, recordScoreUpserted } from '../../../../shared/events/telemetry';
 
 declare const __DEV__: boolean | undefined;
 
@@ -236,11 +239,13 @@ export const PostHoleReconciler = {
       }
 
       let roundId: string | null = null;
+      let roundState: RoundState | null = null;
       if (typeof RoundRecorder.getActiveRound === 'function') {
         try {
           const round = await RoundRecorder.getActiveRound();
           if (round && typeof round.id === 'string') {
             roundId = round.id;
+            roundState = round;
           }
         } catch {
           roundId = null;
@@ -255,6 +260,33 @@ export const PostHoleReconciler = {
           applied,
           rejected,
         });
+        if (applied > 0) {
+          const context = getEventContext();
+          const participant = context?.participant ?? null;
+          const activeEvent = context?.event ?? null;
+          const attachedRoundId = participant?.round_id ?? null;
+          const holeNumber = Math.max(1, Math.floor(holeId));
+          const holeState = roundState?.holes?.[holeNumber] ?? null;
+          const gross =
+            typeof holeState?.strokes === 'number'
+              ? Math.max(0, holeState.strokes)
+              : Math.max(0, holeState?.shots?.length ?? 0);
+          if (activeEvent && participant && attachedRoundId === roundId && gross > 0) {
+            try {
+              await pushHoleScore({
+                eventId: activeEvent.id,
+                roundId,
+                hole: holeNumber,
+                gross,
+                hcpIndex: participant.hcp_index ?? null,
+              });
+              recordScoreUpserted(activeEvent.id, participant.user_id, holeNumber, gross);
+            } catch (pushError) {
+              console.warn('[PostHoleReconciler] pushHoleScore failed', pushError);
+              recordScoreFailed(activeEvent.id, roundId, pushError);
+            }
+          }
+        }
       }
       return { applied, rejected };
     } catch (error) {

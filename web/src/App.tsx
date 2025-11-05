@@ -12,6 +12,7 @@ import ReplayAnalyzerPage from "./pages/ReplayAnalyzer";
 import Nav from "./components/Nav";
 import { qaReplayEnabled } from "./config";
 import ShareRunPage from "./pages/ShareRun";
+import EventLeaderboardPage from "./pages/EventLeaderboard";
 
 export default function App() {
   return (
@@ -25,6 +26,7 @@ export default function App() {
           <Route path="/runs" element={<RunsPage />} />
           <Route path="/runs/:id" element={<RunDetailPage />} />
           <Route path="/share/:id" element={<ShareRunPage />} />
+          <Route path="/event/:id" element={<EventLeaderboardPage />} />
           <Route path="/field-runs" element={<FieldRunsPage />} />
           <Route path="/device-dashboard" element={<DeviceDashboardPage />} />
           <Route path="/accuracy" element={<AccuracyBoardPage />} />
