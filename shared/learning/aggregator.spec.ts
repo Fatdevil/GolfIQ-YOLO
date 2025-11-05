@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { fold } from "./aggregator";
+import { __testUpdateEma, fold } from "./aggregator";
 import type { AcceptSample, OutcomeSample } from "./types";
 
 const baseAccept = (overrides: Partial<AcceptSample>): AcceptSample => ({
@@ -81,5 +81,41 @@ describe("shared/learning/aggregator", () => {
     expect(negative.delta).toBeLessThanOrEqual(0);
     expect(negative.hazardDelta).toBeLessThanOrEqual(0);
     expect(negative.distanceDelta).toBeGreaterThanOrEqual(0);
+  });
+});
+
+describe("weighted EMA", () => {
+  type EmaState = { ema: number; total: number; samples: number };
+  const alpha = 0.2;
+
+  it("heavier weight moves EMA further towards value", () => {
+    const s0: EmaState = { ema: 0.5, total: 0, samples: 0 };
+    const light = __testUpdateEma(s0, 1, 1, alpha);
+    const heavy = __testUpdateEma(s0, 1, 50, alpha);
+    expect(heavy.ema).toBeGreaterThan(light.ema);
+    expect(heavy.samples - s0.samples).toBe(50);
+    expect(light.samples - s0.samples).toBe(1);
+  });
+
+  it("weight=0 does not change EMA or totals", () => {
+    const s0: EmaState = { ema: 0.4, total: 10, samples: 25 };
+    const s1 = __testUpdateEma(s0, 1, 0, alpha);
+    expect(s1.ema).toBeCloseTo(0.4, 10);
+    expect(s1.total).toBe(10);
+    expect(s1.samples).toBe(25);
+  });
+
+  it("alpha_eff matches repeated single-weight updates (within tolerance)", () => {
+    const s0: EmaState = { ema: 0.3, total: 0, samples: 0 };
+    const batched = __testUpdateEma(s0, 0.9, 20, alpha);
+
+    let seq: EmaState = { ema: 0.3, total: 0, samples: 0 };
+    for (let i = 0; i < 20; i += 1) {
+      seq = __testUpdateEma(seq, 0.9, 1, alpha);
+    }
+
+    expect(batched.ema).toBeCloseTo(seq.ema, 6);
+    expect(batched.samples).toBe(seq.samples);
+    expect(batched.total).toBeCloseTo(seq.total, 6);
   });
 });

@@ -14,6 +14,7 @@ const DEFAULT_MIN_SAMPLES = 50;
 const HALF_SAMPLE_THRESHOLD = 100;
 const MAX_DELTA = 0.2;
 const MAX_APPLY_DELTA = 0.1;
+const MAX_WEIGHT = 10_000;
 
 const clamp01 = (value: number): number => {
   if (!Number.isFinite(value)) {
@@ -66,21 +67,42 @@ const sanitizePositive = (value: number): number => (Number.isFinite(value) && v
 
 const sanitizeNonNegative = (value: number): number => (Number.isFinite(value) && value >= 0 ? value : 0);
 
+/**
+ * Update an EMA with a weighted observation using α_eff = 1 − (1 − α)^w.
+ *
+ * A batched observation with weight `w` moves the EMA the same amount as `w`
+ * sequential single-weight updates with smoothing factor `α`. Bounding `w`
+ * guards against pathological spikes while preserving proportional influence
+ * from larger sample windows.
+ */
 const updateEma = (state: EmaState | null, value: number, weight: number, alpha: number): EmaState => {
-  const clampedWeight = sanitizePositive(weight);
-  const clampedValue = clamp01(value);
+  const w = Math.min(MAX_WEIGHT, sanitizePositive(weight));
+  const v = clamp01(value);
+  const a = clamp(alpha, 0, 1);
+
   if (!state) {
     return {
-      ema: clampedValue,
-      total: clampedValue * clampedWeight,
-      samples: clampedWeight,
+      ema: v,
+      total: v * w,
+      samples: w,
     };
   }
-  const ema = alpha * clampedValue + (1 - alpha) * state.ema;
+
+  if (w <= 0) {
+    return {
+      ema: state.ema,
+      total: state.total,
+      samples: state.samples,
+    };
+  }
+
+  const alphaEff = 1 - Math.pow(1 - a, w);
+  const ema = state.ema + (v - state.ema) * alphaEff;
+
   return {
     ema,
-    total: state.total + clampedValue * clampedWeight,
-    samples: state.samples + clampedWeight,
+    total: state.total + v * w,
+    samples: state.samples + w,
   };
 };
 
@@ -231,3 +253,6 @@ export function foldToMap(
   }
   return map;
 }
+
+/** @internal exported for unit tests */
+export const __testUpdateEma = updateEma;
