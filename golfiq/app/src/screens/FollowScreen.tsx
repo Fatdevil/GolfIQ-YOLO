@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Modal,
@@ -247,6 +247,50 @@ function TrackingView({ round, meta, finishDisabled, onFinishPress }: TrackingVi
   const [showCorridor, setShowCorridor] = useState<boolean>(true);
   const [showRing, setShowRing] = useState<boolean>(true);
   const [showLabels, setShowLabels] = useState<boolean>(false);
+  const [watchPrefillToast, setWatchPrefillToast] = useState<
+    { club: string; undo: () => boolean; token: number } | null
+  >(null);
+  const watchPrefillTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const clearWatchPrefillTimer = useCallback(() => {
+    if (watchPrefillTimerRef.current) {
+      clearTimeout(watchPrefillTimerRef.current);
+      watchPrefillTimerRef.current = null;
+    }
+  }, []);
+  const handleWatchPrefillToast = useCallback(
+    ({ club, undo, token }: { club: string; undo: () => boolean; token: number }) => {
+      clearWatchPrefillTimer();
+      setWatchPrefillToast({ club, undo, token });
+      watchPrefillTimerRef.current = setTimeout(() => {
+        setWatchPrefillToast((current) => {
+          if (current && current.token === token) {
+            return null;
+          }
+          return current;
+        });
+        watchPrefillTimerRef.current = null;
+      }, 5000);
+    },
+    [clearWatchPrefillTimer],
+  );
+  useEffect(
+    () => () => {
+      clearWatchPrefillTimer();
+    },
+    [clearWatchPrefillTimer],
+  );
+  const handleWatchPrefillUndo = useCallback(() => {
+    if (!watchPrefillToast) {
+      return;
+    }
+    try {
+      watchPrefillToast.undo();
+    } catch {
+      // ignore undo failures
+    }
+    clearWatchPrefillTimer();
+    setWatchPrefillToast(null);
+  }, [clearWatchPrefillTimer, watchPrefillToast]);
 
   const telemetryEmitter = useMemo(() => resolveTelemetryEmitter(), []);
   const {
@@ -268,6 +312,8 @@ function TrackingView({ round, meta, finishDisabled, onFinishPress }: TrackingVi
     playsLikePct: null,
     watchAutoSend: true,
     telemetryEmitter,
+    watchPrefillEnabled: true,
+    onWatchPrefill: handleWatchPrefillToast,
   });
 
   const autoAdvanceLabel = followState?.autoAdvanceEnabled
@@ -453,6 +499,16 @@ function TrackingView({ round, meta, finishDisabled, onFinishPress }: TrackingVi
           </View>
         </View>
       )}
+      {watchPrefillToast ? (
+        <View style={styles.watchPrefillToast}>
+          <Text style={styles.watchPrefillToastText}>
+            {`Club set to ${watchPrefillToast.club} (from watch)`}
+          </Text>
+          <TouchableOpacity onPress={handleWatchPrefillUndo}>
+            <Text style={styles.watchPrefillToastUndo}>• undo</Text>
+          </TouchableOpacity>
+        </View>
+      ) : null}
       <AutoReviewBanner />
     </SafeAreaView>
   );
@@ -568,4 +624,31 @@ const styles = StyleSheet.create({
   modalButtonLabel: { color: '#ffffff', fontWeight: '600' },
   modalConfirm: { backgroundColor: '#4da3ff' },
   modalConfirmLabel: { color: '#0a0f1d', fontWeight: '700' },
+  watchPrefillToast: {
+    position: 'absolute',
+    left: 16,
+    right: 16,
+    bottom: 110,
+    backgroundColor: 'rgba(15, 23, 42, 0.92)',
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    borderWidth: 1,
+    borderColor: 'rgba(148, 163, 184, 0.35)',
+  },
+  watchPrefillToastText: {
+    color: '#e2e8f0',
+    fontSize: 14,
+    fontWeight: '600',
+    flex: 1,
+    marginRight: 12,
+  },
+  watchPrefillToastUndo: {
+    color: '#38bdf8',
+    fontSize: 14,
+    fontWeight: '700',
+  },
 });
