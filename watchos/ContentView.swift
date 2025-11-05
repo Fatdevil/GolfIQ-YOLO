@@ -17,6 +17,9 @@ struct ContentView: View {
                         .font(.footnote)
                     }
                     playsLikeRow(for: hud)
+                    if let mini = hud.overlayMini {
+                        miniMapRow(for: mini)
+                    }
                     if !hud.tournamentSafe, let strategy = hud.strategy {
                         strategyRow(for: strategy)
                     }
@@ -80,6 +83,20 @@ struct ContentView: View {
         }
     }
 
+    private func miniMapRow(for overlay: HUD.OverlayMini) -> some View {
+        let base = "F \(distanceString(overlay.fmb.f)) | M \(distanceString(overlay.fmb.m)) | B \(distanceString(overlay.fmb.b))"
+        let text: String
+        if let pin = overlay.pin?.section {
+            text = "\(base) · Pin: \(pin.shortLabel)"
+        } else {
+            text = base
+        }
+        return Text(text)
+            .font(.footnote)
+            .fontWeight(.semibold)
+            .monospacedDigit()
+    }
+
     private func strategyRow(for strategy: HUD.Strategy) -> some View {
         HStack(spacing: 6) {
             Text(strategy.profile.displayName)
@@ -121,7 +138,7 @@ private extension HUD.Strategy.Profile {
 #Preview {
     let model = WatchHUDModel()
     if let data = """
-        {"v":1,"ts":1,"fmb":{"front":132,"middle":138,"back":144},"playsLikePct":6.5,"wind":{"mps":3.2,"deg":270},"strategy":{"profile":"neutral","offset_m":-4,"carry_m":136},"tournamentSafe":false}
+        {"v":1,"ts":1,"fmb":{"front":132,"middle":138,"back":144},"playsLikePct":6.5,"wind":{"mps":3.2,"deg":270},"strategy":{"profile":"neutral","offset_m":-4,"carry_m":136},"tournamentSafe":false,"overlayMini":{"fmb":{"f":128,"m":136,"b":144},"pin":{"section":"middle"}}}
         """.data(using: .utf8) {
         model.update(with: data)
     }

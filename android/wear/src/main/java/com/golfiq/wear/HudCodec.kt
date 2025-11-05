@@ -1,6 +1,7 @@
 package com.golfiq.wear
 
 import java.nio.charset.StandardCharsets
+import java.util.Locale
 import org.json.JSONObject
 
 enum class StrategyProfile(val wireName: String) {
@@ -32,6 +33,34 @@ data class HudWind(
     val deg: Double,
 )
 
+data class HudOverlayMiniDistances(
+    val f: Double,
+    val m: Double,
+    val b: Double,
+)
+
+enum class HudOverlayMiniPinSection(val wireName: String) {
+    FRONT("front"),
+    MIDDLE("middle"),
+    BACK("back");
+
+    companion object {
+        fun fromWireName(value: String): HudOverlayMiniPinSection? {
+            val normalized = value.lowercase(Locale.US)
+            return values().firstOrNull { it.wireName == normalized }
+        }
+    }
+}
+
+data class HudOverlayMiniPin(
+    val section: HudOverlayMiniPinSection,
+)
+
+data class HudOverlayMini(
+    val fmb: HudOverlayMiniDistances,
+    val pin: HudOverlayMiniPin?,
+)
+
 data class HudCaddieHint(
     val club: String,
     val carryM: Double,
@@ -50,6 +79,7 @@ data class HudState(
     val strategy: HudStrategy?,
     val tournamentSafe: Boolean,
     val caddie: HudCaddieHint?,
+    val overlayMini: HudOverlayMini?,
 ) {
     val hasData: Boolean get() = timestamp > 0
 
@@ -62,6 +92,7 @@ data class HudState(
             strategy = null,
             tournamentSafe = false,
             caddie = null,
+            overlayMini = null,
         )
     }
 }
@@ -130,6 +161,42 @@ object HudCodec {
 
     fun parseAdvice(raw: Any?): HudCaddieHint? = parseCaddieHint(raw)
 
+    private fun parseOverlayMini(raw: Any?): HudOverlayMini? {
+        if (raw == null || raw == JSONObject.NULL) {
+            return null
+        }
+        val json = when (raw) {
+            is JSONObject -> raw
+            is String -> runCatching { JSONObject(raw) }.getOrNull()
+            else -> null
+        } ?: return null
+        val fmbJson = when (val fmbRaw = json.opt("fmb")) {
+            is JSONObject -> fmbRaw
+            is String -> runCatching { JSONObject(fmbRaw) }.getOrNull()
+            JSONObject.NULL -> null
+            else -> null
+        } ?: return null
+        val front = fmbJson.optDouble("f")
+        val middle = fmbJson.optDouble("m")
+        val back = fmbJson.optDouble("b")
+        if (!front.isFinite() || !middle.isFinite() || !back.isFinite()) {
+            return null
+        }
+        val pin = when (val rawPin = json.opt("pin")) {
+            is JSONObject -> rawPin
+            is String -> runCatching { JSONObject(rawPin) }.getOrNull()
+            JSONObject.NULL -> null
+            else -> null
+        }?.let { pinJson ->
+            val sectionWire = pinJson.optString("section")
+            HudOverlayMiniPinSection.fromWireName(sectionWire)?.let { HudOverlayMiniPin(it) }
+        }
+        return HudOverlayMini(
+            fmb = HudOverlayMiniDistances(f = front, m = middle, b = back),
+            pin = pin,
+        )
+    }
+
     fun decode(bytes: ByteArray): HudState {
         val json = JSONObject(String(bytes, StandardCharsets.UTF_8))
         val version = when (val rawVersion = json.opt("v")) {
@@ -171,6 +238,7 @@ object HudCodec {
         }
 
         val caddie = parseCaddieHint(json.opt("caddie"))
+        val overlayMini = parseOverlayMini(json.opt("overlayMini"))
 
         return HudState(
             timestamp = json.getLong("ts"),
@@ -187,6 +255,7 @@ object HudCodec {
             strategy = strategy,
             tournamentSafe = json.optBoolean("tournamentSafe"),
             caddie = caddie,
+            overlayMini = overlayMini,
         )
     }
 
@@ -253,6 +322,25 @@ object HudCodec {
             hint.confidence?.let { confidence ->
                 builder.append(",\"confidence\":")
                 builder.appendNumber(confidence)
+            }
+            builder.append('}')
+        }
+        state.overlayMini?.let { overlay ->
+            builder.append(",\"overlayMini\":{")
+            builder.append("\"fmb\":{")
+            builder.append("\"f\":")
+            builder.appendNumber(overlay.fmb.f)
+            builder.append(",\"m\":")
+            builder.appendNumber(overlay.fmb.m)
+            builder.append(",\"b\":")
+            builder.appendNumber(overlay.fmb.b)
+            builder.append('}')
+            overlay.pin?.let { pin ->
+                builder.append(",\"pin\":{")
+                builder.append("\"section\":\"")
+                builder.append(pin.section.wireName)
+                builder.append('"')
+                builder.append('}')
             }
             builder.append('}')
         }

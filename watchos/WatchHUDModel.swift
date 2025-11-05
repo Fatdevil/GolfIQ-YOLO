@@ -173,6 +173,35 @@ struct HUD: Decodable, Equatable {
         }
     }
 
+    struct OverlayMini: Decodable, Equatable {
+        struct Distances: Decodable, Equatable {
+            let f: Double
+            let m: Double
+            let b: Double
+        }
+
+        enum PinSection: String, Decodable {
+            case front
+            case middle
+            case back
+
+            var shortLabel: String {
+                switch self {
+                case .front: return "front"
+                case .middle: return "mid"
+                case .back: return "back"
+                }
+            }
+        }
+
+        struct Pin: Decodable, Equatable {
+            let section: PinSection
+        }
+
+        let fmb: Distances
+        let pin: Pin?
+    }
+
     let version: Int
     let timestamp: TimeInterval
     let fmb: Distances
@@ -181,6 +210,7 @@ struct HUD: Decodable, Equatable {
     let strategy: Strategy?
     let tournamentSafe: Bool
     let caddie: CaddieHint?
+    let overlayMini: OverlayMini?
 
     private enum CodingKeys: String, CodingKey {
         case version = "v"
@@ -191,5 +221,6 @@ struct HUD: Decodable, Equatable {
         case strategy
         case tournamentSafe
         case caddie
+        case overlayMini
     }
 }
