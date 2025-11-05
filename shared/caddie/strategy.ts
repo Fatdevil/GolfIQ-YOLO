@@ -12,7 +12,13 @@ import { getCaddieRc } from "./rc";
 import { runMonteCarloV1_5, type McPolygon, type McResult, type McTarget } from "./mc";
 import { ellipseOverlapRisk, lateralWindOffset, sampleEllipsePoints, type RiskFeature } from "./risk";
 import { buildPlayerModel, type PlayerModel } from "./player_model";
-import { STRATEGY_DEFAULTS, type RiskProfile, type StrategyWeights } from "./strategy_profiles";
+import {
+  STRATEGY_DEFAULTS,
+  applyRiskBiasToWeights,
+  type RiskBiasOverride,
+  type RiskProfile,
+  type StrategyWeights,
+} from "./strategy_profiles";
 
 const EARTH_RADIUS_M = 6_378_137;
 
@@ -1714,8 +1720,20 @@ export type StrategyInput = {
   dangerSide?: 'left' | 'right' | null;
 };
 
+export type StrategyRiskOverrides = Partial<
+  Record<
+    RiskProfile,
+    {
+      default?: RiskBiasOverride | null;
+      byClub?: Record<string, RiskBiasOverride | null>;
+    }
+  >
+>;
+
 export type StrategyOptions = {
   riskProfile?: RiskProfile;
+  clubId?: string | null;
+  riskOverrides?: StrategyRiskOverrides | null;
 };
 
 export type StrategyDecision = {
@@ -1735,36 +1753,22 @@ type ScoreResult = {
   breakdown: StrategyDecision['breakdown'];
 };
 
-type RiskBiasMultipliers = {
-  hazard: number;
-  distanceReward: number;
-  fatSideBiasDelta: number;
-};
-
-const RISK_BIAS_MULTIPLIERS: Record<RiskProfile, RiskBiasMultipliers> = {
-  conservative: { hazard: 1.25, distanceReward: 0.9, fatSideBiasDelta: 2 },
-  neutral: { hazard: 1, distanceReward: 1, fatSideBiasDelta: 0 },
-  aggressive: { hazard: 0.85, distanceReward: 1.1, fatSideBiasDelta: -2 },
-};
-
-const applyRiskBiasToWeights = (
-  weights: StrategyWeights,
-  riskProfile: RiskProfile,
-): StrategyWeights => {
-  const multipliers = RISK_BIAS_MULTIPLIERS[riskProfile] ?? RISK_BIAS_MULTIPLIERS.neutral;
-  const hazardScale = multipliers.hazard;
-  const distanceScale = multipliers.distanceReward;
-  const fatSideBias = Math.max(0, weights.fatSideBias_m + multipliers.fatSideBiasDelta);
-
-  return {
-    hazardWater: weights.hazardWater * hazardScale,
-    hazardBunker: weights.hazardBunker * hazardScale,
-    hazardRough: weights.hazardRough * hazardScale,
-    hazardOB: weights.hazardOB * hazardScale,
-    fairwayBonus: weights.fairwayBonus,
-    distanceReward: weights.distanceReward * distanceScale,
-    fatSideBias_m: fatSideBias,
-  };
+const selectRiskOverride = (
+  overrides: StrategyRiskOverrides | null | undefined,
+  profile: RiskProfile,
+  clubId: string | null,
+): RiskBiasOverride | null => {
+  if (!overrides) {
+    return null;
+  }
+  const entry = overrides[profile];
+  if (!entry) {
+    return null;
+  }
+  if (clubId && entry.byClub && entry.byClub[clubId]) {
+    return entry.byClub[clubId] ?? null;
+  }
+  return entry.default ?? null;
 };
 
 const STRATEGY_OFFSET_STEPS = [-12, -8, -4, 0, 4, 8, 12] as const;
@@ -1933,7 +1937,8 @@ export function chooseStrategy(input: StrategyInput, opts?: StrategyOptions): St
   const profile: RiskProfile = STRATEGY_DEFAULTS[input.profile] ? input.profile : 'neutral';
   const weights = STRATEGY_DEFAULTS[profile];
   const riskProfile: RiskProfile = opts?.riskProfile ?? 'neutral';
-  const scoringWeights = applyRiskBiasToWeights(weights, riskProfile);
+  const riskOverride = selectRiskOverride(opts?.riskOverrides ?? null, riskProfile, opts?.clubId ?? null);
+  const scoringWeights = applyRiskBiasToWeights(weights, riskProfile, riskOverride ?? undefined);
   const factor = sanitizeFinite(input.playsLikeFactor, 1);
   const normalizedFactor = factor > 0 ? factor : 1;
   const normalizedInput: StrategyInput = {

@@ -15,6 +15,8 @@ export default defineConfig({
       '../shared/runs/__tests__/**/*.spec.ts',
       '../shared/shotsense/__tests__/**/*.spec.ts',
       '../shared/telemetry/__tests__/**/*.spec.ts',
+      '../shared/caddie/**/*.spec.ts',
+      '../shared/learning/**/*.spec.ts',
       'tests/**/*.spec.ts',
       '../tests/shared/caddie/**/*.spec.ts',
       '../tests/shared/greeniq/**/*.spec.ts',
