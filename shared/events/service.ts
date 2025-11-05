@@ -1,6 +1,7 @@
 import { ensureClient } from '../supabase/client';
 import {
-  observeSyncDrift,
+  enqueueEventResync,
+  observeSyncDrift as observeSyncDriftMetric,
   observeSyncError,
   observeSyncSuccess,
 } from './resync';
@@ -15,6 +16,72 @@ async function requireClient() {
 
 function nowIso() {
   return new Date().toISOString();
+}
+
+type RoundResyncJob = {
+  type: 'round_resync';
+  eventId: UUID;
+  userId: UUID | string;
+  reason?: string;
+};
+
+type SyncDriftObservation = {
+  eventId: UUID;
+  userId: UUID | string | null;
+  hole: number;
+  prevRevision: number | null;
+  localRevision: number | null;
+  prevHash: string | null;
+  localHash: string | null;
+};
+
+type SyncHealthObservation = SyncDriftObservation & {
+  status: 'ok' | 'behind' | 'error';
+  error?: unknown;
+};
+
+type SyncIntegrations = {
+  enqueueSync?: (job: RoundResyncJob) => void;
+  observeSyncHealth?: (payload: SyncHealthObservation) => void;
+  observeSyncDrift?: (payload: SyncDriftObservation) => void;
+};
+
+const defaultIntegrations: Required<SyncIntegrations> = {
+  enqueueSync: (job) => {
+    if (job.type === 'round_resync') {
+      enqueueEventResync(job.eventId, job.reason ?? `round resync for ${job.userId}`);
+    }
+  },
+  observeSyncHealth: (payload) => {
+    if (payload.status === 'ok') {
+      observeSyncSuccess();
+      return;
+    }
+    if (payload.status === 'behind') {
+      observeSyncDriftMetric(payload.eventId, {
+        localRevision: payload.localRevision ?? undefined,
+        remoteRevision: payload.prevRevision ?? undefined,
+        localHash: payload.localHash,
+        remoteHash: payload.prevHash,
+      });
+      return;
+    }
+    observeSyncError(payload.eventId, payload.error);
+  },
+  observeSyncDrift: (payload) => {
+    observeSyncDriftMetric(payload.eventId, {
+      localRevision: payload.localRevision ?? undefined,
+      remoteRevision: payload.prevRevision ?? undefined,
+      localHash: payload.localHash,
+      remoteHash: payload.prevHash,
+    });
+  },
+};
+
+let activeIntegrations: Required<SyncIntegrations> = { ...defaultIntegrations };
+
+export function __setEventSyncIntegrationsForTests(overrides: Partial<SyncIntegrations> | null): void {
+  activeIntegrations = { ...defaultIntegrations, ...(overrides ?? {}) };
 }
 
 // Map round -> participant.user_id for this event (never confuse round_id with user_id)
@@ -91,86 +158,144 @@ export async function pushHoleScore(args: {
   roundRevision?: number | null;
   scoresHash?: string | null;
 }): Promise<void> {
-  let reportedError = false;
+  let userId: string | null = null;
+  let localRevision: number | null = null;
+  let localHash: string | null = null;
+  let prevRevision: number | null = null;
+  let prevHash: string | null = null;
   try {
     const c = await requireClient();
-    const userId = await resolveUserIdForRound(args.eventId, args.roundId);
+    userId = await resolveUserIdForRound(args.eventId, args.roundId);
     if (!userId) {
       throw new Error('no participant mapping for round');
     }
 
-    const net = args.gross ?? 0;
-    // NOTE: Handicap adjustment is applied at aggregate time (not per hole) to avoid 18× rounding.
-    const to_par = (args.gross ?? 0) - 4;
-
-    const normalizedRevision = Number.isFinite(args.roundRevision ?? NaN)
+    localRevision = Number.isFinite(args.roundRevision as number)
       ? Math.max(0, Math.floor(Number(args.roundRevision)))
       : null;
-    const normalizedHash =
+    localHash =
       typeof args.scoresHash === 'string' && args.scoresHash.trim()
         ? args.scoresHash.trim()
         : null;
+
+    const baseSelect = c
+      .from('event_scores')
+      .select('round_revision, scores_hash')
+      .match({ event_id: args.eventId, user_id: userId, hole_no: args.hole });
+
+    let selectData: unknown = null;
+    let selectError: unknown = null;
+
+    if (typeof (baseSelect as { maybeSingle?: () => Promise<any> }).maybeSingle === 'function') {
+      const { data, error } = await (baseSelect as { maybeSingle: () => Promise<any> }).maybeSingle();
+      selectData = data ?? null;
+      selectError = error ?? null;
+    } else {
+      const fallbackQuery = baseSelect as { limit?: (count: number) => Promise<any> };
+      const result = typeof fallbackQuery.limit === 'function' ? await fallbackQuery.limit(1) : { data: null, error: null };
+      selectData = Array.isArray(result?.data) ? result.data[0] ?? null : result?.data ?? null;
+      selectError = result?.error ?? null;
+    }
+
+    if (selectError) {
+      throw selectError instanceof Error ? selectError : new Error('pushHoleScore select failed');
+    }
+
+    const prevRow = selectData && typeof selectData === 'object' ? (selectData as Partial<ScoreRow>) : null;
+
+    const rawPrevRevision = prevRow ? (prevRow as Record<string, unknown>).round_revision : null;
+    if (typeof rawPrevRevision === 'number') {
+      prevRevision = rawPrevRevision;
+    } else if (typeof rawPrevRevision === 'string' && rawPrevRevision.trim()) {
+      const parsed = Number(rawPrevRevision);
+      prevRevision = Number.isFinite(parsed) ? Math.floor(parsed) : null;
+    } else {
+      prevRevision = null;
+    }
+
+    const rawPrevHash = prevRow ? (prevRow as Record<string, unknown>).scores_hash : null;
+    prevHash = typeof rawPrevHash === 'string' && rawPrevHash.trim() ? rawPrevHash.trim() : null;
+
+    const revisionDrift =
+      prevRevision !== null && localRevision !== null && prevRevision !== localRevision;
+    const hashDrift = Boolean(prevHash && localHash && prevHash !== localHash);
+    const remoteAhead =
+      prevRevision !== null && localRevision !== null && prevRevision > localRevision;
+
+    if (remoteAhead) {
+      activeIntegrations.enqueueSync?.({
+        type: 'round_resync',
+        eventId: args.eventId,
+        userId,
+        reason: 'remote_ahead',
+      });
+      activeIntegrations.observeSyncHealth?.({
+        status: 'behind',
+        eventId: args.eventId,
+        userId,
+        hole: args.hole,
+        prevRevision,
+        localRevision,
+        prevHash,
+        localHash,
+      });
+      return;
+    }
 
     const row: Partial<ScoreRow> & { ts: string } = {
       event_id: args.eventId,
       user_id: userId,
       hole_no: args.hole,
-      gross: args.gross,
-      net,
-      to_par,
+      gross: args.gross ?? 0,
+      net: args.gross ?? 0,
+      to_par: (args.gross ?? 0) - 4,
       ts: nowIso(),
-      round_revision: normalizedRevision,
-      scores_hash: normalizedHash,
+      round_revision: localRevision,
+      scores_hash: localHash,
     };
 
-    const { data, error } = await c
+    const { error: upsertError } = await c
       .from('event_scores')
-      .upsert(row, {
-        onConflict: 'event_id,user_id,hole_no',
-        returning: 'representation',
+      .upsert(row, { onConflict: 'event_id,user_id,hole_no', returning: 'minimal' });
+
+    if (upsertError) {
+      throw upsertError instanceof Error ? upsertError : new Error('pushHoleScore upsert failed');
+    }
+
+    if (revisionDrift || hashDrift) {
+      activeIntegrations.observeSyncDrift?.({
+        eventId: args.eventId,
+        userId,
+        hole: args.hole,
+        prevRevision,
+        localRevision,
+        prevHash,
+        localHash,
       });
-
-    if (error) {
-      reportedError = true;
-      observeSyncError(args.eventId, error);
-      throw new Error('pushHoleScore failed');
     }
 
-    const payload = Array.isArray(data) ? (data[0] as Partial<ScoreRow> | undefined) : (data as Partial<ScoreRow> | undefined);
-
-    const remoteRevisionRaw = payload ? (payload as Record<string, unknown>).round_revision : null;
-    const remoteHashRaw = payload ? (payload as Record<string, unknown>).scores_hash : null;
-
-    let remoteRevision: number | null = null;
-    if (typeof remoteRevisionRaw === 'number') {
-      remoteRevision = remoteRevisionRaw;
-    } else if (typeof remoteRevisionRaw === 'string' && remoteRevisionRaw.trim()) {
-      const parsed = Number(remoteRevisionRaw);
-      remoteRevision = Number.isFinite(parsed) ? Math.floor(parsed) : null;
-    }
-
-    const remoteHash =
-      typeof remoteHashRaw === 'string' && remoteHashRaw.trim() ? remoteHashRaw.trim() : null;
-
-    const revisionMismatch =
-      normalizedRevision !== null && (remoteRevision ?? 0) < normalizedRevision;
-    const hashMismatch =
-      Boolean(normalizedHash && remoteHash && remoteHash !== normalizedHash);
-
-    if (revisionMismatch || hashMismatch) {
-      observeSyncDrift(args.eventId, {
-        localRevision: normalizedRevision ?? undefined,
-        remoteRevision: remoteRevision ?? undefined,
-        localHash: normalizedHash,
-        remoteHash,
-      });
-    } else {
-      observeSyncSuccess();
-    }
+    activeIntegrations.observeSyncHealth?.({
+      status: 'ok',
+      eventId: args.eventId,
+      userId,
+      hole: args.hole,
+      prevRevision,
+      localRevision,
+      prevHash,
+      localHash,
+    });
   } catch (error) {
-    if (!reportedError) {
-      observeSyncError(args.eventId, error);
-    }
+    activeIntegrations.observeSyncHealth?.({
+      status: 'error',
+      eventId: args.eventId,
+      userId,
+      hole: args.hole,
+      prevRevision,
+      localRevision,
+      prevHash,
+      localHash,
+      error,
+    });
     if (error instanceof Error) {
       throw error;
     }
