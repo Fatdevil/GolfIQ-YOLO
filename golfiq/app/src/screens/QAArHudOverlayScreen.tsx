@@ -1,6 +1,7 @@
 import React, {
   useCallback,
   useEffect,
+  useImperativeHandle,
   useMemo,
   useRef,
   useState,
@@ -1963,6 +1964,16 @@ type GhostErrorVector = {
   lateral: number;
 };
 
+type MapOverlayFocusOptions = {
+  animate?: boolean;
+  padding?: number;
+  pulse?: { lat: number; lon: number };
+};
+
+type MapOverlayHandle = {
+  focusOnPoint(point: { lat: number; lon: number }, options?: MapOverlayFocusOptions): void;
+};
+
 type MapOverlayProps = {
   data: OverlayData;
   player: LocalPoint;
@@ -1975,24 +1986,140 @@ type MapOverlayProps = {
   ghost?: GhostOverlay | null;
   onLongPressPin?: () => void;
   pinDropEnabled?: boolean;
+  projectLatLon?: ((point: { lat: number; lon: number }) => LocalPoint | null) | null;
 };
 
-const MapOverlay: React.FC<MapOverlayProps> = ({
-  data,
-  player,
-  heading,
-  offline,
-  hazard,
-  markLandingActive,
-  onSelectLanding,
-  landing,
-  ghost,
-  onLongPressPin,
-  pinDropEnabled,
-}) => {
+const MapOverlay = React.forwardRef<MapOverlayHandle, MapOverlayProps>((
+  {
+    data,
+    player,
+    heading,
+    offline,
+    hazard,
+    markLandingActive,
+    onSelectLanding,
+    landing,
+    ghost,
+    onLongPressPin,
+    pinDropEnabled,
+    projectLatLon,
+  },
+  ref,
+) => {
   const { width } = useWindowDimensions();
   const size = Math.min(width - 32, 340);
-  const padding = 20;
+  const basePadding = 20;
+  const [focusPadding, setFocusPadding] = useState<number | null>(null);
+  const [centerOverride, setCenterOverride] = useState<LocalPoint | null>(null);
+  const [guidance, setGuidance] = useState<{ target: LocalPoint; startedAt: number } | null>(null);
+  const [pulse, setPulse] = useState<{ point: LocalPoint; startedAt: number } | null>(null);
+  const centerProgress = useRef(new Animated.Value(0)).current;
+  const guidanceOpacity = useRef(new Animated.Value(0)).current;
+  const pulseOpacity = useRef(new Animated.Value(0)).current;
+  const [centerProgressValue, setCenterProgressValue] = useState(0);
+  const [guidanceOpacityValue, setGuidanceOpacityValue] = useState(0);
+  const [pulseOpacityValue, setPulseOpacityValue] = useState(0);
+  const resetTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    const id = centerProgress.addListener(({ value }) => {
+      setCenterProgressValue(value);
+    });
+    return () => {
+      centerProgress.removeListener(id);
+    };
+  }, [centerProgress]);
+
+  useEffect(() => {
+    const id = guidanceOpacity.addListener(({ value }) => {
+      setGuidanceOpacityValue(value);
+    });
+    return () => {
+      guidanceOpacity.removeListener(id);
+    };
+  }, [guidanceOpacity]);
+
+  useEffect(() => {
+    const id = pulseOpacity.addListener(({ value }) => {
+      setPulseOpacityValue(value);
+    });
+    return () => {
+      pulseOpacity.removeListener(id);
+    };
+  }, [pulseOpacity]);
+
+  useEffect(() => () => {
+    if (resetTimeoutRef.current) {
+      clearTimeout(resetTimeoutRef.current);
+      resetTimeoutRef.current = null;
+    }
+  }, []);
+
+  useImperativeHandle(
+    ref,
+    () => ({
+      focusOnPoint(point, options) {
+        if (!projectLatLon) {
+          return;
+        }
+        const local = projectLatLon(point);
+        if (!local) {
+          return;
+        }
+        setCenterOverride(local);
+        setFocusPadding(options?.padding ?? null);
+        centerProgress.stopAnimation();
+        centerProgress.setValue(0);
+        Animated.timing(centerProgress, {
+          toValue: 1,
+          duration: options?.animate === false ? 0 : 600,
+          easing: Easing.out(Easing.cubic),
+          useNativeDriver: false,
+        }).start();
+        if (resetTimeoutRef.current) {
+          clearTimeout(resetTimeoutRef.current);
+        }
+        resetTimeoutRef.current = setTimeout(() => {
+          setCenterOverride(null);
+          setFocusPadding(null);
+          centerProgress.setValue(0);
+        }, 4_000);
+        if (projectLatLon && options?.pulse) {
+          const teeLocal = projectLatLon(options.pulse);
+          if (teeLocal) {
+            setPulse({ point: teeLocal, startedAt: Date.now() });
+            pulseOpacity.stopAnimation();
+            pulseOpacity.setValue(1);
+            Animated.timing(pulseOpacity, {
+              toValue: 0,
+              duration: 1_200,
+              easing: Easing.out(Easing.cubic),
+              useNativeDriver: false,
+            }).start(({ finished }) => {
+              if (finished) {
+                setPulse(null);
+              }
+            });
+          }
+        }
+        setGuidance({ target: local, startedAt: Date.now() });
+        guidanceOpacity.stopAnimation();
+        guidanceOpacity.setValue(1);
+        Animated.timing(guidanceOpacity, {
+          toValue: 0,
+          duration: 3_000,
+          easing: Easing.out(Easing.cubic),
+          useNativeDriver: false,
+        }).start(({ finished }) => {
+          if (finished) {
+            setGuidance(null);
+          }
+        });
+      },
+    }),
+    [centerProgress, guidanceOpacity, projectLatLon, pulseOpacity],
+  );
+
   const extendedPoints = useMemo(() => {
     const base = data.points.length ? [...data.points] : [];
     if (ghost?.groundPath?.length) {
@@ -2016,19 +2143,27 @@ const MapOverlay: React.FC<MapOverlayProps> = ({
   const extentX = bounds.maxX - bounds.minX;
   const extentY = bounds.maxY - bounds.minY;
   const maxExtent = Math.max(extentX, extentY, 20);
-  const scale = (size - padding * 2) / maxExtent;
-  const center = {
+  const activePadding = focusPadding ?? basePadding;
+  const scale = (size - activePadding * 2) / maxExtent;
+  const baseCenter = {
     x: (bounds.maxX + bounds.minX) / 2,
     y: (bounds.maxY + bounds.minY) / 2,
   };
+  const targetCenter = centerOverride ?? baseCenter;
+  const effectiveCenter = centerOverride
+    ? {
+        x: baseCenter.x + (targetCenter.x - baseCenter.x) * centerProgressValue,
+        y: baseCenter.y + (targetCenter.y - baseCenter.y) * centerProgressValue,
+      }
+    : baseCenter;
   const toScreen = (point: LocalPoint) => ({
-    x: size / 2 + (point.x - center.x) * scale,
-    y: size / 2 - (point.y - center.y) * scale,
+    x: size / 2 + (point.x - effectiveCenter.x) * scale,
+    y: size / 2 - (point.y - effectiveCenter.y) * scale,
   });
   const playerScreen = toScreen(player);
 
   const headingRad = (heading * Math.PI) / 180;
-  const headingRadius = (size - padding * 2) / 2;
+  const headingRadius = (size - activePadding * 2) / 2;
   const headingPos = {
     x: size / 2 + Math.sin(headingRad) * headingRadius,
     y: size / 2 - Math.cos(headingRad) * headingRadius,
@@ -2079,13 +2214,13 @@ const MapOverlay: React.FC<MapOverlayProps> = ({
       const { locationX, locationY } = event.nativeEvent;
       const relativeX = locationX - size / 2;
       const relativeY = locationY - size / 2;
-      const localX = center.x + relativeX / scale;
-      const localY = center.y - relativeY / scale;
+      const localX = effectiveCenter.x + relativeX / scale;
+      const localY = effectiveCenter.y - relativeY / scale;
       onSelectLanding({ x: localX, y: localY });
     },
     [
-      center.x,
-      center.y,
+      effectiveCenter.x,
+      effectiveCenter.y,
       clearLongPress,
       markLandingActive,
       onLongPressPin,
@@ -2127,6 +2262,58 @@ const MapOverlay: React.FC<MapOverlayProps> = ({
           <Text style={styles.mapCupHintText}>Tap·hold to confirm cup</Text>
         </View>
       ) : null}
+      {guidance && guidanceOpacityValue > 0
+        ? (() => {
+            const start = toScreen(player);
+            const end = toScreen(guidance.target);
+            const dx = end.x - start.x;
+            const dy = end.y - start.y;
+            const length = Math.hypot(dx, dy);
+            if (!Number.isFinite(length) || length < 4) {
+              return null;
+            }
+            const midX = (start.x + end.x) / 2;
+            const midY = (start.y + end.y) / 2;
+            const angle = Math.atan2(dy, dx);
+            return (
+              <View
+                key="guidance"
+                style={[
+                  styles.guidanceLine,
+                  {
+                    left: midX,
+                    top: midY,
+                    width: length,
+                    opacity: guidanceOpacityValue,
+                    transform: [
+                      { translateX: -length / 2 },
+                      { translateY: -1 },
+                      { rotate: `${angle}rad` },
+                    ],
+                  },
+                ]}
+              />
+            );
+          })()
+        : null}
+      {pulse && pulseOpacityValue > 0
+        ? (() => {
+            const marker = toScreen(pulse.point);
+            return (
+              <View
+                key="pulse"
+                style={[
+                  styles.pulseMarker,
+                  {
+                    left: marker.x - 8,
+                    top: marker.y - 8,
+                    opacity: pulseOpacityValue,
+                  },
+                ]}
+              />
+            );
+          })()
+        : null}
       {data.features.map((feature) =>
         feature.segments.map((segment, idx) => {
           const start = toScreen(segment.start);
@@ -2486,6 +2673,8 @@ const QAArHudOverlayScreen: React.FC = () => {
   const [reviewSaving, setReviewSaving] = useState(false);
   const [reviewNotice, setReviewNotice] = useState<string | null>(null);
   const previousHoleRef = useRef<number | null>(null);
+  const mapOverlayRef = useRef<MapOverlayHandle | null>(null);
+  const lastFocusKeyRef = useRef<string | null>(null);
   useEffect(() => {
     if (!watchDiagExpanded) {
       return;
@@ -2559,6 +2748,32 @@ const QAArHudOverlayScreen: React.FC = () => {
     }
     previousHoleRef.current = activeHoleId ?? null;
   }, [activeHoleId, openReviewForHole, qaEnabled, reviewVisible]);
+  useEffect(() => {
+    if (!mapOverlayRef.current || !pin) {
+      return;
+    }
+    const key = `${activeHoleId ?? 'na'}:${pin.lat.toFixed(6)}:${pin.lon.toFixed(6)}`;
+    if (lastFocusKeyRef.current === key) {
+      return;
+    }
+    const teeLatLon =
+      overlayOrigin && shotSession?.origin
+        ? fromLocalPoint(overlayOrigin, shotSession.origin)
+        : null;
+    mapOverlayRef.current.focusOnPoint(pin, {
+      animate: true,
+      padding: 24,
+      pulse: teeLatLon ?? undefined,
+    });
+    lastFocusKeyRef.current = key;
+  }, [
+    activeHoleId,
+    overlayOrigin,
+    pin?.lat,
+    pin?.lon,
+    shotSession?.origin?.x,
+    shotSession?.origin?.y,
+  ]);
   const updateReviewShotClub = useCallback((id: string, value: string) => {
     setReviewShots((prev) => prev.map((item) => (item.id === id ? { ...item, club: value } : item)));
   }, []);
@@ -3214,6 +3429,10 @@ const QAArHudOverlayScreen: React.FC = () => {
   const overlayOrigin = useMemo(
     () => (bundle ? deriveOrigin(bundle, selectedCourse) : null),
     [bundle, selectedCourse],
+  );
+  const projectLatLon = useCallback(
+    (point: GeoPoint) => (overlayOrigin ? toLocalENU(overlayOrigin, point) : null),
+    [overlayOrigin],
   );
   const playerLatLon = useMemo(
     () => (overlayOrigin ? fromLocalPoint(overlayOrigin, playerPosition) : null),
@@ -7057,6 +7276,7 @@ const QAArHudOverlayScreen: React.FC = () => {
       </View>
       <View style={styles.overlayWrapper}>
         <MapOverlay
+          ref={mapOverlayRef}
           data={overlayData}
           player={playerPosition}
           heading={heading}
@@ -7068,8 +7288,8 @@ const QAArHudOverlayScreen: React.FC = () => {
           ghost={ghostOverlay}
           onLongPressPin={pinDropUiEnabled ? handleSetPin : undefined}
           pinDropEnabled={pinDropUiEnabled}
+          projectLatLon={projectLatLon}
         />
-        </View>
       </View>
       <View style={styles.statusPanel}>
         <View style={styles.caddieHudToggleRow}>
@@ -10223,6 +10443,21 @@ const styles = StyleSheet.create({
     color: '#f8fafc',
     fontWeight: '700',
     fontSize: 14,
+  },
+  guidanceLine: {
+    position: 'absolute',
+    height: 2,
+    backgroundColor: '#38bdf8',
+    borderRadius: 2,
+  },
+  pulseMarker: {
+    position: 'absolute',
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+    borderWidth: 2,
+    borderColor: '#f97316',
+    backgroundColor: 'rgba(249, 115, 22, 0.15)',
   },
 });
 

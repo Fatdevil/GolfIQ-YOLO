@@ -2,6 +2,9 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import {
+  ADVANCE_DWELL_MS,
+  ADVANCE_VOTES,
+  advanceToHole,
   createAutoHole,
   maybeAdvanceOnGreen,
   updateAutoHole,
@@ -12,6 +15,29 @@ import {
 function course(): CourseRef {
   return {
     id: 'demo',
+    holes: [
+      {
+        hole: 1,
+        tee: { lat: 0, lon: 0 },
+        green: { mid: { lat: 0.0003, lon: 0 } },
+      },
+      {
+        hole: 2,
+        tee: { lat: 0.0006, lon: 0 },
+        green: { mid: { lat: 0.0009, lon: 0 } },
+      },
+      {
+        hole: 3,
+        tee: { lat: 0.0012, lon: 0 },
+        green: { mid: { lat: 0.0015, lon: 0 } },
+      },
+    ],
+  };
+}
+
+function mkCourse(): CourseRef {
+  return {
+    id: 'c',
     holes: [
       {
         hole: 1,
@@ -49,7 +75,7 @@ test('selects hole near tee or green', () => {
 
   state = updateRepeated(state, { lat: 0.0006, lon: 0 }, 3);
   assert.equal(state.hole, 2);
-  assert.equal(state.previousHole, 1);
+  assert.equal(state.prevHole, 1);
 
   state = updateRepeated(state, { lat: 0.0015, lon: 0 }, 3);
   assert.equal(state.hole, 3);
@@ -100,5 +126,83 @@ test('maybeAdvanceOnGreen jumps to next hole when tee leads', () => {
 
   state = maybeAdvanceOnGreen(state, true, Date.now() + 10_000);
   assert.equal(state.hole, 2);
-  assert.equal(state.previousHole, 1);
+  assert.equal(state.prevHole, 1);
+});
+
+test('respects dwell: no auto-advance within dwell window', () => {
+  let state = createAutoHole({ id: 'c', holes: [{ hole: 1 }, { hole: 2 }] }, 1);
+  state.teeLeadHole = 2;
+  state.teeLeadVotes = ADVANCE_VOTES;
+  state = advanceToHole(state, 2, 1000, 'tee-lead');
+  const blocked = maybeAdvanceOnGreen(state, true, 1000 + ADVANCE_DWELL_MS - 100);
+  assert.equal(blocked.hole, 2);
+});
+
+test('undo sets prevHole and applies dwell', () => {
+  let state = createAutoHole({ id: 'c', holes: [{ hole: 1 }, { hole: 2 }] }, 1);
+  state = advanceToHole(state, 2, 1000, 'manual');
+  assert.equal(state.prevHole, 1);
+  const undo = advanceToHole(state, state.prevHole!, 2000, 'undo');
+  assert.equal(undo.hole, 1);
+  undo.teeLeadHole = 2;
+  undo.teeLeadVotes = ADVANCE_VOTES;
+  const afterUndo = maybeAdvanceOnGreen(undo, true, 2000 + ADVANCE_DWELL_MS - 1);
+  assert.equal(afterUndo.hole, 1);
+});
+
+test('updateAutoHole uses advanceToHole so prevHole/lastSwitch/lastSwitchAt are populated', () => {
+  let state = createAutoHole(mkCourse(), 1);
+  const courseData = mkCourse();
+  const tee = courseData.holes[1]?.tee;
+  assert(tee);
+  const baseTime = 1_000;
+  for (let i = 0; i < ADVANCE_VOTES; i += 1) {
+    state = updateAutoHole(
+      state,
+      {
+        course: courseData,
+        fix: { lat: tee.lat, lon: tee.lon, heading_deg: 0, acc_m: 3 },
+      },
+      baseTime + i * 1_000,
+    );
+  }
+  assert.equal(state.hole, 2);
+  assert.equal(state.prevHole, 1);
+  assert(state.lastSwitch);
+  assert.equal(state.lastSwitch?.from, 1);
+  assert.equal(state.lastSwitch?.to, 2);
+  assert.equal(state.lastSwitch?.reason, 'tee-lead');
+  assert.equal(typeof state.lastSwitchAt, 'number');
+});
+
+test('dwell applies after detector-driven switch (no immediate putt-advance)', () => {
+  let state = createAutoHole(mkCourse(), 1);
+  const courseData = mkCourse();
+  const tee = courseData.holes[1]?.tee;
+  assert(tee);
+  const baseTime = 5_000;
+  for (let i = 0; i < ADVANCE_VOTES; i += 1) {
+    state = updateAutoHole(
+      state,
+      {
+        course: courseData,
+        fix: { lat: tee.lat, lon: tee.lon, heading_deg: 0, acc_m: 3 },
+      },
+      baseTime + i * 1_000,
+    );
+  }
+  assert.equal(state.hole, 2);
+  assert.equal(state.lastSwitch?.to, 2);
+  assert.equal(state.prevHole, 1);
+  assert.equal(typeof state.lastSwitchAt, 'number');
+  const dwellBlocked = maybeAdvanceOnGreen(
+    {
+      ...state,
+      teeLeadHole: 3,
+      teeLeadVotes: ADVANCE_VOTES,
+    },
+    true,
+    (state.lastSwitchAt ?? 0) + ADVANCE_DWELL_MS - 1,
+  );
+  assert.equal(dwellBlocked.hole, 2);
 });
