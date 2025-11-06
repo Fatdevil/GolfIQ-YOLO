@@ -118,6 +118,8 @@ import { exportAccuracyNdjson } from '../../../../shared/telemetry/shotsenseMetr
 import { PostHoleReconciler, collectAutoCandidates } from '../shotsense/PostHoleReconciler';
 import EventPanel from '../event/EventPanel';
 import LearningPanel from '../features/learning/LearningPanel';
+import RangeGamesPanel from '../features/range/RangeGamesPanel';
+import { RangeGameController } from '../features/range/RangeGameController';
 import TrainerScreen from './TrainerScreen';
 import {
   createLandingHeuristics,
@@ -2761,6 +2763,7 @@ const QAArHudOverlayScreen: React.FC = () => {
   const [learningActive, setLearningActive] = useState(false);
   const [learningPanelVisible, setLearningPanelVisible] = useState(false);
   const [trainerVisible, setTrainerVisible] = useState(false);
+  const [rangeGamesVisible, setRangeGamesVisible] = useState(false);
   const [learningSuggestions, setLearningSuggestions] = useState<Suggestion[]>([]);
   const [learningApplied, setLearningApplied] = useState(false);
   const [learningOverrides, setLearningOverrides] = useState<StrategyRiskOverrides | null>(null);
@@ -3729,6 +3732,38 @@ const QAArHudOverlayScreen: React.FC = () => {
       const roundShot = mapHudRecordToRoundShot(payload);
       if (hole && roundShot) {
         addRoundShot(hole.holeNo, roundShot);
+      }
+    }
+    if (!tournamentSafe && shotSession.landing) {
+      const previousHits = RangeGameController.getState()?.hits.length ?? 0;
+      const updated = RangeGameController.addShot({
+        ts: typeof payload.tEnd === 'number' && Number.isFinite(payload.tEnd) ? payload.tEnd : Date.now(),
+        club: payload.club ?? undefined,
+        carry_m:
+          typeof payload.carry_m === 'number' && Number.isFinite(payload.carry_m)
+            ? payload.carry_m
+            : undefined,
+        landing: shotSession.landing,
+        lateralSign: shotSession.landing.y >= 0 ? 1 : -1,
+        startDeg:
+          typeof shotSession.headingDeg === 'number' && Number.isFinite(shotSession.headingDeg)
+            ? shotSession.headingDeg
+            : undefined,
+      });
+      if (updated) {
+        emitTelemetry('range.shot', {
+          score: updated.score,
+          hits: updated.hits.length,
+          club: payload.club ?? 'Any',
+        });
+        if (updated.hits.length > previousHits) {
+          const latest = updated.hits[updated.hits.length - 1];
+          emitTelemetry('range.hit', {
+            points: latest.points,
+            targetId: latest.targetId,
+            club: latest.club ?? 'Any',
+          });
+        }
       }
     }
     setShotSession((prev) => {
@@ -6932,6 +6967,10 @@ const QAArHudOverlayScreen: React.FC = () => {
           <TrainerScreen />
         </View>
       </Modal>
+      <RangeGamesPanel
+        visible={rangeGamesVisible}
+        onClose={() => setRangeGamesVisible(false)}
+      />
       <View style={styles.gnssCard}>
         <View style={[styles.gnssBadge, gnssBadgeToneStyle]}>
           <Text style={styles.gnssBadgeText}>{gnssBadgeText}</Text>
@@ -7296,6 +7335,26 @@ const QAArHudOverlayScreen: React.FC = () => {
             Review the last 50 snapshots, camera assistant cues, and weekly plan focus.
           </Text>
         </View>
+        {!tournamentSafe ? (
+          <View style={[styles.rangeGamesCard, styles.sectionTitleSpacing]}>
+            <View style={styles.rangeGamesHeader}>
+              <View>
+                <Text style={styles.sectionTitle}>Range games</Text>
+                <Text style={styles.rangeGamesSubtitle}>Target Bingo with live spray heatmaps.</Text>
+              </View>
+              <TouchableOpacity
+                onPress={() => setRangeGamesVisible(true)}
+                style={styles.rangeGamesButton}
+                accessibilityRole="button"
+              >
+                <Text style={styles.rangeGamesButtonLabel}>Open</Text>
+              </TouchableOpacity>
+            </View>
+            <Text style={styles.rangeGamesHint}>
+              Design custom target ladders, track streaks per club, and export shareable cards.
+            </Text>
+          </View>
+        ) : null}
         <View style={[styles.caddieContainer, styles.sectionTitleSpacing]}>
           <View style={styles.caddieHeader}>
             <View style={styles.caddieHeaderLeft}>
@@ -9957,6 +10016,41 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#1f2937',
     gap: 8,
+  },
+  rangeGamesCard: {
+    backgroundColor: '#0f172a',
+    borderRadius: 12,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: '#1f2937',
+    gap: 8,
+  },
+  rangeGamesHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  rangeGamesSubtitle: {
+    color: '#94a3b8',
+    fontSize: 12,
+    marginTop: 4,
+  },
+  rangeGamesHint: {
+    color: '#94a3b8',
+    fontSize: 13,
+    lineHeight: 18,
+  },
+  rangeGamesButton: {
+    backgroundColor: '#14b8a6',
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 8,
+  },
+  rangeGamesButtonLabel: {
+    color: '#042f2e',
+    fontSize: 13,
+    fontWeight: '700',
   },
   trainerHeader: {
     flexDirection: 'row',
