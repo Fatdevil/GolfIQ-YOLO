@@ -14,6 +14,7 @@ import { qaReplayEnabled } from "./config";
 import ShareRunPage from "./pages/ShareRun";
 import EventLeaderboardPage from "./pages/EventLeaderboard";
 import ReelsComposerPage from "./pages/ReelsComposer";
+import RangeScorePage from "./pages/range/score";
 
 export default function App() {
   return (
@@ -33,6 +34,7 @@ export default function App() {
           <Route path="/accuracy" element={<AccuracyDashboardPage />} />
           <Route path="/admin/feedback" element={<FeedbackAdminPage />} />
           <Route path="/reels" element={<ReelsComposerPage />} />
+          <Route path="/range/score" element={<RangeScorePage />} />
           {qaReplayEnabled && <Route path="/qa/replay" element={<ReplayAnalyzerPage />} />}
         </Routes>
       </main>
