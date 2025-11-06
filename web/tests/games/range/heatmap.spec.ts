@@ -32,3 +32,14 @@ test('makeHeatmap bins points into grid cells', () => {
     ],
   );
 });
+
+test('includes boundary bins when a point lands on the grid edge', () => {
+  const hm = makeHeatmap([
+    { x: 15, y: 0 },
+    { x: 0, y: 10 },
+  ], 5);
+  assert.equal(hm.width, 4);
+  assert.equal(hm.height, 3);
+  const hasEdge = hm.bins.some(b => b.x === 3);
+  assert.equal(hasEdge, true);
+});
