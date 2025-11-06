@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Modal,
   StyleSheet,
@@ -8,20 +8,69 @@ import {
   View,
 } from 'react-native';
 
-import type { AutoHoleState } from '../../../../shared/arhud/auto_hole_detect';
+import {
+  ADVANCE_DWELL_MS,
+  ADVANCE_VOTES,
+  advanceToHole,
+  type AutoHoleState,
+} from '../../../../shared/arhud/auto_hole_detect';
+import {
+  emitAutoHoleStatus,
+  type TelemetryEmitter,
+} from '../../../../shared/telemetry/arhud';
 
 type AutoHoleChipProps = {
   state: AutoHoleState | null;
   enabled: boolean;
   tournamentSafe: boolean;
+  telemetryEmitter?: TelemetryEmitter | null;
   onToggle(enabled: boolean): void;
-  onStep(action: 'prev' | 'next' | 'undo'): void;
+  onStateChange?(next: AutoHoleState): void;
 };
 
-const CONFIDENCE_THRESHOLD = 0.7;
+const CONFIDENCE_THRESHOLD = 0.8;
+const TELEMETRY_STATUS_INTERVAL_MS = 5_000;
 
-const AutoHoleChip: React.FC<AutoHoleChipProps> = ({ state, enabled, tournamentSafe, onToggle, onStep }) => {
+const AutoHoleChip: React.FC<AutoHoleChipProps> = ({
+  state,
+  enabled,
+  tournamentSafe,
+  telemetryEmitter,
+  onToggle,
+  onStateChange,
+}) => {
   const [open, setOpen] = useState(false);
+  const [now, setNow] = useState(() => Date.now());
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setNow(Date.now());
+    }, 1_000);
+    return () => {
+      clearInterval(timer);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!telemetryEmitter || !state) {
+      return undefined;
+    }
+    const publish = () => {
+      emitAutoHoleStatus(telemetryEmitter, {
+        courseId: state.courseId,
+        hole: state.hole,
+        confidence: state.confidence ?? 0,
+        teeLead: state.teeLeadHole ?? null,
+        votes: state.teeLeadVotes ?? 0,
+        auto: enabled,
+      });
+    };
+    publish();
+    const interval = setInterval(publish, TELEMETRY_STATUS_INTERVAL_MS);
+    return () => {
+      clearInterval(interval);
+    };
+  }, [enabled, state, telemetryEmitter]);
 
   const confidencePct = useMemo(() => {
     if (!state) {
@@ -47,6 +96,27 @@ const AutoHoleChip: React.FC<AutoHoleChipProps> = ({ state, enabled, tournamentS
     return `${prefix} • Auto ✓ (${confidencePct ?? 0}%)`;
   }, [confidencePct, enabled, stable, state]);
 
+  const teeLeadVotes = state?.teeLeadVotes ?? 0;
+  const dwellRemainingMs = useMemo(() => {
+    if (!state?.lastSwitchAt) {
+      return 0;
+    }
+    return Math.max(0, ADVANCE_DWELL_MS - (now - state.lastSwitchAt));
+  }, [now, state?.lastSwitchAt]);
+
+  const holes = state?.holes ?? [];
+  const currentIndex = state ? holes.indexOf(state.hole) : -1;
+  const canPrev = Boolean(!tournamentSafe && state && onStateChange && currentIndex > 0);
+  const canNext = Boolean(
+    !tournamentSafe &&
+      state &&
+      onStateChange &&
+      currentIndex >= 0 &&
+      currentIndex + 1 < holes.length,
+  );
+  const prevHoleId = state?.prevHole ?? state?.previousHole ?? null;
+  const canUndo = Boolean(!tournamentSafe && state && onStateChange && prevHoleId !== null);
+
   const showSheet = useCallback(() => {
     setOpen(true);
   }, []);
@@ -65,15 +135,37 @@ const AutoHoleChip: React.FC<AutoHoleChipProps> = ({ state, enabled, tournamentS
     [onToggle, tournamentSafe],
   );
 
-  const handleStep = useCallback(
-    (action: 'prev' | 'next' | 'undo') => {
-      if (tournamentSafe) {
-        return;
-      }
-      onStep(action);
-    },
-    [onStep, tournamentSafe],
-  );
+  const handlePrev = useCallback(() => {
+    if (!state || !onStateChange || !canPrev) {
+      return;
+    }
+    const target = holes[currentIndex - 1];
+    if (typeof target !== 'number') {
+      return;
+    }
+    const nextState = advanceToHole(state, target, Date.now(), 'manual', telemetryEmitter);
+    onStateChange(nextState);
+  }, [canPrev, currentIndex, holes, onStateChange, state, telemetryEmitter]);
+
+  const handleNext = useCallback(() => {
+    if (!state || !onStateChange || !canNext) {
+      return;
+    }
+    const target = holes[currentIndex + 1];
+    if (typeof target !== 'number') {
+      return;
+    }
+    const nextState = advanceToHole(state, target, Date.now(), 'manual', telemetryEmitter);
+    onStateChange(nextState);
+  }, [canNext, currentIndex, holes, onStateChange, state, telemetryEmitter]);
+
+  const handleUndo = useCallback(() => {
+    if (!state || !onStateChange || !canUndo || prevHoleId === null) {
+      return;
+    }
+    const nextState = advanceToHole(state, prevHoleId, Date.now(), 'undo', telemetryEmitter);
+    onStateChange(nextState);
+  }, [canUndo, onStateChange, prevHoleId, state, telemetryEmitter]);
 
   return (
     <>
@@ -95,23 +187,23 @@ const AutoHoleChip: React.FC<AutoHoleChipProps> = ({ state, enabled, tournamentS
             </View>
             <View style={styles.actions}>
               <TouchableOpacity
-                onPress={() => handleStep('prev')}
-                disabled={tournamentSafe}
-                style={[styles.actionButton, tournamentSafe && styles.actionButtonDisabled]}
+                onPress={handlePrev}
+                disabled={!canPrev}
+                style={[styles.actionButton, !canPrev && styles.actionButtonDisabled]}
               >
                 <Text style={styles.actionLabel}>Prev</Text>
               </TouchableOpacity>
               <TouchableOpacity
-                onPress={() => handleStep('undo')}
-                disabled={tournamentSafe}
-                style={[styles.actionButton, tournamentSafe && styles.actionButtonDisabled]}
+                onPress={handleUndo}
+                disabled={!canUndo}
+                style={[styles.actionButton, !canUndo && styles.actionButtonDisabled]}
               >
                 <Text style={styles.actionLabel}>Undo</Text>
               </TouchableOpacity>
               <TouchableOpacity
-                onPress={() => handleStep('next')}
-                disabled={tournamentSafe}
-                style={[styles.actionButton, tournamentSafe && styles.actionButtonDisabled]}
+                onPress={handleNext}
+                disabled={!canNext}
+                style={[styles.actionButton, !canNext && styles.actionButtonDisabled]}
               >
                 <Text style={styles.actionLabel}>Next</Text>
               </TouchableOpacity>
@@ -120,8 +212,18 @@ const AutoHoleChip: React.FC<AutoHoleChipProps> = ({ state, enabled, tournamentS
               <Text style={styles.metaText}>
                 Confidence: {confidencePct !== null ? `${confidencePct}%` : '—'}
               </Text>
-              <Text style={styles.metaText}>Active hole since: {state ? new Date(state.sinceTs).toLocaleTimeString() : '—'}</Text>
-              <Text style={styles.metaText}>Last reasons: {state?.lastReasons?.join(', ') || '—'}</Text>
+              <Text style={styles.metaText}>
+                Tee lead votes: {teeLeadVotes} / {ADVANCE_VOTES}
+              </Text>
+              <Text style={styles.metaText}>
+                Auto dwell: {dwellRemainingMs > 0 ? `${Math.ceil(dwellRemainingMs / 1000)}s remaining` : 'Ready'}
+              </Text>
+              <Text style={styles.metaText}>
+                Active since: {state ? new Date(state.sinceTs).toLocaleTimeString() : '—'}
+              </Text>
+              <Text style={styles.metaText}>
+                Last switch: {state?.lastSwitch ? `${state.lastSwitch.reason} → ${state.lastSwitch.to}` : '—'}
+              </Text>
               {tournamentSafe ? (
                 <Text style={styles.metaWarning}>Tournament-safe: auto-advance disabled</Text>
               ) : null}
@@ -227,4 +329,3 @@ const styles = StyleSheet.create({
 });
 
 export default AutoHoleChip;
-

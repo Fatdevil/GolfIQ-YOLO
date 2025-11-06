@@ -1,5 +1,6 @@
 import { bearingDeg } from './geo';
 import { distanceMeters } from './location';
+import { emitAutoHoleSwitch, type TelemetryEmitter } from '../telemetry/arhud';
 
 export type HoleRef = {
   hole: number;
@@ -9,20 +10,32 @@ export type HoleRef = {
 
 export type CourseRef = { id: string; holes: HoleRef[] };
 
+export type AutoHoleSwitchReason = 'tee-lead' | 'putt-advance' | 'manual' | 'undo';
+
+export type AutoHoleSwitchMeta = {
+  from: number;
+  to: number;
+  at: number;
+  reason: AutoHoleSwitchReason;
+};
+
 export type AutoHoleState = {
   courseId: string;
   hole: number;
   confidence: number;
   sinceTs: number;
-  previousHole: number | null;
+  previousHole?: number | null;
+  prevHole?: number | null;
   lastReasons: string[];
   pendingHole: number | null;
   pendingVotes: number;
   streak: number;
   onGreen: boolean;
-  teeLeadHole: number | null;
-  teeLeadVotes: number;
+  teeLeadHole?: number | null;
+  teeLeadVotes?: number;
   holes: number[];
+  lastSwitch?: AutoHoleSwitchMeta | null;
+  lastSwitchAt?: number | null;
 };
 
 export type AutoInput = {
@@ -37,6 +50,7 @@ const GREEN_FAR_M = 120;
 const HEADING_WINDOW_DEG = 35;
 const SWITCH_VOTES = 3;
 export const ADVANCE_VOTES = 3;
+export const ADVANCE_DWELL_MS = 15_000;
 
 type HoleEval = {
   hole: number;
@@ -176,12 +190,29 @@ function copyState(base: AutoHoleState): AutoHoleState {
     ...base,
     lastReasons: [...base.lastReasons],
     holes: [...base.holes],
+    lastSwitch: base.lastSwitch ? { ...base.lastSwitch } : base.lastSwitch ?? null,
   };
 }
 
-function advanceToHole(state: AutoHoleState, hole: number, now: number, reason: string): AutoHoleState {
+export function canAutoAdvance(now: number, state: AutoHoleState): boolean {
+  const lastSwitchAt = typeof state.lastSwitchAt === 'number' ? state.lastSwitchAt : null;
+  if (!lastSwitchAt) {
+    return true;
+  }
+  return now - lastSwitchAt >= ADVANCE_DWELL_MS;
+}
+
+export function advanceToHole(
+  state: AutoHoleState,
+  hole: number,
+  now: number,
+  reason: AutoHoleSwitchReason,
+  telemetryEmitter?: TelemetryEmitter | null,
+): AutoHoleState {
   const next = copyState(state);
-  next.previousHole = state.hole;
+  const from = state.hole;
+  next.previousHole = from;
+  next.prevHole = from;
   next.hole = hole;
   next.sinceTs = now;
   next.pendingHole = null;
@@ -191,6 +222,17 @@ function advanceToHole(state: AutoHoleState, hole: number, now: number, reason: 
   next.lastReasons = [reason];
   next.teeLeadHole = null;
   next.teeLeadVotes = 0;
+  next.lastSwitch = { from, to: hole, at: now, reason };
+  next.lastSwitchAt = now;
+  const dwellMs = typeof state.lastSwitchAt === 'number' ? Math.max(0, now - state.lastSwitchAt) : 0;
+  emitAutoHoleSwitch(telemetryEmitter, {
+    courseId: state.courseId,
+    from,
+    to: hole,
+    reason,
+    confidence: state.confidence,
+    dwellMs,
+  });
   return next;
 }
 
@@ -221,6 +263,7 @@ export function createAutoHole(course: CourseRef, initialHole?: number): AutoHol
     confidence: 0,
     sinceTs: now,
     previousHole: null,
+    prevHole: null,
     lastReasons: [],
     pendingHole: null,
     pendingVotes: 0,
@@ -229,6 +272,8 @@ export function createAutoHole(course: CourseRef, initialHole?: number): AutoHol
     teeLeadHole: null,
     teeLeadVotes: 0,
     holes,
+    lastSwitch: null,
+    lastSwitchAt: null,
   };
 }
 
@@ -297,8 +342,14 @@ export function updateAutoHole(state: AutoHoleState, input: AutoInput, now = Dat
   }
 
   const nextHole = resolveNextHole(next);
-  if (next.onGreen && nextHole !== null && next.teeLeadHole === nextHole && next.teeLeadVotes >= ADVANCE_VOTES) {
-    return advanceToHole(next, nextHole, now, 'auto-advance');
+  if (
+    next.onGreen &&
+    nextHole !== null &&
+    next.teeLeadHole === nextHole &&
+    (next.teeLeadVotes ?? 0) >= ADVANCE_VOTES &&
+    canAutoAdvance(now, state)
+  ) {
+    return advanceToHole(next, nextHole, now, 'tee-lead');
   }
 
   return next;
@@ -314,7 +365,11 @@ export function maybeAdvanceOnGreen(state: AutoHoleState, onGreen: boolean, now 
   if (nextHole === null) {
     return next;
   }
-  if (next.teeLeadHole === nextHole && next.teeLeadVotes >= ADVANCE_VOTES) {
+  if (
+    next.teeLeadHole === nextHole &&
+    (next.teeLeadVotes ?? 0) >= ADVANCE_VOTES &&
+    canAutoAdvance(now, state)
+  ) {
     return advanceToHole(next, nextHole, now, 'putt-advance');
   }
   return next;
