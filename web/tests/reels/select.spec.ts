@@ -11,6 +11,31 @@ describe('reels selection', () => {
     expect(scoreShot(high)).toBeGreaterThan(scoreShot(low));
   });
 
+  it('does not inflate score when carry is missing', () => {
+    const valid: ReelShotRef = {
+      id: 'valid',
+      ts: 1,
+      club: '7i',
+      carry_m: 150,
+      apex_m: 30,
+      ballSpeed_mps: 60,
+    };
+    const speedOnly: ReelShotRef = {
+      id: 'speed-only',
+      ts: 2,
+      club: '7i',
+      ballSpeed_mps: 60,
+    };
+    expect(scoreShot(valid)).toBeGreaterThan(scoreShot(speedOnly));
+  });
+
+  it('flush term is zero when carry <= 0', () => {
+    const z1: ReelShotRef = { id: 'z1', ts: 1, ballSpeed_mps: 60, carry_m: 0 };
+    const z2: ReelShotRef = { id: 'z2', ts: 2, ballSpeed_mps: 60 };
+    expect(scoreShot(z1)).toBe(0);
+    expect(scoreShot(z2)).toBe(0);
+  });
+
   it('enforces club or time diversity when picking top shots', () => {
     const now = Date.now();
     const pool: ReelShotRef[] = [
@@ -41,5 +66,24 @@ describe('reels selection', () => {
     expect(timeline.shots[1]?.startFrame).toBe(60);
     const commands = planFrame(timeline, 0);
     expect(commands.some((cmd) => cmd.t === 'bg')).toBe(true);
+  });
+
+  it('pickTopShots ignores speed-only samples when filter is on', () => {
+    const good: ReelShotRef = {
+      id: 'g',
+      ts: 1,
+      carry_m: 140,
+      apex_m: 25,
+      ballSpeed_mps: 58,
+      tracer: { points: [
+        [0, 0],
+        [0.5, 0.3],
+        [1, 0.2],
+        [0.9, 0.1],
+      ] },
+    };
+    const speedOnly: ReelShotRef = { id: 's', ts: 2, ballSpeed_mps: 62 };
+    const out = pickTopShots([speedOnly, good], 1);
+    expect(out[0]?.id).toBe('g');
   });
 });

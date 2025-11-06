@@ -7,15 +7,27 @@ function safeNumber(value: unknown): number | undefined {
 }
 
 export function scoreShot(s: ReelShotRef): number {
-  const carry = s.carry_m ?? 0;
-  const apex = s.apex_m ?? 0;
-  const flush = (s.ballSpeed_mps ?? 0) / Math.max(1, carry);
-  const playsLike = s.playsLikePct ?? 0;
-  return carry * 0.65 + apex * 0.25 + flush * 40 + playsLike;
+  const carry = Number.isFinite(s.carry_m as number) ? Math.max(0, s.carry_m!) : 0;
+  const apex = Number.isFinite(s.apex_m as number) ? Math.max(0, s.apex_m!) : 0;
+  const ballSpeed = Number.isFinite(s.ballSpeed_mps as number)
+    ? Math.max(0, s.ballSpeed_mps!)
+    : 0;
+
+  const carryScore = Math.min(carry, 320) * 0.65;
+  const apexScore = Math.min(apex, 80) * 0.25;
+
+  const validCarry = carry > 0.1;
+  const flushRaw = validCarry && ballSpeed > 0 ? ballSpeed / carry : 0;
+  const flushScore = Math.min(flushRaw * 40, 120);
+
+  return carryScore + apexScore + flushScore;
 }
 
 export function pickTopShots(pool: ReelShotRef[], max = 2): ReelShotRef[] {
-  const ranked = pool.slice().sort((a, b) => scoreShot(b) - scoreShot(a));
+  const filtered = pool.filter(
+    (shot) => (shot.carry_m ?? 0) > 0 || (shot.tracer?.points?.length ?? 0) > 3,
+  );
+  const ranked = filtered.slice().sort((a, b) => scoreShot(b) - scoreShot(a));
   const out: ReelShotRef[] = [];
   for (const shot of ranked) {
     if (!out.length) {

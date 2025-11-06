@@ -23,7 +23,7 @@ export default defineConfig({
   build: {
     commonjsOptions: { transformMixedEsModules: true },
     rollupOptions: {
-      external: [],
+      external: ['@ffmpeg/ffmpeg'],
     },
   },
   test: {
