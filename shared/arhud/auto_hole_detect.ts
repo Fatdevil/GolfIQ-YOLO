@@ -318,13 +318,12 @@ export function updateAutoHole(state: AutoHoleState, input: AutoInput, now = Dat
     next.streak = Math.max(0, (state.streak ?? 0) - 1);
   }
 
-  if (next.pendingHole === best.hole && next.pendingVotes >= SWITCH_VOTES) {
-    next.previousHole = state.hole;
-    next.hole = best.hole;
-    next.sinceTs = now;
-    next.streak = SWITCH_VOTES;
-    next.pendingHole = null;
-    next.pendingVotes = 0;
+  if (
+    next.pendingHole === best.hole &&
+    next.pendingVotes >= SWITCH_VOTES &&
+    canAutoAdvance(now, state)
+  ) {
+    return advanceToHole(next, best.hole, now, 'tee-lead');
   }
 
   next.confidence = Math.min(1, next.streak / SWITCH_VOTES);
