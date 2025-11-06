@@ -120,6 +120,10 @@ import EventPanel from '../event/EventPanel';
 import LearningPanel from '../features/learning/LearningPanel';
 import RangeGamesPanel from '../features/range/RangeGamesPanel';
 import { RangeGameController } from '../features/range/RangeGameController';
+import OfflinePanel from '../features/course/OfflinePanel';
+import AutoHoleChip from '../features/course/AutoHoleChip';
+import { AutoHoleController, deriveCourseRef } from '../features/course/AutoHoleController';
+import type { AutoHoleState } from '../../../../shared/arhud/auto_hole_detect';
 import TrainerScreen from './TrainerScreen';
 import {
   createLandingHeuristics,
@@ -2589,6 +2593,9 @@ const QAArHudOverlayScreen: React.FC = () => {
         holeId: reviewHoleId,
         picks,
       });
+      if (applied > 0) {
+        autoHoleRef.current?.handlePutt(true);
+      }
       setReviewVisible(false);
       setReviewShots([]);
       setReviewHoleId(null);
@@ -2807,6 +2814,14 @@ const QAArHudOverlayScreen: React.FC = () => {
   }
   const lockScaleAnim = lockScaleAnimRef.current;
   const tournamentSafe = useMemo(() => readTournamentSafe(), []);
+  const [autoHoleState, setAutoHoleState] = useState<AutoHoleState | null>(null);
+  const [autoHoleEnabled, setAutoHoleEnabled] = useState(!tournamentSafe);
+  const autoHoleRef = useRef<AutoHoleController | null>(null);
+  if (!autoHoleRef.current) {
+    autoHoleRef.current = new AutoHoleController((next) => {
+      setAutoHoleState(next);
+    });
+  }
   const lockScale = useMemo(
     () => lockScaleAnim.interpolate({ inputRange: [0, 1], outputRange: [1, 1.05] }),
     [lockScaleAnim],
@@ -3210,6 +3225,10 @@ const QAArHudOverlayScreen: React.FC = () => {
     () => courses.find((c) => c.courseId === selectedCourseId) ?? null,
     [courses, selectedCourseId],
   );
+  const courseRef = useMemo(
+    () => deriveCourseRef(bundle, selectedCourseId),
+    [bundle, selectedCourseId],
+  );
   const overlayData = useMemo(() => buildOverlayData(bundle, selectedCourse), [bundle, selectedCourse]);
   const overlayOrigin = useMemo(
     () => (bundle ? deriveOrigin(bundle, selectedCourse) : null),
@@ -3234,6 +3253,36 @@ const QAArHudOverlayScreen: React.FC = () => {
       return { lat: playerLatLon.lat, lon: playerLatLon.lon };
     });
   }, [playerLatLon?.lat, playerLatLon?.lon]);
+  useEffect(() => {
+    autoHoleRef.current?.setTournamentSafe(tournamentSafe);
+    if (tournamentSafe && autoHoleEnabled) {
+      setAutoHoleEnabled(false);
+    }
+  }, [tournamentSafe, autoHoleEnabled]);
+  useEffect(() => {
+    if (!qaEnabled) {
+      autoHoleRef.current?.setEnabled(false);
+      return;
+    }
+    autoHoleRef.current?.setEnabled(autoHoleEnabled);
+  }, [autoHoleEnabled, qaEnabled]);
+  useEffect(() => {
+    if (!qaEnabled) {
+      autoHoleRef.current?.setCourse(null);
+      return;
+    }
+    autoHoleRef.current?.setCourse(courseRef, activeHoleId ?? undefined);
+  }, [courseRef, activeHoleId, qaEnabled]);
+  useEffect(() => {
+    if (!autoHoleEnabled || !gnssFix) {
+      return;
+    }
+    autoHoleRef.current?.updateFix({
+      lat: gnssFix.lat,
+      lon: gnssFix.lon,
+      heading_deg: Number.isFinite(heading) ? heading : undefined,
+    });
+  }, [autoHoleEnabled, gnssFix?.lat, gnssFix?.lon, heading]);
   const camera = useMemo(() => createCameraStub({ fps: 15 }), []);
   const defaultQaBag = useMemo(() => defaultBag(), []);
   const sgBaselines = useMemo(() => loadDefaultBaselines(), []);
@@ -6753,6 +6802,18 @@ const QAArHudOverlayScreen: React.FC = () => {
     },
     [handleCourseSelect],
   );
+  const handleAutoHoleToggle = useCallback((value: boolean) => {
+    setAutoHoleEnabled(value);
+  }, []);
+  const handleAutoHolePrev = useCallback(() => {
+    autoHoleRef.current?.manualPrev();
+  }, []);
+  const handleAutoHoleNext = useCallback(() => {
+    autoHoleRef.current?.manualNext();
+  }, []);
+  const handleAutoHoleUndo = useCallback(() => {
+    autoHoleRef.current?.manualUndo();
+  }, []);
 
   const handleRefresh = useCallback(() => {
     if (!qaEnabled) {
@@ -6971,11 +7032,22 @@ const QAArHudOverlayScreen: React.FC = () => {
         visible={rangeGamesVisible}
         onClose={() => setRangeGamesVisible(false)}
       />
-      <View style={styles.gnssCard}>
-        <View style={[styles.gnssBadge, gnssBadgeToneStyle]}>
-          <Text style={styles.gnssBadgeText}>{gnssBadgeText}</Text>
+      <View style={styles.statusRow}>
+        <View style={styles.gnssCard}>
+          <View style={[styles.gnssBadge, gnssBadgeToneStyle]}>
+            <Text style={styles.gnssBadgeText}>{gnssBadgeText}</Text>
+          </View>
+          {gnssShowTip ? <Text style={styles.gnssTip}>stand still 2–3 s</Text> : null}
         </View>
-        {gnssShowTip ? <Text style={styles.gnssTip}>stand still 2–3 s</Text> : null}
+        <AutoHoleChip
+          state={autoHoleState}
+          enabled={autoHoleEnabled}
+          onToggle={handleAutoHoleToggle}
+          onPrev={handleAutoHolePrev}
+          onNext={handleAutoHoleNext}
+          onUndo={handleAutoHoleUndo}
+          tournamentSafe={tournamentSafe}
+        />
       </View>
       <CoursePicker
         courses={courses}
@@ -6988,6 +7060,10 @@ const QAArHudOverlayScreen: React.FC = () => {
         searchQuery={searchQuery}
         onSearchChange={handleSearchChange}
         onSuggestionSelect={handleSuggestionSelect}
+      />
+      <OfflinePanel
+        currentCourseId={selectedCourseId}
+        position={gnssFix ? { lat: gnssFix.lat, lon: gnssFix.lon } : null}
       />
       <EventPanel />
       <View style={styles.autoPickCard}>
@@ -8338,6 +8414,13 @@ const styles = StyleSheet.create({
     color: '#fca5a5',
     marginTop: 8,
     fontSize: 12,
+  },
+  statusRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+    marginTop: 16,
   },
   gnssCard: {
     backgroundColor: '#111827',

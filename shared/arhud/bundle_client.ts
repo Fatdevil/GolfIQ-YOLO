@@ -57,6 +57,7 @@ type CacheBackend = {
   read(id: string): Promise<CachedBundleRecord | null>;
   write(record: CachedBundleRecord): Promise<void>;
   remove(id: string): Promise<void>;
+  list?(): Promise<string[]>;
   describe(): string;
 };
 
@@ -445,6 +446,7 @@ async function loadExpoBackend(): Promise<CacheBackend | null> {
       writeAsStringAsync?: (path: string, contents: string, options?: { encoding?: string }) => Promise<void>;
       deleteAsync?: (path: string, options?: { idempotent?: boolean }) => Promise<void>;
       makeDirectoryAsync?: (path: string, options?: { intermediates?: boolean }) => Promise<void>;
+      readDirectoryAsync?: (path: string) => Promise<string[]>;
     };
     if (!FileSystem || typeof FileSystem !== 'object') {
       return null;
@@ -487,10 +489,26 @@ async function loadExpoBackend(): Promise<CacheBackend | null> {
       const filename = `${root}/${sanitizeId(id)}.json`;
       await FileSystem.deleteAsync(filename, { idempotent: true });
     };
+    const list = async () => {
+      if (!FileSystem.readDirectoryAsync) {
+        return [];
+      }
+      try {
+        await ensureRoot();
+        const entries = await FileSystem.readDirectoryAsync(root);
+        return entries
+          .filter((name) => typeof name === 'string' && name.endsWith('.json'))
+          .map((name) => name.replace(/\.json$/u, ''));
+      } catch (error) {
+        return [];
+      }
+    };
+
     return {
       read,
       write,
       remove,
+      list,
       describe: () => `expo-file-system:${root}`,
     } satisfies CacheBackend;
   } catch (error) {
@@ -537,10 +555,22 @@ async function loadNodeBackend(): Promise<CacheBackend | null> {
         // ignore missing files
       }
     };
+    const list = async () => {
+      try {
+        const files = await fs.readdir(root);
+        return files
+          .filter((file) => file.endsWith('.json'))
+          .map((file) => file.replace(/\.json$/u, ''));
+      } catch (error) {
+        return [];
+      }
+    };
+
     return {
       read,
       write,
       remove,
+      list,
       describe: () => `node-fs:${root}`,
     } satisfies CacheBackend;
   } catch (error) {
@@ -627,6 +657,29 @@ async function removeCache(id: string): Promise<void> {
   if (backend) {
     await backend.remove(id);
   }
+}
+
+async function listCacheIds(): Promise<string[]> {
+  const ids = new Set<string>();
+  for (const key of memoryCache.keys()) {
+    if (key) {
+      ids.add(key);
+    }
+  }
+  const backend = await resolveBackend();
+  if (backend?.list) {
+    try {
+      const backendIds = await backend.list();
+      for (const rawId of backendIds) {
+        if (typeof rawId === 'string' && rawId) {
+          ids.add(sanitizeId(rawId));
+        }
+      }
+    } catch (error) {
+      // ignore backend list failures and fall back to memory-only view
+    }
+  }
+  return [...ids];
 }
 
 function logBundleTelemetry(meta: BundleFetchMeta): void {
@@ -841,6 +894,48 @@ export function getPin(
     return null;
   }
   return { ...info.pin };
+}
+
+export async function listCachedBundleIds(): Promise<string[]> {
+  const ids = await listCacheIds();
+  ids.sort();
+  return ids;
+}
+
+export async function isBundleCached(id: string): Promise<boolean> {
+  if (!id || typeof id !== 'string') {
+    return false;
+  }
+  const record = await readCache(sanitizeId(id));
+  if (!record) {
+    return false;
+  }
+  return isValid(record, Date.now());
+}
+
+export async function removeCachedBundle(id: string): Promise<void> {
+  if (!id || typeof id !== 'string') {
+    return;
+  }
+  await removeCache(sanitizeId(id));
+}
+
+export async function overrideBundleTtl(id: string, ttlSec: number): Promise<boolean> {
+  if (!id || typeof id !== 'string' || !Number.isFinite(ttlSec) || ttlSec <= 0) {
+    return false;
+  }
+  const cacheId = sanitizeId(id);
+  const record = await readCache(cacheId);
+  if (!record) {
+    return false;
+  }
+  const updated: CachedBundleRecord = {
+    ...record,
+    ttlSec,
+    savedAt: Date.now(),
+  };
+  await writeCache(updated);
+  return true;
 }
 
 export function __resetBundleClientForTests(): void {
