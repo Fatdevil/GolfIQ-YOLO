@@ -118,6 +118,7 @@ import { exportAccuracyNdjson } from '../../../../shared/telemetry/shotsenseMetr
 import { PostHoleReconciler, collectAutoCandidates } from '../shotsense/PostHoleReconciler';
 import EventPanel from '../event/EventPanel';
 import LearningPanel from '../features/learning/LearningPanel';
+import TrainerScreen from './TrainerScreen';
 import {
   createLandingHeuristics,
   type LandingProposal,
@@ -2759,6 +2760,7 @@ const QAArHudOverlayScreen: React.FC = () => {
   const lastSpokenPlanRef = useRef<string | null>(null);
   const [learningActive, setLearningActive] = useState(false);
   const [learningPanelVisible, setLearningPanelVisible] = useState(false);
+  const [trainerVisible, setTrainerVisible] = useState(false);
   const [learningSuggestions, setLearningSuggestions] = useState<Suggestion[]>([]);
   const [learningApplied, setLearningApplied] = useState(false);
   const [learningOverrides, setLearningOverrides] = useState<StrategyRiskOverrides | null>(null);
@@ -6911,6 +6913,25 @@ const QAArHudOverlayScreen: React.FC = () => {
           </View>
         </View>
       </Modal>
+      <Modal
+        animationType="slide"
+        visible={trainerVisible}
+        onRequestClose={() => setTrainerVisible(false)}
+      >
+        <View style={styles.trainerModal}>
+          <View style={styles.trainerModalHeader}>
+            <Text style={styles.trainerModalTitle}>Trainer mode</Text>
+            <TouchableOpacity
+              onPress={() => setTrainerVisible(false)}
+              style={styles.trainerModalClose}
+              accessibilityRole="button"
+            >
+              <Text style={styles.trainerModalCloseText}>Close</Text>
+            </TouchableOpacity>
+          </View>
+          <TrainerScreen />
+        </View>
+      </Modal>
       <View style={styles.gnssCard}>
         <View style={[styles.gnssBadge, gnssBadgeToneStyle]}>
           <Text style={styles.gnssBadgeText}>{gnssBadgeText}</Text>
@@ -7257,6 +7278,24 @@ const QAArHudOverlayScreen: React.FC = () => {
             </View>
           </View>
         ) : null}
+        <View style={[styles.trainerCard, styles.sectionTitleSpacing]}>
+          <View style={styles.trainerHeader}>
+            <View>
+              <Text style={styles.sectionTitle}>Trainer mode</Text>
+              <Text style={styles.trainerSubtitle}>Golden-6 feedback after every swing.</Text>
+            </View>
+            <TouchableOpacity
+              onPress={() => setTrainerVisible(true)}
+              style={styles.trainerButton}
+              accessibilityRole="button"
+            >
+              <Text style={styles.trainerButtonLabel}>Open</Text>
+            </TouchableOpacity>
+          </View>
+          <Text style={styles.trainerDescription}>
+            Review the last 50 snapshots, camera assistant cues, and weekly plan focus.
+          </Text>
+        </View>
         <View style={[styles.caddieContainer, styles.sectionTitleSpacing]}>
           <View style={styles.caddieHeader}>
             <View style={styles.caddieHeaderLeft}>
@@ -9910,6 +9949,70 @@ const styles = StyleSheet.create({
   },
   sectionTitleSpacing: {
     marginTop: 12,
+  },
+  trainerCard: {
+    backgroundColor: '#0f172a',
+    borderRadius: 12,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: '#1f2937',
+    gap: 8,
+  },
+  trainerHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  trainerSubtitle: {
+    color: '#94a3b8',
+    fontSize: 12,
+    marginTop: 4,
+  },
+  trainerDescription: {
+    color: '#94a3b8',
+    fontSize: 13,
+    lineHeight: 18,
+  },
+  trainerButton: {
+    backgroundColor: '#2563eb',
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 8,
+  },
+  trainerButtonLabel: {
+    color: '#f8fafc',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  trainerModal: {
+    flex: 1,
+    backgroundColor: '#020617',
+    paddingTop: 24,
+  },
+  trainerModalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingBottom: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#1e293b',
+  },
+  trainerModalTitle: {
+    color: '#f8fafc',
+    fontSize: 18,
+    fontWeight: '700',
+  },
+  trainerModalClose: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
+    backgroundColor: '#1e293b',
+  },
+  trainerModalCloseText: {
+    color: '#e2e8f0',
+    fontSize: 13,
+    fontWeight: '600',
   },
   bundleQaCard: {
     backgroundColor: '#111827',
