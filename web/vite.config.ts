@@ -12,7 +12,9 @@ export default defineConfig({
   },
   optimizeDeps: {
     include: ['@supabase/supabase-js'],
+    exclude: ['@ffmpeg/ffmpeg'],
   },
+  assetsInclude: ['**/*.wasm'],
   server: {
     fs: {
       allow: ['..'],
@@ -21,7 +23,7 @@ export default defineConfig({
   build: {
     commonjsOptions: { transformMixedEsModules: true },
     rollupOptions: {
-      external: [],
+      external: ['@ffmpeg/ffmpeg'],
     },
   },
   test: {

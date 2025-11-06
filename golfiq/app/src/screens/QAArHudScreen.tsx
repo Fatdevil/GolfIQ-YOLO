@@ -44,6 +44,7 @@ import {
   type EdgeRolloutTelemetry,
   type RcRecord,
 } from '../../../../shared/edge/rollout';
+import ReelPreview from '../features/reels/ReelPreview';
 
 const BADGE_COLORS = {
   ok: '#14532d',
@@ -175,6 +176,7 @@ const QAArHudScreen: React.FC = () => {
   const [shareUploading, setShareUploading] = useState(false);
   const [shareMessage, setShareMessage] = useState<string | null>(null);
   const [shareError, setShareError] = useState(false);
+  const [reelPreviewVisible, setReelPreviewVisible] = useState(false);
 
   const headingRawRef = useRef(0);
   const headingSmoothedRef = useRef(0);
@@ -769,6 +771,12 @@ const QAArHudScreen: React.FC = () => {
           {shareUploading ? 'Uploading…' : 'Upload HUD run'}
         </Text>
       </TouchableOpacity>
+      <TouchableOpacity
+        style={[styles.button, styles.secondaryButton]}
+        onPress={() => setReelPreviewVisible(true)}
+      >
+        <Text style={styles.buttonText}>Create Reel (beta)</Text>
+      </TouchableOpacity>
       {shareMessage ? (
         <Text style={[styles.shareMessage, shareError ? styles.shareMessageError : null]}>
           {shareMessage}
@@ -780,14 +788,18 @@ const QAArHudScreen: React.FC = () => {
       {logs.length === 0 ? (
         <Text style={styles.logEntry}>No events yet.</Text>
       ) : (
-          logs.map((entry, index) => (
-            <Text key={`${entry}-${index}`} style={styles.logEntry}>
-              {entry}
-            </Text>
-          ))
-        )}
-      </View>
-    </ScrollView>
+        logs.map((entry, index) => (
+          <Text key={`${entry}-${index}`} style={styles.logEntry}>
+            {entry}
+          </Text>
+        ))
+      )}
+    </View>
+    <ReelPreview
+      visible={reelPreviewVisible}
+      onClose={() => setReelPreviewVisible(false)}
+    />
+  </ScrollView>
   );
 };
 
