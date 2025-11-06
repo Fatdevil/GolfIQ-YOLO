@@ -18,15 +18,48 @@ export function aggregateLeaderboard(
   },
 ): LeaderboardRow[] {
   const { hcpIndexByUser = {}, holesPlayedByUser = {} } = opts ?? {};
-  const acc = new Map<string, { gross: number; holes: number; toPar: number; last?: string }>();
+  type AggEntry = {
+    gross: number;
+    net: number;
+    holes: number;
+    toPar: number;
+    last?: string;
+    stableford: number;
+    hasStableford: boolean;
+    playingHandicap: number | null;
+    netFromRows: boolean;
+  };
+  const acc = new Map<string, AggEntry>();
 
   for (const r of rows) {
-    const entry = acc.get(r.user_id) ?? { gross: 0, holes: 0, toPar: 0, last: undefined };
+    const entry =
+      acc.get(r.user_id) ?? {
+        gross: 0,
+        net: 0,
+        holes: 0,
+        toPar: 0,
+        last: undefined,
+        stableford: 0,
+        hasStableford: false,
+        playingHandicap: null,
+        netFromRows: false,
+      };
     entry.gross += r.gross;
     entry.holes += 1;
     entry.toPar += r.to_par;
+    entry.net += Number.isFinite(r.net) ? Number(r.net) : 0;
+    if (Number.isFinite(r.net)) {
+      entry.netFromRows = true;
+    }
     if (!entry.last || entry.last < r.ts) {
       entry.last = r.ts;
+    }
+    if (Number.isFinite(r.stableford ?? NaN)) {
+      entry.stableford += Number(r.stableford);
+      entry.hasStableford = true;
+    }
+    if (Number.isFinite(r.playing_handicap ?? NaN)) {
+      entry.playingHandicap = Number(r.playing_handicap);
     }
     acc.set(r.user_id, entry);
   }
@@ -35,16 +68,21 @@ export function aggregateLeaderboard(
   for (const [userId, agg] of acc) {
     const holes = Math.max(agg.holes, holesPlayedByUser[userId] ?? agg.holes);
     const gross = agg.gross;
-    const hcp = hcpIndexByUser[userId] ?? 0;
-    const net = computeNetSimple(gross, hcp, holes);
+    let netTotal = agg.net;
+    if (!agg.netFromRows) {
+      const fallbackHcp = hcpIndexByUser[userId] ?? 0;
+      netTotal = computeNetSimple(gross, fallbackHcp, holes);
+    }
     out.push({
       user_id: userId,
       display_name: nameByUser[userId] ?? 'Player',
       holes,
       gross,
-      net,
+      net: netTotal,
       to_par: agg.toPar,
       last_ts: agg.last,
+      stableford: agg.hasStableford ? agg.stableford : undefined,
+      playing_handicap: agg.playingHandicap !== null ? agg.playingHandicap : undefined,
     });
   }
 

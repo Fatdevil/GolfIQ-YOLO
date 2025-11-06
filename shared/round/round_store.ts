@@ -1,4 +1,5 @@
 import type { Hole, Round, Shot } from './round_types';
+import type { HandicapSetup, TeeRating } from '../whs/types';
 
 type AsyncStorageLike = {
   getItem(key: string): Promise<string | null>;
@@ -94,6 +95,36 @@ async function loadStorage(): Promise<AsyncStorageLike> {
   return storagePromise;
 }
 
+function cloneStrokeIndex(list: number[] | undefined): number[] | undefined {
+  if (!Array.isArray(list)) {
+    return undefined;
+  }
+  return list.map((value) => Math.floor(Number(value))); // cloned and normalized to integers
+}
+
+function cloneTee(tee: TeeRating): TeeRating {
+  return {
+    id: tee.id,
+    name: tee.name,
+    nine: tee.nine,
+    slope: tee.slope,
+    rating: tee.rating,
+    par: tee.par,
+    strokeIndex: cloneStrokeIndex(tee.strokeIndex),
+  };
+}
+
+function cloneHandicapSetup(setup: HandicapSetup | undefined): HandicapSetup | undefined {
+  if (!setup) {
+    return undefined;
+  }
+  return {
+    handicapIndex: setup.handicapIndex,
+    allowancePct: setup.allowancePct,
+    tee: cloneTee(setup.tee),
+  };
+}
+
 function cloneShot(shot: Shot): Shot {
   return {
     tStart: shot.tStart,
@@ -129,6 +160,76 @@ function cloneRound(round: ParsedRound | null): ParsedRound | null {
     holes: round.holes.map((hole) => cloneHole(hole)),
     currentHole: Math.min(Math.max(round.currentHole, 0), Math.max(round.holes.length - 1, 0)),
     finished: Boolean(round.finished),
+    handicapSetup: cloneHandicapSetup(round.handicapSetup),
+  };
+}
+
+function sanitizeStrokeIndex(value: unknown): number[] | undefined {
+  if (!Array.isArray(value)) {
+    return undefined;
+  }
+  const normalized: number[] = [];
+  for (const entry of value) {
+    const parsed = Number(entry);
+    if (Number.isFinite(parsed)) {
+      normalized.push(Math.max(1, Math.floor(parsed)));
+    }
+  }
+  return normalized.length ? normalized : undefined;
+}
+
+function sanitizeTee(input: unknown): TeeRating | null {
+  if (!input || typeof input !== 'object') {
+    return null;
+  }
+  const record = input as Record<string, unknown>;
+  const id = typeof record.id === 'string' && record.id.trim() ? record.id.trim() : null;
+  const name = typeof record.name === 'string' && record.name.trim() ? record.name.trim() : null;
+  if (!id || !name) {
+    return null;
+  }
+  const slope = Number(record.slope);
+  const rating = Number(record.rating);
+  const par = Number(record.par);
+  if (!Number.isFinite(slope) || !Number.isFinite(rating) || !Number.isFinite(par)) {
+    return null;
+  }
+  const nineRaw = record.nine;
+  const tee: TeeRating = {
+    id,
+    name,
+    slope,
+    rating,
+    par,
+  };
+  if (nineRaw === 'front' || nineRaw === 'back' || nineRaw === '18') {
+    tee.nine = nineRaw;
+  }
+  const strokeIndex = sanitizeStrokeIndex(record.strokeIndex);
+  if (strokeIndex) {
+    tee.strokeIndex = strokeIndex;
+  }
+  return tee;
+}
+
+function sanitizeHandicapSetup(input: unknown): HandicapSetup | undefined {
+  if (!input || typeof input !== 'object') {
+    return undefined;
+  }
+  const record = input as Record<string, unknown>;
+  const tee = sanitizeTee(record.tee);
+  if (!tee) {
+    return undefined;
+  }
+  const handicapIndex = Number(record.handicapIndex);
+  const allowancePct = Number(record.allowancePct);
+  if (!Number.isFinite(handicapIndex) || !Number.isFinite(allowancePct)) {
+    return undefined;
+  }
+  return {
+    handicapIndex,
+    allowancePct,
+    tee,
   };
 }
 
@@ -250,6 +351,7 @@ function sanitizeRound(input: unknown): ParsedRound | null {
       holes: defaultHoles,
       currentHole: 0,
       finished: Boolean(record.finished),
+      handicapSetup: sanitizeHandicapSetup(record.handicapSetup),
     };
   }
   holes.sort((a, b) => a.holeNo - b.holeNo);
@@ -264,6 +366,7 @@ function sanitizeRound(input: unknown): ParsedRound | null {
     holes,
     currentHole,
     finished: Boolean(record.finished),
+    handicapSetup: sanitizeHandicapSetup(record.handicapSetup),
   };
 }
 
@@ -375,6 +478,7 @@ export function createRound(
     holes,
     currentHole: 0,
     finished: false,
+    handicapSetup: undefined,
   };
   setActiveRound(round);
   void persistRound(activeRound);
@@ -386,6 +490,18 @@ export function setTee(tee: string | undefined): Round | null {
     return null;
   }
   activeRound.tee = tee;
+  activeRound.finished = false;
+  setActiveRound(activeRound);
+  void persistRound(activeRound);
+  return getActiveRound();
+}
+
+export function setHandicapSetup(setup: HandicapSetup | null | undefined): Round | null {
+  if (!activeRound) {
+    return null;
+  }
+  const sanitized = sanitizeHandicapSetup(setup ?? undefined);
+  activeRound.handicapSetup = sanitized ? cloneHandicapSetup(sanitized) : undefined;
   activeRound.finished = false;
   setActiveRound(activeRound);
   void persistRound(activeRound);

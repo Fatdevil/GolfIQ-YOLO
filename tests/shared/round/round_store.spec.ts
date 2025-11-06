@@ -18,6 +18,7 @@ import {
   saveRound,
   serializeRound,
   setScore,
+  setHandicapSetup,
 } from '../../../shared/round/round_store';
 import type { Shot } from '../../../shared/round/round_types';
 
@@ -58,6 +59,24 @@ test('round store create → mutate → persist → resume', async () => {
   };
   addShot(1, teeShot);
   setScore(1, 4);
+
+  setHandicapSetup({
+    handicapIndex: 12.4,
+    allowancePct: 95,
+    tee: {
+      id: 'blue',
+      name: 'Blue',
+      slope: 125,
+      rating: 71.2,
+      par: 72,
+      strokeIndex: Array.from({ length: 18 }, (_, i) => i + 1),
+    },
+  });
+
+  const withHandicap = getActiveRound();
+  assert(withHandicap?.handicapSetup);
+  assert.equal(withHandicap?.handicapSetup?.allowancePct, 95);
+  assert.equal(withHandicap?.handicapSetup?.tee.nine, undefined);
 
   nextHole();
   const afterNext = getActiveRound();
@@ -102,6 +121,8 @@ test('round store create → mutate → persist → resume', async () => {
   assert.equal(reloaded!.holes[0].shots.length, 1);
   assert.equal(reloaded!.holes[1].score, 3);
   assert(reloaded!.finished);
+  assert.equal(reloaded!.handicapSetup?.tee.name, 'Blue');
+  assert.equal(reloaded!.handicapSetup?.tee.strokeIndex?.length, 18);
 
   if (parsed) {
     const resumed = resumeRound(parsed);

@@ -37,6 +37,7 @@ import {
   subscribe,
 } from '../../../../shared/round/round_store';
 import QAArHudOverlayScreen from './QAArHudOverlayScreen';
+import HandicapPanel from '../features/scoring/HandicapPanel';
 import { isQAMode } from '../../qa/QAGate';
 
 const DEFAULT_PAR_SEQUENCE = [
@@ -257,6 +258,7 @@ const QARoundScreen: React.FC = () => {
   const [selectedCourseId, setSelectedCourseId] = useState<string | null>(null);
   const [selectedTeeId, setSelectedTeeId] = useState<string>(TEE_OPTIONS[0]?.id ?? 'white');
   const [overlayVisible, setOverlayVisible] = useState(false);
+  const [handicapVisible, setHandicapVisible] = useState(false);
   const [scoreDraft, setScoreDraft] = useState('');
   const autoCourseRef = useRef<AutoCourseController | null>(null);
 
@@ -641,6 +643,11 @@ const QARoundScreen: React.FC = () => {
               </TouchableOpacity>
             </View>
             <View style={styles.buttonRow}>
+              <TouchableOpacity onPress={() => setHandicapVisible(true)} style={styles.secondaryButton}>
+                <Text style={styles.secondaryButtonText}>Handicap &amp; Tee</Text>
+              </TouchableOpacity>
+            </View>
+            <View style={styles.buttonRow}>
               <TouchableOpacity
                 onPress={handlePrevHole}
                 style={[styles.secondaryButton, round.currentHole === 0 ? styles.secondaryButtonDisabled : null]}
@@ -682,6 +689,15 @@ const QARoundScreen: React.FC = () => {
             <Text style={styles.secondaryButtonText}>Close</Text>
           </TouchableOpacity>
           <QAArHudOverlayScreen />
+        </SafeAreaView>
+      </Modal>
+      <Modal
+        animationType="slide"
+        visible={handicapVisible}
+        onRequestClose={() => setHandicapVisible(false)}
+      >
+        <SafeAreaView style={styles.overlayContainer}>
+          <HandicapPanel onClose={() => setHandicapVisible(false)} />
         </SafeAreaView>
       </Modal>
     </View>

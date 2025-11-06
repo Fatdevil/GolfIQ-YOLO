@@ -1,10 +1,12 @@
 import { RoundRecorder } from '../../../../shared/round/recorder';
+import { getActiveRound } from '../../../../shared/round/round_store';
 import type { Lie, ShotEvent, RoundState } from '../../../../shared/round/types';
 import { appendHoleAccuracy, computeConfusion } from '../../../../shared/telemetry/shotsenseMetrics';
 import { recordAutoReconcile } from '../../../../shared/telemetry/round';
 import { autoQueue, type AcceptedAutoShot } from './AutoCaptureQueue';
 import { pushHoleScore } from '../../../../shared/events/service';
 import { computeRoundRevision, computeScoresHash } from '../../../../shared/events/revision';
+import { computeNetForRound } from '../../../../shared/events/net';
 import { getEventContext } from '../../../../shared/events/state';
 import { recordScoreFailed, recordScoreUpserted } from '../../../../shared/events/telemetry';
 
@@ -276,11 +278,53 @@ export const PostHoleReconciler = {
             try {
               const roundRevision = computeRoundRevision(roundState ?? null);
               const scoresHash = computeScoresHash(roundState ?? null);
+              const qaRound = getActiveRound();
+              const handicapSetup = qaRound?.handicapSetup;
+              const parValue = Math.max(3, Math.min(6, Math.floor(holeState?.par ?? 4)));
+              let netScore: number | null = null;
+              let stablefordPoints: number | null = null;
+              let strokesReceived: number | null = null;
+              let courseHandicap: number | null = null;
+              let playingHandicap: number | null = null;
+              if (handicapSetup) {
+                const holesForNet = (qaRound?.holes ?? []).map((hole) => ({
+                  hole: hole.holeNo,
+                  par: hole.par,
+                  gross: Number.isFinite(hole.score) ? Number(hole.score) : hole.par,
+                }));
+                const targetIndex = holesForNet.findIndex((hole) => hole.hole === holeNumber);
+                if (targetIndex >= 0) {
+                  holesForNet[targetIndex] = {
+                    hole: holeNumber,
+                    par: holesForNet[targetIndex].par,
+                    gross,
+                  };
+                } else {
+                  holesForNet.push({ hole: holeNumber, par: parValue, gross });
+                }
+                holesForNet.sort((a, b) => a.hole - b.hole);
+                const netResult = computeNetForRound(handicapSetup, holesForNet);
+                const holeEntry = netResult.holes.find((entry) => entry.hole === holeNumber);
+                if (holeEntry) {
+                  netScore = holeEntry.net;
+                  stablefordPoints = holeEntry.points;
+                }
+                const holePos = Math.max(0, Math.min(netResult.strokesPerHole.length - 1, holeNumber - 1));
+                strokesReceived = netResult.strokesPerHole[holePos] ?? null;
+                courseHandicap = netResult.courseHandicap;
+                playingHandicap = netResult.playingHandicap;
+              }
               await pushHoleScore({
                 eventId: activeEvent.id,
                 roundId,
                 hole: holeNumber,
                 gross,
+                par: parValue,
+                net: netScore ?? undefined,
+                stableford: stablefordPoints ?? undefined,
+                strokesReceived: strokesReceived ?? undefined,
+                courseHandicap: courseHandicap ?? undefined,
+                playingHandicap: playingHandicap ?? undefined,
                 hcpIndex: participant.hcp_index ?? null,
                 roundRevision,
                 scoresHash,

@@ -1,3 +1,5 @@
+import type { HandicapSetup } from '../whs/types';
+
 export interface Shot {
   tStart: number;
   tEnd?: number;
@@ -25,4 +27,5 @@ export interface Round {
   holes: Hole[];
   currentHole: number;
   finished?: boolean;
+  handicapSetup?: HandicapSetup;
 }

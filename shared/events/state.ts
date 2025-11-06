@@ -1,8 +1,15 @@
 import type { Event, Participant } from './types';
+import type { HandicapSetup } from '../whs/types';
 
 type EventContext = {
   event: Event;
   participant: Participant | null;
+  handicap?: {
+    setup: HandicapSetup;
+    courseHandicap: number;
+    playingHandicap: number;
+    strokesPerHole?: number[];
+  } | null;
 };
 
 let currentContext: EventContext | null = null;
