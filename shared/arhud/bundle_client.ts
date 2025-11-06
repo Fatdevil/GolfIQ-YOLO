@@ -57,6 +57,7 @@ type CacheBackend = {
   read(id: string): Promise<CachedBundleRecord | null>;
   write(record: CachedBundleRecord): Promise<void>;
   remove(id: string): Promise<void>;
+  list?(): Promise<string[]>;
   describe(): string;
 };
 
@@ -441,6 +442,7 @@ async function loadExpoBackend(): Promise<CacheBackend | null> {
     const FileSystem = (await import('expo-file-system')) as Record<string, unknown> & {
       documentDirectory?: string | null;
       getInfoAsync?: (path: string) => Promise<{ exists: boolean; isDirectory?: boolean; isFile?: boolean }>;
+      readDirectoryAsync?: (path: string) => Promise<string[]>;
       readAsStringAsync?: (path: string, options?: { encoding?: string }) => Promise<string>;
       writeAsStringAsync?: (path: string, contents: string, options?: { encoding?: string }) => Promise<void>;
       deleteAsync?: (path: string, options?: { idempotent?: boolean }) => Promise<void>;
@@ -487,10 +489,41 @@ async function loadExpoBackend(): Promise<CacheBackend | null> {
       const filename = `${root}/${sanitizeId(id)}.json`;
       await FileSystem.deleteAsync(filename, { idempotent: true });
     };
+    const list = async () => {
+      if (!FileSystem.readDirectoryAsync) {
+        return [];
+      }
+      await ensureRoot();
+      try {
+        const entries = await FileSystem.readDirectoryAsync(root);
+        const ids: string[] = [];
+        for (const entry of entries) {
+          if (typeof entry !== 'string' || !entry.endsWith('.json')) {
+            continue;
+          }
+          const filename = `${root}/${entry}`;
+          try {
+            const raw = await FileSystem.readAsStringAsync?.(filename, { encoding: 'utf8' });
+            if (!raw) {
+              continue;
+            }
+            const parsed = JSON.parse(raw) as { id?: unknown };
+            const id = typeof parsed.id === 'string' ? parsed.id : entry.replace(/\.json$/u, '');
+            ids.push(id);
+          } catch (error) {
+            // ignore malformed entries
+          }
+        }
+        return ids;
+      } catch (error) {
+        return [];
+      }
+    };
     return {
       read,
       write,
       remove,
+      list,
       describe: () => `expo-file-system:${root}`,
     } satisfies CacheBackend;
   } catch (error) {
@@ -537,10 +570,34 @@ async function loadNodeBackend(): Promise<CacheBackend | null> {
         // ignore missing files
       }
     };
+    const list = async () => {
+      try {
+        const entries = await fs.readdir(root, { withFileTypes: true });
+        const ids: string[] = [];
+        for (const entry of entries) {
+          if (!entry.isFile() || !entry.name.endsWith('.json')) {
+            continue;
+          }
+          const file = path.join(root, entry.name);
+          try {
+            const raw = await fs.readFile(file, 'utf8');
+            const parsed = JSON.parse(raw) as { id?: unknown };
+            const id = typeof parsed.id === 'string' ? parsed.id : entry.name.replace(/\.json$/u, '');
+            ids.push(id);
+          } catch (error) {
+            // ignore malformed entries
+          }
+        }
+        return ids;
+      } catch (error) {
+        return [];
+      }
+    };
     return {
       read,
       write,
       remove,
+      list,
       describe: () => `node-fs:${root}`,
     } satisfies CacheBackend;
   } catch (error) {
@@ -627,6 +684,27 @@ async function removeCache(id: string): Promise<void> {
   if (backend) {
     await backend.remove(id);
   }
+}
+
+async function listCacheIds(): Promise<string[]> {
+  const backend = await resolveBackend();
+  const ids = new Set<string>();
+  for (const key of memoryCache.keys()) {
+    ids.add(key);
+  }
+  if (backend?.list) {
+    try {
+      const listed = await backend.list();
+      for (const id of listed) {
+        if (typeof id === 'string' && id.trim()) {
+          ids.add(sanitizeId(id));
+        }
+      }
+    } catch (error) {
+      // ignore listing errors
+    }
+  }
+  return Array.from(ids);
 }
 
 function logBundleTelemetry(meta: BundleFetchMeta): void {
@@ -856,5 +934,31 @@ export function __setBundleCacheBackendForTests(backend: CacheBackend | null): v
   backendOverride = backend;
   backendPromise = null;
   backendLabel = backend ? backend.describe() : 'memory';
+}
+
+export async function listCachedBundleIds(): Promise<string[]> {
+  const ids = await listCacheIds();
+  ids.sort();
+  return ids;
+}
+
+export async function isBundleCached(id: string): Promise<boolean> {
+  if (!id) {
+    return false;
+  }
+  const cleaned = sanitizeId(id);
+  const record = await readCache(cleaned);
+  if (!record) {
+    return false;
+  }
+  return isValid(record, Date.now());
+}
+
+export async function removeCachedBundle(id: string): Promise<void> {
+  if (!id) {
+    return;
+  }
+  const cleaned = sanitizeId(id);
+  await removeCache(cleaned);
 }
 
