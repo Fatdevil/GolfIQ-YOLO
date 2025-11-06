@@ -36,7 +36,7 @@ const TEE_LOCK_RADIUS_M = 60;
 const GREEN_FAR_M = 120;
 const HEADING_WINDOW_DEG = 35;
 const SWITCH_VOTES = 3;
-const ADVANCE_VOTES = 3;
+export const ADVANCE_VOTES = 3;
 
 type HoleEval = {
   hole: number;
@@ -314,7 +314,7 @@ export function maybeAdvanceOnGreen(state: AutoHoleState, onGreen: boolean, now 
   if (nextHole === null) {
     return next;
   }
-  if (next.teeLeadHole === nextHole) {
+  if (next.teeLeadHole === nextHole && next.teeLeadVotes >= ADVANCE_VOTES) {
     return advanceToHole(next, nextHole, now, 'putt-advance');
   }
   return next;
