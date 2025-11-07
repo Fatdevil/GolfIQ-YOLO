@@ -5,6 +5,7 @@ import { computeHomography, computeResiduals, qualityScore } from '@shared/trace
 import type { Homography, Pt } from '@shared/tracer/calibrate';
 import { setTracerCalibration } from '@shared/round/round_store';
 import { emitTracerCalibration } from '@shared/telemetry/tracer';
+import type { TracerCalibration } from '@shared/tracer/types';
 
 type CalibrationState = {
   tee: Pt | null;
@@ -109,15 +110,12 @@ export default function CalibrateCameraSheet(props: CalibrateCameraSheetProps): 
     if (!calibration || !state.tee || !state.flag) {
       return;
     }
-    const snapshot = {
-      teePx: state.tee,
-      flagPx: state.flag,
+    const snapshot: TracerCalibration = {
+      H: calibration.homography.matrix,
       yardage_m: calibration.yardage_m,
-      holeBearingDeg: props.holeBearingDeg,
       quality: calibration.score,
-      matrix: calibration.homography.matrix,
-      updatedAt: Date.now(),
-    } as const;
+      createdAt: Date.now(),
+    };
     emitTracerCalibration({
       quality: calibration.score,
       yardage_m: calibration.yardage_m,

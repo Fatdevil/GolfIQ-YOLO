@@ -29,5 +29,5 @@ export interface Round {
   currentHole: number;
   finished?: boolean;
   handicapSetup?: HandicapSetup;
-  tracerCalib?: TracerCalibration;
+  tracerCalib?: TracerCalibration | null;
 }

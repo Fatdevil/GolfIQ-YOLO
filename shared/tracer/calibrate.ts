@@ -25,11 +25,7 @@ function safeNumber(value: unknown): number {
 }
 
 function makeIdentityHomography(): Homography {
-  const matrix: HomographyMatrix = [
-    [1, 0, 0],
-    [0, 1, 0],
-    [0, 0, 1],
-  ];
+  const matrix: HomographyMatrix = [1, 0, 0, 0, 1, 0, 0, 0, 1];
   return {
     matrix,
     inverse: matrix,
@@ -52,43 +48,29 @@ export function estimateScale(teePx: Pt, flagPx: Pt, yardage_m: number): number 
 function buildHomographyMatrix(origin: Pt, scale: number, rotationRad: number): HomographyMatrix {
   const cosTheta = Math.cos(rotationRad);
   const sinTheta = Math.sin(rotationRad);
-  const sx = scale * cosTheta;
-  const sy = scale * sinTheta;
-  const m00 = sx;
+  const m00 = scale * cosTheta;
   const m01 = -scale * sinTheta;
   const m02 = -(m00 * origin.x + m01 * origin.y);
-  const m10 = sy;
+  const m10 = scale * sinTheta;
   const m11 = scale * cosTheta;
   const m12 = -(m10 * origin.x + m11 * origin.y);
-  return [
-    [m00, m01, m02],
-    [m10, m11, m12],
-    [0, 0, 1],
-  ];
+  return [m00, m01, m02, m10, m11, m12, 0, 0, 1];
 }
 
 function buildInverseHomography(origin: Pt, scale: number, rotationRad: number): HomographyMatrix {
   if (!Number.isFinite(scale) || scale === 0) {
-    return [
-      [1, 0, 0],
-      [0, 1, 0],
-      [0, 0, 1],
-    ];
+    return [1, 0, 0, 0, 1, 0, 0, 0, 1];
   }
   const cosTheta = Math.cos(rotationRad);
   const sinTheta = Math.sin(rotationRad);
   const invScale = 1 / scale;
   const r00 = cosTheta * invScale;
   const r01 = sinTheta * invScale;
+  const r02 = origin.x;
   const r10 = -sinTheta * invScale;
   const r11 = cosTheta * invScale;
-  const tx = origin.x;
-  const ty = origin.y;
-  return [
-    [r00, r01, tx],
-    [r10, r11, ty],
-    [0, 0, 1],
-  ];
+  const r12 = origin.y;
+  return [r00, r01, r02, r10, r11, r12, 0, 0, 1];
 }
 
 export function computeHomography(
@@ -119,9 +101,10 @@ export function computeHomography(
 }
 
 function apply(matrix: HomographyMatrix, pt: Pt): Pt {
-  const x = matrix[0][0] * pt.x + matrix[0][1] * pt.y + matrix[0][2];
-  const y = matrix[1][0] * pt.x + matrix[1][1] * pt.y + matrix[1][2];
-  const w = matrix[2][0] * pt.x + matrix[2][1] * pt.y + matrix[2][2];
+  const [m00, m01, m02, m10, m11, m12, m20, m21, m22] = matrix;
+  const x = m00 * pt.x + m01 * pt.y + m02;
+  const y = m10 * pt.x + m11 * pt.y + m12;
+  const w = m20 * pt.x + m21 * pt.y + m22;
   if (!Number.isFinite(w) || Math.abs(w) < 1e-6) {
     return { x, y };
   }

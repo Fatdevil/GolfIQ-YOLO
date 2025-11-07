@@ -2677,6 +2677,27 @@ const QAArHudOverlayScreen: React.FC = () => {
   const previousHoleRef = useRef<number | null>(null);
   const mapOverlayRef = useRef<MapOverlayHandle | null>(null);
   const lastFocusKeyRef = useRef<string | null>(null);
+  const tracerCalibrationSummary = useMemo(() => {
+    if (!roundTracerCalib) {
+      return null;
+    }
+    const quality =
+      roundTracerCalib.quality != null
+        ? Math.round(Math.min(1, Math.max(0, roundTracerCalib.quality)) * 100)
+        : null;
+    const yardage =
+      roundTracerCalib.yardage_m != null && Number.isFinite(roundTracerCalib.yardage_m)
+        ? Math.round(roundTracerCalib.yardage_m)
+        : null;
+    const updated =
+      roundTracerCalib.createdAt != null && Number.isFinite(roundTracerCalib.createdAt)
+        ? new Date(roundTracerCalib.createdAt).toLocaleString()
+        : null;
+    return {
+      status: `Quality ${quality != null ? quality : '—'}% · Yardage ${yardage != null ? yardage : '—'} m`,
+      meta: updated ? `Updated ${updated}` : null,
+    };
+  }, [roundTracerCalib]);
   useEffect(() => {
     if (!watchDiagExpanded) {
       return;
@@ -8298,13 +8319,11 @@ const QAArHudOverlayScreen: React.FC = () => {
           {roundTracerCalib ? (
             <View style={styles.calibrationContent}>
               <Text style={styles.calibrationStatus}>
-                {`Quality ${(roundTracerCalib.quality * 100).toFixed(0)}% · Yardage ${Math.round(roundTracerCalib.yardage_m)} m`}
+                {tracerCalibrationSummary?.status ?? 'Quality —% · Yardage — m'}
               </Text>
-              <Text style={styles.calibrationMeta}>
-                {`Bearing ${roundTracerCalib.holeBearingDeg.toFixed(1)}° · Updated ${new Date(
-                  roundTracerCalib.updatedAt,
-                ).toLocaleString()}`}
-              </Text>
+              {tracerCalibrationSummary?.meta ? (
+                <Text style={styles.calibrationMeta}>{tracerCalibrationSummary.meta}</Text>
+              ) : null}
             </View>
           ) : (
             <Text style={styles.calibrationStatus}>No tracer calibration saved for this round.</Text>
