@@ -154,6 +154,12 @@ export async function pushHoleScore(args: {
   roundId: UUID;
   hole: number;
   gross: number;
+  par: number;
+  net?: number | null;
+  stableford?: number | null;
+  strokesReceived?: number | null;
+  courseHandicap?: number | null;
+  playingHandicap?: number | null;
   hcpIndex?: number | null;
   roundRevision?: number | null;
   scoresHash?: string | null;
@@ -260,13 +266,39 @@ export async function pushHoleScore(args: {
       return;
     }
 
+    const par = Number.isFinite(args.par)
+      ? Math.max(3, Math.min(6, Math.round(Number(args.par))))
+      : 4;
+    const hasExplicitNet = Number.isFinite(args.net as number);
+    let netValue: number | undefined;
+    if (hasExplicitNet) {
+      netValue = Math.max(1, Math.round(Number(args.net)));
+    }
+    const stableford = Number.isFinite(args.stableford ?? NaN)
+      ? Math.max(0, Math.round(Number(args.stableford)))
+      : null;
+    const strokesReceived = Number.isFinite(args.strokesReceived ?? NaN)
+      ? Math.trunc(Number(args.strokesReceived))
+      : null;
+    const courseHandicap = Number.isFinite(args.courseHandicap ?? NaN)
+      ? Math.round(Number(args.courseHandicap))
+      : null;
+    const playingHandicap = Number.isFinite(args.playingHandicap ?? NaN)
+      ? Math.round(Number(args.playingHandicap))
+      : null;
+
     const row: Partial<ScoreRow> & { ts: string } = {
       event_id: args.eventId,
       user_id: userId,
       hole_no: args.hole,
       gross: args.gross ?? 0,
-      net: args.gross ?? 0,
-      to_par: (args.gross ?? 0) - 4,
+      ...(hasExplicitNet && netValue !== undefined ? { net: netValue } : {}),
+      to_par: (args.gross ?? 0) - par,
+      par,
+      strokes_received: strokesReceived,
+      stableford,
+      course_handicap: courseHandicap,
+      playing_handicap: playingHandicap,
       ts: nowIso(),
       round_revision: localRevision,
       scores_hash: localHash,

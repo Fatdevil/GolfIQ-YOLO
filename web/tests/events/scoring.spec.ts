@@ -20,6 +20,7 @@ describe('events scoring', () => {
         gross: 5,
         net: 4,
         to_par: 1,
+        stableford: 2,
         ts: new Date(now).toISOString(),
       },
       {
@@ -29,6 +30,8 @@ describe('events scoring', () => {
         gross: 5,
         net: 5,
         to_par: 1,
+        stableford: 1,
+        playing_handicap: 12,
         ts: new Date(now + 1000).toISOString(),
       },
       {
@@ -38,6 +41,7 @@ describe('events scoring', () => {
         gross: 4,
         net: 4,
         to_par: 0,
+        stableford: 3,
         ts: new Date(now + 2000).toISOString(),
       },
     ];
@@ -54,19 +58,25 @@ describe('events scoring', () => {
     expect(leaderboard[0].user_id).toBe('b');
     expect(leaderboard[0].gross).toBe(5);
     expect(leaderboard[0].holes).toBe(1);
+    // WHS fallback: PH=12 ⇒ 1 stroke received on this hole ⇒ net = 5 - 1 = 4
     expect(leaderboard[0].net).toBe(4);
+    // Stableford (standard): 2 + (par + strokesReceived - gross)
+    // using par=4 ⇒ 2 + (4 + 1 - 5) = 2
+    expect(leaderboard[0].stableford).toBe(2);
+    expect(leaderboard[0].playing_handicap).toBe(12);
     expect(leaderboard[1].user_id).toBe('a');
     expect(leaderboard[1].net).toBe(8);
+    expect(leaderboard[1].stableford).toBe(5);
   });
 
-  it('applies handicap once at aggregation (no per-hole rounding)', () => {
+  it('falls back to handicap index when net values unavailable', () => {
     const user = 'u1';
     const rows: ScoreRow[] = Array.from({ length: 18 }, (_, index) => ({
       event_id: 'event',
       user_id: user,
       hole_no: index + 1,
       gross: 5,
-      net: 5,
+      net: Number.NaN,
       to_par: 1,
       ts: `2025-01-01T00:${index.toString().padStart(2, '0')}:00Z`,
     }));
@@ -81,5 +91,6 @@ describe('events scoring', () => {
 
     expect(leaderboard[0].gross).toBe(90);
     expect(leaderboard[0].net).toBe(78);
+    expect(leaderboard[0].playing_handicap).toBeUndefined();
   });
 });

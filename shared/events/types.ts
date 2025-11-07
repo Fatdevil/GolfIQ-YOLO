@@ -23,6 +23,11 @@ export type ScoreRow = {
   gross: number;
   net: number;
   to_par: number;
+  par?: number | null;
+  strokes_received?: number | null;
+  stableford?: number | null;
+  playing_handicap?: number | null;
+  course_handicap?: number | null;
   ts: string;
   round_revision?: number | null;
   scores_hash?: string | null;
@@ -36,4 +41,6 @@ export type LeaderboardRow = {
   net: number;
   to_par: number;
   last_ts?: string;
+  stableford?: number;
+  playing_handicap?: number | null;
 };

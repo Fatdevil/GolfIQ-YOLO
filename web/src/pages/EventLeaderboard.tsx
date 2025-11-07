@@ -140,6 +140,12 @@ export default function EventLeaderboardPage() {
     return `${window.location.origin}/event/${id}`;
   }, [id]);
 
+  const showStableford = useMemo(() => leaderboard.some((row) => row.stableford !== undefined), [leaderboard]);
+  const showPlayingHandicap = useMemo(
+    () => leaderboard.some((row) => row.playing_handicap !== undefined && row.playing_handicap !== null),
+    [leaderboard],
+  );
+
   if (!configured) {
     return (
       <div className="space-y-4">
@@ -192,6 +198,9 @@ export default function EventLeaderboardPage() {
                   <th className="px-4 py-2 text-left text-sm font-semibold text-slate-300">Player</th>
                   <th className="px-4 py-2 text-right text-sm font-semibold text-slate-300">Gross</th>
                   <th className="px-4 py-2 text-right text-sm font-semibold text-slate-300">Net</th>
+                  {showStableford ? (
+                    <th className="px-4 py-2 text-right text-sm font-semibold text-slate-300">Stableford</th>
+                  ) : null}
                   <th className="px-4 py-2 text-right text-sm font-semibold text-slate-300">To Par</th>
                   <th className="px-4 py-2 text-right text-sm font-semibold text-slate-300">Thru</th>
                 </tr>
@@ -199,9 +208,23 @@ export default function EventLeaderboardPage() {
               <tbody className="divide-y divide-slate-800 bg-slate-950/60">
                 {leaderboard.map((row) => (
                   <tr key={row.user_id}>
-                    <td className="px-4 py-2 text-sm text-slate-100">{row.display_name}</td>
+                    <td className="px-4 py-2 text-sm text-slate-100">
+                      <div className="flex items-center justify-between gap-3">
+                        <span>{row.display_name}</span>
+                        {showPlayingHandicap && row.playing_handicap !== null && row.playing_handicap !== undefined ? (
+                          <span className="rounded-full bg-slate-800 px-2 py-0.5 text-xs text-slate-300">
+                            PH {row.playing_handicap}
+                          </span>
+                        ) : null}
+                      </div>
+                    </td>
                     <td className="px-4 py-2 text-right text-sm text-slate-100">{row.gross}</td>
                     <td className="px-4 py-2 text-right text-sm text-slate-100">{row.net}</td>
+                    {showStableford ? (
+                      <td className="px-4 py-2 text-right text-sm text-slate-100">
+                        {row.stableford !== undefined ? row.stableford : '—'}
+                      </td>
+                    ) : null}
                     <td className="px-4 py-2 text-right text-sm text-slate-100">
                       {row.to_par > 0 ? `+${row.to_par}` : row.to_par}
                     </td>

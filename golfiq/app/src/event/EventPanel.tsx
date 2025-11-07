@@ -10,7 +10,7 @@ import {
   listParticipants,
   pollScores,
 } from '../../../../shared/events/service';
-import { setEventContext } from '../../../../shared/events/state';
+import { getEventContext, setEventContext } from '../../../../shared/events/state';
 import type { Event, LeaderboardRow, Participant, ScoreRow } from '../../../../shared/events/types';
 import {
   recordEventAttachedRound,
@@ -102,7 +102,16 @@ const EventPanel: React.FC = () => {
   }, [attachCleanupStatusTimer]);
 
   useEffect(() => {
-    setEventContext(event ? { event, participant: participant ?? null } : null);
+    if (event) {
+      const prev = getEventContext();
+      setEventContext({
+        event,
+        participant: participant ?? null,
+        handicap: prev?.handicap ?? null,
+      });
+      return;
+    }
+    setEventContext(null);
   }, [event, participant]);
 
   useEffect(() => {

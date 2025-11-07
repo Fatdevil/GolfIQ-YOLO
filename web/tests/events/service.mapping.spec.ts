@@ -37,6 +37,7 @@ describe('events service mapping', () => {
       roundId: 'round',
       hole: 1,
       gross: 5,
+      par: 4,
       roundRevision: 2,
       scoresHash: 'hash-2',
     });

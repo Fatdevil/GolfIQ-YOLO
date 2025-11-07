@@ -83,6 +83,7 @@ describe('pushHoleScore sync health decisions', () => {
       roundId: 'round-1',
       hole: 3,
       gross: 4,
+      par: 4,
       roundRevision: 10,
       scoresHash: 'local-hash',
     });
@@ -142,6 +143,7 @@ describe('pushHoleScore sync health decisions', () => {
       roundId: 'round-1',
       hole: 7,
       gross: 5,
+      par: 4,
       roundRevision: 7,
       scoresHash: 'local-hash',
     });
@@ -196,6 +198,7 @@ describe('pushHoleScore sync health decisions', () => {
       roundId: 'round-1',
       hole: 2,
       gross: 3,
+      par: 3,
       roundRevision: 1,
       scoresHash: 'hash-1',
     });
