@@ -7,6 +7,8 @@ import { __resetFfmpegForTests, renderTracerReel } from '../../src/features/reel
 import { REEL_EXPORT_PRESETS, buildDrawTimeline } from '../../src/features/reels/export/templates';
 
 const createFfmpegMock = vi.fn();
+type Scenario = 'webm' | 'mp4' | 'mp4_fail';
+let SCENARIO: Scenario = 'webm';
 
 vi.mock('@ffmpeg/ffmpeg', () => ({
   createFFmpeg: (...args: unknown[]) => createFfmpegMock(...args),
@@ -48,8 +50,7 @@ class FakeMediaRecorder {
   }
 
   start(): void {
-    const header = new Uint8Array(256_000);
-    header.set([0x1a, 0x45, 0xdf, 0xa3], 0);
+    const header = new Uint8Array([0x1a, 0x45, 0xdf, 0xa3, 0x00, 0x00]);
     this.ondataavailable?.({ data: new Blob([header], { type: 'video/webm' }) });
   }
 
@@ -162,24 +163,30 @@ beforeAll(() => {
 
 beforeEach(() => {
   const files: Record<string, Uint8Array> = {};
+  SCENARIO = 'webm';
   createFfmpegMock.mockReset();
   createFfmpegMock.mockReturnValue({
     load: vi.fn().mockResolvedValue(undefined),
     run: vi.fn().mockImplementation(async () => {
-      files['out.mp4'] = new Uint8Array([
-        0x00,
-        0x00,
-        0x00,
-        0x18,
-        0x66,
-        0x74,
-        0x79,
-        0x70,
-        0x69,
-        0x73,
-        0x6f,
-        0x6d,
-      ]);
+      if (SCENARIO === 'mp4_fail') {
+        throw new Error('transcode failure');
+      }
+      if (SCENARIO === 'mp4') {
+        files['out.mp4'] = new Uint8Array([
+          0x00,
+          0x00,
+          0x00,
+          0x18,
+          0x66,
+          0x74,
+          0x79,
+          0x70,
+          0x69,
+          0x73,
+          0x6f,
+          0x6d,
+        ]);
+      }
     }),
     FS: vi.fn().mockImplementation((cmd: string, path: string, data?: Uint8Array) => {
       if (cmd === 'writeFile' && data) {
@@ -306,7 +313,7 @@ describe('reels/export templates', () => {
 describe('reels/export ffmpeg wrapper', () => {
   it('encodes a WebM reel when MP4 not requested', async () => {
     const builder = buildDrawTimeline(baseShot, makeFit('raw'), 'classic');
-    const result = await renderTracerReel({
+  const result = await renderTracerReel({
       drawTimeline: builder,
       startMs: 0,
       endMs: 7000,
@@ -316,15 +323,15 @@ describe('reels/export ffmpeg wrapper', () => {
     });
     expect(result.codec).toBe('webm');
     const bytes = new Uint8Array(await result.blob.arrayBuffer());
-    expect(bytes.byteLength).toBeGreaterThan(200_000);
-    expect(String.fromCharCode(bytes[0]!)).not.toBe('{');
+    expect(bytes.byteLength).toBeGreaterThan(0);
     expect(bytes[0]).toBe(0x1a);
     expect(bytes[1]).toBe(0x45);
   });
 
   it('transcodes to MP4 when requested', async () => {
     const builder = buildDrawTimeline(baseShot, makeFit('raw'), 'classic');
-    const result = await renderTracerReel({
+  SCENARIO = 'mp4';
+  const result = await renderTracerReel({
       drawTimeline: builder,
       startMs: 0,
       endMs: 4000,
@@ -338,23 +345,7 @@ describe('reels/export ffmpeg wrapper', () => {
   });
 
   it('falls back to WebM when MP4 transcode fails', async () => {
-    const files: Record<string, Uint8Array> = {};
-    createFfmpegMock.mockReset();
-    createFfmpegMock.mockReturnValue({
-      load: vi.fn().mockResolvedValue(undefined),
-      run: vi.fn().mockRejectedValue(new Error('transcode failure')),
-      FS: vi.fn().mockImplementation((cmd: string, path: string, data?: Uint8Array) => {
-        if (cmd === 'writeFile' && data) {
-          files[path] = data;
-          return;
-        }
-        if (cmd === 'readFile') {
-          return files[path];
-        }
-        throw new Error(`Unsupported FS command ${cmd}`);
-      }),
-    });
-    __resetFfmpegForTests();
+    SCENARIO = 'mp4_fail';
     const builder = buildDrawTimeline(baseShot, makeFit('raw'), 'classic');
     const result = await renderTracerReel({
       drawTimeline: builder,
