@@ -12,7 +12,9 @@ import type { RoundState, ShotEvent } from '../../../../shared/round/types';
 import { bearingDeg, toLocalENU } from '../../../../shared/arhud/geo';
 import { computeGolden6 } from '../../../../shared/trainer/metrics';
 import { generateWeeklyPlan } from '../../../../shared/trainer/plan';
-import type { GoldenMetric, GoldenSnapshot, WeeklyPlan } from '../../../../shared/trainer/types';
+import { buildGoldenDrillTiles } from '../../../../shared/trainer/drills';
+import type { GoldenDrillTile, GoldenMetric, GoldenSnapshot, WeeklyPlan } from '../../../../shared/trainer/types';
+import { emitLearningDrillDelta, emitLearningDrillEnd, emitLearningDrillStart } from '../../../../shared/telemetry/learning';
 import { emitTrainerCameraAssistant, emitTrainerSnapshot } from '../../../../shared/telemetry/trainer';
 import CameraAssistant from '../features/trainer/CameraAssistant';
 import GoldenTiles from '../features/trainer/GoldenTiles';
@@ -23,7 +25,9 @@ type AsyncStorageLike = {
 };
 
 const SNAPSHOT_STORAGE_KEY = 'trainer.snapshots.v1';
+const DRILL_CLIP_STORAGE_KEY = 'trainer.drill.clips.v1';
 const MAX_SNAPSHOTS = 50;
+const MAX_DRILL_CLIPS = 30;
 const DISTANCE_STEP = 0.5;
 const MIN_DISTANCE = 1.5;
 const MAX_DISTANCE = 6.5;
@@ -39,6 +43,8 @@ const fallbackStorage: AsyncStorageLike = {
 
 let storagePromise: Promise<AsyncStorageLike> | null = null;
 
+type RcRecord = Record<string, unknown>;
+
 function resolveTelemetryEmitter(): ((event: string, payload: Record<string, unknown>) => void) | null {
   if (typeof globalThis === 'undefined') {
     return null;
@@ -46,6 +52,29 @@ function resolveTelemetryEmitter(): ((event: string, payload: Record<string, unk
   const holder = globalThis as { __ARHUD_QA_TELEMETRY__?: unknown };
   const candidate = holder.__ARHUD_QA_TELEMETRY__;
   return typeof candidate === 'function' ? (candidate as (event: string, payload: Record<string, unknown>) => void) : null;
+}
+
+function readRcBoolean(key: string, fallback = false): boolean {
+  if (typeof globalThis === 'undefined') {
+    return fallback;
+  }
+  const holder = globalThis as { RC?: RcRecord };
+  const rc = holder.RC;
+  if (!rc || typeof rc !== 'object') {
+    return fallback;
+  }
+  const raw = rc[key];
+  if (typeof raw === 'boolean') {
+    return raw;
+  }
+  if (typeof raw === 'number') {
+    return raw !== 0;
+  }
+  if (typeof raw === 'string') {
+    const token = raw.trim().toLowerCase();
+    return token === '1' || token === 'true' || token === 'yes' || token === 'on';
+  }
+  return fallback;
 }
 
 async function getStorage(): Promise<AsyncStorageLike> {
@@ -216,15 +245,35 @@ function buildSnapshot(round: RoundState | null, shot: ShotEvent | null): Golden
   };
 }
 
+type DrillClip = {
+  id: string;
+  key: string;
+  label: string;
+  drill: string;
+  recordedAt: number;
+  club?: string | null;
+  today?: number | null;
+  ema?: number | null;
+  delta?: number | null;
+};
+
 const TrainerScreen: React.FC = () => {
   const [snapshots, setSnapshots] = useState<GoldenSnapshot[]>([]);
   const [metrics, setMetrics] = useState<GoldenMetric[]>([]);
   const [plan, setPlan] = useState<WeeklyPlan | null>(null);
   const [completedSessions, setCompletedSessions] = useState<Record<number, boolean>>({});
   const [distanceHint, setDistanceHint] = useState<number>(3.5);
+  const [drillClips, setDrillClips] = useState<DrillClip[]>([]);
+  const [drillsEnabled, setDrillsEnabled] = useState<boolean>(() => readRcBoolean('trainer.drills.enabled', false));
   const telemetryRef = useRef(resolveTelemetryEmitter());
+  const drillDeltaRef = useRef<Record<string, number>>({});
 
   const focusLabels = useMemo(() => plan?.focus ?? [], [plan]);
+
+  const drillTiles = useMemo<GoldenDrillTile[]>(
+    () => (drillsEnabled ? buildGoldenDrillTiles(snapshots) : []),
+    [drillsEnabled, snapshots],
+  );
 
   const loadSnapshots = useCallback(async () => {
     try {
@@ -247,12 +296,48 @@ const TrainerScreen: React.FC = () => {
     }
   }, []);
 
+  const loadDrillClips = useCallback(async () => {
+    try {
+      const storage = await getStorage();
+      const raw = await storage.getItem(DRILL_CLIP_STORAGE_KEY);
+      if (!raw) {
+        return;
+      }
+      const parsed = JSON.parse(raw) as DrillClip[];
+      if (!Array.isArray(parsed)) {
+        return;
+      }
+      const cleaned = parsed
+        .filter(
+          (item) =>
+            item &&
+            typeof item.recordedAt === 'number' &&
+            typeof item.key === 'string' &&
+            typeof item.label === 'string' &&
+            typeof item.drill === 'string',
+        )
+        .sort((a, b) => a.recordedAt - b.recordedAt)
+        .slice(-MAX_DRILL_CLIPS);
+      setDrillClips(cleaned);
+    } catch {
+      // ignore storage errors
+    }
+  }, []);
+
   useEffect(() => {
     loadSnapshots().catch(() => {});
   }, [loadSnapshots]);
 
   useEffect(() => {
+    loadDrillClips().catch(() => {});
+  }, [loadDrillClips]);
+
+  useEffect(() => {
     telemetryRef.current = resolveTelemetryEmitter();
+  }, []);
+
+  useEffect(() => {
+    setDrillsEnabled(readRcBoolean('trainer.drills.enabled', false));
   }, []);
 
   useEffect(() => {
@@ -355,6 +440,83 @@ const TrainerScreen: React.FC = () => {
   const lastSnapshot = snapshots.length ? snapshots[snapshots.length - 1] : null;
   const lastClub = lastSnapshot?.club;
 
+  const handleRecordDrill = useCallback(
+    (tile: GoldenDrillTile, drillName: string) => {
+      if (!drillsEnabled || !tile || !drillName) {
+        return;
+      }
+      const recordedAt = Date.now();
+      const payload = {
+        key: tile.key,
+        club: lastClub ?? null,
+        drill: drillName,
+        today: tile.today ?? null,
+        ema: tile.ema ?? null,
+        delta: tile.delta ?? null,
+        target: tile.target ?? null,
+        samples: tile.samples ?? null,
+      };
+      emitLearningDrillStart(telemetryRef.current, payload);
+
+      const clip: DrillClip = {
+        id: `drill-${recordedAt}`,
+        key: tile.key,
+        label: tile.label,
+        drill: drillName,
+        recordedAt,
+        club: lastClub ?? null,
+        today: tile.today ?? null,
+        ema: tile.ema ?? null,
+        delta: tile.delta ?? null,
+      };
+
+      let nextClips: DrillClip[] = [];
+      setDrillClips((prev) => {
+        const merged = [...prev, clip];
+        if (merged.length > MAX_DRILL_CLIPS) {
+          merged.splice(0, merged.length - MAX_DRILL_CLIPS);
+        }
+        nextClips = merged;
+        return merged;
+      });
+
+      getStorage()
+        .then((storage) => storage.setItem(DRILL_CLIP_STORAGE_KEY, JSON.stringify(nextClips)))
+        .catch(() => {});
+
+      emitLearningDrillEnd(telemetryRef.current, payload);
+    },
+    [drillsEnabled, lastClub],
+  );
+
+  useEffect(() => {
+    if (!drillsEnabled) {
+      drillDeltaRef.current = {};
+      return;
+    }
+    const previous = drillDeltaRef.current;
+    const next: Record<string, number> = {};
+    for (const tile of drillTiles) {
+      if (tile.delta == null || !Number.isFinite(tile.delta)) {
+        continue;
+      }
+      next[tile.key] = tile.delta;
+      const prevValue = previous[tile.key];
+      if (prevValue == null || Math.abs(prevValue - tile.delta) > 0.0001) {
+        emitLearningDrillDelta(telemetryRef.current, {
+          key: tile.key,
+          club: lastClub ?? null,
+          today: tile.today ?? null,
+          ema: tile.ema ?? null,
+          delta: tile.delta ?? null,
+          target: tile.target ?? null,
+          samples: tile.samples ?? null,
+        });
+      }
+    }
+    drillDeltaRef.current = next;
+  }, [drillTiles, drillsEnabled, lastClub]);
+
   return (
     <ScrollView contentContainerStyle={styles.container}>
       <View style={styles.section}>
@@ -392,7 +554,13 @@ const TrainerScreen: React.FC = () => {
           <Text style={styles.sectionTitle}>Golden-6 snapshot</Text>
           {lastClub ? <Text style={styles.clubLabel}>{lastClub}</Text> : null}
         </View>
-        {metrics.length ? <GoldenTiles metrics={metrics} /> : <Text style={styles.placeholder}>Record a swing to populate the Golden-6 metrics.</Text>}
+        {drillsEnabled && drillTiles.length ? (
+          <GoldenTiles tiles={drillTiles} onRecordDrill={handleRecordDrill} />
+        ) : metrics.length ? (
+          <GoldenTiles metrics={metrics} />
+        ) : (
+          <Text style={styles.placeholder}>Record a swing to populate the Golden-6 metrics.</Text>
+        )}
         <TouchableOpacity style={styles.primaryButton} onPress={handleEvaluateLastShot} accessibilityRole="button">
           <Text style={styles.primaryButtonLabel}>Evaluate last shot</Text>
         </TouchableOpacity>

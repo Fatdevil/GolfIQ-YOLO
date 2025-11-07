@@ -26,6 +26,7 @@ export default defineConfig({
       '../tests/shared/follow/**/*.spec.ts',
       '../tests/shared/sync/**/*.spec.ts',
       '../tests/shared/tracer/**/*.spec.ts',
+      '../tests/shared/telemetry/**/*.spec.ts',
       '../shared/follow/__tests__/**/*.spec.ts',
       '../shared/round/__tests__/**/*.spec.ts',
       '../tests/shared/round/**/*.spec.ts',
