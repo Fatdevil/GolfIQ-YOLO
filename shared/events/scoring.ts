@@ -92,7 +92,7 @@ export function aggregateLeaderboard(
       const fallbackHcp = hcpIndexByUser[userId] ?? 0;
       netTotal = computeNetSimple(gross, fallbackHcp, holes);
       const fallbackStableford = 2 * holes + gross - netTotal - agg.toPar;
-      if (format === 'stableford') {
+      if (format === 'stableford' && stablefordTotal === undefined) {
         stablefordTotal = Math.max(0, Math.round(fallbackStableford));
       }
     }
@@ -124,27 +124,51 @@ export function aggregateLeaderboard(
 
   const formatSort: ScoringFormat | undefined = format;
 
-  return out.sort((a, b) => {
-    const useStablefordA = (formatSort ?? a.format) === 'stableford' || a.hasStableford;
-    const useStablefordB = (formatSort ?? b.format) === 'stableford' || b.hasStableford;
-    if (useStablefordA || useStablefordB) {
-      const pointsA = Number.isFinite(a.stableford ?? NaN) ? Number(a.stableford) : Number.NEGATIVE_INFINITY;
-      const pointsB = Number.isFinite(b.stableford ?? NaN) ? Number(b.stableford) : Number.NEGATIVE_INFINITY;
-      if (pointsA !== pointsB) {
-        return pointsB - pointsA;
-      }
-      if (a.gross !== b.gross) {
-        return a.gross - b.gross;
-      }
-    } else {
-      if (a.net !== b.net) return a.net - b.net;
-      if (a.gross !== b.gross) return a.gross - b.gross;
-    }
-    const lastA = a.last_ts ? Date.parse(a.last_ts) : 0;
-    const lastB = b.last_ts ? Date.parse(b.last_ts) : 0;
-    if (lastA !== lastB) {
-      return lastB - lastA;
+  return out.sort((a, b) => cmpLeaderboard(a, b, formatSort));
+}
+
+function cmpLeaderboard(a: LeaderboardRow, b: LeaderboardRow, format?: ScoringFormat): number {
+  const byRecency = () => {
+    const at = a.last_ts ?? '';
+    const bt = b.last_ts ?? '';
+    if (at < bt) return 1;
+    if (at > bt) return -1;
+    return 0;
+  };
+
+  const finish = () => {
+    const recencyOrder = byRecency();
+    if (recencyOrder !== 0) {
+      return recencyOrder;
     }
     return a.display_name.localeCompare(b.display_name);
-  });
+  };
+
+  const hasStablefordValue = (row: LeaderboardRow) => Number.isFinite(row.stableford ?? NaN);
+
+  const wantStableford =
+    format === 'stableford' ||
+    (format === undefined && hasStablefordValue(a) && hasStablefordValue(b));
+
+  if (wantStableford) {
+    const pa = hasStablefordValue(a) ? Number(a.stableford) : Number.NEGATIVE_INFINITY;
+    const pb = hasStablefordValue(b) ? Number(b.stableford) : Number.NEGATIVE_INFINITY;
+    if (pa !== pb) {
+      return pb - pa;
+    }
+    if (a.gross !== b.gross) {
+      return a.gross - b.gross;
+    }
+    return finish();
+  }
+
+  const na = Number.isFinite(a.net ?? NaN) ? Number(a.net) : Number.POSITIVE_INFINITY;
+  const nb = Number.isFinite(b.net ?? NaN) ? Number(b.net) : Number.POSITIVE_INFINITY;
+  if (na !== nb) {
+    return na - nb;
+  }
+  if (a.gross !== b.gross) {
+    return a.gross - b.gross;
+  }
+  return finish();
 }
