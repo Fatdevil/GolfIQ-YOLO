@@ -1,4 +1,6 @@
 import type { DrawCmd, ReelShotRef } from '@shared/reels/types';
+import { PRESET_IDS, PRESETS } from '@shared/reels/presets';
+import type { ReelExportPresetId } from '@shared/reels/presets';
 import type { TracerDrawResult } from '@shared/tracer/draw';
 
 import {
@@ -61,35 +63,24 @@ const THEMES: Record<ReelThemeId, ReelTheme> = {
   },
 };
 
-export const REEL_EXPORT_PRESETS: ReelExportPreset[] = [
-  {
-    id: 'tiktok-1080',
-    label: 'TikTok 1080×1920',
-    width: 1080,
-    height: 1920,
-    fps: DEFAULT_FPS,
-    theme: 'classic',
-    description: 'Full HD vertical optimized for TikTok uploads.',
-  },
-  {
-    id: 'ig-reels-1080',
-    label: 'IG Reels 1080×1920',
-    width: 1080,
-    height: 1920,
-    fps: DEFAULT_FPS,
-    theme: 'pro-dark',
-    description: 'Crisp dark styling tuned for Instagram Reels.',
-  },
-  {
-    id: 'story-720',
-    label: 'Story 720×1280',
-    width: 720,
-    height: 1280,
-    fps: DEFAULT_FPS,
-    theme: 'neon',
-    description: 'Lightweight vertical export perfect for stories.',
-  },
-];
+const PRESET_META: Record<ReelExportPresetId, { label: string; theme: ReelThemeId }> = {
+  tiktok_1080x1920_60: { label: 'TikTok 1080×1920 · 60fps', theme: 'classic' },
+  reels_1080x1920_30: { label: 'Instagram Reels 1080×1920 · 30fps', theme: 'pro-dark' },
+  shorts_1080x1920_60: { label: 'YouTube Shorts 1080×1920 · 60fps', theme: 'neon' },
+  square_1080x1080_30: { label: 'Square 1080×1080 · 30fps', theme: 'classic' },
+};
+
+export const REEL_EXPORT_PRESETS: ReelExportPreset[] = PRESET_IDS.map((id) => {
+  const base = PRESETS[id];
+  const meta = PRESET_META[id] ?? { label: base.id, theme: 'classic' };
+  return {
+    ...base,
+    label: meta.label,
+    theme: meta.theme,
+    width: base.w,
+    height: base.h,
+  } satisfies ReelExportPreset;
+});
 
 export function resolveTheme(candidate?: ReelThemeId | ReelTheme | null): ReelTheme {
   if (!candidate) {

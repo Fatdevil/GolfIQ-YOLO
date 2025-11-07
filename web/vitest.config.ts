@@ -37,5 +37,6 @@ export default defineConfig({
       ...configDefaults.exclude,
     ],
     passWithNoTests: true,
+    environment: 'jsdom',
   }
 });

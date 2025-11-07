@@ -30,6 +30,26 @@ export type ReelTimeline = {
   }[];
 };
 
+export type ReelExportPreset = {
+  id: string;
+  w: number;
+  h: number;
+  fps: number;
+  bitrate: number;
+  safe: {
+    top: number;
+    bottom: number;
+  };
+  description: string;
+};
+
+export type ReelUserOptions = {
+  presetId: string;
+  watermark?: boolean;
+  caption?: string | null;
+  audio?: boolean;
+};
+
 export type DrawCmd =
   | { t: 'bg'; color: string }
   | {
