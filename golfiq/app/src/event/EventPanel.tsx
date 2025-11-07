@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 
 import { aggregateLeaderboard } from '../../../../shared/events/scoring';
+import { computeAggregateForFormat, type HoleInput } from '../../../../shared/events/net';
 import {
   attachRound,
   createEvent,
@@ -9,9 +10,17 @@ import {
   joinEventByCode,
   listParticipants,
   pollScores,
+  updateEventSettings,
 } from '../../../../shared/events/service';
 import { getEventContext, setEventContext } from '../../../../shared/events/state';
-import type { Event, LeaderboardRow, Participant, ScoreRow } from '../../../../shared/events/types';
+import type {
+  Event,
+  EventSettings,
+  LeaderboardRow,
+  Participant,
+  ScoreRow,
+  ScoringFormat,
+} from '../../../../shared/events/types';
 import {
   recordEventAttachedRound,
   recordEventCreated,
@@ -36,6 +45,22 @@ type LeaderboardState = {
 
 const INITIAL_LEADERBOARD: LeaderboardState = { rows: [], updatedAt: 0 };
 
+const DEFAULT_ALLOWANCE: Record<ScoringFormat, number> = {
+  stroke: 95,
+  stableford: 95,
+};
+
+function normalizeSettings(settings?: EventSettings | null): EventSettings {
+  if (!settings) {
+    return { scoringFormat: 'stroke', allowancePct: DEFAULT_ALLOWANCE.stroke };
+  }
+  const format = settings.scoringFormat ?? 'stroke';
+  const allowance = Number.isFinite(settings.allowancePct ?? NaN)
+    ? Math.max(0, Number(settings.allowancePct))
+    : DEFAULT_ALLOWANCE[format];
+  return { scoringFormat: format, allowancePct: allowance };
+}
+
 const EventPanel: React.FC = () => {
   const [event, setEvent] = useState<Nullable<Event>>(null);
   const [participant, setParticipant] = useState<Nullable<Participant>>(null);
@@ -48,6 +73,10 @@ const EventPanel: React.FC = () => {
   const [status, setStatus] = useState<Nullable<string>>(null);
   const [error, setError] = useState<Nullable<string>>(null);
   const [leaderboard, setLeaderboard] = useState<LeaderboardState>(INITIAL_LEADERBOARD);
+  const [eventSettings, setEventSettings] = useState<EventSettings>(() => normalizeSettings(null));
+  const [allowanceInput, setAllowanceInput] = useState(() =>
+    String(normalizeSettings(null).allowancePct ?? DEFAULT_ALLOWANCE.stroke),
+  );
   const nameMapRef = useRef<NameMap>({});
   const pollStopRef = useRef<Nullable<PollStop>>(null);
   const statusTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -115,6 +144,23 @@ const EventPanel: React.FC = () => {
   }, [event, participant]);
 
   useEffect(() => {
+    const normalized = normalizeSettings(event?.settings);
+    setEventSettings((prev) => {
+      if (
+        prev.scoringFormat === normalized.scoringFormat &&
+        (prev.allowancePct ?? null) === (normalized.allowancePct ?? null)
+      ) {
+        return prev;
+      }
+      return normalized;
+    });
+    setAllowanceInput((prev) => {
+      const next = String(normalized.allowancePct ?? DEFAULT_ALLOWANCE[normalized.scoringFormat]);
+      return prev === next ? prev : next;
+    });
+  }, [event?.id, event?.settings]);
+
+  useEffect(() => {
     if (!event) {
       setParticipantsList([]);
       nameMapRef.current = {};
@@ -155,6 +201,36 @@ const EventPanel: React.FC = () => {
   const updateStatus = useCallback((nextStatus: string | null, nextError: string | null = null) => {
     setStatus(nextStatus);
     setError(nextError);
+  }, []);
+
+  const handleSelectFormat = useCallback(
+    (nextFormat: ScoringFormat) => {
+      setEventSettings((prev) => {
+        if (prev.scoringFormat === nextFormat) {
+          return prev;
+        }
+        const currentValue = Number.parseFloat(allowanceInput);
+        const hasCustomAllowance =
+          !Number.isNaN(currentValue) && currentValue !== DEFAULT_ALLOWANCE[prev.scoringFormat];
+        if (!hasCustomAllowance) {
+          setAllowanceInput(String(DEFAULT_ALLOWANCE[nextFormat]));
+        }
+        return {
+          scoringFormat: nextFormat,
+          allowancePct: hasCustomAllowance ? Math.max(0, currentValue) : DEFAULT_ALLOWANCE[nextFormat],
+        };
+      });
+    },
+    [allowanceInput],
+  );
+
+  const handleAllowanceChange = useCallback((value: string) => {
+    setAllowanceInput(value);
+    const parsed = Number.parseFloat(value);
+    setEventSettings((prev) => ({
+      ...prev,
+      allowancePct: Number.isNaN(parsed) ? prev.allowancePct : Math.max(0, parsed),
+    }));
   }, []);
 
   const handleCreate = useCallback(async () => {
@@ -220,6 +296,7 @@ const EventPanel: React.FC = () => {
             name: 'Event',
             code,
             status: 'open',
+            settings: normalizeSettings(null),
           };
           setEvent(fallback);
           resolvedEvent = fallback;
@@ -233,6 +310,34 @@ const EventPanel: React.FC = () => {
       updateStatus(null, 'Unable to join event');
     }
   }, [displayName, event, joinCode, participant, updateStatus, userId]);
+
+  const handleSaveSettings = useCallback(async () => {
+    if (!event) {
+      return;
+    }
+    const parsed = Number.parseFloat(allowanceInput);
+    const allowanceValue = Number.isNaN(parsed)
+      ? DEFAULT_ALLOWANCE[eventSettings.scoringFormat]
+      : Math.max(0, parsed);
+    const nextSettings: EventSettings = {
+      scoringFormat: eventSettings.scoringFormat,
+      allowancePct: allowanceValue,
+    };
+    try {
+      updateStatus('Saving settings…');
+      const updated = await updateEventSettings(event.id, nextSettings);
+      setEvent(updated);
+      updateStatus('Settings saved');
+    } catch (saveError) {
+      console.warn('[EventPanel] update settings failed', saveError);
+      const current = normalizeSettings(event.settings);
+      setEventSettings(current);
+      setAllowanceInput(
+        String(current.allowancePct ?? DEFAULT_ALLOWANCE[current.scoringFormat]),
+      );
+      updateStatus(null, 'Unable to save settings');
+    }
+  }, [allowanceInput, event, eventSettings.scoringFormat, updateStatus]);
 
   const handleAttachRound = useCallback(async () => {
     if (!event || !participant || !round) {
@@ -288,6 +393,7 @@ const EventPanel: React.FC = () => {
           const rowsSorted = aggregateLeaderboard(rows, nameByUser, {
             hcpIndexByUser: hcpByUser,
             holesPlayedByUser: holesPlayed,
+            format: eventSettings.scoringFormat,
           });
           setLeaderboard({ rows: rowsSorted, updatedAt: Date.now() });
         });
@@ -310,7 +416,7 @@ const EventPanel: React.FC = () => {
         pollStopRef.current = null;
       }
     };
-  }, [event, participant, participantsList, updateStatus]);
+  }, [event, eventSettings.scoringFormat, participant, participantsList, updateStatus]);
 
   useEffect(() => {
     if (participant) {
@@ -318,8 +424,32 @@ const EventPanel: React.FC = () => {
     }
   }, [participant]);
 
+  const activeFormat = eventSettings.scoringFormat;
+  const parsedAllowance = Number.parseFloat(allowanceInput);
+  const allowanceValue = Number.isNaN(parsedAllowance)
+    ? eventSettings.allowancePct ?? DEFAULT_ALLOWANCE[activeFormat]
+    : Math.max(0, parsedAllowance);
+
   const leaderboardRows = useMemo(() => leaderboard.rows, [leaderboard]);
   const roundAttached = Boolean(participant?.round_id && round && participant.round_id === round.id);
+  const playerPh = useMemo(() => {
+    if (!round?.handicapSetup) {
+      return null;
+    }
+    const holes: HoleInput[] = round.holes
+      .filter((hole) => Number.isFinite(hole.score))
+      .map((hole) => ({
+        hole: hole.holeNo,
+        par: hole.par,
+        gross: Number(hole.score),
+      }));
+    const aggregate = computeAggregateForFormat(activeFormat, {
+      ...round.handicapSetup,
+      allowancePct: allowanceValue,
+    }, holes);
+    return aggregate.ph;
+  }, [activeFormat, allowanceValue, round]);
+  const showStableford = activeFormat === 'stableford';
 
   return (
     <View style={styles.card}>
@@ -333,6 +463,48 @@ const EventPanel: React.FC = () => {
       ) : (
         <Text style={styles.metaText}>No active event</Text>
       )}
+      {event ? (
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Format settings</Text>
+          <View style={styles.formatRow}>
+            {(['stroke', 'stableford'] as ScoringFormat[]).map((fmt) => {
+              const selected = activeFormat === fmt;
+              return (
+                <TouchableOpacity
+                  key={fmt}
+                  onPress={() => handleSelectFormat(fmt)}
+                  style={[
+                    styles.formatButton,
+                    fmt !== 'stableford' ? styles.formatButtonSpacing : null,
+                    selected ? styles.formatButtonActive : null,
+                  ]}
+                >
+                  <Text
+                    style={[styles.formatButtonLabel, selected ? styles.formatButtonLabelActive : null]}
+                  >
+                    {fmt === 'stroke' ? 'Stroke' : 'Stableford'}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+          <Text style={styles.metaText}>Allowance %</Text>
+          <TextInput
+            placeholder="95"
+            placeholderTextColor="#94a3b8"
+            keyboardType="numeric"
+            value={allowanceInput}
+            onChangeText={handleAllowanceChange}
+            style={styles.input}
+          />
+          <TouchableOpacity onPress={handleSaveSettings} style={styles.secondaryButton}>
+            <Text style={styles.secondaryButtonText}>Save settings</Text>
+          </TouchableOpacity>
+          {playerPh !== null ? (
+            <Text style={styles.metaText}>Your PH: {playerPh}</Text>
+          ) : null}
+        </View>
+      ) : null}
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Create event</Text>
         <TextInput
@@ -392,19 +564,40 @@ const EventPanel: React.FC = () => {
             <View style={[styles.row, styles.headerRow]}>
               <Text style={[styles.cell, styles.nameCell]}>Player</Text>
               <Text style={styles.cell}>Gross</Text>
-              <Text style={styles.cell}>Net</Text>
-              <Text style={styles.cell}>To Par</Text>
+              <Text style={styles.cell}>{showStableford ? 'Pts' : 'Net'}</Text>
+              <Text style={styles.cell}>PH</Text>
+              {!showStableford ? <Text style={styles.cell}>To Par</Text> : null}
               <Text style={styles.cell}>Thru</Text>
             </View>
             <ScrollView style={styles.tableBody}>
               {leaderboardRows.map((row) => (
                 <View key={row.user_id} style={styles.row}>
-                  <Text style={[styles.cell, styles.nameCell]} numberOfLines={1}>
-                    {row.display_name}
-                  </Text>
+                  <View style={[styles.nameCellContainer, styles.nameCell]}>
+                    <Text style={styles.nameText} numberOfLines={1}>
+                      {row.display_name}
+                    </Text>
+                    {row.playing_handicap !== undefined && row.playing_handicap !== null ? (
+                      <View style={styles.phBadge}>
+                        <Text style={styles.phBadgeText}>PH {row.playing_handicap}</Text>
+                      </View>
+                    ) : null}
+                  </View>
                   <Text style={styles.cell}>{row.gross}</Text>
-                  <Text style={styles.cell}>{row.net}</Text>
-                  <Text style={styles.cell}>{row.to_par > 0 ? `+${row.to_par}` : row.to_par}</Text>
+                  <Text style={styles.cell}>{showStableford ? row.stableford ?? '—' : row.net}</Text>
+                  <Text style={styles.cell}>
+                    {row.playing_handicap !== undefined && row.playing_handicap !== null
+                      ? row.playing_handicap
+                      : '—'}
+                  </Text>
+                  {!showStableford ? (
+                    <Text style={styles.cell}>
+                      {typeof row.toPar === 'number'
+                        ? row.toPar > 0
+                          ? `+${row.toPar}`
+                          : row.toPar
+                        : '—'}
+                    </Text>
+                  ) : null}
                   <Text style={styles.cell}>{row.holes}</Text>
                 </View>
               ))}
@@ -515,5 +708,54 @@ const styles = StyleSheet.create({
   metaText: {
     color: '#94a3b8',
     fontSize: 13,
+  },
+  formatRow: {
+    flexDirection: 'row',
+  },
+  formatButton: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: '#1e293b',
+    borderRadius: 8,
+    paddingVertical: 8,
+    alignItems: 'center',
+    backgroundColor: '#1e293b',
+  },
+  formatButtonSpacing: {
+    marginRight: 8,
+  },
+  formatButtonActive: {
+    borderColor: '#2563eb',
+    backgroundColor: '#1e3a8a',
+  },
+  formatButtonLabel: {
+    color: '#cbd5f5',
+    fontWeight: '600',
+  },
+  formatButtonLabelActive: {
+    color: '#f8fafc',
+  },
+  nameCellContainer: {
+    flex: 1.5,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  nameText: {
+    color: '#cbd5f5',
+    fontSize: 13,
+    flexShrink: 1,
+  },
+  phBadge: {
+    backgroundColor: '#1e293b',
+    borderRadius: 12,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    marginLeft: 8,
+  },
+  phBadgeText: {
+    color: '#cbd5f5',
+    fontSize: 11,
+    fontWeight: '600',
   },
 });

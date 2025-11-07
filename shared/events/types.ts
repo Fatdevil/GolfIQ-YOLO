@@ -1,11 +1,19 @@
 export type UUID = string;
 
+export type ScoringFormat = 'stroke' | 'stableford';
+
+export type EventSettings = {
+  scoringFormat: ScoringFormat;
+  allowancePct?: number;
+};
+
 export type Event = {
   id: UUID;
   name: string;
   start_at?: string;
   code: string;
   status?: 'open' | 'closed';
+  settings?: EventSettings | null;
 };
 
 export type Participant = {
@@ -28,6 +36,7 @@ export type ScoreRow = {
   stableford?: number | null;
   playing_handicap?: number | null;
   course_handicap?: number | null;
+  format?: ScoringFormat | null;
   ts: string;
   round_revision?: number | null;
   scores_hash?: string | null;
@@ -39,8 +48,11 @@ export type LeaderboardRow = {
   holes: number;
   gross: number;
   net: number;
-  to_par: number;
+  toPar: number;
+  to_par?: number;
   last_ts?: string;
   stableford?: number;
+  hasStableford: boolean;
   playing_handicap?: number | null;
+  format?: ScoringFormat;
 };

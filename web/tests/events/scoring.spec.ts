@@ -63,6 +63,7 @@ describe('events scoring', () => {
     // Stableford (standard): 2 + (par + strokesReceived - gross)
     // using par=4 ⇒ 2 + (4 + 1 - 5) = 2
     expect(leaderboard[0].stableford).toBe(2);
+    expect(leaderboard[0].hasStableford).toBe(true);
     expect(leaderboard[0].playing_handicap).toBe(12);
     expect(leaderboard[1].user_id).toBe('a');
     expect(leaderboard[1].net).toBe(8);

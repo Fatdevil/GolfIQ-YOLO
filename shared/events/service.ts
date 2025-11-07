@@ -5,7 +5,7 @@ import {
   observeSyncError,
   observeSyncSuccess,
 } from './resync';
-import type { Event, Participant, ScoreRow, UUID } from './types';
+import type { Event, EventSettings, Participant, ScoreRow, ScoringFormat, UUID } from './types';
 
 // --- helpers ---
 async function requireClient() {
@@ -84,6 +84,31 @@ export function __setEventSyncIntegrationsForTests(overrides: Partial<SyncIntegr
   activeIntegrations = { ...defaultIntegrations, ...(overrides ?? {}) };
 }
 
+const DEFAULT_ALLOWANCE: Record<ScoringFormat, number> = {
+  stroke: 95,
+  stableford: 95,
+};
+
+const DEFAULT_EVENT_SETTINGS: EventSettings = {
+  scoringFormat: 'stroke',
+  allowancePct: DEFAULT_ALLOWANCE.stroke,
+};
+
+function normalizeSettings(settings: EventSettings | null | undefined): EventSettings {
+  if (!settings) {
+    return { ...DEFAULT_EVENT_SETTINGS };
+  }
+  const scoringFormat: ScoringFormat = settings.scoringFormat ?? 'stroke';
+  const allowanceRaw = settings.allowancePct;
+  const allowance = Number.isFinite(allowanceRaw ?? NaN)
+    ? Math.max(0, Number(allowanceRaw))
+    : DEFAULT_ALLOWANCE[scoringFormat];
+  return {
+    scoringFormat,
+    allowancePct: allowance,
+  };
+}
+
 // Map round -> participant.user_id for this event (never confuse round_id with user_id)
 async function resolveUserIdForRound(eventId: UUID, roundId: UUID): Promise<string | null> {
   const c = await requireClient();
@@ -102,10 +127,17 @@ async function resolveUserIdForRound(eventId: UUID, roundId: UUID): Promise<stri
 export async function createEvent(name: string): Promise<Event> {
   const c = await requireClient();
   const code = Math.random().toString(36).slice(2, 8).toUpperCase();
-  const payload = { name, code, start_at: nowIso(), status: 'open' };
+  const payload = {
+    name,
+    code,
+    start_at: nowIso(),
+    status: 'open',
+    settings: normalizeSettings(null),
+  };
   const { data, error } = await c.from('events').insert(payload).select().single();
   if (error || !data) throw new Error('createEvent failed');
-  return data as Event;
+  const row = data as Event;
+  return { ...row, settings: normalizeSettings(row.settings) };
 }
 
 export async function joinEventByCode(
@@ -163,6 +195,7 @@ export async function pushHoleScore(args: {
   hcpIndex?: number | null;
   roundRevision?: number | null;
   scoresHash?: string | null;
+  format?: ScoringFormat;
 }): Promise<void> {
   let userId: string | null = null;
   let localRevision: number | null = null;
@@ -274,9 +307,12 @@ export async function pushHoleScore(args: {
     if (hasExplicitNet) {
       netValue = Math.max(1, Math.round(Number(args.net)));
     }
-    const stableford = Number.isFinite(args.stableford ?? NaN)
+    const format: ScoringFormat = args.format ?? 'stroke';
+    const hasStablefordInput = Number.isFinite(args.stableford ?? NaN);
+    const stablefordValue = hasStablefordInput
       ? Math.max(0, Math.round(Number(args.stableford)))
       : null;
+    const includeStableford = format === 'stableford' && stablefordValue !== null;
     const strokesReceived = Number.isFinite(args.strokesReceived ?? NaN)
       ? Math.trunc(Number(args.strokesReceived))
       : null;
@@ -296,7 +332,7 @@ export async function pushHoleScore(args: {
       to_par: (args.gross ?? 0) - par,
       par,
       strokes_received: strokesReceived,
-      stableford,
+      ...(includeStableford ? { stableford: stablefordValue } : {}),
       course_handicap: courseHandicap,
       playing_handicap: playingHandicap,
       ts: nowIso(),
@@ -379,7 +415,7 @@ export async function fetchEvent(eventId: UUID): Promise<Event | null> {
   const c = await requireClient();
   const { data, error } = await c
     .from('events')
-    .select('id,name,code,status,start_at')
+    .select('id,name,code,status,start_at,settings')
     .eq('id', eventId)
     .limit(1);
   if (error || !data) {
@@ -389,7 +425,24 @@ export async function fetchEvent(eventId: UUID): Promise<Event | null> {
   if (!row) {
     return null;
   }
-  return row as Event;
+  const event = row as Event;
+  return { ...event, settings: normalizeSettings(event.settings) };
+}
+
+export async function updateEventSettings(eventId: UUID, settings: EventSettings): Promise<Event> {
+  const c = await requireClient();
+  const normalized = normalizeSettings(settings);
+  const { data, error } = await c
+    .from('events')
+    .update({ settings: normalized })
+    .eq('id', eventId)
+    .select('id,name,code,status,start_at,settings')
+    .single();
+  if (error || !data) {
+    throw new Error('updateEventSettings failed');
+  }
+  const row = data as Event;
+  return { ...row, settings: normalizeSettings(row.settings) };
 }
 
 export async function listParticipants(eventId: UUID): Promise<Participant[]> {

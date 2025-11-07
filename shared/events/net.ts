@@ -18,6 +18,12 @@ export type NetResult = {
   totalPoints: number;
 };
 
+export type RoundAggregate = {
+  ph: number;
+  totalNet: number;
+  totalPoints: number;
+};
+
 export function computeNetForRound(setup: HandicapSetup, holes: HoleInput[]): NetResult {
   const ch = courseHandicap(setup.handicapIndex, setup.tee);
   const ph = playingHandicap(ch, setup.allowancePct);
@@ -49,6 +55,20 @@ export function computeNetForRound(setup: HandicapSetup, holes: HoleInput[]): Ne
     strokesPerHole: strokes,
     holes: scored,
     totalNet,
+    totalPoints,
+  };
+}
+
+export function computeAggregateForFormat(
+  format: 'stroke' | 'stableford',
+  setup: HandicapSetup,
+  holes: HoleInput[],
+): RoundAggregate {
+  const result = computeNetForRound(setup, holes);
+  const totalPoints = format === 'stableford' ? result.totalPoints : result.totalPoints;
+  return {
+    ph: result.playingHandicap,
+    totalNet: result.totalNet,
     totalPoints,
   };
 }

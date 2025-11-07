@@ -1,4 +1,4 @@
-import type { LeaderboardRow, ScoreRow } from './types';
+import type { LeaderboardRow, ScoreRow, ScoringFormat } from './types';
 
 export function computeNetSimple(
   gross: number,
@@ -14,7 +14,8 @@ type AggEntry = {
   net: number;
   holes: number;
   toPar: number;
-  last?: string;
+  last?: { ts: number; iso: string | null };
+  format?: ScoringFormat;
   stableford: number;
   hasStableford: boolean;
   playingHandicap: number | null;
@@ -42,12 +43,18 @@ export function aggregateScoreRows(rows: ScoreRow[]): Map<string, AggEntry> {
     entry.holes += 1;
     entry.toPar += r.to_par;
     if (Number.isFinite(r.net)) {
-      const n = Number(r.net);
-      entry.net += n;
-      if (n !== r.gross) entry.netFromRows = true;
+      const netValue = Number(r.net);
+      entry.net += netValue;
+      if (netValue !== r.gross) {
+        entry.netFromRows = true;
+      }
     }
-    if (!entry.last || entry.last < r.ts) {
-      entry.last = r.ts;
+    const tsValue = typeof r.ts === 'string' ? Date.parse(r.ts) : Number(r.ts);
+    if (Number.isFinite(tsValue)) {
+      const ts = Number(tsValue);
+      if (!entry.last || ts >= entry.last.ts) {
+        entry.last = { ts, iso: typeof r.ts === 'string' ? r.ts : new Date(ts).toISOString() };
+      }
     }
     if (Number.isFinite(r.stableford ?? NaN)) {
       entry.stableford += Number(r.stableford);
@@ -55,6 +62,9 @@ export function aggregateScoreRows(rows: ScoreRow[]): Map<string, AggEntry> {
     }
     if (Number.isFinite(r.playing_handicap ?? NaN)) {
       entry.playingHandicap = Number(r.playing_handicap);
+    }
+    if (r.format === 'stroke' || r.format === 'stableford') {
+      entry.format = r.format;
     }
     acc.set(r.user_id, entry);
   }
@@ -67,45 +77,74 @@ export function aggregateLeaderboard(
   opts?: {
     hcpIndexByUser?: Record<string, number | undefined | null>;
     holesPlayedByUser?: Record<string, number>;
+    format?: ScoringFormat;
   },
 ): LeaderboardRow[] {
-  const { hcpIndexByUser = {}, holesPlayedByUser = {} } = opts ?? {};
+  const { hcpIndexByUser = {}, holesPlayedByUser = {}, format } = opts ?? {};
   const acc = aggregateScoreRows(rows);
   const out: LeaderboardRow[] = [];
   for (const [userId, agg] of acc) {
     const holes = Math.max(agg.holes, holesPlayedByUser[userId] ?? agg.holes);
     const gross = agg.gross;
     let netTotal = agg.net;
-    let stablefordTotal: number | undefined = agg.hasStableford
-      ? agg.stableford
-      : undefined;
+    let stablefordTotal: number | undefined = agg.hasStableford ? agg.stableford : undefined;
     if (!agg.netFromRows) {
       const fallbackHcp = hcpIndexByUser[userId] ?? 0;
       netTotal = computeNetSimple(gross, fallbackHcp, holes);
       const fallbackStableford = 2 * holes + gross - netTotal - agg.toPar;
-      stablefordTotal = Math.max(0, Math.round(fallbackStableford));
+      if (format === 'stableford') {
+        stablefordTotal = Math.max(0, Math.round(fallbackStableford));
+      }
     }
     if (stablefordTotal === undefined && agg.hasStableford) {
       stablefordTotal = agg.stableford;
     }
+    if (stablefordTotal === undefined && format === 'stableford') {
+      const fallbackStableford = 2 * holes + gross - netTotal - agg.toPar;
+      stablefordTotal = Math.max(0, Math.round(fallbackStableford));
+    }
+    const lastTs = agg.last?.iso ?? undefined;
+    const formatForRow: ScoringFormat | undefined = format ?? agg.format;
+    const hasStableford = Boolean(stablefordTotal !== undefined || agg.hasStableford || formatForRow === 'stableford');
     out.push({
       user_id: userId,
       display_name: nameByUser[userId] ?? 'Player',
       holes,
       gross,
       net: netTotal,
+      toPar: agg.toPar,
       to_par: agg.toPar,
-      last_ts: agg.last,
+      last_ts: lastTs,
       stableford: stablefordTotal,
+      hasStableford,
       playing_handicap: agg.playingHandicap !== null ? agg.playingHandicap : undefined,
+      format: formatForRow,
     });
   }
 
+  const formatSort: ScoringFormat | undefined = format;
+
   return out.sort((a, b) => {
-    if (a.net !== b.net) return a.net - b.net;
-    if (a.gross !== b.gross) return a.gross - b.gross;
-    if ((a.last_ts ?? '') < (b.last_ts ?? '')) return 1;
-    if ((a.last_ts ?? '') > (b.last_ts ?? '')) return -1;
-    return 0;
+    const useStablefordA = (formatSort ?? a.format) === 'stableford' || a.hasStableford;
+    const useStablefordB = (formatSort ?? b.format) === 'stableford' || b.hasStableford;
+    if (useStablefordA || useStablefordB) {
+      const pointsA = Number.isFinite(a.stableford ?? NaN) ? Number(a.stableford) : Number.NEGATIVE_INFINITY;
+      const pointsB = Number.isFinite(b.stableford ?? NaN) ? Number(b.stableford) : Number.NEGATIVE_INFINITY;
+      if (pointsA !== pointsB) {
+        return pointsB - pointsA;
+      }
+      if (a.gross !== b.gross) {
+        return a.gross - b.gross;
+      }
+    } else {
+      if (a.net !== b.net) return a.net - b.net;
+      if (a.gross !== b.gross) return a.gross - b.gross;
+    }
+    const lastA = a.last_ts ? Date.parse(a.last_ts) : 0;
+    const lastB = b.last_ts ? Date.parse(b.last_ts) : 0;
+    if (lastA !== lastB) {
+      return lastB - lastA;
+    }
+    return a.display_name.localeCompare(b.display_name);
   });
 }
