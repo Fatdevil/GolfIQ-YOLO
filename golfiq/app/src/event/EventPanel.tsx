@@ -1,5 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import * as Clipboard from 'expo-clipboard';
+import QRCode from 'react-native-qrcode-svg';
 
 import { aggregateLeaderboard } from '../../../../shared/events/scoring';
 import { computeAggregateForFormat, type HoleInput } from '../../../../shared/events/net';
@@ -80,6 +82,41 @@ const EventPanel: React.FC = () => {
   const nameMapRef = useRef<NameMap>({});
   const pollStopRef = useRef<Nullable<PollStop>>(null);
   const statusTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const env = useMemo(() => {
+    const globalEnv =
+      typeof globalThis !== 'undefined'
+        ? ((globalThis as { process?: { env?: Record<string, string | undefined> } }).process?.env ?? {})
+        : {};
+    return globalEnv;
+  }, []);
+
+  const liveEnabled = useMemo(() => {
+    const raw =
+      env.EXPO_PUBLIC_EVENTS_LIVE_ENABLED ??
+      env.EVENTS_LIVE_ENABLED ??
+      env['events.live.enabled'] ??
+      'true';
+    return raw === 'true' || raw === '1';
+  }, [env]);
+
+  const liveBase = useMemo(() => {
+    const base =
+      env.EXPO_PUBLIC_LIVE_BASE ?? env.EXPO_PUBLIC_WEB_BASE ?? env.EXPO_PUBLIC_APP_BASE ?? 'https://app.golfiq.dev';
+    return base.toString().replace(/\/$/, '');
+  }, [env]);
+
+  const eventIdForShare = event?.id ?? '';
+  const roundIdForShare = participant?.round_id ?? '';
+
+  const liveUrl = useMemo(() => {
+    if (!liveEnabled || !eventIdForShare || !roundIdForShare) {
+      return '';
+    }
+    return `${liveBase}/${eventIdForShare}/live/${roundIdForShare}`;
+  }, [liveEnabled, liveBase, eventIdForShare, roundIdForShare]);
+
+  const showLiveLink = liveEnabled && Boolean(event && participant?.round_id && liveUrl);
 
   useEffect(() => {
     let active = true;
@@ -202,6 +239,19 @@ const EventPanel: React.FC = () => {
     setStatus(nextStatus);
     setError(nextError);
   }, []);
+
+  const handleCopyLiveLink = useCallback(async () => {
+    if (!liveUrl) {
+      return;
+    }
+    try {
+      await Clipboard.setStringAsync(liveUrl);
+      updateStatus('Live link copied');
+    } catch (copyError) {
+      console.warn('[EventPanel] copy live link failed', copyError);
+      updateStatus(null, 'Unable to copy live link');
+    }
+  }, [liveUrl, updateStatus]);
 
   const handleSelectFormat = useCallback(
     (nextFormat: ScoringFormat) => {
@@ -555,6 +605,25 @@ const EventPanel: React.FC = () => {
           </TouchableOpacity>
         </View>
       ) : null}
+      {showLiveLink ? (
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Live link</Text>
+          <Text style={styles.metaText}>Share a live scoreboard with spectators.</Text>
+          <TouchableOpacity onPress={handleCopyLiveLink} style={styles.secondaryButton}>
+            <Text style={styles.secondaryButtonText}>Share live link</Text>
+          </TouchableOpacity>
+          <View style={styles.qrWrapper}>
+            {liveUrl ? (
+              <QRCode value={liveUrl} size={160} color="#e2e8f0" backgroundColor="#0f172a" />
+            ) : null}
+          </View>
+          {liveUrl ? (
+            <Text style={styles.qrCaption} numberOfLines={2} selectable>
+              {liveUrl}
+            </Text>
+          ) : null}
+        </View>
+      ) : null}
       {status ? <Text style={styles.statusText}>{status}</Text> : null}
       {error ? <Text style={styles.errorText}>{error}</Text> : null}
       <View style={styles.leaderboard}>
@@ -662,6 +731,20 @@ const styles = StyleSheet.create({
   secondaryButtonText: {
     color: '#e2e8f0',
     fontWeight: '600',
+  },
+  qrWrapper: {
+    marginTop: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 16,
+    borderRadius: 12,
+    backgroundColor: '#0b1221',
+  },
+  qrCaption: {
+    color: '#94a3b8',
+    fontSize: 12,
+    marginTop: 8,
+    textAlign: 'center',
   },
   statusText: {
     color: '#22c55e',

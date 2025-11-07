@@ -1,11 +1,25 @@
 import { ensureClient } from '../supabase/client';
+import { pickTopShots } from '../reels/select';
+import type { ReelShotRef } from '../reels/types';
+import { aggregateLeaderboard } from './scoring';
 import {
   enqueueEventResync,
   observeSyncDrift as observeSyncDriftMetric,
   observeSyncError,
   observeSyncSuccess,
 } from './resync';
-import type { Event, EventSettings, Participant, ScoreRow, ScoringFormat, UUID } from './types';
+import type {
+  Event,
+  EventSettings,
+  LiveSpectatorEvent,
+  LiveSpectatorPlayer,
+  LiveSpectatorShot,
+  LiveSpectatorSnapshot,
+  Participant,
+  ScoreRow,
+  ScoringFormat,
+  UUID,
+} from './types';
 
 // --- helpers ---
 async function requireClient() {
@@ -453,4 +467,301 @@ export async function listParticipants(eventId: UUID): Promise<Participant[]> {
     .eq('event_id', eventId);
   if (error) throw new Error('listParticipants failed');
   return (data ?? []) as Participant[];
+}
+
+type LiveScoreViewRow = {
+  event_id: UUID;
+  round_id: UUID | null;
+  spectator_id?: string | null;
+  user_id?: UUID | null;
+  display_name?: string | null;
+  hcp_index?: number | null;
+  hole_no: number;
+  gross: number;
+  net?: number | null;
+  stableford?: number | null;
+  to_par: number;
+  par?: number | null;
+  strokes_received?: number | null;
+  playing_handicap?: number | null;
+  course_handicap?: number | null;
+  ts: string;
+  format?: string | null;
+};
+
+type LiveEventViewRow = {
+  event_id: UUID;
+  name?: string | null;
+  status?: string | null;
+  scoring_format?: string | null;
+  allowance_pct?: number | null;
+};
+
+type LiveShotViewRow = {
+  event_id: UUID;
+  round_id: UUID;
+  shot_public_id: string;
+  hole: number;
+  seq: number;
+  club?: string | null;
+  carry_m?: number | null;
+  plays_like_pct?: number | null;
+  strokes_gained?: number | null;
+  start_ts_ms?: number | null;
+  updated_at?: string | null;
+};
+
+function toNumber(value: unknown): number | null {
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? numeric : null;
+}
+
+function toScoringFormat(raw: unknown, fallback: ScoringFormat = 'stroke'): ScoringFormat {
+  if (raw === 'stableford' || raw === 'stroke') {
+    return raw;
+  }
+  return fallback;
+}
+
+function toScoreRow(row: LiveScoreViewRow, spectatorId: string): ScoreRow {
+  const gross = Number.isFinite(row.gross) ? Number(row.gross) : 0;
+  const parValue = Number.isFinite(row.par ?? NaN) ? Number(row.par) : null;
+  const netValue = Number.isFinite(row.net ?? NaN) ? Number(row.net) : gross;
+  const toParValue = Number.isFinite(row.to_par ?? NaN)
+    ? Number(row.to_par)
+    : parValue != null
+      ? gross - parValue
+      : 0;
+  return {
+    event_id: row.event_id,
+    user_id: spectatorId,
+    hole_no: row.hole_no,
+    gross,
+    net: netValue,
+    to_par: toParValue,
+    par: parValue,
+    strokes_received: Number.isFinite(row.strokes_received ?? NaN) ? Number(row.strokes_received) : null,
+    stableford: Number.isFinite(row.stableford ?? NaN) ? Number(row.stableford) : null,
+    playing_handicap: Number.isFinite(row.playing_handicap ?? NaN) ? Number(row.playing_handicap) : null,
+    course_handicap: Number.isFinite(row.course_handicap ?? NaN) ? Number(row.course_handicap) : null,
+    format: toScoringFormat(row.format),
+    ts: typeof row.ts === 'string' ? row.ts : new Date().toISOString(),
+  };
+}
+
+function toSpectatorPlayer(
+  spectatorId: string,
+  displayName: string,
+  source: ReturnType<typeof aggregateLeaderboard>[number],
+  whsIndex: number | null,
+): LiveSpectatorPlayer {
+  return {
+    id: spectatorId,
+    name: displayName,
+    gross: source.gross,
+    net: source.net,
+    stableford: source.stableford,
+    toPar: source.to_par ?? source.toPar ?? null,
+    thru: source.holes,
+    lastUpdated: source.last_ts ?? null,
+    playingHandicap: source.playing_handicap ?? null,
+    whsIndex,
+  };
+}
+
+function toShotRef(row: LiveShotViewRow): ReelShotRef {
+  const ts = toNumber(row.start_ts_ms) ?? (typeof row.updated_at === 'string' ? Date.parse(row.updated_at) : Date.now());
+  return {
+    id: row.shot_public_id,
+    ts: Number.isFinite(ts) ? Number(ts) : Date.now(),
+    club: row.club ?? undefined,
+    carry_m: toNumber(row.carry_m) ?? undefined,
+    playsLikePct: toNumber(row.plays_like_pct) ?? undefined,
+  };
+}
+
+function toSpectatorShot(row: LiveShotViewRow): LiveSpectatorShot {
+  return {
+    id: row.shot_public_id,
+    hole: Number.isFinite(row.hole) ? Number(row.hole) : 0,
+    seq: Number.isFinite(row.seq) ? Number(row.seq) : 0,
+    club: row.club ?? null,
+    carry: toNumber(row.carry_m),
+    playsLikePct: toNumber(row.plays_like_pct),
+    strokesGained: toNumber(row.strokes_gained),
+    updatedAt: typeof row.updated_at === 'string' ? row.updated_at : null,
+  };
+}
+
+export async function fetchLiveRoundSnapshot(eventId: UUID, roundId: UUID): Promise<LiveSpectatorSnapshot | null> {
+  const c = await requireClient();
+  const [eventResp, scoreResp, shotsResp] = await Promise.all([
+    c
+      .from('event_live_public_events')
+      .select('*')
+      .eq('event_id', eventId)
+      .maybeSingle(),
+    c
+      .from('event_live_round_scores')
+      .select('*')
+      .eq('event_id', eventId)
+      .eq('round_id', roundId),
+    c
+      .from('event_live_round_shots')
+      .select('*')
+      .eq('event_id', eventId)
+      .eq('round_id', roundId),
+  ]);
+
+  if (eventResp.error) {
+    throw new Error('fetchLiveRoundSnapshot failed to load event');
+  }
+  if (scoreResp.error) {
+    throw new Error('fetchLiveRoundSnapshot failed to load scores');
+  }
+  if (shotsResp.error) {
+    throw new Error('fetchLiveRoundSnapshot failed to load shots');
+  }
+
+  const eventRow = (eventResp.data ?? null) as LiveEventViewRow | null;
+  if (!eventRow) {
+    return null;
+  }
+
+  const format = toScoringFormat(eventRow.scoring_format);
+  const allowance = Number.isFinite(eventRow.allowance_pct ?? NaN) ? Number(eventRow.allowance_pct) : null;
+  const event: LiveSpectatorEvent = {
+    id: eventId,
+    name: eventRow.name ?? 'Event',
+    status: eventRow.status ?? null,
+    format,
+    allowancePct: allowance,
+  };
+
+  const scoreRows = Array.isArray(scoreResp.data) ? (scoreResp.data as LiveScoreViewRow[]) : [];
+  const nameMap: Record<string, string> = {};
+  const hcpMap: Record<string, number | null | undefined> = {};
+  const holesPlayed: Record<string, number> = {};
+  const viewWhsIndex: Record<string, number | null> = {};
+  const mappedRows: ScoreRow[] = [];
+
+  for (const row of scoreRows) {
+    const spectatorId = row.spectator_id ?? row.user_id ?? `${row.display_name ?? 'player'}:${row.hole_no}`;
+    const displayName = row.display_name ?? 'Player';
+    mappedRows.push(toScoreRow(row, spectatorId));
+    nameMap[spectatorId] = displayName;
+    const hcpValue = toNumber(row.hcp_index);
+    if (hcpValue !== null) {
+      hcpMap[spectatorId] = hcpValue;
+      viewWhsIndex[spectatorId] = hcpValue;
+    } else {
+      viewWhsIndex[spectatorId] = null;
+    }
+    holesPlayed[spectatorId] = (holesPlayed[spectatorId] ?? 0) + 1;
+  }
+
+  const leaderboard = aggregateLeaderboard(mappedRows, nameMap, {
+    hcpIndexByUser: hcpMap,
+    holesPlayedByUser: holesPlayed,
+    format,
+  });
+
+  const players: LiveSpectatorPlayer[] = leaderboard.map((row) =>
+    toSpectatorPlayer(row.user_id, row.display_name, row, viewWhsIndex[row.user_id] ?? null),
+  );
+
+  const scoreUpdated = mappedRows
+    .map((row) => {
+      const ts = typeof row.ts === 'string' ? Date.parse(row.ts) : Number(row.ts);
+      return Number.isFinite(ts) ? Number(ts) : null;
+    })
+    .filter((ts): ts is number => Number.isFinite(ts ?? NaN));
+
+  const shotsRaw = Array.isArray(shotsResp.data) ? (shotsResp.data as LiveShotViewRow[]) : [];
+  const shotRefs: ReelShotRef[] = shotsRaw.map(toShotRef);
+  const shotsById = new Map<string, LiveShotViewRow>();
+  for (const row of shotsRaw) {
+    shotsById.set(row.shot_public_id, row);
+  }
+  const picked = pickTopShots(shotRefs, 3);
+  const topShots: LiveSpectatorShot[] = picked
+    .map((ref) => {
+      const source = shotsById.get(ref.id);
+      if (!source) {
+        return null;
+      }
+      const base = toSpectatorShot(source);
+      if (!base.updatedAt && Number.isFinite(ref.ts)) {
+        base.updatedAt = new Date(ref.ts).toISOString();
+      }
+      return base;
+    })
+    .filter((shot): shot is LiveSpectatorShot => Boolean(shot));
+
+  const updatedAt = scoreUpdated.length
+    ? new Date(Math.max(...scoreUpdated)).toISOString()
+    : topShots.length
+      ? topShots.reduce<string | null>((acc, shot) => {
+          if (!shot.updatedAt) {
+            return acc;
+          }
+          if (!acc) {
+            return shot.updatedAt;
+          }
+          return acc > shot.updatedAt ? acc : shot.updatedAt;
+        }, null)
+      : null;
+
+  return {
+    event,
+    players,
+    topShots,
+    updatedAt,
+    format,
+  };
+}
+
+export async function pollLiveRoundSnapshot(
+  eventId: UUID,
+  roundId: UUID,
+  onSnapshot: (snapshot: LiveSpectatorSnapshot) => void,
+  intervalMs = 5000,
+): Promise<() => void> {
+  const delay = Math.max(1000, Number(intervalMs) || 0);
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  let cancelled = false;
+
+  const schedule = () => {
+    if (cancelled) {
+      return;
+    }
+    timer = setTimeout(async () => {
+      try {
+        const snapshot = await fetchLiveRoundSnapshot(eventId, roundId);
+        if (snapshot && !cancelled) {
+          onSnapshot(snapshot);
+        }
+      } catch (error) {
+        if (!cancelled) {
+          console.warn('[events] live poll failed', error);
+        }
+      } finally {
+        schedule();
+      }
+    }, delay);
+  };
+
+  const initial = await fetchLiveRoundSnapshot(eventId, roundId);
+  if (initial) {
+    onSnapshot(initial);
+  }
+  schedule();
+
+  return () => {
+    cancelled = true;
+    if (timer) {
+      clearTimeout(timer);
+      timer = null;
+    }
+  };
 }

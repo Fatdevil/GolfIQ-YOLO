@@ -56,3 +56,43 @@ export type LeaderboardRow = {
   playing_handicap?: number | null;
   format?: ScoringFormat;
 };
+
+export type LiveSpectatorEvent = {
+  id: UUID;
+  name: string;
+  status?: string | null;
+  format: ScoringFormat;
+  allowancePct?: number | null;
+};
+
+export type LiveSpectatorPlayer = {
+  id: string;
+  name: string;
+  gross: number;
+  net?: number | null;
+  stableford?: number | null;
+  toPar?: number | null;
+  thru: number;
+  lastUpdated?: string | null;
+  playingHandicap?: number | null;
+  whsIndex?: number | null;
+};
+
+export type LiveSpectatorShot = {
+  id: string;
+  hole: number;
+  seq: number;
+  club?: string | null;
+  carry?: number | null;
+  playsLikePct?: number | null;
+  strokesGained?: number | null;
+  updatedAt?: string | null;
+};
+
+export type LiveSpectatorSnapshot = {
+  event: LiveSpectatorEvent;
+  players: LiveSpectatorPlayer[];
+  topShots: LiveSpectatorShot[];
+  updatedAt: string | null;
+  format: ScoringFormat;
+};
