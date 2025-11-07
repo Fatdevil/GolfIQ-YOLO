@@ -9,28 +9,22 @@ export function computeNetSimple(
   return Math.max(0, gross - adj);
 }
 
-export function aggregateLeaderboard(
-  rows: ScoreRow[],
-  nameByUser: Record<string, string>,
-  opts?: {
-    hcpIndexByUser?: Record<string, number | undefined | null>;
-    holesPlayedByUser?: Record<string, number>;
-  },
-): LeaderboardRow[] {
-  const { hcpIndexByUser = {}, holesPlayedByUser = {} } = opts ?? {};
-  type AggEntry = {
-    gross: number;
-    net: number;
-    holes: number;
-    toPar: number;
-    last?: string;
-    stableford: number;
-    hasStableford: boolean;
-    playingHandicap: number | null;
-    netFromRows: boolean;
-  };
-  const acc = new Map<string, AggEntry>();
+type AggEntry = {
+  gross: number;
+  net: number;
+  holes: number;
+  toPar: number;
+  last?: string;
+  stableford: number;
+  hasStableford: boolean;
+  playingHandicap: number | null;
+  netFromRows: boolean;
+};
 
+export type AggregatedScoreEntry = AggEntry;
+
+export function aggregateScoreRows(rows: ScoreRow[]): Map<string, AggEntry> {
+  const acc = new Map<string, AggEntry>();
   for (const r of rows) {
     const entry =
       acc.get(r.user_id) ?? {
@@ -47,9 +41,10 @@ export function aggregateLeaderboard(
     entry.gross += r.gross;
     entry.holes += 1;
     entry.toPar += r.to_par;
-    entry.net += Number.isFinite(r.net) ? Number(r.net) : 0;
     if (Number.isFinite(r.net)) {
-      entry.netFromRows = true;
+      const n = Number(r.net);
+      entry.net += n;
+      if (n !== r.gross) entry.netFromRows = true;
     }
     if (!entry.last || entry.last < r.ts) {
       entry.last = r.ts;
@@ -63,7 +58,19 @@ export function aggregateLeaderboard(
     }
     acc.set(r.user_id, entry);
   }
+  return acc;
+}
 
+export function aggregateLeaderboard(
+  rows: ScoreRow[],
+  nameByUser: Record<string, string>,
+  opts?: {
+    hcpIndexByUser?: Record<string, number | undefined | null>;
+    holesPlayedByUser?: Record<string, number>;
+  },
+): LeaderboardRow[] {
+  const { hcpIndexByUser = {}, holesPlayedByUser = {} } = opts ?? {};
+  const acc = aggregateScoreRows(rows);
   const out: LeaderboardRow[] = [];
   for (const [userId, agg] of acc) {
     const holes = Math.max(agg.holes, holesPlayedByUser[userId] ?? agg.holes);

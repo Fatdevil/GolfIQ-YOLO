@@ -269,9 +269,11 @@ export async function pushHoleScore(args: {
     const par = Number.isFinite(args.par)
       ? Math.max(3, Math.min(6, Math.round(Number(args.par))))
       : 4;
-    const netValue = Number.isFinite(args.net ?? NaN)
-      ? Math.max(1, Math.round(Number(args.net)))
-      : Math.max(1, Math.round(args.gross ?? 0));
+    const hasExplicitNet = Number.isFinite(args.net as number);
+    let netValue: number | undefined;
+    if (hasExplicitNet) {
+      netValue = Math.max(1, Math.round(Number(args.net)));
+    }
     const stableford = Number.isFinite(args.stableford ?? NaN)
       ? Math.max(0, Math.round(Number(args.stableford)))
       : null;
@@ -290,7 +292,7 @@ export async function pushHoleScore(args: {
       user_id: userId,
       hole_no: args.hole,
       gross: args.gross ?? 0,
-      net: netValue,
+      ...(hasExplicitNet && netValue !== undefined ? { net: netValue } : {}),
       to_par: (args.gross ?? 0) - par,
       par,
       strokes_received: strokesReceived,
