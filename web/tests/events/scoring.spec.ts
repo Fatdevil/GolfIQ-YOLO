@@ -10,7 +10,7 @@ describe('events scoring', () => {
     expect(computeNetSimple(30, 12, 9)).toBe(24);
   });
 
-  it('aggregates leaderboard rows and sorts by net then gross then recency', () => {
+  it('aggregates leaderboard rows and sorts by net then gross then recency for stroke events', () => {
     const now = Date.now();
     const rows: ScoreRow[] = [
       {
@@ -52,6 +52,7 @@ describe('events scoring', () => {
     const leaderboard = aggregateLeaderboard(rows, names, {
       hcpIndexByUser,
       holesPlayedByUser,
+      format: 'stroke',
     });
 
     expect(leaderboard).toHaveLength(2);
@@ -60,13 +61,115 @@ describe('events scoring', () => {
     expect(leaderboard[0].holes).toBe(1);
     // WHS fallback: PH=12 ⇒ 1 stroke received on this hole ⇒ net = 5 - 1 = 4
     expect(leaderboard[0].net).toBe(4);
-    // Stableford (standard): 2 + (par + strokesReceived - gross)
-    // using par=4 ⇒ 2 + (4 + 1 - 5) = 2
-    expect(leaderboard[0].stableford).toBe(2);
+    // Stableford values reflect the recorded totals even for stroke formats.
+    expect(leaderboard[0].stableford).toBe(1);
+    expect(leaderboard[0].hasStableford).toBe(true);
     expect(leaderboard[0].playing_handicap).toBe(12);
     expect(leaderboard[1].user_id).toBe('a');
     expect(leaderboard[1].net).toBe(8);
     expect(leaderboard[1].stableford).toBe(5);
+  });
+
+  it('ranks by stableford then gross then recency when format is stableford', () => {
+    const rows: ScoreRow[] = [
+      {
+        event_id: 'e',
+        user_id: 'p1',
+        hole_no: 1,
+        gross: 4,
+        net: 4,
+        to_par: 0,
+        stableford: 3,
+        ts: '2025-01-01T00:00:00Z',
+      },
+      {
+        event_id: 'e',
+        user_id: 'p2',
+        hole_no: 1,
+        gross: 5,
+        net: 5,
+        to_par: 1,
+        stableford: 3,
+        ts: '2025-01-01T00:05:00Z',
+      },
+      {
+        event_id: 'e',
+        user_id: 'p1',
+        hole_no: 2,
+        gross: 4,
+        net: 4,
+        to_par: 0,
+        stableford: 2,
+        ts: '2025-01-01T00:10:00Z',
+      },
+      {
+        event_id: 'e',
+        user_id: 'p2',
+        hole_no: 2,
+        gross: 4,
+        net: 4,
+        to_par: 0,
+        stableford: 2,
+        ts: '2025-01-01T00:01:00Z',
+      },
+    ];
+
+    const leaderboard = aggregateLeaderboard(
+      rows,
+      { p1: 'Player One', p2: 'Player Two' },
+      { format: 'stableford' },
+    );
+
+    expect(leaderboard[0].user_id).toBe('p1');
+    expect(leaderboard[0].stableford).toBe(5);
+    expect(leaderboard[1].user_id).toBe('p2');
+    expect(leaderboard[1].stableford).toBe(5);
+    expect(leaderboard[0].gross).toBeLessThan(leaderboard[1].gross);
+    expect(leaderboard[0].last_ts).toBe('2025-01-01T00:10:00Z');
+  });
+
+  it('falls back to stableford ordering only when format is undefined and all rows have points', () => {
+    const rows: ScoreRow[] = [
+      {
+        event_id: 'e',
+        user_id: 's1',
+        hole_no: 1,
+        gross: 5,
+        net: 4,
+        to_par: 1,
+        stableford: 3,
+        ts: '2025-01-01T00:00:00Z',
+      },
+      {
+        event_id: 'e',
+        user_id: 's2',
+        hole_no: 1,
+        gross: 4,
+        net: 3,
+        to_par: 0,
+        stableford: 2,
+        ts: '2025-01-01T00:01:00Z',
+      },
+    ];
+
+    const names = { s1: 'Stable One', s2: 'Stable Two' };
+
+    const stablefordSorted = aggregateLeaderboard(rows, names);
+    expect(stablefordSorted[0].user_id).toBe('s1');
+    expect(stablefordSorted[1].user_id).toBe('s2');
+
+    const withoutPoints: ScoreRow[] = [
+      { ...rows[0], stableford: undefined },
+      rows[1],
+    ];
+
+    const strokeFallback = aggregateLeaderboard(withoutPoints, names, {
+      hcpIndexByUser: { s1: 10, s2: 5 },
+      holesPlayedByUser: { s1: 1, s2: 1 },
+    });
+
+    expect(strokeFallback[0].user_id).toBe('s2');
+    expect(strokeFallback[1].user_id).toBe('s1');
   });
 
   it('falls back to handicap index when net values unavailable', () => {

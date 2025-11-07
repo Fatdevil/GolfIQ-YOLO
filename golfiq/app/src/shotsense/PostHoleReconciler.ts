@@ -280,6 +280,8 @@ export const PostHoleReconciler = {
               const scoresHash = computeScoresHash(roundState ?? null);
               const qaRound = getActiveRound();
               const handicapSetup = qaRound?.handicapSetup;
+              const format = activeEvent.settings?.scoringFormat ?? 'stroke';
+              const allowanceOverride = activeEvent.settings?.allowancePct;
               const parValue = Math.max(3, Math.min(6, Math.floor(holeState?.par ?? 4)));
               let netScore: number | null = null;
               let stablefordPoints: number | null = null;
@@ -303,7 +305,11 @@ export const PostHoleReconciler = {
                   holesForNet.push({ hole: holeNumber, par: parValue, gross });
                 }
                 holesForNet.sort((a, b) => a.hole - b.hole);
-                const netResult = computeNetForRound(handicapSetup, holesForNet);
+                const setup =
+                  typeof allowanceOverride === 'number'
+                    ? { ...handicapSetup, allowancePct: allowanceOverride }
+                    : handicapSetup;
+                const netResult = computeNetForRound(setup, holesForNet);
                 const holeEntry = netResult.holes.find((entry) => entry.hole === holeNumber);
                 if (holeEntry) {
                   netScore = holeEntry.net;
@@ -328,6 +334,7 @@ export const PostHoleReconciler = {
                 hcpIndex: participant.hcp_index ?? null,
                 roundRevision,
                 scoresHash,
+                format,
               });
               recordScoreUpserted(activeEvent.id, participant.user_id, holeNumber, gross);
             } catch (pushError) {
