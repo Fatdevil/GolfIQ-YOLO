@@ -83,6 +83,7 @@ export type RenderTracerReelOptions = {
   templateId?: string;
   onProgress?: (ratio: number) => void;
   signal?: AbortSignal | null;
+  wantMp4?: boolean;
 };
 
 export type RenderTracerReelResult = {
@@ -93,6 +94,7 @@ export type RenderTracerReelResult = {
   width: number;
   height: number;
   timeline: DrawTimeline;
+  fallback?: { codec: 'mp4'; reason: string } | null;
 };
 
 export type RenderFailure = {

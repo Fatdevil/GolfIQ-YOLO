@@ -144,6 +144,7 @@ export default function Composer(): JSX.Element {
   const [includeMusic, setIncludeMusic] = useState(false);
   const [durationWarning, setDurationWarning] = useState<string | null>(null);
   const [abortController, setAbortController] = useState<AbortController | null>(null);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   const selectedPreset = useMemo<ReelExportPreset>(() => {
     return REEL_EXPORT_PRESETS.find((preset) => preset.id === exportPresetId) ?? REEL_EXPORT_PRESETS[0]!;
@@ -249,6 +250,18 @@ export default function Composer(): JSX.Element {
     abortController.abort();
   }, [abortController]);
 
+  useEffect(() => {
+    if (!toastMessage) {
+      return;
+    }
+    const timer = window.setTimeout(() => {
+      setToastMessage(null);
+    }, 5000);
+    return () => {
+      window.clearTimeout(timer);
+    };
+  }, [toastMessage]);
+
   const handleStartExport = useCallback(async () => {
     if (!timeline || !primaryShot || !selectedPreset) {
       setExportStatus('No reel payload available.');
@@ -260,6 +273,7 @@ export default function Composer(): JSX.Element {
       setDownloadUrl(null);
       setDownloadName(null);
     }
+    setToastMessage(null);
     const tracer = buildShotTracerDraw(primaryShot.ref, {
       width: selectedPreset.width,
       height: selectedPreset.height,
@@ -288,6 +302,7 @@ export default function Composer(): JSX.Element {
         watermark: includeWatermark,
         templateId: selectedPreset.id,
         musicSrc: includeMusic ? '/assets/audio/reels/theme.mp3' : null,
+        wantMp4: true,
         onProgress: (ratio) => {
           setExportProgress(Math.max(0, Math.min(1, ratio)));
         },
@@ -300,12 +315,17 @@ export default function Composer(): JSX.Element {
       setDownloadName(`${baseName}.${extension}`);
       setExportStatus(result.codec === 'mp4' ? 'MP4 ready for download' : 'WebM fallback ready');
       setExportProgress(1);
+      if (result.fallback?.codec === 'mp4') {
+        setToastMessage('Exported WebM (MP4 fallback unavailable).');
+      }
     } catch (error) {
       if (error instanceof DOMException && error.name === 'AbortError') {
         setExportStatus('Export cancelled');
+        setToastMessage('Export cancelled.');
       } else {
         console.error('[Reels] export failed', error);
         setExportStatus('Failed to export reel. Please try again.');
+        setToastMessage('Export failed. Please try again.');
       }
     } finally {
       setExporting(false);
@@ -330,6 +350,11 @@ export default function Composer(): JSX.Element {
           Generate a vertical highlight reel with tracer overlays, stat bar, and GolfIQ-YOLO watermark.
         </p>
       </header>
+      {toastMessage ? (
+        <div className="rounded-md border border-emerald-400/40 bg-emerald-500/10 px-4 py-2 text-sm text-emerald-100 shadow-lg">
+          {toastMessage}
+        </div>
+      ) : null}
       {!timeline ? (
         <div className="rounded-lg border border-slate-800 bg-slate-900/80 p-6 text-slate-300">
           Provide a reel payload via the <code className="rounded bg-slate-800 px-1 py-0.5">payload</code> query parameter.
