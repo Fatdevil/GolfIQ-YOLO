@@ -1,6 +1,9 @@
 import { makeBallisticPath, type BallisticPath } from './ballistics';
+import type { TracerFit, TracerPoint, TracerSource } from './types';
 
-type RawPoint = [number, number];
+export type { TracerFit, TracerSource } from './types';
+
+type RawPoint = TracerPoint;
 
 export type FitTracerInput = {
   raw?: RawPoint[] | null;
@@ -9,13 +12,14 @@ export type FitTracerInput = {
   clamp?: number;
 };
 
-export type FitTracerResult = {
-  points: RawPoint[];
-  apexIndex: number;
-  landingIndex: number;
-  source: 'raw' | 'ballistic' | 'default';
-  flags: string[];
-};
+function makeFit(
+  data: Omit<TracerFit, 'estimated'> & { source: TracerSource },
+): TracerFit {
+  return {
+    ...data,
+    estimated: data.source !== 'raw',
+  };
+}
 
 function clamp01(value: number): number {
   if (Number.isNaN(value)) {
@@ -143,7 +147,7 @@ function findExtrema(points: RawPoint[]): { apexIndex: number; landingIndex: num
   return { apexIndex, landingIndex: Math.max(0, points.length - 1) };
 }
 
-function fromBallistics(input: FitTracerInput): FitTracerResult | null {
+function fromBallistics(input: FitTracerInput): TracerFit | null {
   const carry = Number.isFinite(input.carry) ? (input.carry as number) : 0;
   if (carry <= 0) {
     return null;
@@ -158,16 +162,16 @@ function fromBallistics(input: FitTracerInput): FitTracerResult | null {
   }
   const clamped = simplify(ballistic.points, input.clamp);
   const { apexIndex, landingIndex } = findExtrema(clamped);
-  return {
+  return makeFit({
     points: clamped,
     apexIndex,
     landingIndex,
     source: 'ballistic',
     flags: ['tracer:ballistic'],
-  };
+  });
 }
 
-function defaultPath(): FitTracerResult {
+function defaultPath(): TracerFit {
   const points: RawPoint[] = [
     [0, 0],
     [0.32, 0.52],
@@ -175,29 +179,29 @@ function defaultPath(): FitTracerResult {
     [1, 0],
   ];
   const { apexIndex, landingIndex } = findExtrema(points);
-  return {
+  return makeFit({
     points,
     apexIndex,
     landingIndex,
-    source: 'default',
+    source: 'fit',
     flags: ['tracer:default'],
-  };
+  });
 }
 
-export function fitTracerPath(input: FitTracerInput): FitTracerResult | null {
+export function fitTracerPath(input: FitTracerInput): TracerFit | null {
   const clamp = Number.isFinite(input.clamp) ? Math.max(12, Math.floor(input.clamp!)) : 200;
   const raw = Array.isArray(input.raw) ? cleanPoints(input.raw) : [];
   if (raw.length >= 2) {
     const normalized = normalize(raw);
     const simplified = simplify(normalized, clamp);
     const { apexIndex, landingIndex } = findExtrema(simplified);
-    return {
+    return makeFit({
       points: simplified,
       apexIndex,
       landingIndex,
       source: 'raw',
       flags: simplified.length < raw.length ? ['tracer:raw', 'tracer:simplified'] : ['tracer:raw'],
-    };
+    });
   }
   const ballistic = fromBallistics({ ...input, clamp });
   if (ballistic) {

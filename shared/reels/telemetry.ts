@@ -1,3 +1,5 @@
+import type { TracerSource } from '../tracer/types';
+
 type ReelsTelemetryEmitter = (event: string, payload: Record<string, unknown>) => void;
 
 let emitter: ReelsTelemetryEmitter | null = null;
@@ -9,7 +11,7 @@ export function setReelsTelemetryEmitter(candidate: ReelsTelemetryEmitter | null
 
 export function recordTracerTelemetry(
   shot: { id?: string | null },
-  meta: { estimated: boolean; sampleCount: number; flags: string[] },
+  meta: { estimated: boolean; source: TracerSource; sampleCount: number; flags: string[] },
 ): void {
   if (!emitter || !shot) {
     return;
@@ -22,6 +24,7 @@ export function recordTracerTelemetry(
     emitter('reel.tracer', {
       shotId: shot.id ?? null,
       estimated: Boolean(meta.estimated),
+      source: meta.source,
       samples: meta.sampleCount,
       flags: meta.flags,
     });

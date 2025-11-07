@@ -1,5 +1,6 @@
 import type { DrawCmd } from '../reels/types';
 import { fitTracerPath } from './fit_path';
+import type { TracerSource } from './types';
 import { recordTracerTelemetry } from '../reels/telemetry';
 
 export type ShotForTracer = {
@@ -21,6 +22,8 @@ export type TracerDrawResult = {
   estimated: boolean;
   sampleCount: number;
   flags: string[];
+  source: TracerSource;
+  estimateLabel?: string;
 };
 
 const TRACER_COLOR = '#00e6ff';
@@ -51,6 +54,9 @@ function toPixels(points: [number, number][], context: TracerContext): [number, 
   return points.map(([x, y]) => [x * width, height - y * height]);
 }
 
+/**
+ * Any non-raw path is visually dashed to indicate estimated trajectory.
+ */
 export function buildShotTracerDraw(shot: ShotForTracer, context: TracerContext): TracerDrawResult | null {
   const fit = fitTracerPath({
     raw: shot.tracer?.points ?? null,
@@ -64,7 +70,7 @@ export function buildShotTracerDraw(shot: ShotForTracer, context: TracerContext)
   if (!pts.length) {
     return null;
   }
-  const dashed = Boolean(shot.carryEstimated || shot.carry_m == null);
+  const dashed = fit.estimated || Boolean(shot.carryEstimated);
   const tracerCmd: DrawCmd = {
     t: 'tracer',
     pts,
@@ -88,7 +94,7 @@ export function buildShotTracerDraw(shot: ShotForTracer, context: TracerContext)
         align: 'center',
         bold: true,
       });
-    } else {
+    } else if (dashed) {
       commands.push({
         t: 'text',
         x: apexPoint[0],
@@ -101,16 +107,23 @@ export function buildShotTracerDraw(shot: ShotForTracer, context: TracerContext)
       });
     }
   }
-  const estimated = fit.source !== 'raw';
+  const estimated = fit.estimated;
   const flags = [...fit.flags, dashed ? 'tracer:dash' : 'tracer:solid'];
   mergeFlags(shot, flags);
   if (shot && shot.id) {
-    recordTracerTelemetry(shot, { estimated, sampleCount: fit.points.length, flags });
+    recordTracerTelemetry(shot, {
+      estimated,
+      source: fit.source,
+      sampleCount: fit.points.length,
+      flags,
+    });
   }
   return {
     commands,
     estimated,
     sampleCount: fit.points.length,
     flags,
+    source: fit.source,
+    estimateLabel: dashed ? 'est.' : undefined,
   };
 }
