@@ -3,6 +3,13 @@ import { useSearchParams } from 'react-router-dom';
 
 import { makeTimeline, pickTopShots, planFrame } from '@shared/reels/select';
 import type { DrawCmd, ReelShotRef, ReelTimeline } from '@shared/reels/types';
+import { recordReelExport } from '@shared/reels/telemetry';
+import { drawCommands } from '../../routes/composer/draw';
+import {
+  encodeWithFfmpeg,
+  encodeWithMediaRecorder,
+  sleep,
+} from '../../routes/composer/export';
 
 const PREVIEW_WIDTH = 300;
 const PREVIEW_HEIGHT = Math.round(PREVIEW_WIDTH * (16 / 9));
@@ -63,171 +70,6 @@ function resolveShots(payload: ReelPayload | null): ReelShotRef[] {
     return payload.timeline.shots.map((entry) => entry.ref).filter(Boolean);
   }
   return Array.isArray(payload.shots) ? payload.shots : [];
-}
-
-function drawCommands(
-  ctx: CanvasRenderingContext2D,
-  timeline: ReelTimeline,
-  commands: DrawCmd[],
-): void {
-  ctx.save();
-  ctx.clearRect(0, 0, timeline.width, timeline.height);
-  for (const cmd of commands) {
-    switch (cmd.t) {
-      case 'bg': {
-        ctx.fillStyle = cmd.color;
-        ctx.fillRect(0, 0, timeline.width, timeline.height);
-        break;
-      }
-      case 'bar': {
-        ctx.fillStyle = cmd.color;
-        ctx.fillRect(cmd.x, cmd.y, cmd.w, cmd.h);
-        break;
-      }
-      case 'tracer': {
-        if (!cmd.pts.length) {
-          break;
-        }
-        ctx.strokeStyle = cmd.color;
-        ctx.lineWidth = cmd.width;
-        ctx.lineCap = 'round';
-        ctx.lineJoin = 'round';
-        ctx.beginPath();
-        ctx.moveTo(cmd.pts[0][0], cmd.pts[0][1]);
-        for (let i = 1; i < cmd.pts.length; i += 1) {
-          ctx.lineTo(cmd.pts[i][0], cmd.pts[i][1]);
-        }
-        ctx.stroke();
-        break;
-      }
-      case 'dot': {
-        ctx.fillStyle = cmd.color;
-        ctx.beginPath();
-        ctx.arc(cmd.x, cmd.y, cmd.r, 0, Math.PI * 2);
-        ctx.fill();
-        break;
-      }
-      case 'text': {
-        ctx.fillStyle = cmd.color;
-        ctx.font = `${cmd.bold ? '600' : '400'} ${cmd.size}px "Inter", "Helvetica Neue", sans-serif`;
-        ctx.textAlign = cmd.align ?? 'left';
-        ctx.textBaseline = 'middle';
-        ctx.fillText(cmd.text, cmd.x, cmd.y);
-        break;
-      }
-      case 'compass': {
-        ctx.strokeStyle = cmd.color;
-        ctx.lineWidth = 6;
-        ctx.beginPath();
-        ctx.arc(cmd.cx, cmd.cy, cmd.radius, 0, Math.PI * 2);
-        ctx.stroke();
-        const rad = ((cmd.deg ?? 0) - 90) * (Math.PI / 180);
-        const pointerX = cmd.cx + Math.cos(rad) * cmd.radius;
-        const pointerY = cmd.cy + Math.sin(rad) * cmd.radius;
-        ctx.beginPath();
-        ctx.moveTo(cmd.cx, cmd.cy);
-        ctx.lineTo(pointerX, pointerY);
-        ctx.stroke();
-        break;
-      }
-      default:
-        break;
-    }
-  }
-  ctx.restore();
-}
-
-function dataUrlToUint8Array(dataUrl: string): Uint8Array {
-  const [, base64] = dataUrl.split(',');
-  return base64ToBytes(base64 ?? '');
-}
-
-async function encodeWithFfmpeg(frames: string[], timeline: ReelTimeline): Promise<Blob> {
-  const { FFmpeg } = await import('@ffmpeg/ffmpeg');
-  const ffmpeg = new FFmpeg();
-  await ffmpeg.load();
-  try {
-    for (let i = 0; i < frames.length; i += 1) {
-      const name = `frame${String(i).padStart(5, '0')}.png`;
-      await ffmpeg.writeFile(name, dataUrlToUint8Array(frames[i]!));
-    }
-    await ffmpeg.exec([
-      '-r',
-      String(timeline.fps),
-      '-i',
-      'frame%05d.png',
-      '-pix_fmt',
-      'yuv420p',
-      'out.mp4',
-    ]);
-    const output = await ffmpeg.readFile('out.mp4');
-    const data = output instanceof Uint8Array ? output : new TextEncoder().encode(output);
-    const copy = new Uint8Array(data.byteLength);
-    copy.set(data);
-    return new Blob([copy.buffer], { type: 'video/mp4' });
-  } finally {
-    try {
-      await ffmpeg.deleteFile('out.mp4');
-      for (let i = 0; i < frames.length; i += 1) {
-        const name = `frame${String(i).padStart(5, '0')}.png`;
-        await ffmpeg.deleteFile(name);
-      }
-    } catch (error) {
-      // ignore cleanup errors
-    }
-    ffmpeg.terminate();
-  }
-}
-
-async function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-async function encodeWithMediaRecorder(
-  commandFrames: DrawCmd[][],
-  timeline: ReelTimeline,
-  canvas: HTMLCanvasElement,
-): Promise<Blob> {
-  const ctx = canvas.getContext('2d');
-  if (!ctx) {
-    throw new Error('No canvas context for MediaRecorder fallback');
-  }
-  const stream = canvas.captureStream(timeline.fps);
-  const mimeCandidates = [
-    'video/webm;codecs=vp9',
-    'video/webm;codecs=vp8',
-    'video/webm',
-  ];
-  const mimeType = mimeCandidates.find((candidate) =>
-    typeof MediaRecorder !== 'undefined' && MediaRecorder.isTypeSupported(candidate),
-  );
-  if (!mimeType) {
-    throw new Error('MediaRecorder with WebM codecs is not supported in this browser');
-  }
-  const recorder = new MediaRecorder(stream, { mimeType });
-  const chunks: Blob[] = [];
-  const finished = new Promise<Blob>((resolve, reject) => {
-    recorder.addEventListener('dataavailable', (event) => {
-      if (event.data && event.data.size) {
-        chunks.push(event.data);
-      }
-    });
-    recorder.addEventListener('stop', () => {
-      resolve(new Blob(chunks, { type: mimeType }));
-    });
-    recorder.addEventListener('error', (event) => {
-      reject(event.error ?? new Error('MediaRecorder error'));
-    });
-  });
-  recorder.start();
-  const frameDelay = 1000 / Math.max(1, timeline.fps);
-  for (const commands of commandFrames) {
-    drawCommands(ctx, timeline, commands);
-    await sleep(frameDelay);
-  }
-  await sleep(frameDelay);
-  recorder.stop();
-  return finished;
 }
 
 export default function Composer(): JSX.Element {
@@ -337,6 +179,7 @@ export default function Composer(): JSX.Element {
       }
     }
     setStatus('Encoding MP4 via FFmpeg…');
+    const durationMs = Math.round((timeline.frames / Math.max(1, timeline.fps)) * 1000);
     try {
       const blob = await encodeWithFfmpeg(frames, timeline);
       const url = URL.createObjectURL(blob);
@@ -344,19 +187,27 @@ export default function Composer(): JSX.Element {
       setDownloadName('golfiq-reel.mp4');
       setStatus('MP4 ready for download');
       setProgress(1);
+      recordReelExport({ format: 'mp4', durationMs });
     } catch (error) {
       console.error('[Reels] ffmpeg encoding failed', error);
       setStatus('FFmpeg failed, attempting WebM fallback…');
       try {
-        const blob = await encodeWithMediaRecorder(commandFrames, timeline, canvasRef.current);
+        const blob = await encodeWithMediaRecorder(
+          commandFrames,
+          timeline,
+          canvasRef.current,
+          drawCommands,
+        );
         const url = URL.createObjectURL(blob);
         setDownloadUrl(url);
         setDownloadName('golfiq-reel.webm');
         setStatus('WebM fallback ready');
         setProgress(1);
+        recordReelExport({ format: 'webm', durationMs });
       } catch (fallbackError) {
         console.error('[Reels] MediaRecorder fallback failed', fallbackError);
         setStatus('Unable to encode reel. Please try a different browser.');
+        recordReelExport({ format: 'error', durationMs });
       }
     } finally {
       setBuilding(false);

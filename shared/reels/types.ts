@@ -3,6 +3,7 @@ export type ReelShotRef = {
   id: string;
   club?: string;
   carry_m?: number;
+  carryEstimated?: boolean;
   total_m?: number;
   apex_m?: number;
   ballSpeed_mps?: number;
@@ -10,6 +11,7 @@ export type ReelShotRef = {
   lateralSign?: number;
   playsLikePct?: number;
   tracer?: { points: [number, number][] };
+  telemetryFlags?: string[];
 };
 
 export type ReelTimeline = {
@@ -26,7 +28,7 @@ export type ReelTimeline = {
 
 export type DrawCmd =
   | { t: 'bg'; color: string }
-  | { t: 'tracer'; pts: [number, number][]; color: string; width: number }
+  | { t: 'tracer'; pts: [number, number][]; color: string; width: number; dash?: number[] }
   | { t: 'dot'; x: number; y: number; r: number; color: string }
   | {
       t: 'text';

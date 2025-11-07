@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { makeTimeline, pickTopShots, planFrame, scoreShot } from '@shared/reels/select';
-import type { ReelShotRef } from '@shared/reels/types';
+import type { DrawCmd, ReelShotRef } from '@shared/reels/types';
 
 describe('reels selection', () => {
   it('scores higher carry and apex shots above others', () => {
@@ -66,6 +66,8 @@ describe('reels selection', () => {
     expect(timeline.shots[1]?.startFrame).toBe(60);
     const commands = planFrame(timeline, 0);
     expect(commands.some((cmd) => cmd.t === 'bg')).toBe(true);
+    expect(commands.some((cmd) => cmd.t === 'tracer')).toBe(true);
+    expect(commands.some((cmd) => cmd.t === 'text' && cmd.text === 'est.')).toBe(true);
   });
 
   it('pickTopShots ignores speed-only samples when filter is on', () => {
@@ -85,5 +87,15 @@ describe('reels selection', () => {
     const speedOnly: ReelShotRef = { id: 's', ts: 2, ballSpeed_mps: 62 };
     const out = pickTopShots([speedOnly, good], 1);
     expect(out[0]?.id).toBe('g');
+  });
+
+  it('dashes tracer overlay when carry is missing', () => {
+    const missingCarry: ReelShotRef = { id: 'est', ts: 1, carryEstimated: true };
+    const timeline = makeTimeline([missingCarry], 30);
+    const commands = planFrame(timeline, 0);
+    const tracer = commands.find((cmd): cmd is Extract<DrawCmd, { t: 'tracer' }> => cmd.t === 'tracer');
+    expect(tracer?.dash).toBeTruthy();
+    const label = commands.find((cmd) => cmd.t === 'text' && cmd.text === 'est.');
+    expect(label).toBeTruthy();
   });
 });

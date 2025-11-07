@@ -113,6 +113,7 @@ const ReelFrame: React.FC<FrameProps> = ({ width, height, commands }) => {
               strokeWidth={cmd.width}
               strokeLinecap="round"
               strokeLinejoin="round"
+              strokeDasharray={cmd.dash}
             />
           );
         })}
