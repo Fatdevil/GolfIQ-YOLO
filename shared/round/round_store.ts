@@ -1,5 +1,10 @@
 import type { Hole, Round, Shot } from './round_types';
 import type { HandicapSetup, TeeRating } from '../whs/types';
+import {
+  cloneTracerCalibration,
+  isValidHomography,
+  type TracerCalibration,
+} from '../tracer/types';
 
 type AsyncStorageLike = {
   getItem(key: string): Promise<string | null>;
@@ -17,7 +22,7 @@ type GlobalRoundStorage = typeof globalThis & {
   __QA_ROUND_STORAGE__?: AsyncStorageLike;
 };
 
-type ParsedRound = Round & { finished: boolean };
+type ParsedRound = Round & { finished: boolean; tracerCalib?: TracerCalibration | null };
 
 export const ROUND_FILE_NAME = 'round_run.json';
 
@@ -161,7 +166,26 @@ function cloneRound(round: ParsedRound | null): ParsedRound | null {
     currentHole: Math.min(Math.max(round.currentHole, 0), Math.max(round.holes.length - 1, 0)),
     finished: Boolean(round.finished),
     handicapSetup: cloneHandicapSetup(round.handicapSetup),
+    tracerCalib: cloneTracerCalibration(round.tracerCalib ?? null),
   };
+}
+
+function sanitizeTracerCalibration(input: unknown): TracerCalibration | null {
+  if (!input || typeof input !== 'object') {
+    return null;
+  }
+  const candidate = input as Partial<TracerCalibration> & { H?: unknown };
+  if (!isValidHomography(candidate.H)) {
+    return null;
+  }
+  const cloned = cloneTracerCalibration(candidate as TracerCalibration);
+  if (!cloned) {
+    return null;
+  }
+  if (cloned.quality != null) {
+    cloned.quality = Math.min(1, Math.max(0, cloned.quality));
+  }
+  return cloned;
 }
 
 function sanitizeStrokeIndex(value: unknown): number[] | undefined {
@@ -329,6 +353,7 @@ function sanitizeRound(input: unknown): ParsedRound | null {
     return null;
   }
   const currentHoleRaw = Number(record.currentHole);
+  const tracerCalib = sanitizeTracerCalibration(record.tracerCalib);
   const holesRaw = Array.isArray(record.holes) ? record.holes : [];
   const holes: Hole[] = [];
   for (const holeRaw of holesRaw) {
@@ -352,6 +377,7 @@ function sanitizeRound(input: unknown): ParsedRound | null {
       currentHole: 0,
       finished: Boolean(record.finished),
       handicapSetup: sanitizeHandicapSetup(record.handicapSetup),
+      tracerCalib: tracerCalib ?? null,
     };
   }
   holes.sort((a, b) => a.holeNo - b.holeNo);
@@ -367,6 +393,7 @@ function sanitizeRound(input: unknown): ParsedRound | null {
     currentHole,
     finished: Boolean(record.finished),
     handicapSetup: sanitizeHandicapSetup(record.handicapSetup),
+    tracerCalib: tracerCalib ?? null,
   };
 }
 
@@ -397,6 +424,18 @@ async function persistRound(round: ParsedRound | null): Promise<void> {
   } catch (error) {
     // ignore persistence errors for QA tooling
   }
+}
+
+let persistTimer: ReturnType<typeof setTimeout> | null = null;
+
+function queuePersist(): void {
+  if (persistTimer) {
+    return;
+  }
+  persistTimer = setTimeout(() => {
+    persistTimer = null;
+    void persistRound(activeRound);
+  }, 0);
 }
 
 function setActiveRound(round: ParsedRound | null): void {
@@ -479,6 +518,7 @@ export function createRound(
     currentHole: 0,
     finished: false,
     handicapSetup: undefined,
+    tracerCalib: null,
   };
   setActiveRound(round);
   void persistRound(activeRound);
@@ -506,6 +546,33 @@ export function setHandicapSetup(setup: HandicapSetup | null | undefined): Round
   setActiveRound(activeRound);
   void persistRound(activeRound);
   return getActiveRound();
+}
+
+export function setTracerCalibration(calib: TracerCalibration | null): void {
+  if (!activeRound) {
+    return;
+  }
+  const cloned = cloneTracerCalibration(calib);
+  if (cloned && cloned.quality != null) {
+    cloned.quality = Math.min(1, Math.max(0, cloned.quality));
+  }
+  activeRound = {
+    ...activeRound,
+    tracerCalib: cloned ?? null,
+  };
+  queuePersist();
+  notify();
+}
+
+export function getTracerCalibration(): TracerCalibration | null {
+  if (!activeRound?.tracerCalib) {
+    return null;
+  }
+  const cloned = cloneTracerCalibration(activeRound.tracerCalib);
+  if (cloned && cloned.quality != null) {
+    cloned.quality = Math.min(1, Math.max(0, cloned.quality));
+  }
+  return cloned;
 }
 
 export function addShot(holeNo: number, shot: Shot): Round | null {
@@ -643,4 +710,8 @@ export function __resetRoundStoreForTests(): void {
   roundLoaded = false;
   listeners.clear();
   storagePromise = null;
+  if (persistTimer) {
+    clearTimeout(persistTimer);
+    persistTimer = null;
+  }
 }

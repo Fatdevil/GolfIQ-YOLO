@@ -4,12 +4,14 @@ import { useSearchParams } from 'react-router-dom';
 import { makeTimeline, pickTopShots, planFrame } from '@shared/reels/select';
 import type { DrawCmd, ReelShotRef, ReelTimeline } from '@shared/reels/types';
 import { recordReelExport } from '@shared/reels/telemetry';
+import type { Homography, Pt } from '@shared/tracer/calibrate';
 import { drawCommands } from '../../routes/composer/draw';
 import {
   encodeWithFfmpeg,
   encodeWithMediaRecorder,
   sleep,
 } from '../../routes/composer/export';
+import CalibratePanel from './CalibratePanel';
 
 const PREVIEW_WIDTH = 300;
 const PREVIEW_HEIGHT = Math.round(PREVIEW_WIDTH * (16 / 9));
@@ -18,6 +20,14 @@ type ReelPayload = {
   shots?: ReelShotRef[];
   timeline?: ReelTimeline;
   fps?: number;
+};
+
+type CalibrationSnapshot = {
+  homography: Homography;
+  tee: Pt;
+  flag: Pt;
+  yardage_m: number;
+  quality: number;
 };
 
 function base64ToBytes(base64: string): Uint8Array {
@@ -82,10 +92,32 @@ export default function Composer(): JSX.Element {
     }
     return pickTopShots(Array.isArray(payload?.shots) ? payload.shots : [], 2);
   }, [payload, payloadShots]);
+  const [calibration, setCalibration] = useState<CalibrationSnapshot | null>(null);
+  const defaultYardage = useMemo(() => {
+    if (!selectedShots.length) {
+      return undefined;
+    }
+    const shot = selectedShots[0];
+    if (shot?.carry_m && Number.isFinite(shot.carry_m)) {
+      return shot.carry_m;
+    }
+    if (shot?.total_m && Number.isFinite(shot.total_m)) {
+      return shot.total_m;
+    }
+    return undefined;
+  }, [selectedShots]);
+  const defaultBearing = useMemo(() => {
+    if (!selectedShots.length) {
+      return 0;
+    }
+    const bearing = selectedShots[0]?.startDeg;
+    return Number.isFinite(bearing) ? (bearing as number) : 0;
+  }, [selectedShots]);
   const timeline = useMemo(() => {
     if (payload?.timeline && payload?.timeline.shots?.length) {
       return {
         ...payload.timeline,
+        homography: calibration?.homography ?? payload.timeline.homography ?? null,
         shots: payload.timeline.shots.map((entry) => ({
           ...entry,
           ref: entry.ref,
@@ -93,10 +125,14 @@ export default function Composer(): JSX.Element {
       } satisfies ReelTimeline;
     }
     if (selectedShots.length) {
-      return makeTimeline(selectedShots, payload?.timeline?.fps ?? payload?.fps ?? 30);
+      const base = makeTimeline(selectedShots, payload?.timeline?.fps ?? payload?.fps ?? 30);
+      return {
+        ...base,
+        homography: calibration?.homography ?? null,
+      } satisfies ReelTimeline;
     }
     return null;
-  }, [payload, selectedShots]);
+  }, [payload, selectedShots, calibration]);
 
   const [status, setStatus] = useState<string | null>(null);
   const [progress, setProgress] = useState(0);
@@ -105,6 +141,15 @@ export default function Composer(): JSX.Element {
   const [building, setBuilding] = useState(false);
 
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+
+  const handleCalibrationSave = useCallback((snapshot: CalibrationSnapshot) => {
+    setCalibration(snapshot);
+  }, []);
+
+  const calibrateWidth = timeline ? Math.min(260, timeline.width) : 240;
+  const calibrateHeight = timeline
+    ? Math.round((timeline.height / Math.max(1, timeline.width)) * calibrateWidth)
+    : Math.round((PREVIEW_HEIGHT / PREVIEW_WIDTH) * 240);
 
   useEffect(() => {
     return () => {
@@ -279,6 +324,21 @@ export default function Composer(): JSX.Element {
             </div>
           </section>
           <section className="space-y-4 rounded-xl border border-slate-800 bg-slate-950/60 p-6">
+            <div className="space-y-3 rounded-xl border border-slate-800/60 bg-slate-900/40 p-4">
+              <div className="text-sm font-semibold text-slate-200">Camera calibration</div>
+              <p className="text-xs text-slate-400">
+                {calibration
+                  ? `Applied · ${Math.round(calibration.quality * 100)}% quality`
+                  : 'Tap Save to apply calibration to tracer rendering.'}
+              </p>
+              <CalibratePanel
+                width={calibrateWidth}
+                height={calibrateHeight}
+                holeBearingDeg={defaultBearing}
+                defaultYardage={defaultYardage}
+                onSave={handleCalibrationSave}
+              />
+            </div>
             <div className="space-y-2">
               <h2 className="text-xl font-semibold text-slate-50">Export</h2>
               <p className="text-sm text-slate-400">

@@ -118,6 +118,7 @@ import { buildShotFeedback, type FeedbackOutput } from '../../../../shared/plays
 import { exportAccuracyNdjson } from '../../../../shared/telemetry/shotsenseMetrics';
 import { PostHoleReconciler, collectAutoCandidates } from '../shotsense/PostHoleReconciler';
 import EventPanel from '../event/EventPanel';
+import type { TracerCalibration } from '../../../../shared/tracer/types';
 import LearningPanel from '../features/learning/LearningPanel';
 import RangeGamesPanel from '../features/range/RangeGamesPanel';
 import { RangeGameController } from '../features/range/RangeGameController';
@@ -2667,6 +2668,7 @@ const QAArHudOverlayScreen: React.FC = () => {
   const [plannerResult, setPlannerResult] = useState<PlanOut | null>(null);
   const [shotSession, setShotSession] = useState<ShotSessionState | null>(null);
   const [activeHoleId, setActiveHoleId] = useState<number | null>(null);
+  const [roundTracerCalib, setRoundTracerCalib] = useState<TracerCalibration | null>(null);
   const [reviewVisible, setReviewVisible] = useState(false);
   const [reviewHoleId, setReviewHoleId] = useState<number | null>(null);
   const [reviewShots, setReviewShots] = useState<ReviewItem[]>([]);
@@ -2675,6 +2677,27 @@ const QAArHudOverlayScreen: React.FC = () => {
   const previousHoleRef = useRef<number | null>(null);
   const mapOverlayRef = useRef<MapOverlayHandle | null>(null);
   const lastFocusKeyRef = useRef<string | null>(null);
+  const tracerCalibrationSummary = useMemo(() => {
+    if (!roundTracerCalib) {
+      return null;
+    }
+    const quality =
+      roundTracerCalib.quality != null
+        ? Math.round(Math.min(1, Math.max(0, roundTracerCalib.quality)) * 100)
+        : null;
+    const yardage =
+      roundTracerCalib.yardage_m != null && Number.isFinite(roundTracerCalib.yardage_m)
+        ? Math.round(roundTracerCalib.yardage_m)
+        : null;
+    const updated =
+      roundTracerCalib.createdAt != null && Number.isFinite(roundTracerCalib.createdAt)
+        ? new Date(roundTracerCalib.createdAt).toLocaleString()
+        : null;
+    return {
+      status: `Quality ${quality != null ? quality : '—'}% · Yardage ${yardage != null ? yardage : '—'} m`,
+      meta: updated ? `Updated ${updated}` : null,
+    };
+  }, [roundTracerCalib]);
   useEffect(() => {
     if (!watchDiagExpanded) {
       return;
@@ -2691,11 +2714,13 @@ const QAArHudOverlayScreen: React.FC = () => {
     const unsubscribe = subscribeToRound((round) => {
       if (!round || !Array.isArray(round.holes) || !round.holes.length) {
         setActiveHoleId(null);
+        setRoundTracerCalib(null);
         return;
       }
       const index = Math.min(Math.max(round.currentHole, 0), round.holes.length - 1);
       const hole = round.holes[index];
       setActiveHoleId(hole ? hole.holeNo : null);
+      setRoundTracerCalib(round.tracerCalib ?? null);
     });
     return () => {
       try {
@@ -8290,6 +8315,21 @@ const QAArHudOverlayScreen: React.FC = () => {
           ) : null}
         </View>
         <View style={[styles.calibrationContainer, styles.sectionTitleSpacing]}>
+          <Text style={styles.sectionTitle}>Tracer calibration</Text>
+          {roundTracerCalib ? (
+            <View style={styles.calibrationContent}>
+              <Text style={styles.calibrationStatus}>
+                {tracerCalibrationSummary?.status ?? 'Quality —% · Yardage — m'}
+              </Text>
+              {tracerCalibrationSummary?.meta ? (
+                <Text style={styles.calibrationMeta}>{tracerCalibrationSummary.meta}</Text>
+              ) : null}
+            </View>
+          ) : (
+            <Text style={styles.calibrationStatus}>No tracer calibration saved for this round.</Text>
+          )}
+        </View>
+        <View style={[styles.calibrationContainer, styles.sectionTitleSpacing]}>
           <TouchableOpacity
             onPress={() => setBagCalibExpanded((prev) => !prev)}
             style={styles.calibrationHeader}
@@ -10104,6 +10144,10 @@ const styles = StyleSheet.create({
   },
   calibrationStatus: {
     color: '#94a3b8',
+    fontSize: 12,
+  },
+  calibrationMeta: {
+    color: '#64748b',
     fontSize: 12,
   },
   calibrationActions: {

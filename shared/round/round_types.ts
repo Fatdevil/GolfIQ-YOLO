@@ -1,4 +1,5 @@
 import type { HandicapSetup } from '../whs/types';
+import type { TracerCalibration } from '../tracer/types';
 
 export interface Shot {
   tStart: number;
@@ -28,4 +29,5 @@ export interface Round {
   currentHole: number;
   finished?: boolean;
   handicapSetup?: HandicapSetup;
+  tracerCalib?: TracerCalibration | null;
 }

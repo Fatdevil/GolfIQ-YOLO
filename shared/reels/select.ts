@@ -96,7 +96,11 @@ export function planFrame(tl: ReelTimeline, frame: number): DrawCmd[] {
     return commands;
   }
   const { ref } = shot;
-  const tracer = buildShotTracerDraw(ref, { width: tl.width, height: tl.height });
+  const tracer = buildShotTracerDraw(ref, {
+    width: tl.width,
+    height: tl.height,
+    H: tl.homography ?? null,
+  });
   if (tracer) {
     commands.push(...tracer.commands);
   }

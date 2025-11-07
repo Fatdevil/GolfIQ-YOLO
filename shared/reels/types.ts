@@ -1,3 +1,6 @@
+import type { Homography } from '../tracer/calibrate';
+import type { TracerTooltip } from '../tracer/types';
+
 export type ReelShotRef = {
   ts: number;
   id: string;
@@ -19,6 +22,7 @@ export type ReelTimeline = {
   height: number;
   frames: number;
   fps: number;
+  homography?: Homography | null;
   shots: {
     ref: ReelShotRef;
     startFrame: number;
@@ -28,7 +32,14 @@ export type ReelTimeline = {
 
 export type DrawCmd =
   | { t: 'bg'; color: string }
-  | { t: 'tracer'; pts: [number, number][]; color: string; width: number; dash?: number[] }
+  | {
+      t: 'tracer';
+      pts: [number, number][];
+      color: string;
+      width: number;
+      dash?: number[];
+      tooltip?: TracerTooltip;
+    }
   | { t: 'dot'; x: number; y: number; r: number; color: string }
   | {
       t: 'text';
