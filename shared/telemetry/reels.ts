@@ -20,6 +20,48 @@ export function setReelTelemetryEmitter(candidate: ReelTelemetryEmitter | null |
   emitter = typeof candidate === 'function' ? candidate : null;
 }
 
+export function emitReelExportOpened(): void {
+  safeEmit('reel.export.opened', {
+    ts: Date.now(),
+  });
+}
+
+export function emitReelExportOptions(payload: {
+  presetId: string;
+  watermark: boolean;
+  hasCaption: boolean;
+  audio: boolean;
+}): void {
+  if (!payload) {
+    return;
+  }
+  safeEmit('reel.export.options', {
+    preset_id: payload.presetId,
+    watermark: Boolean(payload.watermark),
+    has_caption: Boolean(payload.hasCaption),
+    audio: Boolean(payload.audio),
+    ts: Date.now(),
+  });
+}
+
+export function emitReelExportSubmitted(payload: {
+  presetId: string;
+  watermark: boolean;
+  hasCaption: boolean;
+  audio: boolean;
+}): void {
+  if (!payload) {
+    return;
+  }
+  safeEmit('reel.export.submitted', {
+    preset_id: payload.presetId,
+    watermark: Boolean(payload.watermark),
+    has_caption: Boolean(payload.hasCaption),
+    audio: Boolean(payload.audio),
+    ts: Date.now(),
+  });
+}
+
 export function emitReelExportStart(payload: {
   template: string;
   durationMs: number;

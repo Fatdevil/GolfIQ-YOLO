@@ -2,40 +2,27 @@ import path from 'node:path';
 import { defineConfig, configDefaults } from 'vitest/config';
 
 export default defineConfig({
+  test: {
+    include: ['tests/**/*.spec.ts', 'tests/**/*.spec.tsx', 'src/**/__tests__/**/*.{ts,tsx}'],
+    exclude: [
+      ...configDefaults.exclude,
+      '../shared/**',
+      '../tests/**',
+    ],
+    setupFiles: ['tests/setup.ts'],
+    passWithNoTests: true,
+    environment: 'node',
+    environmentMatchGlobs: [
+      ['tests/**/*.spec.tsx', 'jsdom'],
+      ['src/**/__tests__/**/*.tsx', 'jsdom'],
+    ],
+  },
   resolve: {
     alias: {
       '@shared': path.resolve(__dirname, '../shared'),
+      'expo-device': '/tests/mocks/expo-device.ts',
+      'expo-file-system': '/tests/mocks/expo-file-system.ts',
+      '@react-native-async-storage/async-storage': '/tests/mocks/async-storage.ts',
     },
   },
-  test: {
-    include: [
-      'src/__tests__/**/*.spec.ts',
-      'src/overlay/**/*.spec.tsx',
-      '../shared/playslike/__tests__/**/*.spec.ts',
-      '../shared/runs/__tests__/**/*.spec.ts',
-      '../shared/shotsense/__tests__/**/*.spec.ts',
-      '../shared/telemetry/__tests__/**/*.spec.ts',
-      '../shared/caddie/**/*.spec.ts',
-      '../shared/learning/**/*.spec.ts',
-      'tests/**/*.spec.ts',
-      'tests/**/*.spec.tsx',
-      '../tests/events/**/*.spec.ts',
-      '../tests/shared/caddie/**/*.spec.ts',
-      '../tests/shared/greeniq/**/*.spec.ts',
-      '../tests/shared/game/**/*.spec.ts',
-      '../tests/shared/sg/**/*.spec.ts',
-      '../tests/shared/follow/**/*.spec.ts',
-      '../tests/shared/sync/**/*.spec.ts',
-      '../tests/shared/tracer/**/*.spec.ts',
-      '../tests/shared/telemetry/**/*.spec.ts',
-      '../shared/follow/__tests__/**/*.spec.ts',
-      '../shared/round/__tests__/**/*.spec.ts',
-      '../tests/shared/round/**/*.spec.ts',
-    ],
-    exclude: [
-      // Extend Vitest defaults; add repo-specific excludes below.
-      ...configDefaults.exclude,
-    ],
-    passWithNoTests: true,
-  }
 });

@@ -1,4 +1,9 @@
-import type { DrawCmd, ReelShotRef } from '@shared/reels/types';
+import type {
+  DrawCmd,
+  ReelExportPreset as SharedReelExportPreset,
+  ReelShotRef,
+  ReelUserOptions,
+} from '@shared/reels/types';
 import type { TracerDrawResult } from '@shared/tracer/draw';
 
 export type ReelThemeId = 'classic' | 'neon' | 'pro-dark';
@@ -57,15 +62,6 @@ export type BuildTimelineInput = {
   theme: ReelTheme;
 };
 
-export type ReelTemplate = {
-  id: string;
-  label: string;
-  width: number;
-  height: number;
-  fps: number;
-  theme: ReelThemeId;
-};
-
 export type RenderTracerReelOptions = {
   videoSrc?: string | ArrayBuffer | Uint8Array | Blob | null;
   fps?: number;
@@ -84,6 +80,10 @@ export type RenderTracerReelOptions = {
   onProgress?: (ratio: number) => void;
   signal?: AbortSignal | null;
   wantMp4?: boolean;
+  metadata?: {
+    preset?: SharedReelExportPreset | null;
+    userOptions?: ReelUserOptions | null;
+  } | null;
 };
 
 export type RenderTracerReelResult = {
@@ -95,6 +95,7 @@ export type RenderTracerReelResult = {
   height: number;
   timeline: DrawTimeline;
   fallback?: { codec: 'mp4'; reason: string } | null;
+  metadata: RenderTracerReelOptions['metadata'] | null;
 };
 
 export type RenderFailure = {
@@ -102,8 +103,11 @@ export type RenderFailure = {
   stage: 'init' | 'encode' | 'finalize';
 };
 
-export type ReelExportPreset = ReelTemplate & {
-  description: string;
+export type ReelExportPreset = SharedReelExportPreset & {
+  label: string;
+  theme: ReelThemeId;
+  width: number;
+  height: number;
 };
 
 export type ReelTimelineMetadata = {

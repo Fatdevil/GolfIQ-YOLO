@@ -622,6 +622,7 @@ export async function renderTracerReel(
         width,
         height,
         timeline,
+        metadata: options.metadata ?? null,
         fallback: null,
       } satisfies RenderTracerReelResult;
     }
@@ -639,6 +640,7 @@ export async function renderTracerReel(
         width,
         height,
         timeline,
+        metadata: options.metadata ?? null,
         fallback: null,
       } satisfies RenderTracerReelResult;
     } catch (error) {
@@ -655,6 +657,7 @@ export async function renderTracerReel(
         width,
         height,
         timeline,
+        metadata: options.metadata ?? null,
         fallback: { codec: 'mp4', reason },
       } satisfies RenderTracerReelResult;
     }
