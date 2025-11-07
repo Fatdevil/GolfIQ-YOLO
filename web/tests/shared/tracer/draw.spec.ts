@@ -55,4 +55,28 @@ describe('shared/tracer/draw (web)', () => {
     expect(Array.isArray(tracer!.dash)).toBe(true);
     expect(result!.tooltip?.estimated).toBe(true);
   });
+
+  it('treats carry estimated shots as dashed even with raw source', () => {
+    const shot = {
+      id: 'shot-estimated',
+      carry_m: 180,
+      carryEstimated: true,
+      apex_m: 32,
+      tracer: {
+        points: [
+          [120, 1800],
+          [540, 900],
+          [960, 360],
+        ] as [number, number][],
+      },
+    };
+    const result = buildShotTracerDraw(shot, { width: 1080, height: 1920, H: null });
+    expect(result).toBeTruthy();
+    const tracer = result!.commands.find(
+      (cmd): cmd is DrawCmd & { t: 'tracer' } => cmd.t === 'tracer',
+    );
+    expect(tracer).toBeTruthy();
+    expect(Array.isArray(tracer!.dash)).toBe(true);
+    expect(result!.estimated).toBe(true);
+  });
 });

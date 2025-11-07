@@ -179,7 +179,7 @@ export function buildShotTracerDraw(shot: ShotForTracer, context: TracerContext)
       });
     }
   }
-  const estimated = fit.source !== 'raw';
+  const estimated = dashed;
   const flags = [dashed ? 'tracer:dash' : 'tracer:solid'];
   mergeFlags(shot, flags);
   if (shot && shot.id) {
