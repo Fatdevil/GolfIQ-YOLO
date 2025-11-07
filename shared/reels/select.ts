@@ -1,5 +1,6 @@
 import type { Shot } from '../round/round_types';
 import type { DrawCmd, ReelShotRef, ReelTimeline } from './types';
+import { buildShotTracerDraw } from '../tracer/draw';
 
 function safeNumber(value: unknown): number | undefined {
   const numeric = Number(value);
@@ -95,30 +96,9 @@ export function planFrame(tl: ReelTimeline, frame: number): DrawCmd[] {
     return commands;
   }
   const { ref } = shot;
-  const tracerPts = ref.tracer?.points ?? [];
-  if (tracerPts.length) {
-    const pts = tracerPts.map(([x, y]) => [x * tl.width, tl.height - y * tl.height] as [number, number]);
-    commands.push({ t: 'tracer', pts, color: '#00e6ff', width: 6 });
-    if (ref.apex_m != null && pts.length) {
-      let apexIndex = 0;
-      for (let i = 1; i < tracerPts.length; i += 1) {
-        if (tracerPts[i][1] > tracerPts[apexIndex][1]) {
-          apexIndex = i;
-        }
-      }
-      const apexPoint = pts[apexIndex];
-      commands.push({ t: 'dot', x: apexPoint[0], y: apexPoint[1], r: 12, color: '#ffe600' });
-      commands.push({
-        t: 'text',
-        x: apexPoint[0],
-        y: apexPoint[1] - 28,
-        text: `Apex ${Math.round(ref.apex_m)} m`,
-        size: 36,
-        color: '#ffe600',
-        align: 'center',
-        bold: true,
-      });
-    }
+  const tracer = buildShotTracerDraw(ref, { width: tl.width, height: tl.height });
+  if (tracer) {
+    commands.push(...tracer.commands);
   }
   const carryLabel = Math.round(ref.carry_m ?? ref.total_m ?? 0);
   const clubLabel = ref.club ? `${ref.club}` : '';
@@ -176,7 +156,10 @@ export function mapRoundShotToReelRef(
   shot: Shot,
   options: { roundId: string; holeNo: number; index: number },
 ): ReelShotRef {
-  const carry = safeNumber(shot.carry_m) ?? safeNumber(shot.base_m);
+  const measuredCarry = safeNumber(shot.carry_m);
+  const fallbackCarry = measuredCarry == null ? safeNumber(shot.base_m) : undefined;
+  const carry = measuredCarry ?? fallbackCarry;
+  const carryEstimated = measuredCarry == null && fallbackCarry != null;
   const total = safeNumber(shot.carry_m) ?? safeNumber(shot.base_m);
   const playsLike = safeNumber(shot.playsLike_m);
   const base = safeNumber(shot.base_m);
@@ -190,8 +173,10 @@ export function mapRoundShotToReelRef(
     id: `${options.roundId}:${options.holeNo}:${options.index}`,
     club: shot.club,
     carry_m: carry,
+    carryEstimated,
     total_m: total,
     startDeg: startDeg,
     playsLikePct,
+    telemetryFlags: carryEstimated ? ['reel:carry.estimated'] : undefined,
   };
 }
