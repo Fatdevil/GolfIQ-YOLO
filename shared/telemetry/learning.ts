@@ -11,8 +11,10 @@ type DrillTelemetryPayload = {
   samples?: number | null;
 };
 
-const sanitizeNumber = (value: unknown): number | null => {
-  const num = Number(value);
+export const sanitizeNumber = (value: unknown): number | null => {
+  if (value === null || value === undefined) return null;
+  if (typeof value === 'string' && value.trim() === '') return null;
+  const num = typeof value === 'number' ? value : Number(value);
   return Number.isFinite(num) ? num : null;
 };
 
