@@ -15,6 +15,7 @@ import ShareRunPage from "./pages/ShareRun";
 import EventLeaderboardPage from "./pages/EventLeaderboard";
 import ReelsComposerPage from "./pages/ReelsComposer";
 import RangeScorePage from "./pages/range/score";
+import LiveRoundRoute from "./routes/live/[eventId]/[roundId]";
 
 export default function App() {
   return (
@@ -29,6 +30,7 @@ export default function App() {
           <Route path="/runs/:id" element={<RunDetailPage />} />
           <Route path="/share/:id" element={<ShareRunPage />} />
           <Route path="/event/:id" element={<EventLeaderboardPage />} />
+          <Route path="/:eventId/live/:roundId" element={<LiveRoundRoute />} />
           <Route path="/field-runs" element={<FieldRunsPage />} />
           <Route path="/device-dashboard" element={<DeviceDashboardPage />} />
           <Route path="/accuracy" element={<AccuracyDashboardPage />} />

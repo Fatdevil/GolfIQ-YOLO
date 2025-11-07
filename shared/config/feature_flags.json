@@ -3,5 +3,6 @@
   "hud_target_line": true,
   "hud_battery_saver": true,
   "hudEnabled": false,
-  "hudTracerEnabled": false
+  "hudTracerEnabled": false,
+  "events.live.enabled": true
 }
