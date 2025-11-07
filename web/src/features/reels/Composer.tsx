@@ -2,15 +2,13 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 
 import { makeTimeline, pickTopShots, planFrame } from '@shared/reels/select';
-import type { DrawCmd, ReelShotRef, ReelTimeline } from '@shared/reels/types';
-import { recordReelExport } from '@shared/reels/telemetry';
+import type { ReelShotRef, ReelTimeline } from '@shared/reels/types';
 import type { Homography, Pt } from '@shared/tracer/calibrate';
+import { buildShotTracerDraw } from '@shared/tracer/draw';
 import { drawCommands } from '../../routes/composer/draw';
-import {
-  encodeWithFfmpeg,
-  encodeWithMediaRecorder,
-  sleep,
-} from '../../routes/composer/export';
+import { renderTracerReel } from './export/ffmpeg';
+import { REEL_EXPORT_PRESETS, buildDrawTimeline } from './export/templates';
+import type { ReelExportPreset } from './export/types';
 import CalibratePanel from './CalibratePanel';
 
 const PREVIEW_WIDTH = 300;
@@ -134,11 +132,37 @@ export default function Composer(): JSX.Element {
     return null;
   }, [payload, selectedShots, calibration]);
 
-  const [status, setStatus] = useState<string | null>(null);
-  const [progress, setProgress] = useState(0);
+  const [exportModalOpen, setExportModalOpen] = useState(false);
+  const [exportStatus, setExportStatus] = useState<string | null>(null);
+  const [exportProgress, setExportProgress] = useState(0);
   const [downloadUrl, setDownloadUrl] = useState<string | null>(null);
   const [downloadName, setDownloadName] = useState<string | null>(null);
-  const [building, setBuilding] = useState(false);
+  const [exporting, setExporting] = useState(false);
+  const [exportPresetId, setExportPresetId] = useState<string>(REEL_EXPORT_PRESETS[0]?.id ?? 'tiktok-1080');
+  const [includeWatermark, setIncludeWatermark] = useState(true);
+  const [includeBadges, setIncludeBadges] = useState(true);
+  const [includeMusic, setIncludeMusic] = useState(false);
+  const [durationWarning, setDurationWarning] = useState<string | null>(null);
+  const [abortController, setAbortController] = useState<AbortController | null>(null);
+
+  const selectedPreset = useMemo<ReelExportPreset>(() => {
+    return REEL_EXPORT_PRESETS.find((preset) => preset.id === exportPresetId) ?? REEL_EXPORT_PRESETS[0]!;
+  }, [exportPresetId]);
+
+  const primaryShot = useMemo(() => {
+    if (!timeline?.shots?.length) {
+      return null;
+    }
+    return timeline.shots[0] ?? null;
+  }, [timeline]);
+
+  const exportDurationMs = useMemo(() => {
+    if (!timeline || !primaryShot) {
+      return 0;
+    }
+    const durationFrames = primaryShot.duration || timeline.frames;
+    return Math.max(0, Math.round((durationFrames / Math.max(1, timeline.fps)) * 1000));
+  }, [timeline, primaryShot]);
 
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
@@ -158,6 +182,18 @@ export default function Composer(): JSX.Element {
       }
     };
   }, [downloadUrl]);
+
+  useEffect(() => {
+    if (!exportModalOpen) {
+      setDurationWarning(null);
+      return;
+    }
+    if (exportDurationMs > 20_000) {
+      setDurationWarning('Clips longer than 20 seconds may feel sluggish on social feeds. Trim the swing for best results.');
+    } else {
+      setDurationWarning(null);
+    }
+  }, [exportModalOpen, exportDurationMs]);
 
   useEffect(() => {
     if (!timeline || !canvasRef.current) {
@@ -192,72 +228,99 @@ export default function Composer(): JSX.Element {
     };
   }, [timeline]);
 
-  const handleBuild = useCallback(async () => {
-    if (!timeline || !canvasRef.current) {
-      setStatus('No reel payload available.');
+  const handleOpenExport = useCallback(() => {
+    setExportModalOpen(true);
+    setExportStatus(null);
+    setExportProgress(0);
+  }, []);
+
+  const handleCloseExport = useCallback(() => {
+    if (exporting) {
       return;
     }
-    const ctx = canvasRef.current.getContext('2d');
-    if (!ctx) {
-      setStatus('Unable to access canvas context.');
+    setExportModalOpen(false);
+    setExportStatus(null);
+  }, [exporting]);
+
+  const handleCancelExport = useCallback(() => {
+    if (!abortController) {
       return;
     }
+    abortController.abort();
+  }, [abortController]);
+
+  const handleStartExport = useCallback(async () => {
+    if (!timeline || !primaryShot || !selectedPreset) {
+      setExportStatus('No reel payload available.');
+      return;
+    }
+    const durationMs = exportDurationMs;
     if (downloadUrl) {
       URL.revokeObjectURL(downloadUrl);
       setDownloadUrl(null);
       setDownloadName(null);
     }
-    setBuilding(true);
-    setProgress(0);
-    setStatus('Rendering frames…');
-    const frames: string[] = [];
-    const commandFrames: DrawCmd[][] = [];
-    for (let frame = 0; frame < timeline.frames; frame += 1) {
-      const commands = planFrame(timeline, frame);
-      commandFrames.push(commands);
-      drawCommands(ctx, timeline, commands);
-      frames.push(canvasRef.current.toDataURL('image/png'));
-      const pct = (frame + 1) / timeline.frames;
-      if (frame % 3 === 0 || frame + 1 === timeline.frames) {
-        setProgress(pct);
-        await sleep(0);
-      }
+    const tracer = buildShotTracerDraw(primaryShot.ref, {
+      width: selectedPreset.width,
+      height: selectedPreset.height,
+      H: timeline.homography ?? null,
+    });
+    if (!tracer) {
+      setExportStatus('This swing is missing tracer data.');
+      return;
     }
-    setStatus('Encoding MP4 via FFmpeg…');
-    const durationMs = Math.round((timeline.frames / Math.max(1, timeline.fps)) * 1000);
+    const buildTimeline = buildDrawTimeline(primaryShot.ref, tracer, selectedPreset.theme);
+    const controller = new AbortController();
+    setAbortController(controller);
+    setExporting(true);
+    setExportStatus('Preparing export…');
+    setExportProgress(0.05);
     try {
-      const blob = await encodeWithFfmpeg(frames, timeline);
-      const url = URL.createObjectURL(blob);
-      setDownloadUrl(url);
-      setDownloadName('golfiq-reel.mp4');
-      setStatus('MP4 ready for download');
-      setProgress(1);
-      recordReelExport({ format: 'mp4', durationMs });
+      const result = await renderTracerReel({
+        videoSrc: (primaryShot.ref as unknown as { videoSrc?: string }).videoSrc ?? null,
+        fps: selectedPreset.fps,
+        width: selectedPreset.width,
+        height: selectedPreset.height,
+        startMs: 0,
+        endMs: Math.max(1, durationMs),
+        drawTimeline: buildTimeline,
+        includeBadges,
+        watermark: includeWatermark,
+        templateId: selectedPreset.id,
+        musicSrc: includeMusic ? '/assets/audio/reels/theme.mp3' : null,
+        onProgress: (ratio) => {
+          setExportProgress(Math.max(0, Math.min(1, ratio)));
+        },
+        signal: controller.signal,
+      });
+      const extension = result.codec === 'mp4' ? 'mp4' : 'webm';
+      const baseName = `${selectedPreset.id}-${Date.now()}`;
+      const blobUrl = URL.createObjectURL(result.blob);
+      setDownloadUrl(blobUrl);
+      setDownloadName(`${baseName}.${extension}`);
+      setExportStatus(result.codec === 'mp4' ? 'MP4 ready for download' : 'WebM fallback ready');
+      setExportProgress(1);
     } catch (error) {
-      console.error('[Reels] ffmpeg encoding failed', error);
-      setStatus('FFmpeg failed, attempting WebM fallback…');
-      try {
-        const blob = await encodeWithMediaRecorder(
-          commandFrames,
-          timeline,
-          canvasRef.current,
-          drawCommands,
-        );
-        const url = URL.createObjectURL(blob);
-        setDownloadUrl(url);
-        setDownloadName('golfiq-reel.webm');
-        setStatus('WebM fallback ready');
-        setProgress(1);
-        recordReelExport({ format: 'webm', durationMs });
-      } catch (fallbackError) {
-        console.error('[Reels] MediaRecorder fallback failed', fallbackError);
-        setStatus('Unable to encode reel. Please try a different browser.');
-        recordReelExport({ format: 'error', durationMs });
+      if (error instanceof DOMException && error.name === 'AbortError') {
+        setExportStatus('Export cancelled');
+      } else {
+        console.error('[Reels] export failed', error);
+        setExportStatus('Failed to export reel. Please try again.');
       }
     } finally {
-      setBuilding(false);
+      setExporting(false);
+      setAbortController(null);
     }
-  }, [timeline, downloadUrl]);
+  }, [
+    timeline,
+    primaryShot,
+    selectedPreset,
+    exportDurationMs,
+    downloadUrl,
+    includeBadges,
+    includeWatermark,
+    includeMusic,
+  ]);
 
   return (
     <div className="space-y-8">
@@ -342,39 +405,166 @@ export default function Composer(): JSX.Element {
             <div className="space-y-2">
               <h2 className="text-xl font-semibold text-slate-50">Export</h2>
               <p className="text-sm text-slate-400">
-                Frames are rendered in-memory, then encoded to MP4 via FFmpeg.wasm. If encoding fails, the
-                composer will fall back to a WebM recording using MediaRecorder.
+                Pick a preset to create a share-ready vertical reel. Rendering happens locally with FFmpeg.wasm and
+                falls back to WebM when MP4 is unavailable.
               </p>
             </div>
-            <button
-              type="button"
-              onClick={handleBuild}
-              disabled={building}
-              className="inline-flex w-full items-center justify-center rounded-lg bg-emerald-500 px-4 py-2 text-base font-semibold text-emerald-950 transition hover:bg-emerald-400 disabled:cursor-not-allowed disabled:bg-emerald-500/60"
-            >
-              {building ? 'Building…' : 'Build Reel'}
-            </button>
-            {status ? <p className="text-sm text-slate-300">{status}</p> : null}
-            {building || progress > 0 ? (
-              <div className="h-2 w-full rounded-full bg-slate-800">
-                <div
-                  className="h-full rounded-full bg-emerald-400 transition-all"
-                  style={{ width: `${Math.round(progress * 100)}%` }}
-                />
+            <div className="space-y-4">
+              <div className="rounded-lg border border-slate-800/60 bg-slate-900/40 p-4">
+                <div className="text-xs uppercase tracking-wide text-slate-500">Active preset</div>
+                <div className="mt-2 text-lg font-semibold text-slate-100">{selectedPreset.label}</div>
+                <div className="text-xs text-slate-400">{selectedPreset.description}</div>
               </div>
-            ) : null}
-            {downloadUrl && downloadName ? (
-              <a
-                href={downloadUrl}
-                download={downloadName}
-                className="inline-flex w-full items-center justify-center rounded-lg border border-emerald-400 px-4 py-2 text-base font-semibold text-emerald-300 transition hover:bg-emerald-500/10"
+              <button
+                type="button"
+                onClick={handleOpenExport}
+                disabled={!timeline || !primaryShot}
+                className="inline-flex w-full items-center justify-center rounded-lg bg-emerald-500 px-4 py-2 text-base font-semibold text-emerald-950 transition hover:bg-emerald-400 disabled:cursor-not-allowed disabled:bg-emerald-500/60"
               >
-                Download {downloadName}
-              </a>
-            ) : null}
+                {exporting ? 'Exporting…' : 'Export Reel'}
+              </button>
+              {exportStatus ? <p className="text-sm text-slate-300">{exportStatus}</p> : null}
+              {downloadUrl && downloadName ? (
+                <a
+                  href={downloadUrl}
+                  download={downloadName}
+                  className="inline-flex w-full items-center justify-center rounded-lg border border-emerald-400 px-4 py-2 text-base font-semibold text-emerald-300 transition hover:bg-emerald-500/10"
+                >
+                  Download {downloadName}
+                </a>
+              ) : null}
+            </div>
           </section>
         </div>
       )}
+      {exportModalOpen ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 px-4 py-8 backdrop-blur">
+          <div className="w-full max-w-2xl rounded-2xl border border-slate-800 bg-slate-950 p-6 shadow-2xl">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-2xl font-semibold text-slate-50">Export reel</h3>
+                <p className="text-sm text-slate-400">Choose a preset and options, then start encoding.</p>
+              </div>
+              <button
+                type="button"
+                onClick={handleCloseExport}
+                disabled={exporting}
+                className="rounded-full border border-slate-700 px-3 py-1 text-sm text-slate-300 transition hover:border-slate-500 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                Close
+              </button>
+            </div>
+            <div className="mt-6 space-y-5">
+              <section>
+                <div className="text-sm font-semibold text-slate-200">Presets</div>
+                <div className="mt-3 grid gap-3">
+                  {REEL_EXPORT_PRESETS.map((preset) => (
+                    <label
+                      key={preset.id}
+                      className={`flex cursor-pointer flex-col gap-1 rounded-xl border px-4 py-3 transition hover:border-emerald-400/70 ${
+                        exportPresetId === preset.id ? 'border-emerald-400 bg-emerald-500/10' : 'border-slate-800 bg-slate-900/40'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between gap-4">
+                        <div>
+                          <div className="text-base font-semibold text-slate-100">{preset.label}</div>
+                          <div className="text-xs text-slate-400">{preset.description}</div>
+                        </div>
+                        <div className="text-xs text-slate-400">
+                          {preset.width}×{preset.height} · {preset.fps} fps
+                        </div>
+                      </div>
+                      <input
+                        type="radio"
+                        name="reel-preset"
+                        value={preset.id}
+                        checked={exportPresetId === preset.id}
+                        onChange={() => setExportPresetId(preset.id)}
+                        className="sr-only"
+                      />
+                    </label>
+                  ))}
+                </div>
+              </section>
+              <section className="grid gap-3 sm:grid-cols-3">
+                <label className="flex items-center gap-2 text-sm text-slate-200">
+                  <input
+                    type="checkbox"
+                    checked={includeWatermark}
+                    onChange={(event) => setIncludeWatermark(event.target.checked)}
+                    className="h-4 w-4 rounded border-slate-700 bg-slate-900 text-emerald-400 focus:ring-emerald-400"
+                  />
+                  Watermark
+                </label>
+                <label className="flex items-center gap-2 text-sm text-slate-200">
+                  <input
+                    type="checkbox"
+                    checked={includeBadges}
+                    onChange={(event) => setIncludeBadges(event.target.checked)}
+                    className="h-4 w-4 rounded border-slate-700 bg-slate-900 text-emerald-400 focus:ring-emerald-400"
+                  />
+                  Carry &amp; club badges
+                </label>
+                <label className="flex items-center gap-2 text-sm text-slate-200">
+                  <input
+                    type="checkbox"
+                    checked={includeMusic}
+                    onChange={(event) => setIncludeMusic(event.target.checked)}
+                    className="h-4 w-4 rounded border-slate-700 bg-slate-900 text-emerald-400 focus:ring-emerald-400"
+                  />
+                  Add music bed
+                </label>
+              </section>
+              <div className="flex items-center justify-between text-xs text-slate-400">
+                <span>Clip length</span>
+                <span>{(exportDurationMs / 1000).toFixed(1)} s @ {selectedPreset.fps} fps</span>
+              </div>
+              {durationWarning ? (
+                <div className="rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-xs text-amber-200">
+                  {durationWarning}
+                </div>
+              ) : null}
+              <div className="space-y-2">
+                <div className="h-2 w-full rounded-full bg-slate-800">
+                  <div
+                    className="h-full rounded-full bg-emerald-400 transition-all"
+                    style={{ width: `${Math.round(exportProgress * 100)}%` }}
+                  />
+                </div>
+                {exportStatus ? <div className="text-sm text-slate-300">{exportStatus}</div> : null}
+              </div>
+              <div className="flex flex-wrap items-center gap-3">
+                <button
+                  type="button"
+                  onClick={handleStartExport}
+                  disabled={exporting || !primaryShot}
+                  className="inline-flex items-center justify-center rounded-lg bg-emerald-500 px-4 py-2 text-sm font-semibold text-emerald-950 transition hover:bg-emerald-400 disabled:cursor-not-allowed disabled:bg-emerald-500/60"
+                >
+                  {exporting ? 'Encoding…' : 'Start export'}
+                </button>
+                {exporting ? (
+                  <button
+                    type="button"
+                    onClick={handleCancelExport}
+                    className="inline-flex items-center justify-center rounded-lg border border-slate-700 px-4 py-2 text-sm font-semibold text-slate-200 transition hover:border-slate-500"
+                  >
+                    Cancel
+                  </button>
+                ) : null}
+                {downloadUrl && downloadName ? (
+                  <a
+                    href={downloadUrl}
+                    download={downloadName}
+                    className="inline-flex items-center justify-center rounded-lg border border-emerald-400 px-4 py-2 text-sm font-semibold text-emerald-300 transition hover:bg-emerald-500/10"
+                  >
+                    Download {downloadName}
+                  </a>
+                ) : null}
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
