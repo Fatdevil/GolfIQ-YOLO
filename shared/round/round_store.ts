@@ -1,5 +1,6 @@
 import type { Hole, Round, Shot } from './round_types';
 import type { HandicapSetup, TeeRating } from '../whs/types';
+import type { HomographyMatrix, TracerCalibration } from '../tracer/types';
 
 type AsyncStorageLike = {
   getItem(key: string): Promise<string | null>;
@@ -139,6 +140,21 @@ function cloneShot(shot: Shot): Shot {
   };
 }
 
+function cloneTracerCalibration(calib: TracerCalibration | undefined): TracerCalibration | undefined {
+  if (!calib) {
+    return undefined;
+  }
+  return {
+    teePx: { x: calib.teePx.x, y: calib.teePx.y },
+    flagPx: { x: calib.flagPx.x, y: calib.flagPx.y },
+    yardage_m: calib.yardage_m,
+    holeBearingDeg: calib.holeBearingDeg,
+    quality: calib.quality,
+    matrix: calib.matrix.map((row) => row.slice(0, 3) as [number, number, number]) as HomographyMatrix,
+    updatedAt: calib.updatedAt,
+  };
+}
+
 function cloneHole(hole: Hole): Hole {
   return {
     holeNo: hole.holeNo,
@@ -161,6 +177,7 @@ function cloneRound(round: ParsedRound | null): ParsedRound | null {
     currentHole: Math.min(Math.max(round.currentHole, 0), Math.max(round.holes.length - 1, 0)),
     finished: Boolean(round.finished),
     handicapSetup: cloneHandicapSetup(round.handicapSetup),
+    tracerCalib: cloneTracerCalibration(round.tracerCalib),
   };
 }
 
@@ -503,6 +520,16 @@ export function setHandicapSetup(setup: HandicapSetup | null | undefined): Round
   const sanitized = sanitizeHandicapSetup(setup ?? undefined);
   activeRound.handicapSetup = sanitized ? cloneHandicapSetup(sanitized) : undefined;
   activeRound.finished = false;
+  setActiveRound(activeRound);
+  void persistRound(activeRound);
+  return getActiveRound();
+}
+
+export function setTracerCalibration(calib: TracerCalibration | null | undefined): Round | null {
+  if (!activeRound) {
+    return null;
+  }
+  activeRound.tracerCalib = calib ? cloneTracerCalibration(calib) : undefined;
   setActiveRound(activeRound);
   void persistRound(activeRound);
   return getActiveRound();

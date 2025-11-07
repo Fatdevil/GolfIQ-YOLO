@@ -1,6 +1,11 @@
-import { describe, it, expect } from 'vitest';
+import { afterEach, describe, it, expect } from 'vitest';
 
 import { buildShotTracerDraw } from '../../../shared/tracer/draw';
+import { __setTracerRcForTests } from '../../../shared/tracer/rc';
+
+afterEach(() => {
+  __setTracerRcForTests(null);
+});
 
 describe('buildShotTracerDraw', () => {
   it('renders apex label for measured tracer path', () => {
@@ -22,6 +27,7 @@ describe('buildShotTracerDraw', () => {
     expect(apexLabel).toBeTruthy();
     const apexDot = result!.commands.find((cmd) => cmd.t === 'dot');
     expect(apexDot).toBeTruthy();
+    expect(tracer!.tooltip).toMatchObject({ estimated: false, carry_m: 160, apex_m: 32 });
   });
 
   it('adds dashed estimate for ballistic fallback paths', () => {
@@ -33,16 +39,19 @@ describe('buildShotTracerDraw', () => {
     };
     const result = buildShotTracerDraw(shot, { width: 1080, height: 1920 });
     expect(result).toBeTruthy();
-    expect(result!.source).toBe('ballistic');
+    expect(result!.source).toBe('computed');
     expect(result!.estimated).toBe(true);
     const tracer = result!.commands.find((cmd) => cmd.t === 'tracer');
     expect(tracer).toBeTruthy();
     expect(Array.isArray(tracer!.dash)).toBe(true);
     expect(result!.estimateLabel).toBe('est.');
-    const apexLabel = result!.commands.find((cmd) => cmd.t === 'text' && cmd.text === 'est.');
+    const apexLabel = result!.commands.find(
+      (cmd) => cmd.t === 'text' && typeof cmd.text === 'string' && cmd.text.startsWith('Apex'),
+    );
     expect(apexLabel).toBeTruthy();
     const apexDot = result!.commands.find((cmd) => cmd.t === 'dot');
-    expect(apexDot).toBeUndefined();
+    expect(apexDot).toBeTruthy();
+    expect(tracer!.tooltip).toMatchObject({ estimated: true, carry_m: 180, apex_m: 32 });
   });
 
   it('dashes tracer when carry is missing or estimated', () => {
@@ -58,12 +67,13 @@ describe('buildShotTracerDraw', () => {
     const tracer = result!.commands.find((cmd) => cmd.t === 'tracer');
     expect(tracer).toBeTruthy();
     expect(Array.isArray(tracer!.dash)).toBe(true);
-    expect(result!.source).toBe('fit');
+    expect(result!.source).toBe('computed');
     expect(result!.estimated).toBe(true);
     expect(result!.estimateLabel).toBe('est.');
     const estLabel = result!.commands.find((cmd) => cmd.t === 'text' && cmd.text === 'est.');
     expect(estLabel).toBeTruthy();
     const apexDot = result!.commands.find((cmd) => cmd.t === 'dot');
-    expect(apexDot).toBeUndefined();
+    expect(apexDot).toBeTruthy();
+    expect(tracer!.tooltip).toMatchObject({ estimated: true });
   });
 });

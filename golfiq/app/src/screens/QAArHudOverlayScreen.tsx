@@ -118,6 +118,7 @@ import { buildShotFeedback, type FeedbackOutput } from '../../../../shared/plays
 import { exportAccuracyNdjson } from '../../../../shared/telemetry/shotsenseMetrics';
 import { PostHoleReconciler, collectAutoCandidates } from '../shotsense/PostHoleReconciler';
 import EventPanel from '../event/EventPanel';
+import type { TracerCalibration } from '../../../../shared/tracer/types';
 import LearningPanel from '../features/learning/LearningPanel';
 import RangeGamesPanel from '../features/range/RangeGamesPanel';
 import { RangeGameController } from '../features/range/RangeGameController';
@@ -2667,6 +2668,7 @@ const QAArHudOverlayScreen: React.FC = () => {
   const [plannerResult, setPlannerResult] = useState<PlanOut | null>(null);
   const [shotSession, setShotSession] = useState<ShotSessionState | null>(null);
   const [activeHoleId, setActiveHoleId] = useState<number | null>(null);
+  const [roundTracerCalib, setRoundTracerCalib] = useState<TracerCalibration | null>(null);
   const [reviewVisible, setReviewVisible] = useState(false);
   const [reviewHoleId, setReviewHoleId] = useState<number | null>(null);
   const [reviewShots, setReviewShots] = useState<ReviewItem[]>([]);
@@ -2691,11 +2693,13 @@ const QAArHudOverlayScreen: React.FC = () => {
     const unsubscribe = subscribeToRound((round) => {
       if (!round || !Array.isArray(round.holes) || !round.holes.length) {
         setActiveHoleId(null);
+        setRoundTracerCalib(null);
         return;
       }
       const index = Math.min(Math.max(round.currentHole, 0), round.holes.length - 1);
       const hole = round.holes[index];
       setActiveHoleId(hole ? hole.holeNo : null);
+      setRoundTracerCalib(round.tracerCalib ?? null);
     });
     return () => {
       try {
@@ -8290,6 +8294,23 @@ const QAArHudOverlayScreen: React.FC = () => {
           ) : null}
         </View>
         <View style={[styles.calibrationContainer, styles.sectionTitleSpacing]}>
+          <Text style={styles.sectionTitle}>Tracer calibration</Text>
+          {roundTracerCalib ? (
+            <View style={styles.calibrationContent}>
+              <Text style={styles.calibrationStatus}>
+                {`Quality ${(roundTracerCalib.quality * 100).toFixed(0)}% · Yardage ${Math.round(roundTracerCalib.yardage_m)} m`}
+              </Text>
+              <Text style={styles.calibrationMeta}>
+                {`Bearing ${roundTracerCalib.holeBearingDeg.toFixed(1)}° · Updated ${new Date(
+                  roundTracerCalib.updatedAt,
+                ).toLocaleString()}`}
+              </Text>
+            </View>
+          ) : (
+            <Text style={styles.calibrationStatus}>No tracer calibration saved for this round.</Text>
+          )}
+        </View>
+        <View style={[styles.calibrationContainer, styles.sectionTitleSpacing]}>
           <TouchableOpacity
             onPress={() => setBagCalibExpanded((prev) => !prev)}
             style={styles.calibrationHeader}
@@ -10104,6 +10125,10 @@ const styles = StyleSheet.create({
   },
   calibrationStatus: {
     color: '#94a3b8',
+    fontSize: 12,
+  },
+  calibrationMeta: {
+    color: '#64748b',
     fontSize: 12,
   },
   calibrationActions: {
