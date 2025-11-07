@@ -273,6 +273,7 @@ export function computeGolden6(input: {
       unit: GOLDEN_LABELS.startLine.unit,
       value: Number.parseFloat(startValue.toFixed(1)),
       quality: startQuality,
+      sampleCount: 1,
     },
     {
       key: 'faceToPathIdx',
@@ -280,6 +281,7 @@ export function computeGolden6(input: {
       unit: GOLDEN_LABELS.faceToPathIdx.unit,
       value: Number.parseFloat(faceValue.toFixed(2)),
       quality: faceQuality,
+      sampleCount: 1,
     },
     {
       key: 'tempo',
@@ -287,6 +289,7 @@ export function computeGolden6(input: {
       unit: GOLDEN_LABELS.tempo.unit,
       value: Number.parseFloat(tempoValue.toFixed(2)),
       quality: tempoQuality,
+      sampleCount: 1,
     },
     {
       key: 'lowPointSign',
@@ -294,6 +297,7 @@ export function computeGolden6(input: {
       unit: GOLDEN_LABELS.lowPointSign.unit,
       value: lowPointValue,
       quality: lowPointQuality,
+      sampleCount: 1,
     },
     {
       key: 'launchProxy',
@@ -301,6 +305,7 @@ export function computeGolden6(input: {
       unit: GOLDEN_LABELS.launchProxy.unit,
       value: Number.parseFloat(launchValue.toFixed(1)),
       quality: launchQuality,
+      sampleCount: 1,
     },
     {
       key: 'dynLoftProxy',
@@ -308,6 +313,7 @@ export function computeGolden6(input: {
       unit: GOLDEN_LABELS.dynLoftProxy.unit,
       value: Number.parseFloat(dynLoftValue.toFixed(1)),
       quality: dynLoftQuality,
+      sampleCount: 1,
     },
   ];
 
