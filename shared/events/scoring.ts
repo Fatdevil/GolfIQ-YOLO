@@ -76,9 +76,17 @@ export function aggregateLeaderboard(
     const holes = Math.max(agg.holes, holesPlayedByUser[userId] ?? agg.holes);
     const gross = agg.gross;
     let netTotal = agg.net;
+    let stablefordTotal: number | undefined = agg.hasStableford
+      ? agg.stableford
+      : undefined;
     if (!agg.netFromRows) {
       const fallbackHcp = hcpIndexByUser[userId] ?? 0;
       netTotal = computeNetSimple(gross, fallbackHcp, holes);
+      const fallbackStableford = 2 * holes + gross - netTotal - agg.toPar;
+      stablefordTotal = Math.max(0, Math.round(fallbackStableford));
+    }
+    if (stablefordTotal === undefined && agg.hasStableford) {
+      stablefordTotal = agg.stableford;
     }
     out.push({
       user_id: userId,
@@ -88,7 +96,7 @@ export function aggregateLeaderboard(
       net: netTotal,
       to_par: agg.toPar,
       last_ts: agg.last,
-      stableford: agg.hasStableford ? agg.stableford : undefined,
+      stableford: stablefordTotal,
       playing_handicap: agg.playingHandicap !== null ? agg.playingHandicap : undefined,
     });
   }

@@ -58,8 +58,11 @@ describe('events scoring', () => {
     expect(leaderboard[0].user_id).toBe('b');
     expect(leaderboard[0].gross).toBe(5);
     expect(leaderboard[0].holes).toBe(1);
-    expect(leaderboard[0].net).toBe(5);
-    expect(leaderboard[0].stableford).toBe(1);
+    // WHS fallback: PH=12 ⇒ 1 stroke received on this hole ⇒ net = 5 - 1 = 4
+    expect(leaderboard[0].net).toBe(4);
+    // Stableford (standard): 2 + (par + strokesReceived - gross)
+    // using par=4 ⇒ 2 + (4 + 1 - 5) = 2
+    expect(leaderboard[0].stableford).toBe(2);
     expect(leaderboard[0].playing_handicap).toBe(12);
     expect(leaderboard[1].user_id).toBe('a');
     expect(leaderboard[1].net).toBe(8);
