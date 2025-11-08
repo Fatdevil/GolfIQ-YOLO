@@ -14,6 +14,9 @@ concurrency:
 
 jobs:
   audit:
+    permissions:
+      contents: read
+      issues: write
     if: ${{ github.event_name == 'workflow_dispatch' || (github.event_name == 'pull_request' && contains(toJson(github.event.pull_request.labels.*.name), 'audit')) }}
     runs-on: ubuntu-latest
     steps:
@@ -63,4 +66,21 @@ jobs:
               '',
               '_Artifacts:_ `docs/Built_Status_Audit.md`, `reports/built_inventory.json`'
             ].join('\n');
-            await github.rest.issues.createComment({ owner: context.repo.owner, repo: context.repo.repo, issue_number: context.payload.pull_request.number, body });
+            const isFork = Boolean(context.payload.pull_request?.head?.repo?.fork);
+
+            const writeSummary = async () => {
+              await core.summary.addRaw(body, true).write();
+            };
+
+            if (isFork) {
+              core.info('Skipping PR comment for forked repository; writing to step summary instead.');
+              await writeSummary();
+              return;
+            }
+
+            try {
+              await github.rest.issues.createComment({ owner: context.repo.owner, repo: context.repo.repo, issue_number: context.payload.pull_request.number, body });
+            } catch (error) {
+              core.warning(`Failed to post audit comment: ${error.message}`);
+              await writeSummary();
+            }
