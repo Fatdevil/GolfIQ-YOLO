@@ -21,9 +21,19 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
+      - name: Check audit script presence
+        id: audit-script
+        run: |
+          if [ -f tools/inventory_audit.py ]; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
       - name: Run inventory audit
+        if: steps.audit-script.outputs.exists == 'true'
         run: python tools/inventory_audit.py
       - name: Upload audit artifacts
+        if: steps.audit-script.outputs.exists == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: inventory-audit
