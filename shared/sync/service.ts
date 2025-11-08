@@ -1,6 +1,14 @@
 import type { RoundState, ShotEvent } from "../round/types";
 import { CloudEvent, CloudRound, CloudShot } from "./types";
 
+export type HudSnapshot = {
+  roundId: string;
+  holeId: number;
+  version: string;
+  deviceId?: string | null;
+  payload: Record<string, any>;
+};
+
 type RealtimeChannelLike = {
   on: (...args: unknown[]) => RealtimeChannelLike;
   subscribe: (...args: unknown[]) => Promise<{ status?: string } | undefined>;
@@ -63,6 +71,32 @@ const roundFingerprints = new Map<string, string>();
 const shotFingerprints = new Map<string, string>();
 type TelemetryFn = (event: string, payload?: Record<string, unknown>) => void;
 let telemetry: TelemetryFn | null = null;
+
+function stableStringify(value: unknown): string {
+  if (value === null || typeof value !== "object") {
+    return JSON.stringify(value);
+  }
+  if (Array.isArray(value)) {
+    return `[${value.map((entry) => stableStringify(entry)).join(",")}]`;
+  }
+  const entries = Object.keys(value as Record<string, unknown>)
+    .sort()
+    .map((key) => `${JSON.stringify(key)}:${stableStringify((value as Record<string, unknown>)[key])}`);
+  return `{${entries.join(",")}}`;
+}
+
+function djb2(input: string): string {
+  let hash = 5381;
+  for (let i = 0; i < input.length; i += 1) {
+    hash = ((hash << 5) + hash) ^ input.charCodeAt(i);
+  }
+  return (hash >>> 0).toString(16).padStart(8, "0");
+}
+
+function fingerprintSnapshot(snapshot: HudSnapshot): string {
+  const base = { r: snapshot.roundId, h: snapshot.holeId, v: snapshot.version, p: snapshot.payload };
+  return `v1:${djb2(stableStringify(base))}`;
+}
 
 function chunk<T>(input: readonly T[], size: number): T[][] {
   if (size <= 0) {
@@ -353,7 +387,15 @@ export function isEnabled(): boolean {
   if (!hasCredentials()) {
     return false;
   }
-  return envFlagEnabled() || readRcFlag();
+  const base = envFlagEnabled() || readRcFlag();
+  const envFlag =
+    (typeof process !== "undefined" && process?.env?.CLOUD_SYNC_ENABLED !== undefined
+      ? process.env.CLOUD_SYNC_ENABLED
+      : undefined) ??
+    (typeof globalThis !== "undefined" && (globalThis as Record<string, unknown>).CLOUD_SYNC_ENABLED !== undefined
+      ? (globalThis as Record<string, unknown>).CLOUD_SYNC_ENABLED
+      : "false");
+  return base && String(envFlag).toLowerCase() === "true";
 }
 
 export async function pushRound(round: RoundState): Promise<void> {
@@ -422,6 +464,52 @@ export async function pushShots(roundId: string, shots: ShotEvent[]): Promise<vo
   }
   if (hadError) {
     throw new Error(`cloud-sync: shot upsert failed (${roundId})`);
+  }
+}
+
+export async function pushHudSnapshot(snapshot: HudSnapshot): Promise<void> {
+  if (!isEnabled()) {
+    return;
+  }
+  const supa = await ensureClient();
+  if (!supa) {
+    return;
+  }
+  const started = now();
+  const fingerprint = fingerprintSnapshot(snapshot);
+  try {
+    const row = {
+      round_id: snapshot.roundId,
+      hole_id: snapshot.holeId,
+      version: snapshot.version,
+      device_id: snapshot.deviceId ?? null,
+      fp_hash: fingerprint,
+      payload_jsonb: snapshot.payload,
+      ts: new Date().toISOString(),
+    };
+    const { error } = await supa
+      .from("hud_snapshots")
+      .upsert(row, { onConflict: "fp_hash", ignoreDuplicates: true });
+
+    telemetry?.("sync.hud_snapshot_push_ms", {
+      ok: !error,
+      ms: now() - started,
+      roundId: snapshot.roundId,
+      holeId: snapshot.holeId,
+    });
+
+    if (error) {
+      telemetry?.("sync_error", {
+        type: "hud_snapshot",
+        code: errorCode(error),
+        message: typeof (error as { message?: unknown }).message === "string" ? (error as { message: string }).message : undefined,
+      });
+    }
+  } catch (err) {
+    telemetry?.("sync_error", {
+      type: "hud_snapshot",
+      message: err instanceof Error ? err.message : String(err),
+    });
   }
 }
 
