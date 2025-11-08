@@ -18,7 +18,7 @@ struct ContentView: View {
                     }
                     playsLikeRow(for: hud)
                     if let mini = hud.overlayMini {
-                        miniMapRow(for: mini)
+                        miniMapRow(for: mini, tournamentSafe: hud.tournamentSafe)
                     }
                     if !hud.tournamentSafe, let strategy = hud.strategy {
                         strategyRow(for: strategy)
@@ -83,18 +83,22 @@ struct ContentView: View {
         }
     }
 
-    private func miniMapRow(for overlay: HUD.OverlayMini) -> some View {
-        let base = "F \(distanceString(overlay.fmb.f)) | M \(distanceString(overlay.fmb.m)) | B \(distanceString(overlay.fmb.b))"
-        let text: String
-        if let pin = overlay.pin?.section {
-            text = "\(base) · Pin: \(pin.shortLabel)"
-        } else {
-            text = base
+    private func miniMapRow(for overlay: HUD.OverlayMini, tournamentSafe: Bool) -> some View {
+        let configuration = OverlayMiniBridge.configuration(from: overlay)
+        let summary = miniMapSummaryText(for: overlay)
+        return VStack(alignment: .leading, spacing: 6) {
+            HoleMiniMapView(configuration: configuration, tournamentSafe: tournamentSafe)
+            Text(summary)
+                .font(.footnote)
+                .fontWeight(.semibold)
+                .monospacedDigit()
         }
-        return Text(text)
-            .font(.footnote)
-            .fontWeight(.semibold)
-            .monospacedDigit()
+    }
+
+    private func miniMapSummaryText(for overlay: HUD.OverlayMini) -> String {
+        let base = "F \(distanceString(overlay.fmb.f)) | M \(distanceString(overlay.fmb.m)) | B \(distanceString(overlay.fmb.b))"
+        guard let pin = overlay.pin?.section else { return base }
+        return "\(base) · Pin: \(pin.shortLabel)"
     }
 
     private func strategyRow(for strategy: HUD.Strategy) -> some View {
