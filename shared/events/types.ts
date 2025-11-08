@@ -1,3 +1,7 @@
+export type EventId = string & { __brand: 'EventId' };
+export type ShortCode = string & { __brand: 'ShortCode' };
+export type MemberRole = 'admin' | 'player' | 'spectator';
+
 export type UUID = string;
 
 export type ScoringFormat = 'stroke' | 'stableford';
