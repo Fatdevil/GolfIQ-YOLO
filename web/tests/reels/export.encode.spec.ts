@@ -4,6 +4,7 @@ import type { ShotForTracer } from '@shared/tracer/draw';
 
 import { encodeReel, ReelEncodeError } from '../../src/features/reels/export/encode';
 import { __resetFfmpegForTests } from '../../src/features/reels/export/encodeWithFfmpeg';
+import * as renderer from '../../src/features/reels/export/renderTimeline';
 
 const createFfmpegMock = vi.fn();
 
@@ -27,11 +28,13 @@ class FakeCanvasContext2D {
   beginPath(): void {}
   moveTo(): void {}
   lineTo(): void {}
+  quadraticCurveTo(): void {}
   stroke(): void {}
   setLineDash(): void {}
   arc(): void {}
   fill(): void {}
   fillText(): void {}
+  closePath(): void {}
 }
 
 class FakeCanvasElement {
@@ -263,6 +266,24 @@ describe('encodeReel', () => {
       audio: false,
     });
     expect(result.mime).toBe('video/webm');
+  });
+
+  it('forwards includeBadges flag to the renderer', async () => {
+    const spy = vi.spyOn(renderer, 'renderFramesToCanvas');
+    try {
+      await encodeReel([makeShot()], {
+        presetId: 'reels_1080x1920_30',
+        watermark: false,
+        caption: null,
+        audio: false,
+        includeBadges: false,
+      });
+      expect(spy).toHaveBeenCalled();
+      const call = spy.mock.calls[0];
+      expect(call?.[2]).toEqual(expect.objectContaining({ includeBadges: false }));
+    } finally {
+      spy.mockRestore();
+    }
   });
 
   it('throws a finalize error when encoded output is invalid', async () => {

@@ -6,11 +6,16 @@ export type ReelRenderOptions = {
   watermark: boolean;
   caption: string | null;
   homography?: Homography | null;
+  includeBadges: boolean;
 };
 
 export type OverlayLayout = {
   caption: { x: number; y: number; width: number; height: number } | null;
   watermark: { x: number; y: number; width: number; height: number } | null;
+  badges: {
+    carry: { x: number; y: number; width: number; height: number };
+    club: { x: number; y: number; width: number; height: number };
+  } | null;
 };
 
 export type RenderSession = {
@@ -23,11 +28,21 @@ export type RenderSession = {
   drawFrame: (index: number) => void;
 };
 
+type ShotWithBadges = ShotForTracer & {
+  club?: string | null;
+  total_m?: number | null;
+};
+
 const SHOT_DURATION_MS = 3000;
 const OUTRO_DURATION_MS = 2000;
 const CAPTION_MARGIN = 24;
 const WATERMARK_MARGIN = 24;
 const WATERMARK_WIDTH_RATIO = 0.12;
+const BADGE_MARGIN = 24;
+const BADGE_WIDTH_RATIO = 0.42;
+const BADGE_MIN_WIDTH = 220;
+const BADGE_VERTICAL_GAP = 16;
+const BADGE_BASE_HEIGHT = 104;
 
 function resolveWatermarkAspect(image: HTMLImageElement | null): number {
   if (!image) {
@@ -59,6 +74,31 @@ function createCanvas(width: number, height: number): HTMLCanvasElement {
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(Math.max(value, min), max);
+}
+
+function addRoundedRectPath(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+  radius: number,
+): void {
+  const safeRadius = clamp(radius, 0, Math.min(width, height) / 2);
+  const anyCtx = ctx as CanvasRenderingContext2D & { roundRect?: (x: number, y: number, w: number, h: number, r: number) => void };
+  if (typeof anyCtx.roundRect === 'function') {
+    anyCtx.roundRect(x, y, width, height, safeRadius);
+    return;
+  }
+  ctx.moveTo(x + safeRadius, y);
+  ctx.lineTo(x + width - safeRadius, y);
+  ctx.quadraticCurveTo(x + width, y, x + width, y + safeRadius);
+  ctx.lineTo(x + width, y + height - safeRadius);
+  ctx.quadraticCurveTo(x + width, y + height, x + width - safeRadius, y + height);
+  ctx.lineTo(x + safeRadius, y + height);
+  ctx.quadraticCurveTo(x, y + height, x, y + height - safeRadius);
+  ctx.lineTo(x, y + safeRadius);
+  ctx.quadraticCurveTo(x, y, x + safeRadius, y);
 }
 
 function drawTracerCommand(
@@ -204,6 +244,59 @@ function drawWatermark(
   ctx.restore();
 }
 
+function formatCarryText(shot: ShotWithBadges): string {
+  const carry = Number.isFinite(shot.carry_m as number) ? Math.round(shot.carry_m as number) : null;
+  const total = Number.isFinite(shot.total_m as number) ? Math.round(shot.total_m as number) : null;
+  const value = carry ?? total ?? 0;
+  return `Carry ${value} m`;
+}
+
+function formatClubText(shot: ShotWithBadges): string {
+  const raw = shot.club ?? null;
+  if (typeof raw === 'string' && raw.trim().length > 0) {
+    return raw.trim().toUpperCase();
+  }
+  return '—';
+}
+
+function drawBadge(
+  ctx: CanvasRenderingContext2D,
+  layout: { x: number; y: number; width: number; height: number } | null,
+  text: string,
+): void {
+  if (!layout || layout.width <= 0 || layout.height <= 0) {
+    return;
+  }
+  ctx.save();
+  ctx.fillStyle = '#0f172acc';
+  ctx.strokeStyle = '#38bdf8';
+  ctx.lineWidth = Math.max(2, Math.round(layout.height * 0.08));
+  ctx.beginPath();
+  addRoundedRectPath(ctx, layout.x, layout.y, layout.width, layout.height, layout.height / 2);
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+  ctx.fillStyle = '#f8fafc';
+  const fontSize = Math.max(24, Math.round(layout.height * 0.38));
+  ctx.font = `600 ${fontSize}px "Inter", "Helvetica Neue", sans-serif`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(text, layout.x + layout.width / 2, layout.y + layout.height / 2);
+  ctx.restore();
+}
+
+function drawBadges(
+  ctx: CanvasRenderingContext2D,
+  layout: OverlayLayout['badges'],
+  shot: ShotWithBadges | null,
+): void {
+  if (!layout || !shot) {
+    return;
+  }
+  drawBadge(ctx, layout.carry, formatCarryText(shot));
+  drawBadge(ctx, layout.club, formatClubText(shot));
+}
+
 function drawOutro(
   ctx: CanvasRenderingContext2D,
   layout: OverlayLayout['watermark'],
@@ -263,11 +356,45 @@ export function computeOverlayLayout(
       y,
     };
   }
-  return { caption: captionRect, watermark: watermarkRect };
+  let badgesRect: OverlayLayout['badges'] = null;
+  if (options.includeBadges) {
+    const availableHeight = Math.max(0, watermarkRect ? watermarkRect.y : safeTop);
+    const baseTotalHeight = BADGE_BASE_HEIGHT * 2 + BADGE_VERTICAL_GAP;
+    const scale = availableHeight > 0 ? Math.min(1, availableHeight / baseTotalHeight) : 0;
+    let badgeHeight = Math.max(0, Math.round(BADGE_BASE_HEIGHT * scale));
+    let spacing = badgeHeight > 0 ? Math.max(8, Math.round(BADGE_VERTICAL_GAP * scale)) : 0;
+    let totalHeight = badgeHeight * 2 + spacing;
+    if (totalHeight > availableHeight && availableHeight > 0) {
+      const adjusted = Math.max(0, availableHeight - spacing);
+      badgeHeight = adjusted > 0 ? Math.floor(adjusted / 2) : 0;
+      totalHeight = badgeHeight * 2 + spacing;
+    }
+    if (badgeHeight >= 28 && totalHeight <= availableHeight) {
+      const widthScale = badgeHeight / BADGE_BASE_HEIGHT || 0;
+      const maxWidth = Math.max(0, preset.w - BADGE_MARGIN * 2);
+      const baseWidth = clamp(Math.round(preset.w * BADGE_WIDTH_RATIO), BADGE_MIN_WIDTH, maxWidth);
+      const badgeWidth = Math.max(
+        0,
+        Math.min(maxWidth, Math.round(baseWidth * Math.max(widthScale, 0.5))),
+      );
+      const defaultX = Math.max(0, preset.w - safeRight - badgeWidth);
+      const horizontalGap = BADGE_MARGIN;
+      const x = watermarkRect
+        ? clamp(watermarkRect.x - horizontalGap - badgeWidth, 0, defaultX)
+        : defaultX;
+      const carryY = Math.max(0, availableHeight - totalHeight);
+      const clubY = carryY + badgeHeight + spacing;
+      badgesRect = {
+        carry: { x, y: carryY, width: badgeWidth, height: badgeHeight },
+        club: { x, y: clubY, width: badgeWidth, height: badgeHeight },
+      };
+    }
+  }
+  return { caption: captionRect, watermark: watermarkRect, badges: badgesRect };
 }
 
 export async function renderFramesToCanvas(
-  shots: ShotForTracer[],
+  shots: ShotWithBadges[],
   preset: ReelExportPreset,
   options: ReelRenderOptions,
 ): Promise<RenderSession> {
@@ -286,6 +413,7 @@ export async function renderFramesToCanvas(
   const durationMs = Math.round((frameCount / fps) * 1000);
   const watermarkImage = options.watermark ? await loadWatermarkImage() : null;
   const layout = computeOverlayLayout(preset, options, resolveWatermarkAspect(watermarkImage));
+  const includeBadges = options.includeBadges === true;
 
   const tracerResults = shots.map((shot) =>
     buildShotTracerDraw(shot, { width: preset.w, height: preset.h, H: options.homography ?? null }) ?? null,
@@ -313,6 +441,10 @@ export async function renderFramesToCanvas(
     }
 
     drawCaption(ctx, options.caption ?? null, layout.caption);
+    if (includeBadges) {
+      const shotWithMeta = (shots[shotIndex] ?? null) as ShotWithBadges | null;
+      drawBadges(ctx, layout.badges, shotWithMeta);
+    }
     drawWatermark(ctx, layout.watermark, watermarkImage);
   };
 

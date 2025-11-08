@@ -365,12 +365,14 @@ export default function Composer(): JSX.Element {
       const watermark = normalizedOptions.watermark !== false;
       const audio = normalizedOptions.audio === true;
       const caption = normalizedOptions.caption ?? null;
+      const includeBadgesFlag = includeBadges === true;
       try {
         const result = await encodeReel(shotsForEncoding, {
           presetId: preset.id,
           watermark,
           caption,
           audio,
+          includeBadges: includeBadgesFlag,
           homography: timeline.homography ?? null,
           signal: controller.signal,
           onProgress: (ratio) => {
@@ -414,7 +416,7 @@ export default function Composer(): JSX.Element {
         setAbortController(null);
       }
     },
-    [timeline, primaryShot, exportDurationMs, downloadUrl],
+    [timeline, primaryShot, exportDurationMs, downloadUrl, includeBadges],
   );
 
   return (

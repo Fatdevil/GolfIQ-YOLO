@@ -12,6 +12,7 @@ export type ReelEncodeOptions = {
   watermark?: boolean;
   caption?: string | null;
   audio?: boolean;
+  includeBadges?: boolean;
   signal?: AbortSignal;
   onProgress?: (p: number) => void;
   homography?: Homography | null;
@@ -92,6 +93,7 @@ export async function encodeReel(
     watermark: options.watermark !== false,
     caption: sanitizeCaption(options.caption ?? null),
     homography: options.homography ?? null,
+    includeBadges: options.includeBadges !== false,
   };
   const includeAudio = options.audio === true;
   const progress = typeof options.onProgress === 'function' ? options.onProgress : () => {};
