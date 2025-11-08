@@ -22,7 +22,7 @@ type HarnessProps = {
 function ExportModalHarness(props: HarnessProps): JSX.Element {
   const { onSubmit } = props;
   const [options, setOptions] = useState<ReelUserOptions>(() => __loadStoredExportOptionsForTest());
-  const [includeBadges, setIncludeBadges] = useState(true);
+  const [includeBadges, setIncludeBadges] = useState<boolean>(() => options.includeBadges !== false);
 
   useEffect(() => {
     const sanitized = __sanitizeExportOptionsForTest(options);
@@ -34,7 +34,11 @@ function ExportModalHarness(props: HarnessProps): JSX.Element {
       open
       presets={REEL_EXPORT_PRESETS}
       options={options}
-      onOptionsChange={(next) => setOptions(__sanitizeExportOptionsForTest(next))}
+      onOptionsChange={(next) => {
+        const sanitized = __sanitizeExportOptionsForTest(next);
+        setOptions(sanitized);
+        setIncludeBadges(sanitized.includeBadges !== false);
+      }}
       onSubmit={(next) => {
         const sanitized = __sanitizeExportOptionsForTest(next);
         setOptions(sanitized);
@@ -46,7 +50,10 @@ function ExportModalHarness(props: HarnessProps): JSX.Element {
       exportStatus={null}
       durationMs={5200}
       includeBadges={includeBadges}
-      onIncludeBadgesChange={setIncludeBadges}
+      onIncludeBadgesChange={(next) => {
+        setIncludeBadges(next);
+        setOptions((prev) => __sanitizeExportOptionsForTest({ ...prev, includeBadges: next }));
+      }}
       onCancel={() => {}}
       downloadUrl={null}
       downloadName={null}
@@ -105,6 +112,7 @@ describe('reels export presets modal', () => {
       expect(parsed.presetId).toBe('reels_1080x1920_30');
       expect(parsed.watermark).toBe(false);
       expect(parsed.audio).toBe(true);
+      expect(parsed.includeBadges).toBe(true);
       expect(typeof parsed.caption === 'string' ? parsed.caption.length <= 80 : parsed.caption).toBeTruthy();
     });
 

@@ -50,6 +50,7 @@ export type ReelUserOptions = {
   watermark?: boolean;
   caption?: string | null;
   audio?: boolean;
+  includeBadges?: boolean;
 };
 
 export type DrawCmd =

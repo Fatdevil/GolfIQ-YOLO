@@ -268,7 +268,7 @@ describe('encodeReel', () => {
     expect(result.mime).toBe('video/webm');
   });
 
-  it('forwards includeBadges flag to the renderer', async () => {
+  it('forwards includeBadges flag to the renderer when disabled', async () => {
     const spy = vi.spyOn(renderer, 'renderFramesToCanvas');
     try {
       await encodeReel([makeShot()], {
@@ -277,6 +277,41 @@ describe('encodeReel', () => {
         caption: null,
         audio: false,
         includeBadges: false,
+      });
+      expect(spy).toHaveBeenCalled();
+      const call = spy.mock.calls[0];
+      expect(call?.[2]).toEqual(expect.objectContaining({ includeBadges: false }));
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it('enables badges in the renderer when includeBadges is true', async () => {
+    const spy = vi.spyOn(renderer, 'renderFramesToCanvas');
+    try {
+      await encodeReel([makeShot()], {
+        presetId: 'reels_1080x1920_30',
+        watermark: false,
+        caption: null,
+        audio: false,
+        includeBadges: true,
+      });
+      expect(spy).toHaveBeenCalled();
+      const call = spy.mock.calls[0];
+      expect(call?.[2]).toEqual(expect.objectContaining({ includeBadges: true }));
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it('defaults includeBadges to false when option is omitted', async () => {
+    const spy = vi.spyOn(renderer, 'renderFramesToCanvas');
+    try {
+      await encodeReel([makeShot()], {
+        presetId: 'reels_1080x1920_30',
+        watermark: false,
+        caption: null,
+        audio: false,
       });
       expect(spy).toHaveBeenCalled();
       const call = spy.mock.calls[0];

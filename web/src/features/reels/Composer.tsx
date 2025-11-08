@@ -25,6 +25,7 @@ const DEFAULT_EXPORT_OPTIONS: ReelUserOptions = {
   watermark: true,
   caption: null,
   audio: false,
+  includeBadges: true,
 };
 
 function isValidPresetId(id: string | null | undefined): id is string {
@@ -46,6 +47,7 @@ function sanitizeExportOptions(candidate: Partial<ReelUserOptions> | null | unde
     watermark,
     caption,
     audio,
+    includeBadges: merged.includeBadges === true,
   } satisfies ReelUserOptions;
 }
 
@@ -193,7 +195,7 @@ export default function Composer(): JSX.Element {
   const [downloadName, setDownloadName] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
   const [exportOptions, setExportOptions] = useState<ReelUserOptions>(() => loadStoredExportOptions());
-  const [includeBadges, setIncludeBadges] = useState(true);
+  const [includeBadges, setIncludeBadges] = useState<boolean>(() => exportOptions.includeBadges !== false);
   const [durationWarning, setDurationWarning] = useState<string | null>(null);
   const [abortController, setAbortController] = useState<AbortController | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -203,7 +205,14 @@ export default function Composer(): JSX.Element {
   }, [exportOptions.presetId]);
 
   const handleOptionsChange = useCallback((next: ReelUserOptions) => {
-    setExportOptions(sanitizeExportOptions(next));
+    const sanitized = sanitizeExportOptions(next);
+    setExportOptions(sanitized);
+    setIncludeBadges(sanitized.includeBadges !== false);
+  }, []);
+
+  const handleIncludeBadgesChange = useCallback((next: boolean) => {
+    setIncludeBadges(next);
+    setExportOptions((prev) => sanitizeExportOptions({ ...prev, includeBadges: next }));
   }, []);
 
   useEffect(() => {
@@ -339,6 +348,7 @@ export default function Composer(): JSX.Element {
       }
       const normalizedOptions = sanitizeExportOptions(options);
       setExportOptions(normalizedOptions);
+      setIncludeBadges(normalizedOptions.includeBadges !== false);
       const preset =
         REEL_EXPORT_PRESETS.find((candidate) => candidate.id === normalizedOptions.presetId) ??
         REEL_EXPORT_PRESETS[0] ?? null;
@@ -365,14 +375,13 @@ export default function Composer(): JSX.Element {
       const watermark = normalizedOptions.watermark !== false;
       const audio = normalizedOptions.audio === true;
       const caption = normalizedOptions.caption ?? null;
-      const includeBadgesFlag = includeBadges === true;
       try {
         const result = await encodeReel(shotsForEncoding, {
           presetId: preset.id,
           watermark,
           caption,
           audio,
-          includeBadges: includeBadgesFlag,
+          includeBadges: normalizedOptions.includeBadges === true,
           homography: timeline.homography ?? null,
           signal: controller.signal,
           onProgress: (ratio) => {
@@ -416,7 +425,7 @@ export default function Composer(): JSX.Element {
         setAbortController(null);
       }
     },
-    [timeline, primaryShot, exportDurationMs, downloadUrl, includeBadges],
+    [timeline, primaryShot, exportDurationMs, downloadUrl],
   );
 
   return (
@@ -556,7 +565,7 @@ export default function Composer(): JSX.Element {
         exportStatus={exportStatus}
         durationMs={exportDurationMs}
         includeBadges={includeBadges}
-        onIncludeBadgesChange={setIncludeBadges}
+        onIncludeBadgesChange={handleIncludeBadgesChange}
         onCancel={handleCancelExport}
         downloadUrl={downloadUrl}
         downloadName={downloadName}
