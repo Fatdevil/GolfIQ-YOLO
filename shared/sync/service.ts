@@ -387,15 +387,14 @@ export function isEnabled(): boolean {
   if (!hasCredentials()) {
     return false;
   }
-  const base = envFlagEnabled() || readRcFlag();
-  const envFlag =
-    (typeof process !== "undefined" && process?.env?.CLOUD_SYNC_ENABLED !== undefined
-      ? process.env.CLOUD_SYNC_ENABLED
-      : undefined) ??
-    (typeof globalThis !== "undefined" && (globalThis as Record<string, unknown>).CLOUD_SYNC_ENABLED !== undefined
-      ? (globalThis as Record<string, unknown>).CLOUD_SYNC_ENABLED
-      : "false");
-  return base && String(envFlag).toLowerCase() === "true";
+  const envOn = envFlagEnabled();
+  const rcOn = readRcFlag();
+  let globalOn = false;
+  if (typeof globalThis !== "undefined" && (globalThis as Record<string, unknown>).CLOUD_SYNC_ENABLED !== undefined) {
+    const candidate = (globalThis as Record<string, unknown>).CLOUD_SYNC_ENABLED;
+    globalOn = normalizeBoolean(candidate);
+  }
+  return Boolean(envOn || rcOn || globalOn);
 }
 
 export async function pushRound(round: RoundState): Promise<void> {
