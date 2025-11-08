@@ -1,0 +1,43 @@
+name: Inventory Audit
+
+on:
+  workflow_dispatch:
+  pull_request:
+    types: [opened, synchronize, reopened, labeled]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: inventory-audit-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  audit:
+    if: ${{ github.event_name == 'workflow_dispatch' || (github.event_name == 'pull_request' && contains(toJson(github.event.pull_request.labels.*.name), 'audit')) }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Check audit script presence
+        id: audit-script
+        run: |
+          if [ -f tools/inventory_audit.py ]; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Run inventory audit
+        if: steps.audit-script.outputs.exists == 'true'
+        run: python tools/inventory_audit.py
+      - name: Upload audit artifacts
+        if: steps.audit-script.outputs.exists == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: inventory-audit
+          retention-days: 7
+          path: |
+            docs/Built_Status_Audit.md
+            reports/built_inventory.json

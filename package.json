@@ -10,7 +10,8 @@
     "store:screens": "tsx --tsconfig tsconfig.tools.json tools/store_screenshots.ts",
     "store:privacy": "python3 tools/privacy_labels.py",
     "store:zip": "bash scripts/make_store_zip.sh",
-    "store:attach": "tsx --tsconfig tsconfig.tools.json tools/attach_to_release.ts"
+    "store:attach": "tsx --tsconfig tsconfig.tools.json tools/attach_to_release.ts",
+    "audit:inventory": "if [ -f tools/inventory_audit.py ]; then python tools/inventory_audit.py; else echo 'tools/inventory_audit.py missing; skipping audit'; fi"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.45.0",
