@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 
 import { qrSvg } from '@shared/qr/svg';
 
+const makeStr = (n: number) => 'A'.repeat(n);
+
 function extractAttribute(svg: string, attr: string): string | null {
   const match = svg.match(new RegExp(`${attr}="([^"]+)"`));
   return match ? match[1] ?? null : null;
@@ -36,6 +38,29 @@ describe('qrSvg', () => {
   it('rejects oversized payloads', () => {
     const long = 'a'.repeat(256);
     expect(() => qrSvg(long)).toThrow(/payload too large/);
+  });
+});
+
+describe('qrSvg capacity (v6-M, byte mode)', () => {
+  it('throws on empty data', () => {
+    expect(() => qrSvg('')).toThrow(/data is required/i);
+  });
+
+  it('accepts payload at true max (≈106 bytes)', () => {
+    const s = makeStr(106);
+    const svg = qrSvg(s, 192);
+    expect(svg.includes('<svg')).toBe(true);
+    expect(svg.includes('</svg>')).toBe(true);
+  });
+
+  it('rejects payload just above max (107 bytes)', () => {
+    const s = makeStr(107);
+    expect(() => qrSvg(s, 192)).toThrow(/payload too large/i);
+  });
+
+  it('never overflows codeword capacity', () => {
+    const s = makeStr(106);
+    expect(() => qrSvg(s, 192)).not.toThrow();
   });
 });
 

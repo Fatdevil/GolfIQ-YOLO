@@ -8,6 +8,15 @@ const TOTAL_DATA_CODEWORDS = DATA_CODEWORDS_PER_BLOCK * TOTAL_BLOCKS; // 108
 const ECC_CODEWORDS_PER_BLOCK = 16;
 const QUIET_ZONE = 4;
 
+const QR_MODE_BITS = 4;
+const QR_LEN_BITS_V1_9 = 8;
+
+function maxPayloadBytes(codewords: number): number {
+  const capBits = codewords * 8;
+  const headerBits = QR_MODE_BITS + QR_LEN_BITS_V1_9;
+  return Math.floor((capBits - headerBits) / 8);
+}
+
 type Matrix = Array<Array<boolean | null>>;
 
 const GF256_EXP: number[] = new Array(512);
@@ -527,10 +536,18 @@ export function qrSvg(data: string, size = 192): string {
   }
   initTables();
   const payload = textToBytes(data);
-  if (payload.length > TOTAL_DATA_CODEWORDS) {
-    throw new Error('payload too large for QR version 6-M');
+
+  const MAX_BYTES = maxPayloadBytes(TOTAL_DATA_CODEWORDS);
+  if (payload.length > MAX_BYTES) {
+    throw new Error(`payload too large for QR version 6-M (max ${MAX_BYTES} bytes, got ${payload.length})`);
   }
+
   const bits = buildBitBuffer(payload);
+
+  const CAP_BITS = TOTAL_DATA_CODEWORDS * 8;
+  if (bits.length > CAP_BITS) {
+    throw new Error(`bit buffer overflow for QR version 6-M (need ${bits.length} bits, cap ${CAP_BITS})`);
+  }
   const dataCodewords = bitsToCodewords(bits);
   const codewords = createInterleavedCodewords(dataCodewords);
   const matrix = selectBestMask(codewords);
