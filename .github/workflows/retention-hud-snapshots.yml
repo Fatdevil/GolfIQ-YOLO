@@ -1,0 +1,8 @@
+name: Purge HUD snapshots (manual)
+on: workflow_dispatch
+jobs:
+  purge:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Purge (requires DB env injected later)
+        run: echo "psql $DATABASE_URL -c 'select public.purge_hud_snapshots();'"
