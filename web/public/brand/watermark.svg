@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 120" role="img" aria-labelledby="title desc">
+  <title id="title">GolfIQ watermark</title>
+  <desc id="desc">Wordmark for GolfIQ Shot Tracer reels export.</desc>
+  <defs>
+    <linearGradient id="g" x1="0%" x2="100%" y1="0%" y2="100%">
+      <stop offset="0%" stop-color="#38bdf8" />
+      <stop offset="100%" stop-color="#0ea5e9" />
+    </linearGradient>
+  </defs>
+  <rect width="320" height="120" rx="12" ry="12" fill="#020617" opacity="0.82" />
+  <g font-family="'Inter', 'Helvetica Neue', Arial, sans-serif" font-weight="700">
+    <text x="32" y="74" font-size="64" fill="url(#g)">Golf</text>
+    <text x="192" y="74" font-size="64" fill="#f8fafc">IQ</text>
+  </g>
+  <text x="160" y="102" font-size="28" text-anchor="middle" fill="#94a3b8" font-family="'Inter', 'Helvetica Neue', Arial, sans-serif">
+    Shot Tracer
+  </text>
+</svg>

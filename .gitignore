@@ -60,6 +60,10 @@ ios/Pods/
 *.mov
 *.avi
 
+# Reel export binary assets
+web/public/brand/*.png
+web/public/audio/*.mp3
+
 # AR-HUD assets
 tests/golden/hud_states/*.png
 

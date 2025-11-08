@@ -39,6 +39,8 @@ export type ReelExportPreset = {
   safe: {
     top: number;
     bottom: number;
+    left?: number;
+    right?: number;
   };
   description: string;
 };
