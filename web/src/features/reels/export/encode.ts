@@ -93,7 +93,7 @@ export async function encodeReel(
     watermark: options.watermark !== false,
     caption: sanitizeCaption(options.caption ?? null),
     homography: options.homography ?? null,
-    includeBadges: options.includeBadges !== false,
+    includeBadges: options.includeBadges === true,
   };
   const includeAudio = options.audio === true;
   const progress = typeof options.onProgress === 'function' ? options.onProgress : () => {};
