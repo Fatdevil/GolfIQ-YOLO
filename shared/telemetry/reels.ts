@@ -116,19 +116,35 @@ export function emitReelExportComplete(payload: {
   });
 }
 
-export function emitReelExportError(payload: {
-  template: string;
+export function emitReelExportSuccess(payload: {
+  presetId: string;
+  codec: 'video/mp4' | 'video/webm';
+  frames: number;
   durationMs: number;
-  codec: 'mp4' | 'webm';
-  message?: string;
+}): void {
+  if (!payload) {
+    return;
+  }
+  safeEmit('reel.export.success', {
+    preset_id: payload.presetId,
+    codec: payload.codec,
+    frames: Number.isFinite(payload.frames) ? Math.round(payload.frames) : null,
+    duration_ms: Number.isFinite(payload.durationMs) ? Math.round(payload.durationMs) : null,
+    ts: Date.now(),
+  });
+}
+
+export function emitReelExportFailure(payload: {
+  presetId: string;
+  stage: 'init' | 'encode' | 'finalize';
+  message?: string | null;
 }): void {
   if (!payload) {
     return;
   }
   safeEmit('reel.export.error', {
-    template: payload.template,
-    duration_ms: Number.isFinite(payload.durationMs) ? Math.round(payload.durationMs) : null,
-    codec: payload.codec,
+    preset_id: payload.presetId,
+    stage: payload.stage,
     message: payload.message ?? null,
     ts: Date.now(),
   });

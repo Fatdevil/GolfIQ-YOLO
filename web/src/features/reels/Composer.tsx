@@ -5,10 +5,11 @@ import { makeTimeline, pickTopShots, planFrame } from '@shared/reels/select';
 import type { ReelShotRef, ReelTimeline, ReelUserOptions } from '@shared/reels/types';
 import { DEFAULT_REEL_EXPORT_PRESET_ID } from '@shared/reels/presets';
 import type { Homography, Pt } from '@shared/tracer/calibrate';
-import { buildShotTracerDraw } from '@shared/tracer/draw';
+import type { ShotForTracer } from '@shared/tracer/draw';
+import { emitReelExportFailure, emitReelExportSuccess } from '@shared/telemetry/reels';
 import { drawCommands } from '../../routes/composer/draw';
-import { renderTracerReel } from './export/ffmpeg';
-import { REEL_EXPORT_PRESETS, buildDrawTimeline } from './export/templates';
+import { encodeReel, ReelEncodeError } from './export/encode';
+import { REEL_EXPORT_PRESETS } from './export/templates';
 import type { ReelExportPreset } from './export/types';
 import ExportModal from './export/ExportModal';
 import CalibratePanel from './CalibratePanel';
@@ -345,23 +346,17 @@ export default function Composer(): JSX.Element {
         setExportStatus('No preset available for export.');
         return;
       }
-      const durationMs = exportDurationMs;
       if (downloadUrl) {
         URL.revokeObjectURL(downloadUrl);
         setDownloadUrl(null);
         setDownloadName(null);
       }
       setToastMessage(null);
-      const tracer = buildShotTracerDraw(primaryShot.ref, {
-        width: preset.w,
-        height: preset.h,
-        H: timeline.homography ?? null,
-      });
-      if (!tracer) {
-        setExportStatus('This swing is missing tracer data.');
+      const shotsForEncoding = timeline.shots.map((shot) => shot.ref as unknown as ShotForTracer);
+      if (!shotsForEncoding.length) {
+        setExportStatus('No swings selected for export.');
         return;
       }
-      const buildTimeline = buildDrawTimeline(primaryShot.ref, tracer, preset.theme);
       const controller = new AbortController();
       setAbortController(controller);
       setExporting(true);
@@ -369,59 +364,57 @@ export default function Composer(): JSX.Element {
       setExportProgress(0.05);
       const watermark = normalizedOptions.watermark !== false;
       const audio = normalizedOptions.audio === true;
+      const caption = normalizedOptions.caption ?? null;
       try {
-        const result = await renderTracerReel({
-          videoSrc: (primaryShot.ref as unknown as { videoSrc?: string }).videoSrc ?? null,
-          fps: preset.fps,
-          width: preset.w,
-          height: preset.h,
-          startMs: 0,
-          endMs: Math.max(1, durationMs),
-          drawTimeline: buildTimeline,
-          includeBadges,
+        const result = await encodeReel(shotsForEncoding, {
+          presetId: preset.id,
           watermark,
-          templateId: preset.id,
-          musicSrc: audio ? '/assets/audio/reels/theme.mp3' : null,
-          wantMp4: true,
-          metadata: {
-            preset,
-            userOptions: {
-              presetId: preset.id,
-              watermark,
-              caption: normalizedOptions.caption ?? null,
-              audio,
-            },
-          },
+          caption,
+          audio,
+          homography: timeline.homography ?? null,
+          signal: controller.signal,
           onProgress: (ratio) => {
             setExportProgress(Math.max(0, Math.min(1, ratio)));
           },
-          signal: controller.signal,
         });
-        const extension = result.codec === 'mp4' ? 'mp4' : 'webm';
+        const extension = result.mime === 'video/mp4' ? 'mp4' : 'webm';
         const baseName = `${preset.id}-${Date.now()}`;
         const blobUrl = URL.createObjectURL(result.blob);
         setDownloadUrl(blobUrl);
         setDownloadName(`${baseName}.${extension}`);
-        setExportStatus(result.codec === 'mp4' ? 'MP4 ready for download' : 'WebM fallback ready');
+        setExportStatus(result.mime === 'video/mp4' ? 'MP4 ready for download' : 'WebM fallback ready');
         setExportProgress(1);
-        if (result.fallback?.codec === 'mp4') {
-          setToastMessage('Exported WebM (MP4 fallback unavailable).');
+        emitReelExportSuccess({
+          presetId: preset.id,
+          codec: result.mime,
+          frames: result.frameCount,
+          durationMs: result.durationMs,
+        });
+        if (result.mime === 'video/webm') {
+          setToastMessage('Exported WebM via MediaRecorder fallback.');
         }
       } catch (error) {
         if (error instanceof DOMException && error.name === 'AbortError') {
           setExportStatus('Export cancelled');
           setToastMessage('Export cancelled.');
+          emitReelExportFailure({ presetId: preset.id, stage: 'encode', message: 'aborted' });
+        } else if (error instanceof ReelEncodeError) {
+          emitReelExportFailure({ presetId: preset.id, stage: error.stage, message: error.message });
+          console.error('[Reels] export failed', error);
+          setExportStatus('Failed to export reel. Please try again.');
+          setToastMessage('Export failed. Please try again.');
         } else {
           console.error('[Reels] export failed', error);
           setExportStatus('Failed to export reel. Please try again.');
           setToastMessage('Export failed. Please try again.');
+          emitReelExportFailure({ presetId: preset.id, stage: 'encode', message: (error as Error).message });
         }
       } finally {
         setExporting(false);
         setAbortController(null);
       }
     },
-    [timeline, primaryShot, exportDurationMs, downloadUrl, includeBadges],
+    [timeline, primaryShot, exportDurationMs, downloadUrl],
   );
 
   return (
