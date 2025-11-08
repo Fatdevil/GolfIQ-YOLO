@@ -14,6 +14,9 @@ concurrency:
 
 jobs:
   audit:
+    permissions:
+      contents: read
+      issues: write
     if: ${{ github.event_name == 'workflow_dispatch' || (github.event_name == 'pull_request' && contains(toJson(github.event.pull_request.labels.*.name), 'audit')) }}
     runs-on: ubuntu-latest
     steps:
@@ -32,6 +35,10 @@ jobs:
       - name: Run inventory audit
         if: steps.audit-script.outputs.exists == 'true'
         run: python tools/inventory_audit.py
+      - name: Check audit report presence
+        id: has_report
+        run: |
+          if [ -f reports/built_inventory.json ]; then echo "ok=true" >> $GITHUB_OUTPUT; else echo "ok=false" >> $GITHUB_OUTPUT; fi
       - name: Upload audit artifacts
         if: steps.audit-script.outputs.exists == 'true'
         uses: actions/upload-artifact@v4
@@ -41,3 +48,39 @@ jobs:
           path: |
             docs/Built_Status_Audit.md
             reports/built_inventory.json
+      - name: Comment audit summary
+        if: ${{ steps.has_report.outputs.ok == 'true' && github.event_name == 'pull_request' }}
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const fs = require('fs');
+            const j = JSON.parse(fs.readFileSync('reports/built_inventory.json','utf8'));
+            const rows = j.features.map(f => `| ${f.id} | ${f.name} | ${f.status} | ${f.confidence} | ${f.owner_guess} |`).join('\n');
+            const body = [
+              '### Inventory Audit Summary',
+              '',
+              '| P | Feature | Status | Conf. | Owner |',
+              '|---|---------|--------|-------|-------|',
+              rows,
+              '',
+              '_Artifacts:_ `docs/Built_Status_Audit.md`, `reports/built_inventory.json`'
+            ].join('\n');
+            const isFork = Boolean(context.payload.pull_request?.head?.repo?.fork);
+
+            const writeSummary = async () => {
+              await core.summary.addRaw(body, true).write();
+            };
+
+            if (isFork) {
+              core.info('Skipping PR comment for forked repository; writing to step summary instead.');
+              await writeSummary();
+              return;
+            }
+
+            try {
+              await github.rest.issues.createComment({ owner: context.repo.owner, repo: context.repo.repo, issue_number: context.payload.pull_request.number, body });
+            } catch (error) {
+              core.warning(`Failed to post audit comment: ${error.message}`);
+              await writeSummary();
+            }
