@@ -45,6 +45,21 @@ def test_start_pause_close_emit_actions(monkeypatch: pytest.MonkeyPatch) -> None
     assert repo.get_event(event_id)["status"] == "closed"
 
 
+def test_register_players_empty_list_returns_400(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    mod, repo, event_id = _setup_repo(monkeypatch)
+
+    response = client.post(
+        f"/events/{event_id}/players",
+        json={"players": []},
+        headers=_admin_headers(),
+    )
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == "no players provided"
+
+
 def test_update_settings_partial_preserves_defaults(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -121,6 +136,23 @@ def test_regenerate_code_uses_fallback_and_placeholder(
     assert any(entry[0][1] == "code.regenerate" for entry in actions)
 
 
+def test_regenerate_code_returns_503_when_codes_exhausted(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    mod, repo, event_id = _setup_repo(monkeypatch)
+
+    monkeypatch.setattr(repo, "resolve_event_by_code", lambda *_: {"id": "used"})
+    monkeypatch.setattr(mod, "generate_code", lambda: "DUPLIC1")
+
+    response = client.post(
+        f"/events/{event_id}/code/regenerate",
+        headers=_admin_headers("member-err"),
+    )
+
+    assert response.status_code == 503
+    assert response.json()["detail"] == "unable to allocate join code"
+
+
 def test_regenerate_code_returns_404_when_repo_returns_none(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -138,6 +170,24 @@ def test_regenerate_code_returns_404_when_repo_returns_none(
     assert response.status_code == 404
     body = response.json()
     assert body["detail"] == "event not found"
+
+
+def test_regenerate_code_injects_placeholder_when_svg_missing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    mod, repo, event_id = _setup_repo(monkeypatch)
+
+    monkeypatch.setattr(mod, "generate_code", lambda: "NEWCODE")
+    monkeypatch.setattr(mod, "qr_svg", lambda *_: None)
+    monkeypatch.setattr(mod, "qr_svg_placeholder", lambda *_: "<svg placeholder />")
+
+    response = client.post(
+        f"/events/{event_id}/code/regenerate",
+        headers=_admin_headers("member-qr"),
+    )
+
+    assert response.status_code in (200, 201)
+    assert response.json()["qrSvg"] == "<svg placeholder />"
 
 
 def test_board_reflects_gross_and_net_modes(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -171,3 +221,48 @@ def test_board_reflects_gross_and_net_modes(monkeypatch: pytest.MonkeyPatch) -> 
     second = client.get(f"/events/{event_id}/board")
     assert second.status_code == 200
     assert second.json()["grossNet"] == "gross"
+
+
+def test_start_pause_close_unknown_event_returns_404(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    mod = importlib.import_module("server.routes.events")
+    repo = mod._MemoryEventsRepository()
+    monkeypatch.setattr(mod, "_REPOSITORY", repo)
+
+    headers = _admin_headers("member-missing")
+    for action in ("start", "pause", "close"):
+        response = client.post(f"/events/missing/{action}", headers=headers)
+        assert response.status_code == 404
+        assert response.json()["detail"] == "event not found"
+
+
+def test_update_settings_missing_event_without_payload_returns_404(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    mod = importlib.import_module("server.routes.events")
+    repo = mod._MemoryEventsRepository()
+    monkeypatch.setattr(mod, "_REPOSITORY", repo)
+
+    response = client.patch(
+        "/events/missing/settings",
+        json={},
+        headers=_admin_headers("member-settings"),
+    )
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "event not found"
+
+
+def test_host_state_missing_event_returns_404(monkeypatch: pytest.MonkeyPatch) -> None:
+    mod = importlib.import_module("server.routes.events")
+    repo = mod._MemoryEventsRepository()
+    monkeypatch.setattr(mod, "_REPOSITORY", repo)
+
+    response = client.get(
+        "/events/missing/host",
+        headers=_admin_headers("member-host"),
+    )
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "event not found"
