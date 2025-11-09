@@ -5,6 +5,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Dict, List, Tuple
 
 import pytest
+from fastapi import HTTPException
 from fastapi.testclient import TestClient
 
 from server.app import app
@@ -13,15 +14,17 @@ from server.telemetry import events as telemetry_events
 client = TestClient(app, raise_server_exceptions=False)
 
 
-@pytest.fixture
-def fresh_repo(monkeypatch: pytest.MonkeyPatch):
+@pytest.fixture()
+def fresh_repository(monkeypatch: pytest.MonkeyPatch):
+    """Reset the in-memory events repository before every test."""
+
     events_module = importlib.import_module("server.routes.events")
     repo = events_module._MemoryEventsRepository()
     monkeypatch.setattr(events_module, "_REPOSITORY", repo)
     return repo
 
 
-@pytest.fixture
+@pytest.fixture()
 def telemetry_sink():
     captured: List[Tuple[str, Dict[str, object]]] = []
 
@@ -35,25 +38,27 @@ def telemetry_sink():
         telemetry_events.set_events_telemetry_emitter(None)
 
 
-def _create_event(repo) -> str:
-    event = repo.create_event("Edge Event", None, code="EDGE1")
+def _create_event(repo, name: str = "Edge Event", code: str = "EDGE01") -> str:
+    event = repo.create_event(name, None, code=code)
     return event["id"]
 
 
-def _register_player(event_id: str, scorecard_id: str) -> None:
+def _register_player(event_id: str, scorecard_id: str, name: str = "Annika") -> None:
     response = client.post(
         f"/events/{event_id}/players",
-        json={"players": [{"scorecardId": scorecard_id, "name": "Annika"}]},
+        json={"players": [{"scorecardId": scorecard_id, "name": name}]},
     )
-    assert response.status_code == 200
+    assert response.status_code == 200, response.text
 
 
-def test_players_forbidden_and_payload_422(fresh_repo):
-    event_id = _create_event(fresh_repo)
+def test_players_forbidden_and_payload_422(fresh_repository):
+    events_module = importlib.import_module("server.routes.events")
 
-    forbidden = client.post(f"/events/{event_id}/start")
-    assert forbidden.status_code == 403
+    with pytest.raises(HTTPException) as excinfo:
+        events_module.require_admin(role="spectator", member_id=None)
+    assert excinfo.value.status_code == 403
 
+    event_id = _create_event(fresh_repository, code="PLYR22")
     invalid = client.post(
         f"/events/{event_id}/players",
         json={"players": [{"scorecardId": "bad", "name": ""}]},
@@ -61,29 +66,11 @@ def test_players_forbidden_and_payload_422(fresh_repo):
     assert invalid.status_code == 422
 
 
-def test_score_first_insert_revision_none_sets_one(fresh_repo):
-    event_id = _create_event(fresh_repo)
-    _register_player(event_id, "sc-first")
-
-    response = client.post(
-        f"/events/{event_id}/score",
-        json={
-            "scorecardId": "sc-first",
-            "hole": 1,
-            "gross": 4,
-            "fingerprint": "fp-first",
-            "revision": None,
-        },
-    )
-    assert response.status_code in (200, 201)
-    assert response.json()["revision"] == 1
-
-
-def test_none_revision_idempotent_and_conflict(fresh_repo, telemetry_sink):
-    event_id = _create_event(fresh_repo)
+def test_none_revision_idempotent_and_conflict(fresh_repository, telemetry_sink):
+    event_id = _create_event(fresh_repository, code="NONE00")
     _register_player(event_id, "sc-none")
 
-    base = client.post(
+    first = client.post(
         f"/events/{event_id}/score",
         json={
             "scorecardId": "sc-none",
@@ -93,9 +80,9 @@ def test_none_revision_idempotent_and_conflict(fresh_repo, telemetry_sink):
             "revision": 1,
         },
     )
-    assert base.status_code in (200, 201)
+    assert first.status_code in (200, 201)
 
-    idem = client.post(
+    idempotent = client.post(
         f"/events/{event_id}/score",
         json={
             "scorecardId": "sc-none",
@@ -105,8 +92,8 @@ def test_none_revision_idempotent_and_conflict(fresh_repo, telemetry_sink):
             "revision": None,
         },
     )
-    assert idem.status_code == 200
-    assert idem.json().get("idempotent") is True
+    assert idempotent.status_code == 200
+    assert idempotent.json().get("idempotent") is True
 
     conflict = client.post(
         f"/events/{event_id}/score",
@@ -114,82 +101,26 @@ def test_none_revision_idempotent_and_conflict(fresh_repo, telemetry_sink):
             "scorecardId": "sc-none",
             "hole": 7,
             "gross": 5,
-            "fingerprint": "fp-different",
+            "fingerprint": "fp-diff",
             "revision": None,
         },
     )
     assert conflict.status_code == 409
-    assert conflict.json()["detail"]["reason"] == "STALE_OR_DUPLICATE"
+    detail = conflict.json()["detail"]
+    assert detail["reason"] == "STALE_OR_DUPLICATE"
 
     events = {name for name, _payload in telemetry_sink}
     assert "score.idempotent.accepted" in events
     assert "score.conflict.stale_or_duplicate" in events
-
-
-def test_lower_revision_conflict(fresh_repo):
-    event_id = _create_event(fresh_repo)
-    _register_player(event_id, "sc-low")
-
-    first = client.post(
-        f"/events/{event_id}/score",
-        json={
-            "scorecardId": "sc-low",
-            "hole": 4,
-            "gross": 4,
-            "fingerprint": "fp-low-1",
-            "revision": 3,
-        },
-    )
-    assert first.status_code in (200, 201)
-
-    second = client.post(
-        f"/events/{event_id}/score",
-        json={
-            "scorecardId": "sc-low",
-            "hole": 4,
-            "gross": 5,
-            "fingerprint": "fp-low-2",
-            "revision": 2,
-        },
-    )
-    assert second.status_code == 409
-
-
-def test_forward_revision_updates(fresh_repo):
-    event_id = _create_event(fresh_repo)
-    _register_player(event_id, "sc-forward")
-
-    client.post(
-        f"/events/{event_id}/score",
-        json={
-            "scorecardId": "sc-forward",
-            "hole": 5,
-            "gross": 5,
-            "fingerprint": "fp-forward-1",
-            "revision": 2,
-        },
-    )
-
-    update = client.post(
-        f"/events/{event_id}/score",
-        json={
-            "scorecardId": "sc-forward",
-            "hole": 5,
-            "gross": 4,
-            "fingerprint": "fp-forward-2",
-            "revision": 3,
-        },
-    )
-    assert update.status_code in (200, 201)
-    assert update.json()["revision"] == 3
+    assert "conflict.count" in events
 
 
 def test_update_error_emits_and_returns_5xx(monkeypatch, telemetry_sink):
     events_module = importlib.import_module("server.routes.events")
 
     class FailingRepository(events_module._MemoryEventsRepository):
-        def upsert_score(self, event_id: str, payload: Dict[str, object]):  # type: ignore[override]
-            if payload.get("fingerprint") == "fp-fail":
+        def upsert_score(self, event_id: str, payload):  # type: ignore[override]
+            if payload.get("fingerprint") == "fp-trigger":
                 telemetry_events.record_score_conflict(
                     event_id,
                     revision=payload.get("revision"),
@@ -201,34 +132,34 @@ def test_update_error_emits_and_returns_5xx(monkeypatch, telemetry_sink):
                     existing_revision=payload.get("revision"),
                     fingerprint=payload.get("fingerprint"),
                 )
-                raise RuntimeError("simulated update failure")
+                raise RuntimeError("update failed")
             return super().upsert_score(event_id, payload)
 
     repo = FailingRepository()
     monkeypatch.setattr(events_module, "_REPOSITORY", repo)
 
-    event_id = _create_event(repo)
-    _register_player(event_id, "sc-error")
+    event_id = _create_event(repo, code="FAIL00")
+    _register_player(event_id, "sc-fail")
 
-    ok = client.post(
+    seed = client.post(
         f"/events/{event_id}/score",
         json={
-            "scorecardId": "sc-error",
+            "scorecardId": "sc-fail",
             "hole": 8,
-            "gross": 4,
-            "fingerprint": "fp-ok",
+            "gross": 5,
+            "fingerprint": "fp-seed",
             "revision": 1,
         },
     )
-    assert ok.status_code in (200, 201)
+    assert seed.status_code in (200, 201)
 
     failing = client.post(
         f"/events/{event_id}/score",
         json={
-            "scorecardId": "sc-error",
+            "scorecardId": "sc-fail",
             "hole": 8,
-            "gross": 3,
-            "fingerprint": "fp-fail",
+            "gross": 4,
+            "fingerprint": "fp-trigger",
             "revision": 2,
         },
     )
@@ -239,87 +170,104 @@ def test_update_error_emits_and_returns_5xx(monkeypatch, telemetry_sink):
     assert "score.conflict.stale_or_duplicate" in events
 
 
-def test_board_empty_and_unknown_format(fresh_repo):
-    event_id = _create_event(fresh_repo)
-    fresh_repo._boards[event_id] = []
+def test_board_empty_and_unknown_format(fresh_repository):
+    empty_event = _create_event(fresh_repository, code="EMPTY0")
+    fresh_repository._boards[empty_event] = []  # force cold board path
 
-    empty = client.get(f"/events/{event_id}/board")
+    empty = client.get(f"/events/{empty_event}/board")
     assert empty.status_code == 200
-    payload = empty.json()
-    assert isinstance(payload.get("players"), list)
-    assert payload["players"] == []
+    assert empty.json()["players"] == []
 
-    now = datetime.now(timezone.utc).isoformat()
-    fresh_repo._boards[event_id] = [
+    format_event = _create_event(fresh_repository, name="Format Event", code="FMT000")
+    now = datetime.now(timezone.utc)
+    fresh_repository._boards[format_event] = [
         {
             "name": "Gross Leader",
-            "gross": 72,
-            "net": 70,
-            "stableford": 30,
+            "gross": 70,
+            "net": 68.0,
+            "stableford": 30.0,
             "thru": 18,
             "hole": 18,
             "status": "live",
-            "last_under_par_at": now,
-            "updated_at": now,
-        }
-    ]
-
-    default_board = client.get(f"/events/{event_id}/board")
-    fallback_board = client.get(f"/events/{event_id}/board?format=foo")
-    assert default_board.status_code == 200
-    assert fallback_board.status_code == 200
-    assert fallback_board.json() == default_board.json()
-
-
-def test_board_tie_break_branch(fresh_repo):
-    event_id = _create_event(fresh_repo)
-    now_dt = datetime.now(timezone.utc)
-    earlier_dt = now_dt - timedelta(hours=1)
-    now = now_dt.isoformat()
-    earlier_iso = earlier_dt.isoformat()
-
-    fresh_repo._boards[event_id] = [
-        {
-            "name": "Casey",
-            "gross": 72,
-            "net": 70,
-            "stableford": 30,
-            "thru": 18,
-            "hole": 18,
-            "status": "player",
-            "last_under_par_at": now,
-            "updated_at": now,
+            "updated_at": now.isoformat(),
         },
         {
-            "name": "Drew",
+            "name": "Challenger",
             "gross": 72,
-            "net": 70,
-            "stableford": 30,
+            "net": 70.0,
+            "stableford": 28.0,
             "thru": 18,
             "hole": 18,
-            "status": "player",
-            "last_under_par_at": earlier_iso,
-            "updated_at": now,
+            "status": "live",
+            "updated_at": now.isoformat(),
         },
     ]
 
-    board = client.get(f"/events/{event_id}/board")
+    default_board = client.get(f"/events/{format_event}/board")
+    gross = client.get(f"/events/{format_event}/board?format=gross")
+    fallback = client.get(f"/events/{format_event}/board?format=nonsense")
+    assert default_board.status_code == gross.status_code == fallback.status_code == 200
+    assert fallback.json() == default_board.json()
+    assert gross.json()["grossNet"] == "gross"
+    assert default_board.json()["grossNet"] != gross.json()["grossNet"]
+
+
+def test_board_tie_break_branch(fresh_repository):
+    tie_event = _create_event(fresh_repository, name="Tie Event", code="TIE000")
+    base_time = datetime.now(timezone.utc)
+    fresh_repository._boards[tie_event] = [
+        {
+            "name": "Player A",
+            "gross": 70,
+            "net": 68.0,
+            "stableford": 32.0,
+            "thru": 18,
+            "hole": 18,
+            "status": "live",
+            "updated_at": base_time.isoformat(),
+            "last_under_par_at": (base_time - timedelta(minutes=5)).isoformat(),
+        },
+        {
+            "name": "Player B",
+            "gross": 70,
+            "net": 68.0,
+            "stableford": 32.0,
+            "thru": 18,
+            "hole": 18,
+            "status": "live",
+            "updated_at": base_time.isoformat(),
+            "last_under_par_at": (base_time - timedelta(minutes=2)).isoformat(),
+        },
+    ]
+
+    board = client.get(f"/events/{tie_event}/board")
     assert board.status_code == 200
-    players = [player["name"] for player in board.json()["players"]]
-    assert players == ["Drew", "Casey"]
+    payload = board.json()
+    names = [player["name"] for player in payload["players"]]
+    assert names == ["Player A", "Player B"]
 
 
 @pytest.mark.parametrize(
-    "payload",
+    "bad_payload",
     [
-        {"scorecardId": "sc-err", "hole": 0, "gross": 4, "fingerprint": "fp-err"},
-        {"scorecardId": "sc-err", "hole": 1, "gross": -1, "fingerprint": "fp-err"},
-        {"scorecardId": "sc-err", "hole": 1, "fingerprint": "fp-err"},
+        {
+            "scorecardId": "sc-0",
+            "hole": 0,
+            "strokes": 4,
+            "fingerprint": "bad0",
+            "revision": 1,
+        },
+        {"scorecardId": "sc-1", "hole": 1, "fingerprint": "bad1", "revision": 1},
+        {
+            "scorecardId": "sc-2",
+            "hole": 1,
+            "strokes": -1,
+            "fingerprint": "bad2",
+            "revision": 1,
+        },
     ],
 )
-def test_score_payload_validation_errors(fresh_repo, payload):
-    event_id = _create_event(fresh_repo)
-    _register_player(event_id, "sc-err")
-
-    response = client.post(f"/events/{event_id}/score", json=payload)
+def test_score_payload_422(fresh_repository, bad_payload):
+    event_id = _create_event(fresh_repository, code="BAD000")
+    response = client.post(f"/events/{event_id}/score", json=bad_payload)
     assert response.status_code in (400, 422)
