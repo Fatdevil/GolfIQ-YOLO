@@ -3,6 +3,8 @@ from __future__ import annotations
 import sys
 from types import ModuleType
 
+import pytest
+
 from server.utils.qr_svg import qr_svg
 
 
@@ -46,3 +48,8 @@ def test_qr_svg_renders_when_segno_present(monkeypatch):
     svg = qr_svg("golfiq://join/HIJKLMN")
     assert svg is not None
     assert "golfiq://join/HIJKLMN" in svg
+
+
+def test_qr_svg_requires_non_empty_payload():
+    with pytest.raises(ValueError):
+        qr_svg("")
