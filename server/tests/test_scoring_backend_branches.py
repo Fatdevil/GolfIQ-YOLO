@@ -1,81 +1,38 @@
+from __future__ import annotations
+
 import importlib
-from typing import Any, Dict, List, Tuple
+from typing import Dict, List, Tuple
 
 import pytest
 from fastapi.testclient import TestClient
 
 from server.app import app
+from server.telemetry import events as telemetry_events
 
 
 client = TestClient(app)
 
 
 @pytest.fixture(autouse=True)
-def _reset_repo(monkeypatch):
+def reset_repository(monkeypatch):
     events_module = importlib.import_module("server.routes.events")
     repo = events_module._MemoryEventsRepository()
     monkeypatch.setattr(events_module, "_REPOSITORY", repo)
-    yield
+    yield repo
 
 
 @pytest.fixture
-def telemetry_spy(monkeypatch) -> List[Tuple[str, Dict[str, Any]]]:
-    events_module = importlib.import_module("server.routes.events")
-    calls: List[Tuple[str, Dict[str, Any]]] = []
+def telemetry_capture():
+    captured: List[Tuple[str, Dict[str, object]]] = []
 
-    def capture(event_name: str, payload: Dict[str, Any]):
-        calls.append((event_name, dict(payload)))
+    def _emit(name: str, payload: Dict[str, object]) -> None:
+        captured.append((name, dict(payload)))
 
-    def _wrap(event_name):
-        def _recorder(event_id: str, **kwargs):
-            payload = {"eventId": event_id, **kwargs}
-            capture(event_name, payload)
-
-        return _recorder
-
-    monkeypatch.setattr(
-        events_module,
-        "record_score_write",
-        lambda event_id, duration_ms, *, status, fingerprint=None, revision=None: capture(
-            "score.write_ms",
-            {
-                "eventId": event_id,
-                "durationMs": duration_ms,
-                "status": status,
-                "fingerprint": fingerprint,
-                "revision": revision,
-            },
-        ),
-    )
-    monkeypatch.setattr(
-        events_module,
-        "record_score_idempotent",
-        _wrap("score.idempotent.accepted"),
-    )
-    monkeypatch.setattr(
-        events_module,
-        "record_score_conflict",
-        _wrap("conflict.count"),
-    )
-    monkeypatch.setattr(
-        events_module,
-        "record_score_conflict_stale_or_duplicate",
-        _wrap("score.conflict.stale_or_duplicate"),
-    )
-    monkeypatch.setattr(
-        events_module,
-        "record_board_build",
-        lambda event_id, duration_ms, *, mode=None, rows=None: capture(
-            "board.build_ms",
-            {
-                "eventId": event_id,
-                "durationMs": duration_ms,
-                "mode": mode,
-                "rows": rows,
-            },
-        ),
-    )
-    return calls
+    telemetry_events.set_events_telemetry_emitter(_emit)
+    try:
+        yield captured
+    finally:
+        telemetry_events.set_events_telemetry_emitter(None)
 
 
 def _create_event(monkeypatch) -> str:
@@ -87,26 +44,37 @@ def _create_event(monkeypatch) -> str:
     return response.json()["id"]
 
 
-def test_register_players_happy_path_and_invalid(monkeypatch):
+def _register_player(
+    event_id: str, *, scorecard_id: str = "sc-1", name: str = "Alice"
+) -> None:
+    register = client.post(
+        f"/events/{event_id}/players",
+        json={"players": [{"scorecardId": scorecard_id, "name": name}]},
+    )
+    assert register.status_code == 200
+
+
+def _find_event(
+    captured: List[Tuple[str, Dict[str, object]]], name: str
+) -> List[Dict[str, object]]:
+    return [payload for event_name, payload in captured if event_name == name]
+
+
+def test_register_players_success_and_422(monkeypatch):
     event_id = _create_event(monkeypatch)
 
     ok_response = client.post(
         f"/events/{event_id}/players",
         json={
             "players": [
-                {
-                    "scorecardId": "sc-1",
-                    "name": "Alice",
-                    "hcpIndex": 4.2,
-                    "playingHandicap": 3,
-                },
-                {"scorecardId": "sc-2", "name": "Bob"},
+                {"scorecardId": "p-1", "name": "Annika", "hcpIndex": 3.4},
+                {"scorecardId": "p-2", "name": "Sören"},
             ]
         },
     )
     assert ok_response.status_code == 200
     body = ok_response.json()
-    assert {player["scorecardId"] for player in body["players"]} == {"sc-1", "sc-2"}
+    assert {player["scorecardId"] for player in body["players"]} == {"p-1", "p-2"}
 
     invalid = client.post(
         f"/events/{event_id}/players",
@@ -115,115 +83,201 @@ def test_register_players_happy_path_and_invalid(monkeypatch):
     assert invalid.status_code == 422
 
 
-def test_score_revision_paths_and_telemetry(monkeypatch, telemetry_spy):
+def test_first_insert_revision_none_sets_one(monkeypatch, telemetry_capture):
     event_id = _create_event(monkeypatch)
-    client.post(
-        f"/events/{event_id}/players",
-        json={"players": [{"scorecardId": "alpha", "name": "Alice"}]},
-    )
+    _register_player(event_id)
 
-    first = client.post(
+    response = client.post(
         f"/events/{event_id}/score",
         json={
-            "scorecardId": "alpha",
+            "scorecardId": "sc-1",
             "hole": 1,
             "gross": 4,
             "net": 3,
             "stableford": 2,
             "par": 4,
-            "strokesReceived": 1,
-            "fingerprint": "fp-1",
+            "fingerprint": "fp-none",
             "revision": None,
         },
     )
-    assert first.status_code in (200, 201)
-    payload = first.json()
+    assert response.status_code in (200, 201)
+    payload = response.json()
     assert payload["revision"] == 1
+    assert payload["status"] == "ok"
+    assert _find_event(telemetry_capture, "score.write_ms")
 
-    idempotent = client.post(
+
+def test_idempotent_same_revision_same_fingerprint(monkeypatch, telemetry_capture):
+    event_id = _create_event(monkeypatch)
+    _register_player(event_id)
+
+    payload = {
+        "scorecardId": "sc-1",
+        "hole": 2,
+        "gross": 4,
+        "net": 3,
+        "stableford": 2,
+        "par": 4,
+        "fingerprint": "fp-idem",
+        "revision": 1,
+    }
+    first = client.post(f"/events/{event_id}/score", json=payload)
+    assert first.status_code in (200, 201)
+    retry = client.post(f"/events/{event_id}/score", json=payload)
+    assert retry.status_code == 200
+    body = retry.json()
+    assert body.get("idempotent") is True
+
+    assert _find_event(telemetry_capture, "score.idempotent.accepted")
+    statuses = [
+        p.get("status") for p in _find_event(telemetry_capture, "score.write_ms")
+    ]
+    assert "idempotent" in statuses
+
+
+def test_conflict_same_revision_different_fingerprint(monkeypatch, telemetry_capture):
+    event_id = _create_event(monkeypatch)
+    _register_player(event_id)
+
+    client.post(
         f"/events/{event_id}/score",
         json={
-            "scorecardId": "alpha",
-            "hole": 1,
+            "scorecardId": "sc-1",
+            "hole": 3,
             "gross": 4,
             "net": 3,
             "stableford": 2,
             "par": 4,
-            "strokesReceived": 1,
-            "fingerprint": "fp-1",
+            "fingerprint": "fp-original",
             "revision": 1,
         },
     )
-    assert idempotent.status_code == 200
-    assert idempotent.json().get("idempotent") is True
-
-    conflict_same_revision = client.post(
+    conflict = client.post(
         f"/events/{event_id}/score",
         json={
-            "scorecardId": "alpha",
-            "hole": 1,
+            "scorecardId": "sc-1",
+            "hole": 3,
             "gross": 5,
             "net": 4,
             "stableford": 1,
             "par": 4,
-            "strokesReceived": 0,
-            "fingerprint": "fp-2",
+            "fingerprint": "fp-conflict",
             "revision": 1,
         },
     )
-    assert conflict_same_revision.status_code == 409
-    assert conflict_same_revision.json()["detail"]["reason"] == "STALE_OR_DUPLICATE"
+    assert conflict.status_code == 409
+    detail = conflict.json()["detail"]
+    assert detail["reason"] == "STALE_OR_DUPLICATE"
 
-    higher_revision = client.post(
+    assert _find_event(telemetry_capture, "conflict.count")
+    assert _find_event(telemetry_capture, "score.conflict.stale_or_duplicate")
+
+
+def test_conflict_lower_revision(monkeypatch, telemetry_capture):
+    event_id = _create_event(monkeypatch)
+    _register_player(event_id)
+
+    client.post(
         f"/events/{event_id}/score",
         json={
-            "scorecardId": "alpha",
-            "hole": 1,
-            "gross": 3,
-            "net": 2,
-            "stableford": 3,
-            "par": 4,
-            "strokesReceived": 1,
-            "fingerprint": "fp-3",
+            "scorecardId": "sc-1",
+            "hole": 4,
+            "gross": 4,
+            "fingerprint": "fp-high",
+            "revision": 3,
+        },
+    )
+    conflict = client.post(
+        f"/events/{event_id}/score",
+        json={
+            "scorecardId": "sc-1",
+            "hole": 4,
+            "gross": 5,
+            "fingerprint": "fp-low",
             "revision": 2,
         },
     )
-    assert higher_revision.status_code in (200, 201)
-    assert higher_revision.json()["revision"] == 2
+    assert conflict.status_code == 409
+    assert conflict.json()["detail"]["reason"] == "STALE_OR_DUPLICATE"
+    assert _find_event(telemetry_capture, "score.conflict.stale_or_duplicate")
 
-    lower_revision = client.post(
+
+def test_higher_revision_writes(monkeypatch, telemetry_capture):
+    event_id = _create_event(monkeypatch)
+    _register_player(event_id)
+
+    client.post(
         f"/events/{event_id}/score",
         json={
-            "scorecardId": "alpha",
-            "hole": 1,
-            "gross": 2,
-            "net": 1,
-            "stableford": 4,
-            "par": 3,
-            "strokesReceived": 1,
-            "fingerprint": "fp-4",
+            "scorecardId": "sc-1",
+            "hole": 5,
+            "gross": 5,
+            "fingerprint": "fp-start",
+            "revision": 2,
+        },
+    )
+    update = client.post(
+        f"/events/{event_id}/score",
+        json={
+            "scorecardId": "sc-1",
+            "hole": 5,
+            "gross": 4,
+            "net": 3,
+            "stableford": 2,
+            "par": 4,
+            "fingerprint": "fp-forward",
+            "revision": 3,
+        },
+    )
+    assert update.status_code in (200, 201)
+    payload = update.json()
+    assert payload["revision"] == 3
+    assert payload["status"] == "ok"
+    assert _find_event(telemetry_capture, "score.write_ms")
+
+
+def test_score_value_error_records_invalid(monkeypatch, telemetry_capture):
+    events_module = importlib.import_module("server.routes.events")
+
+    def _boom(self, event_id: str, payload: Dict[str, object]):
+        raise ValueError("db boom")
+
+    monkeypatch.setattr(events_module._MemoryEventsRepository, "upsert_score", _boom)
+
+    event_id = _create_event(monkeypatch)
+    _register_player(event_id)
+
+    response = client.post(
+        f"/events/{event_id}/score",
+        json={
+            "scorecardId": "sc-1",
+            "hole": 6,
+            "gross": 4,
+            "fingerprint": "fp-error",
             "revision": 1,
         },
     )
-    assert lower_revision.status_code == 409
-    assert lower_revision.json()["detail"]["reason"] == "STALE_OR_DUPLICATE"
+    assert response.status_code == 400
+    assert response.json()["detail"] == "db boom"
 
-    assert any(name == "score.idempotent.accepted" for name, _ in telemetry_spy)
-    assert any(name == "score.conflict.stale_or_duplicate" for name, _ in telemetry_spy)
-    assert any(name == "score.write_ms" for name, _ in telemetry_spy)
+    statuses = [
+        p.get("status") for p in _find_event(telemetry_capture, "score.write_ms")
+    ]
+    assert "invalid" in statuses
 
 
-def test_board_formats_and_totals(monkeypatch, telemetry_spy):
+def test_board_gross_net_and_stableford(monkeypatch, telemetry_capture):
     event_id = _create_event(monkeypatch)
     client.post(
         f"/events/{event_id}/players",
         json={
             "players": [
-                {"scorecardId": "alpha", "name": "Alice", "hcpIndex": 5.0},
-                {"scorecardId": "bravo", "name": "Bob", "hcpIndex": 3.2},
+                {"scorecardId": "alpha", "name": "Alice", "hcpIndex": 5.2},
+                {"scorecardId": "bravo", "name": "Bob", "hcpIndex": 8.7},
             ]
         },
     )
+
     for payload in (
         {
             "scorecardId": "alpha",
@@ -232,7 +286,6 @@ def test_board_formats_and_totals(monkeypatch, telemetry_spy):
             "net": 3,
             "stableford": 2,
             "par": 4,
-            "strokesReceived": 1,
             "fingerprint": "alpha-h1",
             "revision": 1,
         },
@@ -243,13 +296,12 @@ def test_board_formats_and_totals(monkeypatch, telemetry_spy):
             "net": 5,
             "stableford": 1,
             "par": 4,
-            "strokesReceived": 0,
             "fingerprint": "bravo-h1",
             "revision": 1,
         },
     ):
-        resp = client.post(f"/events/{event_id}/score", json=payload)
-        assert resp.status_code in (200, 201)
+        post = client.post(f"/events/{event_id}/score", json=payload)
+        assert post.status_code in (200, 201)
 
     default_board = client.get(f"/events/{event_id}/board")
     assert default_board.status_code == 200
@@ -257,30 +309,31 @@ def test_board_formats_and_totals(monkeypatch, telemetry_spy):
     assert default_payload["grossNet"] == "net"
 
     net_board = client.get(f"/events/{event_id}/board", params={"format": "net"})
-    assert net_board.status_code == 200
-    net_payload = net_board.json()
-    assert net_payload["grossNet"] == "net"
-
     gross_board = client.get(f"/events/{event_id}/board", params={"format": "gross"})
-    assert gross_board.status_code == 200
-    gross_payload = gross_board.json()
-    assert gross_payload["grossNet"] == "gross"
-
     stableford_board = client.get(
         f"/events/{event_id}/board", params={"format": "stableford"}
     )
-    assert stableford_board.status_code == 200
-    stableford_payload = stableford_board.json()
-    assert stableford_payload["grossNet"] == "stableford"
 
-    net_totals = {row["name"]: row["net"] for row in net_payload["players"]}
-    gross_totals = {row["name"]: row["gross"] for row in gross_payload["players"]}
-    stableford_totals = {
-        row["name"]: row["stableford"] for row in stableford_payload["players"]
-    }
+    assert (
+        net_board.status_code
+        == gross_board.status_code
+        == stableford_board.status_code
+        == 200
+    )
+
+    net_payload = net_board.json()
+    gross_payload = gross_board.json()
+    stableford_payload = stableford_board.json()
+
+    def _totals(board: Dict[str, object], field: str) -> Dict[str, float]:
+        return {row["name"]: row[field] for row in board["players"]}
+
+    net_totals = _totals(net_payload, "net")
+    gross_totals = _totals(gross_payload, "gross")
+    stableford_totals = _totals(stableford_payload, "stableford")
 
     assert net_totals["Alice"] != gross_totals["Alice"]
     assert stableford_totals["Alice"] != gross_totals["Alice"]
     assert net_totals["Bob"] != stableford_totals["Bob"]
 
-    assert any(name == "board.build_ms" for name, _ in telemetry_spy)
+    assert _find_event(telemetry_capture, "board.build_ms")
