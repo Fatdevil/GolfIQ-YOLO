@@ -173,6 +173,48 @@ def record_tv_rotate(
     _safe_emit("events.tv.rotate", payload)
 
 
+def emit_clip_upload_requested(
+    *, eventId: str, clipId: str, size: int, ct: str
+) -> None:
+    payload: Dict[str, object] = {
+        "eventId": eventId,
+        "clipId": clipId,
+        "size": int(max(0, size)),
+        "contentType": ct,
+        "ts": _now_ms(),
+    }
+    _safe_emit("clips.upload.requested", payload)
+
+
+def emit_clip_ready(*, clipId: str, duration_ms: int) -> None:
+    payload: Dict[str, object] = {
+        "clipId": clipId,
+        "durationMs": int(max(0, duration_ms)),
+        "ts": _now_ms(),
+    }
+    _safe_emit("clips.ready", payload)
+
+
+def emit_clip_failed(*, clipId: str, error: str | None = None) -> None:
+    payload: Dict[str, object] = {
+        "clipId": clipId,
+        "ts": _now_ms(),
+    }
+    if error:
+        payload["error"] = error
+    _safe_emit("clips.failed", payload)
+
+
+def emit_clip_reaction(*, clipId: str, userId: str, emoji: str) -> None:
+    payload: Dict[str, object] = {
+        "clipId": clipId,
+        "userId": userId,
+        "emoji": emoji,
+        "ts": _now_ms(),
+    }
+    _safe_emit("clips.reaction", payload)
+
+
 def _now_ms() -> int:
     from time import time
 
@@ -192,4 +234,8 @@ __all__ = [
     "record_score_idempotent",
     "record_score_conflict",
     "record_score_conflict_stale_or_duplicate",
+    "emit_clip_upload_requested",
+    "emit_clip_ready",
+    "emit_clip_failed",
+    "emit_clip_reaction",
 ]

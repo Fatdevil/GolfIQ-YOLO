@@ -22,7 +22,12 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field
 
 from server.security import require_api_key
+from server import jobs
+from server.repositories.clips_repo import clips_repo
+from server.storage import presign_put
 from server.telemetry.events import (
+    emit_clip_reaction,
+    emit_clip_upload_requested,
     record_board_build,
     record_board_resync,
     record_event_created,
@@ -41,6 +46,9 @@ router = APIRouter(
     prefix="/events", tags=["events"], dependencies=[Depends(require_api_key)]
 )
 join_router = APIRouter(tags=["events"])  # Join endpoint is public for spectators.
+clips_router = APIRouter(
+    prefix="/clips", tags=["clips"], dependencies=[Depends(require_api_key)]
+)
 
 
 ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
@@ -53,6 +61,12 @@ DEFAULT_TV_FLAGS: Dict[str, Any] = {
 }
 DEFAULT_GROSS_NET = "net"
 VALID_GROSS_NET = {"gross", "net", "stableford"}
+CLIPS_MAX_SIZE_MB = int(os.getenv("CLIPS_MAX_SIZE_MB", "40") or "40")
+CLIPS_PRESIGN_EXPIRES = max(
+    60,
+    min(int(os.getenv("CLIPS_PRESIGN_EXPIRES", "90") or "90"), 120),
+)
+CLIPS_VISIBILITY_DEFAULT = os.getenv("CLIPS_VISIBILITY_DEFAULT", "event")
 
 
 def _normalize_gross_net(value: Any) -> str:
@@ -79,6 +93,13 @@ def _normalize_tv_flags(flags: Mapping[str, Any] | None) -> Dict[str, Any]:
         except (TypeError, ValueError):
             merged["rotateIntervalMs"] = merged["rotateIntervalMs"]
     return merged
+
+
+def _coerce_uuid(value: str, *, namespace: uuid.UUID = uuid.NAMESPACE_URL) -> uuid.UUID:
+    try:
+        return uuid.UUID(str(value))
+    except (TypeError, ValueError):
+        return uuid.uuid5(namespace, str(value))
 
 
 class CreateEventBody(BaseModel):
@@ -112,6 +133,27 @@ class SpectatorPlayer(BaseModel):
     thru: int
     hole: int
     status: str | None = None
+
+
+class ClipPresignIn(BaseModel):
+    content_type: str = Field(
+        ..., alias="contentType", pattern=r"^video/(mp4|quicktime|webm)$"
+    )
+    size_bytes: int = Field(..., alias="sizeBytes", ge=1)
+    hole: int | None = Field(default=None, ge=1, le=18)
+    fingerprint: str = Field(..., min_length=1, max_length=200)
+
+    model_config = ConfigDict(populate_by_name=True)
+
+
+class ClipCompleteIn(BaseModel):
+    src_uri: str = Field(..., alias="srcUri")
+
+    model_config = ConfigDict(populate_by_name=True)
+
+
+class ClipReactionIn(BaseModel):
+    emoji: str = Field(..., min_length=1, max_length=8)
 
 
 class TvFlagsModel(BaseModel):
@@ -998,6 +1040,12 @@ class _MemoryEventsRepository:
 _REPOSITORY = _MemoryEventsRepository()
 
 
+@dataclass(frozen=True)
+class EventMember:
+    id: str
+    role: str
+
+
 def require_admin(
     role: str | None = Header(default=None, alias="x-event-role"),
     member_id: str | None = Header(default=None, alias="x-event-member"),
@@ -1007,6 +1055,24 @@ def require_admin(
             status_code=status.HTTP_403_FORBIDDEN, detail="admin role required"
         )
     return member_id
+
+
+def require_member(
+    role: str | None = Header(default=None, alias="x-event-role"),
+    member_id: str | None = Header(default=None, alias="x-event-member"),
+) -> EventMember:
+    normalized = (role or "").strip().lower()
+    if normalized not in {"admin", "player", "spectator"}:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="member role required",
+        )
+    if not member_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="member id required",
+        )
+    return EventMember(id=str(member_id), role=normalized)
 
 
 @router.post(
@@ -1348,6 +1414,102 @@ def update_settings(
     return _build_host_state(event_id)
 
 
+@router.post("/{event_id}/clips/presign")
+def presign_clip(
+    event_id: str,
+    body: ClipPresignIn,
+    me: EventMember = Depends(require_member),
+):
+    event = _REPOSITORY.get_event(event_id)
+    if not event:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="event not found"
+        )
+    max_bytes = CLIPS_MAX_SIZE_MB * 1_000_000
+    if body.size_bytes > max_bytes:
+        raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail="clip too large",
+        )
+    clip_id = clips_repo.create_placeholder(
+        event_id=_coerce_uuid(event_id),
+        player_id=_coerce_uuid(me.id, namespace=uuid.NAMESPACE_DNS),
+        hole=body.hole,
+        fingerprint=body.fingerprint,
+        visibility=CLIPS_VISIBILITY_DEFAULT,
+    )
+    key = f"clips/{_coerce_uuid(event_id)}/{clip_id}.mp4"
+    url, fields = presign_put(
+        key,
+        content_type=body.content_type,
+        expires=CLIPS_PRESIGN_EXPIRES,
+    )
+    emit_clip_upload_requested(
+        eventId=str(event_id),
+        clipId=str(clip_id),
+        size=body.size_bytes,
+        ct=body.content_type,
+    )
+    return {"clipId": str(clip_id), "url": url, "fields": fields}
+
+
+@router.get("/{event_id}/clips")
+def list_clips(event_id: str, after: datetime | None = None, limit: int = 20):
+    event = _REPOSITORY.get_event(event_id)
+    if not event:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="event not found"
+        )
+    safe_limit = max(1, min(100, int(limit)))
+    rows = clips_repo.list_ready(
+        _coerce_uuid(event_id),
+        after=after,
+        limit=safe_limit,
+        visibility=CLIPS_VISIBILITY_DEFAULT,
+    )
+    return {"items": [clips_repo.to_public(r) for r in rows]}
+
+
+@clips_router.post("/{clip_id}/complete")
+def complete_clip(
+    clip_id: str,
+    body: ClipCompleteIn,
+    me: EventMember = Depends(require_member),
+):
+    try:
+        clip_uuid = uuid.UUID(str(clip_id))
+    except (TypeError, ValueError):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="clip not found"
+        )
+    if not clips_repo.mark_processing(clip_uuid, body.src_uri, actor=me.id):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="clip not found"
+        )
+    jobs.enqueue("transcode_clip", {"clipId": str(clip_uuid), "src": body.src_uri})
+    return {"ok": True}
+
+
+@clips_router.post("/{clip_id}/react")
+def react_clip(
+    clip_id: str,
+    body: ClipReactionIn,
+    me: EventMember = Depends(require_member),
+):
+    try:
+        clip_uuid = uuid.UUID(str(clip_id))
+    except (TypeError, ValueError):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="clip not found"
+        )
+    if not clips_repo.add_reaction(clip_uuid, me.id, body.emoji):
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail="rate limited"
+        )
+    emit_clip_reaction(clipId=str(clip_uuid), userId=str(me.id), emoji=body.emoji)
+    return {"ok": True}
+
+
 def _build_host_state(event_id: str) -> HostStateResponse:
     event = _REPOSITORY.get_event(event_id)
     if not event:
@@ -1379,10 +1541,12 @@ def _build_host_state(event_id: str) -> HostStateResponse:
 __all__ = [
     "router",
     "join_router",
+    "clips_router",
     "build_board",
     "generate_code",
     "validate_code",
     "require_admin",
+    "require_member",
 ]
 
 

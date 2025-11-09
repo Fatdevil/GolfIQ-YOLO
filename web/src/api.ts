@@ -1,6 +1,7 @@
 import axios from "axios";
 
 import type { GrossNetMode, TvFlags } from "@shared/events/types";
+import type { ClipListResponse } from "@web/features/clips/types";
 
 const API = import.meta.env.VITE_API_BASE || "http://localhost:8000";
 const API_KEY = import.meta.env.VITE_API_KEY || "";
@@ -8,6 +9,25 @@ const API_KEY = import.meta.env.VITE_API_KEY || "";
 /** Return default headers incl. x-api-key if present. */
 const withAuth = (extra: Record<string, string> = {}) =>
   (API_KEY ? { "x-api-key": API_KEY, ...extra } : extra);
+
+type MemberHeadersOptions = {
+  memberId?: string;
+  role?: "spectator" | "player" | "admin";
+  includeJson?: boolean;
+};
+
+const withMemberHeaders = (options: MemberHeadersOptions = {}) => {
+  const headers: Record<string, string> = {
+    "x-event-role": options.role ?? "spectator",
+  };
+  if (options.memberId) {
+    headers["x-event-member"] = options.memberId;
+  }
+  if (options.includeJson) {
+    headers["Content-Type"] = "application/json";
+  }
+  return withAuth(headers);
+};
 
 export { API };
 
@@ -71,6 +91,30 @@ export const fetchSpectatorBoard = (eventId: string) =>
       headers: withAuth(),
     })
     .then((r) => r.data);
+
+export const fetchEventClips = (
+  eventId: string,
+  params?: { after?: string; limit?: number },
+) =>
+  axios
+    .get<ClipListResponse>(`${API}/events/${eventId}/clips`, {
+      params,
+      headers: withAuth(),
+    })
+    .then((r) => r.data);
+
+export const postClipReaction = (
+  clipId: string,
+  emoji: string,
+  options: { memberId?: string; role?: "spectator" | "player" | "admin" } = {},
+) =>
+  axios
+    .post(
+      `${API}/clips/${clipId}/react`,
+      { emoji },
+      { headers: withMemberHeaders({ ...options, includeJson: true }) },
+    )
+    .then((r) => r.data as { ok: boolean });
 
 export type HostStateResponse = {
   id: string;

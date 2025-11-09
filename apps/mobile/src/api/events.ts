@@ -94,3 +94,56 @@ export async function postScore(args: PostScoreArgs): Promise<PostScoreResult> {
 
   return { ok: false, status: response.status };
 }
+
+export type ClipReactions = {
+  counts: Record<string, number>;
+  recentCount: number;
+  total: number;
+};
+
+export type ShotClip = {
+  id: string;
+  eventId: string;
+  playerId: string;
+  roundId?: string | null;
+  hole?: number | null;
+  status: string;
+  srcUri?: string | null;
+  hlsUrl?: string | null;
+  mp4Url?: string | null;
+  thumbUrl?: string | null;
+  durationMs?: number | null;
+  fingerprint?: string | null;
+  visibility: string;
+  createdAt: string | null;
+  reactions: ClipReactions;
+  weight: number;
+};
+
+export type ClipListResponse = {
+  items: ShotClip[];
+};
+
+export async function fetchClips(
+  eventId: string,
+  params: { after?: string; limit?: number } = {},
+): Promise<ClipListResponse> {
+  const url = new URL(`${resolveApiBase()}/events/${encodeURIComponent(eventId)}/clips`);
+  if (params.after) {
+    url.searchParams.set('after', params.after);
+  }
+  if (params.limit) {
+    url.searchParams.set('limit', String(params.limit));
+  }
+  const response = await fetch(url.toString(), {
+    method: 'GET',
+    headers: {
+      Accept: 'application/json',
+    },
+  });
+  if (!response.ok) {
+    const message = await response.text();
+    throw new Error(message || 'Failed to load clips');
+  }
+  return (await response.json()) as ClipListResponse;
+}

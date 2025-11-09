@@ -14,6 +14,7 @@ export default defineConfig({
     environment: 'node',
     environmentMatchGlobs: [
       ['tests/**/*.spec.tsx', 'jsdom'],
+      ['tests/events/clips.spec.ts', 'jsdom'],
       ['src/**/__tests__/**/*.tsx', 'jsdom'],
     ],
   },

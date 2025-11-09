@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useParams } from 'react-router-dom';
 
 import { fetchSpectatorBoard, type SpectatorBoardResponse } from '@web/api';
@@ -6,6 +6,11 @@ import { createBackoffController } from '@shared/events/resync';
 import { emitEventsLiveTick, emitEventsResync } from '@shared/events/telemetry';
 import type { SpectatorPlayer } from '@shared/events/spectator';
 import type { SpectatorBoardPlayer as ApiSpectatorPlayer, UUID } from '@shared/events/types';
+import ClipBadge from '@web/features/clips/ClipBadge';
+import ClipModal from '@web/features/clips/ClipModal';
+import TopShotsPanel from '@web/features/clips/TopShotsPanel';
+import { useClips } from '@web/features/clips/useClips';
+import type { ShotClip } from '@web/features/clips/types';
 
 type BoardState = SpectatorBoardResponse;
 
@@ -94,14 +99,46 @@ export default function LiveLeaderboardPage(): JSX.Element {
     status: player.status ?? undefined,
   }));
 
+  const {
+    clips,
+    topShots,
+    loading: clipsLoading,
+    error: clipsError,
+    react,
+  } = useClips(eventId, { enabled: Boolean(eventId) });
+  const [selectedClip, setSelectedClip] = useState<ShotClip | null>(null);
+
+  const openTopClip = useCallback(() => {
+    if (topShots.length > 0) {
+      setSelectedClip(topShots[0]);
+    }
+  }, [topShots]);
+
+  const handleReact = useCallback(
+    async (clip: ShotClip, emoji: string) => {
+      try {
+        await react(clip.id, emoji);
+      } catch (err) {
+        console.warn('Failed to react to clip', err);
+      }
+    },
+    [react],
+  );
+
   return (
     <div className="mx-auto flex w-full max-w-4xl flex-col gap-6">
       <header>
-        <h1 className="text-3xl font-bold">Live Leaderboard</h1>
+        <div className="flex items-center justify-between gap-3">
+          <h1 className="text-3xl font-bold">Live Leaderboard</h1>
+          <ClipBadge count={clips.length} onClick={openTopClip} />
+        </div>
         {board?.updatedAt && (
           <p className="mt-2 text-sm text-slate-300">Updated {new Date(board.updatedAt).toLocaleTimeString()}</p>
         )}
         {error && <p className="mt-2 text-sm text-rose-300">{error}</p>}
+        {clipsError && clips.length === 0 && (
+          <p className="mt-2 text-sm text-rose-300">{clipsError}</p>
+        )}
       </header>
       <div className="overflow-hidden rounded-lg bg-slate-900 shadow">
         <table className="min-w-full divide-y divide-slate-800 text-left text-sm">
@@ -136,6 +173,14 @@ export default function LiveLeaderboardPage(): JSX.Element {
           </tbody>
         </table>
       </div>
+      <TopShotsPanel
+        clips={topShots}
+        loading={clipsLoading}
+        error={clipsError}
+        onSelect={setSelectedClip}
+        onReact={handleReact}
+      />
+      <ClipModal clip={selectedClip} open={Boolean(selectedClip)} onClose={() => setSelectedClip(null)} />
     </div>
   );
 }

@@ -1,0 +1,1 @@
+import "./clips.spec.tsx";

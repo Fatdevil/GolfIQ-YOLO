@@ -34,6 +34,7 @@ from .routes.rollout import router as rollout_router
 from .routes.providers import router as providers_router
 from .routes.runs import router as runs_router
 from .routes.runs_upload import router as runs_upload_router
+from .routes.events import clips_router as events_clips_router
 from .routes.events import join_router as events_join_router
 from .routes.events import router as events_router
 from .routes.issues import router as issues_router
@@ -119,6 +120,7 @@ app.include_router(bench_router)
 app.include_router(course_bundle_router)
 app.include_router(metrics.router)
 app.include_router(events_router)
+app.include_router(events_clips_router)
 app.include_router(events_join_router)
 app.include_router(providers_router)
 app.add_api_route(
