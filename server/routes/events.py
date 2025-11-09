@@ -2,20 +2,33 @@ from __future__ import annotations
 
 import os
 import threading
+import time
 import uuid
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any, Callable, Dict, Iterable, List, Mapping, Tuple
 
-from fastapi import APIRouter, Body, Depends, Header, HTTPException, Path, status
+from fastapi import (
+    APIRouter,
+    Body,
+    Depends,
+    Header,
+    HTTPException,
+    Path,
+    Query,
+    status,
+)
 from pydantic import BaseModel, ConfigDict, Field
 
 from server.security import require_api_key
 from server.telemetry.events import (
+    record_board_build,
     record_board_resync,
     record_event_created,
     record_event_joined,
     record_host_action,
+    record_score_conflict,
+    record_score_write,
 )
 
 
@@ -36,10 +49,11 @@ DEFAULT_TV_FLAGS: Dict[str, Any] = {
     "rotateIntervalMs": None,
 }
 DEFAULT_GROSS_NET = "net"
+VALID_GROSS_NET = {"gross", "net", "stableford"}
 
 
 def _normalize_gross_net(value: Any) -> str:
-    if isinstance(value, str) and value.lower() in {"gross", "net"}:
+    if isinstance(value, str) and value.lower() in VALID_GROSS_NET:
         return value.lower()
     return DEFAULT_GROSS_NET
 
@@ -91,6 +105,7 @@ class SpectatorPlayer(BaseModel):
     name: str
     gross: int
     net: float | None = None
+    stableford: float | None = None
     thru: int
     hole: int
     status: str | None = None
@@ -112,6 +127,65 @@ class BoardResponse(BaseModel):
     participants: int = 0
     spectators: int = 0
     qrSvg: str | None = Field(default=None, alias="qrSvg")
+
+    model_config = ConfigDict(populate_by_name=True)
+
+
+class RegisterEventPlayer(BaseModel):
+    scorecard_id: str | None = Field(default=None, alias="scorecardId")
+    name: str = Field(..., min_length=1, max_length=120)
+    member_id: str | None = Field(default=None, alias="memberId")
+    hcp_index: float | None = Field(default=None, alias="hcpIndex")
+    course_handicap: int | None = Field(default=None, alias="courseHandicap")
+    playing_handicap: int | None = Field(default=None, alias="playingHandicap")
+    status: str | None = None
+
+    model_config = ConfigDict(populate_by_name=True)
+
+
+class RegisterPlayersBody(BaseModel):
+    players: List[RegisterEventPlayer]
+
+
+class EventPlayerState(BaseModel):
+    scorecard_id: str = Field(alias="scorecardId")
+    name: str
+    member_id: str | None = Field(default=None, alias="memberId")
+    hcp_index: float | None = Field(default=None, alias="hcpIndex")
+    course_handicap: int | None = Field(default=None, alias="courseHandicap")
+    playing_handicap: int | None = Field(default=None, alias="playingHandicap")
+    updated_at: str = Field(alias="updatedAt")
+
+    model_config = ConfigDict(populate_by_name=True)
+
+
+class RegisterPlayersResponse(BaseModel):
+    players: List[EventPlayerState]
+
+
+class ScoreWriteBody(BaseModel):
+    scorecard_id: str = Field(..., alias="scorecardId")
+    hole: int = Field(..., ge=1, le=36)
+    gross: int = Field(..., ge=0)
+    net: int | None = None
+    stableford: int | None = None
+    par: int | None = None
+    to_par: int | None = Field(default=None, alias="toPar")
+    strokes_received: int | None = Field(default=None, alias="strokesReceived")
+    playing_handicap: int | None = Field(default=None, alias="playingHandicap")
+    course_handicap: int | None = Field(default=None, alias="courseHandicap")
+    hcp_index: float | None = Field(default=None, alias="hcpIndex")
+    revision: int | None = None
+    fingerprint: str | None = None
+    format: str | None = None
+
+    model_config = ConfigDict(populate_by_name=True)
+
+
+class ScoreWriteResponse(BaseModel):
+    status: str
+    revision: int | None = None
+    updated_at: str = Field(alias="updatedAt")
 
     model_config = ConfigDict(populate_by_name=True)
 
@@ -252,6 +326,7 @@ def _sanitize_player(row: Mapping[str, Any]) -> Tuple[SpectatorPlayer, Dict[str,
     name = str(name_source).strip() or "Player"
     gross = _to_int(row.get("gross"))
     net = _to_float(row.get("net"))
+    stableford = _to_float(row.get("stableford"))
     thru = _to_int(row.get("thru") or row.get("holes") or row.get("holes_played"))
     hole = _to_int(row.get("hole") or row.get("current_hole") or thru)
     status_val = row.get("status") or row.get("state")
@@ -261,6 +336,7 @@ def _sanitize_player(row: Mapping[str, Any]) -> Tuple[SpectatorPlayer, Dict[str,
         name=name,
         gross=gross if gross is not None else 0,
         net=net,
+        stableford=stableford,
         thru=thru if thru is not None else 0,
         hole=hole if hole is not None else 0,
         status=status,
@@ -268,8 +344,10 @@ def _sanitize_player(row: Mapping[str, Any]) -> Tuple[SpectatorPlayer, Dict[str,
 
     meta = {
         "last_under_par": row.get("last_under_par_at") or row.get("under_par_at"),
-        "finished_at": row.get("finished_at") or row.get("completed_at"),
-        "updated_at": row.get("updated_at") or row.get("last_updated") or row.get("ts"),
+        "updated_at": row.get("updated_at")
+        or row.get("last_updated")
+        or row.get("ts")
+        or row.get("last_ts"),
     }
     return sanitized, meta
 
@@ -283,34 +361,218 @@ def build_board(
     updated_ts: List[float] = []
     for raw in rows:
         player, meta = _sanitize_player(raw)
+        stableford = (
+            float(player.stableford) if player.stableford is not None else float("-inf")
+        )
         net = player.net if player.net is not None else float("inf")
         gross = float(player.gross)
         last_under_par_ts = _parse_timestamp(meta.get("last_under_par"))
-        finished_ts = _parse_timestamp(meta.get("finished_at"))
         updated = _parse_timestamp(meta.get("updated_at"))
         if updated is not None:
             updated_ts.append(updated)
+        name_key = player.name.lower()
+        recency_key = (
+            -updated if updated is not None else float("inf")
+        )  # negative for descending recency
         if mode == "gross":
             sort_key = (
                 gross,
                 net,
+                recency_key,
                 last_under_par_ts if last_under_par_ts is not None else float("inf"),
-                finished_ts if finished_ts is not None else float("inf"),
-                player.name.lower(),
+                name_key,
+            )
+        elif mode == "stableford":
+            sort_key = (
+                -stableford if stableford != float("-inf") else float("inf"),
+                gross,
+                recency_key,
+                last_under_par_ts if last_under_par_ts is not None else float("inf"),
+                name_key,
             )
         else:
             sort_key = (
                 net,
                 gross,
+                recency_key,
                 last_under_par_ts if last_under_par_ts is not None else float("inf"),
-                finished_ts if finished_ts is not None else float("inf"),
-                player.name.lower(),
+                name_key,
             )
         enriched.append((player, sort_key))
 
     enriched.sort(key=lambda item: item[1])
     players = [item[0] for item in enriched]
     updated_at = _format_timestamp(max(updated_ts)) if updated_ts else None
+    return players, updated_at
+
+
+@dataclass
+class _AggregatedCard:
+    gross: int = 0
+    net: float = 0.0
+    holes: int = 0
+    to_par: int = 0
+    max_hole: int = 0
+    last_ts: float | None = None
+    last_iso: str | None = None
+    stableford: float = 0.0
+    has_stableford: bool = False
+    net_from_rows: bool = False
+    playing_handicap: int | None = None
+    format: str | None = None
+
+
+def _aggregate_scorecards(
+    rows: Iterable[Mapping[str, Any]],
+    meta: Mapping[str, Mapping[str, Any]],
+    *,
+    mode: str,
+) -> Tuple[List[SpectatorPlayer], str | None]:
+    aggregated: Dict[str, _AggregatedCard] = {}
+    updated_candidates: List[float] = []
+    for row in rows:
+        scorecard_id = str(row.get("scorecard_id") or row.get("scorecardId") or "")
+        if not scorecard_id:
+            continue
+        entry = aggregated.setdefault(scorecard_id, _AggregatedCard())
+        gross = _to_int(row.get("gross")) or 0
+        net_value = _to_float(row.get("net"))
+        hole_no = _to_int(row.get("hole")) or 0
+        stableford_value = _to_float(row.get("stableford"))
+        to_par_value = _to_int(row.get("to_par") or row.get("toPar"))
+        par_value = _to_int(row.get("par"))
+        if to_par_value is None and par_value is not None:
+            to_par_value = gross - par_value
+        entry.gross += gross
+        entry.holes += 1
+        entry.to_par += to_par_value if to_par_value is not None else 0
+        if net_value is not None:
+            entry.net += net_value
+            if int(round(net_value)) != gross:
+                entry.net_from_rows = True
+        if stableford_value is not None:
+            entry.stableford += stableford_value
+            entry.has_stableford = True
+        if hole_no > entry.max_hole:
+            entry.max_hole = hole_no
+        playing_handicap = _safe_int(
+            row.get("playing_handicap") or row.get("playingHandicap")
+        )
+        if playing_handicap is not None:
+            entry.playing_handicap = playing_handicap
+        row_format = row.get("format")
+        if isinstance(row_format, str) and row_format.lower() in VALID_GROSS_NET:
+            entry.format = row_format.lower()
+        updated = (
+            _parse_timestamp(row.get("updated_at"))
+            or _parse_timestamp(row.get("updatedAt"))
+            or _parse_timestamp(row.get("ts"))
+        )
+        if updated is not None:
+            updated_candidates.append(updated)
+            if entry.last_ts is None or updated >= entry.last_ts:
+                entry.last_ts = updated
+                entry.last_iso = _format_timestamp(updated)
+
+    # Include players with no scores yet
+    for scorecard_id, card_meta in meta.items():
+        aggregated.setdefault(scorecard_id, _AggregatedCard())
+        updated = _parse_timestamp(card_meta.get("updated_at"))
+        if updated is not None:
+            updated_candidates.append(updated)
+            card_entry = aggregated[scorecard_id]
+            if card_entry.last_ts is None or updated >= (
+                card_entry.last_ts or float("-inf")
+            ):
+                card_entry.last_ts = updated
+                card_entry.last_iso = _format_timestamp(updated)
+        elif aggregated[scorecard_id].last_iso is None:
+            iso = card_meta.get("created_at")
+            if isinstance(iso, str):
+                aggregated[scorecard_id].last_iso = iso
+
+    leaderboard: List[Tuple[SpectatorPlayer, Tuple[Any, ...]]] = []
+    for scorecard_id, entry in aggregated.items():
+        card_meta = meta.get(scorecard_id, {})
+        name = str(card_meta.get("name") or "Player")
+        holes = entry.holes
+        gross_total = entry.gross
+        net_total = entry.net
+        hcp_index = _safe_float(card_meta.get("hcp_index"))
+        if not entry.net_from_rows:
+            net_total = _compute_net_simple(gross_total, hcp_index, holes)
+        stableford_total: float | None
+        if entry.has_stableford:
+            stableford_total = entry.stableford
+        else:
+            stableford_total = None
+        if stableford_total is None and mode == "stableford":
+            fallback = 2 * holes + gross_total - net_total - entry.to_par
+            stableford_total = float(max(0, round(fallback)))
+        last_ts = entry.last_ts
+        if last_ts is None:
+            fallback_updated = _parse_timestamp(card_meta.get("updated_at"))
+            if fallback_updated is not None:
+                last_ts = fallback_updated
+        playing_handicap = entry.playing_handicap
+        if playing_handicap is None:
+            playing_handicap = _safe_int(card_meta.get("playing_handicap"))
+        thru = holes
+        next_hole = entry.max_hole + 1 if entry.max_hole > 0 else 1
+        net_display: float | None
+        if holes > 0 or entry.net_from_rows:
+            net_display = float(net_total)
+        else:
+            net_display = None
+        player = SpectatorPlayer(
+            name=name,
+            gross=int(gross_total),
+            net=net_display,
+            stableford=stableford_total,
+            thru=thru,
+            hole=next_hole,
+            status=str(card_meta.get("status")) if card_meta.get("status") else None,
+        )
+        updated_iso = entry.last_iso or card_meta.get("updated_at")
+        if updated_iso:
+            updated = _parse_timestamp(updated_iso)
+            if updated is not None:
+                updated_candidates.append(updated)
+        name_key = name.lower()
+        recency_key = -(last_ts or float("-inf"))
+        if mode == "gross":
+            sort_key = (
+                player.gross,
+                player.net if player.net is not None else float("inf"),
+                recency_key,
+                name_key,
+            )
+        elif mode == "stableford":
+            stableford_key = (
+                -float(player.stableford)
+                if player.stableford is not None
+                else float("inf")
+            )
+            sort_key = (
+                stableford_key,
+                player.gross,
+                recency_key,
+                name_key,
+            )
+        else:
+            sort_key = (
+                player.net if player.net is not None else float("inf"),
+                player.gross,
+                recency_key,
+                name_key,
+            )
+        leaderboard.append((player, sort_key))
+
+    leaderboard.sort(key=lambda item: item[1])
+    players = [player for player, _ in leaderboard]
+    updated_at = (
+        _format_timestamp(max(updated_candidates)) if updated_candidates else None
+    )
     return players, updated_at
 
 
@@ -332,6 +594,7 @@ class _MemoryEventsRepository:
         self._event_status: Dict[str, str] = {}
         self._members: Dict[Tuple[str, str], _Member] = {}
         self._boards: Dict[str, List[Dict[str, Any]]] = {}
+        self._scorecards: Dict[str, Dict[str, Dict[str, Any]]] = {}
 
     def create_event(
         self, name: str, emoji: str | None, *, code: str
@@ -390,6 +653,219 @@ class _MemoryEventsRepository:
             counts = self._counts_locked(event_id)
             result.update(counts)
             return result
+
+    def register_scorecards(
+        self, event_id: str, players: Iterable[Mapping[str, Any]]
+    ) -> List[Dict[str, Any]]:
+        with self._lock:
+            if event_id not in self._events:
+                raise KeyError(event_id)
+            cards = self._scorecards.setdefault(event_id, {})
+            results: List[Dict[str, Any]] = []
+            now = datetime.now(timezone.utc).isoformat()
+            for payload in players:
+                requested = payload.get("scorecard_id") or payload.get("scorecardId")
+                scorecard_id = str(requested) if requested else str(uuid.uuid4())
+                card = cards.get(scorecard_id)
+                if card is None:
+                    card = {
+                        "scorecard_id": scorecard_id,
+                        "name": str(payload.get("name") or "Player"),
+                        "member_id": payload.get("member_id")
+                        or payload.get("memberId"),
+                        "hcp_index": _safe_float(
+                            payload.get("hcp_index") or payload.get("hcpIndex")
+                        ),
+                        "course_handicap": _safe_int(
+                            payload.get("course_handicap")
+                            or payload.get("courseHandicap")
+                        ),
+                        "playing_handicap": _safe_int(
+                            payload.get("playing_handicap")
+                            or payload.get("playingHandicap")
+                        ),
+                        "status": payload.get("status"),
+                        "created_at": now,
+                        "updated_at": now,
+                        "format": None,
+                        "holes": {},
+                    }
+                    cards[scorecard_id] = card
+                else:
+                    card["name"] = str(
+                        payload.get("name") or card.get("name") or "Player"
+                    )
+                    member_id = payload.get("member_id") or payload.get("memberId")
+                    if member_id:
+                        card["member_id"] = member_id
+                    hcp_index = _safe_float(
+                        payload.get("hcp_index") or payload.get("hcpIndex")
+                    )
+                    if hcp_index is not None:
+                        card["hcp_index"] = hcp_index
+                    course_hcp = _safe_int(
+                        payload.get("course_handicap") or payload.get("courseHandicap")
+                    )
+                    if course_hcp is not None:
+                        card["course_handicap"] = course_hcp
+                    playing_hcp = _safe_int(
+                        payload.get("playing_handicap")
+                        or payload.get("playingHandicap")
+                    )
+                    if playing_hcp is not None:
+                        card["playing_handicap"] = playing_hcp
+                    status = payload.get("status")
+                    if status:
+                        card["status"] = status
+                    card["updated_at"] = now
+                member_id = card.get("member_id")
+                if member_id:
+                    self._members[(event_id, str(member_id))] = _Member(
+                        event_id=event_id,
+                        member_id=str(member_id),
+                        name=card.get("name"),
+                        role="player",
+                    )
+                results.append(self._scorecard_public_view(card))
+            return results
+
+    def upsert_score(
+        self, event_id: str, payload: Mapping[str, Any]
+    ) -> Tuple[str, Dict[str, Any]]:
+        with self._lock:
+            cards = self._scorecards.get(event_id)
+            if cards is None:
+                raise KeyError(event_id)
+            scorecard_id_raw = (
+                payload.get("scorecard_id")
+                or payload.get("scorecardId")
+                or payload.get("card_id")
+            )
+            if not scorecard_id_raw:
+                raise KeyError("scorecard_id")
+            scorecard_id = str(scorecard_id_raw)
+            card = cards.get(scorecard_id)
+            if card is None:
+                raise KeyError(scorecard_id)
+            hole = _to_int(payload.get("hole"))
+            if hole is None or hole <= 0:
+                raise ValueError("invalid hole")
+            revision = _safe_int(payload.get("revision"))
+            fingerprint = payload.get("fingerprint")
+            if isinstance(fingerprint, str):
+                fingerprint = fingerprint.strip() or None
+            existing = card["holes"].get(hole)
+            if existing is not None:
+                existing_revision = _safe_int(existing.get("revision"))
+                if (
+                    revision is not None
+                    and existing_revision is not None
+                    and revision < existing_revision
+                ):
+                    return "conflict", dict(existing)
+                if fingerprint and existing.get("fingerprint") == fingerprint:
+                    return "idempotent", dict(existing)
+            gross = _to_int(payload.get("gross")) or 0
+            net = _safe_int(payload.get("net"))
+            stableford = _safe_int(payload.get("stableford"))
+            par = _safe_int(payload.get("par"))
+            to_par = _safe_int(payload.get("to_par") or payload.get("toPar"))
+            strokes_received = _safe_int(
+                payload.get("strokes_received") or payload.get("strokesReceived")
+            )
+            playing_handicap = _safe_int(
+                payload.get("playing_handicap") or payload.get("playingHandicap")
+            )
+            course_handicap = _safe_int(
+                payload.get("course_handicap") or payload.get("courseHandicap")
+            )
+            hcp_index = _safe_float(payload.get("hcp_index") or payload.get("hcpIndex"))
+            row_format_raw = payload.get("format")
+            row_format = (
+                row_format_raw.lower()
+                if isinstance(row_format_raw, str)
+                and row_format_raw.lower() in VALID_GROSS_NET
+                else None
+            )
+            now = datetime.now(timezone.utc).isoformat()
+            if to_par is None and par is not None:
+                to_par = gross - par
+            target_revision = revision
+            if target_revision is None:
+                target_revision = (
+                    _safe_int(existing.get("revision")) + 1
+                    if existing and _safe_int(existing.get("revision")) is not None
+                    else 0
+                )
+            record = {
+                "hole": hole,
+                "gross": gross,
+                "net": net,
+                "stableford": stableford,
+                "par": par,
+                "to_par": to_par,
+                "strokes_received": strokes_received,
+                "playing_handicap": playing_handicap,
+                "course_handicap": course_handicap,
+                "fingerprint": fingerprint,
+                "revision": target_revision,
+                "format": row_format,
+                "updated_at": now,
+            }
+            card["holes"][hole] = record
+            card["updated_at"] = now
+            if hcp_index is not None:
+                card["hcp_index"] = hcp_index
+            if playing_handicap is not None:
+                card["playing_handicap"] = playing_handicap
+            if course_handicap is not None:
+                card["course_handicap"] = course_handicap
+            if row_format is not None:
+                card["format"] = row_format
+            return "updated", dict(record)
+
+    def get_score_rows(
+        self, event_id: str
+    ) -> Tuple[List[Mapping[str, Any]], Dict[str, Dict[str, Any]]]:
+        with self._lock:
+            cards = self._scorecards.get(event_id)
+            if not cards:
+                return [], {}
+            rows: List[Mapping[str, Any]] = []
+            meta: Dict[str, Dict[str, Any]] = {}
+            for scorecard_id, card in cards.items():
+                meta[scorecard_id] = {
+                    "name": card.get("name"),
+                    "member_id": card.get("member_id"),
+                    "hcp_index": card.get("hcp_index"),
+                    "course_handicap": card.get("course_handicap"),
+                    "playing_handicap": card.get("playing_handicap"),
+                    "status": card.get("status"),
+                    "updated_at": card.get("updated_at"),
+                    "created_at": card.get("created_at"),
+                    "format": card.get("format"),
+                }
+                for hole_no, hole_data in card.get("holes", {}).items():
+                    row = dict(hole_data)
+                    row["hole"] = hole_no
+                    row["scorecard_id"] = scorecard_id
+                    rows.append(row)
+            return rows, meta
+
+    def _scorecard_public_view(self, card: Mapping[str, Any]) -> Dict[str, Any]:
+        hcp_index = card.get("hcp_index")
+        return {
+            "scorecardId": str(card.get("scorecard_id")),
+            "name": str(card.get("name") or "Player"),
+            "memberId": card.get("member_id"),
+            "hcpIndex": (
+                float(hcp_index) if isinstance(hcp_index, (int, float)) else hcp_index
+            ),
+            "courseHandicap": card.get("course_handicap"),
+            "playingHandicap": card.get("playing_handicap"),
+            "status": card.get("status"),
+            "updatedAt": card.get("updated_at"),
+        }
 
     def add_member(
         self, event_id: str, *, member_id: str, name: str | None, role: str
@@ -557,16 +1033,124 @@ def join_event(
     return JoinResponse(eventId=event["id"])
 
 
+@router.post(
+    "/{event_id}/players",
+    response_model=RegisterPlayersResponse,
+    status_code=status.HTTP_200_OK,
+)
+def register_players(
+    event_id: str, body: RegisterPlayersBody
+) -> RegisterPlayersResponse:
+    if not body.players:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="no players provided"
+        )
+    try:
+        stored = _REPOSITORY.register_scorecards(
+            event_id,
+            [player.model_dump(by_alias=True) for player in body.players],
+        )
+    except KeyError:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="event not found"
+        ) from None
+    response_players = [EventPlayerState(**item) for item in stored]
+    return RegisterPlayersResponse(players=response_players)
+
+
+@router.post(
+    "/{event_id}/score",
+    response_model=ScoreWriteResponse,
+    status_code=status.HTTP_200_OK,
+)
+def submit_score(event_id: str, body: ScoreWriteBody) -> ScoreWriteResponse:
+    payload = body.model_dump(by_alias=True)
+    start = time.perf_counter()
+    try:
+        status_label, record = _REPOSITORY.upsert_score(event_id, payload)
+    except KeyError:
+        record_score_write(
+            event_id,
+            (time.perf_counter() - start) * 1000.0,
+            status="missing",
+            fingerprint=body.fingerprint,
+            revision=body.revision,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="scorecard not found"
+        ) from None
+    except ValueError as exc:
+        record_score_write(
+            event_id,
+            (time.perf_counter() - start) * 1000.0,
+            status="invalid",
+            fingerprint=body.fingerprint,
+            revision=body.revision,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)
+        ) from exc
+
+    duration_ms = (time.perf_counter() - start) * 1000.0
+    if status_label == "conflict":
+        record_score_conflict(
+            event_id,
+            revision=_safe_int(record.get("revision")),
+            fingerprint=body.fingerprint,
+        )
+        record_score_write(
+            event_id,
+            duration_ms,
+            status="conflict",
+            fingerprint=body.fingerprint,
+            revision=body.revision,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT, detail="revision conflict"
+        )
+
+    status_value = "idempotent" if status_label == "idempotent" else "ok"
+    record_score_write(
+        event_id,
+        duration_ms,
+        status=status_value,
+        fingerprint=body.fingerprint,
+        revision=body.revision,
+    )
+    updated_at = record.get("updated_at") or datetime.now(timezone.utc).isoformat()
+    revision_value = _safe_int(record.get("revision"))
+    return ScoreWriteResponse(
+        status=status_value, revision=revision_value, updatedAt=updated_at
+    )
+
+
 @router.get("/{event_id}/board", response_model=BoardResponse)
-def get_board(event_id: str) -> BoardResponse:
-    rows = _REPOSITORY.get_board(event_id)
-    settings = _REPOSITORY.get_settings(event_id)
-    mode = _normalize_gross_net(settings.get("grossNet"))
-    tv_flags = _normalize_tv_flags(settings.get("tvFlags"))
+def get_board(event_id: str, format: str | None = Query(default=None)) -> BoardResponse:
     event = _REPOSITORY.get_event(event_id)
-    if not rows:
-        record_board_resync(event_id, reason="empty", attempt=1)
-    players, updated_at = build_board(rows, mode=mode)
+    settings = event.get("settings") if event else {}
+    configured_mode = (
+        _normalize_gross_net(settings.get("grossNet"))
+        if settings
+        else DEFAULT_GROSS_NET
+    )
+    override_mode = _normalize_gross_net(format) if format else None
+    mode = override_mode or configured_mode
+    tv_flags = _normalize_tv_flags(settings.get("tvFlags") if settings else None)
+
+    start = time.perf_counter()
+    score_rows, score_meta = _REPOSITORY.get_score_rows(event_id)
+    if score_rows or score_meta:
+        players, updated_at = _aggregate_scorecards(score_rows, score_meta, mode=mode)
+        rows_count = len(players)
+    else:
+        legacy_rows = _REPOSITORY.get_board(event_id)
+        if not legacy_rows:
+            record_board_resync(event_id, reason="empty", attempt=1)
+        players, updated_at = build_board(legacy_rows, mode=mode)
+        rows_count = len(players)
+    duration_ms = (time.perf_counter() - start) * 1000.0
+    record_board_build(event_id, duration_ms, mode=mode, rows=rows_count)
+
     counts = (
         {
             "participants": int(event.get("participants", 0)),
@@ -745,3 +1329,22 @@ __all__ = [
     "validate_code",
     "require_admin",
 ]
+
+
+def _compute_net_simple(gross: float, hcp_index: float | None, holes: int) -> int:
+    if holes <= 0:
+        return int(round(gross))
+    if hcp_index is None:
+        return int(round(gross))
+    adjustment = round(hcp_index * (holes / 18.0))
+    return int(max(0, round(gross - adjustment)))
+
+
+def _safe_int(value: Any) -> int | None:
+    parsed = _to_int(value)
+    return parsed if parsed is not None else None
+
+
+def _safe_float(value: Any) -> float | None:
+    parsed = _to_float(value)
+    return parsed if parsed is not None else None

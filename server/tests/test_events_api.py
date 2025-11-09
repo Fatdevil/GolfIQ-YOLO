@@ -96,7 +96,15 @@ def test_board_sanitizes_hidden_fields(monkeypatch, telemetry_sink):
     board = board_response.json()
     assert "players" in board
     for player in board.get("players", []):
-        assert set(player.keys()) <= {"name", "gross", "net", "thru", "hole", "status"}
+        assert set(player.keys()) <= {
+            "name",
+            "gross",
+            "net",
+            "stableford",
+            "thru",
+            "hole",
+            "status",
+        }
     assert all(event != "events.resync" for event, _ in telemetry_sink)
 
 
