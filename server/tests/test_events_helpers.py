@@ -4,7 +4,7 @@ import importlib
 import math
 import secrets
 from datetime import datetime, timezone
-from typing import Iterable, Mapping
+from typing import Mapping
 
 import pytest
 
