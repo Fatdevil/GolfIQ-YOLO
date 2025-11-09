@@ -22,4 +22,16 @@ def qr_svg(data: str, size: int = 192) -> Optional[str]:
     return buffer.getvalue().decode("utf-8")
 
 
-__all__ = ["qr_svg"]
+def qr_svg_placeholder(size: int = 192, label: str = "QR Unavailable") -> str:
+    """Tiny inline SVG used when real QR generation is unavailable."""
+    return (
+        f'<svg xmlns="http://www.w3.org/2000/svg" width="{size}" height="{size}" '
+        f'viewBox="0 0 {size} {size}" role="img" aria-label="qr-unavailable">'
+        f'<rect width="100%" height="100%" fill="#111827"/>'
+        f'<text x="50%" y="50%" fill="#9CA3AF" font-size="{int(size * 0.12)}" '
+        f'dominant-baseline="middle" text-anchor="middle">{label}</text>'
+        "</svg>"
+    )
+
+
+__all__ = ["qr_svg", "qr_svg_placeholder"]

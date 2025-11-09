@@ -19,7 +19,7 @@ from server.telemetry.events import (
 )
 
 
-from server.utils.qr_svg import qr_svg
+from server.utils.qr_svg import qr_svg, qr_svg_placeholder
 
 router = APIRouter(
     prefix="/events", tags=["events"], dependencies=[Depends(require_api_key)]
@@ -383,7 +383,9 @@ class _MemoryEventsRepository:
                 return None
             result = dict(event)
             result["code"] = self._event_codes.get(event_id, result.get("code"))
-            result["status"] = self._event_status.get(event_id, result.get("status", "pending"))
+            result["status"] = self._event_status.get(
+                event_id, result.get("status", "pending")
+            )
             result["settings"] = self._clone_settings_locked(event_id)
             counts = self._counts_locked(event_id)
             result.update(counts)
@@ -441,7 +443,9 @@ class _MemoryEventsRepository:
             self._events[event_id]["code"] = new_code
             return new_code
 
-    def update_settings(self, event_id: str, *, settings: Mapping[str, Any]) -> Dict[str, Any] | None:
+    def update_settings(
+        self, event_id: str, *, settings: Mapping[str, Any]
+    ) -> Dict[str, Any] | None:
         with self._lock:
             if event_id not in self._events:
                 return None
@@ -453,7 +457,9 @@ class _MemoryEventsRepository:
                 current["grossNet"] = _normalize_gross_net(settings.get("grossNet"))
             if "tvFlags" in settings:
                 current["tvFlags"] = _normalize_tv_flags(
-                    settings.get("tvFlags") if isinstance(settings.get("tvFlags"), Mapping) else None
+                    settings.get("tvFlags")
+                    if isinstance(settings.get("tvFlags"), Mapping)
+                    else None
                 )
             stored = {
                 "grossNet": _normalize_gross_net(current.get("grossNet")),
@@ -504,7 +510,9 @@ def require_admin(
     member_id: str | None = Header(default=None, alias="x-event-member"),
 ) -> str | None:
     if (role or "").lower() != "admin":
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="admin role required")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="admin role required"
+        )
     return member_id
 
 
@@ -560,7 +568,10 @@ def get_board(event_id: str) -> BoardResponse:
         record_board_resync(event_id, reason="empty", attempt=1)
     players, updated_at = build_board(rows, mode=mode)
     counts = (
-        {"participants": int(event.get("participants", 0)), "spectators": int(event.get("spectators", 0))}
+        {
+            "participants": int(event.get("participants", 0)),
+            "spectators": int(event.get("spectators", 0)),
+        }
         if event
         else _REPOSITORY.counts(event_id)
     )
@@ -596,7 +607,9 @@ def start_event(
 ) -> HostStateResponse:
     updated = _REPOSITORY.set_status(event_id, "live")
     if updated is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="event not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="event not found"
+        )
     record_host_action(event_id, "start", member_id=member_id)
     return _build_host_state(event_id)
 
@@ -608,7 +621,9 @@ def pause_event(
 ) -> HostStateResponse:
     updated = _REPOSITORY.set_status(event_id, "paused")
     if updated is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="event not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="event not found"
+        )
     record_host_action(event_id, "pause", member_id=member_id)
     return _build_host_state(event_id)
 
@@ -620,7 +635,9 @@ def close_event(
 ) -> HostStateResponse:
     updated = _REPOSITORY.set_status(event_id, "closed")
     if updated is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="event not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="event not found"
+        )
     record_host_action(event_id, "close", member_id=member_id)
     return _build_host_state(event_id)
 
@@ -641,6 +658,7 @@ def regenerate_code(
     candidate = acquire_unique_code(5, generate_code)
 
     if candidate is None:
+
         def fallback() -> str:
             body = _random_indexes(6)
             checksum = _compute_checksum(body)
@@ -655,9 +673,14 @@ def regenerate_code(
             detail="unable to allocate join code",
         )
     if _REPOSITORY.regenerate_code(event_id, candidate) is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="event not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="event not found"
+        )
     record_host_action(event_id, "code.regenerate", member_id=member_id)
-    return _build_host_state(event_id)
+    state = _build_host_state(event_id)
+    if state.qrSvg is None:
+        state = state.model_copy(update={"qrSvg": qr_svg_placeholder()})
+    return state
 
 
 @router.patch("/{event_id}/settings", response_model=HostStateResponse)
@@ -674,10 +697,14 @@ def update_settings(
     if payload:
         updated = _REPOSITORY.update_settings(event_id, settings=payload)
         if updated is None:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="event not found")
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="event not found"
+            )
     else:
         if _REPOSITORY.get_event(event_id) is None:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="event not found")
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="event not found"
+            )
     record_host_action(event_id, "settings.update", member_id=member_id)
     return _build_host_state(event_id)
 
@@ -685,7 +712,9 @@ def update_settings(
 def _build_host_state(event_id: str) -> HostStateResponse:
     event = _REPOSITORY.get_event(event_id)
     if not event:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="event not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="event not found"
+        )
     code = str(event.get("code") or "").upper()
     base_url = _web_base_url()
     join_url = f"{base_url}/join/{code}" if code else f"{base_url}/events/{event_id}"

@@ -136,7 +136,9 @@ def test_host_actions_require_admin(monkeypatch, telemetry_sink):
     assert closed.status_code == 200
     assert closed.json()["status"] == "closed"
 
-    host_events = [name for name, _payload in telemetry_sink if name == "events.host.action"]
+    host_events = [
+        name for name, _payload in telemetry_sink if name == "events.host.action"
+    ]
     assert host_events.count("events.host.action") >= 3
 
 
