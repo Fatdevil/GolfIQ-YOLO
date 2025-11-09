@@ -5,10 +5,8 @@ import threading
 import uuid
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from io import BytesIO
 from typing import Any, Dict, Iterable, List, Mapping, Tuple
 
-import segno
 from fastapi import APIRouter, Body, Depends, HTTPException, Path, status
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -20,7 +18,11 @@ from server.telemetry.events import (
 )
 
 
-router = APIRouter(prefix="/events", tags=["events"], dependencies=[Depends(require_api_key)])
+from server.utils.qr_svg import qr_svg
+
+router = APIRouter(
+    prefix="/events", tags=["events"], dependencies=[Depends(require_api_key)]
+)
 join_router = APIRouter(tags=["events"])  # Join endpoint is public for spectators.
 
 
@@ -37,7 +39,7 @@ class CreateEventResponse(BaseModel):
     id: str
     code: str
     joinUrl: str
-    qrSvg: str
+    qrSvg: str | None = None
 
 
 class JoinRequest(BaseModel):
@@ -66,8 +68,10 @@ class BoardResponse(BaseModel):
 
 
 def _web_base_url() -> str:
-    base = os.getenv("WEB_BASE_URL") or os.getenv("EXPO_PUBLIC_WEB_BASE") or os.getenv(
-        "APP_BASE_URL"
+    base = (
+        os.getenv("WEB_BASE_URL")
+        or os.getenv("EXPO_PUBLIC_WEB_BASE")
+        or os.getenv("APP_BASE_URL")
     )
     return (base or "https://app.golfiq.dev").rstrip("/")
 
@@ -113,17 +117,6 @@ def validate_code(code: str) -> bool:
             return False
     checksum = values.pop()
     return _compute_checksum(values) == checksum
-
-
-def qr_svg(data: str, *, size: int = 192) -> str:
-    if not data:
-        raise ValueError("QR payload is required")
-    symbol = segno.make(data, micro=False, error="m", version=6, boost_error=False)
-    width, _ = symbol.symbol_size(scale=1, border=4)
-    scale = max(1, int(size / max(width, 1)))
-    buffer = BytesIO()
-    symbol.save(buffer, kind="svg", xmldecl=False, unit="px", scale=scale)
-    return buffer.getvalue().decode("utf-8")
 
 
 def _parse_timestamp(value: Any) -> float | None:
@@ -205,14 +198,14 @@ def _sanitize_player(row: Mapping[str, Any]) -> Tuple[SpectatorPlayer, Dict[str,
     meta = {
         "last_under_par": row.get("last_under_par_at") or row.get("under_par_at"),
         "finished_at": row.get("finished_at") or row.get("completed_at"),
-        "updated_at": row.get("updated_at")
-        or row.get("last_updated")
-        or row.get("ts"),
+        "updated_at": row.get("updated_at") or row.get("last_updated") or row.get("ts"),
     }
     return sanitized, meta
 
 
-def build_board(rows: Iterable[Mapping[str, Any]]) -> Tuple[List[SpectatorPlayer], str | None]:
+def build_board(
+    rows: Iterable[Mapping[str, Any]],
+) -> Tuple[List[SpectatorPlayer], str | None]:
     enriched: List[Tuple[SpectatorPlayer, Tuple[float, float, float, float, str]]] = []
     updated_ts: List[float] = []
     for raw in rows:
@@ -255,7 +248,9 @@ class _MemoryEventsRepository:
         self._members: Dict[Tuple[str, str], _Member] = {}
         self._boards: Dict[str, List[Dict[str, Any]]] = {}
 
-    def create_event(self, name: str, emoji: str | None, *, code: str) -> Dict[str, Any]:
+    def create_event(
+        self, name: str, emoji: str | None, *, code: str
+    ) -> Dict[str, Any]:
         with self._lock:
             event_id = str(uuid.uuid4())
             now = datetime.now(timezone.utc).isoformat()
@@ -287,7 +282,9 @@ class _MemoryEventsRepository:
         self, event_id: str, *, member_id: str, name: str | None, role: str
     ) -> None:
         with self._lock:
-            member = _Member(event_id=event_id, member_id=member_id, name=name, role=role)
+            member = _Member(
+                event_id=event_id, member_id=member_id, name=name, role=role
+            )
             self._members[(event_id, member_id)] = member
             board = self._boards.setdefault(event_id, [])
             board.append(
@@ -316,14 +313,22 @@ class _MemoryEventsRepository:
 _REPOSITORY = _MemoryEventsRepository()
 
 
-@router.post("", response_model=CreateEventResponse, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "",
+    response_model=CreateEventResponse,
+    status_code=status.HTTP_201_CREATED,
+    response_model_exclude_none=True,
+)
 def create_event(body: CreateEventBody) -> CreateEventResponse:
     code = generate_code()
     event = _REPOSITORY.create_event(body.name, body.emoji, code=code)
     join_url = f"{_web_base_url()}/join/{code}"
-    svg = qr_svg(f"golfiq://join/{code}")
+    svg = qr_svg(join_url)
     record_event_created(event["id"], code, name=body.name)
-    return CreateEventResponse(id=event["id"], code=code, joinUrl=join_url, qrSvg=svg)
+    response = CreateEventResponse(id=event["id"], code=code, joinUrl=join_url)
+    if svg is not None:
+        response.qrSvg = svg
+    return response
 
 
 @join_router.post("/join/{code}", response_model=JoinResponse)
@@ -333,12 +338,18 @@ def join_event(
 ) -> JoinResponse:
     normalized = code.strip().upper()
     if not validate_code(normalized):
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="invalid code")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="invalid code"
+        )
     event = _REPOSITORY.resolve_event_by_code(normalized)
     if not event:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="event not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="event not found"
+        )
     member_id = body.member_id or str(uuid.uuid4())
-    _REPOSITORY.add_member(event["id"], member_id=member_id, name=body.name, role="spectator")
+    _REPOSITORY.add_member(
+        event["id"], member_id=member_id, name=body.name, role="spectator"
+    )
     record_event_joined(event["id"], member_id)
     return JoinResponse(eventId=event["id"])
 
@@ -352,4 +363,4 @@ def get_board(event_id: str) -> BoardResponse:
     return BoardResponse(players=players, updatedAt=updated_at)
 
 
-__all__ = ["router", "join_router", "build_board", "generate_code", "validate_code", "qr_svg"]
+__all__ = ["router", "join_router", "build_board", "generate_code", "validate_code"]

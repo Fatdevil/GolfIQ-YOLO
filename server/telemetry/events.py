@@ -44,7 +44,9 @@ def record_event_joined(event_id: str, member_id: str | None = None) -> None:
     _safe_emit("events.join", payload)
 
 
-def record_board_resync(event_id: str, *, reason: str | None = None, attempt: int | None = None) -> None:
+def record_board_resync(
+    event_id: str, *, reason: str | None = None, attempt: int | None = None
+) -> None:
     payload: Dict[str, object] = {"eventId": event_id}
     if reason:
         payload["reason"] = reason
