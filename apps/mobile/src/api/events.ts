@@ -1,6 +1,10 @@
 import { resolveApiBase } from '@app/config';
 import type { GrossNetMode, SpectatorBoardPlayer, TvFlags } from '@shared/events/types';
 
+export type PostScoreResult =
+  | { ok: true; idempotent?: boolean; revision: number }
+  | { ok: false; retry?: 'bump'; currentRevision?: number; reason?: string; status: number };
+
 type JoinResponse = {
   eventId: string;
 };
@@ -45,4 +49,48 @@ export async function fetchBoard(eventId: string): Promise<SpectatorBoardRespons
     throw new Error(message || 'Failed to load live board');
   }
   return (await response.json()) as SpectatorBoardResponse;
+}
+
+export type PostScoreArgs = {
+  eventId: string;
+  scorecardId: string;
+  hole: number;
+  strokes: number;
+  putts?: number | null;
+  revision?: number | null;
+  fingerprint: string;
+};
+
+export async function postScore(args: PostScoreArgs): Promise<PostScoreResult> {
+  const response = await fetch(`${resolveApiBase()}/events/${encodeURIComponent(args.eventId)}/score`, {
+    method: 'POST',
+    headers: headers(),
+    body: JSON.stringify(args),
+  });
+
+  if (response.ok) {
+    const json = await response.json().catch(() => ({}));
+    return {
+      ok: true,
+      idempotent: json?.idempotent === true ? true : undefined,
+      revision: typeof json?.revision === 'number' ? json.revision : args.revision ?? 1,
+    };
+  }
+
+  if (response.status === 409) {
+    const data = await response.json().catch(() => ({}));
+    const detail = data?.detail;
+    const currentRevision = detail?.currentRevision;
+    if (detail?.reason === 'STALE_OR_DUPLICATE' && Number.isFinite(currentRevision)) {
+      return {
+        ok: false,
+        retry: 'bump',
+        currentRevision: Number(currentRevision),
+        reason: detail.reason,
+        status: 409,
+      };
+    }
+  }
+
+  return { ok: false, status: response.status };
 }
