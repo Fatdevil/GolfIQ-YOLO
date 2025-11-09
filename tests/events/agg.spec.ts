@@ -57,4 +57,16 @@ describe('spectator leaderboard aggregation', () => {
     ]);
     expect(board.players.map((player) => player.name)).toEqual(['Eli', 'Drew']);
   });
+
+  it('supports gross-first sorting when requested', () => {
+    const board = buildSpectatorBoard(
+      [
+        { name: 'Grace', gross: 68, net: 68, last_under_par_at: '2024-01-01T10:00:00Z' },
+        { name: 'Harper', gross: 70, net: 66, last_under_par_at: '2024-01-01T09:00:00Z' },
+        { name: 'Ivy', gross: 69, net: 67, last_under_par_at: '2024-01-01T08:00:00Z' },
+      ],
+      { mode: 'gross' },
+    );
+    expect(board.players.map((player) => player.name)).toEqual(['Grace', 'Ivy', 'Harper']);
+  });
 });

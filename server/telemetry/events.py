@@ -56,6 +56,37 @@ def record_board_resync(
     _safe_emit("events.resync", payload)
 
 
+def record_host_action(event_id: str, action: str, *, member_id: str | None = None) -> None:
+    payload: Dict[str, object] = {"eventId": event_id, "action": action}
+    if member_id:
+        payload["memberId"] = member_id
+    payload["ts"] = _now_ms()
+    _safe_emit("events.host.action", payload)
+
+
+def record_tv_tick(event_id: str, duration_ms: float, *, source: str | None = None) -> None:
+    payload: Dict[str, object] = {
+        "eventId": event_id,
+        "durationMs": int(max(0, round(duration_ms))),
+    }
+    if source:
+        payload["source"] = source
+    payload["ts"] = _now_ms()
+    _safe_emit("events.tv.tick_ms", payload)
+
+
+def record_tv_rotate(event_id: str, interval_ms: float, view: str, *, source: str | None = None) -> None:
+    payload: Dict[str, object] = {
+        "eventId": event_id,
+        "intervalMs": int(max(0, round(interval_ms))),
+        "view": view,
+    }
+    if source:
+        payload["source"] = source
+    payload["ts"] = _now_ms()
+    _safe_emit("events.tv.rotate", payload)
+
+
 def _now_ms() -> int:
     from time import time
 
@@ -67,4 +98,7 @@ __all__ = [
     "record_event_created",
     "record_event_joined",
     "record_board_resync",
+    "record_host_action",
+    "record_tv_tick",
+    "record_tv_rotate",
 ]

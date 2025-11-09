@@ -18,6 +18,7 @@ import type {
   Participant,
   ScoreRow,
   ScoringFormat,
+  TvFlags,
   UUID,
 } from './types';
 
@@ -103,9 +104,18 @@ const DEFAULT_ALLOWANCE: Record<ScoringFormat, number> = {
   stableford: 95,
 };
 
+const DEFAULT_TV_FLAGS: Required<Pick<TvFlags, 'showQrOverlay' | 'autoRotateTop'>> &
+  Partial<TvFlags> = {
+    showQrOverlay: false,
+    autoRotateTop: true,
+    rotateIntervalMs: undefined,
+  };
+
 const DEFAULT_EVENT_SETTINGS: EventSettings = {
   scoringFormat: 'stroke',
   allowancePct: DEFAULT_ALLOWANCE.stroke,
+  grossNet: 'net',
+  tvFlags: { ...DEFAULT_TV_FLAGS },
 };
 
 function normalizeSettings(settings: EventSettings | null | undefined): EventSettings {
@@ -117,9 +127,16 @@ function normalizeSettings(settings: EventSettings | null | undefined): EventSet
   const allowance = Number.isFinite(allowanceRaw ?? NaN)
     ? Math.max(0, Number(allowanceRaw))
     : DEFAULT_ALLOWANCE[scoringFormat];
+  const grossNet = settings.grossNet === 'gross' ? 'gross' : 'net';
+  const tvFlags: TvFlags = {
+    ...DEFAULT_TV_FLAGS,
+    ...(settings.tvFlags ?? {}),
+  };
   return {
     scoringFormat,
     allowancePct: allowance,
+    grossNet,
+    tvFlags,
   };
 }
 
