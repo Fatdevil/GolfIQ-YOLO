@@ -15,6 +15,7 @@
       "react-native": ["./src/runtime/react-native"],
       "@react-navigation/native": ["./src/runtime/react-navigation-native"],
       "@react-navigation/native-stack": ["./src/runtime/react-navigation-native-stack"],
+      "expo-barcode-scanner": ["./src/runtime/expo-barcode-scanner"],
       "@app/*": ["./src/*"],
       "@shared/*": ["../../shared/*"]
     }

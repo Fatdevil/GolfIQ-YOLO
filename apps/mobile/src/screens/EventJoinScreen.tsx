@@ -1,6 +1,8 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 
+import { requestPermissionsAsync } from 'expo-barcode-scanner';
+
 import { joinByCode } from '@app/api/events';
 import type { RootStackParamList } from '@app/navigation/types';
 import { safeEmit } from '@app/telemetry';
@@ -24,6 +26,7 @@ export default function EventJoinScreen({ navigation, route, initialCode }: Prop
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const [scanHint, setScanHint] = useState<string | null>(null);
   const autoSubmitRef = useRef<string | null>(null);
 
   useEffect(() => {
@@ -79,12 +82,34 @@ export default function EventJoinScreen({ navigation, route, initialCode }: Prop
     setCode(normalized);
     setError(null);
     setMessage(null);
+    setScanHint(null);
     if (normalized !== autoSubmitRef.current) {
       autoSubmitRef.current = null;
     }
   };
 
   const disableJoin = loading;
+
+  const handleScanPress = useCallback(async () => {
+    safeEmit('events.scan.open', {});
+    try {
+      const result = await requestPermissionsAsync();
+      if (result?.granted) {
+        setScanHint(null);
+        navigation.navigate('EventScan');
+        return;
+      }
+      const status = result?.status ?? 'unknown';
+      safeEmit('events.scan.denied', { status });
+      setScanHint('Kameratillstånd krävs för att skanna. Ange koden manuellt.');
+    } catch (error) {
+      safeEmit('events.scan.denied', { status: 'error' });
+      setScanHint('Kunde inte begära kameratillstånd. Ange koden manuellt.');
+      if (process.env.NODE_ENV !== 'production') {
+        console.warn('[EventJoinScreen] failed to request camera permissions', error);
+      }
+    }
+  }, [navigation]);
 
   return (
     <View style={styles.container}>
@@ -108,6 +133,16 @@ export default function EventJoinScreen({ navigation, route, initialCode }: Prop
           {message}
         </Text>
       )}
+      {scanHint && (
+        <Text style={styles.hint} testID="scan-hint">
+          {scanHint}
+        </Text>
+      )}
+      <TouchableOpacity accessibilityLabel="Skanna QR" onPress={handleScanPress} testID="scan-cta">
+        <View style={styles.secondaryButton}>
+          <Text style={styles.secondaryButtonText}>Skanna QR</Text>
+        </View>
+      </TouchableOpacity>
       <TouchableOpacity
         accessibilityLabel="Join event"
         onPress={() => submit().catch(() => {})}
@@ -153,6 +188,23 @@ const styles = StyleSheet.create({
   buttonText: {
     color: '#fff',
     fontWeight: '600',
+  },
+  secondaryButton: {
+    marginTop: 8,
+    paddingVertical: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#111827',
+    borderRadius: 6,
+  },
+  secondaryButtonText: {
+    color: '#111827',
+    fontWeight: '600',
+  },
+  hint: {
+    color: '#1f2937',
+    fontSize: 12,
   },
 });
 

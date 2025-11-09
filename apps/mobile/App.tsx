@@ -7,6 +7,7 @@ import linking from '@app/linking';
 import type { RootStackParamList } from '@app/navigation/types';
 import EventJoinScreen from '@app/screens/EventJoinScreen';
 import EventLiveScreen from '@app/screens/EventLiveScreen';
+import EventScanScreen from '@app/screens/EventScanScreen';
 import { extractJoinCode } from '@app/utils/deepLink';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -42,6 +43,7 @@ export default function App(): JSX.Element {
           {(props) => <EventJoinScreen {...props} initialCode={initialCode} />}
         </Stack.Screen>
         <Stack.Screen name="EventLive" component={EventLiveScreen} />
+        <Stack.Screen name="EventScan" component={EventScanScreen} />
       </Stack.Navigator>
     </NavigationContainer>
   );

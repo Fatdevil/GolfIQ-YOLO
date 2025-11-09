@@ -11,7 +11,7 @@ export default defineConfig({
     environment: 'jsdom',
     setupFiles: ['./vitest.setup.ts'],
     css: false,
-    include: ['__tests__/**/*.spec.ts'],
+    include: ['__tests__/**/*.spec.ts', '__tests__/**/*.spec.tsx'],
   },
   resolve: {
     alias: {
@@ -20,6 +20,7 @@ export default defineConfig({
       'react-native': resolve(srcDir, 'runtime/react-native.tsx'),
       '@react-navigation/native': resolve(srcDir, 'runtime/react-navigation-native.tsx'),
       '@react-navigation/native-stack': resolve(srcDir, 'runtime/react-navigation-native-stack.tsx'),
+      'expo-barcode-scanner': resolve(srcDir, 'runtime/expo-barcode-scanner.tsx'),
     },
   },
 });
