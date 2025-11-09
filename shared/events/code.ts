@@ -1,5 +1,3 @@
-import { randomBytes } from 'node:crypto';
-
 import type { ShortCode } from './types';
 
 const ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
@@ -8,6 +6,16 @@ const CHAR_TO_VALUE = new Map<string, number>(
   Array.from(ALPHABET).map((char, index) => [char, index]),
 );
 
+function fillRandom(bytes: Uint8Array): void {
+  if (typeof globalThis.crypto?.getRandomValues === 'function') {
+    globalThis.crypto.getRandomValues(bytes);
+    return;
+  }
+  for (let i = 0; i < bytes.length; i += 1) {
+    bytes[i] = Math.floor(Math.random() * 256);
+  }
+}
+
 function randomIndexes(count: number): number[] {
   const result: number[] = [];
   if (count <= 0) {
@@ -15,7 +23,8 @@ function randomIndexes(count: number): number[] {
   }
   const maxMultiple = Math.floor(256 / ALPHABET_SIZE) * ALPHABET_SIZE;
   while (result.length < count) {
-    const bytes = randomBytes(count);
+    const bytes = new Uint8Array(count);
+    fillRandom(bytes);
     for (const byte of bytes) {
       if (byte < maxMultiple) {
         result.push(byte % ALPHABET_SIZE);

@@ -217,3 +217,55 @@ export function __setNowProviderForTests(fn: (() => number) | null): void {
 export function __setRandomProviderForTests(fn: (() => number) | null): void {
   randomProvider = fn ?? (() => Math.random());
 }
+
+export type BackoffController = {
+  success(): number;
+  failure(): number;
+  reset(): void;
+  attempts(): number;
+};
+
+export function createBackoffController(options?: {
+  baseMs?: number;
+  maxMs?: number;
+  factor?: number;
+  jitter?: number;
+  successMs?: number;
+  successMaxMs?: number;
+}): BackoffController {
+  const failureBase = Math.max(1, options?.baseMs ?? 1000);
+  const failureMax = Math.max(failureBase, options?.maxMs ?? 8000);
+  const factor = Math.max(1, options?.factor ?? 2);
+  const jitterRatio = Math.max(0, Math.min(1, options?.jitter ?? 0.2));
+  const successDelay = Math.max(1, options?.successMs ?? options?.baseMs ?? 1000);
+  const inferredSuccessMax = Math.round(successDelay * (1 + jitterRatio));
+  const successMax = Math.max(
+    successDelay,
+    options?.successMaxMs ?? inferredSuccessMax,
+  );
+  let attempt = 0;
+
+  const computeDelay = (value: number, limit: number) => {
+    const jitter = value * jitterRatio * Math.random();
+    return Math.round(Math.min(limit, value + jitter));
+  };
+
+  return {
+    success() {
+      attempt = 0;
+      return computeDelay(successDelay, successMax);
+    },
+    failure() {
+      attempt += 1;
+      const exponential = failureBase * factor ** Math.max(attempt - 1, 0);
+      const delay = Math.min(failureMax, exponential);
+      return computeDelay(delay, failureMax);
+    },
+    reset() {
+      attempt = 0;
+    },
+    attempts() {
+      return attempt;
+    },
+  };
+}
