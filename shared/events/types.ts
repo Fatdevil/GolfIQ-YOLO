@@ -100,3 +100,12 @@ export type LiveSpectatorSnapshot = {
   updatedAt: string | null;
   format: ScoringFormat;
 };
+
+export type SpectatorBoardPlayer = {
+  name: string;
+  gross: number;
+  net?: number | null;
+  thru: number;
+  hole: number;
+  status?: string | null;
+};

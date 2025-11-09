@@ -16,6 +16,9 @@ import EventLeaderboardPage from "./pages/EventLeaderboard";
 import ReelsComposerPage from "./pages/ReelsComposer";
 import RangeScorePage from "./pages/range/score";
 import LiveRoundRoute from "./routes/live/[eventId]/[roundId]";
+import CreateEventPage from "./pages/events/new";
+import JoinEventPage from "./pages/join/[code]";
+import LiveLeaderboardPage from "./pages/events/[id]/live";
 
 export default function App() {
   return (
@@ -30,6 +33,10 @@ export default function App() {
           <Route path="/runs/:id" element={<RunDetailPage />} />
           <Route path="/share/:id" element={<ShareRunPage />} />
           <Route path="/event/:id" element={<EventLeaderboardPage />} />
+          <Route path="/events/new" element={<CreateEventPage />} />
+          <Route path="/events/:id/live" element={<LiveLeaderboardPage />} />
+          <Route path="/join" element={<JoinEventPage />} />
+          <Route path="/join/:code" element={<JoinEventPage />} />
           <Route path="/:eventId/live/:roundId" element={<LiveRoundRoute />} />
           <Route path="/field-runs" element={<FieldRunsPage />} />
           <Route path="/device-dashboard" element={<DeviceDashboardPage />} />

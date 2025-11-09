@@ -13,6 +13,8 @@
     "baseUrl": ".",
     "paths": {
       "@shared/*": ["../shared/*"],
+      "@web/*": ["./src/*"],
+      "@web": ["./src"],
       "vitest": ["./node_modules/vitest"],
       "vitest/*": ["./node_modules/vitest/*"]
     },

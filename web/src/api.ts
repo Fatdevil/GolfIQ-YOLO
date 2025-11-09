@@ -9,6 +9,62 @@ const withAuth = (extra: Record<string, string> = {}) =>
 
 export { API };
 
+export type CreateEventBody = {
+  name: string;
+  emoji?: string;
+};
+
+export type CreateEventResponse = {
+  id: string;
+  code: string;
+  joinUrl: string;
+  qrSvg: string;
+};
+
+export const postCreateEvent = (body: CreateEventBody) =>
+  axios
+    .post<CreateEventResponse>(`${API}/events`, body, {
+      headers: withAuth({ 'Content-Type': 'application/json' }),
+    })
+    .then((r) => r.data);
+
+export type JoinEventBody = {
+  memberId?: string;
+  name?: string;
+};
+
+export type JoinEventResponse = {
+  eventId: string;
+};
+
+export const postJoinEvent = (code: string, body: JoinEventBody = {}) =>
+  axios
+    .post<JoinEventResponse>(`${API}/join/${code}`, body, {
+      headers: withAuth({ 'Content-Type': 'application/json' }),
+    })
+    .then((r) => r.data);
+
+export type SpectatorBoardPlayer = {
+  name: string;
+  gross: number;
+  net?: number | null;
+  thru: number;
+  hole: number;
+  status?: string | null;
+};
+
+export type SpectatorBoardResponse = {
+  players: SpectatorBoardPlayer[];
+  updatedAt: string | null;
+};
+
+export const fetchSpectatorBoard = (eventId: string) =>
+  axios
+    .get<SpectatorBoardResponse>(`${API}/events/${eventId}/board`, {
+      headers: withAuth(),
+    })
+    .then((r) => r.data);
+
 export type CalibrationMeasureBody = {
   p1x: number;
   p1y: number;

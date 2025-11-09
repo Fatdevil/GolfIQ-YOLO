@@ -66,3 +66,39 @@ export function recordLeaderboardViewedWeb(eventId: UUID): void {
     eventId,
   });
 }
+
+export function emitEventsCreate(payload: { eventId: UUID; code: string; source?: string | null }): void {
+  emit('events.create', {
+    eventId: payload.eventId,
+    code: payload.code,
+    source: payload.source ?? 'web',
+    ts: Date.now(),
+  });
+}
+
+export function emitEventsJoin(payload: { eventId: UUID; memberId?: string | null; source?: string | null }): void {
+  emit('events.join', {
+    eventId: payload.eventId,
+    memberId: payload.memberId ?? null,
+    source: payload.source ?? 'web',
+    ts: Date.now(),
+  });
+}
+
+export function emitEventsLiveTick(payload: { eventId: UUID; durationMs: number }): void {
+  emit('events.live_tick_ms', {
+    eventId: payload.eventId,
+    durationMs: Math.max(0, Math.round(payload.durationMs)),
+    ts: Date.now(),
+  });
+}
+
+export function emitEventsResync(payload: { eventId: UUID; delayMs: number; attempt: number; reason?: string | null }): void {
+  emit('events.resync', {
+    eventId: payload.eventId,
+    delayMs: Math.max(0, Math.round(payload.delayMs)),
+    attempt: Math.max(0, payload.attempt),
+    reason: payload.reason ?? null,
+    ts: Date.now(),
+  });
+}

@@ -4,3 +4,4 @@ httpx
 numpy>=1.26
 prometheus-client
 boto3
+segno
