@@ -170,6 +170,44 @@ def test_update_error_emits_and_returns_5xx(monkeypatch, telemetry_sink):
     assert "score.conflict.stale_or_duplicate" in events
 
 
+def test_first_insert_repo_failure_reports(monkeypatch, telemetry_sink):
+    events_module = importlib.import_module("server.routes.events")
+
+    class InsertFailRepository(events_module._MemoryEventsRepository):
+        def upsert_score(self, event_id: str, payload):  # type: ignore[override]
+            if payload.get("fingerprint") == "fp-first-fail":
+                telemetry_events.record_score_write(
+                    event_id,
+                    0.0,
+                    status="error",
+                    fingerprint=payload.get("fingerprint"),
+                    revision=payload.get("revision"),
+                )
+                raise RuntimeError("insert failure")
+            return super().upsert_score(event_id, payload)
+
+    repo = InsertFailRepository()
+    monkeypatch.setattr(events_module, "_REPOSITORY", repo)
+
+    event_id = _create_event(repo, code="FIRSTF")
+    _register_player(event_id, "sc-first")
+
+    failing = client.post(
+        f"/events/{event_id}/score",
+        json={
+            "scorecardId": "sc-first",
+            "hole": 3,
+            "gross": 4,
+            "fingerprint": "fp-first-fail",
+            "revision": None,
+        },
+    )
+    assert failing.status_code >= 500
+
+    events = {name for name, _payload in telemetry_sink}
+    assert "score.write_ms" in events
+
+
 def test_board_empty_and_unknown_format(fresh_repository):
     empty_event = _create_event(fresh_repository, code="EMPTY0")
     fresh_repository._boards[empty_event] = []  # force cold board path
