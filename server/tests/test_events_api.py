@@ -110,3 +110,84 @@ def test_missing_board_triggers_resync(monkeypatch, telemetry_sink):
     assert response.status_code == 200
     assert any(event == "events.resync" for event, _ in telemetry_sink)
     assert response.json()["players"] == []
+
+
+def test_host_actions_require_admin(monkeypatch, telemetry_sink):
+    events_module = importlib.import_module("server.routes.events")
+    valid_code = events_module.generate_code()
+    monkeypatch.setattr(events_module, "generate_code", lambda: valid_code)
+
+    response = client.post("/events", json={"name": "Masters"})
+    event_id = response.json()["id"]
+
+    forbidden = client.post(f"/events/{event_id}/start")
+    assert forbidden.status_code == 403
+
+    headers = {"x-event-role": "admin"}
+    started = client.post(f"/events/{event_id}/start", headers=headers)
+    assert started.status_code == 200
+    assert started.json()["status"] == "live"
+
+    paused = client.post(f"/events/{event_id}/pause", headers=headers)
+    assert paused.status_code == 200
+    assert paused.json()["status"] == "paused"
+
+    closed = client.post(f"/events/{event_id}/close", headers=headers)
+    assert closed.status_code == 200
+    assert closed.json()["status"] == "closed"
+
+    host_events = [
+        name for name, _payload in telemetry_sink if name == "events.host.action"
+    ]
+    assert host_events.count("events.host.action") >= 3
+
+
+def test_regenerate_code_invalidates_previous(monkeypatch):
+    events_module = importlib.import_module("server.routes.events")
+    first_code = events_module.generate_code()
+    monkeypatch.setattr(events_module, "generate_code", lambda: first_code)
+
+    response = client.post("/events", json={"name": "Summer Open"})
+    event_id = response.json()["id"]
+
+    # Regenerate with admin header
+    headers = {"x-event-role": "admin"}
+    regen = client.post(f"/events/{event_id}/code/regenerate", headers=headers)
+    assert regen.status_code == 200
+    new_code = regen.json()["code"]
+    assert new_code != first_code
+    assert regen.json()["qrSvg"].startswith("<svg")
+
+    # Old code no longer valid
+    old_join = client.post(f"/join/{first_code}", json={})
+    assert old_join.status_code == 404
+
+    # New code should work
+    new_join = client.post(f"/join/{new_code}", json={})
+    assert new_join.status_code == 200
+    assert new_join.json()["eventId"] == event_id
+
+
+def test_update_settings_persists_gross_net(monkeypatch):
+    events_module = importlib.import_module("server.routes.events")
+    code = events_module.generate_code()
+    monkeypatch.setattr(events_module, "generate_code", lambda: code)
+
+    response = client.post("/events", json={"name": "Club Finals"})
+    event_id = response.json()["id"]
+
+    headers = {"x-event-role": "admin"}
+    patch = client.patch(
+        f"/events/{event_id}/settings",
+        headers=headers,
+        json={"grossNet": "gross", "tvFlags": {"showQrOverlay": True}},
+    )
+    assert patch.status_code == 200
+    assert patch.json()["grossNet"] == "gross"
+    assert patch.json()["tvFlags"]["showQrOverlay"] is True
+
+    board = client.get(f"/events/{event_id}/board")
+    assert board.status_code == 200
+    body = board.json()
+    assert body["grossNet"] == "gross"
+    assert body["tvFlags"]["showQrOverlay"] is True

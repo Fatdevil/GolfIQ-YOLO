@@ -192,7 +192,14 @@ function sortPlayers(a: BoardPlayer & { tie: InternalScore }, b: BoardPlayer & {
   return a.name.localeCompare(b.name);
 }
 
-export function buildBoard(rounds: RoundLike[], slope?: SlopeCR): Board {
+export type BoardMode = 'gross' | 'net';
+
+export function buildBoard(
+  rounds: RoundLike[],
+  slope?: SlopeCR,
+  options?: { mode?: BoardMode },
+): Board {
+  const mode: BoardMode = options?.mode === 'gross' ? 'gross' : 'net';
   const players: Array<BoardPlayer & { tie: InternalScore }> = [];
   let latestUpdate: number | null = null;
 
@@ -217,7 +224,12 @@ export function buildBoard(rounds: RoundLike[], slope?: SlopeCR): Board {
     });
   }
 
-  players.sort(sortPlayers);
+  players.sort((a, b) => {
+    if (mode === 'gross' && a.gross !== b.gross) {
+      return a.gross - b.gross;
+    }
+    return sortPlayers(a, b);
+  });
 
   const sanitized = players.map(({ tie, ...rest }) => rest);
   const updatedAt = latestUpdate !== null ? new Date(latestUpdate).toISOString() : new Date().toISOString();

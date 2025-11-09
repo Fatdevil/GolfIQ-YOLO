@@ -1,5 +1,5 @@
 import { resolveApiBase } from '@app/config';
-import type { SpectatorBoardPlayer } from '@shared/events/types';
+import type { GrossNetMode, SpectatorBoardPlayer, TvFlags } from '@shared/events/types';
 
 type JoinResponse = {
   eventId: string;
@@ -8,6 +8,11 @@ type JoinResponse = {
 type SpectatorBoardResponse = {
   players: SpectatorBoardPlayer[];
   updatedAt: string | null;
+  grossNet?: GrossNetMode;
+  tvFlags?: TvFlags | null;
+  participants?: number;
+  spectators?: number;
+  qrSvg?: string | null;
 };
 
 function headers(): HeadersInit {

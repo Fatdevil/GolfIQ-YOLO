@@ -5,9 +5,9 @@ import threading
 import uuid
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Any, Dict, Iterable, List, Mapping, Tuple
+from typing import Any, Callable, Dict, Iterable, List, Mapping, Tuple
 
-from fastapi import APIRouter, Body, Depends, HTTPException, Path, status
+from fastapi import APIRouter, Body, Depends, Header, HTTPException, Path, status
 from pydantic import BaseModel, ConfigDict, Field
 
 from server.security import require_api_key
@@ -15,10 +15,11 @@ from server.telemetry.events import (
     record_board_resync,
     record_event_created,
     record_event_joined,
+    record_host_action,
 )
 
 
-from server.utils.qr_svg import qr_svg
+from server.utils.qr_svg import qr_svg, qr_svg_placeholder
 
 router = APIRouter(
     prefix="/events", tags=["events"], dependencies=[Depends(require_api_key)]
@@ -28,6 +29,39 @@ join_router = APIRouter(tags=["events"])  # Join endpoint is public for spectato
 
 ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
 ALPHABET_SIZE = len(ALPHABET)
+
+DEFAULT_TV_FLAGS: Dict[str, Any] = {
+    "showQrOverlay": False,
+    "autoRotateTop": True,
+    "rotateIntervalMs": None,
+}
+DEFAULT_GROSS_NET = "net"
+
+
+def _normalize_gross_net(value: Any) -> str:
+    if isinstance(value, str) and value.lower() in {"gross", "net"}:
+        return value.lower()
+    return DEFAULT_GROSS_NET
+
+
+def _normalize_tv_flags(flags: Mapping[str, Any] | None) -> Dict[str, Any]:
+    merged: Dict[str, Any] = dict(DEFAULT_TV_FLAGS)
+    if not isinstance(flags, Mapping):
+        return merged
+    if "showQrOverlay" in flags:
+        merged["showQrOverlay"] = bool(flags.get("showQrOverlay"))
+    if "autoRotateTop" in flags:
+        merged["autoRotateTop"] = bool(flags.get("autoRotateTop"))
+    if "rotateIntervalMs" in flags:
+        try:
+            candidate = flags.get("rotateIntervalMs")
+            if candidate is None:
+                merged["rotateIntervalMs"] = None
+            else:
+                merged["rotateIntervalMs"] = max(0, int(candidate))
+        except (TypeError, ValueError):
+            merged["rotateIntervalMs"] = merged["rotateIntervalMs"]
+    return merged
 
 
 class CreateEventBody(BaseModel):
@@ -62,9 +96,46 @@ class SpectatorPlayer(BaseModel):
     status: str | None = None
 
 
+class TvFlagsModel(BaseModel):
+    show_qr_overlay: bool = Field(default=False, alias="showQrOverlay")
+    auto_rotate_top: bool = Field(default=True, alias="autoRotateTop")
+    rotate_interval_ms: int | None = Field(default=None, alias="rotateIntervalMs")
+
+    model_config = ConfigDict(populate_by_name=True)
+
+
 class BoardResponse(BaseModel):
     players: List[SpectatorPlayer]
     updatedAt: str | None = None
+    grossNet: str = Field(default="net", alias="grossNet")
+    tvFlags: TvFlagsModel = Field(default_factory=TvFlagsModel, alias="tvFlags")
+    participants: int = 0
+    spectators: int = 0
+    qrSvg: str | None = Field(default=None, alias="qrSvg")
+
+    model_config = ConfigDict(populate_by_name=True)
+
+
+class HostStateResponse(BaseModel):
+    id: str
+    name: str
+    status: str
+    code: str
+    joinUrl: str
+    grossNet: str = Field(default="net", alias="grossNet")
+    tvFlags: TvFlagsModel = Field(default_factory=TvFlagsModel, alias="tvFlags")
+    participants: int = 0
+    spectators: int = 0
+    qrSvg: str | None = Field(default=None, alias="qrSvg")
+
+    model_config = ConfigDict(populate_by_name=True)
+
+
+class UpdateSettingsBody(BaseModel):
+    grossNet: str | None = Field(default=None, alias="grossNet")
+    tvFlags: TvFlagsModel | None = Field(default=None, alias="tvFlags")
+
+    model_config = ConfigDict(populate_by_name=True)
 
 
 def _web_base_url() -> str:
@@ -205,6 +276,8 @@ def _sanitize_player(row: Mapping[str, Any]) -> Tuple[SpectatorPlayer, Dict[str,
 
 def build_board(
     rows: Iterable[Mapping[str, Any]],
+    *,
+    mode: str = "net",
 ) -> Tuple[List[SpectatorPlayer], str | None]:
     enriched: List[Tuple[SpectatorPlayer, Tuple[float, float, float, float, str]]] = []
     updated_ts: List[float] = []
@@ -217,13 +290,22 @@ def build_board(
         updated = _parse_timestamp(meta.get("updated_at"))
         if updated is not None:
             updated_ts.append(updated)
-        sort_key = (
-            net,
-            gross,
-            last_under_par_ts if last_under_par_ts is not None else float("inf"),
-            finished_ts if finished_ts is not None else float("inf"),
-            player.name.lower(),
-        )
+        if mode == "gross":
+            sort_key = (
+                gross,
+                net,
+                last_under_par_ts if last_under_par_ts is not None else float("inf"),
+                finished_ts if finished_ts is not None else float("inf"),
+                player.name.lower(),
+            )
+        else:
+            sort_key = (
+                net,
+                gross,
+                last_under_par_ts if last_under_par_ts is not None else float("inf"),
+                finished_ts if finished_ts is not None else float("inf"),
+                player.name.lower(),
+            )
         enriched.append((player, sort_key))
 
     enriched.sort(key=lambda item: item[1])
@@ -245,6 +327,9 @@ class _MemoryEventsRepository:
         self._lock = threading.Lock()
         self._events: Dict[str, Dict[str, Any]] = {}
         self._codes: Dict[str, str] = {}
+        self._event_codes: Dict[str, str] = {}
+        self._event_settings: Dict[str, Dict[str, Any]] = {}
+        self._event_status: Dict[str, str] = {}
         self._members: Dict[Tuple[str, str], _Member] = {}
         self._boards: Dict[str, List[Dict[str, Any]]] = {}
 
@@ -254,9 +339,22 @@ class _MemoryEventsRepository:
         with self._lock:
             event_id = str(uuid.uuid4())
             now = datetime.now(timezone.utc).isoformat()
-            event = {"id": event_id, "name": name, "emoji": emoji, "created_at": now}
+            event = {
+                "id": event_id,
+                "name": name,
+                "emoji": emoji,
+                "created_at": now,
+                "status": "pending",
+                "code": code,
+            }
             self._events[event_id] = event
             self._codes[code] = event_id
+            self._event_codes[event_id] = code
+            self._event_status[event_id] = "pending"
+            self._event_settings[event_id] = {
+                "grossNet": DEFAULT_GROSS_NET,
+                "tvFlags": dict(DEFAULT_TV_FLAGS),
+            }
             self._boards[event_id] = [
                 {
                     "name": f"{name} Captain",
@@ -277,6 +375,21 @@ class _MemoryEventsRepository:
             if not event_id:
                 return None
             return self._events.get(event_id)
+
+    def get_event(self, event_id: str) -> Dict[str, Any] | None:
+        with self._lock:
+            event = self._events.get(event_id)
+            if not event:
+                return None
+            result = dict(event)
+            result["code"] = self._event_codes.get(event_id, result.get("code"))
+            result["status"] = self._event_status.get(
+                event_id, result.get("status", "pending")
+            )
+            result["settings"] = self._clone_settings_locked(event_id)
+            counts = self._counts_locked(event_id)
+            result.update(counts)
+            return result
 
     def add_member(
         self, event_id: str, *, member_id: str, name: str | None, role: str
@@ -309,8 +422,98 @@ class _MemoryEventsRepository:
                 return []
             return [dict(row) for row in board]
 
+    def set_status(self, event_id: str, status: str) -> Dict[str, Any] | None:
+        with self._lock:
+            if event_id not in self._events:
+                return None
+            self._event_status[event_id] = status
+            event = self._events[event_id]
+            event["status"] = status
+            return dict(event)
+
+    def regenerate_code(self, event_id: str, new_code: str) -> str | None:
+        with self._lock:
+            if event_id not in self._events:
+                return None
+            old_code = self._event_codes.get(event_id)
+            if old_code:
+                self._codes.pop(old_code, None)
+            self._codes[new_code] = event_id
+            self._event_codes[event_id] = new_code
+            self._events[event_id]["code"] = new_code
+            return new_code
+
+    def update_settings(
+        self, event_id: str, *, settings: Mapping[str, Any]
+    ) -> Dict[str, Any] | None:
+        with self._lock:
+            if event_id not in self._events:
+                return None
+            current = self._event_settings.setdefault(
+                event_id,
+                {"grossNet": DEFAULT_GROSS_NET, "tvFlags": dict(DEFAULT_TV_FLAGS)},
+            )
+            if "grossNet" in settings:
+                current["grossNet"] = _normalize_gross_net(settings.get("grossNet"))
+            if "tvFlags" in settings:
+                current["tvFlags"] = _normalize_tv_flags(
+                    settings.get("tvFlags")
+                    if isinstance(settings.get("tvFlags"), Mapping)
+                    else None
+                )
+            stored = {
+                "grossNet": _normalize_gross_net(current.get("grossNet")),
+                "tvFlags": _normalize_tv_flags(current.get("tvFlags")),
+            }
+            self._event_settings[event_id] = stored
+            self._events[event_id]["settings"] = stored
+            return dict(stored)
+
+    def get_settings(self, event_id: str) -> Dict[str, Any]:
+        with self._lock:
+            return self._clone_settings_locked(event_id)
+
+    def counts(self, event_id: str) -> Dict[str, int]:
+        with self._lock:
+            return self._counts_locked(event_id)
+
+    def _clone_settings_locked(self, event_id: str) -> Dict[str, Any]:
+        settings = self._event_settings.get(event_id)
+        if not settings:
+            return {
+                "grossNet": DEFAULT_GROSS_NET,
+                "tvFlags": dict(DEFAULT_TV_FLAGS),
+            }
+        return {
+            "grossNet": _normalize_gross_net(settings.get("grossNet")),
+            "tvFlags": _normalize_tv_flags(settings.get("tvFlags")),
+        }
+
+    def _counts_locked(self, event_id: str) -> Dict[str, int]:
+        participants = self._count_members_locked(event_id, {"player", "admin"})
+        spectators = self._count_members_locked(event_id, {"spectator"})
+        return {"participants": participants, "spectators": spectators}
+
+    def _count_members_locked(self, event_id: str, roles: set[str]) -> int:
+        return sum(
+            1
+            for (ev_id, _), member in self._members.items()
+            if ev_id == event_id and member.role in roles
+        )
+
 
 _REPOSITORY = _MemoryEventsRepository()
+
+
+def require_admin(
+    role: str | None = Header(default=None, alias="x-event-role"),
+    member_id: str | None = Header(default=None, alias="x-event-member"),
+) -> str | None:
+    if (role or "").lower() != "admin":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="admin role required"
+        )
+    return member_id
 
 
 @router.post(
@@ -357,10 +560,188 @@ def join_event(
 @router.get("/{event_id}/board", response_model=BoardResponse)
 def get_board(event_id: str) -> BoardResponse:
     rows = _REPOSITORY.get_board(event_id)
+    settings = _REPOSITORY.get_settings(event_id)
+    mode = _normalize_gross_net(settings.get("grossNet"))
+    tv_flags = _normalize_tv_flags(settings.get("tvFlags"))
+    event = _REPOSITORY.get_event(event_id)
     if not rows:
         record_board_resync(event_id, reason="empty", attempt=1)
-    players, updated_at = build_board(rows)
-    return BoardResponse(players=players, updatedAt=updated_at)
+    players, updated_at = build_board(rows, mode=mode)
+    counts = (
+        {
+            "participants": int(event.get("participants", 0)),
+            "spectators": int(event.get("spectators", 0)),
+        }
+        if event
+        else _REPOSITORY.counts(event_id)
+    )
+    qr_svg_value: str | None = None
+    if tv_flags.get("showQrOverlay") and event:
+        code = str(event.get("code") or "").upper()
+        if code:
+            join_url = f"{_web_base_url()}/join/{code}"
+            qr_svg_value = qr_svg(join_url)
+    return BoardResponse(
+        players=players,
+        updatedAt=updated_at,
+        grossNet=mode,
+        tvFlags=TvFlagsModel(**tv_flags),
+        participants=counts.get("participants", 0),
+        spectators=counts.get("spectators", 0),
+        qrSvg=qr_svg_value,
+    )
 
 
-__all__ = ["router", "join_router", "build_board", "generate_code", "validate_code"]
+@router.get("/{event_id}/host", response_model=HostStateResponse)
+def get_host_state(
+    event_id: str,
+    member_id: str | None = Depends(require_admin),
+) -> HostStateResponse:
+    return _build_host_state(event_id)
+
+
+@router.post("/{event_id}/start", response_model=HostStateResponse)
+def start_event(
+    event_id: str,
+    member_id: str | None = Depends(require_admin),
+) -> HostStateResponse:
+    updated = _REPOSITORY.set_status(event_id, "live")
+    if updated is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="event not found"
+        )
+    record_host_action(event_id, "start", member_id=member_id)
+    return _build_host_state(event_id)
+
+
+@router.post("/{event_id}/pause", response_model=HostStateResponse)
+def pause_event(
+    event_id: str,
+    member_id: str | None = Depends(require_admin),
+) -> HostStateResponse:
+    updated = _REPOSITORY.set_status(event_id, "paused")
+    if updated is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="event not found"
+        )
+    record_host_action(event_id, "pause", member_id=member_id)
+    return _build_host_state(event_id)
+
+
+@router.post("/{event_id}/close", response_model=HostStateResponse)
+def close_event(
+    event_id: str,
+    member_id: str | None = Depends(require_admin),
+) -> HostStateResponse:
+    updated = _REPOSITORY.set_status(event_id, "closed")
+    if updated is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="event not found"
+        )
+    record_host_action(event_id, "close", member_id=member_id)
+    return _build_host_state(event_id)
+
+
+@router.post("/{event_id}/code/regenerate", response_model=HostStateResponse)
+def regenerate_code(
+    event_id: str,
+    member_id: str | None = Depends(require_admin),
+) -> HostStateResponse:
+    def acquire_unique_code(attempts: int, generator: Callable[[], str]) -> str | None:
+        for _ in range(attempts):
+            candidate = generator()
+            existing = _REPOSITORY.resolve_event_by_code(candidate)
+            if existing is None:
+                return candidate
+        return None
+
+    candidate = acquire_unique_code(5, generate_code)
+
+    if candidate is None:
+
+        def fallback() -> str:
+            body = _random_indexes(6)
+            checksum = _compute_checksum(body)
+            indexes = [*body, checksum]
+            return "".join(ALPHABET[i] for i in indexes)
+
+        candidate = acquire_unique_code(10, fallback)
+
+    if candidate is None:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="unable to allocate join code",
+        )
+    if _REPOSITORY.regenerate_code(event_id, candidate) is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="event not found"
+        )
+    record_host_action(event_id, "code.regenerate", member_id=member_id)
+    state = _build_host_state(event_id)
+    if state.qrSvg is None:
+        state = state.model_copy(update={"qrSvg": qr_svg_placeholder()})
+    return state
+
+
+@router.patch("/{event_id}/settings", response_model=HostStateResponse)
+def update_settings(
+    event_id: str,
+    body: UpdateSettingsBody = Body(default_factory=UpdateSettingsBody),
+    member_id: str | None = Depends(require_admin),
+) -> HostStateResponse:
+    payload: Dict[str, Any] = {}
+    if body.grossNet is not None:
+        payload["grossNet"] = body.grossNet
+    if body.tvFlags is not None:
+        payload["tvFlags"] = body.tvFlags.model_dump(by_alias=True)
+    if payload:
+        updated = _REPOSITORY.update_settings(event_id, settings=payload)
+        if updated is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="event not found"
+            )
+    else:
+        if _REPOSITORY.get_event(event_id) is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="event not found"
+            )
+    record_host_action(event_id, "settings.update", member_id=member_id)
+    return _build_host_state(event_id)
+
+
+def _build_host_state(event_id: str) -> HostStateResponse:
+    event = _REPOSITORY.get_event(event_id)
+    if not event:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="event not found"
+        )
+    code = str(event.get("code") or "").upper()
+    base_url = _web_base_url()
+    join_url = f"{base_url}/join/{code}" if code else f"{base_url}/events/{event_id}"
+    settings = event.get("settings") or {}
+    gross_net = _normalize_gross_net(settings.get("grossNet"))
+    tv_flags = _normalize_tv_flags(settings.get("tvFlags"))
+    counts = _REPOSITORY.counts(event_id)
+    svg = qr_svg(join_url) if code else None
+    return HostStateResponse(
+        id=event_id,
+        name=str(event.get("name") or "Event"),
+        status=str(event.get("status") or "pending"),
+        code=code,
+        joinUrl=join_url,
+        grossNet=gross_net,
+        tvFlags=TvFlagsModel(**tv_flags),
+        participants=counts.get("participants", 0),
+        spectators=counts.get("spectators", 0),
+        qrSvg=svg,
+    )
+
+
+__all__ = [
+    "router",
+    "join_router",
+    "build_board",
+    "generate_code",
+    "validate_code",
+    "require_admin",
+]

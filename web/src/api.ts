@@ -1,5 +1,7 @@
 import axios from "axios";
 
+import type { GrossNetMode, TvFlags } from "@shared/events/types";
+
 const API = import.meta.env.VITE_API_BASE || "http://localhost:8000";
 const API_KEY = import.meta.env.VITE_API_KEY || "";
 
@@ -56,12 +58,97 @@ export type SpectatorBoardPlayer = {
 export type SpectatorBoardResponse = {
   players: SpectatorBoardPlayer[];
   updatedAt: string | null;
+  grossNet?: GrossNetMode;
+  tvFlags?: TvFlags | null;
+  participants?: number;
+  spectators?: number;
+  qrSvg?: string | null;
 };
 
 export const fetchSpectatorBoard = (eventId: string) =>
   axios
     .get<SpectatorBoardResponse>(`${API}/events/${eventId}/board`, {
       headers: withAuth(),
+    })
+    .then((r) => r.data);
+
+export type HostStateResponse = {
+  id: string;
+  name: string;
+  status: string;
+  code: string;
+  joinUrl: string;
+  grossNet: GrossNetMode;
+  tvFlags: TvFlags;
+  participants: number;
+  spectators: number;
+  qrSvg?: string | null;
+};
+
+type AdminHeadersOptions = {
+  memberId?: string;
+  includeJson?: boolean;
+};
+
+function withAdminHeaders(options: AdminHeadersOptions = {}): Record<string, string> {
+  const headers: Record<string, string> = { "x-event-role": "admin" };
+  if (options.memberId) {
+    headers["x-event-member"] = options.memberId;
+  }
+  if (options.includeJson) {
+    headers["Content-Type"] = "application/json";
+  }
+  return withAuth(headers);
+}
+
+export const fetchHostState = (eventId: string, memberId?: string) =>
+  axios
+    .get<HostStateResponse>(`${API}/events/${eventId}/host`, {
+      headers: withAdminHeaders({ memberId }),
+    })
+    .then((r) => r.data);
+
+export const postEventStart = (eventId: string, memberId?: string) =>
+  axios
+    .post<HostStateResponse>(`${API}/events/${eventId}/start`, null, {
+      headers: withAdminHeaders({ memberId }),
+    })
+    .then((r) => r.data);
+
+export const postEventPause = (eventId: string, memberId?: string) =>
+  axios
+    .post<HostStateResponse>(`${API}/events/${eventId}/pause`, null, {
+      headers: withAdminHeaders({ memberId }),
+    })
+    .then((r) => r.data);
+
+export const postEventClose = (eventId: string, memberId?: string) =>
+  axios
+    .post<HostStateResponse>(`${API}/events/${eventId}/close`, null, {
+      headers: withAdminHeaders({ memberId }),
+    })
+    .then((r) => r.data);
+
+export const postEventRegenerateCode = (eventId: string, memberId?: string) =>
+  axios
+    .post<HostStateResponse>(`${API}/events/${eventId}/code/regenerate`, null, {
+      headers: withAdminHeaders({ memberId }),
+    })
+    .then((r) => r.data);
+
+export type UpdateEventSettingsBody = {
+  grossNet?: GrossNetMode;
+  tvFlags?: TvFlags;
+};
+
+export const patchEventSettings = (
+  eventId: string,
+  body: UpdateEventSettingsBody,
+  memberId?: string,
+) =>
+  axios
+    .patch<HostStateResponse>(`${API}/events/${eventId}/settings`, body, {
+      headers: withAdminHeaders({ memberId, includeJson: true }),
     })
     .then((r) => r.data);
 

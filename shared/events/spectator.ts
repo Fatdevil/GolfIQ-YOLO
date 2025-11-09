@@ -130,12 +130,27 @@ function extractMeta(row: RawSpectatorRow) {
   } as const;
 }
 
-function buildSortKey(player: SpectatorPlayer, row: RawSpectatorRow): [number, number, number, number, string] {
+type SortMode = 'net' | 'gross';
+
+function buildSortKey(
+  player: SpectatorPlayer,
+  row: RawSpectatorRow,
+  mode: SortMode,
+): [number, number, number, number, string] {
   const netValue = player.net ?? Number.POSITIVE_INFINITY;
   const grossValue = Number.isFinite(player.gross) ? player.gross : Number.POSITIVE_INFINITY;
   const meta = extractMeta(row);
   const lastUnderPar = parseTimestamp(meta.lastUnderPar);
   const finished = parseTimestamp(meta.finishedAt);
+  if (mode === 'gross') {
+    return [
+      grossValue,
+      netValue,
+      lastUnderPar ?? Number.POSITIVE_INFINITY,
+      finished ?? Number.POSITIVE_INFINITY,
+      player.name.toLowerCase(),
+    ];
+  }
   return [
     netValue,
     grossValue,
@@ -145,10 +160,14 @@ function buildSortKey(player: SpectatorPlayer, row: RawSpectatorRow): [number, n
   ];
 }
 
-export function buildSpectatorBoard(rows: RawSpectatorRow[]): SpectatorBoard {
+export function buildSpectatorBoard(
+  rows: RawSpectatorRow[],
+  options?: { mode?: SortMode },
+): SpectatorBoard {
+  const mode: SortMode = options?.mode === 'gross' ? 'gross' : 'net';
   const enriched = rows.map((row) => {
     const player = sanitizeSpectatorRow(row);
-    return { player, sort: buildSortKey(player, row), row };
+    return { player, sort: buildSortKey(player, row, mode), row };
   });
 
   enriched.sort((a, b) => {

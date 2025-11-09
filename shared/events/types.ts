@@ -6,9 +6,19 @@ export type UUID = string;
 
 export type ScoringFormat = 'stroke' | 'stableford';
 
+export type GrossNetMode = 'gross' | 'net';
+
+export type TvFlags = {
+  showQrOverlay?: boolean;
+  autoRotateTop?: boolean;
+  rotateIntervalMs?: number | null;
+};
+
 export type EventSettings = {
   scoringFormat: ScoringFormat;
   allowancePct?: number;
+  grossNet?: GrossNetMode;
+  tvFlags?: TvFlags | null;
 };
 
 export type Event = {
