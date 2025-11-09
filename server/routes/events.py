@@ -18,6 +18,7 @@ from fastapi import (
     Query,
     status,
 )
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field
 
 from server.security import require_api_key
@@ -28,6 +29,8 @@ from server.telemetry.events import (
     record_event_joined,
     record_host_action,
     record_score_conflict,
+    record_score_conflict_stale_or_duplicate,
+    record_score_idempotent,
     record_score_write,
 )
 
@@ -186,6 +189,7 @@ class ScoreWriteResponse(BaseModel):
     status: str
     revision: int | None = None
     updated_at: str = Field(alias="updatedAt")
+    idempotent: bool | None = None
 
     model_config = ConfigDict(populate_by_name=True)
 
@@ -755,16 +759,26 @@ class _MemoryEventsRepository:
             if isinstance(fingerprint, str):
                 fingerprint = fingerprint.strip() or None
             existing = card["holes"].get(hole)
+            incoming_revision = revision
+            incoming_fingerprint = fingerprint
             if existing is not None:
                 existing_revision = _safe_int(existing.get("revision"))
-                if (
-                    revision is not None
-                    and existing_revision is not None
-                    and revision < existing_revision
+                existing_fingerprint = existing.get("fingerprint")
+                if incoming_fingerprint == existing_fingerprint and (
+                    incoming_revision is None or incoming_revision == existing_revision
                 ):
-                    return "conflict", dict(existing)
-                if fingerprint and existing.get("fingerprint") == fingerprint:
-                    return "idempotent", dict(existing)
+                    record = dict(existing)
+                    if "updated_at" not in record and existing.get("updated_at"):
+                        record["updated_at"] = existing.get("updated_at")
+                    return "idempotent", record
+                if incoming_revision is None or (
+                    existing_revision is not None
+                    and incoming_revision <= existing_revision
+                ):
+                    return "conflict", {
+                        "revision": existing_revision,
+                        "fingerprint": existing_fingerprint,
+                    }
             gross = _to_int(payload.get("gross")) or 0
             net = _safe_int(payload.get("net"))
             stableford = _safe_int(payload.get("stableford"))
@@ -790,13 +804,16 @@ class _MemoryEventsRepository:
             now = datetime.now(timezone.utc).isoformat()
             if to_par is None and par is not None:
                 to_par = gross - par
-            target_revision = revision
-            if target_revision is None:
+            if existing is None:
                 target_revision = (
-                    _safe_int(existing.get("revision")) + 1
-                    if existing and _safe_int(existing.get("revision")) is not None
-                    else 0
+                    incoming_revision if incoming_revision is not None else 1
                 )
+                status_label = "created"
+            else:
+                target_revision = incoming_revision
+                if target_revision is None:
+                    raise ValueError("missing revision for score update")
+                status_label = "updated"
             record = {
                 "hole": hole,
                 "gross": gross,
@@ -822,7 +839,7 @@ class _MemoryEventsRepository:
                 card["course_handicap"] = course_handicap
             if row_format is not None:
                 card["format"] = row_format
-            return "updated", dict(record)
+            return status_label, dict(record)
 
     def get_score_rows(
         self, event_id: str
@@ -1093,9 +1110,16 @@ def submit_score(event_id: str, body: ScoreWriteBody) -> ScoreWriteResponse:
 
     duration_ms = (time.perf_counter() - start) * 1000.0
     if status_label == "conflict":
+        existing_revision = _safe_int(record.get("revision"))
         record_score_conflict(
             event_id,
-            revision=_safe_int(record.get("revision")),
+            revision=existing_revision,
+            fingerprint=body.fingerprint,
+        )
+        record_score_conflict_stale_or_duplicate(
+            event_id,
+            incoming_revision=body.revision,
+            existing_revision=existing_revision,
             fingerprint=body.fingerprint,
         )
         record_score_write(
@@ -1106,22 +1130,53 @@ def submit_score(event_id: str, body: ScoreWriteBody) -> ScoreWriteResponse:
             revision=body.revision,
         )
         raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT, detail="revision conflict"
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "reason": "STALE_OR_DUPLICATE",
+                "currentRevision": existing_revision,
+            },
         )
 
-    status_value = "idempotent" if status_label == "idempotent" else "ok"
+    revision_value = _safe_int(record.get("revision"))
+    updated_at = record.get("updated_at") or datetime.now(timezone.utc).isoformat()
+    if status_label == "idempotent":
+        record_score_idempotent(
+            event_id,
+            fingerprint=body.fingerprint,
+            revision=revision_value,
+        )
+        record_score_write(
+            event_id,
+            duration_ms,
+            status="idempotent",
+            fingerprint=body.fingerprint,
+            revision=body.revision,
+        )
+        return ScoreWriteResponse(
+            status="ok",
+            revision=revision_value,
+            updated_at=updated_at,
+            idempotent=True,
+        )
+
     record_score_write(
         event_id,
         duration_ms,
-        status=status_value,
+        status="ok",
         fingerprint=body.fingerprint,
         revision=body.revision,
     )
-    updated_at = record.get("updated_at") or datetime.now(timezone.utc).isoformat()
-    revision_value = _safe_int(record.get("revision"))
-    return ScoreWriteResponse(
-        status=status_value, revision=revision_value, updatedAt=updated_at
+    response_payload = ScoreWriteResponse(
+        status="ok",
+        revision=revision_value,
+        updated_at=updated_at,
     )
+    if status_label == "created":
+        return JSONResponse(
+            status_code=status.HTTP_201_CREATED,
+            content=response_payload.model_dump(by_alias=True, exclude_none=True),
+        )
+    return response_payload
 
 
 @router.get("/{event_id}/board", response_model=BoardResponse)

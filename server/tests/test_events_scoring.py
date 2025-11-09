@@ -93,11 +93,11 @@ def test_register_score_and_board(monkeypatch, telemetry_sink):
     }
 
     first = client.post(f"/events/{event_id}/score", json=score_a)
-    assert first.status_code == 200
+    assert first.status_code in (200, 201)
     assert first.json()["status"] == "ok"
 
     second = client.post(f"/events/{event_id}/score", json=score_b)
-    assert second.status_code == 200
+    assert second.status_code in (200, 201)
 
     board = client.get(f"/events/{event_id}/board")
     assert board.status_code == 200
@@ -138,15 +138,18 @@ def test_score_idempotent(monkeypatch, telemetry_sink):
         "fingerprint": "alpha-dup",
     }
     first = client.post(f"/events/{event_id}/score", json=payload)
-    assert first.status_code == 200
+    assert first.status_code in (200, 201)
     assert first.json()["status"] == "ok"
     retry = client.post(f"/events/{event_id}/score", json=payload)
     assert retry.status_code == 200
-    assert retry.json()["status"] == "idempotent"
+    body_retry = retry.json()
+    assert body_retry["status"] == "ok"
+    assert body_retry.get("idempotent") is True
     statuses = [
         p.get("status") for name, p in telemetry_sink if name == "score.write_ms"
     ]
     assert statuses.count("idempotent") >= 1
+    assert any(name == "score.idempotent.accepted" for name, _ in telemetry_sink)
 
 
 def test_score_conflict(monkeypatch, telemetry_sink):
@@ -178,7 +181,142 @@ def test_score_conflict(monkeypatch, telemetry_sink):
         },
     )
     assert conflict.status_code == 409
+    detail = conflict.json()["detail"]
+    assert detail["reason"] == "STALE_OR_DUPLICATE"
+    assert detail["currentRevision"] == 2
     assert any(name == "conflict.count" for name, _ in telemetry_sink)
+    assert any(
+        name == "score.conflict.stale_or_duplicate" for name, _ in telemetry_sink
+    )
+
+
+def test_insert_with_none_revision_sets_one(monkeypatch):
+    event_id = _create_event(monkeypatch)
+    client.post(
+        f"/events/{event_id}/players",
+        json={"players": [{"scorecardId": "sc1", "name": "Alice"}]},
+    )
+    response = client.post(
+        f"/events/{event_id}/score",
+        json={
+            "scorecardId": "sc1",
+            "hole": 1,
+            "gross": 4,
+            "fingerprint": "fp_a",
+            "revision": None,
+        },
+    )
+    assert response.status_code in (200, 201)
+    assert response.json()["revision"] == 1
+
+
+def test_equal_revision_same_fingerprint_idempotent_ok(monkeypatch):
+    event_id = _create_event(monkeypatch)
+    client.post(
+        f"/events/{event_id}/players",
+        json={"players": [{"scorecardId": "sc1", "name": "Alice"}]},
+    )
+    payload = {
+        "scorecardId": "sc1",
+        "hole": 1,
+        "gross": 4,
+        "fingerprint": "fp_same",
+        "revision": 1,
+    }
+    first = client.post(f"/events/{event_id}/score", json=payload)
+    assert first.status_code in (200, 201)
+    second = client.post(f"/events/{event_id}/score", json=payload)
+    assert second.status_code == 200
+    assert second.json().get("idempotent") is True
+
+
+def test_equal_revision_diff_fingerprint_conflict(monkeypatch):
+    event_id = _create_event(monkeypatch)
+    client.post(
+        f"/events/{event_id}/players",
+        json={"players": [{"scorecardId": "sc1", "name": "Alice"}]},
+    )
+    client.post(
+        f"/events/{event_id}/score",
+        json={
+            "scorecardId": "sc1",
+            "hole": 1,
+            "gross": 4,
+            "fingerprint": "fp_one",
+            "revision": 1,
+        },
+    )
+    conflict = client.post(
+        f"/events/{event_id}/score",
+        json={
+            "scorecardId": "sc1",
+            "hole": 1,
+            "gross": 4,
+            "fingerprint": "fp_two",
+            "revision": 1,
+        },
+    )
+    assert conflict.status_code == 409
+    assert conflict.json()["detail"]["reason"] == "STALE_OR_DUPLICATE"
+
+
+def test_lower_revision_conflict(monkeypatch):
+    event_id = _create_event(monkeypatch)
+    client.post(
+        f"/events/{event_id}/players",
+        json={"players": [{"scorecardId": "sc1", "name": "Alice"}]},
+    )
+    client.post(
+        f"/events/{event_id}/score",
+        json={
+            "scorecardId": "sc1",
+            "hole": 1,
+            "gross": 4,
+            "fingerprint": "fp_hi",
+            "revision": 3,
+        },
+    )
+    conflict = client.post(
+        f"/events/{event_id}/score",
+        json={
+            "scorecardId": "sc1",
+            "hole": 1,
+            "gross": 5,
+            "fingerprint": "fp_low",
+            "revision": 2,
+        },
+    )
+    assert conflict.status_code == 409
+
+
+def test_higher_revision_writes(monkeypatch):
+    event_id = _create_event(monkeypatch)
+    client.post(
+        f"/events/{event_id}/players",
+        json={"players": [{"scorecardId": "sc1", "name": "Alice"}]},
+    )
+    client.post(
+        f"/events/{event_id}/score",
+        json={
+            "scorecardId": "sc1",
+            "hole": 1,
+            "gross": 4,
+            "fingerprint": "fp_start",
+            "revision": 2,
+        },
+    )
+    update = client.post(
+        f"/events/{event_id}/score",
+        json={
+            "scorecardId": "sc1",
+            "hole": 1,
+            "gross": 3,
+            "fingerprint": "fp_next",
+            "revision": 3,
+        },
+    )
+    assert update.status_code in (200, 201)
+    assert update.json()["revision"] == 3
 
 
 def test_board_tie_break_and_thru(monkeypatch):

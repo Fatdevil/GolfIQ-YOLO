@@ -65,6 +65,17 @@ def record_score_write(
     _safe_emit("score.write_ms", payload)
 
 
+def record_score_idempotent(
+    event_id: str, *, fingerprint: str | None = None, revision: int | None = None
+) -> None:
+    payload: Dict[str, object] = {"eventId": event_id, "ts": _now_ms()}
+    if fingerprint:
+        payload["fingerprint"] = fingerprint
+    if revision is not None:
+        payload["revision"] = int(revision)
+    _safe_emit("score.idempotent.accepted", payload)
+
+
 def record_score_conflict(
     event_id: str, *, revision: int | None = None, fingerprint: str | None = None
 ) -> None:
@@ -74,6 +85,24 @@ def record_score_conflict(
     if fingerprint:
         payload["fingerprint"] = fingerprint
     _safe_emit("conflict.count", payload)
+
+
+def record_score_conflict_stale_or_duplicate(
+    event_id: str,
+    *,
+    incoming_revision: int | None,
+    existing_revision: int | None,
+    fingerprint: str | None = None,
+) -> None:
+    payload: Dict[str, object] = {
+        "eventId": event_id,
+        "incomingRevision": incoming_revision,
+        "existingRevision": existing_revision,
+        "ts": _now_ms(),
+    }
+    if fingerprint:
+        payload["fingerprint"] = fingerprint
+    _safe_emit("score.conflict.stale_or_duplicate", payload)
 
 
 def record_board_build(
@@ -160,5 +189,7 @@ __all__ = [
     "record_tv_tick",
     "record_tv_rotate",
     "record_score_write",
+    "record_score_idempotent",
     "record_score_conflict",
+    "record_score_conflict_stale_or_duplicate",
 ]
