@@ -51,3 +51,9 @@ def test_admin_regenerate_returns_svg_always(monkeypatch: pytest.MonkeyPatch):
     payload = response.json()
     assert isinstance(payload.get("qrSvg"), str)
     assert payload["qrSvg"].startswith("<svg")
+
+
+def test_admin_regenerate_forbidden_without_role(monkeypatch: pytest.MonkeyPatch):
+    _, event_id = _setup_event(monkeypatch)
+    response = client.post(f"/events/{event_id}/code/regenerate")
+    assert response.status_code == 403

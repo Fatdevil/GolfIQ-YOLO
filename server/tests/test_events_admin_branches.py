@@ -121,6 +121,25 @@ def test_regenerate_code_uses_fallback_and_placeholder(
     assert any(entry[0][1] == "code.regenerate" for entry in actions)
 
 
+def test_regenerate_code_returns_404_when_repo_returns_none(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    mod, repo, event_id = _setup_repo(monkeypatch)
+
+    monkeypatch.setattr(mod, "record_host_action", lambda *a, **k: None)
+    monkeypatch.setattr(repo, "regenerate_code", lambda *_: None)
+
+    headers = _admin_headers("member-3")
+    response = client.post(
+        f"/events/{event_id}/code/regenerate",
+        headers=headers,
+    )
+
+    assert response.status_code == 404
+    body = response.json()
+    assert body["detail"] == "event not found"
+
+
 def test_board_reflects_gross_and_net_modes(monkeypatch: pytest.MonkeyPatch) -> None:
     mod, repo, event_id = _setup_repo(monkeypatch)
 
