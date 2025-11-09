@@ -8,6 +8,7 @@ export const linking: LinkingOptions<any> = {
     screens: {
       EventJoin: 'join/:code?',
       EventLive: 'events/:id/live',
+      EventScan: 'scan',
     },
   },
   getInitialURL: async () =>

@@ -1,0 +1,14 @@
+{
+  "expo": {
+    "name": "GolfIQ Mobile",
+    "slug": "golfiq-mobile",
+    "ios": {
+      "infoPlist": {
+        "NSCameraUsageDescription": "Skanna QR-koder för att gå med i event."
+      }
+    },
+    "android": {
+      "permissions": ["CAMERA"]
+    }
+  }
+}

@@ -21,9 +21,13 @@ type ViewProps = CommonProps & {
   onLayout?: () => void;
 };
 
-export const View: React.FC<ViewProps> = ({ children, testID }) => (
-  <div data-testid={testID}>{children}</div>
-);
+export const View = React.forwardRef<HTMLDivElement, ViewProps>(({ children, testID }, ref) => (
+  <div data-testid={testID} ref={ref}>
+    {children}
+  </div>
+));
+
+View.displayName = 'View';
 
 type ScrollViewProps = CommonProps & {
   contentContainerStyle?: Record<string, unknown>;
@@ -153,3 +157,9 @@ export const useMemoValue = <T,>(factory: () => T, deps: React.DependencyList): 
 };
 
 export const Platform = { OS: 'web' } as const;
+
+export const Vibration = {
+  vibrate(_pattern?: number | number[]): void {
+    // no-op for web runtime
+  },
+};
