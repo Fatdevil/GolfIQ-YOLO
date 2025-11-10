@@ -5,6 +5,7 @@ import { postClipCommentary } from '@web/api';
 
 import { useEventSession, type EventSession } from '../../session/eventSession';
 import type { ShotClip } from './types';
+import { reportClip } from './moderationApi';
 
 export type ClipModalProps = {
   clip: ShotClip;
@@ -31,6 +32,9 @@ export function ClipModal({ clip, onClose, onRefetch }: ClipModalProps): JSX.Ele
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
+  const [reporting, setReporting] = useState(false);
+  const [reportError, setReportError] = useState<string | null>(null);
+  const [reportSubmitted, setReportSubmitted] = useState(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
   const title = useMemo(() => resolveCommentaryField(clip.ai_title ?? clip.aiTitle), [clip]);
@@ -44,6 +48,9 @@ export function ClipModal({ clip, onClose, onRefetch }: ClipModalProps): JSX.Ele
     setError(null);
     setLoading(false);
     setIsPlaying(false);
+    setReportError(null);
+    setReportSubmitted(false);
+    setReporting(false);
     if (audioRef.current) {
       audioRef.current.pause();
       audioRef.current = null;
@@ -64,12 +71,22 @@ export function ClipModal({ clip, onClose, onRefetch }: ClipModalProps): JSX.Ele
 
   const isAdmin = role === 'admin';
   const canRequest = isAdmin && !safe;
+  const isHidden = Boolean(clip.hidden);
+  const visibility = clip.visibility ?? 'public';
+  const hasMember = Boolean(memberId);
+  const lacksVisibilityAccess =
+    !isAdmin && visibility !== 'public' && (visibility === 'private' ? true : !hasMember);
   const hideCoachExtras = Boolean(session.tournamentSafe && session.coachMode);
-  const bannerMessage = safe
-    ? TOURNAMENT_SAFE_MESSAGE
-    : error === TOURNAMENT_SAFE_MESSAGE
-    ? TOURNAMENT_SAFE_MESSAGE
-    : null;
+  const banners: string[] = [];
+  if (safe || error === TOURNAMENT_SAFE_MESSAGE) {
+    banners.push(TOURNAMENT_SAFE_MESSAGE);
+  }
+  if (isHidden) {
+    banners.push('Hidden by moderation');
+  }
+  if (lacksVisibilityAccess) {
+    banners.push('Not visible to you');
+  }
 
   const handleRequest = async () => {
     if (!clip.id || !isAdmin) {
@@ -116,6 +133,26 @@ export function ClipModal({ clip, onClose, onRefetch }: ClipModalProps): JSX.Ele
     }
   };
 
+  const handleReportClip = async () => {
+    if (!clip.id || isAdmin || reporting || reportSubmitted) {
+      return;
+    }
+    setReporting(true);
+    setReportError(null);
+    try {
+      await reportClip(clip.id, {
+        reason: 'user_report',
+        reporter: memberId ?? null,
+      });
+      setReportSubmitted(true);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Unable to report clip';
+      setReportError(message);
+    } finally {
+      setReporting(false);
+    }
+  };
+
   return (
     <div className="flex flex-col gap-4 p-4">
       <header className="flex items-start justify-between gap-4">
@@ -158,11 +195,14 @@ export function ClipModal({ clip, onClose, onRefetch }: ClipModalProps): JSX.Ele
         )}
       </div>
 
-      {bannerMessage && (
-        <div className="rounded border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm text-amber-100">
-          {bannerMessage}
+      {banners.map((message) => (
+        <div
+          key={message}
+          className="rounded border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm text-amber-100"
+        >
+          {message}
         </div>
-      )}
+      ))}
 
       {isAdmin && (
         <div className="flex items-center gap-3">
@@ -177,6 +217,20 @@ export function ClipModal({ clip, onClose, onRefetch }: ClipModalProps): JSX.Ele
           {error && error !== TOURNAMENT_SAFE_MESSAGE && (
             <span className="text-sm text-rose-400">{error}</span>
           )}
+        </div>
+      )}
+
+      {!isAdmin && (
+        <div className="flex items-center gap-3 text-sm">
+          <button
+            type="button"
+            onClick={handleReportClip}
+            disabled={reporting || reportSubmitted}
+            className="text-slate-400 hover:text-slate-100 disabled:cursor-not-allowed disabled:text-slate-500"
+          >
+            {reportSubmitted ? 'Reported' : reporting ? 'Reporting…' : 'Report clip'}
+          </button>
+          {reportError && <span className="text-rose-400">{reportError}</span>}
         </div>
       )}
     </div>

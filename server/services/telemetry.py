@@ -88,6 +88,55 @@ def emit_commentary_play_tts(event_id: str, clip_id: str) -> None:
     )
 
 
+def emit_clip_reported(
+    clip_id: str, *, reason: str, reporter: str | None = None
+) -> None:
+    payload: Dict[str, object] = {
+        "clipId": clip_id,
+        "reason": reason,
+        "ts": _now_ms(),
+    }
+    if reporter:
+        payload["reporter"] = reporter
+    _emit("clip.reported", payload)
+
+
+def emit_clip_moderation_hide(clip_id: str, member_id: str | None = None) -> None:
+    payload: Dict[str, object] = {
+        "clipId": clip_id,
+        "ts": _now_ms(),
+    }
+    if member_id:
+        payload["memberId"] = member_id
+    _emit("clip.moderation.hide", payload)
+
+
+def emit_clip_moderation_unhide(clip_id: str, member_id: str | None = None) -> None:
+    payload: Dict[str, object] = {
+        "clipId": clip_id,
+        "ts": _now_ms(),
+    }
+    if member_id:
+        payload["memberId"] = member_id
+    _emit("clip.moderation.unhide", payload)
+
+
+def emit_clip_visibility_changed(
+    clip_id: str,
+    *,
+    visibility: str,
+    member_id: str | None = None,
+) -> None:
+    payload: Dict[str, object] = {
+        "clipId": clip_id,
+        "visibility": visibility,
+        "ts": _now_ms(),
+    }
+    if member_id:
+        payload["memberId"] = member_id
+    _emit("clip.visibility.changed", payload)
+
+
 __all__ = [
     "emit_commentary_request",
     "emit_commentary_running",
@@ -95,4 +144,8 @@ __all__ = [
     "emit_commentary_failed",
     "emit_commentary_blocked_safe",
     "emit_commentary_play_tts",
+    "emit_clip_reported",
+    "emit_clip_moderation_hide",
+    "emit_clip_moderation_unhide",
+    "emit_clip_visibility_changed",
 ]

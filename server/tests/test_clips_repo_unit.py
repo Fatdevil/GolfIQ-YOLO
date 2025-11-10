@@ -62,3 +62,24 @@ def test_to_public_handles_snake_and_camel():
     assert public["aiTitle"] == "Big putt"
     assert public["aiSummary"] == "Drops the 20 footer."
     assert public["aiTtsUrl"] == "https://cdn/voice.mp3"
+
+
+def test_list_for_event_filters_records():
+    clips_repo.register_clip(
+        {
+            "id": "clip-a",
+            "event_id": "event-a",
+            "video_url": "https://cdn/clip-a.mp4",
+        }
+    )
+    clips_repo.register_clip(
+        {
+            "id": "clip-b",
+            "event_id": "event-b",
+            "video_url": "https://cdn/clip-b.mp4",
+        }
+    )
+
+    items = list(clips_repo.list_for_event("event-a"))
+    assert len(items) == 1
+    assert items[0]["id"] == "clip-a"

@@ -20,6 +20,7 @@ import CreateEventPage from "./pages/events/new";
 import JoinEventPage from "./pages/join/[code]";
 import LiveLeaderboardPage from "./pages/events/[id]/live";
 import EventClipsAdminQueue from "./pages/events/[id]/admin/clips";
+import EventClipModerationPage from "./pages/events/[id]/admin/moderation";
 
 export default function App() {
   return (
@@ -37,6 +38,7 @@ export default function App() {
           <Route path="/events/new" element={<CreateEventPage />} />
           <Route path="/events/:id/live" element={<LiveLeaderboardPage />} />
           <Route path="/events/:id/admin/clips" element={<EventClipsAdminQueue />} />
+          <Route path="/events/:id/admin/moderation" element={<EventClipModerationPage />} />
           <Route path="/join" element={<JoinEventPage />} />
           <Route path="/join/:code" element={<JoinEventPage />} />
           <Route path="/:eventId/live/:roundId" element={<LiveRoundRoute />} />

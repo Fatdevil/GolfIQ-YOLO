@@ -16,4 +16,6 @@ export type ShotClip = {
   aiTtsUrl?: string | null;
   tournamentSafe?: boolean;
   coachMode?: boolean;
+  hidden?: boolean;
+  visibility?: 'private' | 'event' | 'friends' | 'public';
 };

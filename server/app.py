@@ -33,6 +33,7 @@ from .routes.cv_mock import router as cv_mock_router
 from .routes.models import router as models_router
 from .routes.rollout import router as rollout_router
 from .routes.providers import router as providers_router
+from .routes.moderation import router as moderation_router
 from .routes.runs import router as runs_router
 from .routes.runs_upload import router as runs_upload_router
 from .routes.events import join_router as events_join_router
@@ -125,6 +126,7 @@ app.include_router(events_router)
 app.include_router(events_session_router)
 app.include_router(events_join_router)
 app.include_router(providers_router)
+app.include_router(moderation_router)
 app.add_api_route(
     "/health",
     _health_handler,
