@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from typing import Dict, Iterable, MutableMapping, Optional
+from typing import Dict, MutableMapping
 
 from server.schemas.commentary import ClipCommentaryOut, CommentaryStatus
 

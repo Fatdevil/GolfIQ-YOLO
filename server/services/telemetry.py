@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict, Mapping
+from typing import Dict, Mapping
 
 from server.telemetry import events as telemetry_events
 
