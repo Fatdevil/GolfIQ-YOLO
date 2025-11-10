@@ -12,7 +12,6 @@ from fastapi import (
     APIRouter,
     Body,
     Depends,
-    Header,
     HTTPException,
     Path,
     Query,
@@ -20,8 +19,11 @@ from fastapi import (
 )
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field
+from uuid import UUID
 
+from server.auth import require_admin
 from server.security import require_api_key
+from server.services import commentary
 from server.telemetry.events import (
     record_board_build,
     record_board_resync,
@@ -112,6 +114,12 @@ class SpectatorPlayer(BaseModel):
     thru: int
     hole: int
     status: str | None = None
+
+
+class CommentaryOut(BaseModel):
+    title: str
+    summary: str
+    ttsUrl: str | None = None
 
 
 class TvFlagsModel(BaseModel):
@@ -998,17 +1006,6 @@ class _MemoryEventsRepository:
 _REPOSITORY = _MemoryEventsRepository()
 
 
-def require_admin(
-    role: str | None = Header(default=None, alias="x-event-role"),
-    member_id: str | None = Header(default=None, alias="x-event-member"),
-) -> str | None:
-    if (role or "").lower() != "admin":
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN, detail="admin role required"
-        )
-    return member_id
-
-
 @router.post(
     "",
     response_model=CreateEventResponse,
@@ -1228,6 +1225,18 @@ def get_board(event_id: str, format: str | None = Query(default=None)) -> BoardR
         participants=counts.get("participants", 0),
         spectators=counts.get("spectators", 0),
         qrSvg=qr_svg_value,
+    )
+
+
+@router.post(
+    "/clips/{clip_id}/commentary",
+    response_model=CommentaryOut,
+    dependencies=[Depends(require_admin)],
+)
+def create_clip_commentary(clip_id: UUID) -> CommentaryOut:
+    result = commentary.generate_commentary(str(clip_id))
+    return CommentaryOut(
+        title=result.title, summary=result.summary, ttsUrl=result.tts_url
     )
 
 

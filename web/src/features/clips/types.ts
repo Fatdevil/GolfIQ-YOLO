@@ -1,0 +1,19 @@
+export type ShotClip = {
+  id: string;
+  event_id?: string;
+  eventId?: string;
+  player_name?: string;
+  playerName?: string;
+  video_url?: string;
+  videoUrl?: string;
+  thumbnail_url?: string;
+  thumbnailUrl?: string;
+  ai_title?: string | null;
+  ai_summary?: string | null;
+  ai_tts_url?: string | null;
+  aiTitle?: string | null;
+  aiSummary?: string | null;
+  aiTtsUrl?: string | null;
+  tournamentSafe?: boolean;
+  coachMode?: boolean;
+};
