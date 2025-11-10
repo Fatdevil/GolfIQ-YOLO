@@ -1,11 +1,11 @@
-import React from "react";
+import React, { useMemo } from "react";
 import ReactDOM from "react-dom/client";
-import { BrowserRouter } from "react-router-dom";
+import { BrowserRouter, matchPath, useLocation } from "react-router-dom";
 import { bootstrapSupabase } from "./bootstrap/supabase";
 import App from "./App";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { TempAltDemo } from "./dev/TempAltDemo";
-import { EventSessionContext, bootstrapEventSession } from "./session/eventSession";
+import { EventSessionProvider } from "./session/eventSession";
 import "./styles.css";
 import "./sentry";
 
@@ -23,16 +23,42 @@ if (isTempAltDemo) {
     </React.StrictMode>,
   );
 } else {
-  const initialSession = bootstrapEventSession();
   root.render(
     <React.StrictMode>
       <BrowserRouter>
         <ErrorBoundary>
-          <EventSessionContext.Provider value={initialSession}>
-            <App />
-          </EventSessionContext.Provider>
+          <EventAwareApp />
         </ErrorBoundary>
       </BrowserRouter>
     </React.StrictMode>,
+  );
+}
+
+function EventAwareApp(): JSX.Element {
+  const location = useLocation();
+  const eventId = useMemo(() => {
+    const patterns: Array<string | { path: string; end?: boolean }> = [
+      { path: "/event/:id", end: false },
+      { path: "/events/:id", end: false },
+      { path: "/events/:id/live", end: false },
+      { path: "/:eventId/live/:roundId", end: false },
+    ];
+    for (const pattern of patterns) {
+      const match = matchPath(pattern, location.pathname);
+      if (match?.params?.id) {
+        return match.params.id;
+      }
+      if (match?.params?.eventId) {
+        return match.params.eventId;
+      }
+    }
+    const queryEvent = new URLSearchParams(location.search).get("eventId");
+    return queryEvent;
+  }, [location.pathname, location.search]);
+
+  return (
+    <EventSessionProvider eventId={eventId}>
+      <App />
+    </EventSessionProvider>
   );
 }

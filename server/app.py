@@ -36,6 +36,7 @@ from .routes.runs import router as runs_router
 from .routes.runs_upload import router as runs_upload_router
 from .routes.events import join_router as events_join_router
 from .routes.events import router as events_router
+from .routes.events_session import router as events_session_router
 from .routes.issues import router as issues_router
 from server.config.remote import router as remote_config_router
 from server.tools.telemetry_aggregate import router as telemetry_tools_router
@@ -119,6 +120,7 @@ app.include_router(bench_router)
 app.include_router(course_bundle_router)
 app.include_router(metrics.router)
 app.include_router(events_router)
+app.include_router(events_session_router)
 app.include_router(events_join_router)
 app.include_router(providers_router)
 app.add_api_route(
