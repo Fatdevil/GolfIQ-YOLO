@@ -10,12 +10,9 @@ from typing import Any, Dict, Iterable, Mapping, Sequence
 
 import httpx
 
+from server.schemas.commentary import CommentaryStatus
 from server.services import clips_repo
-from server.telemetry.events import (
-    emit_clip_commentary_failed,
-    emit_clip_commentary_ok,
-    emit_clip_commentary_requested,
-)
+from server.services import commentary_queue, telemetry as telemetry_service
 
 _logger = logging.getLogger("server.services.commentary")
 
@@ -172,11 +169,16 @@ def generate_commentary(clip_id: str) -> CommentaryResult:
     """Generate commentary for a clip and persist the result."""
 
     clip_id = str(clip_id)
-    emit_clip_commentary_requested(clip_id)
+    clip = clips_repo.get_clip(clip_id)
+    event_id = _require_event_id(clip)
+    commentary_queue.upsert(
+        clip_id,
+        event_id=event_id,
+        status=CommentaryStatus.running,
+    )
+    telemetry_service.emit_commentary_running(event_id, clip_id)
 
     try:
-        clip = clips_repo.get_clip(clip_id)
-        event_id = _require_event_id(clip)
         event = _load_event(event_id)
         board = _load_board(event_id)
         prompt = build_prompt(clip, event, board)
@@ -191,12 +193,28 @@ def generate_commentary(clip_id: str) -> CommentaryResult:
         clips_repo.update_ai_commentary(
             clip_id, title=title, summary=summary, tts_url=tts_url
         )
-        emit_clip_commentary_ok(clip_id, has_tts=bool(tts_url))
+        commentary_queue.upsert(
+            clip_id,
+            event_id=event_id,
+            status=CommentaryStatus.ready,
+            title=title,
+            summary=summary,
+            tts_url=tts_url,
+        )
+        telemetry_service.emit_commentary_done(event_id, clip_id, has_tts=bool(tts_url))
         return CommentaryResult(
             clip_id=clip_id, title=title, summary=summary, tts_url=tts_url
         )
     except Exception as exc:  # pragma: no cover - error path exercised in tests
-        emit_clip_commentary_failed(clip_id, error=str(exc))
+        commentary_queue.upsert(
+            clip_id,
+            event_id=event_id,
+            status=CommentaryStatus.failed,
+            title=None,
+            summary=None,
+            tts_url=None,
+        )
+        telemetry_service.emit_commentary_failed(event_id, clip_id, error=str(exc))
         raise
 
 

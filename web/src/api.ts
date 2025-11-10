@@ -101,6 +101,8 @@ function withAdminHeaders(options: AdminHeadersOptions = {}): Record<string, str
   return withAuth(headers);
 }
 
+export { withAdminHeaders };
+
 export const fetchHostState = (eventId: string, memberId?: string) =>
   axios
     .get<HostStateResponse>(`${API}/events/${eventId}/host`, {

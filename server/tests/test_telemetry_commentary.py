@@ -4,6 +4,7 @@ from typing import Dict, List, Tuple
 
 import pytest
 
+from server.services import telemetry as commentary_telemetry
 from server.telemetry import events as telemetry_events
 
 
@@ -22,23 +23,33 @@ def test_commentary_events_emit_payload():
 
     telemetry_events.set_events_telemetry_emitter(_emit)
 
-    telemetry_events.emit_clip_commentary_requested("clip-1")
-    telemetry_events.emit_clip_commentary_ok("clip-1", has_tts=True)
-    telemetry_events.emit_clip_commentary_failed("clip-1", "boom")
+    commentary_telemetry.emit_commentary_request("event-1", "clip-1")
+    commentary_telemetry.emit_commentary_running("event-1", "clip-1")
+    commentary_telemetry.emit_commentary_done("event-1", "clip-1", has_tts=True)
+    commentary_telemetry.emit_commentary_failed("event-1", "clip-1", "boom")
+    commentary_telemetry.emit_commentary_blocked_safe(
+        "event-1", "clip-1", member_id="host"
+    )
+    commentary_telemetry.emit_commentary_play_tts("event-1", "clip-1")
 
     names = [name for name, _payload in captured]
     assert names == [
-        "clip.commentary.requested",
-        "clip.commentary.ok",
+        "clip.commentary.request",
+        "clip.commentary.running",
+        "clip.commentary.done",
         "clip.commentary.failed",
+        "clip.commentary.blocked_safe",
+        "clip.commentary.play_tts",
     ]
-    assert captured[1][1]["hasTts"] is True
-    assert captured[2][1]["error"] == "boom"
+    assert captured[2][1]["hasTts"] is True
+    assert captured[3][1]["error"] == "boom"
+    assert captured[4][1]["memberId"] == "host"
 
 
 def test_commentary_events_noop_without_emitter():
     telemetry_events.set_events_telemetry_emitter(None)
-    telemetry_events.emit_clip_commentary_requested("clip-2")
-    telemetry_events.emit_clip_commentary_ok("clip-2", has_tts=False)
-    telemetry_events.emit_clip_commentary_failed("clip-2", "err")
+    commentary_telemetry.emit_commentary_request("event-2", "clip-2")
+    commentary_telemetry.emit_commentary_running("event-2", "clip-2")
+    commentary_telemetry.emit_commentary_done("event-2", "clip-2", has_tts=False)
+    commentary_telemetry.emit_commentary_failed("event-2", "clip-2", "err")
     # Should not raise and nothing captured since emitter is None.

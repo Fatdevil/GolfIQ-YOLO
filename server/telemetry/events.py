@@ -28,6 +28,12 @@ def _safe_emit(event: str, payload: MutableMapping[str, object]) -> None:
         _logger.exception("failed to emit telemetry event %s", event)
 
 
+def emit(event: str, payload: Mapping[str, object]) -> None:
+    """Public helper to emit telemetry events via the registered emitter."""
+
+    _safe_emit(event, dict(payload))
+
+
 def record_event_created(event_id: str, code: str, *, name: str | None = None) -> None:
     payload: Dict[str, object] = {"eventId": event_id, "code": code}
     if name:
@@ -217,6 +223,7 @@ def _now_ms() -> int:
 
 __all__ = [
     "set_events_telemetry_emitter",
+    "emit",
     "record_event_created",
     "record_event_joined",
     "record_board_resync",

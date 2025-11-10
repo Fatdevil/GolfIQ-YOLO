@@ -108,7 +108,7 @@ def test_generate_commentary_with_tts(
     assert stored["ai_tts_url"] == "https://cdn.example.com/clip.mp3"
 
     assert any(
-        name == "clip.commentary.ok" and payload.get("hasTts")
+        name == "clip.commentary.done" and payload.get("hasTts")
         for name, payload in telemetry_sink
     )
 
@@ -146,7 +146,7 @@ def test_generate_commentary_without_tts(
     assert stored["ai_tts_url"] is None
 
     assert any(
-        name == "clip.commentary.ok" and not payload.get("hasTts")
+        name == "clip.commentary.done" and not payload.get("hasTts")
         for name, payload in telemetry_sink
     )
 
