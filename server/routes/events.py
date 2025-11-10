@@ -23,7 +23,7 @@ from uuid import UUID
 
 from server.auth import require_admin
 from server.security import require_api_key
-from server.services import commentary
+from server.services import clips_repo, commentary
 from server.telemetry.events import (
     record_board_build,
     record_board_resync,
@@ -34,6 +34,7 @@ from server.telemetry.events import (
     record_score_conflict_stale_or_duplicate,
     record_score_idempotent,
     record_score_write,
+    emit_clip_commentary_blocked_safe,
 )
 
 
@@ -1240,13 +1241,124 @@ def get_board(event_id: str, format: str | None = Query(default=None)) -> BoardR
     )
 
 
+SAFE_FLAG_KEYS = ("safe", "tournamentSafe", "tournament_safe")
+
+
+def _extract_safe_flag(mapping: Mapping[str, Any] | None) -> bool | None:
+    if not isinstance(mapping, Mapping):
+        return None
+    for key in SAFE_FLAG_KEYS:
+        candidate = mapping.get(key)
+        if isinstance(candidate, bool):
+            return candidate
+    return None
+
+
+def _safe_flag_from_host_state(host_state: Any) -> bool | None:
+    for key in SAFE_FLAG_KEYS:
+        candidate = getattr(host_state, key, None)
+        if isinstance(candidate, bool):
+            return candidate
+    if hasattr(host_state, "model_dump"):
+        dumped = host_state.model_dump()
+        value = _extract_safe_flag(dumped if isinstance(dumped, Mapping) else None)
+        if value is not None:
+            return value
+        dumped_alias = host_state.model_dump(by_alias=True)
+        alias_value = _extract_safe_flag(
+            dumped_alias if isinstance(dumped_alias, Mapping) else None
+        )
+        if alias_value is not None:
+            return alias_value
+        nested = None
+        if isinstance(dumped, Mapping):
+            nested = dumped.get("tvFlags")
+        if nested is None and isinstance(dumped_alias, Mapping):
+            nested = dumped_alias.get("tvFlags")
+        nested_value = _extract_safe_flag(
+            nested if isinstance(nested, Mapping) else None
+        )
+        if nested_value is not None:
+            return nested_value
+    if isinstance(host_state, Mapping):
+        value = _extract_safe_flag(host_state)
+        if value is not None:
+            return value
+        nested = host_state.get("tvFlags")
+        nested_value = _extract_safe_flag(
+            nested if isinstance(nested, Mapping) else None
+        )
+        if nested_value is not None:
+            return nested_value
+    return None
+
+
+def _resolve_commentary_safe_flag(event_id: str) -> bool:
+    host_state: Any | None = None
+    try:
+        host_state = _build_host_state(event_id)
+    except HTTPException as exc:
+        if exc.status_code == status.HTTP_404_NOT_FOUND:
+            raise
+    except Exception:
+        host_state = None
+
+    if host_state is not None:
+        value = _safe_flag_from_host_state(host_state)
+        if value is not None:
+            return value
+
+    event = _REPOSITORY.get_event(event_id)
+    if event:
+        direct = _extract_safe_flag(event)
+        if direct is not None:
+            return direct
+        settings = event.get("settings") if isinstance(event, Mapping) else None
+        nested = _extract_safe_flag(settings)
+        if nested is not None:
+            return nested
+        if isinstance(settings, Mapping):
+            flags = settings.get("tvFlags")
+            flags_value = _extract_safe_flag(
+                flags if isinstance(flags, Mapping) else None
+            )
+            if flags_value is not None:
+                return flags_value
+    return False
+
+
+def _assert_commentary_allowed(
+    event_id: str, clip_id: str, member_id: str | None
+) -> None:
+    if _resolve_commentary_safe_flag(event_id):
+        emit_clip_commentary_blocked_safe(event_id, clip_id, member_id)
+        raise HTTPException(
+            status_code=status.HTTP_423_LOCKED,
+            detail={
+                "code": "TOURNAMENT_SAFE",
+                "message": "Commentary disabled in tournament-safe",
+            },
+        )
+
+
 @router.post(
     "/clips/{clip_id}/commentary",
     response_model=CommentaryOut,
-    dependencies=[Depends(require_admin)],
 )
-def create_clip_commentary(clip_id: UUID) -> CommentaryOut:
-    result = commentary.generate_commentary(str(clip_id))
+def create_clip_commentary(
+    clip_id: UUID, member_id: str | None = Depends(require_admin)
+) -> CommentaryOut:
+    clip_str = str(clip_id)
+    clip_record = clips_repo.get_clip(clip_str)
+    try:
+        event_id = commentary._require_event_id(clip_record)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        ) from exc
+    _assert_commentary_allowed(event_id, clip_str, member_id)
+    result = commentary.generate_commentary(clip_str)
     return CommentaryOut(
         title=result.title, summary=result.summary, ttsUrl=result.tts_url
     )

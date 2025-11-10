@@ -196,6 +196,19 @@ def emit_clip_commentary_failed(clip_id: str, error: str) -> None:
     _safe_emit("clip.commentary.failed", payload)
 
 
+def emit_clip_commentary_blocked_safe(
+    event_id: str, clip_id: str, member_id: str | None
+) -> None:
+    payload: Dict[str, object] = {
+        "eventId": event_id,
+        "clipId": clip_id,
+        "ts": _now_ms(),
+    }
+    if member_id:
+        payload["memberId"] = member_id
+    _safe_emit("clip.commentary.blocked_safe", payload)
+
+
 def _now_ms() -> int:
     from time import time
 
@@ -218,4 +231,5 @@ __all__ = [
     "emit_clip_commentary_requested",
     "emit_clip_commentary_ok",
     "emit_clip_commentary_failed",
+    "emit_clip_commentary_blocked_safe",
 ]

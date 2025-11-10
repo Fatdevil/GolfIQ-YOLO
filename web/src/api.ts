@@ -142,10 +142,10 @@ export type ClipCommentaryResponse = {
   ttsUrl?: string | null;
 };
 
-export const postClipCommentary = (clipId: string) =>
+export const postClipCommentary = (clipId: string, memberId?: string) =>
   axios
     .post<ClipCommentaryResponse>(`${API}/events/clips/${clipId}/commentary`, null, {
-      headers: withAdminHeaders(),
+      headers: withAdminHeaders({ memberId }),
     })
     .then((r) => r.data);
 

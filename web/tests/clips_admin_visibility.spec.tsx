@@ -26,14 +26,16 @@ describe('ClipModal admin visibility', () => {
     expect(screen.getByText('Request commentary')).toBeTruthy();
   });
 
-  it('hides admin CTA when session is admin but safe=true', () => {
+  it('disables admin CTA when session is admin but safe=true', () => {
     render(
       <EventSessionContext.Provider value={{ role: 'admin', memberId: 'host', safe: true }}>
         <ClipModal clip={clip} />
       </EventSessionContext.Provider>,
     );
 
-    expect(screen.queryByText('Request commentary')).toBeNull();
+    const button = screen.getByRole('button', { name: 'Request commentary' });
+    expect((button as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.getByText('Tournament-safe: commentary disabled')).toBeTruthy();
   });
 
   it('hides admin CTA for spectators', () => {
