@@ -86,3 +86,32 @@ def test_client_configuration_uses_clip_overrides(
     assert kwargs["aws_secret_access_key"] == "secret"
     assert kwargs["endpoint_url"] == "https://r2.example.com"
     assert kwargs["config"].s3.get("addressing_style") == "path"
+
+
+def test_client_returns_cached_inside_lock(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    sentinel = object()
+    calls: list[tuple[tuple[object, ...], dict[str, object]]] = []
+
+    class _FakeLock:
+        def __enter__(self):
+            presign_module._CLIENT = sentinel
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+    monkeypatch.setattr(presign_module, "_CLIENT", None)
+    monkeypatch.setattr(presign_module, "_LOCK", _FakeLock())
+    monkeypatch.setattr(
+        presign_module.boto3,
+        "client",
+        lambda *args, **kwargs: calls.append((args, kwargs)) or {"client": "created"},
+    )
+
+    try:
+        assert presign_module._client() is sentinel
+        assert calls == []
+    finally:
+        presign_module._CLIENT = None
