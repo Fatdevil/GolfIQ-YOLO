@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { TraceData } from "../lib/traceUtils";
+import { getSignedPlaybackUrl } from "../media/sign";
 import {
   MetricOverlay,
   drawMetricsOverlay,
@@ -85,7 +86,8 @@ export default function ExportPanel({ isOpen, onClose, runId, videoUrl, trace, m
 
       const video = document.createElement("video");
       video.crossOrigin = "anonymous";
-      video.src = videoUrl;
+      const playback = await getSignedPlaybackUrl(videoUrl);
+      video.src = playback.url;
       video.muted = true;
       video.playsInline = true;
       video.preload = "auto";

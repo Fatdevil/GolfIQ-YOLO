@@ -1,5 +1,5 @@
 import { cleanup, render, screen } from '@testing-library/react';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { ClipModal } from '@web/features/clips/ClipModal';
 import type { ShotClip } from '@web/features/clips/types';
@@ -12,8 +12,13 @@ describe('ClipModal admin visibility', () => {
     ai_summary: null,
   };
 
+  beforeEach(() => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false, status: 404, json: async () => ({}) }));
+  });
+
   afterEach(() => {
     cleanup();
+    vi.unstubAllGlobals();
   });
 
   it('shows admin CTA when session is admin and safe=false', () => {

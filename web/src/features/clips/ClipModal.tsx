@@ -2,6 +2,8 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { isAxiosError } from 'axios';
 
 import { postClipCommentary } from '@web/api';
+import { useSignedVideoSource } from '@web/media/useSignedVideoSource';
+import { useMediaPlaybackTelemetry } from '@web/media/telemetry';
 
 import { useEventSession, type EventSession } from '../../session/eventSession';
 import type { ShotClip } from './types';
@@ -36,6 +38,7 @@ export function ClipModal({ clip, onClose, onRefetch }: ClipModalProps): JSX.Ele
   const [reportError, setReportError] = useState<string | null>(null);
   const [reportSubmitted, setReportSubmitted] = useState(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const videoRef = useRef<HTMLVideoElement | null>(null);
 
   const title = useMemo(() => resolveCommentaryField(clip.ai_title ?? clip.aiTitle), [clip]);
   const summary = useMemo(
@@ -43,6 +46,18 @@ export function ClipModal({ clip, onClose, onRefetch }: ClipModalProps): JSX.Ele
     [clip],
   );
   const ttsUrl = useMemo(() => normalizeTtsUrl(clip), [clip]);
+  const rawVideoUrl = useMemo(() => clip.video_url ?? clip.videoUrl ?? null, [clip]);
+  const { url: signedVideoUrl, path: signedPath, signed: hasSignature, exp: signedExp, loading: signing } =
+    useSignedVideoSource(rawVideoUrl);
+
+  useMediaPlaybackTelemetry(videoRef, {
+    clipId: clip.id ?? null,
+    runId: null,
+    path: signedPath,
+    signed: hasSignature,
+    source: 'clip_modal',
+    exp: signedExp,
+  });
 
   useEffect(() => {
     setError(null);
@@ -167,8 +182,17 @@ export function ClipModal({ clip, onClose, onRefetch }: ClipModalProps): JSX.Ele
         )}
       </header>
 
-      {clip.video_url ?? clip.videoUrl ? (
-        <video controls className="w-full rounded bg-black" src={(clip.video_url ?? clip.videoUrl) ?? undefined} />
+      {signedVideoUrl ? (
+        <video
+          ref={videoRef}
+          controls
+          className="w-full rounded bg-black"
+          src={signedVideoUrl ?? undefined}
+        />
+      ) : rawVideoUrl && signing ? (
+        <div className="flex h-48 w-full items-center justify-center rounded border border-dashed border-slate-700 text-slate-500">
+          Preparing video…
+        </div>
       ) : (
         <div className="flex h-48 w-full items-center justify-center rounded border border-dashed border-slate-700 text-slate-500">
           Video unavailable

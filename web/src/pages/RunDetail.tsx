@@ -10,6 +10,8 @@ import { visualTracerEnabled, playsLikeEnabled } from "../config";
 import PlaysLikePanel from "../components/PlaysLikePanel";
 import { mergePlaysLikeCfg, type PlaysLikeCfg } from "@shared/playslike/PlaysLikeService";
 import type { TempAltOverrides } from "@shared/playslike";
+import { useSignedVideoSource } from "@web/media/useSignedVideoSource";
+import { useMediaPlaybackTelemetry } from "@web/media/telemetry";
 
 interface RunDetailData {
   run_id?: string;
@@ -29,8 +31,17 @@ export default function RunDetailPage() {
   const [tempAltSettings, setTempAltSettings] = useState<TempAltOverrides | null>(null);
   const lastPlaysLikeTier = useRef<string | null>(null);
   const lastAssignSignature = useRef<string | null>(null);
+  const backViewVideoRef = useRef<HTMLVideoElement | null>(null);
 
   const backView = useMemo(() => extractBackViewPayload(data), [data]);
+  const backViewVideoUrl = backView?.videoUrl ?? null;
+  const {
+    url: signedBackViewUrl,
+    path: backViewPath,
+    signed: backViewSigned,
+    exp: backViewExp,
+    loading: backViewSigning,
+  } = useSignedVideoSource(backViewVideoUrl);
   const qualityBadges = useMemo(() => {
     const badges: Array<{ key: string; value?: string }> = [];
     if (!backView?.quality) {
@@ -62,6 +73,24 @@ export default function RunDetailPage() {
     return typeof meta === "string" ? meta : null;
   }, [data]);
   const pipelineSource = backView?.source ?? null;
+  const resolvedRunId = useMemo(() => {
+    if (data && typeof data === "object") {
+      const value = (data as Record<string, unknown>)["run_id"];
+      if (typeof value === "string" && value.trim()) {
+        return value;
+      }
+    }
+    return id ?? null;
+  }, [data, id]);
+
+  useMediaPlaybackTelemetry(backViewVideoRef, {
+    clipId: null,
+    runId: resolvedRunId,
+    path: backViewPath,
+    signed: backViewSigned,
+    source: "run_detail.back_view",
+    exp: backViewExp,
+  });
 
   const metricSources = useMemo(() => {
     if (!data) return [] as Record<string, unknown>[];
@@ -461,15 +490,20 @@ export default function RunDetailPage() {
       {!loading && visualTracerEnabled && backView && (
         <div className="space-y-4 rounded-xl border border-slate-800 bg-slate-900/60 p-4 shadow-lg">
           <div className="relative aspect-video w-full overflow-hidden rounded-lg border border-slate-800/60 bg-slate-950/60">
-            {backView.videoUrl ? (
+            {signedBackViewUrl ? (
               <video
-                src={backView.videoUrl}
+                ref={backViewVideoRef}
+                src={signedBackViewUrl}
                 className="h-full w-full object-cover opacity-70"
                 controls
                 muted
                 loop
                 playsInline
               />
+            ) : backViewVideoUrl && backViewSigning ? (
+              <div className="flex h-full items-center justify-center text-xs text-slate-500">
+                Preparing video…
+              </div>
             ) : (
               <div className="flex h-full items-center justify-center text-xs text-slate-500">
                 Back-view preview not available
