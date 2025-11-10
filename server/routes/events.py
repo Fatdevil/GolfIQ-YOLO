@@ -916,6 +916,18 @@ class _MemoryEventsRepository:
                 }
             )
 
+    def get_member(self, event_id: str, member_id: str) -> _Member | None:
+        with self._lock:
+            member = self._members.get((event_id, member_id))
+            if member is None:
+                return None
+            return _Member(
+                event_id=member.event_id,
+                member_id=member.member_id,
+                name=member.name,
+                role=member.role,
+            )
+
     def get_board(self, event_id: str) -> List[Mapping[str, Any]]:
         with self._lock:
             board = self._boards.get(event_id)

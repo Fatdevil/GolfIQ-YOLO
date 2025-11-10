@@ -58,7 +58,7 @@ export function ClipModal({ clip, onClose, onRefetch }: ClipModalProps): JSX.Ele
     };
   }, [ttsUrl]);
 
-  const canRequest = session.role === 'admin';
+  const canRequest = session.role === 'admin' && !session.safe;
   const hideCoachExtras = Boolean(session.tournamentSafe && session.coachMode);
 
   const handleRequest = async () => {
