@@ -170,7 +170,9 @@ def test_iter_host_candidates_handles_nested_mappings():
 
 def test_resolve_role_uses_host_candidates(monkeypatch):
     events_module = importlib.import_module("server.routes.events")
-    monkeypatch.setattr(events_module._REPOSITORY, "get_member", lambda event_id, member_id: None)
+    monkeypatch.setattr(
+        events_module._REPOSITORY, "get_member", lambda event_id, member_id: None
+    )
 
     role = events_session_module._resolve_role(
         "evt-role", {"owner": "admin-123"}, "admin-123"
@@ -215,7 +217,9 @@ def test_resolve_safe_flag_uses_model_dump_value(monkeypatch):
         def model_dump(self, **kwargs: object) -> dict[str, object]:
             return {"safe": True}
 
-    monkeypatch.setattr(events_module, "_build_host_state", lambda event_id: DumpState())
+    monkeypatch.setattr(
+        events_module, "_build_host_state", lambda event_id: DumpState()
+    )
 
     assert events_session_module._resolve_safe_flag("evt-dump", {}) is True
 
@@ -231,7 +235,9 @@ def test_resolve_safe_flag_uses_model_dump_alias(monkeypatch):
                 return {"safe": True}
             return {}
 
-    monkeypatch.setattr(events_module, "_build_host_state", lambda event_id: AliasState())
+    monkeypatch.setattr(
+        events_module, "_build_host_state", lambda event_id: AliasState()
+    )
 
     assert events_session_module._resolve_safe_flag("evt-alias", {}) is True
 
@@ -247,7 +253,9 @@ def test_resolve_safe_flag_uses_nested_flags(monkeypatch):
                 return {}
             return {"tvFlags": {"tournamentSafe": True}}
 
-    monkeypatch.setattr(events_module, "_build_host_state", lambda event_id: NestedState())
+    monkeypatch.setattr(
+        events_module, "_build_host_state", lambda event_id: NestedState()
+    )
 
     assert events_session_module._resolve_safe_flag("evt-nested", {}) is True
 
