@@ -116,6 +116,24 @@ def test_presign_rejects_large_payload(monkeypatch):
     assert response.status_code == status.HTTP_413_REQUEST_ENTITY_TOO_LARGE
 
 
+def test_presign_returns_404_when_event_missing(monkeypatch):
+    missing_event = str(uuid.uuid4())
+    events_module = importlib.import_module("server.routes.events")
+    monkeypatch.setattr(events_module, "presign_put", lambda *_, **__: ("u", {}))
+
+    response = client.post(
+        f"/events/{missing_event}/clips/presign",
+        json={
+            "contentType": "video/mp4",
+            "sizeBytes": 1024,
+            "fingerprint": "abc123",
+        },
+        headers=_member_headers(),
+    )
+
+    assert response.status_code == status.HTTP_404_NOT_FOUND
+
+
 def test_presign_requires_member_header(monkeypatch):
     event_id = _create_event()
     events_module = importlib.import_module("server.routes.events")
@@ -137,6 +155,16 @@ def test_complete_returns_404_for_missing_clip():
         json={"srcUri": "https://example.com/video.mp4"},
         headers=_member_headers(),
     )
+    assert response.status_code == status.HTTP_404_NOT_FOUND
+
+
+def test_complete_rejects_invalid_clip_identifier():
+    response = client.post(
+        "/clips/not-a-uuid/complete",
+        json={"srcUri": "https://example.com/video.mp4"},
+        headers=_member_headers(),
+    )
+
     assert response.status_code == status.HTTP_404_NOT_FOUND
 
 
@@ -244,6 +272,11 @@ def test_list_clips_respects_ready_status_and_limit(monkeypatch):
     assert response_after.json()["items"] == []
 
 
+def test_list_clips_requires_existing_event():
+    response = client.get(f"/events/{uuid.uuid4()}/clips", headers=_member_headers())
+    assert response.status_code == status.HTTP_404_NOT_FOUND
+
+
 def test_react_requires_member_header(monkeypatch):
     event_id = _create_event()
     events_module = importlib.import_module("server.routes.events")
@@ -270,6 +303,16 @@ def test_react_requires_member_header(monkeypatch):
         json={"emoji": "🔥"},
     )
     assert response.status_code == status.HTTP_403_FORBIDDEN
+
+
+def test_react_rejects_invalid_clip_identifier():
+    response = client.post(
+        "/clips/not-a-uuid/react",
+        json={"emoji": "🔥"},
+        headers=_member_headers(),
+    )
+
+    assert response.status_code == status.HTTP_404_NOT_FOUND
 
 
 def test_react_success_emits_telemetry(monkeypatch, telemetry_sink):

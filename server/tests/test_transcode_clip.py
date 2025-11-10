@@ -100,3 +100,11 @@ def test_transcode_failure_marks_failed(monkeypatch: pytest.MonkeyPatch) -> None
     assert args[0] == clip_id
     assert "boom" in kwargs.get("error", "")
     assert telemetry and telemetry[0][0] == "failed"
+
+
+def test_transcode_requires_clip_and_source() -> None:
+    with pytest.raises(ValueError):
+        transcode_clip.handle({})
+
+    with pytest.raises(ValueError):
+        transcode_clip.handle({"clipId": str(uuid.uuid4())})
