@@ -6,7 +6,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from server.app import app
-from server.services import clips_repo, commentary
+from server.services import clips_repo, commentary, commentary_queue
 from server.telemetry import events as telemetry_events
 
 client = TestClient(app, raise_server_exceptions=False)
@@ -27,6 +27,7 @@ def repo(monkeypatch: pytest.MonkeyPatch):
     repository = events_module._MemoryEventsRepository()
     monkeypatch.setattr(events_module, "_REPOSITORY", repository)
     monkeypatch.setattr(clips_repo, "_CLIP_STORE", {})
+    commentary_queue.reset()
     return repository
 
 
@@ -88,6 +89,8 @@ def test_commentary_request_blocked_when_safe(
     assert payload["eventId"] == event_id
     assert payload["clipId"] == clip_id
     assert payload.get("memberId") == "member-1"
+    stored = commentary_queue.get(clip_id)
+    assert stored.status.name == "blocked_safe"
 
 
 def test_commentary_request_allowed_when_not_safe(

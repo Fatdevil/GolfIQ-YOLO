@@ -26,6 +26,7 @@ from .routes.caddie_health import router as caddie_health_router
 from .routes.caddie_recommend import router as caddie_router
 from .routes.calibrate import router as calibrate_router
 from .routes.course_bundle import router as course_bundle_router
+from .routes.commentary import router as commentary_router
 from .routes.cv_analyze import router as cv_analyze_router
 from .routes.cv_analyze_video import router as cv_analyze_video_router
 from .routes.cv_mock import router as cv_mock_router
@@ -118,6 +119,7 @@ app.include_router(bundle_router)
 app.include_router(bundle_index_router)
 app.include_router(bench_router)
 app.include_router(course_bundle_router)
+app.include_router(commentary_router)
 app.include_router(metrics.router)
 app.include_router(events_router)
 app.include_router(events_session_router)

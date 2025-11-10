@@ -23,7 +23,13 @@ from uuid import UUID
 
 from server.auth import require_admin
 from server.security import require_api_key
-from server.services import clips_repo, commentary
+from server.schemas.commentary import CommentaryStatus
+from server.services import (
+    clips_repo,
+    commentary,
+    commentary_queue,
+    telemetry as telemetry_service,
+)
 from server.telemetry.events import (
     record_board_build,
     record_board_resync,
@@ -34,7 +40,6 @@ from server.telemetry.events import (
     record_score_conflict_stale_or_duplicate,
     record_score_idempotent,
     record_score_write,
-    emit_clip_commentary_blocked_safe,
 )
 
 
@@ -1331,7 +1336,14 @@ def _assert_commentary_allowed(
     event_id: str, clip_id: str, member_id: str | None
 ) -> None:
     if _resolve_commentary_safe_flag(event_id):
-        emit_clip_commentary_blocked_safe(event_id, clip_id, member_id)
+        commentary_queue.upsert(
+            clip_id,
+            event_id=event_id,
+            status=CommentaryStatus.blocked_safe,
+        )
+        telemetry_service.emit_commentary_blocked_safe(
+            event_id, clip_id, member_id=member_id
+        )
         raise HTTPException(
             status_code=status.HTTP_423_LOCKED,
             detail={
@@ -1358,6 +1370,12 @@ def create_clip_commentary(
             detail=str(exc),
         ) from exc
     _assert_commentary_allowed(event_id, clip_str, member_id)
+    commentary_queue.upsert(
+        clip_str,
+        event_id=event_id,
+        status=CommentaryStatus.queued,
+    )
+    telemetry_service.emit_commentary_request(event_id, clip_str, member_id=member_id)
     result = commentary.generate_commentary(clip_str)
     return CommentaryOut(
         title=result.title, summary=result.summary, ttsUrl=result.tts_url
