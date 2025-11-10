@@ -1,6 +1,19 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, renderHook, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Mock } from "vitest";
+
+import { useClips } from "@web/features/clips/useClips";
+
+vi.mock("hls.js", () => ({
+  default: class {
+    static isSupported(): boolean {
+      return false;
+    }
+    loadSource(_src: string): void {}
+    attachMedia(_media: HTMLMediaElement): void {}
+    destroy(): void {}
+  },
+}));
 
 vi.mock("react-router-dom", async () => {
   const actual = await vi.importActual<typeof import("react-router-dom")>("react-router-dom");
@@ -10,8 +23,29 @@ vi.mock("react-router-dom", async () => {
   };
 });
 
-vi.mock("@web/api", () => {
+const eventSessionMock: { current: { memberId: string; role: "spectator" | "player" | "admin" } | null } = {
+  current: { memberId: "mem-1", role: "spectator" },
+};
+
+vi.mock("@web/features/events/session", () => {
+  const sessionFns = {
+    getEventMemberId: vi.fn((eventId: string) => eventSessionMock.current?.memberId ?? null),
+    getEventRole: vi.fn((eventId: string) => eventSessionMock.current?.role ?? null),
+    setEventSession: vi.fn(),
+    ensureSpectatorSession: vi.fn(),
+    clearEventSession: vi.fn(),
+    generateMemberId: vi.fn(() => "generated"),
+  };
   return {
+    useEventSession: () => eventSessionMock.current,
+    session: sessionFns,
+  };
+});
+
+vi.mock("@web/api", async () => {
+  const actual = await vi.importActual<typeof import("@web/api")>("@web/api");
+  return {
+    ...actual,
     fetchSpectatorBoard: vi.fn().mockResolvedValue({ players: [], updatedAt: null }),
     fetchEventClips: vi.fn().mockResolvedValue({
       items: [
@@ -34,7 +68,6 @@ vi.mock("@web/api", () => {
         },
       ],
     }),
-    postClipReaction: vi.fn().mockResolvedValue({ ok: true }),
   };
 });
 
@@ -117,11 +150,16 @@ describe("events clips integration", () => {
     render(<LiveLeaderboardPage />);
     await flushAsync();
     await vi.runOnlyPendingTimersAsync();
+    const spy = vi.spyOn(api, "postClipReaction").mockResolvedValue({ ok: true });
     const reactButton = screen.getAllByRole("button", { name: /🔥/i })[0];
     fireEvent.click(reactButton);
     await flushAsync();
-    expect(api.postClipReaction).toHaveBeenCalledTimes(1);
-    expect(api.postClipReaction).toHaveBeenCalledWith("clip-1", "🔥", { memberId: undefined, role: undefined });
+    expect(spy).toHaveBeenCalledTimes(1);
+    expect(spy).toHaveBeenCalledWith("event-1", "clip-1", "🔥", {
+      memberId: "mem-1",
+      role: "spectator",
+    });
+    spy.mockRestore();
   });
 
   it("opens modal with video when selecting a clip", async () => {
@@ -160,5 +198,28 @@ describe("events clips integration", () => {
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(playMock).toHaveBeenCalled();
     expect(performance.now() - beforeOpen).toBeLessThanOrEqual(1500);
+  });
+
+  it("sends x-event-member and role on reaction", async () => {
+    const fetchSpy = vi
+      .spyOn(globalThis as { fetch: typeof fetch }, "fetch")
+      .mockResolvedValue(new Response(JSON.stringify({ ok: true }), { status: 200 }) as Response);
+    const { result, unmount } = renderHook(() =>
+      useClips("e-123", { enabled: true, memberId: "mem-1", role: "spectator" }),
+    );
+    await act(async () => {
+      await result.current.react("clip-1", "🔥");
+    });
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    const call = fetchSpy.mock.calls[0]!;
+    const [url, init] = call;
+    expect(String(url)).toContain("/clips/clip-1/react");
+    const requestInit = (init as RequestInit | undefined) ?? {};
+    const headers = (requestInit.headers ?? {}) as Record<string, string>;
+    expect(headers["x-event-member"]).toBe("mem-1");
+    expect(headers["x-event-role"]).toBe("spectator");
+    expect(headers["x-event-id"]).toBe("e-123");
+    unmount();
+    fetchSpy.mockRestore();
   });
 });

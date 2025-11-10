@@ -1,10 +1,11 @@
-import { FormEvent, useEffect, useState } from 'react';
+import { FormEvent, useEffect, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 
 import { postJoinEvent } from '@web/api';
 import { emitEventsJoin } from '@shared/events/telemetry';
 import { normalizeCode, validateCode } from '@shared/events/code';
 import type { UUID } from '@shared/events/types';
+import { session } from '@web/features/events/session';
 
 export default function JoinEventPage(): JSX.Element {
   const params = useParams<{ code?: string }>();
@@ -13,6 +14,7 @@ export default function JoinEventPage(): JSX.Element {
   const [message, setMessage] = useState<string | null>(null);
   const [messageTone, setMessageTone] = useState<'info' | 'error'>('info');
   const [eventId, setEventId] = useState<string | null>(null);
+  const memberRef = useRef<string>(session.generateMemberId());
 
   useEffect(() => {
     if (params.code) {
@@ -33,10 +35,12 @@ export default function JoinEventPage(): JSX.Element {
     setMessage(null);
     try {
       const normalized = normalizeCode(trimmed);
-      const response = await postJoinEvent(normalized);
+      const memberId = memberRef.current;
+      const response = await postJoinEvent(normalized, { memberId });
       setEventId(response.eventId);
       setMessage('Joined as spectator – open the live leaderboard.');
       setMessageTone('info');
+      session.setEventSession(response.eventId, { memberId, role: 'spectator' });
       emitEventsJoin({ eventId: response.eventId as UUID });
     } catch (err) {
       const messageText = err instanceof Error ? err.message : 'Unable to join event';

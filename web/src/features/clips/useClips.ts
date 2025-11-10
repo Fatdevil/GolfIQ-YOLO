@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import { fetchEventClips, postClipReaction } from "@web/api";
+import { fetchEventClips, postClipReaction, type EventRole } from "@web/api";
+import { session } from "@web/features/events/session";
 import type { ShotClip } from "@web/features/clips/types";
 
 type UseClipsOptions = {
   pollMs?: number;
   memberId?: string;
-  role?: "spectator" | "player" | "admin";
+  role?: EventRole;
   enabled?: boolean;
 };
 
@@ -38,16 +39,20 @@ function dedupeClips(existing: ShotClip[], incoming: ShotClip[]): ShotClip[] {
   });
 }
 
-export function useClips(eventId: string, options: UseClipsOptions = {}): UseClipsResult {
+export function useClips(
+  eventId: string | undefined,
+  options: UseClipsOptions = {},
+): UseClipsResult {
   const [clips, setClips] = useState<ShotClip[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const pollMs = options.pollMs ?? DEFAULT_POLL_MS;
+  const enabled = options.enabled !== undefined ? options.enabled : true;
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastFetchedAt = useRef<string | null>(null);
 
   useEffect(() => {
-    if (!eventId || options.enabled === false) {
+    if (!eventId || !enabled) {
       return () => undefined;
     }
     let cancelled = false;
@@ -104,13 +109,22 @@ export function useClips(eventId: string, options: UseClipsOptions = {}): UseCli
         timerRef.current = null;
       }
     };
-  }, [eventId, pollMs, options.enabled]);
+  }, [enabled, eventId, pollMs]);
 
   const react = useCallback(
     async (clipId: string, emoji: string) => {
-      await postClipReaction(clipId, emoji, {
-        memberId: options.memberId,
-        role: options.role,
+      if (!eventId) {
+        throw new Error("missing_event_id");
+      }
+      const memberId =
+        options.memberId ?? session.getEventMemberId(eventId);
+      if (!memberId) {
+        throw new Error("member_identity_required");
+      }
+      const role = options.role ?? session.getEventRole(eventId) ?? "spectator";
+      await postClipReaction(eventId, clipId, emoji, {
+        memberId,
+        role,
       });
       setClips((current) =>
         current.map((clip) => {
@@ -131,7 +145,7 @@ export function useClips(eventId: string, options: UseClipsOptions = {}): UseCli
         }),
       );
     },
-    [options.memberId, options.role],
+    [eventId, options.memberId, options.role],
   );
 
   const topShots = useMemo(() => {

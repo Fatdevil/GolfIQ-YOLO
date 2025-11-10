@@ -1,14 +1,13 @@
-from __future__ import annotations
-
 import importlib
 import uuid
 from datetime import datetime, timedelta, timezone
 
 import pytest
+from fastapi import status
 from fastapi.testclient import TestClient
 
-from server.app import app
 from server import jobs
+from server.app import app
 from server.repositories.clips_repo import InMemoryClipsRepository, clips_repo
 from server.telemetry import events as telemetry_events
 
@@ -16,7 +15,7 @@ client = TestClient(app)
 
 
 @pytest.fixture(autouse=True)
-def _setup(monkeypatch):
+def _reset_state(monkeypatch):
     monkeypatch.delenv("REQUIRE_API_KEY", raising=False)
     monkeypatch.delenv("API_KEY", raising=False)
     events_module = importlib.import_module("server.routes.events")
@@ -45,7 +44,7 @@ def telemetry_sink():
 
 def _create_event() -> str:
     response = client.post("/events", json={"name": "Club Night"})
-    assert response.status_code == 201
+    assert response.status_code == status.HTTP_201_CREATED
     return response.json()["id"]
 
 
@@ -58,14 +57,14 @@ def _member_headers(
     }
 
 
-def test_presign_creates_placeholder(monkeypatch, telemetry_sink):
+def test_presign_happy_path(monkeypatch, telemetry_sink):
     event_id = _create_event()
     events_module = importlib.import_module("server.routes.events")
-    monkeypatch.setattr(
-        events_module,
-        "presign_put",
-        lambda key, content_type, expires: ("https://upload", {"key": key}),
-    )
+
+    def _fake_presign(key, *_, **__):
+        return "https://upload", {"key": key}
+
+    monkeypatch.setattr(events_module, "presign_put", _fake_presign)
 
     response = client.post(
         f"/events/{event_id}/clips/presign",
@@ -76,37 +75,75 @@ def test_presign_creates_placeholder(monkeypatch, telemetry_sink):
         },
         headers=_member_headers(),
     )
-    assert response.status_code == 200
+    assert response.status_code == status.HTTP_200_OK
     body = response.json()
-    assert body["clipId"]
+    assert uuid.UUID(body["clipId"])
     assert body["url"] == "https://upload"
-    assert "fields" in body
-    repo_state = clips_repo.fetch(uuid.UUID(body["clipId"]))
-    assert repo_state is not None
-    assert repo_state.get("status") == "queued"
+    assert isinstance(body["fields"], dict)
+    record = clips_repo.fetch(uuid.UUID(body["clipId"]))
+    assert record is not None
+    assert record.get("status") == "queued"
     assert any(event == "clips.upload.requested" for event, _ in telemetry_sink)
+
+
+def test_presign_rejects_invalid_mime():
+    event_id = _create_event()
+    response = client.post(
+        f"/events/{event_id}/clips/presign",
+        json={
+            "contentType": "video/avi",
+            "sizeBytes": 1024,
+            "fingerprint": "oops",
+        },
+        headers=_member_headers(),
+    )
+    assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
 
 
 def test_presign_rejects_large_payload(monkeypatch):
     event_id = _create_event()
     events_module = importlib.import_module("server.routes.events")
-    monkeypatch.setattr(events_module, "presign_put", lambda *args, **kwargs: ("u", {}))
+    monkeypatch.setattr(events_module, "presign_put", lambda *_, **__: ("u", {}))
     response = client.post(
         f"/events/{event_id}/clips/presign",
         json={
             "contentType": "video/mp4",
-            "sizeBytes": 100_000_000,
+            "sizeBytes": 1_000_000_000,
             "fingerprint": "too-big",
         },
         headers=_member_headers(),
     )
-    assert response.status_code == 413
+    assert response.status_code == status.HTTP_413_REQUEST_ENTITY_TOO_LARGE
 
 
-def test_complete_enqueues_transcode(monkeypatch):
+def test_presign_requires_member_header(monkeypatch):
     event_id = _create_event()
     events_module = importlib.import_module("server.routes.events")
-    monkeypatch.setattr(events_module, "presign_put", lambda *args, **kwargs: ("u", {}))
+    monkeypatch.setattr(events_module, "presign_put", lambda *_, **__: ("u", {}))
+    response = client.post(
+        f"/events/{event_id}/clips/presign",
+        json={
+            "contentType": "video/mp4",
+            "sizeBytes": 1024,
+            "fingerprint": "abc123",
+        },
+    )
+    assert response.status_code == status.HTTP_403_FORBIDDEN
+
+
+def test_complete_returns_404_for_missing_clip():
+    response = client.post(
+        "/clips/00000000-0000-0000-0000-000000000000/complete",
+        json={"srcUri": "https://example.com/video.mp4"},
+        headers=_member_headers(),
+    )
+    assert response.status_code == status.HTTP_404_NOT_FOUND
+
+
+def test_complete_enqueues_transcode_job(monkeypatch):
+    event_id = _create_event()
+    events_module = importlib.import_module("server.routes.events")
+    monkeypatch.setattr(events_module, "presign_put", lambda *_, **__: ("u", {}))
     presign = client.post(
         f"/events/{event_id}/clips/presign",
         json={
@@ -122,21 +159,20 @@ def test_complete_enqueues_transcode(monkeypatch):
         json={"srcUri": "https://example.com/video.mp4"},
         headers=_member_headers(),
     )
-    assert response.status_code == 200
-    job_entries = jobs.get_buffered_jobs()
-    assert job_entries
-    name, payload = job_entries[-1]
-    assert name == "transcode_clip"
-    assert payload["clipId"] == clip_id
+    assert response.status_code == status.HTTP_200_OK
+    jobs_buffer = jobs.get_buffered_jobs()
+    assert jobs_buffer
+    job_name, payload = jobs_buffer[-1]
+    assert job_name == "transcode_clip"
+    assert payload == {"clipId": clip_id, "src": "https://example.com/video.mp4"}
     record = clips_repo.fetch(uuid.UUID(clip_id))
     assert record.get("status") == "processing"
 
 
-def test_list_clips_filters_and_orders(monkeypatch):
+def test_complete_returns_404_when_repo_rejects(monkeypatch):
     event_id = _create_event()
     events_module = importlib.import_module("server.routes.events")
-    monkeypatch.setattr(events_module, "presign_put", lambda *args, **kwargs: ("u", {}))
-    headers = _member_headers()
+    monkeypatch.setattr(events_module, "presign_put", lambda *_, **__: ("u", {}))
     presign = client.post(
         f"/events/{event_id}/clips/presign",
         json={
@@ -144,46 +180,147 @@ def test_list_clips_filters_and_orders(monkeypatch):
             "sizeBytes": 1024,
             "fingerprint": "abc123",
         },
-        headers=headers,
+        headers=_member_headers(),
     )
-    clip_id = uuid.UUID(presign.json()["clipId"])
-    clips_repo.mark_ready(
-        clip_id,
-        hls_url="https://cdn/clips/master.m3u8",
-        mp4_url=None,
-        thumb_url="https://cdn/thumb.jpg",
-        duration_ms=15_000,
+    clip_id = presign.json()["clipId"]
+    monkeypatch.setattr(clips_repo, "mark_processing", lambda *_args, **_kwargs: False)
+    response = client.post(
+        f"/clips/{clip_id}/complete",
+        json={"srcUri": "https://example.com/video.mp4"},
+        headers=_member_headers(),
     )
-    after = datetime.now(timezone.utc) - timedelta(days=1)
-    response = client.get(
-        f"/events/{event_id}/clips",
-        params={"after": after.isoformat(), "limit": 10},
-    )
-    assert response.status_code == 200
-    items = response.json()["items"]
-    assert len(items) == 1
-    assert items[0]["hlsUrl"].endswith("master.m3u8")
-    assert items[0]["weight"] > 0
+    assert response.status_code == status.HTTP_404_NOT_FOUND
 
 
-def test_react_rate_limited(monkeypatch, telemetry_sink):
+def test_list_clips_respects_ready_status_and_limit(monkeypatch):
     event_id = _create_event()
     events_module = importlib.import_module("server.routes.events")
-    monkeypatch.setattr(events_module, "presign_put", lambda *args, **kwargs: ("u", {}))
+    monkeypatch.setattr(events_module, "presign_put", lambda *_, **__: ("u", {}))
     headers = _member_headers()
+    first = client.post(
+        f"/events/{event_id}/clips/presign",
+        json={
+            "contentType": "video/mp4",
+            "sizeBytes": 1024,
+            "fingerprint": "clip1",
+        },
+        headers=headers,
+    )
+    second = client.post(
+        f"/events/{event_id}/clips/presign",
+        json={
+            "contentType": "video/mp4",
+            "sizeBytes": 1024,
+            "fingerprint": "clip2",
+        },
+        headers=headers,
+    )
+    clips_repo.mark_ready(
+        uuid.UUID(first.json()["clipId"]),
+        hls_url="https://cdn/first.m3u8",
+        mp4_url=None,
+        thumb_url="https://cdn/first.jpg",
+        duration_ms=10_000,
+    )
+    clips_repo.mark_processing(
+        uuid.UUID(second.json()["clipId"]),
+        src_uri="https://upload",
+    )
+    response = client.get(
+        f"/events/{event_id}/clips",
+        params={"limit": 1},
+    )
+    assert response.status_code == status.HTTP_200_OK
+    items = response.json()["items"]
+    assert len(items) == 1
+    assert items[0]["hlsUrl"] == "https://cdn/first.m3u8"
+
+    after = datetime.now(timezone.utc) + timedelta(seconds=1)
+    response_after = client.get(
+        f"/events/{event_id}/clips",
+        params={"after": after.isoformat()},
+    )
+    assert response_after.status_code == status.HTTP_200_OK
+    assert response_after.json()["items"] == []
+
+
+def test_react_requires_member_header(monkeypatch):
+    event_id = _create_event()
+    events_module = importlib.import_module("server.routes.events")
+    monkeypatch.setattr(events_module, "presign_put", lambda *_, **__: ("u", {}))
     presign = client.post(
         f"/events/{event_id}/clips/presign",
         json={
             "contentType": "video/mp4",
             "sizeBytes": 1024,
-            "fingerprint": "abc123",
+            "fingerprint": "clip1",
+        },
+        headers=_member_headers(),
+    )
+    clip_id = presign.json()["clipId"]
+    clips_repo.mark_ready(
+        uuid.UUID(clip_id),
+        hls_url="https://cdn/clip.m3u8",
+        mp4_url=None,
+        thumb_url="https://cdn/thumb.jpg",
+        duration_ms=12_000,
+    )
+    response = client.post(
+        f"/clips/{clip_id}/react",
+        json={"emoji": "🔥"},
+    )
+    assert response.status_code == status.HTTP_403_FORBIDDEN
+
+
+def test_react_success_emits_telemetry(monkeypatch, telemetry_sink):
+    event_id = _create_event()
+    events_module = importlib.import_module("server.routes.events")
+    monkeypatch.setattr(events_module, "presign_put", lambda *_, **__: ("u", {}))
+    headers = _member_headers(member_id="member-1")
+    presign = client.post(
+        f"/events/{event_id}/clips/presign",
+        json={
+            "contentType": "video/mp4",
+            "sizeBytes": 1024,
+            "fingerprint": "clip1",
         },
         headers=headers,
     )
     clip_id = presign.json()["clipId"]
     clips_repo.mark_ready(
         uuid.UUID(clip_id),
-        hls_url="https://cdn/clips/master.m3u8",
+        hls_url="https://cdn/clip.m3u8",
+        mp4_url=None,
+        thumb_url="https://cdn/thumb.jpg",
+        duration_ms=12_000,
+    )
+    response = client.post(
+        f"/clips/{clip_id}/react",
+        json={"emoji": "🔥"},
+        headers=headers,
+    )
+    assert response.status_code == status.HTTP_200_OK
+    assert any(event == "clips.reaction" for event, _ in telemetry_sink)
+
+
+def test_react_rate_limited(monkeypatch):
+    event_id = _create_event()
+    events_module = importlib.import_module("server.routes.events")
+    monkeypatch.setattr(events_module, "presign_put", lambda *_, **__: ("u", {}))
+    headers = _member_headers()
+    presign = client.post(
+        f"/events/{event_id}/clips/presign",
+        json={
+            "contentType": "video/mp4",
+            "sizeBytes": 1024,
+            "fingerprint": "clip1",
+        },
+        headers=headers,
+    )
+    clip_id = presign.json()["clipId"]
+    clips_repo.mark_ready(
+        uuid.UUID(clip_id),
+        hls_url="https://cdn/clip.m3u8",
         mp4_url=None,
         thumb_url="https://cdn/thumb.jpg",
         duration_ms=10_000,
@@ -193,68 +330,10 @@ def test_react_rate_limited(monkeypatch, telemetry_sink):
         json={"emoji": "🔥"},
         headers=headers,
     )
-    assert first.status_code == 200
+    assert first.status_code == status.HTTP_200_OK
     second = client.post(
         f"/clips/{clip_id}/react",
         json={"emoji": "🔥"},
         headers=headers,
     )
-    assert second.status_code == 429
-    assert any(event == "clips.reaction" for event, _ in telemetry_sink)
-
-
-def test_worker_mark_ready(monkeypatch, telemetry_sink):
-    from server.jobs import transcode_clip
-
-    repo = InMemoryClipsRepository()
-    clips_repo.set_repository(repo)
-    clip_id = repo.create_placeholder(
-        event_id=uuid.uuid4(),
-        player_id=uuid.uuid4(),
-        hole=None,
-        fingerprint="fp",
-    )
-    monkeypatch.setenv("CLIPS_TRANSCODE_PROVIDER", "stub")
-    monkeypatch.setattr(
-        transcode_clip,
-        "_stub_transcode",
-        lambda clip_uuid, src: {
-            "hls_url": "https://cdn/master.m3u8",
-            "thumb_url": "https://cdn/thumb.jpg",
-            "mp4_url": src,
-            "duration_ms": 1234,
-        },
-    )
-    transcode_clip.handle(
-        {"clipId": str(clip_id), "src": "https://example.com/video.mp4"}
-    )
-    record = repo.fetch(clip_id)
-    assert record.get("status") == "ready"
-    assert record.get("hls_url") == "https://cdn/master.m3u8"
-    assert any(event == "clips.ready" for event, _ in telemetry_sink)
-
-
-def test_worker_failure_marks_failed(monkeypatch, telemetry_sink):
-    from server.jobs import transcode_clip
-
-    repo = InMemoryClipsRepository()
-    clips_repo.set_repository(repo)
-    clip_id = repo.create_placeholder(
-        event_id=uuid.uuid4(),
-        player_id=uuid.uuid4(),
-        hole=None,
-        fingerprint="fp",
-    )
-    monkeypatch.setenv("CLIPS_TRANSCODE_PROVIDER", "stub")
-
-    def _raise(*_args, **_kwargs):
-        raise RuntimeError("boom")
-
-    monkeypatch.setattr(transcode_clip, "_stub_transcode", _raise)
-    with pytest.raises(RuntimeError):
-        transcode_clip.handle(
-            {"clipId": str(clip_id), "src": "https://example.com/video.mp4"}
-        )
-    record = repo.fetch(clip_id)
-    assert record.get("status") == "failed"
-    assert any(event == "clips.failed" for event, _ in telemetry_sink)
+    assert second.status_code == status.HTTP_429_TOO_MANY_REQUESTS

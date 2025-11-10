@@ -10,26 +10,9 @@ const API_KEY = import.meta.env.VITE_API_KEY || "";
 const withAuth = (extra: Record<string, string> = {}) =>
   (API_KEY ? { "x-api-key": API_KEY, ...extra } : extra);
 
-type MemberHeadersOptions = {
-  memberId?: string;
-  role?: "spectator" | "player" | "admin";
-  includeJson?: boolean;
-};
-
-const withMemberHeaders = (options: MemberHeadersOptions = {}) => {
-  const headers: Record<string, string> = {
-    "x-event-role": options.role ?? "spectator",
-  };
-  if (options.memberId) {
-    headers["x-event-member"] = options.memberId;
-  }
-  if (options.includeJson) {
-    headers["Content-Type"] = "application/json";
-  }
-  return withAuth(headers);
-};
-
 export { API };
+
+export type EventRole = "admin" | "player" | "spectator";
 
 export type CreateEventBody = {
   name: string;
@@ -103,18 +86,33 @@ export const fetchEventClips = (
     })
     .then((r) => r.data);
 
-export const postClipReaction = (
+export async function postClipReaction(
+  eventId: string,
   clipId: string,
   emoji: string,
-  options: { memberId?: string; role?: "spectator" | "player" | "admin" } = {},
-) =>
-  axios
-    .post(
-      `${API}/clips/${clipId}/react`,
-      { emoji },
-      { headers: withMemberHeaders({ ...options, includeJson: true }) },
-    )
-    .then((r) => r.data as { ok: boolean });
+  opts: { memberId: string; role?: EventRole },
+): Promise<{ ok: boolean }>
+{
+  const headers: Record<string, string> = {
+    "content-type": "application/json",
+    "x-event-id": eventId,
+    "x-event-member": opts.memberId,
+    "x-event-role": opts.role ?? "spectator",
+  };
+  if (API_KEY) {
+    headers["x-api-key"] = API_KEY;
+  }
+  const res = await fetch(`${API}/clips/${clipId}/react`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({ emoji }),
+  });
+  if (!res.ok) {
+    const error = Object.assign(new Error("reaction_failed"), { status: res.status });
+    throw error;
+  }
+  return (await res.json()) as { ok: boolean };
+}
 
 export type HostStateResponse = {
   id: string;

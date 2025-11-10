@@ -25,6 +25,7 @@ export default defineConfig({
       'expo-device': '/tests/mocks/expo-device.ts',
       'expo-file-system': '/tests/mocks/expo-file-system.ts',
       '@react-native-async-storage/async-storage': '/tests/mocks/async-storage.ts',
+      'hls.js': '/tests/mocks/hls.js',
     },
   },
 });

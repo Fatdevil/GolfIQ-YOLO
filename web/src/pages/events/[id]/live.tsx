@@ -10,6 +10,7 @@ import ClipBadge from '@web/features/clips/ClipBadge';
 import ClipModal from '@web/features/clips/ClipModal';
 import TopShotsPanel from '@web/features/clips/TopShotsPanel';
 import { useClips } from '@web/features/clips/useClips';
+import { useEventSession } from '@web/features/events/session';
 import type { ShotClip } from '@web/features/clips/types';
 
 type BoardState = SpectatorBoardResponse;
@@ -17,6 +18,7 @@ type BoardState = SpectatorBoardResponse;
 export default function LiveLeaderboardPage(): JSX.Element {
   const params = useParams<{ id: string }>();
   const eventId = params.id ?? '';
+  const session = useEventSession(params.id);
   const [board, setBoard] = useState<BoardState | null>(null);
   const [error, setError] = useState<string | null>(null);
   const pollingRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -105,7 +107,11 @@ export default function LiveLeaderboardPage(): JSX.Element {
     loading: clipsLoading,
     error: clipsError,
     react,
-  } = useClips(eventId, { enabled: Boolean(eventId) });
+  } = useClips(params.id, {
+    enabled: Boolean(params.id),
+    memberId: session?.memberId,
+    role: session?.role,
+  });
   const [selectedClip, setSelectedClip] = useState<ShotClip | null>(null);
 
   const openTopClip = useCallback(() => {
