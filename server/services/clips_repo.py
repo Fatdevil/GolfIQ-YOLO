@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict, Mapping, MutableMapping
+from typing import Any, Dict, Iterable, Mapping, MutableMapping
 
 
 class ClipNotFoundError(LookupError):
@@ -32,6 +32,19 @@ def get_clip(clip_id: str) -> Dict[str, Any]:
     if clip is None:
         raise ClipNotFoundError(str(clip_id))
     return dict(clip)
+
+
+def list_for_event(event_id: str) -> Iterable[Dict[str, Any]]:
+    """Iterate over clips registered for a specific event."""
+
+    event_key = str(event_id)
+    for clip in _CLIP_STORE.values():
+        stored_event = clip.get("event_id") or clip.get("eventId")
+        if stored_event is None:
+            continue
+        if str(stored_event) != event_key:
+            continue
+        yield dict(clip)
 
 
 def update_ai_commentary(
@@ -74,6 +87,7 @@ __all__ = [
     "ClipNotFoundError",
     "register_clip",
     "get_clip",
+    "list_for_event",
     "update_ai_commentary",
     "to_public",
 ]
