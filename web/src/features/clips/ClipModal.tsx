@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { isAxiosError } from 'axios';
 
 import { postClipCommentary } from '@web/api';
 
@@ -10,6 +11,8 @@ export type ClipModalProps = {
   onClose?: () => void;
   onRefetch?: () => void | Promise<void>;
 };
+
+const TOURNAMENT_SAFE_MESSAGE = 'Tournament-safe: commentary disabled';
 
 function resolveCommentaryField(value?: string | null): string {
   if (typeof value === 'string') {
@@ -24,6 +27,7 @@ function normalizeTtsUrl(clip: ShotClip): string | null {
 
 export function ClipModal({ clip, onClose, onRefetch }: ClipModalProps): JSX.Element {
   const session = useEventSession() as EventSession & { tournamentSafe?: boolean; coachMode?: boolean };
+  const { role, safe, memberId } = session;
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -58,21 +62,35 @@ export function ClipModal({ clip, onClose, onRefetch }: ClipModalProps): JSX.Ele
     };
   }, [ttsUrl]);
 
-  const canRequest = session.role === 'admin' && !session.safe;
+  const isAdmin = role === 'admin';
+  const canRequest = isAdmin && !safe;
   const hideCoachExtras = Boolean(session.tournamentSafe && session.coachMode);
+  const bannerMessage = safe
+    ? TOURNAMENT_SAFE_MESSAGE
+    : error === TOURNAMENT_SAFE_MESSAGE
+    ? TOURNAMENT_SAFE_MESSAGE
+    : null;
 
   const handleRequest = async () => {
-    if (!clip.id) {
+    if (!clip.id || !isAdmin) {
+      return;
+    }
+    if (!canRequest) {
+      setError(TOURNAMENT_SAFE_MESSAGE);
       return;
     }
     setLoading(true);
     setError(null);
     try {
-      await postClipCommentary(clip.id);
+      await postClipCommentary(clip.id, memberId ?? undefined);
       if (onRefetch) {
         await onRefetch();
       }
     } catch (err) {
+      if (isAxiosError(err) && err.response?.status === 423) {
+        setError(TOURNAMENT_SAFE_MESSAGE);
+        return;
+      }
       const message = err instanceof Error ? err.message : 'Failed to request commentary';
       setError(message);
     } finally {
@@ -140,22 +158,26 @@ export function ClipModal({ clip, onClose, onRefetch }: ClipModalProps): JSX.Ele
         )}
       </div>
 
-      {canRequest && (
+      {bannerMessage && (
+        <div className="rounded border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm text-amber-100">
+          {bannerMessage}
+        </div>
+      )}
+
+      {isAdmin && (
         <div className="flex items-center gap-3">
           <button
             type="button"
             onClick={handleRequest}
-            disabled={loading}
+            disabled={loading || !canRequest}
             className="rounded bg-teal-500 px-4 py-2 text-sm font-semibold text-slate-950 hover:bg-teal-400 disabled:opacity-60"
           >
             {loading ? 'Requesting…' : 'Request commentary'}
           </button>
-          {error && <span className="text-sm text-rose-400">{error}</span>}
+          {error && error !== TOURNAMENT_SAFE_MESSAGE && (
+            <span className="text-sm text-rose-400">{error}</span>
+          )}
         </div>
-      )}
-
-      {!canRequest && error && (
-        <p className="text-sm text-rose-400">{error}</p>
       )}
     </div>
   );
