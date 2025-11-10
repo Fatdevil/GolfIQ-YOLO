@@ -8,7 +8,11 @@ export type EventSession = { role: EventRole; memberId: string | null; safe: boo
 
 type EventSessionResponse = { role: EventRole; memberId?: string | null; safe?: boolean; ts: string };
 
-const DEFAULT_SESSION: EventSession = { role: 'spectator', memberId: null, safe: false };
+export const DEFAULT_SESSION: EventSession = {
+  role: 'spectator',
+  memberId: null,
+  safe: true,
+};
 
 const API_KEY = import.meta.env.VITE_API_KEY || '';
 const DEV_SESSION_FALLBACK_ENABLED = import.meta.env.VITE_DEV_SESSION_FALLBACK === 'true';
@@ -89,6 +93,10 @@ export function EventSessionProvider({ eventId, children }: EventSessionProvider
       };
     }
 
+    const requestId = globalThis.crypto?.randomUUID?.() ?? `${Date.now()}`;
+
+    setSession({ ...DEFAULT_SESSION, memberId: storedMemberId });
+
     fetchEventSession(eventId, storedMemberId)
       .then((next) => {
         if (!cancelled) {
@@ -96,14 +104,9 @@ export function EventSessionProvider({ eventId, children }: EventSessionProvider
         }
       })
       .catch((err) => {
-        console.warn('Failed to load event session', err);
-        if (cancelled) {
-          return;
-        }
-        if (DEV_SESSION_FALLBACK_ENABLED) {
-          setSession(bootstrapEventSession());
-        } else {
-          setSession({ ...DEFAULT_SESSION, memberId: storedMemberId });
+        console.warn('Failed to load event session', err, { requestId });
+        if (!cancelled) {
+          setSession((prev) => ({ ...DEFAULT_SESSION, memberId: prev.memberId }));
         }
       });
 

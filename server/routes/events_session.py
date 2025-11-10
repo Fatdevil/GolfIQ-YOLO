@@ -68,7 +68,9 @@ def _iter_host_candidates(event: Mapping[str, object]) -> Iterable[str]:
     return potential
 
 
-def _resolve_role(event_id: str, event: Mapping[str, object], member_id: Optional[str]) -> str:
+def _resolve_role(
+    event_id: str, event: Mapping[str, object], member_id: Optional[str]
+) -> str:
     if not member_id:
         return "spectator"
     stored = events_routes._REPOSITORY.get_member(event_id, member_id)
@@ -118,7 +120,9 @@ def _resolve_safe_flag(event_id: str, event: Mapping[str, object]) -> bool:
         if value is not None:
             return value
         flags = settings.get("tvFlags")
-        nested_value = _extract_from_mapping(flags if isinstance(flags, Mapping) else None)
+        nested_value = _extract_from_mapping(
+            flags if isinstance(flags, Mapping) else None
+        )
         if nested_value is not None:
             return nested_value
     return False
