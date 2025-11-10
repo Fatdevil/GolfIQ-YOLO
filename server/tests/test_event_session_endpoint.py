@@ -5,6 +5,7 @@ from fastapi import HTTPException
 from fastapi.testclient import TestClient
 
 from server.app import app
+from server.routes import events_session as events_session_module
 
 
 client = TestClient(app)
@@ -145,3 +146,125 @@ def test_event_session_reraises_404_from_host_state(repo, monkeypatch):
     response = client.get(f"/events/{event['id']}/session")
 
     assert response.status_code == 404
+
+
+def test_extract_from_mapping_returns_none_for_non_mapping():
+    assert events_session_module._extract_from_mapping(None) is None
+    assert events_session_module._extract_from_mapping("invalid") is None
+
+
+def test_iter_host_candidates_handles_nested_mappings():
+    event = {
+        "host": {"memberId": "host-a", "member_id": "host-b"},
+        "owner": "owner-1",
+        "owner_id": "owner-2",
+    }
+
+    candidates = list(events_session_module._iter_host_candidates(event))
+
+    assert "host-a" in candidates
+    assert "host-b" in candidates
+    assert candidates.count("owner-1") == 1
+    assert candidates.count("owner-2") == 1
+
+
+def test_resolve_role_uses_host_candidates(monkeypatch):
+    events_module = importlib.import_module("server.routes.events")
+    monkeypatch.setattr(events_module._REPOSITORY, "get_member", lambda event_id, member_id: None)
+
+    role = events_session_module._resolve_role(
+        "evt-role", {"owner": "admin-123"}, "admin-123"
+    )
+
+    assert role == "admin"
+
+
+def test_resolve_safe_flag_rethrows_404(monkeypatch):
+    events_module = importlib.import_module("server.routes.events")
+
+    def raise_404(event_id: str):
+        raise HTTPException(status_code=404, detail="missing")
+
+    monkeypatch.setattr(events_module, "_build_host_state", raise_404)
+
+    with pytest.raises(HTTPException) as exc:
+        events_session_module._resolve_safe_flag("evt-404", {})
+
+    assert exc.value.status_code == 404
+
+
+def test_resolve_safe_flag_handles_other_errors(monkeypatch):
+    events_module = importlib.import_module("server.routes.events")
+
+    def raise_error(event_id: str):
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(events_module, "_build_host_state", raise_error)
+
+    event = {"safe": True}
+
+    assert events_session_module._resolve_safe_flag("evt-safe", event) is True
+
+
+def test_resolve_safe_flag_uses_model_dump_value(monkeypatch):
+    events_module = importlib.import_module("server.routes.events")
+
+    class DumpState:
+        safe = "unknown"
+
+        def model_dump(self, **kwargs: object) -> dict[str, object]:
+            return {"safe": True}
+
+    monkeypatch.setattr(events_module, "_build_host_state", lambda event_id: DumpState())
+
+    assert events_session_module._resolve_safe_flag("evt-dump", {}) is True
+
+
+def test_resolve_safe_flag_uses_model_dump_alias(monkeypatch):
+    events_module = importlib.import_module("server.routes.events")
+
+    class AliasState:
+        safe = None
+
+        def model_dump(self, **kwargs: object) -> dict[str, object]:
+            if kwargs.get("by_alias"):
+                return {"safe": True}
+            return {}
+
+    monkeypatch.setattr(events_module, "_build_host_state", lambda event_id: AliasState())
+
+    assert events_session_module._resolve_safe_flag("evt-alias", {}) is True
+
+
+def test_resolve_safe_flag_uses_nested_flags(monkeypatch):
+    events_module = importlib.import_module("server.routes.events")
+
+    class NestedState:
+        safe = None
+
+        def model_dump(self, **kwargs: object) -> dict[str, object]:
+            if kwargs.get("by_alias"):
+                return {}
+            return {"tvFlags": {"tournamentSafe": True}}
+
+    monkeypatch.setattr(events_module, "_build_host_state", lambda event_id: NestedState())
+
+    assert events_session_module._resolve_safe_flag("evt-nested", {}) is True
+
+
+def test_resolve_safe_flag_reads_event_settings(monkeypatch):
+    events_module = importlib.import_module("server.routes.events")
+    monkeypatch.setattr(events_module, "_build_host_state", lambda event_id: None)
+
+    event = {"settings": {"safe": True}}
+
+    assert events_session_module._resolve_safe_flag("evt-settings", event) is True
+
+
+def test_resolve_safe_flag_reads_nested_settings(monkeypatch):
+    events_module = importlib.import_module("server.routes.events")
+    monkeypatch.setattr(events_module, "_build_host_state", lambda event_id: None)
+
+    event = {"settings": {"safe": "maybe", "tvFlags": {"tournament_safe": True}}}
+
+    assert events_session_module._resolve_safe_flag("evt-flags", event) is True
