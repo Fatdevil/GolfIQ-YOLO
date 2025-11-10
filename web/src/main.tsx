@@ -5,7 +5,7 @@ import { bootstrapSupabase } from "./bootstrap/supabase";
 import App from "./App";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { TempAltDemo } from "./dev/TempAltDemo";
-import { EventSessionProvider } from "./features/events/EventSessionContext";
+import { EventSessionContext, bootstrapEventSession } from "./session/eventSession";
 import "./styles.css";
 import "./sentry";
 
@@ -23,13 +23,14 @@ if (isTempAltDemo) {
     </React.StrictMode>,
   );
 } else {
+  const initialSession = bootstrapEventSession();
   root.render(
     <React.StrictMode>
       <BrowserRouter>
         <ErrorBoundary>
-          <EventSessionProvider>
+          <EventSessionContext.Provider value={initialSession}>
             <App />
-          </EventSessionProvider>
+          </EventSessionContext.Provider>
         </ErrorBoundary>
       </BrowserRouter>
     </React.StrictMode>,

@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { postClipCommentary } from '@web/api';
 
-import { useEventSession } from '../events/EventSessionContext';
+import { useEventSession, type EventSession } from '../../session/eventSession';
 import type { ShotClip } from './types';
 
 export type ClipModalProps = {
@@ -23,7 +23,7 @@ function normalizeTtsUrl(clip: ShotClip): string | null {
 }
 
 export function ClipModal({ clip, onClose, onRefetch }: ClipModalProps): JSX.Element {
-  const session = useEventSession();
+  const session = useEventSession() as EventSession & { tournamentSafe?: boolean; coachMode?: boolean };
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -59,7 +59,7 @@ export function ClipModal({ clip, onClose, onRefetch }: ClipModalProps): JSX.Ele
   }, [ttsUrl]);
 
   const canRequest = session.role === 'admin';
-  const hideCoachExtras = session.tournamentSafe && session.coachMode;
+  const hideCoachExtras = Boolean(session.tournamentSafe && session.coachMode);
 
   const handleRequest = async () => {
     if (!clip.id) {

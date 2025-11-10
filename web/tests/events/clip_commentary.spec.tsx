@@ -7,7 +7,7 @@ import { beforeAll, describe, expect, it, vi, afterEach } from 'vitest';
 import { postClipCommentary, API } from '@web/api';
 import { ClipModal } from '@web/features/clips/ClipModal';
 import type { ShotClip } from '@web/features/clips/types';
-import { EventSessionProvider } from '@web/features/events/EventSessionContext';
+import { EventSessionContext } from '@web/session/eventSession';
 
 
 
@@ -59,9 +59,9 @@ describe('ClipModal', () => {
 
   it('renders existing commentary when available', () => {
     render(
-      <EventSessionProvider value={{ role: 'spectator', tournamentSafe: false, coachMode: false }}>
+      <EventSessionContext.Provider value={{ role: 'spectator', memberId: null }}>
         <ClipModal clip={baseClip} />
-      </EventSessionProvider>,
+      </EventSessionContext.Provider>,
     );
 
     expect(screen.getByText('Walk-off eagle')).toBeTruthy();
@@ -71,9 +71,9 @@ describe('ClipModal', () => {
 
   it('shows request button only for admin role', () => {
     render(
-      <EventSessionProvider value={{ role: 'admin', tournamentSafe: false, coachMode: false }}>
+      <EventSessionContext.Provider value={{ role: 'admin', memberId: null }}>
         <ClipModal clip={{ ...baseClip, ai_title: undefined, ai_summary: undefined }} />
-      </EventSessionProvider>,
+      </EventSessionContext.Provider>,
     );
 
     expect(screen.getByText('Request commentary')).toBeTruthy();
@@ -89,7 +89,7 @@ describe('ClipModal', () => {
     function Wrapper(): JSX.Element {
       const [clip, setClip] = useState<ShotClip>(clipWithRefetch);
       return (
-        <EventSessionProvider value={{ role: 'admin', tournamentSafe: false, coachMode: false }}>
+        <EventSessionContext.Provider value={{ role: 'admin', memberId: 'abc' }}>
           <ClipModal
             clip={clip}
             onRefetch={() =>
@@ -101,7 +101,7 @@ describe('ClipModal', () => {
               }))
             }
           />
-        </EventSessionProvider>
+        </EventSessionContext.Provider>
       );
     }
 
@@ -119,9 +119,9 @@ describe('ClipModal', () => {
 
   it('renders voice-over control when tts url available', () => {
     render(
-      <EventSessionProvider value={{ role: 'admin', tournamentSafe: false, coachMode: false }}>
+      <EventSessionContext.Provider value={{ role: 'admin', memberId: null }}>
         <ClipModal clip={{ ...baseClip, ai_tts_url: 'https://cdn.example.com/tts.mp3' }} />
-      </EventSessionProvider>,
+      </EventSessionContext.Provider>,
     );
 
     expect(screen.getByText('Play voice-over')).toBeTruthy();
@@ -129,9 +129,9 @@ describe('ClipModal', () => {
 
   it('hides voice-over control when no url', () => {
     render(
-      <EventSessionProvider value={{ role: 'admin', tournamentSafe: false, coachMode: false }}>
+      <EventSessionContext.Provider value={{ role: 'admin', memberId: null }}>
         <ClipModal clip={{ ...baseClip, ai_tts_url: undefined }} />
-      </EventSessionProvider>,
+      </EventSessionContext.Provider>,
     );
 
     expect(screen.queryByText('Play voice-over')).toBeNull();

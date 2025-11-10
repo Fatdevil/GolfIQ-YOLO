@@ -98,3 +98,48 @@ def test_call_llm_invalid_payload_raises(monkeypatch: pytest.MonkeyPatch) -> Non
 
     with pytest.raises(ValueError):
         commentary.call_llm("prompt")
+
+
+def test_build_prompt_handles_iterable_board_and_event_id() -> None:
+    clip = {"id": "clip-2", "playerName": "Alex", "hole_number": 3, "parValue": 3}
+    event = {"id": "event-2", "name": "City Open"}
+
+    def board_rows():
+        yield {"player": "Alex", "gross": 12, "hole": 4}
+
+    prompt = commentary.build_prompt(clip, event, board_rows())
+    assert "Event ID: event-2" in prompt
+    assert "hole 4" in prompt
+
+
+def test_synthesize_tts_behaviour(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("TTS_ENABLED", raising=False)
+    assert commentary.synthesize_tts("hello") is None
+
+    monkeypatch.setenv("TTS_ENABLED", "true")
+    monkeypatch.setenv("TTS_PROVIDER", "other")
+    with pytest.raises(RuntimeError):
+        commentary.synthesize_tts("hello")
+
+
+def test_require_event_id_and_load_event(monkeypatch: pytest.MonkeyPatch) -> None:
+    with pytest.raises(ValueError):
+        commentary._require_event_id({})
+
+    from server.routes import events as events_routes
+
+    original_repo = events_routes._REPOSITORY
+
+    class DummyRepo:
+        def get_event(self, _event_id: str) -> dict | None:
+            return None
+
+        def get_board(self, _event_id: str) -> list:
+            return []
+
+    events_routes._REPOSITORY = DummyRepo()
+    try:
+        with pytest.raises(LookupError):
+            commentary._load_event("missing")
+    finally:
+        events_routes._REPOSITORY = original_repo
