@@ -136,6 +136,19 @@ export const postEventRegenerateCode = (eventId: string, memberId?: string) =>
     })
     .then((r) => r.data);
 
+export type ClipCommentaryResponse = {
+  title: string;
+  summary: string;
+  ttsUrl?: string | null;
+};
+
+export const postClipCommentary = (clipId: string) =>
+  axios
+    .post<ClipCommentaryResponse>(`${API}/events/clips/${clipId}/commentary`, null, {
+      headers: withAdminHeaders(),
+    })
+    .then((r) => r.data);
+
 export type UpdateEventSettingsBody = {
   grossNet?: GrossNetMode;
   tvFlags?: TvFlags;

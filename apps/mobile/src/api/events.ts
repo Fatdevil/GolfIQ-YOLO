@@ -94,3 +94,26 @@ export async function postScore(args: PostScoreArgs): Promise<PostScoreResult> {
 
   return { ok: false, status: response.status };
 }
+
+export type ClipCommentaryResponse = {
+  title: string;
+  summary: string;
+  ttsUrl?: string | null;
+};
+
+export async function requestClipCommentary(clipId: string): Promise<ClipCommentaryResponse> {
+  const response = await fetch(`${resolveApiBase()}/events/clips/${encodeURIComponent(clipId)}/commentary`, {
+    method: 'POST',
+    headers: {
+      Accept: 'application/json',
+      'x-event-role': 'admin',
+    },
+  });
+
+  if (!response.ok) {
+    const message = await response.text();
+    throw new Error(message || 'Failed to generate commentary');
+  }
+
+  return (await response.json()) as ClipCommentaryResponse;
+}

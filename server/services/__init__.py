@@ -1,5 +1,5 @@
-﻿"""Service layer exports."""
+"""Service layer exports."""
 
-from . import caddie_core
+from . import caddie_core, commentary
 
-__all__ = ["caddie_core"]
+__all__ = ["caddie_core", "commentary"]

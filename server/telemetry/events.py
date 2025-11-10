@@ -173,6 +173,29 @@ def record_tv_rotate(
     _safe_emit("events.tv.rotate", payload)
 
 
+def emit_clip_commentary_requested(clip_id: str) -> None:
+    payload: Dict[str, object] = {"clipId": clip_id, "ts": _now_ms()}
+    _safe_emit("clip.commentary.requested", payload)
+
+
+def emit_clip_commentary_ok(clip_id: str, *, has_tts: bool) -> None:
+    payload: Dict[str, object] = {
+        "clipId": clip_id,
+        "hasTts": bool(has_tts),
+        "ts": _now_ms(),
+    }
+    _safe_emit("clip.commentary.ok", payload)
+
+
+def emit_clip_commentary_failed(clip_id: str, error: str) -> None:
+    payload: Dict[str, object] = {
+        "clipId": clip_id,
+        "error": error,
+        "ts": _now_ms(),
+    }
+    _safe_emit("clip.commentary.failed", payload)
+
+
 def _now_ms() -> int:
     from time import time
 
@@ -192,4 +215,7 @@ __all__ = [
     "record_score_idempotent",
     "record_score_conflict",
     "record_score_conflict_stale_or_duplicate",
+    "emit_clip_commentary_requested",
+    "emit_clip_commentary_ok",
+    "emit_clip_commentary_failed",
 ]
