@@ -11,6 +11,7 @@ export type Job = {
   attempt: number;
   nextAt: number;
   createdAt: number;
+  meta?: Record<string, unknown> | null;
 };
 
 export type JobHandlerResult =
@@ -126,6 +127,17 @@ export class OfflineQueue {
     });
   }
 
+  async getJob(jobId: string): Promise<Job | null> {
+    return this.withLock(async () => {
+      const jobs = await this.loadJobs();
+      const match = jobs.find((entry) => entry.id === jobId);
+      if (!match) {
+        return null;
+      }
+      return { ...match, meta: cloneMeta(match.meta) };
+    });
+  }
+
   subscribe(listener: () => void): () => void {
     this.listeners.add(listener);
     return () => {
@@ -169,7 +181,7 @@ export class OfflineQueue {
         return;
       }
       const current = jobs[index];
-      const draft: Job = { ...current };
+      const draft: Job = { ...current, meta: cloneMeta(current.meta) };
       const next = typeof updater === "function" ? updater(draft) ?? draft : updater;
       if (!next) {
         return;
@@ -249,7 +261,12 @@ export class OfflineQueue {
         this.refreshState(jobs);
         return null;
       }
-      const updatedHead: Job = { ...head, attempt: head.attempt + 1, nextAt: now };
+      const updatedHead: Job = {
+        ...head,
+        attempt: head.attempt + 1,
+        nextAt: now,
+        meta: cloneMeta(head.meta),
+      };
       const updated = jobs.slice();
       updated[0] = updatedHead;
       await this.persistJobs(updated);
@@ -412,6 +429,7 @@ export class OfflineQueue {
       attempt,
       nextAt,
       createdAt,
+      meta: normalizeMeta(job.meta, baseline.meta),
     };
   }
 
@@ -445,5 +463,29 @@ export class OfflineQueue {
       .catch(() => undefined);
     return run;
   }
+}
+
+function cloneMeta(meta: unknown): Record<string, unknown> | undefined {
+  if (!isRecord(meta)) {
+    return undefined;
+  }
+  return { ...meta };
+}
+
+function normalizeMeta(
+  meta: unknown,
+  fallback?: Record<string, unknown> | null | undefined,
+): Record<string, unknown> | undefined {
+  if (isRecord(meta)) {
+    return { ...meta };
+  }
+  if (isRecord(fallback)) {
+    return { ...fallback };
+  }
+  return undefined;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === "object" && !Array.isArray(value);
 }
 
