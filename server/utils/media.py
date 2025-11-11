@@ -33,6 +33,14 @@ def reset_media_url_cache() -> None:
     get_media_origin_base.cache_clear()
 
 
+def _host(netloc: str) -> str:
+    if netloc.endswith(":80"):
+        return netloc[:-3]
+    if netloc.endswith(":443"):
+        return netloc[:-4]
+    return netloc
+
+
 def _normalize_media_url(url: str | None, origin_base: str | None) -> str | None:
     if not url:
         return None
@@ -68,11 +76,44 @@ def _normalize_media_url(url: str | None, origin_base: str | None) -> str | None
 
 
 def rewrite_media_url(url: str | None) -> str | None:
-    normalized = _normalize_media_url(url, get_media_origin_base())
+    if not url:
+        return None
+
+    candidate = str(url).strip()
+    if not candidate:
+        return None
+
+    parsed_original = urlparse(candidate)
+    if parsed_original.scheme and parsed_original.scheme not in ("http", "https"):
+        return candidate
+
+    origin_base = get_media_origin_base()
+    normalized = _normalize_media_url(candidate, origin_base)
     if not normalized:
         return None
+
     cdn_base = get_media_cdn_base()
-    return to_cdn(normalized, cdn_base) if cdn_base else normalized
+    if not cdn_base:
+        return normalized
+
+    parsed = urlparse(normalized)
+    if parsed.scheme and parsed.scheme not in ("http", "https"):
+        return normalized
+
+    if not parsed.netloc:
+        return to_cdn(normalized, cdn_base)
+
+    origin_host = _host(urlparse(origin_base).netloc) if origin_base else ""
+    allow_csv = os.getenv("MEDIA_CDN_REWRITE_HOSTS", "")
+    allow_hosts = {_host(host.strip()) for host in allow_csv.split(",") if host.strip()}
+    allowed_hosts = set(allow_hosts)
+    if origin_host:
+        allowed_hosts.add(origin_host)
+
+    if _host(parsed.netloc) in allowed_hosts:
+        return to_cdn(normalized, cdn_base)
+
+    return normalized
 
 
 def resolve_thumb_url(record: Mapping[str, object]) -> str | None:
