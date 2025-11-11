@@ -18,3 +18,7 @@ export const uploadRetryMaxMs = parseNumber(
   120_000,
 );
 export const uploadPresignVersion = import.meta.env.VITE_UPLOAD_PRESIGN_VERSION ?? "v2";
+
+export const sgTopShotsAlpha = parseNumber(import.meta.env.VITE_TOP_SHOTS_ALPHA, 0.6);
+export const sgTopShotsBeta = parseNumber(import.meta.env.VITE_TOP_SHOTS_BETA, 1.0);
+export const sgTopShotsGamma = parseNumber(import.meta.env.VITE_TOP_SHOTS_GAMMA, 0.3);

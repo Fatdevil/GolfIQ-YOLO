@@ -55,6 +55,7 @@ def upsert(
     title: str | None | object = _MISSING,
     summary: str | None | object = _MISSING,
     tts_url: str | None | object = _MISSING,
+    sg_delta: float | None | object = _MISSING,
     updated_ts: datetime | None = None,
 ) -> ClipCommentaryOut:
     """Insert or update a commentary record."""
@@ -67,6 +68,8 @@ def upsert(
         record["summary"] = summary
     if tts_url is not _MISSING:
         record["ttsUrl"] = tts_url
+    if sg_delta is not _MISSING:
+        record["sgDelta"] = sg_delta if sg_delta is None else float(sg_delta)
     record["updatedTs"] = updated_ts or _now()
     return ClipCommentaryOut.model_validate(
         {
@@ -76,6 +79,7 @@ def upsert(
             "summary": record.get("summary"),
             "ttsUrl": record.get("ttsUrl"),
             "updatedTs": record["updatedTs"],
+            "sgDelta": record.get("sgDelta"),
         }
     )
 
@@ -94,6 +98,7 @@ def get(clip_id: str) -> ClipCommentaryOut:
             "summary": record.get("summary"),
             "ttsUrl": record.get("ttsUrl"),
             "updatedTs": record["updatedTs"],
+            "sgDelta": record.get("sgDelta"),
         }
     )
 
@@ -124,6 +129,7 @@ def list_for_event(
                     "summary": record.get("summary"),
                     "ttsUrl": record.get("ttsUrl"),
                     "updatedTs": record["updatedTs"],
+                    "sgDelta": record.get("sgDelta"),
                 }
             )
         )

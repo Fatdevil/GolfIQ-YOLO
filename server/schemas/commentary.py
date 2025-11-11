@@ -27,3 +27,4 @@ class ClipCommentaryOut(BaseModel):
     summary: str | None = None
     ttsUrl: str | None = None
     updatedTs: datetime
+    sgDelta: float | None = None

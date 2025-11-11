@@ -137,6 +137,38 @@ def emit_clip_visibility_changed(
     _emit("clip.visibility.changed", payload)
 
 
+def emit_clip_sg_recorded(
+    clip_id: str,
+    *,
+    sg_delta: float,
+    anchor_sec: float | None = None,
+) -> None:
+    payload: Dict[str, object] = {
+        "clipId": clip_id,
+        "sgDelta": float(sg_delta),
+        "ts": _now_ms(),
+    }
+    if anchor_sec is not None:
+        payload["anchorSec"] = float(anchor_sec)
+    _emit("clip.sg.recorded", payload)
+
+
+def emit_clip_rank_evaluated(
+    event_id: str,
+    *,
+    clip_count: int,
+    top_score: float | None,
+) -> None:
+    payload: Dict[str, object] = {
+        "eventId": event_id,
+        "clipCount": int(clip_count),
+        "ts": _now_ms(),
+    }
+    if top_score is not None:
+        payload["topScore"] = float(top_score)
+    _emit("clip.rank.evaluated", payload)
+
+
 __all__ = [
     "emit_commentary_request",
     "emit_commentary_running",
@@ -148,4 +180,6 @@ __all__ = [
     "emit_clip_moderation_hide",
     "emit_clip_moderation_unhide",
     "emit_clip_visibility_changed",
+    "emit_clip_sg_recorded",
+    "emit_clip_rank_evaluated",
 ]

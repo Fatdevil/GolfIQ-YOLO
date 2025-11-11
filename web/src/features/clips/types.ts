@@ -8,12 +8,18 @@ export type ShotClip = {
   videoUrl?: string;
   thumbnail_url?: string;
   thumbnailUrl?: string;
+  created_at?: string;
+  createdAt?: string;
   ai_title?: string | null;
   ai_summary?: string | null;
   ai_tts_url?: string | null;
   aiTitle?: string | null;
   aiSummary?: string | null;
   aiTtsUrl?: string | null;
+  sg_delta?: number | null;
+  sgDelta?: number | null;
+  anchors?: number[] | null;
+  score?: number | null;
   tournamentSafe?: boolean;
   coachMode?: boolean;
   hidden?: boolean;

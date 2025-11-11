@@ -22,7 +22,15 @@ def register_clip(record: Mapping[str, Any]) -> None:
     clip_id = str(record.get("id"))
     if not clip_id:
         raise ValueError("clip record requires an id")
-    _CLIP_STORE[clip_id] = dict(record)
+    stored = dict(record)
+    anchors = record.get("anchors") or record.get("anchorsSec")
+    if anchors is not None and not isinstance(anchors, list):
+        try:
+            anchors_list = list(anchors)
+        except TypeError:
+            anchors_list = [anchors]
+        stored["anchors"] = anchors_list
+    _CLIP_STORE[clip_id] = stored
 
 
 def get_clip(clip_id: str) -> Dict[str, Any]:
@@ -80,7 +88,38 @@ def to_public(record: Mapping[str, Any]) -> Dict[str, Any]:
         result["aiSummary"] = record.get("ai_summary") or record.get("aiSummary")
     if "ai_tts_url" in record or "aiTtsUrl" in record:
         result["aiTtsUrl"] = record.get("ai_tts_url") or record.get("aiTtsUrl")
+    if "sg_delta" in record or "sgDelta" in record:
+        try:
+            result["sgDelta"] = float(record.get("sg_delta") or record.get("sgDelta"))
+        except (TypeError, ValueError):
+            result["sgDelta"] = None
+    anchors = record.get("anchors") or record.get("anchorsSec")
+    if anchors is not None:
+        result["anchors"] = [float(a) for a in anchors if _is_number(a)]
     return result
+
+
+def update_metrics(
+    clip_id: str,
+    *,
+    sg_delta: float | None = None,
+    anchors: Iterable[float] | None = None,
+) -> None:
+    """Persist derived metrics for a clip."""
+
+    clip = _CLIP_STORE.setdefault(str(clip_id), {"id": str(clip_id)})
+    if sg_delta is not None:
+        clip["sg_delta"] = float(sg_delta)
+    if anchors is not None:
+        clip["anchors"] = [float(value) for value in anchors]
+
+
+def _is_number(value: Any) -> bool:
+    try:
+        float(value)
+        return True
+    except (TypeError, ValueError):
+        return False
 
 
 __all__ = [
@@ -88,6 +127,7 @@ __all__ = [
     "register_clip",
     "get_clip",
     "list_for_event",
+    "update_metrics",
     "update_ai_commentary",
     "to_public",
 ]
