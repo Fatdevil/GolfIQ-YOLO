@@ -1,50 +1,113 @@
 import { useEffect, useState } from "react";
 
-import type { SignedPlaybackUrl } from "./sign";
-import { getSignedPlaybackUrl } from "./sign";
+import { extractSignablePath, signHls } from "./sign";
 
-type SignedVideoState = Omit<SignedPlaybackUrl, "url"> & { url: string | null; loading: boolean };
+export type SignedVideoState = {
+  url: string | null;
+  path: string | null;
+  signed: boolean;
+  exp: number | null;
+  loading: boolean;
+  error: string | null;
+};
+
+const EMPTY_STATE: SignedVideoState = {
+  url: null,
+  path: null,
+  signed: false,
+  exp: null,
+  loading: false,
+  error: null,
+};
+
+function isFallbackEnabled(): boolean {
+  return import.meta.env.VITE_MEDIA_SIGN_DEV_FALLBACK === "true";
+}
 
 export function useSignedVideoSource(rawUrl: string | null | undefined): SignedVideoState {
   const [state, setState] = useState<SignedVideoState>(() => ({
-    url: rawUrl ?? null,
-    path: null,
-    signed: false,
-    exp: null,
+    ...EMPTY_STATE,
     loading: Boolean(rawUrl),
   }));
 
   useEffect(() => {
-    let active = true;
+    let cancelled = false;
+
     if (!rawUrl) {
-      setState({ url: null, path: null, signed: false, exp: null, loading: false });
+      setState({ ...EMPTY_STATE });
       return () => {
-        active = false;
+        cancelled = true;
       };
     }
 
-    setState({ url: null, path: null, signed: false, exp: null, loading: true });
+    const path = extractSignablePath(rawUrl);
 
-    getSignedPlaybackUrl(rawUrl)
-      .then((result) => {
-        if (!active) {
+    setState({
+      ...EMPTY_STATE,
+      path,
+      loading: true,
+    });
+
+    if (!path) {
+      const fallback = isFallbackEnabled();
+      setState({
+        ...EMPTY_STATE,
+        url: fallback ? rawUrl : null,
+        path: null,
+        loading: false,
+        error: fallback ? "fallback" : "invalid_path",
+      });
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    signHls(path)
+      .then((payload) => {
+        if (cancelled) {
           return;
         }
-        setState({ ...result, url: result.url, loading: false });
+        setState({
+          url: payload.url,
+          path,
+          signed: true,
+          exp: payload.exp ?? null,
+          loading: false,
+          error: null,
+        });
       })
       .catch((error) => {
-        if (!active) {
+        if (cancelled) {
           return;
         }
         if (import.meta.env.DEV) {
           // eslint-disable-next-line no-console
-          console.warn("[media/sign] unexpected signer failure", error);
+          console.warn(`[media/sign] failed to sign ${path}`, error);
         }
-        setState({ url: rawUrl ?? null, path: null, signed: false, exp: null, loading: false });
+        const fallback = isFallbackEnabled();
+        if (fallback) {
+          setState({
+            url: rawUrl,
+            path,
+            signed: false,
+            exp: null,
+            loading: false,
+            error: "fallback",
+          });
+          return;
+        }
+        setState({
+          url: null,
+          path,
+          signed: false,
+          exp: null,
+          loading: false,
+          error: "sign_failed",
+        });
       });
 
     return () => {
-      active = false;
+      cancelled = true;
     };
   }, [rawUrl]);
 

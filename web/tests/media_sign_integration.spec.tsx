@@ -15,6 +15,7 @@ describe('media signing integration', () => {
     cleanup();
     vi.restoreAllMocks();
     vi.unstubAllGlobals();
+    vi.unstubAllEnvs();
   });
 
   it('requests a signed URL before rendering video playback', async () => {
@@ -46,7 +47,28 @@ describe('media signing integration', () => {
     });
   });
 
-  it('falls back to the unsigned URL when signing fails', async () => {
+  it('does not render video when signing fails without fallback', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: false, status: 500 });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const { container } = render(
+      <EventSessionContext.Provider value={{ role: 'spectator', memberId: 'viewer', safe: false }}>
+        <ClipModal clip={{ ...baseClip, id: 'clip-unsigned' }} />
+      </EventSessionContext.Provider>,
+    );
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalled();
+    });
+
+    await waitFor(() => {
+      expect(container.querySelector('video')).toBeNull();
+    });
+  });
+
+  it('falls back to the unsigned URL when signing fails and fallback is enabled', async () => {
+    vi.stubEnv('VITE_MEDIA_SIGN_DEV_FALLBACK', 'true');
+
     const fetchMock = vi.fn().mockResolvedValue({ ok: false, status: 500 });
     vi.stubGlobal('fetch', fetchMock);
 
