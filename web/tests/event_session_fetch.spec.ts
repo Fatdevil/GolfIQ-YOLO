@@ -11,7 +11,7 @@ describe('fetchEventSession', () => {
 
   it('requests admin session data with memberId', async () => {
     const spy = vi.spyOn(axios, 'get').mockResolvedValue({
-      data: { role: 'admin', memberId: 'host-1', safe: false, ts: 'now' },
+      data: { role: 'admin', memberId: 'host-1', safe: false, ts: 1700000000 },
     });
 
     const session = await fetchEventSession('evt-1', 'host-1');
@@ -25,7 +25,7 @@ describe('fetchEventSession', () => {
 
   it('defaults safe flag when server omits it', async () => {
     const spy = vi.spyOn(axios, 'get').mockResolvedValue({
-      data: { role: 'spectator', memberId: null, ts: 'later' },
+      data: { role: 'spectator', memberId: null, ts: 1700000500 },
     });
 
     const session = await fetchEventSession('evt-2', null);
@@ -39,7 +39,7 @@ describe('fetchEventSession', () => {
 
   it('propagates safe=true from response', async () => {
     vi.spyOn(axios, 'get').mockResolvedValue({
-      data: { role: 'admin', memberId: 'host-9', safe: true, ts: 'future' },
+      data: { role: 'admin', memberId: 'host-9', safe: true, ts: 1700000700 },
     });
 
     const session = await fetchEventSession('evt-3', 'host-9');

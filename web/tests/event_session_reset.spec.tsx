@@ -28,7 +28,7 @@ describe('EventSessionProvider reset behaviour', () => {
       const target = url.toString();
       if (target.endsWith('/events/A/session')) {
         return Promise.resolve({
-          data: { role: 'admin', memberId: 'host-A', safe: false, ts: 'now' },
+          data: { role: 'admin', memberId: 'host-A', safe: false, ts: 1700000000 },
         });
       }
       if (target.endsWith('/events/B/session')) {
@@ -62,7 +62,7 @@ describe('EventSessionProvider reset behaviour', () => {
     });
 
     deferred.resolve?.({
-      data: { role: 'spectator', memberId: 'member-B', safe: false, ts: 'later' },
+      data: { role: 'spectator', memberId: 'member-B', safe: false, ts: 1700000500 },
     });
 
     await waitFor(() => {

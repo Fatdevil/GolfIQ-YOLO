@@ -20,7 +20,7 @@ class EventSessionResponse(BaseModel):
     role: Literal["admin", "spectator"]
     member_id: str | None = Field(default=None, alias="memberId")
     safe: bool = False
-    ts: str
+    ts: int
 
     model_config = ConfigDict(populate_by_name=True)
 
@@ -145,7 +145,7 @@ def get_event_session(
         role=role,
         memberId=normalized_member,
         safe=safe,
-        ts=datetime.now(timezone.utc).isoformat(),
+        ts=int(datetime.now(timezone.utc).timestamp()),
     )
 
 

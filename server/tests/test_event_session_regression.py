@@ -33,4 +33,4 @@ def test_session_admin_and_safe(monkeypatch):
     assert payload["role"] == "admin"
     assert payload["memberId"] == "m1"
     assert payload["safe"] is True
-    assert isinstance(payload["ts"], str)
+    assert isinstance(payload["ts"], int)
