@@ -6,7 +6,7 @@ const API = import.meta.env.VITE_API_BASE || "http://localhost:8000";
 const API_KEY = import.meta.env.VITE_API_KEY || "";
 
 /** Return default headers incl. x-api-key if present. */
-const withAuth = (extra: Record<string, string> = {}) =>
+export const withAuth = (extra: Record<string, string> = {}) =>
   (API_KEY ? { "x-api-key": API_KEY, ...extra } : extra);
 
 export { API };

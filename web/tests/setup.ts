@@ -1,3 +1,5 @@
+import 'fake-indexeddb/auto';
+
 // Only in Node/Vitest
 defineBlobArrayBufferPolyfill();
 

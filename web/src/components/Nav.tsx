@@ -4,6 +4,7 @@ import { useState } from "react";
 
 import { useCalibration } from "../hooks/useCalibration";
 import { qaReplayEnabled } from "../config";
+import QueueIndicator from "./QueueIndicator";
 
 export default function Nav() {
   const [open, setOpen] = useState(false);
@@ -37,16 +38,22 @@ export default function Nav() {
             </NavLink>
           ))}
         </nav>
-        <button
-          onClick={() => setOpen((v) => !v)}
-          className="sm:hidden"
-          aria-label="Toggle navigation"
-        >
-          <Menu className="h-6 w-6 text-slate-300" />
-        </button>
+        <div className="flex items-center gap-3">
+          <QueueIndicator />
+          <button
+            onClick={() => setOpen((v) => !v)}
+            className="sm:hidden"
+            aria-label="Toggle navigation"
+          >
+            <Menu className="h-6 w-6 text-slate-300" />
+          </button>
+        </div>
       </div>
       {open && (
         <div className="border-t border-slate-800 bg-slate-900/95 px-4 py-3 sm:hidden">
+          <div className="mb-3 sm:hidden">
+            <QueueIndicator />
+          </div>
           {calibration && (
             <div className="mb-3 rounded bg-emerald-500/10 px-3 py-2 text-xs font-semibold text-emerald-300">
               Calibrated ✓

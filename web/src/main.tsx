@@ -1,6 +1,7 @@
 import React, { useMemo } from "react";
 import ReactDOM from "react-dom/client";
 import { BrowserRouter, matchPath, useLocation } from "react-router-dom";
+import { bootstrapOffline } from "./bootstrap/offline";
 import { bootstrapSupabase } from "./bootstrap/supabase";
 import App from "./App";
 import { ErrorBoundary } from "./components/ErrorBoundary";
@@ -10,6 +11,7 @@ import "./styles.css";
 import "./sentry";
 
 bootstrapSupabase();
+bootstrapOffline();
 
 const isTempAltDemo =
   import.meta.env.DEV && new URLSearchParams(window.location.search).get("tempaltDemo") === "1";
