@@ -121,6 +121,65 @@ def emit_clip_moderation_unhide(clip_id: str, member_id: str | None = None) -> N
     _emit("clip.moderation.unhide", payload)
 
 
+def emit_live_start(
+    event_id: str,
+    *,
+    source: str,
+    hls_path: str,
+    go_live_ms: int,
+) -> None:
+    payload: Dict[str, object] = {
+        "eventId": event_id,
+        "source": source,
+        "hlsPath": hls_path,
+        "goLiveMs": int(max(0, go_live_ms)),
+        "ts": _now_ms(),
+    }
+    _emit("live.start", payload)
+
+
+def emit_live_stop(event_id: str) -> None:
+    _emit("live.stop", {"eventId": event_id, "ts": _now_ms()})
+
+
+def emit_live_token_minted(
+    event_id: str, *, viewer_id: str, exp: int, ttl_s: int
+) -> None:
+    payload: Dict[str, object] = {
+        "eventId": event_id,
+        "viewerId": viewer_id,
+        "exp": int(exp),
+        "ttl": int(ttl_s),
+        "ts": _now_ms(),
+    }
+    _emit("live.token", payload)
+
+
+def emit_live_status(
+    event_id: str,
+    *,
+    running: bool,
+    token_valid: bool,
+    viewer_id: str | None = None,
+) -> None:
+    payload: Dict[str, object] = {
+        "eventId": event_id,
+        "running": bool(running),
+        "token": bool(token_valid),
+        "ts": _now_ms(),
+    }
+    if viewer_id:
+        payload["viewerId"] = viewer_id
+    _emit("live.status", payload)
+
+
+def emit_live_viewer_join(event_id: str, viewer_id: str) -> None:
+    _emit(
+        "live.viewer_join",
+        {"eventId": event_id, "viewerId": viewer_id, "ts": _now_ms()},
+    )
+
+
 def emit_clip_visibility_changed(
     clip_id: str,
     *,

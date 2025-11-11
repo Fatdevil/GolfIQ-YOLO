@@ -21,6 +21,8 @@ import JoinEventPage from "./pages/join/[code]";
 import LiveLeaderboardPage from "./pages/events/[id]/live";
 import EventClipsAdminQueue from "./pages/events/[id]/admin/clips";
 import EventClipModerationPage from "./pages/events/[id]/admin/moderation";
+import EventLiveHostPage from "./pages/events/[id]/live-host";
+import EventLiveViewerPage from "./pages/events/[id]/live-view";
 import EventTopShotsPage from "./pages/events/[id]/top-shots";
 
 export default function App() {
@@ -38,6 +40,8 @@ export default function App() {
           <Route path="/event/:id" element={<EventLeaderboardPage />} />
           <Route path="/events/new" element={<CreateEventPage />} />
           <Route path="/events/:id/live" element={<LiveLeaderboardPage />} />
+          <Route path="/events/:id/live-host" element={<EventLiveHostPage />} />
+          <Route path="/events/:id/live-view" element={<EventLiveViewerPage />} />
           <Route path="/events/:id/admin/clips" element={<EventClipsAdminQueue />} />
           <Route path="/events/:id/admin/moderation" element={<EventClipModerationPage />} />
           <Route path="/events/:id/top-shots" element={<EventTopShotsPage />} />

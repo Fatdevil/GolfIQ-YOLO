@@ -43,6 +43,8 @@ function EventAwareApp(): JSX.Element {
       { path: "/event/:id", end: false },
       { path: "/events/:id", end: false },
       { path: "/events/:id/live", end: false },
+      { path: "/events/:id/live-host", end: false },
+      { path: "/events/:id/live-view", end: false },
       { path: "/:eventId/live/:roundId", end: false },
     ];
     for (const pattern of patterns) {
