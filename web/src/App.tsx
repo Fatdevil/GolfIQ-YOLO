@@ -24,6 +24,7 @@ import EventClipModerationPage from "./pages/events/[id]/admin/moderation";
 import EventLiveHostPage from "./pages/events/[id]/live-host";
 import EventLiveViewerPage from "./pages/events/[id]/live-view";
 import EventTopShotsPage from "./pages/events/[id]/top-shots";
+import HomeFeed from "./pages/home/HomeFeed";
 
 export default function App() {
   return (
@@ -31,7 +32,9 @@ export default function App() {
       <Nav />
       <main className="mx-auto w-full max-w-6xl px-4 pb-20 pt-6">
         <Routes>
-          <Route path="/" element={<AnalyzePage />} />
+          <Route path="/" element={<HomeFeed />} />
+          <Route path="/feed" element={<HomeFeed />} />
+          <Route path="/analyze" element={<AnalyzePage />} />
           <Route path="/calibration" element={<CalibrationPage />} />
           <Route path="/mock" element={<MockAnalyzePage />} />
           <Route path="/runs" element={<RunsPage />} />

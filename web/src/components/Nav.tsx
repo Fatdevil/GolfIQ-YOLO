@@ -85,7 +85,8 @@ type LinkItem = { to: string; label: string };
 
 function getLinks(): LinkItem[] {
   const base: LinkItem[] = [
-    { to: "/", label: "Analyze" },
+    { to: "/", label: "Home" },
+    { to: "/analyze", label: "Analyze" },
     { to: "/calibration", label: "Calibration" },
     { to: "/mock", label: "Mock" },
     { to: "/runs", label: "Runs" },

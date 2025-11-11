@@ -161,3 +161,9 @@ def register_viewer(event_id: str, viewer_id: str) -> None:
 def viewers_count(event_id: str) -> int:
     state = _ensure_state(event_id)
     return len(state.viewers)
+
+
+def list_running_events() -> list[str]:
+    """Return event identifiers that currently have an active live stream."""
+
+    return [event_id for event_id, state in _STATE.items() if state.running]

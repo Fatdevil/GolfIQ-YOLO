@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict, Iterable, Mapping, MutableMapping
+from datetime import datetime, timezone
+from typing import Any, Dict, Iterable, Iterator, Mapping, MutableMapping
 
 
 class ClipNotFoundError(LookupError):
@@ -53,6 +54,26 @@ def list_for_event(event_id: str) -> Iterable[Dict[str, Any]]:
         if str(stored_event) != event_key:
             continue
         yield dict(clip)
+
+
+def list_recent(limit: int | None = None) -> Iterable[Dict[str, Any]]:
+    """Iterate over clips sorted by newest creation timestamp first."""
+
+    items: list[tuple[float, Dict[str, Any]]] = []
+    for clip in _CLIP_STORE.values():
+        items.append((_created_ts(clip), dict(clip)))
+
+    items.sort(key=lambda item: item[0], reverse=True)
+
+    def _iterator() -> Iterator[Dict[str, Any]]:
+        count = 0
+        for _, record in items:
+            if limit is not None and count >= limit:
+                break
+            count += 1
+            yield record
+
+    return _iterator()
 
 
 def update_ai_commentary(
@@ -122,11 +143,32 @@ def _is_number(value: Any) -> bool:
         return False
 
 
+def _created_ts(record: Mapping[str, Any]) -> float:
+    value = record.get("created_at") or record.get("createdAt")
+    if value is None:
+        return 0.0
+    if isinstance(value, datetime):
+        dt = value if value.tzinfo else value.replace(tzinfo=timezone.utc)
+        return dt.timestamp()
+    if isinstance(value, (int, float)):
+        return float(value)
+    if isinstance(value, str):
+        try:
+            dt = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        except ValueError:
+            return 0.0
+        return (
+            dt.timestamp() if dt.tzinfo else dt.replace(tzinfo=timezone.utc).timestamp()
+        )
+    return 0.0
+
+
 __all__ = [
     "ClipNotFoundError",
     "register_clip",
     "get_clip",
     "list_for_event",
+    "list_recent",
     "update_metrics",
     "update_ai_commentary",
     "to_public",
