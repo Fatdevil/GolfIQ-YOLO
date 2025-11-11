@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import os
+from urllib.parse import quote_plus
+
 try:  # pragma: no cover - FastAPI always provides pydantic
     from pydantic import BaseModel
 except ImportError:  # pragma: no cover
@@ -18,6 +21,15 @@ router = APIRouter(
     tags=["live"],
     dependencies=[Depends(require_api_key)],
 )
+
+
+def _web_base_url() -> str:
+    base = (
+        os.getenv("WEB_BASE_URL")
+        or os.getenv("EXPO_PUBLIC_WEB_BASE")
+        or os.getenv("APP_BASE_URL")
+    )
+    return (base or "https://app.golfiq.dev").rstrip("/")
 
 
 class StartLiveRequest(BaseModel):
@@ -107,7 +119,9 @@ def status_route(
             ) from exc
         metadata = viewer_token.decode_token(token) or {}
         viewer_id = metadata.get("viewerId")
-        if not token_valid:
+        if token_valid:
+            status_payload = live_stream.status_live(event_id)
+        else:
             status_payload.pop("hlsPath", None)
         telemetry_service.emit_live_status(
             event_id,
@@ -125,3 +139,40 @@ def status_route(
     )
     status_payload.pop("hlsPath", None)
     return status_payload
+
+
+@router.get("/viewer_link")
+def viewer_link_route(
+    event_id: str,
+    member_id: str | None = Depends(require_admin),
+) -> dict[str, str]:
+    _ = member_id
+    status_payload = live_stream.status_live(event_id)
+    if not status_payload.get("running"):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="live stream not running",
+        )
+    try:
+        minted = viewer_token.mint_viewer_token(event_id)
+    except RuntimeError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)
+        ) from exc
+    token = minted.get("token")
+    if not token:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="failed to mint viewer token",
+        )
+    metadata = viewer_token.decode_token(token) or {}
+    viewer_id = metadata.get("viewerId") or "unknown"
+    exp = int(metadata.get("exp", minted.get("exp", 0)))
+    telemetry_service.emit_live_viewer_link_copied(
+        event_id,
+        viewer_id=viewer_id,
+        exp=exp,
+    )
+    base = _web_base_url()
+    url = f"{base}/events/{event_id}/live-view?token={quote_plus(token)}"
+    return {"url": url}

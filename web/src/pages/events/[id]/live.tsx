@@ -6,6 +6,8 @@ import { createBackoffController } from '@shared/events/resync';
 import { emitEventsLiveTick, emitEventsResync } from '@shared/events/telemetry';
 import type { SpectatorPlayer } from '@shared/events/spectator';
 import type { SpectatorBoardPlayer as ApiSpectatorPlayer, UUID } from '@shared/events/types';
+import { LiveBadge } from '@web/features/live/LiveBadge';
+import { useLiveStatus } from '@web/features/live/useLiveStatus';
 
 type BoardState = SpectatorBoardResponse;
 
@@ -16,6 +18,7 @@ export default function LiveLeaderboardPage(): JSX.Element {
   const [error, setError] = useState<string | null>(null);
   const pollingRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastTick = useRef<number>(Date.now());
+  const liveStatus = useLiveStatus(eventId || null, { pollMs: 8000 });
   const backoff = useMemo(
     () =>
       createBackoffController({
@@ -97,7 +100,15 @@ export default function LiveLeaderboardPage(): JSX.Element {
   return (
     <div className="mx-auto flex w-full max-w-4xl flex-col gap-6">
       <header>
-        <h1 className="text-3xl font-bold">Live Leaderboard</h1>
+        <div className="flex flex-wrap items-center gap-3">
+          <h1 className="text-3xl font-bold">Live Leaderboard</h1>
+          <LiveBadge
+            eventId={eventId || null}
+            running={liveStatus.running}
+            viewers={liveStatus.viewers}
+            startedAt={liveStatus.startedAt}
+          />
+        </div>
         {board?.updatedAt && (
           <p className="mt-2 text-sm text-slate-300">Updated {new Date(board.updatedAt).toLocaleTimeString()}</p>
         )}

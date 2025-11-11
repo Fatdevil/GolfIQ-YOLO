@@ -5,9 +5,11 @@ import { API, withAdminHeaders, withAuth } from '@web/api';
 export type StartLiveResponse = { hlsPath: string; startedAt: string };
 export type StopLiveResponse = { stopped: boolean };
 export type MintViewerTokenResponse = { token: string; exp: number };
+export type CreateViewerLinkResponse = { url: string };
 export type LiveStatusResponse = {
   running: boolean;
-  startedAt?: string | null;
+  startedAt: string | null;
+  viewers: number;
   hlsPath?: string | null;
 };
 
@@ -59,5 +61,15 @@ export const getLiveStatus = (eventId: string, token?: string | null) =>
     .get<LiveStatusResponse>(`${API}/events/${eventId}/live/status`, {
       headers: withAuth(),
       params: token ? { token } : undefined,
+    })
+    .then((response) => response.data);
+
+export const createViewerLink = (
+  eventId: string,
+  memberId: string | null | undefined,
+) =>
+  axios
+    .get<CreateViewerLinkResponse>(`${API}/events/${eventId}/live/viewer_link`, {
+      headers: withAdminHeaders({ memberId: memberId ?? undefined }),
     })
     .then((response) => response.data);

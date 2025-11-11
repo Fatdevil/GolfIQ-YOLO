@@ -28,7 +28,7 @@ export default function EventLiveViewerPage(): JSX.Element {
     if (token && playback.running && playback.videoUrl && !emittedRef.current) {
       emittedRef.current = true;
       void postTelemetryEvent({
-        event: 'live.viewer_join',
+        event: 'live.viewer_open',
         eventId,
         signed: playback.signed,
         path: playback.hlsPath,
