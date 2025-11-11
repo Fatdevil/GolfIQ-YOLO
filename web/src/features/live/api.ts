@@ -6,6 +6,7 @@ export type StartLiveResponse = { hlsPath: string; startedAt: string };
 export type StopLiveResponse = { stopped: boolean };
 export type MintViewerTokenResponse = { token: string; exp: number };
 export type CreateViewerLinkResponse = { url: string };
+export type ExchangeInviteResponse = { token: string; exp: number };
 export type LiveStatusResponse = {
   running: boolean;
   startedAt: string | null;
@@ -72,4 +73,15 @@ export const createViewerLink = (
     .get<CreateViewerLinkResponse>(`${API}/events/${eventId}/live/viewer_link`, {
       headers: withAdminHeaders({ memberId: memberId ?? undefined }),
     })
+    .then((response) => response.data);
+
+export const exchangeViewerInvite = (eventId: string, invite: string) =>
+  axios
+    .post<ExchangeInviteResponse>(
+      `${API}/events/${eventId}/live/exchange_invite`,
+      { invite },
+      {
+        headers: withAuth({ 'Content-Type': 'application/json' }),
+      },
+    )
     .then((response) => response.data);

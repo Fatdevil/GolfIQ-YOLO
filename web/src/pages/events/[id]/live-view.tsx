@@ -1,15 +1,75 @@
-import { useEffect, useMemo, useRef } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useParams, useSearchParams } from 'react-router-dom';
 
 import { useLivePlayback } from '@web/features/live/useLivePlayback';
 import { postTelemetryEvent } from '@web/api';
 import { useMediaPlaybackTelemetry } from '@web/media/telemetry';
+import { exchangeViewerInvite } from '@web/features/live/api';
 
 export default function EventLiveViewerPage(): JSX.Element {
   const params = useParams<{ id: string }>();
   const [searchParams] = useSearchParams();
   const eventId = params.id ?? '';
-  const token = searchParams.get('token');
+  const invite = searchParams.get('invite');
+  const tokenParam = searchParams.get('token');
+  const [token, setToken] = useState<string | null>(tokenParam);
+  const [inviteError, setInviteError] = useState<string | null>(null);
+  const [invitePending, setInvitePending] = useState(false);
+
+  useEffect(() => {
+    setToken(tokenParam);
+  }, [tokenParam, eventId]);
+
+  useEffect(() => {
+    if (!eventId || !invite || tokenParam) {
+      return;
+    }
+    let cancelled = false;
+    setInvitePending(true);
+    setInviteError(null);
+    exchangeViewerInvite(eventId, invite)
+      .then((response) => {
+        if (cancelled) {
+          return;
+        }
+        setToken(response.token);
+        setInviteError(null);
+        void postTelemetryEvent({
+          event: 'live.invite.exchange.ok',
+          eventId,
+        }).catch((error) => {
+          if (import.meta.env.DEV) {
+            console.warn('[live/viewer] telemetry failed', error);
+          }
+        });
+      })
+      .catch((error) => {
+        if (cancelled) {
+          return;
+        }
+        const message =
+          error instanceof Error ? error.message : 'Unable to claim viewer invite. Ask host for a new link.';
+        setInviteError(message);
+        void postTelemetryEvent({
+          event: 'live.invite.exchange.fail',
+          eventId,
+          reason: error instanceof Error ? error.message : 'unknown',
+        }).catch((err) => {
+          if (import.meta.env.DEV) {
+            console.warn('[live/viewer] telemetry failed', err);
+          }
+        });
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setInvitePending(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [eventId, invite, tokenParam]);
 
   const playback = useLivePlayback(eventId || null, { token });
   const videoRef = useRef<HTMLVideoElement | null>(null);
@@ -41,8 +101,16 @@ export default function EventLiveViewerPage(): JSX.Element {
   }, [eventId, playback.hlsPath, playback.running, playback.signed, playback.videoUrl, token]);
 
   const content = useMemo(() => {
-    if (!token) {
+    if (!token && !invite) {
       return <p className="text-sm text-rose-300">Viewer token missing. Ask the host for a new link.</p>;
+    }
+    if (invite && !token) {
+      if (invitePending) {
+        return <p className="text-sm text-slate-300">Preparing your live viewer session…</p>;
+      }
+      if (inviteError) {
+        return <p className="text-sm text-rose-300">{inviteError}</p>;
+      }
     }
     if (playback.loading) {
       return <p className="text-sm text-slate-300">Checking live status…</p>;
@@ -57,13 +125,14 @@ export default function EventLiveViewerPage(): JSX.Element {
       <video
         ref={videoRef}
         className="w-full rounded-lg border border-slate-800 bg-black"
+        data-testid="live-viewer-video"
         controls
         autoPlay
         playsInline
         src={playback.videoUrl}
       />
     );
-  }, [playback.loading, playback.running, playback.videoUrl, token]);
+  }, [invite, inviteError, invitePending, playback.loading, playback.running, playback.videoUrl, token]);
 
   return (
     <div className="mx-auto flex max-w-4xl flex-col gap-6">

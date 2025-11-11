@@ -15,11 +15,12 @@ const stopLive = vi.mocked(liveApi.stopLive);
 const createViewerLink = vi.mocked(liveApi.createViewerLink);
 
 const adminSession = { ...DEFAULT_SESSION, role: 'admin' as const, memberId: 'member-42', safe: false };
+let originalClipboardDescriptor: PropertyDescriptor | undefined;
 
 function renderHost(session = adminSession) {
   return render(
     <EventSessionContext.Provider value={session}>
-      <MemoryRouter initialEntries={["/events/event-42/live-host"]}>
+      <MemoryRouter initialEntries={[`/events/event-42/live-host`]}>
         <Routes>
           <Route path="/events/:id/live-host" element={<EventLiveHostPage />} />
         </Routes>
@@ -28,32 +29,35 @@ function renderHost(session = adminSession) {
   );
 }
 
-describe('Live host viewer link copy', () => {
+describe('Live host viewer invite copy', () => {
   let clipboardSpy: ReturnType<typeof vi.fn>;
 
   beforeEach(() => {
     getLiveStatus.mockResolvedValue({ running: false, startedAt: null, viewers: 0, hlsPath: null });
     startLive.mockResolvedValue({ hlsPath: '/hls/mock/event-42/index.m3u8', startedAt: new Date().toISOString() });
     stopLive.mockResolvedValue({ stopped: true });
-    createViewerLink.mockResolvedValue({ url: 'https://app.example/events/event-42/live-view?token=abc' });
-  clipboardSpy = vi.fn().mockResolvedValue(undefined);
-  Object.defineProperty(navigator, 'clipboard', {
-    configurable: true,
-    writable: true,
-    value: {
-      writeText: clipboardSpy,
-    } as unknown as Clipboard,
-  });
+    createViewerLink.mockResolvedValue({ url: 'https://app.example/events/event-42/live-view?invite=abc' });
+
+    originalClipboardDescriptor = Object.getOwnPropertyDescriptor(navigator, 'clipboard');
+    clipboardSpy = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      get: () => ({ writeText: clipboardSpy } as unknown as Clipboard),
+    });
   });
 
   afterEach(() => {
     vi.restoreAllMocks();
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    delete (navigator as any).clipboard;
+    if (originalClipboardDescriptor) {
+      Object.defineProperty(navigator, 'clipboard', originalClipboardDescriptor);
+    } else {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      delete (navigator as any).clipboard;
+    }
     cleanup();
   });
 
-  it('calls API and copies viewer link to clipboard', async () => {
+  it('calls API and copies invite link to clipboard', async () => {
     renderHost();
 
     const user = userEvent.setup();

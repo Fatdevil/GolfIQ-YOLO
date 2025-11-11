@@ -63,10 +63,14 @@ def test_viewer_link_returns_url_and_emits_telemetry(
     body = response.json()
     url = body["url"]
 
-    assert url.startswith("https://web.example/events/event-link/live-view?token=")
-    token = url.split("token=")[-1]
-    assert token
+    assert url.startswith("https://web.example/events/event-link/live-view?invite=")
+    invite = url.split("invite=")[-1]
+    assert invite
 
+    assert any(
+        name == "live.invite.minted" and payload.get("eventId") == "event-link"
+        for name, payload in telemetry_sink
+    )
     assert any(
         name == "live.viewer_link.copied" and payload.get("eventId") == "event-link"
         for name, payload in telemetry_sink

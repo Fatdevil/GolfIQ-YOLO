@@ -33,7 +33,7 @@ beforeEach(() => {
   getLiveStatus.mockResolvedValue({ running: false, startedAt: null, viewers: 0, hlsPath: null });
   startLive.mockResolvedValue({ hlsPath: '/hls/mock/event-9/index.m3u8', startedAt: new Date().toISOString() });
   stopLive.mockResolvedValue({ stopped: true });
-  createViewerLink.mockResolvedValue({ url: 'https://app.example/events/event-9/live-view?token=viewer-token' });
+  createViewerLink.mockResolvedValue({ url: 'https://app.example/events/event-9/live-view?invite=invite-code' });
   clipboardSpy = vi.fn().mockResolvedValue(undefined);
   const clipboard = {
     writeText: clipboardSpy,
