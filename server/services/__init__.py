@@ -5,10 +5,12 @@ from . import (
     clips_repo,
     commentary,
     commentary_queue,
+    live_stream,
     moderation_repo,
     ranking,
     sg,
     telemetry,
+    viewer_token,
 )
 
 __all__ = [
@@ -16,8 +18,10 @@ __all__ = [
     "clips_repo",
     "commentary",
     "commentary_queue",
+    "live_stream",
     "moderation_repo",
     "ranking",
     "sg",
     "telemetry",
+    "viewer_token",
 ]
