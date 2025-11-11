@@ -32,7 +32,7 @@ def test_event_session_returns_admin_role(repo):
     assert payload["role"] == "admin"
     assert payload["memberId"] == "host-1"
     assert payload["safe"] is False
-    assert isinstance(payload.get("ts"), str)
+    assert isinstance(payload.get("ts"), int)
 
 
 def test_event_session_defaults_to_spectator(repo):

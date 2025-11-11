@@ -6,7 +6,7 @@ import { API } from '../api';
 export type EventRole = 'spectator' | 'admin';
 export type EventSession = { role: EventRole; memberId: string | null; safe: boolean };
 
-type EventSessionResponse = { role: EventRole; memberId?: string | null; safe?: boolean; ts: string };
+type EventSessionResponse = { role: EventRole; memberId?: string | null; safe?: boolean; ts: number };
 
 export const DEFAULT_SESSION: EventSession = {
   role: 'spectator',

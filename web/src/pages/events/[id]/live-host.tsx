@@ -145,32 +145,34 @@ export default function EventLiveHostPage(): JSX.Element {
         )}
         {error && <p className="text-sm text-rose-300">{error}</p>}
       </header>
-      <div className="flex flex-wrap gap-3">
-        <button
-          type="button"
-          className="rounded bg-emerald-600 px-4 py-2 font-semibold text-white disabled:cursor-not-allowed disabled:bg-emerald-900"
-          onClick={handleStart}
-          disabled={loading || running || controlsDisabled}
-        >
-          Start Stream
-        </button>
-        <button
-          type="button"
-          className="rounded bg-slate-700 px-4 py-2 font-semibold text-white disabled:cursor-not-allowed disabled:bg-slate-900"
-          onClick={handleStop}
-          disabled={loading || !running || controlsDisabled}
-        >
-          Stop Stream
-        </button>
-        <button
-          type="button"
-          className="rounded bg-sky-600 px-4 py-2 font-semibold text-white disabled:cursor-not-allowed disabled:bg-sky-900"
-          onClick={handleCopyViewerLink}
-          disabled={loading || !running || controlsDisabled}
-        >
-          Copy Viewer Link
-        </button>
-      </div>
+      {!controlsDisabled ? (
+        <div className="flex flex-wrap gap-3">
+          <button
+            type="button"
+            className="rounded bg-emerald-600 px-4 py-2 font-semibold text-white disabled:cursor-not-allowed disabled:bg-emerald-900"
+            onClick={handleStart}
+            disabled={loading || running}
+          >
+            Start Stream
+          </button>
+          <button
+            type="button"
+            className="rounded bg-slate-700 px-4 py-2 font-semibold text-white disabled:cursor-not-allowed disabled:bg-slate-900"
+            onClick={handleStop}
+            disabled={loading || !running}
+          >
+            Stop Stream
+          </button>
+          <button
+            type="button"
+            className="rounded bg-sky-600 px-4 py-2 font-semibold text-white disabled:cursor-not-allowed disabled:bg-sky-900"
+            onClick={handleCopyViewerLink}
+            disabled={loading || !running}
+          >
+            Copy Viewer Link
+          </button>
+        </div>
+      ) : null}
       {viewerLink && (
         <div className="rounded border border-slate-800 bg-slate-900 p-4">
           <p className="text-sm font-semibold text-slate-200">Viewer link</p>

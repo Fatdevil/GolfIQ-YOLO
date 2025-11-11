@@ -25,6 +25,7 @@ import EventLiveHostPage from "./pages/events/[id]/live-host";
 import EventLiveViewerPage from "./pages/events/[id]/live-view";
 import EventTopShotsPage from "./pages/events/[id]/top-shots";
 import HomeFeed from "./pages/home/HomeFeed";
+import { EventSessionBoundary } from "./session/EventSessionBoundary";
 
 export default function App() {
   return (
@@ -42,12 +43,54 @@ export default function App() {
           <Route path="/share/:id" element={<ShareRunPage />} />
           <Route path="/event/:id" element={<EventLeaderboardPage />} />
           <Route path="/events/new" element={<CreateEventPage />} />
-          <Route path="/events/:id/live" element={<LiveLeaderboardPage />} />
-          <Route path="/events/:id/live-host" element={<EventLiveHostPage />} />
-          <Route path="/events/:id/live-view" element={<EventLiveViewerPage />} />
-          <Route path="/events/:id/admin/clips" element={<EventClipsAdminQueue />} />
-          <Route path="/events/:id/admin/moderation" element={<EventClipModerationPage />} />
-          <Route path="/events/:id/top-shots" element={<EventTopShotsPage />} />
+          <Route
+            path="/events/:id/live"
+            element={
+              <EventSessionBoundary>
+                <LiveLeaderboardPage />
+              </EventSessionBoundary>
+            }
+          />
+          <Route
+            path="/events/:id/live-host"
+            element={
+              <EventSessionBoundary>
+                <EventLiveHostPage />
+              </EventSessionBoundary>
+            }
+          />
+          <Route
+            path="/events/:id/live-view"
+            element={
+              <EventSessionBoundary>
+                <EventLiveViewerPage />
+              </EventSessionBoundary>
+            }
+          />
+          <Route
+            path="/events/:id/admin/clips"
+            element={
+              <EventSessionBoundary>
+                <EventClipsAdminQueue />
+              </EventSessionBoundary>
+            }
+          />
+          <Route
+            path="/events/:id/admin/moderation"
+            element={
+              <EventSessionBoundary>
+                <EventClipModerationPage />
+              </EventSessionBoundary>
+            }
+          />
+          <Route
+            path="/events/:id/top-shots"
+            element={
+              <EventSessionBoundary>
+                <EventTopShotsPage />
+              </EventSessionBoundary>
+            }
+          />
           <Route path="/join" element={<JoinEventPage />} />
           <Route path="/join/:code" element={<JoinEventPage />} />
           <Route path="/:eventId/live/:roundId" element={<LiveRoundRoute />} />
