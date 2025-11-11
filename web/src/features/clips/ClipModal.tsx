@@ -230,6 +230,7 @@ export function ClipModal({ clip, onClose, onRefetch }: ClipModalProps): JSX.Ele
             type="button"
             onClick={handleRequest}
             disabled={loading}
+            aria-label="Request commentary"
             className="rounded bg-teal-500 px-4 py-2 text-sm font-semibold text-slate-950 hover:bg-teal-400 disabled:opacity-60"
           >
             {loading ? 'Requesting…' : 'Request commentary'}

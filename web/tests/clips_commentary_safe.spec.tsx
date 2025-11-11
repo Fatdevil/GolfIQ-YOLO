@@ -26,19 +26,18 @@ afterEach(() => {
 });
 
 describe('Clip commentary safe guard', () => {
-  it('disables admin request button and shows banner in safe mode', () => {
+  it('hides admin request button and shows banner in safe mode', () => {
     render(
       <EventSessionContext.Provider value={{ role: 'admin', memberId: 'host-1', safe: true }}>
         <ClipModal clip={baseClip} />
       </EventSessionContext.Provider>,
     );
 
-    const button = screen.getByRole('button', { name: /request commentary/i });
-    expect((button as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.queryByRole('button', { name: /request commentary/i })).toBeNull();
     expect(screen.getByText('Tournament-safe: commentary disabled')).toBeTruthy();
   });
 
-  it('requests commentary when not in safe mode', async () => {
+  it('renders enabled request button for admin when not in safe mode', async () => {
     const user = userEvent.setup();
     const postSpy = vi
       .spyOn(api, 'postClipCommentary')
@@ -50,11 +49,24 @@ describe('Clip commentary safe guard', () => {
       </EventSessionContext.Provider>,
     );
 
-    await user.click(screen.getByRole('button', { name: /request commentary/i }));
+    const btn = (await screen.findByRole('button', { name: /request commentary/i })) as HTMLButtonElement;
+    expect(btn.disabled).toBe(false);
+
+    await user.click(btn);
 
     await waitFor(() => {
       expect(postSpy).toHaveBeenCalledWith('clip-safe', 'member-7');
     });
+  });
+
+  it('does not render request button for spectators', () => {
+    render(
+      <EventSessionContext.Provider value={{ role: 'spectator', memberId: 'viewer-9', safe: false }}>
+        <ClipModal clip={baseClip} />
+      </EventSessionContext.Provider>,
+    );
+
+    expect(screen.queryByRole('button', { name: /request commentary/i })).toBeNull();
   });
 
   it('surfaces tournament-safe banner when server locks commentary', async () => {
