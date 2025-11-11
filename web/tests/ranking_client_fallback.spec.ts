@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { rankTopShotsClient } from '@web/features/clips/ranking';
+import { rankTopShotsClient } from '@web/features/clips/rankingClient';
 
 describe('rankTopShotsClient', () => {
   it('matches expected ordering for sample dataset', () => {

@@ -21,6 +21,16 @@ function parseCreatedAt(clip: ClipWithMetrics): number | null {
   return Number.isFinite(time) ? time : null;
 }
 
+function minutesSince(timestampMs: number | null, nowMs: number): number | null {
+  if (timestampMs === null) return null;
+  const deltaMs = nowMs - timestampMs;
+  const minutes = deltaMs / 60000;
+  if (!Number.isFinite(minutes) || minutes <= 0) {
+    return null;
+  }
+  return minutes;
+}
+
 export function rankTopShotsClient(
   clips: ClipWithMetrics[],
   nowMs = Date.now(),
@@ -37,13 +47,8 @@ export function rankTopShotsClient(
       toNumber((clip as Record<string, unknown>).reactions_total ?? (clip as Record<string, unknown>).reactionsTotal ?? 0);
     const sgDelta = toNumber(clip.sgDelta ?? clip.sg_delta ?? 0, 0);
     const createdAt = parseCreatedAt(clip);
-    let recencyComponent = 0;
-    if (createdAt !== null && createdAt < nowMs) {
-      const minutes = (nowMs - createdAt) / 60000;
-      if (minutes > 0) {
-        recencyComponent = gamma * (1 / minutes);
-      }
-    }
+    const minutes = minutesSince(createdAt, nowMs);
+    const recencyComponent = minutes === null ? 0 : gamma * (1 / minutes);
     const score = reactions1m + alpha * Math.log1p(Math.max(0, reactionsTotal)) + beta * sgDelta + recencyComponent;
     return { ...clip, score } as TopShotClip;
   });

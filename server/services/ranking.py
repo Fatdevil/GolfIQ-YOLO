@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from math import log1p
-from typing import Iterable, Mapping, Sequence
+from typing import Iterable, Mapping, Optional, Sequence
 
 
 @dataclass(slots=True)
@@ -24,18 +24,20 @@ def _parse_timestamp(value: object) -> datetime | None:
     if isinstance(value, str):
         try:
             dt = datetime.fromisoformat(value.replace("Z", "+00:00"))
-        except ValueError:
+        except Exception:  # pragma: no cover - defensive guard
             return None
         return dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
     return None
 
 
-def _minutes_since(timestamp: datetime | None, now: datetime) -> float | None:
+def _minutes_since(timestamp: datetime | None, now: datetime) -> Optional[float]:
     if timestamp is None:
         return None
     delta = now - timestamp
     minutes = delta.total_seconds() / 60.0
-    return minutes if minutes > 0 else 1.0 / 60.0
+    if minutes <= 0:
+        return None
+    return minutes
 
 
 def _ensure_float(value: object, default: float = 0.0) -> float:
@@ -69,9 +71,9 @@ def rank_top_shots(
         )
         sg_delta = _ensure_float(clip.get("sg_delta") or clip.get("sgDelta"))
         created = _parse_timestamp(clip.get("created_at") or clip.get("createdAt"))
-        recency_minutes = _minutes_since(created, now)
         recency_component = 0.0
-        if recency_minutes is not None and recency_minutes > 0:
+        recency_minutes = _minutes_since(created, now)
+        if recency_minutes is not None:
             recency_component = gamma * (1.0 / recency_minutes)
         score = (
             r1 + alpha * log1p(max(0.0, r_total)) + beta * sg_delta + recency_component

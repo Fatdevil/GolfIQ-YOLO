@@ -9,7 +9,7 @@ import {
   getEventTopShots,
   type TopShotClip,
 } from '../../../features/clips/metricsApi';
-import { rankTopShotsClient } from '../../../features/clips/ranking';
+import { rankTopShotsClient } from '../../../features/clips/rankingClient';
 import { useEventSession } from '../../../session/eventSession';
 
 export default function EventTopShotsPage(): JSX.Element {
