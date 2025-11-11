@@ -171,10 +171,12 @@ def generate_commentary(clip_id: str) -> CommentaryResult:
     clip_id = str(clip_id)
     clip = clips_repo.get_clip(clip_id)
     event_id = _require_event_id(clip)
+    sg_delta = _resolve_clip_sg_delta(clip)
     commentary_queue.upsert(
         clip_id,
         event_id=event_id,
         status=CommentaryStatus.running,
+        sg_delta=sg_delta,
     )
     telemetry_service.emit_commentary_running(event_id, clip_id)
 
@@ -200,6 +202,7 @@ def generate_commentary(clip_id: str) -> CommentaryResult:
             title=title,
             summary=summary,
             tts_url=tts_url,
+            sg_delta=sg_delta,
         )
         telemetry_service.emit_commentary_done(event_id, clip_id, has_tts=bool(tts_url))
         return CommentaryResult(
@@ -213,6 +216,7 @@ def generate_commentary(clip_id: str) -> CommentaryResult:
             title=None,
             summary=None,
             tts_url=None,
+            sg_delta=sg_delta,
         )
         telemetry_service.emit_commentary_failed(event_id, clip_id, error=str(exc))
         raise
@@ -245,6 +249,16 @@ def _load_board(event_id: str) -> Iterable[Mapping[str, Any]]:
     from server.routes import events as events_routes
 
     return events_routes._REPOSITORY.get_board(event_id)
+
+
+def _resolve_clip_sg_delta(clip: Mapping[str, Any]) -> float | None:
+    value = clip.get("sg_delta") or clip.get("sgDelta")
+    if value is None:
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
 
 
 __all__ = [

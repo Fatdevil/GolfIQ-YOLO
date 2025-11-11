@@ -372,7 +372,7 @@ export class OfflineQueue {
     if (this.jobsCache) {
       return this.jobsCache;
     }
-    const stored = await get<Job[]>(this.storageKey, this.store).catch(() => null);
+    const stored = (await get(this.storageKey, this.store).catch(() => null)) as Job[] | null;
     const jobs = Array.isArray(stored)
       ? stored.map((job) => this.normalizeJob(job))
       : [];

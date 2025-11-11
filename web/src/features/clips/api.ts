@@ -11,6 +11,7 @@ export type ClipCommentary = {
   summary?: string | null;
   ttsUrl?: string | null;
   updatedTs: string;
+  sgDelta?: number | null;
 };
 
 export type ListCommentaryOptions = {

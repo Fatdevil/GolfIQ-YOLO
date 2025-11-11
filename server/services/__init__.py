@@ -6,6 +6,8 @@ from . import (
     commentary,
     commentary_queue,
     moderation_repo,
+    ranking,
+    sg,
     telemetry,
 )
 
@@ -15,5 +17,7 @@ __all__ = [
     "commentary",
     "commentary_queue",
     "moderation_repo",
+    "ranking",
+    "sg",
     "telemetry",
 ]

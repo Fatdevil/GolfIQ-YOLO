@@ -76,6 +76,7 @@ def test_list_commentary_with_status_filter() -> None:
             "summary": "Shot drained for birdie",
             "ttsUrl": None,
             "updatedTs": payload[0]["updatedTs"],
+            "sgDelta": None,
         }
     ]
 

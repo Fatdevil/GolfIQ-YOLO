@@ -89,6 +89,16 @@ def _normalize_tv_flags(flags: Mapping[str, Any] | None) -> Dict[str, Any]:
     return merged
 
 
+def _resolve_clip_sg_delta(clip: Mapping[str, Any]) -> float | None:
+    value = clip.get("sg_delta") or clip.get("sgDelta")
+    if value is None:
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
 class CreateEventBody(BaseModel):
     name: str = Field(..., min_length=1, max_length=120)
     emoji: str | None = Field(default=None, max_length=4)
@@ -1336,10 +1346,18 @@ def _assert_commentary_allowed(
     event_id: str, clip_id: str, member_id: str | None
 ) -> None:
     if _resolve_commentary_safe_flag(event_id):
+        sg_delta = None
+        try:
+            clip_record = clips_repo.get_clip(clip_id)
+        except clips_repo.ClipNotFoundError:
+            clip_record = None
+        if clip_record is not None:
+            sg_delta = _resolve_clip_sg_delta(clip_record)
         commentary_queue.upsert(
             clip_id,
             event_id=event_id,
             status=CommentaryStatus.blocked_safe,
+            sg_delta=sg_delta,
         )
         telemetry_service.emit_commentary_blocked_safe(
             event_id, clip_id, member_id=member_id
@@ -1374,6 +1392,7 @@ def create_clip_commentary(
         clip_str,
         event_id=event_id,
         status=CommentaryStatus.queued,
+        sg_delta=_resolve_clip_sg_delta(clip_record),
     )
     telemetry_service.emit_commentary_request(event_id, clip_str, member_id=member_id)
     result = commentary.generate_commentary(clip_str)

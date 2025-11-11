@@ -2,6 +2,8 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { isAxiosError } from 'axios';
 
+import clsx from 'clsx';
+
 import { postClipCommentary } from '@web/api';
 import {
   getClipCommentary,
@@ -11,6 +13,7 @@ import {
   type CommentaryStatus,
 } from '@web/features/clips/api';
 import { useEventSession } from '@web/session/eventSession';
+import { formatSgDelta } from '@web/features/clips/ClipCard';
 
 const POLL_INTERVAL_MS = 4000;
 const TOURNAMENT_SAFE_MESSAGE = 'Tournament-safe: commentary disabled';
@@ -24,12 +27,35 @@ const STATUS_LABELS: Record<CommentaryStatus, string> = {
 };
 
 const STATUS_STYLES: Record<CommentaryStatus, string> = {
-  queued: 'bg-amber-500/10 text-amber-200',
+    queued: 'bg-amber-500/10 text-amber-200',
   running: 'bg-sky-500/10 text-sky-200',
   ready: 'bg-teal-500/10 text-teal-200',
   failed: 'bg-rose-500/10 text-rose-200',
   blocked_safe: 'bg-purple-500/10 text-purple-200',
 };
+
+const SG_POSITIVE_THRESHOLD = 0.05;
+
+function sgBadgeClass(value: number | null | undefined): string {
+  if (typeof value !== 'number' || !Number.isFinite(value)) {
+    return 'bg-slate-800 text-slate-400';
+  }
+  if (value > SG_POSITIVE_THRESHOLD) {
+    return 'bg-emerald-500/10 text-emerald-200';
+  }
+  if (value < -SG_POSITIVE_THRESHOLD) {
+    return 'bg-rose-500/10 text-rose-200';
+  }
+  return 'bg-slate-800 text-slate-300';
+}
+
+function SgBadge({ value }: { value?: number | null }): JSX.Element {
+  const label = formatSgDelta(value ?? null);
+  if (!label) {
+    return <span className="text-xs text-slate-500">—</span>;
+  }
+  return <span className={clsx('inline-flex items-center rounded-full px-2 py-1 text-xs font-semibold', sgBadgeClass(value ?? null))}>{label}</span>;
+}
 
 function StatusBadge({ status }: { status: CommentaryStatus }): JSX.Element {
   return (
@@ -297,6 +323,7 @@ export default function EventClipsAdminQueue(): JSX.Element {
               <thead>
                 <tr className="bg-slate-900/60 text-left text-xs uppercase tracking-wide text-slate-400">
                   <th className="px-4 py-3">Clip</th>
+                  <th className="px-4 py-3">SGΔ</th>
                   <th className="px-4 py-3">Status</th>
                   <th className="px-4 py-3">Updated</th>
                   <th className="px-4 py-3 text-right">Actions</th>
@@ -318,6 +345,9 @@ export default function EventClipsAdminQueue(): JSX.Element {
                       className={`transition hover:bg-slate-900/40 ${selected ? 'bg-slate-900/50' : ''}`}
                     >
                       <td className="px-4 py-3 font-mono text-xs text-slate-300">{clip.clipId}</td>
+                      <td className="px-4 py-3">
+                        <SgBadge value={clip.sgDelta ?? null} />
+                      </td>
                       <td className="px-4 py-3">
                         <StatusBadge status={clip.status} />
                       </td>
@@ -367,6 +397,12 @@ export default function EventClipsAdminQueue(): JSX.Element {
                 <p className="text-sm text-slate-300">{formatUpdated(detail.updatedTs)}</p>
               </div>
               {detail.title && <h3 className="text-xl font-semibold text-slate-100">{detail.title}</h3>}
+              <div className="flex items-center gap-3">
+                <div>
+                  <p className="text-xs uppercase tracking-wide text-slate-500">SGΔ</p>
+                  <SgBadge value={detail.sgDelta ?? null} />
+                </div>
+              </div>
               {detail.summary && <p className="text-sm leading-relaxed text-slate-300">{detail.summary}</p>}
               {detail.ttsUrl && (
                 <button

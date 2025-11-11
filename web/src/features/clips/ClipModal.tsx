@@ -8,6 +8,7 @@ import { useMediaPlaybackTelemetry } from '@web/media/telemetry';
 import { useEventSession, type EventSession } from '../../session/eventSession';
 import type { ShotClip } from './types';
 import { reportClip } from './moderationApi';
+import { ClipPlayer } from './Player';
 
 export type ClipModalProps = {
   clip: ShotClip;
@@ -183,12 +184,7 @@ export function ClipModal({ clip, onClose, onRefetch }: ClipModalProps): JSX.Ele
       </header>
 
       {signedVideoUrl ? (
-        <video
-          ref={videoRef}
-          controls
-          className="w-full rounded bg-black"
-          src={signedVideoUrl ?? undefined}
-        />
+        <ClipPlayer ref={videoRef} src={signedVideoUrl} anchors={clip.anchors ?? null} />
       ) : rawVideoUrl && signing ? (
         <div className="flex h-48 w-full items-center justify-center rounded border border-dashed border-slate-700 text-slate-500">
           Preparing video…
