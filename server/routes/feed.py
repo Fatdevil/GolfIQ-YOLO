@@ -12,9 +12,11 @@ from typing import Any, Iterable, Mapping
 from fastapi import APIRouter, Header, Query, status
 from fastapi.responses import JSONResponse, Response
 
+from server.schemas.moderation import Visibility
 from server.services import (
     clips_repo,
     live_stream,
+    moderation_repo,
     ranking,
     telemetry as telemetry_service,
 )
@@ -131,6 +133,12 @@ def _collect_top_shots(now: datetime) -> list[dict[str, Any]]:
     ranked = ranking.rank_top_shots(clips_repo.list_recent(), now.timestamp())
     results: list[dict[str, Any]] = []
     for entry in ranked:
+        clip_id = entry.get("id") or entry.get("clipId")
+        if not clip_id:
+            continue
+        state = moderation_repo.get_state(str(clip_id))
+        if state.hidden or state.visibility is not Visibility.public:
+            continue
         serialized = _serialize_top_shot(entry)
         if not serialized:
             continue
