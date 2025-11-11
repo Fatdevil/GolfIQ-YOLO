@@ -12,7 +12,7 @@ vi.mock('@web/features/live/api');
 const getLiveStatus = vi.mocked(liveApi.getLiveStatus);
 const startLive = vi.mocked(liveApi.startLive);
 const stopLive = vi.mocked(liveApi.stopLive);
-const mintViewerToken = vi.mocked(liveApi.mintViewerToken);
+const createViewerLink = vi.mocked(liveApi.createViewerLink);
 
 const adminSession = { ...DEFAULT_SESSION, role: 'admin' as const, memberId: 'member-1', safe: false };
 let clipboardSpy: ReturnType<typeof vi.fn>;
@@ -30,16 +30,17 @@ function renderPage(session = adminSession) {
 }
 
 beforeEach(() => {
-  getLiveStatus.mockResolvedValue({ running: false });
+  getLiveStatus.mockResolvedValue({ running: false, startedAt: null, viewers: 0, hlsPath: null });
   startLive.mockResolvedValue({ hlsPath: '/hls/mock/event-9/index.m3u8', startedAt: new Date().toISOString() });
   stopLive.mockResolvedValue({ stopped: true });
-  mintViewerToken.mockResolvedValue({ token: 'viewer-token', exp: Math.floor(Date.now() / 1000) + 600 });
+  createViewerLink.mockResolvedValue({ url: 'https://app.example/events/event-9/live-view?invite=invite-code' });
   clipboardSpy = vi.fn().mockResolvedValue(undefined);
+  const clipboard = {
+    writeText: clipboardSpy,
+  } as unknown as Clipboard;
   Object.defineProperty(navigator, 'clipboard', {
     configurable: true,
-    value: {
-      writeText: clipboardSpy,
-    },
+    get: () => clipboard,
   });
 });
 
@@ -73,23 +74,23 @@ describe('Event live host controls', () => {
   it('mints viewer link and copies to clipboard', async () => {
     renderPage();
 
-    await screen.findByRole('button', { name: 'Generate Viewer Link' });
+    await screen.findByRole('button', { name: 'Copy Viewer Link' });
 
     const user = userEvent.setup();
 
     await user.click(screen.getByRole('button', { name: 'Start Stream' }));
     await waitFor(() => expect(startLive).toHaveBeenCalled());
 
-    await user.click(screen.getByRole('button', { name: 'Generate Viewer Link' }));
+    await user.click(screen.getByRole('button', { name: 'Copy Viewer Link' }));
 
     await waitFor(() => {
-      expect(mintViewerToken).toHaveBeenCalledWith('event-9', adminSession.memberId);
+      expect(createViewerLink).toHaveBeenCalledWith('event-9', adminSession.memberId);
     });
 
     await waitFor(() => {
-      expect(screen.getByText(/Copied to clipboard/)).toBeTruthy();
+      expect(screen.getByText(/Viewer link copied!/)).toBeTruthy();
     });
 
-    expect(screen.getByText(/Viewer link/)).toBeTruthy();
+    expect(screen.getByText('Viewer link copied!')).toBeTruthy();
   });
 });

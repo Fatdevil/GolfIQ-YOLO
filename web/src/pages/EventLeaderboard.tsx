@@ -13,6 +13,8 @@ import type {
 import { listParticipants, pollScores } from '@shared/events/service';
 import { recordLeaderboardViewedWeb } from '@shared/events/telemetry';
 import { ensureClient, isSupabaseConfigured } from '@shared/supabase/client';
+import { LiveBadge } from '@web/features/live/LiveBadge';
+import { useLiveStatus } from '@web/features/live/useLiveStatus';
 
 const DEFAULT_ALLOWANCE: Record<ScoringFormat, number> = {
   stroke: 95,
@@ -63,6 +65,7 @@ export default function EventLeaderboardPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [configured, setConfigured] = useState(true);
+  const liveStatus = useLiveStatus(id ?? null, { pollMs: 10000 });
 
   useEffect(() => {
     if (!id) {
@@ -292,7 +295,15 @@ export default function EventLeaderboardPage() {
   return (
     <div className="space-y-6">
       <header className="space-y-2">
-        <h1 className="text-3xl font-semibold">{event.name}</h1>
+        <div className="flex flex-wrap items-center gap-3">
+          <h1 className="text-3xl font-semibold">{event.name}</h1>
+          <LiveBadge
+            eventId={event.id ?? id ?? null}
+            running={liveStatus.running}
+            viewers={liveStatus.viewers}
+            startedAt={liveStatus.startedAt}
+          />
+        </div>
         <p className="text-slate-400">
           Event code <span className="font-mono text-slate-100">{event.code}</span>
         </p>

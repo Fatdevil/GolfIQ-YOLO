@@ -155,6 +155,53 @@ def emit_live_token_minted(
     _emit("live.token", payload)
 
 
+def emit_live_viewer_link_copied(event_id: str, *, viewer_id: str, exp: int) -> None:
+    payload: Dict[str, object] = {
+        "eventId": event_id,
+        "viewerId": viewer_id,
+        "exp": int(exp),
+        "ts": _now_ms(),
+    }
+    _emit("live.viewer_link.copied", payload)
+
+
+def emit_live_invite_minted(
+    event_id: str,
+    *,
+    exp: int,
+    ttl_s: int,
+    member_id: str | None = None,
+) -> None:
+    payload: Dict[str, object] = {
+        "eventId": event_id,
+        "exp": int(exp),
+        "ttl": int(ttl_s),
+        "ts": _now_ms(),
+    }
+    if member_id:
+        payload["memberId"] = member_id
+    _emit("live.invite.minted", payload)
+
+
+def emit_live_invite_exchange(
+    event_id: str,
+    *,
+    ok: bool,
+    viewer_id: str | None = None,
+    reason: str | None = None,
+) -> None:
+    payload: Dict[str, object] = {
+        "eventId": event_id,
+        "ok": bool(ok),
+        "ts": _now_ms(),
+    }
+    if viewer_id:
+        payload["viewerId"] = viewer_id
+    if not ok and reason:
+        payload["reason"] = reason
+    _emit("live.invite.exchange", payload)
+
+
 def emit_live_status(
     event_id: str,
     *,

@@ -1,17 +1,14 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useParams } from 'react-router-dom';
 
-import { getLiveStatus, mintViewerToken, startLive, stopLive, type LiveStatusResponse } from '@web/features/live/api';
+import {
+  createViewerLink,
+  getLiveStatus,
+  startLive,
+  stopLive,
+  type LiveStatusResponse,
+} from '@web/features/live/api';
 import { useEventSession } from '@web/session/eventSession';
-
-function buildViewerUrl(eventId: string, token: string): string {
-  try {
-    const origin = window.location.origin;
-    return `${origin}/events/${eventId}/live-view?token=${encodeURIComponent(token)}`;
-  } catch (error) {
-    return `/events/${eventId}/live-view?token=${encodeURIComponent(token)}`;
-  }
-}
 
 export default function EventLiveHostPage(): JSX.Element {
   const params = useParams<{ id: string }>();
@@ -21,7 +18,6 @@ export default function EventLiveHostPage(): JSX.Element {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [viewerLink, setViewerLink] = useState<string | null>(null);
-  const [tokenExp, setTokenExp] = useState<number | null>(null);
   const [copied, setCopied] = useState(false);
 
   const isAdmin = session.role === 'admin';
@@ -35,7 +31,12 @@ export default function EventLiveHostPage(): JSX.Element {
     getLiveStatus(eventId)
       .then((payload) => {
         if (!cancelled) {
-          setStatus(payload);
+          setStatus({
+            running: Boolean(payload.running),
+            startedAt: payload.startedAt ?? null,
+            viewers: typeof payload.viewers === 'number' ? payload.viewers : 0,
+            hlsPath: payload.hlsPath ?? null,
+          });
         }
       })
       .catch(() => {
@@ -59,7 +60,12 @@ export default function EventLiveHostPage(): JSX.Element {
     setError(null);
     try {
       const payload = await startLive(eventId, session.memberId);
-      setStatus({ running: true, startedAt: payload.startedAt, hlsPath: payload.hlsPath });
+      setStatus({
+        running: true,
+        startedAt: payload.startedAt,
+        viewers: 0,
+        hlsPath: payload.hlsPath,
+      });
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to start live stream';
       setError(message);
@@ -76,7 +82,7 @@ export default function EventLiveHostPage(): JSX.Element {
     setError(null);
     try {
       await stopLive(eventId, session.memberId);
-      setStatus({ running: false });
+      setStatus({ running: false, startedAt: null, viewers: 0, hlsPath: null });
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to stop live stream';
       setError(message);
@@ -85,7 +91,7 @@ export default function EventLiveHostPage(): JSX.Element {
     }
   }, [controlsDisabled, eventId, isAdmin, session.memberId]);
 
-  const handleMintToken = useCallback(async () => {
+  const handleCopyViewerLink = useCallback(async () => {
     if (!eventId || !isAdmin || controlsDisabled) {
       return;
     }
@@ -93,31 +99,32 @@ export default function EventLiveHostPage(): JSX.Element {
     setError(null);
     setCopied(false);
     try {
-      const minted = await mintViewerToken(eventId, session.memberId);
-      const link = buildViewerUrl(eventId, minted.token);
+      const created = await createViewerLink(eventId, session.memberId);
+      const link = created.url;
       setViewerLink(link);
-      setTokenExp(minted.exp);
       if (navigator.clipboard?.writeText) {
         await navigator.clipboard.writeText(link);
         setCopied(true);
+        window.setTimeout(() => setCopied(false), 2000);
       }
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Failed to mint viewer link';
+      const message = err instanceof Error ? err.message : 'Failed to copy viewer link';
       setError(message);
     } finally {
       setLoading(false);
     }
   }, [controlsDisabled, eventId, isAdmin, session.memberId]);
 
+  const viewerCount = status?.viewers ?? 0;
   const statusLabel = useMemo(() => {
     if (!running) {
       return 'Live stream is stopped';
     }
     if (startedAt) {
-      return `Live since ${startedAt.toLocaleTimeString()}`;
+      return `Live since ${startedAt.toLocaleTimeString()} · ${viewerCount} watching`;
     }
-    return 'Live stream running';
-  }, [running, startedAt]);
+    return `Live stream running · ${viewerCount} watching`;
+  }, [running, startedAt, viewerCount]);
 
   if (!isAdmin) {
     return (
@@ -158,10 +165,10 @@ export default function EventLiveHostPage(): JSX.Element {
         <button
           type="button"
           className="rounded bg-sky-600 px-4 py-2 font-semibold text-white disabled:cursor-not-allowed disabled:bg-sky-900"
-          onClick={handleMintToken}
+          onClick={handleCopyViewerLink}
           disabled={loading || !running || controlsDisabled}
         >
-          Generate Viewer Link
+          Copy Viewer Link
         </button>
       </div>
       {viewerLink && (
@@ -169,8 +176,7 @@ export default function EventLiveHostPage(): JSX.Element {
           <p className="text-sm font-semibold text-slate-200">Viewer link</p>
           <p className="break-all text-sm text-slate-300">{viewerLink}</p>
           <p className="mt-2 text-xs text-slate-500">
-            {copied ? 'Copied to clipboard.' : 'Use the copy button to share the link.'}
-            {tokenExp && ` Expires at ${new Date(tokenExp * 1000).toLocaleTimeString()}.`}
+            {copied ? 'Viewer link copied!' : 'Use the copy button to share the link.'}
           </p>
         </div>
       )}

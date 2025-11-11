@@ -136,9 +136,11 @@ def stop_live(event_id: str) -> dict[str, Any]:
 
 def status_live(event_id: str) -> dict[str, Any]:
     state = _ensure_state(event_id)
+    viewers = len(state.viewers) if state.running else 0
     payload = {
         "running": state.running,
         "startedAt": state.to_dict()["startedAt"],
+        "viewers": viewers,
     }
     if state.running and state.hls_path:
         payload["hlsPath"] = state.hls_path
