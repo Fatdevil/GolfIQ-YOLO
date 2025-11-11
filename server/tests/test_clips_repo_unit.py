@@ -1,6 +1,7 @@
 import pytest
 
 from server.services import clips_repo
+from server.utils import media as media_utils
 
 
 @pytest.fixture(autouse=True)
@@ -8,6 +9,15 @@ def reset_clip_store():
     clips_repo._CLIP_STORE.clear()
     yield
     clips_repo._CLIP_STORE.clear()
+
+
+@pytest.fixture(autouse=True)
+def reset_media_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("MEDIA_CDN_BASE_URL", raising=False)
+    monkeypatch.delenv("MEDIA_ORIGIN_BASE_URL", raising=False)
+    media_utils.reset_media_url_cache()
+    yield
+    media_utils.reset_media_url_cache()
 
 
 def test_register_requires_id():
@@ -62,6 +72,24 @@ def test_to_public_handles_snake_and_camel():
     assert public["aiTitle"] == "Big putt"
     assert public["aiSummary"] == "Drops the 20 footer."
     assert public["aiTtsUrl"] == "https://cdn/voice.mp3"
+
+
+def test_to_public_rewrites_media_with_cdn(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("MEDIA_CDN_BASE_URL", "https://cdn.example")
+    monkeypatch.setenv("MEDIA_ORIGIN_BASE_URL", "https://origin.example")
+    media_utils.reset_media_url_cache()
+
+    record = {
+        "id": "clip-7",
+        "event_id": "evt-7",
+        "video_url": "/hls/evt-7/master.m3u8",
+        "created_at": "2025-02-02T12:00:00Z",
+    }
+
+    public = clips_repo.to_public(record)
+    assert public["videoUrl"] == "https://cdn.example/hls/evt-7/master.m3u8"
+    assert public["thumbUrl"] == "https://cdn.example/hls/evt-7/thumb.jpg"
+    assert public["thumbnailUrl"] == public["thumbUrl"]
 
 
 def test_list_for_event_filters_records():

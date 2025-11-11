@@ -5,6 +5,8 @@ import { useLivePlayback } from '@web/features/live/useLivePlayback';
 import { postTelemetryEvent } from '@web/api';
 import { useMediaPlaybackTelemetry } from '@web/media/telemetry';
 import { exchangeViewerInvite } from '@web/features/live/api';
+import { useAttachVideoSource } from '@web/player/useAttachVideoSource';
+import { measureStart } from '@web/metrics/playerTiming';
 
 export default function EventLiveViewerPage(): JSX.Element {
   const params = useParams<{ id: string }>();
@@ -84,6 +86,32 @@ export default function EventLiveViewerPage(): JSX.Element {
     exp: null,
   });
 
+  useAttachVideoSource({ videoRef, src: playback.videoUrl, live: true });
+
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video || !playback.videoUrl) {
+      return () => undefined;
+    }
+    return measureStart(video, { live: true, src: playback.videoUrl }, (timing) => {
+      void postTelemetryEvent({
+        event: 'media.play.start',
+        eventId,
+        path: playback.hlsPath,
+        live: timing.live,
+        playStartMs: timing.play_start_ms,
+        src: timing.src,
+        requestedAt: timing.reqTs,
+        firstFrameTs: timing.firstFrameTs,
+        source: 'live',
+      }).catch((error) => {
+        if (import.meta.env.DEV) {
+          console.warn('[live/viewer] play-start telemetry failed', error);
+        }
+      });
+    });
+  }, [eventId, playback.hlsPath, playback.videoUrl]);
+
   useEffect(() => {
     if (token && playback.running && playback.videoUrl && !emittedRef.current) {
       emittedRef.current = true;
@@ -129,7 +157,7 @@ export default function EventLiveViewerPage(): JSX.Element {
         controls
         autoPlay
         playsInline
-        src={playback.videoUrl}
+        preload="metadata"
       />
     );
   }, [invite, inviteError, invitePending, playback.loading, playback.running, playback.videoUrl, token]);

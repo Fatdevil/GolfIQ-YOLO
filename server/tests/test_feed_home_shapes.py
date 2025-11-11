@@ -96,6 +96,7 @@ def test_feed_home_shapes(monkeypatch: pytest.MonkeyPatch) -> None:
     assert top_shots[0]["anchorSec"] == pytest.approx(8.0, rel=1e-6)
     assert top_shots[0]["reactions1min"] == 3
     assert top_shots[0]["reactionsTotal"] == 17
+    assert "thumbUrl" in top_shots[0]
 
     assert isinstance(payload["live"], list)
 

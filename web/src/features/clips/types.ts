@@ -8,6 +8,7 @@ export type ShotClip = {
   videoUrl?: string;
   thumbnail_url?: string;
   thumbnailUrl?: string;
+  thumbUrl?: string | null;
   created_at?: string;
   createdAt?: string;
   ai_title?: string | null;

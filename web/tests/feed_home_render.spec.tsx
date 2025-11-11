@@ -51,6 +51,7 @@ describe("HomeFeed", () => {
           createdAt: "2024-01-02T12:00:00Z",
           anchorSec: 8,
           rankScore: 2.41,
+          thumbUrl: "https://cdn.test/thumb.jpg",
         },
       ],
       live: [
@@ -69,6 +70,7 @@ describe("HomeFeed", () => {
     renderHomeFeed();
 
     expect(await screen.findByText("Clip clip-1")).toBeTruthy();
+    expect(screen.getByAltText("Preview for clip clip-1")).toBeTruthy();
     expect(screen.getByText("Anchor 8s")).toBeTruthy();
     expect(screen.getByText("3 in 1m • 17 total")).toBeTruthy();
     expect(screen.getByText("Event evt-live")).toBeTruthy();

@@ -26,8 +26,10 @@ import EventLiveViewerPage from "./pages/events/[id]/live-view";
 import EventTopShotsPage from "./pages/events/[id]/top-shots";
 import HomeFeed from "./pages/home/HomeFeed";
 import { EventSessionBoundary } from "./session/EventSessionBoundary";
+import { useCdnPreconnect } from "./media/cdn";
 
 export default function App() {
+  useCdnPreconnect();
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100">
       <Nav />

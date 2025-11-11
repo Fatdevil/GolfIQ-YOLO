@@ -20,6 +20,7 @@ from server.services import (
     ranking,
     telemetry as telemetry_service,
 )
+from server.utils.media import resolve_thumb_url, rewrite_media_url
 
 
 router = APIRouter(prefix="/feed", tags=["feed"])
@@ -126,6 +127,7 @@ def _serialize_top_shot(entry: Mapping[str, Any]) -> dict[str, Any] | None:
         "createdAt": created_at,
         "anchorSec": _resolve_anchor(entry),
         "rankScore": score,
+        "thumbUrl": resolve_thumb_url(entry),
     }
 
 
@@ -160,7 +162,7 @@ def _collect_live_events() -> list[dict[str, Any]]:
                 "eventId": str(event_id),
                 "viewers": _ensure_int(status.get("viewers")),
                 "startedAt": status.get("startedAt"),
-                "livePath": live_path,
+                "livePath": rewrite_media_url(live_path),
             }
         )
     events.sort(key=lambda item: item.get("startedAt") or "", reverse=True)
