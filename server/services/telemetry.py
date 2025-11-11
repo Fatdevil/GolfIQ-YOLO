@@ -202,6 +202,33 @@ def emit_live_invite_exchange(
     _emit("live.invite.exchange", payload)
 
 
+def emit_feed_home_requested(*, limit: int) -> None:
+    _emit(
+        "feed.home.requested",
+        {
+            "limit": int(limit),
+            "ts": _now_ms(),
+        },
+    )
+
+
+def emit_feed_home_served(
+    *,
+    limit: int,
+    top_count: int,
+    live_count: int,
+) -> None:
+    _emit(
+        "feed.home.served",
+        {
+            "limit": int(limit),
+            "topCount": int(top_count),
+            "liveCount": int(live_count),
+            "ts": _now_ms(),
+        },
+    )
+
+
 def emit_live_status(
     event_id: str,
     *,

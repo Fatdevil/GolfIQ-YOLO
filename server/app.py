@@ -32,6 +32,7 @@ from .routes.commentary import router as commentary_router
 from .routes.cv_analyze import router as cv_analyze_router
 from .routes.cv_analyze_video import router as cv_analyze_video_router
 from .routes.cv_mock import router as cv_mock_router
+from .routes.feed import router as feed_router
 from .routes.models import router as models_router
 from .routes.rollout import router as rollout_router
 from .routes.providers import router as providers_router
@@ -122,6 +123,7 @@ app.include_router(caddie_router)
 app.include_router(caddie_health_router)
 app.include_router(bundle_router)
 app.include_router(bundle_index_router)
+app.include_router(feed_router)
 app.include_router(bench_router)
 app.include_router(course_bundle_router)
 app.include_router(clips_router)
