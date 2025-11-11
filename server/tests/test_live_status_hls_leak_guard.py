@@ -2,12 +2,16 @@ from fastapi.testclient import TestClient
 
 from server.app import app
 from server.routes import live as mod
+from server.utils import media as media_utils
 
 
 client = TestClient(app)
 
 
 def test_status_with_no_token_never_returns_hls_path(monkeypatch):
+    monkeypatch.delenv("MEDIA_CDN_BASE_URL", raising=False)
+    monkeypatch.delenv("MEDIA_ORIGIN_BASE_URL", raising=False)
+    media_utils.reset_media_url_cache()
     monkeypatch.setattr(
         mod.live_stream,
         "status_live",
@@ -19,3 +23,4 @@ def test_status_with_no_token_never_returns_hls_path(monkeypatch):
     payload = response.json()
     assert payload.get("running") is True
     assert "hlsPath" not in payload
+    media_utils.reset_media_url_cache()

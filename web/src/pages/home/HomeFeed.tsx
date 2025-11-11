@@ -15,6 +15,7 @@ import {
   emitFeedHomeRendered,
   emitFeedHomeRequested,
 } from "@web/features/feed/telemetry";
+import { preloadImage } from "@web/utils/preload";
 
 const DEFAULT_LIMIT = 20;
 const POSITIVE_THRESHOLD = 0.05;
@@ -203,9 +204,19 @@ export function TopShotCard({ shot, onPlay }: TopShotCardProps): JSX.Element {
   const reactionsLabel = `${shot.reactions1min} in 1m • ${shot.reactionsTotal} total`;
   const scoreLabel = Number.isFinite(shot.rankScore) ? `Score ${shot.rankScore.toFixed(2)}` : null;
   const anchorLabel = `${Math.max(0, Math.round((shot.anchorSec ?? 0) * 10) / 10)}s`;
+  const thumb = shot.thumbUrl ?? null;
+
+  const handlePreload = useCallback(() => {
+    preloadImage(thumb);
+  }, [thumb]);
 
   return (
     <div className="flex h-full flex-col gap-4 rounded-xl border border-slate-800 bg-slate-900/80 p-4 shadow-sm">
+      {thumb ? (
+        <div className="overflow-hidden rounded-lg border border-slate-800 bg-slate-950/80">
+          <img src={thumb} alt={`Preview for clip ${shot.clipId}`} className="aspect-video w-full object-cover" />
+        </div>
+      ) : null}
       <div className="flex items-start justify-between gap-4">
         <div className="flex flex-col gap-1">
           <span className="text-xs uppercase tracking-wide text-slate-500">{shot.eventId ?? "Top shot"}</span>
@@ -229,6 +240,8 @@ export function TopShotCard({ shot, onPlay }: TopShotCardProps): JSX.Element {
         <button
           type="button"
           onClick={() => onPlay?.(shot)}
+          onMouseEnter={handlePreload}
+          onFocus={handlePreload}
           className="rounded-lg bg-emerald-500 px-4 py-2 text-sm font-semibold text-slate-950 transition hover:bg-emerald-400"
         >
           Play from anchor

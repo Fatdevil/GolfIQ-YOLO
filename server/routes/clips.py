@@ -40,6 +40,7 @@ class RankedClipOut(BaseModel):
     createdAt: str | None = None
     videoUrl: str | None = None
     thumbnailUrl: str | None = None
+    thumbUrl: str | None = None
     aiTitle: str | None = None
     aiSummary: str | None = None
     aiTtsUrl: str | None = None

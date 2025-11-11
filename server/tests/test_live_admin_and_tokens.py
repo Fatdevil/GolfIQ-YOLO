@@ -5,6 +5,7 @@ from fastapi.testclient import TestClient
 
 from server.app import app
 from server.services import live_stream, viewer_token
+from server.utils import media as media_utils
 from server.telemetry import events as telemetry_events
 
 client = TestClient(app, raise_server_exceptions=False)
@@ -18,8 +19,12 @@ def reset_state(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
     monkeypatch.setenv("LIVE_VIEWER_SIGN_KEY", "test-sign-key")
     monkeypatch.delenv("API_KEY", raising=False)
     monkeypatch.delenv("REQUIRE_API_KEY", raising=False)
+    monkeypatch.delenv("MEDIA_CDN_BASE_URL", raising=False)
+    monkeypatch.delenv("MEDIA_ORIGIN_BASE_URL", raising=False)
+    media_utils.reset_media_url_cache()
     yield
     live_stream.reset()
+    media_utils.reset_media_url_cache()
 
 
 @pytest.fixture

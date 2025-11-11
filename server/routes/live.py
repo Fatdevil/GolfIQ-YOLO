@@ -16,6 +16,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from server.auth import require_admin
 from server.security import require_api_key
 from server.services import live_stream, telemetry as telemetry_service, viewer_token
+from server.utils.media import rewrite_media_url
 
 router = APIRouter(
     prefix="/events/{event_id}/live",
@@ -136,6 +137,11 @@ def status_route(
     token: str | None = Query(default=None),
 ) -> dict[str, object | None]:
     status_payload = live_stream.status_live(event_id)
+    live_path = status_payload.get("hlsPath")
+    if live_path:
+        rewritten = rewrite_media_url(str(live_path))
+        if rewritten:
+            status_payload["hlsPath"] = rewritten
     viewer_id: str | None = None
     token_valid = False
     if token:
@@ -149,6 +155,11 @@ def status_route(
         viewer_id = metadata.get("viewerId")
         if token_valid:
             status_payload = live_stream.status_live(event_id)
+            live_path = status_payload.get("hlsPath")
+            if live_path:
+                rewritten = rewrite_media_url(str(live_path))
+                if rewritten:
+                    status_payload["hlsPath"] = rewritten
         else:
             status_payload.pop("hlsPath", None)
         telemetry_service.emit_live_status(

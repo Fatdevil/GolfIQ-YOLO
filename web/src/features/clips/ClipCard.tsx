@@ -1,6 +1,8 @@
 import clsx from 'clsx';
+import { useCallback } from 'react';
 
 import type { ShotClip } from './types';
+import { preloadImage } from '@web/utils/preload';
 
 type ClipCardProps = {
   clip: ShotClip & { sgDelta?: number | null; score?: number | null };
@@ -33,15 +35,21 @@ function resolveBadgeClass(value: number | null | undefined): string {
 
 export function ClipCard({ clip, onSelect }: ClipCardProps): JSX.Element {
   const player = clip.playerName ?? clip.player_name ?? 'Unknown player';
-  const thumbnail = clip.thumbnailUrl ?? clip.thumbnail_url ?? null;
+  const thumbnail = clip.thumbUrl ?? clip.thumbnailUrl ?? clip.thumbnail_url ?? null;
   const sgDelta = clip.sgDelta ?? clip.sg_delta ?? null;
   const sgLabel = formatSgDelta(sgDelta);
   const score = typeof clip.score === 'number' ? clip.score : null;
+
+  const handlePreload = useCallback(() => {
+    preloadImage(thumbnail);
+  }, [thumbnail]);
 
   return (
     <button
       type="button"
       onClick={() => onSelect?.(clip)}
+      onMouseEnter={handlePreload}
+      onFocus={handlePreload}
       className="flex w-full items-stretch gap-4 rounded-lg border border-slate-800 bg-slate-900 p-3 text-left transition hover:border-slate-700 hover:bg-slate-800"
     >
       <div className="flex h-24 w-32 items-center justify-center overflow-hidden rounded bg-slate-800">

@@ -11,6 +11,7 @@ export type HomeFeedTopShot = {
   createdAt: string | null;
   anchorSec: number;
   rankScore: number;
+  thumbUrl?: string | null;
 };
 
 export type HomeFeedLiveEvent = {

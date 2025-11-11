@@ -5,6 +5,16 @@ from datetime import datetime, timezone
 import pytest
 
 from server.routes import feed as feed_routes
+from server.utils import media as media_utils
+
+
+@pytest.fixture(autouse=True)
+def reset_media_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("MEDIA_CDN_BASE_URL", raising=False)
+    monkeypatch.delenv("MEDIA_ORIGIN_BASE_URL", raising=False)
+    media_utils.reset_media_url_cache()
+    yield
+    media_utils.reset_media_url_cache()
 
 
 def test_ensure_float_handles_none_and_invalid() -> None:
@@ -67,3 +77,5 @@ def test_serialize_top_shot_validates_fields() -> None:
     assert serialized["reactions1min"] == 4
     assert serialized["reactionsTotal"] == 10
     assert serialized["anchorSec"] == pytest.approx(3.0)
+    assert "thumbUrl" in serialized
+    assert serialized["thumbUrl"] is None

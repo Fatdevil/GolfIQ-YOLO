@@ -5,6 +5,8 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any, Dict, Iterable, Iterator, Mapping, MutableMapping
 
+from server.utils.media import resolve_thumb_url, rewrite_media_url
+
 
 class ClipNotFoundError(LookupError):
     """Raised when a requested clip could not be located."""
@@ -94,13 +96,23 @@ def update_ai_commentary(
 def to_public(record: Mapping[str, Any]) -> Dict[str, Any]:
     """Map a clip record to the public representation returned by the API."""
 
+    raw_video = record.get("video_url") or record.get("videoUrl")
+    raw_thumbnail = record.get("thumbnail_url") or record.get("thumbnailUrl")
+
+    video_url = rewrite_media_url(str(raw_video)) if raw_video else None
+    thumbnail_url = rewrite_media_url(str(raw_thumbnail)) if raw_thumbnail else None
+    thumb_url = resolve_thumb_url(record)
+    if thumbnail_url is None:
+        thumbnail_url = thumb_url
+
     result: Dict[str, Any] = {
         "id": str(record.get("id")),
         "eventId": record.get("event_id") or record.get("eventId"),
         "playerId": record.get("player_id") or record.get("playerId"),
         "playerName": record.get("player_name") or record.get("playerName"),
-        "videoUrl": record.get("video_url") or record.get("videoUrl"),
-        "thumbnailUrl": record.get("thumbnail_url") or record.get("thumbnailUrl"),
+        "videoUrl": video_url,
+        "thumbnailUrl": thumbnail_url,
+        "thumbUrl": thumb_url,
         "createdAt": record.get("created_at") or record.get("createdAt"),
     }
     if "ai_title" in record or "aiTitle" in record:

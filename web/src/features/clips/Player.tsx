@@ -1,9 +1,13 @@
 import { forwardRef, useImperativeHandle, useMemo, useRef } from 'react';
 
+import { useAttachVideoSource } from '@web/player/useAttachVideoSource';
+
 type ClipPlayerProps = {
   src?: string | null;
   anchors?: number[] | null;
   className?: string;
+  poster?: string | null;
+  live?: boolean;
 };
 
 function formatAnchorLabel(seconds: number): string {
@@ -19,7 +23,7 @@ function formatAnchorLabel(seconds: number): string {
 }
 
 export const ClipPlayer = forwardRef<HTMLVideoElement | null, ClipPlayerProps>(function ClipPlayer(
-  { src, anchors, className }: ClipPlayerProps,
+  { src, anchors, className, poster, live = false }: ClipPlayerProps,
   forwardedRef,
 ) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
@@ -51,9 +55,17 @@ export const ClipPlayer = forwardRef<HTMLVideoElement | null, ClipPlayerProps>(f
     }
   };
 
+  useAttachVideoSource({ videoRef, src, live });
+
   return (
     <div className={className}>
-      <video ref={videoRef} controls className="w-full rounded bg-black" src={src ?? undefined} />
+      <video
+        ref={videoRef}
+        controls
+        className="w-full rounded bg-black"
+        poster={poster ?? undefined}
+        preload="metadata"
+      />
       {sanitizedAnchors.length > 0 ? (
         <div className="mt-2 flex flex-wrap items-center gap-2">
           <span className="text-xs uppercase tracking-wide text-slate-400">Anchors:</span>

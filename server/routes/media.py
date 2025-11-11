@@ -6,6 +6,7 @@ from typing import Any, Dict
 from fastapi import APIRouter, HTTPException, Query
 
 from server.services import media_signer
+from server.utils.media import rewrite_media_url
 
 router = APIRouter(prefix="/media", tags=["media"])
 
@@ -27,4 +28,5 @@ def sign_media(
 
     base = os.getenv("HLS_BASE_URL", "/static")
     url = media_signer.build_url(base, signed)
-    return {"url": url, "exp": signed["exp"]}
+    rewritten = rewrite_media_url(url) or url
+    return {"url": rewritten, "exp": signed["exp"]}

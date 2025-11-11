@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { isAxiosError } from 'axios';
 
-import { postClipCommentary } from '@web/api';
+import { postClipCommentary, postTelemetryEvent } from '@web/api';
 import { useSignedVideoSource } from '@web/media/useSignedVideoSource';
 import { useMediaPlaybackTelemetry } from '@web/media/telemetry';
+import { measureStart } from '@web/metrics/playerTiming';
 
 import { useEventSession, type EventSession } from '../../session/eventSession';
 import type { ShotClip } from './types';
@@ -50,6 +51,10 @@ export function ClipModal({ clip, onClose, onRefetch }: ClipModalProps): JSX.Ele
   const rawVideoUrl = useMemo(() => clip.video_url ?? clip.videoUrl ?? null, [clip]);
   const { url: signedVideoUrl, path: signedPath, signed: hasSignature, exp: signedExp, loading: signing } =
     useSignedVideoSource(rawVideoUrl);
+  const poster = useMemo(
+    () => clip.thumbUrl ?? clip.thumbnailUrl ?? clip.thumbnail_url ?? null,
+    [clip],
+  );
 
   useMediaPlaybackTelemetry(videoRef, {
     clipId: clip.id ?? null,
@@ -59,6 +64,31 @@ export function ClipModal({ clip, onClose, onRefetch }: ClipModalProps): JSX.Ele
     source: 'clip_modal',
     exp: signedExp,
   });
+
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video || !signedVideoUrl) {
+      return () => undefined;
+    }
+    return measureStart(video, { live: false, src: signedVideoUrl }, (timing) => {
+      void postTelemetryEvent({
+        event: 'media.play.start',
+        clipId: clip.id ?? null,
+        path: signedPath,
+        live: timing.live,
+        playStartMs: timing.play_start_ms,
+        src: timing.src,
+        requestedAt: timing.reqTs,
+        firstFrameTs: timing.firstFrameTs,
+        source: 'clip_modal',
+      }).catch((error) => {
+        if (import.meta.env.DEV) {
+          // eslint-disable-next-line no-console
+          console.warn('[clip/modal] play-start telemetry failed', error);
+        }
+      });
+    });
+  }, [clip.id, signedPath, signedVideoUrl]);
 
   useEffect(() => {
     setError(null);
@@ -184,7 +214,7 @@ export function ClipModal({ clip, onClose, onRefetch }: ClipModalProps): JSX.Ele
       </header>
 
       {signedVideoUrl ? (
-        <ClipPlayer ref={videoRef} src={signedVideoUrl} anchors={clip.anchors ?? null} />
+        <ClipPlayer ref={videoRef} src={signedVideoUrl} anchors={clip.anchors ?? null} poster={poster} />
       ) : rawVideoUrl && signing ? (
         <div className="flex h-48 w-full items-center justify-center rounded border border-dashed border-slate-700 text-slate-500">
           Preparing video…
