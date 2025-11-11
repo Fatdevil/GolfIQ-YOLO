@@ -78,7 +78,12 @@ def test_feed_home_shapes(monkeypatch: pytest.MonkeyPatch) -> None:
 
     payload = response.json()
     assert payload["updatedAt"] == "2024-01-02T12:30:00Z"
-    assert payload["etag"] == response.headers["etag"]
+    etag_header = response.headers["etag"]
+    assert etag_header.startswith('"') and etag_header.endswith('"')
+    rep_etag = etag_header.strip('"')
+    snapshot_etag, _, limit_token = rep_etag.partition(";limit=")
+    assert payload["etag"] == snapshot_etag
+    assert limit_token == "5"
 
     top_shots = payload["topShots"]
     assert isinstance(top_shots, list) and len(top_shots) == 3

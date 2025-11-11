@@ -164,6 +164,15 @@ def _compute_etag(payload: dict[str, Any]) -> str:
     return hashlib.sha256(blob).hexdigest()
 
 
+def _norm_etag(value: str | None) -> str | None:
+    if not value:
+        return None
+    normalized = value.strip()
+    if normalized.startswith("W/"):
+        normalized = normalized[2:]
+    return normalized.strip('"') or None
+
+
 def _refresh_snapshot() -> _FeedSnapshot:
     now = _now()
     top_shots = _collect_top_shots(now)
@@ -199,12 +208,14 @@ def read_home_feed(
     telemetry_service.emit_feed_home_requested(limit=clamped_limit)
     snapshot = _get_snapshot()
 
+    rep_etag = f"{snapshot.etag};limit={clamped_limit}"
     headers = {
-        "ETag": snapshot.etag,
+        "ETag": f'"{rep_etag}"',
         "Cache-Control": f"public, max-age={int(_CACHE_TTL_SECONDS)}",
+        "Vary": "Accept, Accept-Encoding",
     }
 
-    if if_none_match and if_none_match == snapshot.etag:
+    if _norm_etag(if_none_match) == rep_etag:
         return Response(status_code=status.HTTP_304_NOT_MODIFIED, headers=headers)
 
     payload = snapshot.as_payload(clamped_limit)

@@ -51,10 +51,14 @@ def test_feed_home_etag_and_ttl(monkeypatch):
 
     response = client.get("/feed/home")
     assert response.status_code == 200
-    etag = response.headers["etag"]
+    etag_header = response.headers["etag"]
     payload = response.json()
-    assert payload["etag"] == etag
+    assert etag_header.startswith('"') and etag_header.endswith('"')
+    rep_etag = etag_header.strip('"')
+    snapshot_etag, _, limit_token = rep_etag.partition(";limit=")
+    assert snapshot_etag == payload["etag"]
+    assert limit_token == "20"
 
-    cached = client.get("/feed/home", headers={"If-None-Match": etag})
+    cached = client.get("/feed/home", headers={"If-None-Match": etag_header})
     assert cached.status_code == 304
-    assert cached.headers["etag"] == etag
+    assert cached.headers["etag"] == etag_header
