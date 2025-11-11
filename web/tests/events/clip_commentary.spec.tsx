@@ -2,7 +2,7 @@ import axios from 'axios';
 import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { useState } from 'react';
-import { beforeAll, describe, expect, it, vi, afterEach } from 'vitest';
+import { beforeAll, beforeEach, describe, expect, it, vi, afterEach } from 'vitest';
 
 import { postClipCommentary, API } from '@web/api';
 import { ClipModal } from '@web/features/clips/ClipModal';
@@ -14,6 +14,7 @@ import { EventSessionContext } from '@web/session/eventSession';
 afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
+  vi.unstubAllGlobals();
 });
 
 beforeAll(() => {
@@ -27,6 +28,10 @@ beforeAll(() => {
     writable: true,
     value: vi.fn(),
   });
+});
+
+beforeEach(() => {
+  vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false, status: 404, json: async () => ({}) }));
 });
 
 describe('postClipCommentary', () => {

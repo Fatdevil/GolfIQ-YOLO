@@ -16,6 +16,7 @@ from fastapi import (
     File,
     Form,
     HTTPException,
+    Query,
     Request,
     UploadFile,
 )
@@ -266,13 +267,33 @@ async def get_shared_run(run_id: str, request: Request):
 
 
 @router.post("/upload-url")
-async def create_upload_url(payload: UploadUrlRequest) -> Dict[str, Any]:
+async def create_upload_url(
+    payload: UploadUrlRequest, version: str | None = Query(default=None)
+) -> Dict[str, Any]:
     backend = os.getenv("STORAGE_BACKEND", "fs").strip().lower() or "fs"
     ttl_days = int(os.getenv("RUNS_TTL_DAYS", "30") or "30")
     key = _make_key(payload.run_id)
+    requested_version = (
+        (version or os.getenv("UPLOAD_PRESIGN_VERSION", "v1") or "v1").strip().lower()
+    )
+    if requested_version not in {"v1", "v2"}:
+        requested_version = "v1"
 
     if backend == "s3":
         presigned = get_presigned_put(key, ttl_days)
+        if requested_version == "v2":
+            fields: Dict[str, Any] = {"key": key}
+            headers = presigned.get("headers") or {}
+            if isinstance(headers, dict):
+                content_type = headers.get("Content-Type") or headers.get(
+                    "content-type"
+                )
+                if content_type:
+                    fields["contentType"] = content_type
+            policy = presigned.get("policy")
+            if policy:
+                fields["policy"] = policy
+            return {"url": presigned["url"], "fields": fields}
         return {
             "backend": "s3",
             "url": presigned["url"],
