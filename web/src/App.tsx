@@ -23,6 +23,7 @@ import EventClipsAdminQueue from "./pages/events/[id]/admin/clips";
 import EventClipModerationPage from "./pages/events/[id]/admin/moderation";
 import EventLiveHostPage from "./pages/events/[id]/live-host";
 import EventLiveViewerPage from "./pages/events/[id]/live-view";
+import LiveViewerPage from "./pages/events/LiveViewerPage";
 import EventTopShotsPage from "./pages/events/[id]/top-shots";
 import HomeFeed from "./pages/home/HomeFeed";
 import { EventSessionBoundary } from "./session/EventSessionBoundary";
@@ -47,6 +48,14 @@ export default function App() {
           <Route path="/events/new" element={<CreateEventPage />} />
           <Route
             path="/events/:id/live"
+            element={
+              <EventSessionBoundary>
+                <LiveViewerPage />
+              </EventSessionBoundary>
+            }
+          />
+          <Route
+            path="/events/:id/live/leaderboard"
             element={
               <EventSessionBoundary>
                 <LiveLeaderboardPage />

@@ -14,8 +14,15 @@ except ImportError:  # pragma: no cover
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 
 from server.auth import require_admin
+from server.config import LIVE_HEARTBEAT_TTL_SEC, LIVE_LATENCY_MODE
+from server.schemas.live import LiveState
 from server.security import require_api_key
-from server.services import live_stream, telemetry as telemetry_service, viewer_token
+from server.services import (
+    live_state,
+    live_stream,
+    telemetry as telemetry_service,
+    viewer_token,
+)
 from server.utils.media import rewrite_media_url
 
 router = APIRouter(
@@ -57,6 +64,20 @@ def _check_exchange_rate_limit(event_id: str, request: Request) -> None:
     entries.append(now)
 
 
+def _build_live_state(event_id: str) -> LiveState:
+    state = live_state.as_state(
+        event_id,
+        ttl_seconds=LIVE_HEARTBEAT_TTL_SEC,
+        default_latency=LIVE_LATENCY_MODE,
+    )
+    viewer_url = state.viewerUrl
+    if viewer_url:
+        rewritten = rewrite_media_url(viewer_url)
+        if rewritten:
+            state = state.model_copy(update={"viewerUrl": rewritten})
+    return state
+
+
 class StartLiveRequest(BaseModel):
     source: str = "mock"
 
@@ -67,6 +88,34 @@ class MintTokenRequest(BaseModel):
 
 class ExchangeInviteRequest(BaseModel):
     invite: str
+
+
+class HeartbeatRequest(BaseModel):
+    streamId: str | None = None
+    viewerUrl: str | None = None
+    latencyMode: str | None = None
+
+
+@router.get("", response_model=LiveState)
+def live_state_route(event_id: str) -> LiveState:
+    return _build_live_state(event_id)
+
+
+@router.post("/heartbeat", response_model=LiveState)
+def live_heartbeat_route(
+    event_id: str,
+    body: HeartbeatRequest | None = None,
+    member_id: str | None = Depends(require_admin),
+) -> LiveState:
+    _ = member_id
+    payload = body or HeartbeatRequest()
+    live_state.upsert(
+        event_id,
+        stream_id=payload.streamId,
+        viewer_url=payload.viewerUrl,
+        latency_mode=payload.latencyMode,
+    )
+    return _build_live_state(event_id)
 
 
 @router.post("/start")
@@ -95,7 +144,9 @@ def stop_live_route(
     event_id: str, member_id: str | None = Depends(require_admin)
 ) -> dict[str, bool]:
     _ = member_id
-    return live_stream.stop_live(event_id)
+    result = live_stream.stop_live(event_id)
+    live_state.mark_offline(event_id)
+    return result
 
 
 @router.post("/token")

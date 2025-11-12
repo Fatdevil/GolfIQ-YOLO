@@ -4,6 +4,7 @@ import { useParams } from 'react-router-dom';
 import {
   createViewerLink,
   getLiveStatus,
+  postLiveHeartbeat,
   startLive,
   stopLive,
   type LiveStatusResponse,
@@ -51,6 +52,39 @@ export default function EventLiveHostPage(): JSX.Element {
 
   const running = status?.running === true;
   const startedAt = status?.startedAt ? new Date(status.startedAt) : null;
+
+  useEffect(() => {
+    if (!eventId || !running || !isAdmin || controlsDisabled) {
+      return () => undefined;
+    }
+    let cancelled = false;
+    const HEARTBEAT_MS = 20_000;
+
+    const sendHeartbeat = async () => {
+      try {
+        await postLiveHeartbeat(eventId, session.memberId, {
+          streamId: status?.hlsPath ?? undefined,
+          viewerUrl: status?.hlsPath ?? undefined,
+        });
+      } catch (error) {
+        if (import.meta.env.DEV) {
+          console.warn('[live/host] heartbeat failed', error);
+        }
+      }
+    };
+
+    void sendHeartbeat();
+    const timer = window.setInterval(() => {
+      if (!cancelled) {
+        void sendHeartbeat();
+      }
+    }, HEARTBEAT_MS);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [controlsDisabled, eventId, isAdmin, running, session.memberId, status?.hlsPath]);
 
   const handleStart = useCallback(async () => {
     if (!eventId || !isAdmin || controlsDisabled) {
