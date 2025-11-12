@@ -14,6 +14,15 @@ export type LiveStatusResponse = {
   hlsPath?: string | null;
 };
 
+export type LiveStateResponse = {
+  isLive: boolean;
+  viewerUrl: string | null;
+  startedTs: number | null;
+  updatedTs: number | null;
+  streamId: string | null;
+  latencyMode: string | null;
+};
+
 export const startLive = (
   eventId: string,
   memberId: string | null | undefined,
@@ -72,6 +81,30 @@ export const createViewerLink = (
   axios
     .get<CreateViewerLinkResponse>(`${API}/events/${eventId}/live/viewer_link`, {
       headers: withAdminHeaders({ memberId: memberId ?? undefined }),
+    })
+    .then((response) => response.data);
+
+export const getLiveState = (eventId: string) =>
+  axios
+    .get<LiveStateResponse>(`${API}/events/${eventId}/live`, {
+      headers: withAuth(),
+    })
+    .then((response) => response.data);
+
+export type LiveHeartbeatBody = {
+  streamId?: string | null;
+  viewerUrl?: string | null;
+  latencyMode?: string | null;
+};
+
+export const postLiveHeartbeat = (
+  eventId: string,
+  memberId: string | null | undefined,
+  body: LiveHeartbeatBody = {},
+) =>
+  axios
+    .post<LiveStateResponse>(`${API}/events/${eventId}/live/heartbeat`, body, {
+      headers: withAdminHeaders({ memberId: memberId ?? undefined, includeJson: true }),
     })
     .then((response) => response.data);
 

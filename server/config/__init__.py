@@ -18,6 +18,8 @@ __all__ = [
     "MAX_ZIP_FILES",
     "MAX_ZIP_RATIO",
     "MAX_ZIP_SIZE_BYTES",
+    "LIVE_HEARTBEAT_TTL_SEC",
+    "LIVE_LATENCY_MODE",
     "coerce_boolish",
     "env_bool",
     "get_settings",
@@ -81,6 +83,9 @@ MAX_ZIP_SIZE_BYTES: int = _int_env("MAX_ZIP_SIZE_BYTES", 50_000_000)
 MAX_ZIP_FILES: int = _int_env("MAX_ZIP_FILES", 400)
 MAX_ZIP_RATIO: float = _float_env("MAX_ZIP_RATIO", 200.0)
 MAX_VIDEO_BYTES: int = _int_env("MAX_VIDEO_BYTES", 80_000_000)
+
+LIVE_HEARTBEAT_TTL_SEC: int = _int_env("LIVE_HEARTBEAT_TTL_SEC", 120)
+LIVE_LATENCY_MODE: str = os.getenv("LIVE_LATENCY_MODE", "ll-hls").strip() or "ll-hls"
 
 ENABLE_SPIN: bool = env_bool("ENABLE_SPIN", False)
 CAPTURE_IMPACT_FRAMES: bool = env_bool("CAPTURE_IMPACT_FRAMES", True)

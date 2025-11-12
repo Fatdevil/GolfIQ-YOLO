@@ -78,7 +78,7 @@ describe("HomeFeed", () => {
 
     await user.click(screen.getByRole("button", { name: "Play from anchor" }));
     expect(mockClickClip).toHaveBeenCalledWith({ clipId: "clip-1", eventId: "evt-1", anchorSec: 8 });
-    await user.click(screen.getByRole("button", { name: "Watch" }));
+    await user.click(screen.getByRole("button", { name: "Open live viewer" }));
     expect(mockClickWatch).toHaveBeenCalledWith({ eventId: "evt-live", livePath: "/hls/evt-live/master.m3u8" });
     expect(mockRendered).toHaveBeenCalledWith({ topCount: 1, liveCount: 1 });
   });

@@ -91,7 +91,7 @@ export default function HomeFeed(): JSX.Element {
       emitFeedClickWatch({ eventId: event.eventId, livePath: event.livePath });
       const params = new URLSearchParams();
       params.set("source", "feed");
-      navigate(`/events/${event.eventId}/live-view?${params.toString()}`);
+      navigate(`/events/${event.eventId}/live?${params.toString()}`);
     },
     [navigate],
   );
@@ -272,8 +272,9 @@ function LiveEventCard({ event, onWatch }: LiveEventCardProps): JSX.Element {
         type="button"
         onClick={onWatch}
         className="self-start rounded-lg bg-emerald-500 px-4 py-2 text-sm font-semibold text-slate-950 transition hover:bg-emerald-400 md:self-auto"
+        aria-label="Open live viewer"
       >
-        Watch
+        Watch live
       </button>
     </div>
   );
