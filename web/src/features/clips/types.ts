@@ -1,3 +1,11 @@
+export type ClipAnchorRef = {
+  runId: string;
+  hole: number;
+  shot: number;
+  tStartMs: number;
+  tEndMs: number;
+};
+
 export type ShotClip = {
   id: string;
   event_id?: string;
@@ -25,4 +33,5 @@ export type ShotClip = {
   coachMode?: boolean;
   hidden?: boolean;
   visibility?: 'private' | 'event' | 'friends' | 'public';
+  anchorRefs?: ClipAnchorRef[];
 };

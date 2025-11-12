@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any, Dict, Iterable, Iterator, Mapping, MutableMapping
 
+from server.services import anchors_store
 from server.utils.media import resolve_thumb_url, rewrite_media_url
 
 
@@ -129,6 +130,20 @@ def to_public(record: Mapping[str, Any]) -> Dict[str, Any]:
     anchors = record.get("anchors") or record.get("anchorsSec")
     if anchors is not None:
         result["anchors"] = [float(a) for a in anchors if _is_number(a)]
+    clip_id = str(record.get("id")) if record.get("id") is not None else None
+    if clip_id:
+        anchor_refs = [
+            {
+                "runId": anchor.runId,
+                "hole": anchor.hole,
+                "shot": anchor.shot,
+                "tStartMs": anchor.tStartMs,
+                "tEndMs": anchor.tEndMs,
+            }
+            for anchor in anchors_store.list_by_clip(clip_id)
+        ]
+        if anchor_refs:
+            result["anchorRefs"] = anchor_refs
     return result
 
 

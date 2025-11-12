@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from threading import Lock
 from time import time
-from typing import Dict, Tuple
+from typing import Dict, Iterable, Tuple
 
 from server.schemas.anchors import AnchorIn, AnchorOut
 
@@ -27,6 +27,16 @@ def list_run(run_id: str) -> list[AnchorOut]:
 def get_one(run_id: str, hole: int, shot: int) -> AnchorOut | None:
     with _ANCHORS_LOCK:
         return _ANCHORS.get(_key(run_id, hole, shot))
+
+
+def list_by_clip(clip_id: str) -> list[AnchorOut]:
+    with _ANCHORS_LOCK:
+        matches: Iterable[AnchorOut] = (
+            anchor for anchor in _ANCHORS.values() if anchor.clipId == clip_id
+        )
+        return sorted(
+            matches, key=lambda anchor: (anchor.runId, anchor.hole, anchor.shot)
+        )
 
 
 def create_or_confirm(run_id: str, anchor: AnchorIn) -> tuple[AnchorOut, bool]:
@@ -111,5 +121,6 @@ __all__ = [
     "create_or_confirm",
     "get_one",
     "list_run",
+    "list_by_clip",
     "patch_one",
 ]
