@@ -110,3 +110,26 @@ if (typeof document !== 'undefined' && !(document as any).startViewTransition) {
     return { finished: Promise.resolve() };
   };
 }
+
+class MockEventSource {
+  url: string;
+  onmessage: ((event: MessageEvent) => void) | null = null;
+  onerror: ((event: Event) => void) | null = null;
+
+  constructor(url: string) {
+    this.url = url;
+    (globalAny as any).__es = this;
+  }
+
+  addEventListener(_event: string, handler: EventListener) {
+    this.onmessage = handler as (event: MessageEvent) => void;
+  }
+
+  removeEventListener(_event: string, _handler: EventListener) {}
+
+  close() {}
+}
+
+if (!globalAny.EventSource) {
+  globalAny.EventSource = MockEventSource as unknown as typeof EventSource;
+}
