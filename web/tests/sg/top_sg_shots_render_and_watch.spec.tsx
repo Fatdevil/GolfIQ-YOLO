@@ -90,7 +90,7 @@ describe('TopSGShots', () => {
   it('renders positive deltas sorted descending and dispatches watch event', async () => {
     const dispatchSpy = vi.spyOn(window, 'dispatchEvent');
 
-    render(<TopSGShots runId={runId} />);
+    render(<TopSGShots runId={runId} isClipVisible={() => true} />);
 
     const items = await screen.findAllByRole('listitem');
     expect(items).toHaveLength(3);

@@ -1,5 +1,6 @@
 import * as React from 'react';
 
+import { useEventContext } from '@web/events/context';
 import { openAndSeekTo } from '@web/player/seek';
 import { useAnchors, useRunSG, type Anchor, type RunSG } from '@web/sg/hooks';
 import { SGDeltaBadge } from '@web/sg/SGDeltaBadge';
@@ -63,6 +64,8 @@ export function TopSGShots({ runId, limit = 5, isClipVisible, title = 'Top SG sh
   const normalizedRunId = typeof runId === 'string' && runId.trim() ? runId.trim() : '';
   const { data: sg, loading: sgLoading, error: sgError } = useRunSG(normalizedRunId);
   const { data: anchors, loading: anchorLoading, error: anchorError } = useAnchors(normalizedRunId);
+  const eventContext = useEventContext();
+  const visibilityGuard = isClipVisible ?? eventContext.isClipVisible;
 
   const anchorMap = React.useMemo(() => {
     const map = new Map<string, Anchor>();
@@ -79,8 +82,8 @@ export function TopSGShots({ runId, limit = 5, isClipVisible, title = 'Top SG sh
   }, [anchors]);
 
   const topShots = React.useMemo(
-    () => positiveDeltaShots(sg, anchorMap, limit, isClipVisible),
-    [sg, anchorMap, limit, isClipVisible],
+    () => positiveDeltaShots(sg, anchorMap, limit, visibilityGuard),
+    [sg, anchorMap, limit, visibilityGuard],
   );
 
   const handleWatch = React.useCallback(

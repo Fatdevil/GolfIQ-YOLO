@@ -15,14 +15,14 @@ type EventContextValue = {
   eventId: string;
   members: EventMember[];
   runs: EventRun[];
-  isClipVisible?: (clipId: string) => boolean;
+  isClipVisible: (clipId: string) => boolean;
 };
 
 const DEFAULT_CONTEXT: EventContextValue = {
   eventId: '',
   members: [],
   runs: [],
-  isClipVisible: undefined,
+  isClipVisible: () => false,
 };
 
 const EventContext = React.createContext<EventContextValue>(DEFAULT_CONTEXT);

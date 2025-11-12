@@ -16,8 +16,11 @@ import { ensureClient, isSupabaseConfigured } from '@shared/supabase/client';
 import { LiveBadge } from '@web/features/live/LiveBadge';
 import { useLiveStatus } from '@web/features/live/useLiveStatus';
 import { EventContextProvider } from '@web/events/context';
+import { makeIsClipVisible } from '@web/features/clips/visibilityPolicy';
+import { useEventClipVisibility } from '@web/features/clips/useEventClipVisibility';
 import { EventSGLeaderboard } from '@web/sg/EventSGLeaderboard';
 import { EventTopSGShots } from '@web/sg/EventTopSGShots';
+import { useEventSession } from '@web/session/eventSession';
 
 const DEFAULT_ALLOWANCE: Record<ScoringFormat, number> = {
   stroke: 95,
@@ -69,6 +72,7 @@ export default function EventLeaderboardPage() {
   const [error, setError] = useState<string | null>(null);
   const [configured, setConfigured] = useState(true);
   const liveStatus = useLiveStatus(id ?? null, { pollMs: 10000 });
+  const session = useEventSession();
 
   useEffect(() => {
     if (!id) {
@@ -316,13 +320,21 @@ export default function EventLeaderboardPage() {
     return null;
   }
 
+  const clipVisibility = useEventClipVisibility(event.id ?? null, session);
+  const viewer = useMemo(
+    () => ({ inEvent: session.role === 'admin' || Boolean(session.memberId) }),
+    [session.memberId, session.role],
+  );
+  const isClipVisible = useMemo(() => makeIsClipVisible(clipVisibility.get, viewer), [clipVisibility.get, viewer]);
+
   const contextValue = useMemo(
     () => ({
       eventId: event.id,
       members: eventMembers,
       runs: eventRuns,
+      isClipVisible,
     }),
-    [event.id, eventMembers, eventRuns],
+    [event.id, eventMembers, eventRuns, isClipVisible],
   );
 
   const content = (

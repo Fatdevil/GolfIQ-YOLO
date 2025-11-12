@@ -63,6 +63,7 @@ describe('EventSGLeaderboard', () => {
             { memberId: 'player-a', runId: 'run-a' },
             { memberId: 'player-b', runId: 'run-b' },
           ],
+          isClipVisible: () => true,
         }}
       >
         <EventSGLeaderboard />
