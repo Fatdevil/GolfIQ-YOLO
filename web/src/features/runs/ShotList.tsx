@@ -3,6 +3,7 @@ import { useMemo } from 'react';
 import SGDeltaBadge from '@web/sg/SGDeltaBadge';
 import { openAndSeekTo } from '@web/player/seek';
 import { useAnchors, useRunSG } from '@web/sg/hooks';
+import { isClipVisible } from '@web/sg/visibility';
 
 export type ShotModerationState = {
   hole: number;
@@ -13,15 +14,6 @@ export type ShotModerationState = {
 };
 
 const keyFor = (hole: number, shot: number) => `${hole}:${shot}`;
-
-const isClipVisible = (state: Pick<ShotModerationState, 'hidden' | 'visibility'> | undefined): boolean => {
-  if (!state) return true;
-  if (state.hidden) return false;
-  if (state.visibility && state.visibility !== 'public') {
-    return false;
-  }
-  return true;
-};
 
 type ShotListProps = {
   runId?: string | null;

@@ -45,90 +45,143 @@ export async function fetchAnchors(runId: string): Promise<Anchor[]> {
 /** Tiny cache-in-memory for a session; bust on route change if needed */
 const _cache = new Map<string, unknown>();
 
+const sgCacheKey = (runId: string) => `sg:${runId}`;
+const anchorCacheKey = (runId: string) => `anc:${runId}`;
+
+export function getCachedRunSG(runId: string): RunSG | undefined {
+  if (!runId) {
+    return undefined;
+  }
+  return _cache.get(sgCacheKey(runId)) as RunSG | undefined;
+}
+
+export function setCachedRunSG(runId: string, value: RunSG): void {
+  if (!runId) {
+    return;
+  }
+  _cache.set(sgCacheKey(runId), value);
+}
+
+export function getCachedAnchors(runId: string): Anchor[] | undefined {
+  if (!runId) {
+    return undefined;
+  }
+  return _cache.get(anchorCacheKey(runId)) as Anchor[] | undefined;
+}
+
+export function setCachedAnchors(runId: string, value: Anchor[]): void {
+  if (!runId) {
+    return;
+  }
+  _cache.set(anchorCacheKey(runId), value);
+}
+
 export function useRunSG(runId: string) {
-  const cacheKey = React.useMemo(() => (runId ? `sg:${runId}` : ''), [runId]);
-  const initialData = React.useMemo(() => {
-    if (!cacheKey) return undefined;
-    return _cache.get(cacheKey) as RunSG | undefined;
-  }, [cacheKey]);
+  const normalizedRunId = typeof runId === 'string' && runId ? runId : '';
+  const initialData = React.useMemo(() => getCachedRunSG(normalizedRunId), [normalizedRunId]);
 
   const [data, setData] = React.useState<RunSG | undefined>(initialData);
-  const [loading, setLoading] = React.useState(!initialData && !!runId);
+  const [loading, setLoading] = React.useState(!initialData && !!normalizedRunId);
   const [error, setError] = React.useState<Error | undefined>();
 
   React.useEffect(() => {
-    if (!runId || !cacheKey) {
+    if (!normalizedRunId) {
+      setData(undefined);
+      setLoading(false);
+      setError(undefined);
       return undefined;
     }
-    let alive = true;
-    if (!data) {
-      (async () => {
-        try {
-          setLoading(true);
-          const value = await fetchRunSG(runId);
-          if (!alive) return;
-          _cache.set(cacheKey, value);
-          setData(value);
-          setError(undefined);
-        } catch (err) {
-          if (alive) {
-            setError(err as Error);
-          }
-        } finally {
-          if (alive) {
-            setLoading(false);
-          }
-        }
-      })();
+
+    const cached = getCachedRunSG(normalizedRunId);
+    if (cached) {
+      setData(cached);
+      setLoading(false);
+      setError(undefined);
+      return undefined;
     }
+
+    let alive = true;
+    setLoading(true);
+
+    (async () => {
+      try {
+        const value = await fetchRunSG(normalizedRunId);
+        if (!alive) {
+          return;
+        }
+        setCachedRunSG(normalizedRunId, value);
+        setData(value);
+        setError(undefined);
+      } catch (err) {
+        if (alive) {
+          setError(err as Error);
+        }
+      } finally {
+        if (alive) {
+          setLoading(false);
+        }
+      }
+    })();
+
     return () => {
       alive = false;
     };
-  }, [cacheKey, data, runId]);
+  }, [normalizedRunId]);
 
   return { data, loading, error };
 }
 
 export function useAnchors(runId: string) {
-  const cacheKey = React.useMemo(() => (runId ? `anc:${runId}` : ''), [runId]);
-  const initialData = React.useMemo(() => {
-    if (!cacheKey) return undefined;
-    return _cache.get(cacheKey) as Anchor[] | undefined;
-  }, [cacheKey]);
+  const normalizedRunId = typeof runId === 'string' && runId ? runId : '';
+  const initialData = React.useMemo(() => getCachedAnchors(normalizedRunId), [normalizedRunId]);
 
   const [data, setData] = React.useState<Anchor[] | undefined>(initialData);
-  const [loading, setLoading] = React.useState(!initialData && !!runId);
+  const [loading, setLoading] = React.useState(!initialData && !!normalizedRunId);
   const [error, setError] = React.useState<Error | undefined>();
 
   React.useEffect(() => {
-    if (!runId || !cacheKey) {
+    if (!normalizedRunId) {
+      setData(undefined);
+      setLoading(false);
+      setError(undefined);
       return undefined;
     }
-    let alive = true;
-    if (!data) {
-      (async () => {
-        try {
-          setLoading(true);
-          const value = await fetchAnchors(runId);
-          if (!alive) return;
-          _cache.set(cacheKey, value);
-          setData(value);
-          setError(undefined);
-        } catch (err) {
-          if (alive) {
-            setError(err as Error);
-          }
-        } finally {
-          if (alive) {
-            setLoading(false);
-          }
-        }
-      })();
+
+    const cached = getCachedAnchors(normalizedRunId);
+    if (cached) {
+      setData(cached);
+      setLoading(false);
+      setError(undefined);
+      return undefined;
     }
+
+    let alive = true;
+    setLoading(true);
+
+    (async () => {
+      try {
+        const value = await fetchAnchors(normalizedRunId);
+        if (!alive) {
+          return;
+        }
+        setCachedAnchors(normalizedRunId, value);
+        setData(value);
+        setError(undefined);
+      } catch (err) {
+        if (alive) {
+          setError(err as Error);
+        }
+      } finally {
+        if (alive) {
+          setLoading(false);
+        }
+      }
+    })();
+
     return () => {
       alive = false;
     };
-  }, [cacheKey, data, runId]);
+  }, [normalizedRunId]);
 
   return { data, loading, error };
 }
