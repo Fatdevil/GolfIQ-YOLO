@@ -12,6 +12,8 @@ from . import (
     sg,
     telemetry,
     viewer_token,
+    watch_devices,
+    watch_tip_bus,
 )
 
 __all__ = [
@@ -26,4 +28,6 @@ __all__ = [
     "sg",
     "telemetry",
     "viewer_token",
+    "watch_devices",
+    "watch_tip_bus",
 ]

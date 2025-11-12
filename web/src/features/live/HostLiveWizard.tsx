@@ -1,12 +1,14 @@
 import * as React from 'react';
 
 import { API, getApiKey, postTelemetryEvent } from '@web/api';
+import PairWatchDialog from '@web/watch/PairWatchDialog';
 import { useEventSession } from '@web/session/eventSession';
 import { copyToClipboard } from '@web/utils/copy';
 
 const POLL_MS = 5_000;
 const HEARTBEAT_MS = 20_000;
 const REFRESH_THRESHOLD_SEC = 35;
+const WATCH_FEATURE_ENABLED = import.meta.env.VITE_FEATURE_WATCH === '1' || import.meta.env.DEV;
 
 type LiveStateResponse = {
   isLive: boolean;
@@ -117,6 +119,7 @@ export default function HostLiveWizard({ eventId }: { eventId: string }): JSX.El
   const [token, setToken] = React.useState<Token | null>(null);
   const [error, setError] = React.useState<string | undefined>();
   const [remaining, setRemaining] = React.useState<number>(0);
+  const [pairDialogOpen, setPairDialogOpen] = React.useState(false);
 
   const tokenRef = React.useRef<Token | null>(null);
   const refreshingRef = React.useRef(false);
@@ -390,6 +393,27 @@ export default function HostLiveWizard({ eventId }: { eventId: string }): JSX.El
       )}
 
       {error ? <div className="text-xs text-rose-400">Error: {error}</div> : null}
+
+      {WATCH_FEATURE_ENABLED ? (
+        <div className="flex justify-end">
+          <button
+            type="button"
+            className="rounded border border-slate-700 px-2 py-1 text-xs font-semibold text-emerald-300 hover:border-emerald-400 disabled:cursor-not-allowed disabled:opacity-60"
+            onClick={() => setPairDialogOpen(true)}
+            disabled={!session.memberId}
+          >
+            Pair Watch
+          </button>
+        </div>
+      ) : null}
+
+      {WATCH_FEATURE_ENABLED ? (
+        <PairWatchDialog
+          open={pairDialogOpen}
+          onClose={() => setPairDialogOpen(false)}
+          memberId={session.memberId}
+        />
+      ) : null}
     </div>
   );
 }

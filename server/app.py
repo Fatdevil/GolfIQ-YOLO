@@ -22,6 +22,7 @@ from server.api.routers.coach_feedback import router as coach_feedback_router
 from server.api.routers.live_tokens import router as live_tokens_router
 from server.api.routers.sg import router as sg_router
 from server.api.routers.share import router as share_router
+from server.api.routers.watch_pairing import router as watch_pairing_router
 from server.api.routers.watch_tips import router as watch_tips_router
 from server.metrics import MetricsMiddleware, metrics_app
 from server.retention.sweeper import sweep_retention_once, sweep_upload_retention
@@ -146,6 +147,7 @@ app.include_router(live_tokens_router)
 app.include_router(sg_router)
 app.include_router(share_router)
 app.include_router(watch_tips_router)
+app.include_router(watch_pairing_router)
 if os.getenv("APP_ENV", "").lower() not in {"production", "prod"}:
     from server.dev.seed_s16 import router as seed_s16_router
 
