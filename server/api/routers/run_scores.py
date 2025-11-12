@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import time
+from threading import Lock
 from typing import Any, Dict
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -26,6 +27,7 @@ class ScoreEventBody(BaseModel):
 
 
 _RECORDED_EVENTS: dict[str, dict[str, Dict[str, Any]]] = {}
+_RECORDED_EVENTS_LOCK = Lock()
 
 
 @router.post("/{run_id}/score", status_code=status.HTTP_200_OK)
@@ -36,17 +38,18 @@ def submit_score_event(run_id: str, body: ScoreEventBody) -> Dict[str, str]:
     if not dedupe_key:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="dedupeKey required")
 
-    events_for_run = _RECORDED_EVENTS.setdefault(run_id, {})
-    if dedupe_key in events_for_run:
-        return {"status": "ok", "dedupe": dedupe_key}
+    with _RECORDED_EVENTS_LOCK:
+        events_for_run = _RECORDED_EVENTS.setdefault(run_id, {})
+        if dedupe_key in events_for_run:
+            return {"status": "ok", "dedupe": dedupe_key}
 
-    events_for_run[dedupe_key] = {
-        "ts": body.ts,
-        "kind": body.kind,
-        "payload": body.payload,
-        "recordedAt": time.time(),
-    }
-    return {"status": "ok", "dedupe": dedupe_key}
+        events_for_run[dedupe_key] = {
+            "ts": body.ts,
+            "kind": body.kind,
+            "payload": body.payload,
+            "recordedAt": time.time(),
+        }
+        return {"status": "ok", "dedupe": dedupe_key}
 
 
 def _reset_state() -> None:

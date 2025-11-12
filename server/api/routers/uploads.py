@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import time
 import uuid
+from threading import Lock
 from typing import Any, Dict
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
@@ -39,6 +40,7 @@ class FinalizeResponse(BaseModel):
 
 
 _FINALIZED_CLIPS: dict[str, FinalizeResponse] = {}
+_FINALIZED_CLIPS_LOCK = Lock()
 
 
 @router.post("/presign", response_model=PresignResponse)
@@ -79,14 +81,15 @@ def finalize_upload(body: FinalizeRequest) -> FinalizeResponse:
     if not dedupe_key:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, detail="dedupeKey required")
 
-    existing = _FINALIZED_CLIPS.get(dedupe_key)
-    if existing:
-        return existing
+    with _FINALIZED_CLIPS_LOCK:
+        existing = _FINALIZED_CLIPS.get(dedupe_key)
+        if existing:
+            return existing
 
-    clip_id = _generate_clip_id(body.clipMeta)
-    response = FinalizeResponse(clipId=clip_id)
-    _FINALIZED_CLIPS[dedupe_key] = response
-    return response
+        clip_id = _generate_clip_id(body.clipMeta)
+        response = FinalizeResponse(clipId=clip_id)
+        _FINALIZED_CLIPS[dedupe_key] = response
+        return response
 
 
 def _make_object_key() -> str:
