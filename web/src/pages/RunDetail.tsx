@@ -14,6 +14,8 @@ import { useSignedVideoSource } from "@web/media/useSignedVideoSource";
 import { useMediaPlaybackTelemetry } from "@web/media/telemetry";
 import { openAndSeekTo } from "@web/player/seek";
 import { ShotList, type ShotModerationState } from "@web/features/runs/ShotList";
+import { TopSGShots } from "@web/sg/TopSGShots";
+import { isClipVisible as moderationAllowsClip } from "@web/sg/visibility";
 
 interface RunDetailData {
   run_id?: string;
@@ -144,6 +146,24 @@ export default function RunDetailPage() {
 
     return Array.from(map.values());
   }, [data]);
+
+  const clipVisibilityByClipId = useMemo(() => {
+    const map = new Map<string, Pick<ShotModerationState, "hidden" | "visibility">>();
+    shotStates.forEach((entry) => {
+      if (entry?.clipId) {
+        map.set(entry.clipId, entry);
+      }
+    });
+    return map;
+  }, [shotStates]);
+
+  const resolveClipVisible = useCallback(
+    (clipId: string) => {
+      const state = clipVisibilityByClipId.get(clipId);
+      return moderationAllowsClip(state);
+    },
+    [clipVisibilityByClipId],
+  );
 
   useMediaPlaybackTelemetry(backViewVideoRef, {
     clipId: null,
@@ -533,6 +553,10 @@ export default function RunDetailPage() {
           {error}
         </div>
       )}
+
+      {!loading && resolvedRunId ? (
+        <TopSGShots runId={resolvedRunId} isClipVisible={resolveClipVisible} />
+      ) : null}
 
       {!loading && resolvedRunId ? (
         <ShotList

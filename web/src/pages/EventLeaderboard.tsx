@@ -15,6 +15,12 @@ import { recordLeaderboardViewedWeb } from '@shared/events/telemetry';
 import { ensureClient, isSupabaseConfigured } from '@shared/supabase/client';
 import { LiveBadge } from '@web/features/live/LiveBadge';
 import { useLiveStatus } from '@web/features/live/useLiveStatus';
+import { EventContextProvider } from '@web/events/context';
+import { makeIsClipVisible } from '@web/features/clips/visibilityPolicy';
+import { useEventClipVisibility } from '@web/features/clips/useEventClipVisibility';
+import { EventSGLeaderboard } from '@web/sg/EventSGLeaderboard';
+import { EventTopSGShots } from '@web/sg/EventTopSGShots';
+import { useEventSession } from '@web/session/eventSession';
 
 const DEFAULT_ALLOWANCE: Record<ScoringFormat, number> = {
   stroke: 95,
@@ -66,6 +72,7 @@ export default function EventLeaderboardPage() {
   const [error, setError] = useState<string | null>(null);
   const [configured, setConfigured] = useState(true);
   const liveStatus = useLiveStatus(id ?? null, { pollMs: 10000 });
+  const session = useEventSession();
 
   useEffect(() => {
     if (!id) {
@@ -198,6 +205,27 @@ export default function EventLeaderboardPage() {
   }, [id]);
 
   const activeFormat = useMemo(() => resolveFormat(event, leaderboard), [event, leaderboard]);
+  const eventMembers = useMemo(
+    () =>
+      Object.values(participants).map((participant) => ({
+        id: participant.user_id,
+        name:
+          typeof participant.display_name === 'string' && participant.display_name.trim()
+            ? participant.display_name
+            : participant.user_id,
+      })),
+    [participants],
+  );
+  const eventRuns = useMemo(
+    () =>
+      Object.values(participants)
+        .map((participant) => ({
+          memberId: participant.user_id,
+          runId: typeof participant.round_id === 'string' ? participant.round_id : '',
+        }))
+        .filter((entry) => entry.runId && entry.memberId),
+    [participants],
+  );
   const allowance = useMemo(() => event?.settings?.allowancePct ?? DEFAULT_ALLOWANCE[activeFormat], [
     event,
     activeFormat,
@@ -292,7 +320,24 @@ export default function EventLeaderboardPage() {
     return null;
   }
 
-  return (
+  const clipVisibility = useEventClipVisibility(event.id ?? null, session);
+  const viewer = useMemo(
+    () => ({ inEvent: session.role === 'admin' || Boolean(session.memberId) }),
+    [session.memberId, session.role],
+  );
+  const isClipVisible = useMemo(() => makeIsClipVisible(clipVisibility.get, viewer), [clipVisibility.get, viewer]);
+
+  const contextValue = useMemo(
+    () => ({
+      eventId: event.id,
+      members: eventMembers,
+      runs: eventRuns,
+      isClipVisible,
+    }),
+    [event.id, eventMembers, eventRuns, isClipVisible],
+  );
+
+  const content = (
     <div className="space-y-6">
       <header className="space-y-2">
         <div className="flex flex-wrap items-center gap-3">
@@ -414,6 +459,15 @@ export default function EventLeaderboardPage() {
           </ul>
         )}
       </section>
+
+      {eventRuns.length ? (
+        <div className="grid gap-4 md:grid-cols-2">
+          <EventSGLeaderboard />
+          <EventTopSGShots />
+        </div>
+      ) : null}
     </div>
   );
+
+  return <EventContextProvider value={contextValue}>{content}</EventContextProvider>;
 }
