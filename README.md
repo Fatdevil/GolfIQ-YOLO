@@ -65,6 +65,12 @@ curl -X POST "http://localhost:8000/cv/analyze/video" \
   -F "ref_len_m=1.0" -F "ref_len_px=100" -F "fps_fallback=120"
 ```
 
+### Live viewer tokens
+
+- `LIVE_SIGN_TTL_SEC` (default `120`) controls the TTL in seconds for signed viewer URLs. Tokens automatically refresh when
+  ~30 seconds from expiry.
+- `LIVE_SIGN_SECRET` holds the HMAC key used when signing viewer URLs; set to a random hex string in production.
+
 ## Web UI
 
 The project ships with a Vite + React single-page app for uploading captures, kicking off mock runs, and browsing persisted runs.
