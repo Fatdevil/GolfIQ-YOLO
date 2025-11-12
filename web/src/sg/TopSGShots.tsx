@@ -3,6 +3,7 @@ import * as React from 'react';
 import { useEventContext } from '@web/events/context';
 import { openAndSeekTo } from '@web/player/seek';
 import { useAnchors, useRunSG, type Anchor, type RunSG } from '@web/sg/hooks';
+import { isSGFeatureEnabled } from '@web/sg/feature';
 import { SGDeltaBadge } from '@web/sg/SGDeltaBadge';
 
 const keyFor = (hole: number, shot: number) => `${hole}:${shot}`;
@@ -61,7 +62,16 @@ function positiveDeltaShots(sg: RunSG | undefined, anchors: Map<string, Anchor>,
 }
 
 export function TopSGShots({ runId, limit = 5, isClipVisible, title = 'Top SG shots' }: TopSGShotsProps) {
-  const normalizedRunId = typeof runId === 'string' && runId.trim() ? runId.trim() : '';
+  if (!isSGFeatureEnabled()) {
+    return null;
+  }
+
+  const rawRunId = typeof runId === 'string' && runId.trim() ? runId.trim() : '';
+  if (!rawRunId) {
+    return null;
+  }
+
+  const normalizedRunId = rawRunId;
   const { data: sg, loading: sgLoading, error: sgError } = useRunSG(normalizedRunId);
   const { data: anchors, loading: anchorLoading, error: anchorError } = useAnchors(normalizedRunId);
   const eventContext = useEventContext();
@@ -95,10 +105,6 @@ export function TopSGShots({ runId, limit = 5, isClipVisible, title = 'Top SG sh
     },
     [],
   );
-
-  if (!normalizedRunId) {
-    return null;
-  }
 
   const isLoading = sgLoading || anchorLoading;
   const error = sgError ?? anchorError;

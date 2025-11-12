@@ -14,6 +14,7 @@ import {
   type RunSG,
 } from '@web/sg/hooks';
 import { SGDeltaBadge } from '@web/sg/SGDeltaBadge';
+import { isSGFeatureEnabled } from '@web/sg/feature';
 
 const keyFor = (hole: number, shot: number) => `${hole}:${shot}`;
 
@@ -74,6 +75,11 @@ function collectTopShots(
 }
 
 export function EventTopSGShots({ limit = 10 }: { limit?: number }): JSX.Element | null {
+  const featureEnabled = isSGFeatureEnabled();
+  if (!featureEnabled) {
+    return null;
+  }
+
   const { eventId, members, runs, isClipVisible } = useEventContext();
   const memberNameById = React.useMemo(() => {
     const map = new Map<string, string>();

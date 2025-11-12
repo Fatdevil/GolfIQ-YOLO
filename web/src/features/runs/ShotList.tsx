@@ -1,8 +1,9 @@
 import { useMemo } from 'react';
 
-import SGDeltaBadge from '@web/sg/SGDeltaBadge';
 import { openAndSeekTo } from '@web/player/seek';
+import SGDeltaBadge from '@web/sg/SGDeltaBadge';
 import { useAnchors, useRunSG } from '@web/sg/hooks';
+import { isSGFeatureEnabled } from '@web/sg/feature';
 import { isClipVisible } from '@web/sg/visibility';
 
 export type ShotModerationState = {
@@ -32,6 +33,10 @@ type RenderEntry = {
 };
 
 export function ShotList({ runId, shots = [], onOpenClip }: ShotListProps) {
+  if (!isSGFeatureEnabled()) {
+    return null;
+  }
+
   const normalizedRunId = typeof runId === 'string' ? runId : '';
   const { data: sg, loading: sgLoading, error: sgError } = useRunSG(normalizedRunId);
   const { data: anchors, loading: anchorLoading, error: anchorError } = useAnchors(normalizedRunId);

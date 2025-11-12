@@ -8,6 +8,7 @@ import {
   setCachedRunSG,
   type RunSG,
 } from '@web/sg/hooks';
+import { isSGFeatureEnabled } from '@web/sg/feature';
 
 type LeaderboardRow = {
   runId: string;
@@ -37,6 +38,11 @@ function formatTotal(total: number): string {
 }
 
 export function EventSGLeaderboard(): JSX.Element | null {
+  const featureEnabled = isSGFeatureEnabled();
+  if (!featureEnabled) {
+    return null;
+  }
+
   const { eventId, members, runs } = useEventContext();
   const memberNameById = React.useMemo(() => {
     const map = new Map<string, string>();
