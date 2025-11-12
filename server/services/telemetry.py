@@ -17,6 +17,12 @@ def _emit(event: str, payload: Mapping[str, object]) -> None:
     telemetry_events.emit(event, payload)
 
 
+def emit(event: str, payload: Mapping[str, object]) -> None:
+    """Public helper to emit arbitrary telemetry events."""
+
+    _emit(event, payload)
+
+
 def emit_commentary_request(
     event_id: str,
     clip_id: str,

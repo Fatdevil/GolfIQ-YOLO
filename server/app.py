@@ -17,6 +17,7 @@ from server.api.routers import run_scores as api_run_scores
 from server.api.routers import uploads as api_uploads
 from server.api.routers.coach import router as coach_router
 from server.api.routers.coach_feedback import router as coach_feedback_router
+from server.api.routers.sg import router as sg_router
 from server.metrics import MetricsMiddleware, metrics_app
 from server.retention.sweeper import sweep_retention_once, sweep_upload_retention
 
@@ -134,6 +135,7 @@ app.include_router(commentary_router)
 app.include_router(metrics.router)
 app.include_router(api_uploads.router)
 app.include_router(api_run_scores.router)
+app.include_router(sg_router)
 app.include_router(events_router)
 app.include_router(events_session_router)
 app.include_router(events_join_router)
