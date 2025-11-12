@@ -20,6 +20,7 @@ from server.api.routers.caddie import router as caddie_api_router
 from server.api.routers.coach import router as coach_router
 from server.api.routers.coach_feedback import router as coach_feedback_router
 from server.api.routers.sg import router as sg_router
+from server.api.routers.watch_tips import router as watch_tips_router
 from server.metrics import MetricsMiddleware, metrics_app
 from server.retention.sweeper import sweep_retention_once, sweep_upload_retention
 
@@ -140,6 +141,7 @@ app.include_router(anchors_router)
 app.include_router(api_uploads.router)
 app.include_router(api_run_scores.router)
 app.include_router(sg_router)
+app.include_router(watch_tips_router)
 if os.getenv("APP_ENV", "").lower() not in {"production", "prod"}:
     from server.dev.seed_s16 import router as seed_s16_router
 
