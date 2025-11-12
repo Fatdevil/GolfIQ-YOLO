@@ -7,7 +7,12 @@ from typing import Dict, List
 from .curves import expected_strokes
 from .schemas import HoleSG, RunSGResult, ShotEvent, ShotSG
 
-_PENALTY: Dict[str, float] = {"ob": 2.0, "hazard": 1.0, "unplayable": 1.0}
+# Number of penalty strokes *in addition to the swing already counted as -1*
+_PENALTY: Dict[str, float] = {
+    "ob": 1.0,  # stroke-and-distance = +1 penalty; swing already counted
+    "hazard": 1.0,  # lateral / penalty area
+    "unplayable": 1.0,  # drop with one-stroke penalty
+}
 
 
 def _post_shot_lie(distance_after: float, previous_lie: str) -> str:
