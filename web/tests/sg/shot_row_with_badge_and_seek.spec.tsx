@@ -68,19 +68,42 @@ describe('ShotList watch interactions', () => {
       />,
     );
 
-    await screen.findByRole('button', { name: /watch/i });
+    await screen.findByRole('button', { name: /^watch$/i });
 
     const user = userEvent.setup();
-    await user.click(screen.getByRole('button', { name: /watch/i }));
+    await user.click(screen.getByRole('button', { name: /^watch$/i }));
 
     await waitFor(() => expect(dispatchSpy).toHaveBeenCalled());
     const event = dispatchSpy.mock.calls[0][0] as CustomEvent<{ clipId: string; tMs: number }>;
     expect(event.type).toBe('player:open');
     expect(event.detail).toEqual({ clipId: 'clip-1', tMs: 3210 });
 
-    expect(pushSpy).toHaveBeenCalledWith({}, '', '/clips/clip-1?t=3210');
+    expect(pushSpy).not.toHaveBeenCalled();
 
     dispatchSpy.mockRestore();
     pushSpy.mockRestore();
+  });
+
+  it('allows clicking the SG badge to open the clip', async () => {
+    const dispatchSpy = vi.spyOn(window, 'dispatchEvent');
+
+    render(
+      <ShotList
+        runId={runId}
+        shots={[{ hole: 1, shot: 1, clipId: 'clip-1', hidden: false, visibility: 'public' }]}
+      />,
+    );
+
+    const user = userEvent.setup();
+    const badgeButton = await screen.findByRole('button', {
+      name: /watch clip for hole 1 shot 1/i,
+    });
+    await user.click(badgeButton);
+
+    await waitFor(() => expect(dispatchSpy).toHaveBeenCalled());
+    const event = dispatchSpy.mock.calls[0][0] as CustomEvent<{ clipId: string; tMs: number }>;
+    expect(event.detail).toEqual({ clipId: 'clip-1', tMs: 3210 });
+
+    dispatchSpy.mockRestore();
   });
 });

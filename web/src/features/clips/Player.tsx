@@ -10,6 +10,7 @@ type ClipPlayerProps = {
   className?: string;
   poster?: string | null;
   live?: boolean;
+  startMs?: number | null;
 };
 
 function formatAnchorLabel(seconds: number): string {
@@ -25,7 +26,7 @@ function formatAnchorLabel(seconds: number): string {
 }
 
 export const ClipPlayer = forwardRef<HTMLVideoElement | null, ClipPlayerProps>(function ClipPlayer(
-  { clipId, src, anchors, className, poster, live = false }: ClipPlayerProps,
+  { clipId, src, anchors, className, poster, live = false, startMs = null }: ClipPlayerProps,
   forwardedRef,
 ) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
@@ -95,6 +96,16 @@ export const ClipPlayer = forwardRef<HTMLVideoElement | null, ClipPlayerProps>(f
     }
     return undefined;
   }, [clipId, src]);
+
+  useEffect(() => {
+    if (startMs === null || startMs === undefined) {
+      return;
+    }
+    if (!Number.isFinite(startMs)) {
+      return;
+    }
+    seekWhenReady(Math.max(0, Number(startMs)) / 1000);
+  }, [startMs, clipId]);
 
   useEffect(() => {
     if (!clipId) {

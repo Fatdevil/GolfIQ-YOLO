@@ -12,6 +12,7 @@ import { mergePlaysLikeCfg, type PlaysLikeCfg } from "@shared/playslike/PlaysLik
 import type { TempAltOverrides } from "@shared/playslike";
 import { useSignedVideoSource } from "@web/media/useSignedVideoSource";
 import { useMediaPlaybackTelemetry } from "@web/media/telemetry";
+import { openAndSeekTo } from "@web/player/seek";
 import { ShotList, type ShotModerationState } from "@web/features/runs/ShotList";
 
 interface RunDetailData {
@@ -533,7 +534,13 @@ export default function RunDetailPage() {
         </div>
       )}
 
-      {!loading && resolvedRunId ? <ShotList runId={resolvedRunId} shots={shotStates} /> : null}
+      {!loading && resolvedRunId ? (
+        <ShotList
+          runId={resolvedRunId}
+          shots={shotStates}
+          onOpenClip={(clipId, tMs) => openAndSeekTo({ clipId, tStartMs: tMs, pushUrl: false })}
+        />
+      ) : null}
 
       {!loading && data?.impact_preview && (
         <div className="rounded-md border border-emerald-500/40 bg-emerald-500/10 px-4 py-3 text-xs text-emerald-100">

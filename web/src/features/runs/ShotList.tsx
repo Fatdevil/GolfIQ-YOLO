@@ -26,7 +26,7 @@ const isClipVisible = (state: Pick<ShotModerationState, 'hidden' | 'visibility'>
 type ShotListProps = {
   runId?: string | null;
   shots?: ShotModerationState[];
-  onOpenClip?: (clipId: string) => void;
+  onOpenClip?: (clipId: string, tMs: number) => void;
 };
 
 type RenderEntry = {
@@ -142,9 +142,10 @@ export function ShotList({ runId, shots = [], onOpenClip }: ShotListProps) {
   const handleWatch = (clipId: string, tStartMs: number | undefined) => {
     if (!clipId || typeof tStartMs !== 'number') return;
     if (onOpenClip) {
-      onOpenClip(clipId);
+      onOpenClip(clipId, tStartMs);
+      return;
     }
-    openAndSeekTo({ clipId, tStartMs });
+    openAndSeekTo({ clipId, tStartMs, pushUrl: false });
   };
 
   return (
@@ -177,7 +178,18 @@ export function ShotList({ runId, shots = [], onOpenClip }: ShotListProps) {
                   <td className="px-4 py-2 font-mono text-xs text-emerald-200">{entry.shot}</td>
                   <td className="px-4 py-2">
                     {entry.visible && entry.hasDelta ? (
-                      <SGDeltaBadge delta={entry.delta} />
+                      canWatch ? (
+                        <button
+                          type="button"
+                          onClick={() => handleWatch(entry.clipId!, entry.tStartMs)}
+                          className="rounded px-2 py-1 transition hover:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/60"
+                          aria-label={`Watch clip for hole ${entry.hole} shot ${entry.shot}`}
+                        >
+                          <SGDeltaBadge delta={entry.delta} />
+                        </button>
+                      ) : (
+                        <SGDeltaBadge delta={entry.delta} />
+                      )
                     ) : (
                       <span className="text-xs text-slate-500">{entry.visible ? '—' : 'Hidden'}</span>
                     )}

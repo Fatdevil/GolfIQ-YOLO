@@ -28,6 +28,7 @@ import EventTopShotsPage from "./pages/events/[id]/top-shots";
 import HomeFeed from "./pages/home/HomeFeed";
 import { EventSessionBoundary } from "./session/EventSessionBoundary";
 import { useCdnPreconnect } from "./media/cdn";
+import { PlayerOverlay } from "@web/player/PlayerOverlay";
 
 export default function App() {
   useCdnPreconnect();
@@ -114,6 +115,7 @@ export default function App() {
           {qaReplayEnabled && <Route path="/qa/replay" element={<ReplayAnalyzerPage />} />}
         </Routes>
       </main>
+      <PlayerOverlay />
     </div>
   );
 }
