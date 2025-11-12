@@ -14,6 +14,7 @@ import {
   type RunSG,
 } from '@web/sg/hooks';
 import { SGDeltaBadge } from '@web/sg/SGDeltaBadge';
+import { isSGFeatureEnabled } from '@web/sg/feature';
 
 const keyFor = (hole: number, shot: number) => `${hole}:${shot}`;
 
@@ -75,6 +76,7 @@ function collectTopShots(
 
 export function EventTopSGShots({ limit = 10 }: { limit?: number }): JSX.Element | null {
   const { eventId, members, runs, isClipVisible } = useEventContext();
+  const featureEnabled = isSGFeatureEnabled();
   const memberNameById = React.useMemo(() => {
     const map = new Map<string, string>();
     members.forEach((member) => {
@@ -120,7 +122,7 @@ export function EventTopSGShots({ limit = 10 }: { limit?: number }): JSX.Element
   const [error, setError] = React.useState<string | null>(null);
 
   React.useEffect(() => {
-    if (!eventId || runOrder.length === 0) {
+    if (!featureEnabled || !eventId || runOrder.length === 0) {
       setRows([]);
       setLoading(false);
       setError(null);
@@ -201,9 +203,9 @@ export function EventTopSGShots({ limit = 10 }: { limit?: number }): JSX.Element
     return () => {
       cancelled = true;
     };
-  }, [eventId, isClipVisible, limit, memberNameById, runMeta, runOrder]);
+  }, [eventId, featureEnabled, isClipVisible, limit, memberNameById, runMeta, runOrder]);
 
-  if (!eventId || runOrder.length === 0) {
+  if (!featureEnabled || !eventId || runOrder.length === 0) {
     return null;
   }
 

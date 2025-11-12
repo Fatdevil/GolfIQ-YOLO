@@ -138,6 +138,10 @@ app.include_router(anchors_router)
 app.include_router(api_uploads.router)
 app.include_router(api_run_scores.router)
 app.include_router(sg_router)
+if os.getenv("APP_ENV", "").lower() not in {"production", "prod"}:
+    from server.dev.seed_s16 import router as seed_s16_router
+
+    app.include_router(seed_s16_router)
 app.include_router(events_router)
 app.include_router(events_session_router)
 app.include_router(events_join_router)
