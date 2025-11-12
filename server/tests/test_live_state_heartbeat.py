@@ -42,6 +42,7 @@ def test_heartbeat_sets_live_and_ttl_expiry(monkeypatch: pytest.MonkeyPatch) -> 
     body = response.json()
     assert body["isLive"] is True
     assert body["streamId"] == "stream-1"
+    assert body["startedTs"] == base_time
 
     monkeypatch.setattr(
         live_state, "_now", lambda: base_time + live_routes.LIVE_HEARTBEAT_TTL_SEC - 1
@@ -58,6 +59,62 @@ def test_heartbeat_sets_live_and_ttl_expiry(monkeypatch: pytest.MonkeyPatch) -> 
     payload = expired.json()
     assert payload["isLive"] is False
     assert payload["viewerUrl"] is None
+    assert payload["streamId"] is None
+    assert payload["startedTs"] is None
+
+
+def test_stop_is_immediate_offline(monkeypatch: pytest.MonkeyPatch) -> None:
+    base_time = 2_000
+    monkeypatch.setattr(live_state, "_now", lambda: base_time)
+
+    heartbeat = client.post(
+        "/events/event-55/live/heartbeat",
+        json={"streamId": "stream-55", "viewerUrl": "https://media.example/live.m3u8"},
+        headers=ADMIN_HEADERS,
+    )
+    assert heartbeat.status_code == 200
+    data = heartbeat.json()
+    assert data["isLive"] is True
+    assert data["updatedTs"] == base_time
+
+    live_state.mark_offline("event-55")
+
+    monkeypatch.setattr(live_state, "_now", lambda: base_time + 1)
+    state = client.get("/events/event-55/live")
+    assert state.status_code == 200
+    payload = state.json()
+    assert payload["isLive"] is False
+    assert payload["viewerUrl"] is None
+    assert payload["updatedTs"] == base_time
+    assert payload["streamId"] is None
+    assert payload["startedTs"] is None
+
+
+def test_heartbeat_after_stop_clears_offline(monkeypatch: pytest.MonkeyPatch) -> None:
+    base_time = 5_000
+    monkeypatch.setattr(live_state, "_now", lambda: base_time)
+
+    live_state.mark_offline("event-77")
+
+    offline = client.get("/events/event-77/live")
+    assert offline.status_code == 200
+    assert offline.json()["isLive"] is False
+
+    monkeypatch.setattr(live_state, "_now", lambda: base_time + 5)
+    heartbeat = client.post(
+        "/events/event-77/live/heartbeat",
+        json={"streamId": "stream-77", "viewerUrl": "https://media.example/live.m3u8"},
+        headers=ADMIN_HEADERS,
+    )
+    assert heartbeat.status_code == 200
+    data = heartbeat.json()
+    assert data["isLive"] is True
+    assert data["updatedTs"] == base_time + 5
+    assert data["streamId"] == "stream-77"
+
+    current = client.get("/events/event-77/live")
+    assert current.status_code == 200
+    assert current.json()["isLive"] is True
 
 
 def test_viewer_url_rewritten_and_preserves_query(

@@ -16,6 +16,7 @@ class _Session:
     started_ts: int | None = None
     updated_ts: int | None = None
     latency_mode: str | None = None
+    forced_offline: bool = False
 
 
 _SESSIONS: Dict[str, _Session] = {}
@@ -50,6 +51,8 @@ def upsert(
             session.started_ts = now
         session.updated_ts = now
 
+    session.forced_offline = False
+
     if stream_id is not None:
         session.stream_id = stream_id or None
     if viewer_url is not None:
@@ -64,15 +67,14 @@ def mark_offline(event_id: str) -> None:
     """Mark *event_id* as offline while retaining last heartbeat timestamp."""
 
     session = _SESSIONS.get(event_id)
-    now = _now()
     if session is None:
         session = _Session()
         _SESSIONS[event_id] = session
+    session.forced_offline = True
     session.viewer_url = None
     session.stream_id = None
     session.latency_mode = None
     session.started_ts = None
-    session.updated_ts = now
 
 
 def as_state(event_id: str, ttl_seconds: int, default_latency: str | None) -> LiveState:
@@ -92,16 +94,19 @@ def as_state(event_id: str, ttl_seconds: int, default_latency: str | None) -> Li
         )
 
     updated_ts = session.updated_ts
-    is_live = bool(updated_ts and now - updated_ts < max(1, ttl_seconds))
+    ttl_window = max(1, ttl_seconds)
+    is_live = bool(
+        not session.forced_offline and updated_ts and now - updated_ts < ttl_window
+    )
     viewer_url = session.viewer_url if is_live else None
     latency_mode = session.latency_mode or default_latency
 
     return LiveState(
         isLive=is_live,
         viewerUrl=viewer_url,
-        startedTs=session.started_ts,
+        startedTs=session.started_ts if is_live else None,
         updatedTs=updated_ts,
-        streamId=session.stream_id,
+        streamId=session.stream_id if is_live else None,
         latencyMode=latency_mode,
     )
 
