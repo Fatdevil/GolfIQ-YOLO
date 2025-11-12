@@ -1,13 +1,14 @@
 from __future__ import annotations
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 
 from server.sg.compile import compile_shot_events
 from server.sg.engine import compute_run_sg
 from server.services.sg_cache import CACHE
 from server.services.telemetry import emit
+from server.security import require_api_key
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(require_api_key)])
 
 
 @router.get("/api/runs/{run_id}/sg")

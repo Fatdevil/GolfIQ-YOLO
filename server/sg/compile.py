@@ -4,13 +4,16 @@ import hashlib
 import json
 from typing import Any, Dict, List, Tuple
 
-from ..api.routers.run_scores import _RECORDED_EVENTS
+from ..api.routers.run_scores import _RECORDED_EVENTS, _RECORDED_EVENTS_LOCK
 
 from .schemas import ShotEvent
 
 
 def run_events_snapshot(run_id: str) -> list[dict]:
-    events_for_run: Dict[str, Dict[str, Any]] = _RECORDED_EVENTS.get(run_id, {})
+    with _RECORDED_EVENTS_LOCK:
+        events_for_run: Dict[str, Dict[str, Any]] = dict(
+            _RECORDED_EVENTS.get(run_id, {})
+        )
     return sorted(
         events_for_run.values(),
         key=lambda e: (e.get("ts", 0), json.dumps(e, sort_keys=True)),
