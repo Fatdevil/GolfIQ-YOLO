@@ -62,9 +62,16 @@ function positiveDeltaShots(sg: RunSG | undefined, anchors: Map<string, Anchor>,
 }
 
 export function TopSGShots({ runId, limit = 5, isClipVisible, title = 'Top SG shots' }: TopSGShotsProps) {
+  if (!isSGFeatureEnabled()) {
+    return null;
+  }
+
   const rawRunId = typeof runId === 'string' && runId.trim() ? runId.trim() : '';
-  const featureEnabled = isSGFeatureEnabled();
-  const normalizedRunId = featureEnabled ? rawRunId : '';
+  if (!rawRunId) {
+    return null;
+  }
+
+  const normalizedRunId = rawRunId;
   const { data: sg, loading: sgLoading, error: sgError } = useRunSG(normalizedRunId);
   const { data: anchors, loading: anchorLoading, error: anchorError } = useAnchors(normalizedRunId);
   const eventContext = useEventContext();
@@ -98,14 +105,6 @@ export function TopSGShots({ runId, limit = 5, isClipVisible, title = 'Top SG sh
     },
     [],
   );
-
-  if (!featureEnabled) {
-    return null;
-  }
-
-  if (!rawRunId) {
-    return null;
-  }
 
   const isLoading = sgLoading || anchorLoading;
   const error = sgError ?? anchorError;

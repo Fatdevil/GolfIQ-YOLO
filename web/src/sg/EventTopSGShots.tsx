@@ -75,8 +75,12 @@ function collectTopShots(
 }
 
 export function EventTopSGShots({ limit = 10 }: { limit?: number }): JSX.Element | null {
-  const { eventId, members, runs, isClipVisible } = useEventContext();
   const featureEnabled = isSGFeatureEnabled();
+  if (!featureEnabled) {
+    return null;
+  }
+
+  const { eventId, members, runs, isClipVisible } = useEventContext();
   const memberNameById = React.useMemo(() => {
     const map = new Map<string, string>();
     members.forEach((member) => {
@@ -122,7 +126,7 @@ export function EventTopSGShots({ limit = 10 }: { limit?: number }): JSX.Element
   const [error, setError] = React.useState<string | null>(null);
 
   React.useEffect(() => {
-    if (!featureEnabled || !eventId || runOrder.length === 0) {
+    if (!eventId || runOrder.length === 0) {
       setRows([]);
       setLoading(false);
       setError(null);
@@ -203,9 +207,9 @@ export function EventTopSGShots({ limit = 10 }: { limit?: number }): JSX.Element
     return () => {
       cancelled = true;
     };
-  }, [eventId, featureEnabled, isClipVisible, limit, memberNameById, runMeta, runOrder]);
+  }, [eventId, isClipVisible, limit, memberNameById, runMeta, runOrder]);
 
-  if (!featureEnabled || !eventId || runOrder.length === 0) {
+  if (!eventId || runOrder.length === 0) {
     return null;
   }
 

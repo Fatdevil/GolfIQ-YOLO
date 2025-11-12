@@ -68,6 +68,7 @@ describe('TopSGShots', () => {
   const fetchSpy = vi.fn<typeof fetch>();
 
   beforeEach(() => {
+    vi.stubEnv?.('VITE_FEATURE_SG', '1');
     __testing.clearCache();
     fetchSpy.mockImplementation((input: RequestInfo | URL) => {
       const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
@@ -83,6 +84,7 @@ describe('TopSGShots', () => {
   });
 
   afterEach(() => {
+    vi.unstubAllEnvs?.();
     global.fetch = originalFetch;
     fetchSpy.mockReset();
   });

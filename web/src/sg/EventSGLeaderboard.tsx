@@ -38,8 +38,12 @@ function formatTotal(total: number): string {
 }
 
 export function EventSGLeaderboard(): JSX.Element | null {
-  const { eventId, members, runs } = useEventContext();
   const featureEnabled = isSGFeatureEnabled();
+  if (!featureEnabled) {
+    return null;
+  }
+
+  const { eventId, members, runs } = useEventContext();
   const memberNameById = React.useMemo(() => {
     const map = new Map<string, string>();
     members.forEach((member) => {
@@ -85,7 +89,7 @@ export function EventSGLeaderboard(): JSX.Element | null {
   const [error, setError] = React.useState<string | null>(null);
 
   React.useEffect(() => {
-    if (!featureEnabled || !eventId || runOrder.length === 0) {
+    if (!eventId || runOrder.length === 0) {
       setRows([]);
       setLoading(false);
       setError(null);
@@ -145,9 +149,9 @@ export function EventSGLeaderboard(): JSX.Element | null {
     return () => {
       cancelled = true;
     };
-  }, [eventId, featureEnabled, memberNameById, runMeta, runOrder]);
+  }, [eventId, memberNameById, runMeta, runOrder]);
 
-  if (!featureEnabled || !eventId || runOrder.length === 0) {
+  if (!eventId || runOrder.length === 0) {
     return null;
   }
 

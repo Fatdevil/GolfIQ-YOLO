@@ -12,6 +12,7 @@ Följ stegen nedan för att köra en demo av strokes-gained upplevelsen med den 
    ```
 
 2. **Boota webbklienten med SG-flaggan på.**
+   SG-gränssnittet är avstängt som standard. Sätt `VITE_FEATURE_SG` till en explicit sann-sträng (t.ex. `1`, `true`, `on`, `yes`, `enable`) när du bygger eller kör webbappen.
    Öppna ett nytt terminalfönster och kör:
    ```bash
    cd /workspace/GolfIQ-YOLO

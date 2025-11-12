@@ -1,11 +1,18 @@
+/** Returns true only for explicit truthy values. Default: false (off). */
 export function isSGFeatureEnabled(): boolean {
-  const value = import.meta.env?.VITE_FEATURE_SG;
-  if (value === undefined || value === null) {
-    return true;
+  const raw = import.meta.env?.VITE_FEATURE_SG;
+  if (raw == null) {
+    return false;
   }
-  const normalized = String(value).trim().toLowerCase();
+  const normalized = String(raw).trim().toLowerCase();
   if (!normalized) {
-    return true;
+    return false;
   }
-  return normalized !== '0' && normalized !== 'false' && normalized !== 'off';
+  return (
+    normalized === '1' ||
+    normalized === 'true' ||
+    normalized === 'on' ||
+    normalized === 'yes' ||
+    normalized === 'enable'
+  );
 }
