@@ -9,7 +9,7 @@ export default defineConfig({
       '../shared/**',
       '../tests/**',
     ],
-    setupFiles: ['tests/setup.ts'],
+    setupFiles: ['tests/setup.ts', 'src/test/setup.ts'],
     passWithNoTests: true,
     environment: 'node',
     environmentMatchGlobs: [
@@ -21,7 +21,7 @@ export default defineConfig({
     alias: {
       '@shared': path.resolve(__dirname, '../shared'),
       '@web': path.resolve(__dirname, './src'),
-      'hls.js': '/tests/mocks/hls.ts',
+      'hls.js': path.resolve(__dirname, 'src/test/mocks/hls.ts'),
       'expo-device': '/tests/mocks/expo-device.ts',
       'expo-file-system': '/tests/mocks/expo-file-system.ts',
       '@react-native-async-storage/async-storage': '/tests/mocks/async-storage.ts',
