@@ -1,0 +1,208 @@
+import { useMemo } from 'react';
+
+import SGDeltaBadge from '@web/sg/SGDeltaBadge';
+import { openAndSeekTo } from '@web/player/seek';
+import { useAnchors, useRunSG } from '@web/sg/hooks';
+
+export type ShotModerationState = {
+  hole: number;
+  shot: number;
+  clipId?: string | null;
+  hidden?: boolean;
+  visibility?: 'private' | 'event' | 'friends' | 'public' | string | null;
+};
+
+const keyFor = (hole: number, shot: number) => `${hole}:${shot}`;
+
+const isClipVisible = (state: Pick<ShotModerationState, 'hidden' | 'visibility'> | undefined): boolean => {
+  if (!state) return true;
+  if (state.hidden) return false;
+  if (state.visibility && state.visibility !== 'public') {
+    return false;
+  }
+  return true;
+};
+
+type ShotListProps = {
+  runId?: string | null;
+  shots?: ShotModerationState[];
+  onOpenClip?: (clipId: string) => void;
+};
+
+type RenderEntry = {
+  hole: number;
+  shot: number;
+  delta: number;
+  hasDelta: boolean;
+  clipId?: string;
+  tStartMs?: number;
+  visible: boolean;
+};
+
+export function ShotList({ runId, shots = [], onOpenClip }: ShotListProps) {
+  const normalizedRunId = typeof runId === 'string' ? runId : '';
+  const { data: sg, loading: sgLoading, error: sgError } = useRunSG(normalizedRunId);
+  const { data: anchors, loading: anchorLoading, error: anchorError } = useAnchors(normalizedRunId);
+
+  const moderationByShot = useMemo(() => {
+    const map = new Map<string, ShotModerationState>();
+    shots.forEach((entry) => {
+      if (!entry) return;
+      const { hole, shot } = entry;
+      if (typeof hole !== 'number' || typeof shot !== 'number') {
+        return;
+      }
+      map.set(keyFor(hole, shot), entry);
+    });
+    return map;
+  }, [shots]);
+
+  const clipStateByClipId = useMemo(() => {
+    const map = new Map<string, ShotModerationState>();
+    shots.forEach((entry) => {
+      if (!entry?.clipId) return;
+      map.set(entry.clipId, entry);
+    });
+    return map;
+  }, [shots]);
+
+  const anchorByKey = useMemo(() => {
+    const map = new Map<string, { clipId: string; tStartMs: number }>();
+    anchors?.forEach((anchor) => {
+      const { hole, shot, clipId, tStartMs } = anchor;
+      if (!clipId) return;
+      map.set(keyFor(hole, shot), { clipId, tStartMs });
+    });
+    return map;
+  }, [anchors]);
+
+  const entries = useMemo<RenderEntry[]>(() => {
+    if (!sg?.holes?.length) {
+      return [];
+    }
+    const list: RenderEntry[] = [];
+    sg.holes.forEach((holeEntry) => {
+      holeEntry.shots.forEach((shotEntry) => {
+        const key = keyFor(shotEntry.hole, shotEntry.shot);
+        const anchor = anchorByKey.get(key);
+        const moderation = moderationByShot.get(key) ?? (anchor?.clipId ? clipStateByClipId.get(anchor.clipId) : undefined);
+        const visible = isClipVisible(moderation);
+        const delta = shotEntry.sg_delta;
+        const hasDelta = Number.isFinite(delta);
+        list.push({
+          hole: shotEntry.hole,
+          shot: shotEntry.shot,
+          delta,
+          hasDelta,
+          clipId: anchor?.clipId,
+          tStartMs: anchor?.tStartMs,
+          visible,
+        });
+      });
+    });
+    return list.sort((a, b) => (a.hole === b.hole ? a.shot - b.shot : a.hole - b.hole));
+  }, [sg, anchorByKey, moderationByShot, clipStateByClipId]);
+
+  if (!normalizedRunId) {
+    return null;
+  }
+
+  if (sgError) {
+    return (
+      <div className="rounded-md border border-rose-500/40 bg-rose-500/10 px-4 py-3 text-sm text-rose-100">
+        Failed to load strokes gained: {sgError.message}
+      </div>
+    );
+  }
+
+  if (anchorError) {
+    return (
+      <div className="rounded-md border border-rose-500/40 bg-rose-500/10 px-4 py-3 text-sm text-rose-100">
+        Failed to load anchors: {anchorError.message}
+      </div>
+    );
+  }
+
+  if (sgLoading || anchorLoading) {
+    return (
+      <div className="rounded-md border border-slate-800 bg-slate-900/60 px-4 py-3 text-sm text-slate-300">
+        Loading strokes gained…
+      </div>
+    );
+  }
+
+  if (!entries.length) {
+    return (
+      <div className="rounded-md border border-slate-800 bg-slate-900/60 px-4 py-3 text-sm text-slate-300">
+        No strokes-gained data available for this run yet.
+      </div>
+    );
+  }
+
+  const handleWatch = (clipId: string, tStartMs: number | undefined) => {
+    if (!clipId || typeof tStartMs !== 'number') return;
+    if (onOpenClip) {
+      onOpenClip(clipId);
+    }
+    openAndSeekTo({ clipId, tStartMs });
+  };
+
+  return (
+    <div className="overflow-hidden rounded-xl border border-slate-800 bg-slate-950/60 shadow-lg">
+      <div className="border-b border-slate-800 bg-slate-900/60 px-4 py-3">
+        <h3 className="text-base font-semibold text-slate-100">Strokes-gained by shot</h3>
+        {Number.isFinite(sg?.total_sg ?? NaN) ? (
+          <p className="mt-1 text-sm text-slate-300">
+            Total SG: <SGDeltaBadge delta={sg!.total_sg} />
+          </p>
+        ) : null}
+      </div>
+      <div className="overflow-x-auto">
+        <table className="min-w-full divide-y divide-slate-800 text-sm text-slate-200">
+          <thead className="bg-slate-900/70 text-xs uppercase tracking-wide text-slate-400">
+            <tr>
+              <th className="px-4 py-2 text-left font-semibold">Hole</th>
+              <th className="px-4 py-2 text-left font-semibold">Shot</th>
+              <th className="px-4 py-2 text-left font-semibold">SGΔ</th>
+              <th className="px-4 py-2 text-left font-semibold">Action</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-800">
+            {entries.map((entry) => {
+              const key = keyFor(entry.hole, entry.shot);
+              const canWatch = entry.visible && entry.clipId && typeof entry.tStartMs === 'number';
+              return (
+                <tr key={key} className="odd:bg-slate-900/40">
+                  <td className="px-4 py-2 font-mono text-xs text-emerald-200">{entry.hole}</td>
+                  <td className="px-4 py-2 font-mono text-xs text-emerald-200">{entry.shot}</td>
+                  <td className="px-4 py-2">
+                    {entry.visible && entry.hasDelta ? (
+                      <SGDeltaBadge delta={entry.delta} />
+                    ) : (
+                      <span className="text-xs text-slate-500">{entry.visible ? '—' : 'Hidden'}</span>
+                    )}
+                  </td>
+                  <td className="px-4 py-2">
+                    {canWatch ? (
+                      <button
+                        type="button"
+                        onClick={() => handleWatch(entry.clipId!, entry.tStartMs)}
+                        className="rounded border border-emerald-500/40 px-3 py-1 text-xs font-semibold text-emerald-200 transition hover:bg-emerald-500/10"
+                      >
+                        Watch
+                      </button>
+                    ) : (
+                      <span className="text-xs text-slate-500">{entry.visible ? 'No clip' : 'Restricted'}</span>
+                    )}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+export default ShotList;

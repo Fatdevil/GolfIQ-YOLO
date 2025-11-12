@@ -214,7 +214,13 @@ export function ClipModal({ clip, onClose, onRefetch }: ClipModalProps): JSX.Ele
       </header>
 
       {signedVideoUrl ? (
-        <ClipPlayer ref={videoRef} src={signedVideoUrl} anchors={clip.anchors ?? null} poster={poster} />
+        <ClipPlayer
+          ref={videoRef}
+          clipId={clip.id ?? null}
+          src={signedVideoUrl}
+          anchors={clip.anchors ?? null}
+          poster={poster}
+        />
       ) : rawVideoUrl && signing ? (
         <div className="flex h-48 w-full items-center justify-center rounded border border-dashed border-slate-700 text-slate-500">
           Preparing video…
