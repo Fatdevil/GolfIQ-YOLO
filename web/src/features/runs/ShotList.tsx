@@ -2,6 +2,7 @@ import { useMemo } from 'react';
 
 import { openAndSeekTo } from '@web/player/seek';
 import SGDeltaBadge from '@web/sg/SGDeltaBadge';
+import { CaddieTipPanel } from '@web/sg/CaddieTipPanel';
 import { useAnchors, useRunSG } from '@web/sg/hooks';
 import { isSGFeatureEnabled } from '@web/sg/feature';
 import { isClipVisible } from '@web/sg/visibility';
@@ -12,6 +13,8 @@ export type ShotModerationState = {
   clipId?: string | null;
   hidden?: boolean;
   visibility?: 'private' | 'event' | 'friends' | 'public' | string | null;
+  before_m?: number;
+  bearing_deg?: number;
 };
 
 const keyFor = (hole: number, shot: number) => `${hole}:${shot}`;
@@ -30,6 +33,8 @@ type RenderEntry = {
   clipId?: string;
   tStartMs?: number;
   visible: boolean;
+  before_m?: number;
+  bearing_deg?: number;
 };
 
 export function ShotList({ runId, shots = [], onOpenClip }: ShotListProps) {
@@ -49,7 +54,29 @@ export function ShotList({ runId, shots = [], onOpenClip }: ShotListProps) {
       if (typeof hole !== 'number' || typeof shot !== 'number') {
         return;
       }
-      map.set(keyFor(hole, shot), entry);
+      const key = keyFor(hole, shot);
+      const existing = map.get(key);
+      if (existing) {
+        const next: ShotModerationState = { ...existing };
+        if (entry.clipId !== undefined) {
+          next.clipId = entry.clipId;
+        }
+        if (entry.hidden !== undefined) {
+          next.hidden = entry.hidden;
+        }
+        if (entry.visibility !== undefined) {
+          next.visibility = entry.visibility;
+        }
+        if (entry.before_m !== undefined) {
+          next.before_m = entry.before_m;
+        }
+        if (entry.bearing_deg !== undefined) {
+          next.bearing_deg = entry.bearing_deg;
+        }
+        map.set(key, next);
+      } else {
+        map.set(key, entry);
+      }
     });
     return map;
   }, [shots]);
@@ -94,6 +121,8 @@ export function ShotList({ runId, shots = [], onOpenClip }: ShotListProps) {
           clipId: anchor?.clipId,
           tStartMs: anchor?.tStartMs,
           visible,
+          before_m: moderation?.before_m,
+          bearing_deg: moderation?.bearing_deg,
         });
       });
     });
@@ -163,6 +192,7 @@ export function ShotList({ runId, shots = [], onOpenClip }: ShotListProps) {
               <th className="px-4 py-2 text-left font-semibold">Shot</th>
               <th className="px-4 py-2 text-left font-semibold">SGΔ</th>
               <th className="px-4 py-2 text-left font-semibold">Action</th>
+              <th className="px-4 py-2 text-left font-semibold">Advice</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-800">
@@ -202,6 +232,19 @@ export function ShotList({ runId, shots = [], onOpenClip }: ShotListProps) {
                       </button>
                     ) : (
                       <span className="text-xs text-slate-500">{entry.visible ? 'No clip' : 'Restricted'}</span>
+                    )}
+                  </td>
+                  <td className="px-4 py-2 align-top">
+                    {normalizedRunId ? (
+                      <CaddieTipPanel
+                        runId={normalizedRunId}
+                        hole={entry.hole}
+                        shot={entry.shot}
+                        before_m={Math.max(0, Number.isFinite(entry.before_m) ? (entry.before_m as number) : 0)}
+                        bearing_deg={Number.isFinite(entry.bearing_deg) ? (entry.bearing_deg as number) : 0}
+                      />
+                    ) : (
+                      <span className="text-xs text-slate-500">No run id</span>
                     )}
                   </td>
                 </tr>

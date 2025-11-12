@@ -130,6 +130,23 @@ export default function RunDetailPage() {
       })();
 
       const clipId = typeof clipCandidate === "string" && clipCandidate.trim() ? clipCandidate : undefined;
+      const before = normalizeNumber(
+        payload.before_m ??
+          payload.beforeDistance ??
+          payload.before_distance_m ??
+          payload.distance_before_m ??
+          payload.beforeMeters ??
+          payload.before,
+      );
+      const bearing = normalizeNumber(
+        payload.target_bearing_deg ??
+          payload.targetBearingDeg ??
+          payload.target_bearing ??
+          payload.bearing_deg ??
+          payload.bearingDeg ??
+          payload.bearing ??
+          0,
+      );
       const hiddenRaw =
         payload.hidden ??
         ((payload.clip && typeof payload.clip === "object" ? (payload.clip as Record<string, unknown>).hidden : undefined) ??
@@ -141,7 +158,22 @@ export default function RunDetailPage() {
 
       const visibility = typeof visibilityRaw === "string" ? visibilityRaw.toLowerCase() : undefined;
       const hidden = Boolean(hiddenRaw);
-      map.set(`${hole}:${shot}`, { hole, shot, clipId, hidden, visibility });
+      const key = `${hole}:${shot}`;
+      const merged: ShotModerationState = { ...(map.get(key) ?? {}), hole, shot };
+      if (clipId !== undefined) {
+        merged.clipId = clipId;
+      }
+      merged.hidden = hidden;
+      if (visibility !== undefined) {
+        merged.visibility = visibility;
+      }
+      if (before !== null) {
+        merged.before_m = before;
+      }
+      if (bearing !== null) {
+        merged.bearing_deg = bearing;
+      }
+      map.set(key, merged);
     });
 
     return Array.from(map.values());
