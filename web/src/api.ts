@@ -5,6 +5,8 @@ import type { GrossNetMode, TvFlags } from "@shared/events/types";
 const API = import.meta.env.VITE_API_BASE || "http://localhost:8000";
 const API_KEY = import.meta.env.VITE_API_KEY || "";
 
+export const getApiKey = () => API_KEY;
+
 /** Return default headers incl. x-api-key if present. */
 export const withAuth = (extra: Record<string, string> = {}) =>
   (API_KEY ? { "x-api-key": API_KEY, ...extra } : extra);

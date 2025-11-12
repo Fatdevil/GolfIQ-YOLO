@@ -12,6 +12,8 @@ import { mergePlaysLikeCfg, type PlaysLikeCfg } from "@shared/playslike/PlaysLik
 import type { TempAltOverrides } from "@shared/playslike";
 import { useSignedVideoSource } from "@web/media/useSignedVideoSource";
 import { useMediaPlaybackTelemetry } from "@web/media/telemetry";
+import { openAndSeekTo } from "@web/player/seek";
+import { ShotList, type ShotModerationState } from "@web/features/runs/ShotList";
 
 interface RunDetailData {
   run_id?: string;
@@ -82,6 +84,66 @@ export default function RunDetailPage() {
     }
     return id ?? null;
   }, [data, id]);
+
+  const shotStates = useMemo<ShotModerationState[]>(() => {
+    const events = Array.isArray((data as Record<string, unknown> | null)?.events)
+      ? ((data as Record<string, unknown>).events as unknown[])
+      : [];
+    const map = new Map<string, ShotModerationState>();
+    const normalizeNumber = (value: unknown): number | null => {
+      const num = typeof value === "number" ? value : typeof value === "string" ? Number.parseFloat(value) : NaN;
+      return Number.isFinite(num) ? num : null;
+    };
+
+    events.forEach((event) => {
+      if (!event || typeof event !== "object") {
+        return;
+      }
+      const record = event as Record<string, unknown>;
+      const payload =
+        record.payload && typeof record.payload === "object"
+          ? (record.payload as Record<string, unknown>)
+          : record;
+
+      const hole = normalizeNumber(payload.hole ?? (payload as Record<string, unknown>)["Hole"]);
+      const shot = normalizeNumber(payload.shot ?? (payload as Record<string, unknown>)["Shot"]);
+      if (hole === null || shot === null) {
+        return;
+      }
+
+      const clipCandidate = (() => {
+        const direct = payload.clipId ?? payload.clip_id ?? payload.clipID;
+        if (typeof direct === "string" && direct.trim()) {
+          return direct;
+        }
+        const clipObject = payload.clip;
+        if (clipObject && typeof clipObject === "object") {
+          const clipRecord = clipObject as Record<string, unknown>;
+          const nested = clipRecord.id ?? clipRecord.clipId ?? clipRecord.clip_id;
+          if (typeof nested === "string" && nested.trim()) {
+            return nested;
+          }
+        }
+        return undefined;
+      })();
+
+      const clipId = typeof clipCandidate === "string" && clipCandidate.trim() ? clipCandidate : undefined;
+      const hiddenRaw =
+        payload.hidden ??
+        ((payload.clip && typeof payload.clip === "object" ? (payload.clip as Record<string, unknown>).hidden : undefined) ??
+          undefined);
+      const visibilityRaw =
+        payload.visibility ??
+        ((payload.clip && typeof payload.clip === "object" ? (payload.clip as Record<string, unknown>).visibility : undefined) ??
+          undefined);
+
+      const visibility = typeof visibilityRaw === "string" ? visibilityRaw.toLowerCase() : undefined;
+      const hidden = Boolean(hiddenRaw);
+      map.set(`${hole}:${shot}`, { hole, shot, clipId, hidden, visibility });
+    });
+
+    return Array.from(map.values());
+  }, [data]);
 
   useMediaPlaybackTelemetry(backViewVideoRef, {
     clipId: null,
@@ -471,6 +533,14 @@ export default function RunDetailPage() {
           {error}
         </div>
       )}
+
+      {!loading && resolvedRunId ? (
+        <ShotList
+          runId={resolvedRunId}
+          shots={shotStates}
+          onOpenClip={(clipId, tMs) => openAndSeekTo({ clipId, tStartMs: tMs, pushUrl: false })}
+        />
+      ) : null}
 
       {!loading && data?.impact_preview && (
         <div className="rounded-md border border-emerald-500/40 bg-emerald-500/10 px-4 py-3 text-xs text-emerald-100">
