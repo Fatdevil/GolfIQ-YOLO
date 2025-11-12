@@ -39,10 +39,14 @@ describe('CaddieTipPanel', () => {
 
     await screen.findByText(/Target 150 m plays-like/i);
     expect(
-      screen.getAllByText((content, element) => Boolean(element?.textContent?.includes('Club: 7i'))).length,
+      screen.getAllByText((content: string, element: Element | null) =>
+        Boolean(element?.textContent?.includes('Club: 7i')),
+      ).length,
     ).toBeGreaterThan(0);
     expect(
-      screen.getAllByText((content, element) => Boolean(element?.textContent?.includes('Plays-like 152 m'))).length,
+      screen.getAllByText((content: string, element: Element | null) =>
+        Boolean(element?.textContent?.includes('Plays-like 152 m')),
+      ).length,
     ).toBeGreaterThan(0);
   });
 

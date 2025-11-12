@@ -1,7 +1,7 @@
 import 'fake-indexeddb/auto';
 import { vi } from 'vitest';
 
-vi.mock('hls.js', () => import('./mocks/hls'));
+vi.mock('hls.js', () => import('../src/test/mocks/hls'));
 
 // Only in Node/Vitest
 defineBlobArrayBufferPolyfill();
