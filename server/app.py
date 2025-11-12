@@ -13,6 +13,7 @@ from fastapi.staticfiles import StaticFiles
 from server.api.health import health as _health_handler
 from server.api.routers import calibrate as legacy_calibrate
 from server.api.routers import metrics
+from server.api.routers.anchors import router as anchors_router
 from server.api.routers import run_scores as api_run_scores
 from server.api.routers import uploads as api_uploads
 from server.api.routers.coach import router as coach_router
@@ -133,6 +134,7 @@ app.include_router(clips_router)
 app.include_router(clips_events_router)
 app.include_router(commentary_router)
 app.include_router(metrics.router)
+app.include_router(anchors_router)
 app.include_router(api_uploads.router)
 app.include_router(api_run_scores.router)
 app.include_router(sg_router)
