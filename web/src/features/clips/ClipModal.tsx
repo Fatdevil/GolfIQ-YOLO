@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { isAxiosError } from 'axios';
 
 import { postClipCommentary, postTelemetryEvent } from '@web/api';
+import { shareAnchor, type AnchorShareResult } from '@web/share/anchor';
 import { useSignedVideoSource } from '@web/media/useSignedVideoSource';
 import { useMediaPlaybackTelemetry } from '@web/media/telemetry';
 import { measureStart } from '@web/metrics/playerTiming';
@@ -39,6 +40,7 @@ export function ClipModal({ clip, onClose, onRefetch }: ClipModalProps): JSX.Ele
   const [reporting, setReporting] = useState(false);
   const [reportError, setReportError] = useState<string | null>(null);
   const [reportSubmitted, setReportSubmitted] = useState(false);
+  const [shareResult, setShareResult] = useState<AnchorShareResult | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
 
@@ -55,6 +57,7 @@ export function ClipModal({ clip, onClose, onRefetch }: ClipModalProps): JSX.Ele
     () => clip.thumbUrl ?? clip.thumbnailUrl ?? clip.thumbnail_url ?? null,
     [clip],
   );
+  const shareAnchorRef = useMemo(() => clip.anchorRefs?.[0] ?? null, [clip.anchorRefs]);
 
   useMediaPlaybackTelemetry(videoRef, {
     clipId: clip.id ?? null,
@@ -97,6 +100,7 @@ export function ClipModal({ clip, onClose, onRefetch }: ClipModalProps): JSX.Ele
     setReportError(null);
     setReportSubmitted(false);
     setReporting(false);
+    setShareResult(null);
     if (audioRef.current) {
       audioRef.current.pause();
       audioRef.current = null;
@@ -199,6 +203,20 @@ export function ClipModal({ clip, onClose, onRefetch }: ClipModalProps): JSX.Ele
     }
   };
 
+  const handleShareAnchor = async () => {
+    if (!shareAnchorRef) {
+      return;
+    }
+    const result = await shareAnchor({
+      runId: shareAnchorRef.runId,
+      hole: shareAnchorRef.hole,
+      shot: shareAnchorRef.shot,
+    });
+    if (result) {
+      setShareResult(result);
+    }
+  };
+
   return (
     <div className="flex flex-col gap-4 p-4">
       <header className="flex items-start justify-between gap-4">
@@ -206,11 +224,36 @@ export function ClipModal({ clip, onClose, onRefetch }: ClipModalProps): JSX.Ele
           <h2 className="text-xl font-semibold">Clip commentary</h2>
           {summary && <p className="text-sm text-slate-400">Auto-generated spectator summary</p>}
         </div>
-        {onClose && (
-          <button type="button" onClick={onClose} className="text-sm text-slate-400 hover:text-slate-200">
-            Close
-          </button>
-        )}
+        <div className="flex items-center gap-3">
+          {shareAnchorRef ? (
+            <div className="flex flex-col items-end gap-1">
+              <button
+                type="button"
+                onClick={() => {
+                  void handleShareAnchor();
+                }}
+                className="text-sm font-semibold text-slate-300 underline decoration-dotted underline-offset-4 hover:text-slate-100"
+              >
+                Share
+              </button>
+              {shareResult ? (
+                <a
+                  href={shareResult.ogUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-[10px] font-medium text-slate-400 hover:text-slate-200"
+                >
+                  Preview card
+                </a>
+              ) : null}
+            </div>
+          ) : null}
+          {onClose && (
+            <button type="button" onClick={onClose} className="text-sm text-slate-400 hover:text-slate-200">
+              Close
+            </button>
+          )}
+        </div>
       </header>
 
       {signedVideoUrl ? (

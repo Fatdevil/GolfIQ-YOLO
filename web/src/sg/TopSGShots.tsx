@@ -3,6 +3,7 @@ import * as React from 'react';
 import { useEventContext } from '@web/events/context';
 import { openAndSeekTo } from '@web/player/seek';
 import { useAnchors, useRunSG, type Anchor, type RunSG } from '@web/sg/hooks';
+import { shareAnchor, type AnchorShareResult } from '@web/share/anchor';
 import { isSGFeatureEnabled } from '@web/sg/feature';
 import { SGDeltaBadge } from '@web/sg/SGDeltaBadge';
 
@@ -76,6 +77,11 @@ export function TopSGShots({ runId, limit = 5, isClipVisible, title = 'Top SG sh
   const { data: anchors, loading: anchorLoading, error: anchorError } = useAnchors(normalizedRunId);
   const eventContext = useEventContext();
   const visibilityGuard = isClipVisible ?? eventContext.isClipVisible;
+  const [shared, setShared] = React.useState<Record<string, AnchorShareResult>>({});
+
+  React.useEffect(() => {
+    setShared({});
+  }, [normalizedRunId]);
 
   const anchorMap = React.useMemo(() => {
     const map = new Map<string, Anchor>();
@@ -106,6 +112,16 @@ export function TopSGShots({ runId, limit = 5, isClipVisible, title = 'Top SG sh
     [],
   );
 
+  const handleShare = React.useCallback(
+    async (row: ShotRow) => {
+      const result = await shareAnchor({ runId: normalizedRunId, hole: row.hole, shot: row.shot });
+      if (result) {
+        setShared((current) => ({ ...current, [row.key]: result }));
+      }
+    },
+    [normalizedRunId],
+  );
+
   const isLoading = sgLoading || anchorLoading;
   const error = sgError ?? anchorError;
 
@@ -123,22 +139,49 @@ export function TopSGShots({ runId, limit = 5, isClipVisible, title = 'Top SG sh
       ) : null}
       {!error && topShots.length > 0 ? (
         <ul className="space-y-2">
-          {topShots.map((row) => (
-            <li key={row.key} className="flex items-center justify-between gap-4 text-sm text-slate-200">
-              <div className="flex items-center gap-3">
-                <SGDeltaBadge delta={row.delta} />
-                <span className="font-mono text-xs uppercase tracking-wide text-slate-400">H{row.hole} • S{row.shot}</span>
-              </div>
-              <button
-                type="button"
-                aria-label={`Watch hole ${row.hole} shot ${row.shot}`}
-                className="text-xs font-semibold text-emerald-300 underline decoration-dotted underline-offset-4 hover:text-emerald-200"
-                onClick={() => handleWatch(row.anchor)}
-              >
-                Watch
-              </button>
-            </li>
-          ))}
+          {topShots.map((row) => {
+            const preview = shared[row.key];
+            return (
+              <li key={row.key} className="flex items-center justify-between gap-4 text-sm text-slate-200">
+                <div className="flex items-center gap-3">
+                  <SGDeltaBadge delta={row.delta} />
+                  <span className="font-mono text-xs uppercase tracking-wide text-slate-400">H{row.hole} • S{row.shot}</span>
+                </div>
+                <div className="flex flex-col items-end gap-1">
+                  <div className="flex items-center gap-3">
+                    <button
+                      type="button"
+                      aria-label={`Share hole ${row.hole} shot ${row.shot}`}
+                      className="text-xs font-semibold text-slate-300 underline decoration-dotted underline-offset-4 hover:text-slate-100"
+                      onClick={() => {
+                        void handleShare(row);
+                      }}
+                    >
+                      Share
+                    </button>
+                    <button
+                      type="button"
+                      aria-label={`Watch hole ${row.hole} shot ${row.shot}`}
+                      className="text-xs font-semibold text-emerald-300 underline decoration-dotted underline-offset-4 hover:text-emerald-200"
+                      onClick={() => handleWatch(row.anchor)}
+                    >
+                      Watch
+                    </button>
+                  </div>
+                  {preview ? (
+                    <a
+                      href={preview.ogUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-[10px] font-medium text-slate-400 hover:text-slate-200"
+                    >
+                      Preview card
+                    </a>
+                  ) : null}
+                </div>
+              </li>
+            );
+          })}
         </ul>
       ) : null}
     </div>

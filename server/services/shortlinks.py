@@ -1,0 +1,68 @@
+"""In-memory store for generated short links."""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+from threading import Lock
+from typing import Dict, Optional
+import secrets
+import time
+
+
+@dataclass
+class ShortLink:
+    sid: str
+    url: str
+    title: str
+    description: str
+    image: Optional[str]
+    created_ts: int
+    clip_id: Optional[str] = None
+
+
+_STORE: Dict[str, ShortLink] = {}
+_LOCK = Lock()
+
+
+def _new_id(n: int = 8) -> str:
+    alphabet = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+    return "".join(secrets.choice(alphabet) for _ in range(n))
+
+
+def create(
+    url: str,
+    title: str,
+    description: str,
+    image: Optional[str],
+    *,
+    clip_id: Optional[str] = None,
+) -> ShortLink:
+    """Persist a short link and return the stored record."""
+
+    with _LOCK:
+        sid = _new_id()
+        while sid in _STORE:
+            sid = _new_id()
+        sl = ShortLink(
+            sid=sid,
+            url=url,
+            title=title,
+            description=description,
+            image=image,
+            created_ts=int(time.time() * 1000),
+            clip_id=clip_id,
+        )
+        _STORE[sid] = sl
+        return sl
+
+
+def get(sid: str) -> Optional[ShortLink]:
+    return _STORE.get(sid)
+
+
+def _reset_state() -> None:
+    with _LOCK:
+        _STORE.clear()
+
+
+__all__ = ["ShortLink", "create", "get", "_reset_state"]
