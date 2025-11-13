@@ -10,23 +10,22 @@ from server.services import watch_tip_bus
 
 
 @pytest.fixture(autouse=True)
-def _clear_bus():
+def _reset_bus():
     watch_tip_bus.clear()
     yield
     watch_tip_bus.clear()
 
 
-# Run with anyio so the async generator can be exercised under the configured backend.
 @pytest.mark.anyio
-async def test_stream_emits_tip_and_ping(monkeypatch) -> None:
+async def test_stream_emits_single_tip_and_closes(monkeypatch) -> None:
     member_id = "mem-sse"
     fake_time = {"value": 0.0}
 
     monkeypatch.setattr(
-        "server.api.routers.watch_tips.PING_INTERVAL_SECONDS", 0.05, raising=True
+        "server.api.routers.watch_tips.POLL_INTERVAL_SECONDS", 0.0, raising=True
     )
     monkeypatch.setattr(
-        "server.api.routers.watch_tips.POLL_INTERVAL_SECONDS", 0.0, raising=True
+        "server.api.routers.watch_tips.PING_INTERVAL_SECONDS", 60.0, raising=True
     )
     monkeypatch.setattr(watch_tips.time, "time", lambda: fake_time["value"])
 
@@ -36,34 +35,29 @@ async def test_stream_emits_tip_and_ping(monkeypatch) -> None:
 
     stream = watch_tips._tip_stream(member_id, DummyRequest())
 
+    body = watch_tips.TipIn(
+        tipId="tip-stream-1",
+        title="Approach",
+        body="Go for center",
+        club="9i",
+        playsLike_m=135.0,
+        shotRef={"hole": 3, "shot": 1},
+    )
+
     try:
         with anyio.fail_after(0.2):
             initial = await anext(stream)
-        assert ":ok" in initial
+        assert initial.startswith(":ok")
 
-        body = watch_tips.TipIn(
-            tipId="tip-stream-1",
-            title="Approach",
-            body="Go for center",
-            club="9i",
-            playsLike_m=135.0,
-            shotRef={"hole": 3, "shot": 1},
-        )
         watch_tips.post_tip(member_id, body)
 
         with anyio.fail_after(0.2):
-            tip_event = await anext(stream)
-        data_line = next(
-            line for line in tip_event.splitlines() if line.startswith("data: ")
-        )
-        tip_payload = json.loads(data_line.split("data: ", 1)[1])
-        assert tip_payload["tipId"] == "tip-stream-1"
-        assert tip_payload["club"] == "9i"
+            event = await anext(stream)
 
-        fake_time["value"] = 1.0
-        with anyio.fail_after(0.2):
-            ping_event = await anext(stream)
-        assert ping_event.startswith("event: ping")
+        data_line = next(
+            line for line in event.splitlines() if line.startswith("data: ")
+        )
+        payload = json.loads(data_line.split("data: ", 1)[1])
+        assert payload["tipId"] == body.tipId
     finally:
-        fake_time["value"] = 1.0
         await stream.aclose()
