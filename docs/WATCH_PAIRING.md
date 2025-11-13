@@ -51,6 +51,10 @@ sequenceDiagram
 - Devices can rotate secrets (`rotate_device_secret`) or be unbound server-side if needed.
 - All endpoints enforce lightweight IP-based rate limiting.
 
+### Error handling
+
+- If a join code never existed or has already been purged after expiry, `/api/watch/devices/bind` returns **404 Not Found**. Clients should treat any 4xx response as a failed bind and prompt the user to request a fresh code.
+
 ## 4. Platform bridge implementation tips
 
 ### watchOS (via iPhone bridge)

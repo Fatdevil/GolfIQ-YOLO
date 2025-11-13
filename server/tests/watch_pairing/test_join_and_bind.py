@@ -65,4 +65,5 @@ def test_bind_rejects_expired_code(monkeypatch) -> None:
             "/api/watch/devices/bind",
             json={"deviceId": device.device_id, "code": join_code.code},
         )
-    assert response.status_code == 410
+    # Once a code is expired and purged it is indistinguishable from an unknown code.
+    assert response.status_code == 404
