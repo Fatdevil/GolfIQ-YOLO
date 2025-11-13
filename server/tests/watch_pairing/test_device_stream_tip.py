@@ -35,6 +35,11 @@ def reset_state() -> None:
     watch_tip_bus.clear()
 
 
+@pytest.fixture
+def anyio_backend() -> str:  # pragma: no cover - fixture declaration
+    return "asyncio"
+
+
 @pytest.mark.anyio
 @pytest.mark.timeout(5)
 async def test_device_stream_yields_tip_and_closes(
@@ -85,20 +90,24 @@ async def test_device_stream_yields_tip_and_closes(
 
     body = response.body_iterator
     saw_tip = False
+    buffer: list[str] = []
     async for chunk in body:
         text = chunk.decode() if isinstance(chunk, (bytes, bytearray)) else str(chunk)
-        if text.startswith("event: tip"):
-            data_chunk = await body.__anext__()
-            data_text = (
-                data_chunk.decode()
-                if isinstance(data_chunk, (bytes, bytearray))
-                else str(data_chunk)
-            )
-            assert data_text.startswith("data:")
-            payload = json.loads(data_text.split("data:", 1)[1].strip())
-            assert payload["tipId"] == "tip-stream-1"
-            saw_tip = True
+        buffer.append(text)
+        combined = "".join(buffer)
+        if "event: tip" in combined and "data:" in combined:
+            # Normalize whitespace and read the first data payload
+            for line in combined.splitlines():
+                if line.startswith("data:"):
+                    payload = json.loads(line.split("data:", 1)[1].strip())
+                    assert payload["tipId"] == "tip-stream-1"
+                    saw_tip = True
+                    break
             break
+
+    # Ensure the generator finalizer runs so unsubscribe hooks fire
+    if hasattr(body, "aclose"):
+        await body.aclose()
 
     assert saw_tip
     assert subscribed == ["member-stream"]

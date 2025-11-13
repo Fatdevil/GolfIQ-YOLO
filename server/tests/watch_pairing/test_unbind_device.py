@@ -9,6 +9,7 @@ from server.services.watch_devices import (
     record_ack,
     register_device,
     reset,
+    rotate_device_secret,
     unbind_device,
 )
 
@@ -41,3 +42,28 @@ def test_unbind_device_clears_bound_member_and_ack() -> None:
 def test_unbind_device_ignores_unknown_device() -> None:
     # Should not raise even if device is missing.
     unbind_device("missing-device")
+
+
+def test_rotate_device_secret_updates_secret_and_timestamp() -> None:
+    device = register_device()
+    old_secret = device.device_secret
+    before = device.last_seen_ts
+
+    rotated = rotate_device_secret(device.device_id)
+
+    assert rotated.device_secret != old_secret
+    assert rotated.device_id == device.device_id
+    assert rotated.last_seen_ts >= before
+
+    stored = get_device(device.device_id)
+    assert stored is not None
+    assert stored.device_secret == rotated.device_secret
+
+
+def test_rotate_device_secret_requires_existing_device() -> None:
+    with pytest.raises(KeyError):
+        rotate_device_secret("no-such-device")
+
+
+def test_record_ack_returns_none_for_unknown_device() -> None:
+    assert record_ack("missing", "tip-42") is None

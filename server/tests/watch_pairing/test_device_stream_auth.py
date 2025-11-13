@@ -126,3 +126,16 @@ def test_ack_requires_authentication() -> None:
         )
 
     assert response.status_code == 401
+
+
+@pytest.mark.timeout(5)
+def test_device_stream_rejects_malformed_authorization_header() -> None:
+    """An Authorization header without Bearer should be rejected."""
+
+    with TestClient(app) as client:
+        response = client.get(
+            "/api/watch/devices/stream",
+            headers={"Authorization": "Token something"},
+        )
+
+    assert response.status_code == 401

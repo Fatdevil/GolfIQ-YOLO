@@ -103,3 +103,35 @@ def test_device_token_refresh_issues_new_expiration() -> None:
     payload = response.json()
     assert payload["token"].startswith(device.device_id)
     assert payload["expTs"] > int(time.time())
+
+
+def test_device_token_refresh_rejects_bad_secret() -> None:
+    """Refreshing with an incorrect secret should return 401."""
+
+    device = watch_devices.register_device()
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/watch/devices/token",
+            params={
+                "deviceId": device.device_id,
+                "deviceSecret": "wrong-secret",
+            },
+        )
+
+    assert response.status_code == 401
+    body = response.json()
+    assert "invalid device credentials" in body.get("detail", "")
+
+
+def test_device_token_refresh_rejects_unknown_device() -> None:
+    """Refreshing a token for a non-existent device should fail."""
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/watch/devices/token",
+            params={"deviceId": "missing", "deviceSecret": "anything"},
+        )
+
+    assert response.status_code == 401
+    assert "invalid device credentials" in response.json().get("detail", "")
