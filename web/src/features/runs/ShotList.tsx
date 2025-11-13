@@ -3,7 +3,7 @@ import { useMemo } from 'react';
 import { openAndSeekTo } from '@web/player/seek';
 import SGDeltaBadge from '@web/sg/SGDeltaBadge';
 import { CaddieTipPanel } from '@web/sg/CaddieTipPanel';
-import { useAnchors, useRunSG } from '@web/sg/hooks';
+import { useRunAnchors, useRunSG } from '@web/sg/hooks';
 import { isSGFeatureEnabled } from '@web/sg/feature';
 import { isClipVisible } from '@web/sg/visibility';
 
@@ -44,7 +44,7 @@ export function ShotList({ runId, shots = [], onOpenClip }: ShotListProps) {
 
   const normalizedRunId = typeof runId === 'string' ? runId : '';
   const { data: sg, loading: sgLoading, error: sgError } = useRunSG(normalizedRunId);
-  const { data: anchors, loading: anchorLoading, error: anchorError } = useAnchors(normalizedRunId);
+  const { data: anchors, loading: anchorLoading, error: anchorError } = useRunAnchors(normalizedRunId);
 
   const moderationByShot = useMemo(() => {
     const map = new Map<string, ShotModerationState>();
@@ -93,9 +93,9 @@ export function ShotList({ runId, shots = [], onOpenClip }: ShotListProps) {
   const anchorByKey = useMemo(() => {
     const map = new Map<string, { clipId: string; tStartMs: number }>();
     anchors?.forEach((anchor) => {
-      const { hole, shot, clipId, tStartMs } = anchor;
-      if (!clipId) return;
-      map.set(keyFor(hole, shot), { clipId, tStartMs });
+      const { hole, shot, clip_id, t_start_ms } = anchor;
+      if (!clip_id) return;
+      map.set(keyFor(hole, shot), { clipId: clip_id, tStartMs: t_start_ms });
     });
     return map;
   }, [anchors]);
@@ -178,9 +178,9 @@ export function ShotList({ runId, shots = [], onOpenClip }: ShotListProps) {
     <div className="overflow-hidden rounded-xl border border-slate-800 bg-slate-950/60 shadow-lg">
       <div className="border-b border-slate-800 bg-slate-900/60 px-4 py-3">
         <h3 className="text-base font-semibold text-slate-100">Strokes-gained by shot</h3>
-        {Number.isFinite(sg?.total_sg ?? NaN) ? (
+        {Number.isFinite(sg?.sg_total ?? NaN) ? (
           <p className="mt-1 text-sm text-slate-300">
-            Total SG: <SGDeltaBadge delta={sg!.total_sg} />
+            Total SG: <SGDeltaBadge delta={sg!.sg_total} />
           </p>
         ) : null}
       </div>

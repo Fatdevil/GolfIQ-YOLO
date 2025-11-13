@@ -8,11 +8,12 @@ import type { Anchor, RunSG } from '@web/sg/hooks';
 const runId = 'run-456';
 
 const sgPayload: RunSG = {
-  total_sg: 1.2,
+  run_id: runId,
+  sg_total: 1.2,
   holes: [
     {
       hole: 2,
-      sg: 1.2,
+      sg_total: 1.2,
       shots: [
         { hole: 2, shot: 1, sg_delta: 0.6 },
         { hole: 2, shot: 2, sg_delta: 0.6 },
@@ -23,24 +24,26 @@ const sgPayload: RunSG = {
 
 const anchorsPayload: Anchor[] = [
   {
-    runId,
+    run_id: runId,
     hole: 2,
     shot: 1,
-    clipId: 'clip-hidden',
-    tStartMs: 1000,
-    tEndMs: 4000,
+    clip_id: 'clip-hidden',
+    t_start_ms: 1000,
+    t_end_ms: 4000,
     version: 1,
-    ts: Date.now(),
+    created_ts: Date.now() - 4000,
+    updated_ts: Date.now() - 2000,
   },
   {
-    runId,
+    run_id: runId,
     hole: 2,
     shot: 2,
-    clipId: 'clip-restricted',
-    tStartMs: 2000,
-    tEndMs: 5000,
+    clip_id: 'clip-restricted',
+    t_start_ms: 2000,
+    t_end_ms: 5000,
     version: 1,
-    ts: Date.now(),
+    created_ts: Date.now() - 3500,
+    updated_ts: Date.now() - 1500,
   },
 ];
 
@@ -53,11 +56,11 @@ describe('ShotList moderation guards', () => {
     __testing.clearCache();
     fetchSpy.mockImplementation((input: RequestInfo | URL) => {
       const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
-      if (url.endsWith('/sg')) {
-        return Promise.resolve(new Response(JSON.stringify(sgPayload), { status: 200 }));
-      }
-      if (url.endsWith('/anchors')) {
+      if (url.includes('/api/sg/runs/') && url.endsWith('/anchors')) {
         return Promise.resolve(new Response(JSON.stringify(anchorsPayload), { status: 200 }));
+      }
+      if (url.includes('/api/sg/runs/')) {
+        return Promise.resolve(new Response(JSON.stringify(sgPayload), { status: 200 }));
       }
       return Promise.reject(new Error(`unexpected url ${url}`));
     });
@@ -87,7 +90,7 @@ describe('ShotList moderation guards', () => {
     const rows = screen.getAllByRole('row').slice(1) as HTMLElement[]; // skip header row
     rows.forEach((row: HTMLElement) => {
       const scope = within(row);
-      expect(scope.queryByLabelText('Strokes Gained delta')).toBeNull();
+      expect(scope.queryByLabelText('Strokes Gained för slaget')).toBeNull();
       expect(scope.queryByRole('button', { name: /watch/i })).toBeNull();
     });
 

@@ -56,10 +56,10 @@ function collectTopShots(
         return;
       }
       const anchor = anchors.get(keyFor(holeNumber, shotNumber));
-      if (!anchor?.clipId || typeof anchor.tStartMs !== 'number') {
+      if (!anchor?.clip_id || typeof anchor.t_start_ms !== 'number') {
         return;
       }
-      if (canShow && !canShow(anchor.clipId)) {
+      if (canShow && !canShow(anchor.clip_id)) {
         return;
       }
       rows.push({
@@ -219,7 +219,7 @@ export function EventTopSGShots({ limit = 10 }: { limit?: number }): JSX.Element
       className="space-y-3 rounded-xl border border-slate-800 bg-slate-950/60 p-4 shadow-lg"
     >
       <div className="flex items-center justify-between">
-        <h3 className="text-lg font-semibold text-slate-100">Top SG shots</h3>
+        <h3 className="text-lg font-semibold text-slate-100">Top SG-slag</h3>
         {loading ? <span className="text-xs text-slate-400">Loading…</span> : null}
       </div>
       {error ? <p className="text-sm text-rose-300">{error}</p> : null}
@@ -242,7 +242,7 @@ export function EventTopSGShots({ limit = 10 }: { limit?: number }): JSX.Element
                 aria-label={`Watch ${row.name} hole ${row.hole} shot ${row.shot}`}
                 className="text-xs font-semibold text-emerald-300 underline decoration-dotted underline-offset-4 hover:text-emerald-200"
                 onClick={() =>
-                  openAndSeekTo({ clipId: row.anchor.clipId, tStartMs: row.anchor.tStartMs, pushUrl: false })
+                  openAndSeekTo({ clipId: row.anchor.clip_id, tStartMs: row.anchor.t_start_ms, pushUrl: false })
                 }
               >
                 Watch

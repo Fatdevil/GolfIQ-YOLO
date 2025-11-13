@@ -15,11 +15,12 @@ type DemoData = {
 const demoData: DemoData = {
   sg: {
     'run-alice': {
-      total_sg: 2.0,
+      run_id: 'run-alice',
+      sg_total: 2.0,
       holes: [
         {
           hole: 1,
-          sg: 2.0,
+          sg_total: 2.0,
           shots: [
             { hole: 1, shot: 1, sg_delta: 1.5 },
             { hole: 1, shot: 2, sg_delta: 0.5 },
@@ -28,11 +29,12 @@ const demoData: DemoData = {
       ],
     },
     'run-bob': {
-      total_sg: 1.1,
+      run_id: 'run-bob',
+      sg_total: 1.1,
       holes: [
         {
           hole: 1,
-          sg: 1.1,
+          sg_total: 1.1,
           shots: [
             { hole: 1, shot: 1, sg_delta: 0.3 },
             { hole: 1, shot: 2, sg_delta: 0.8 },
@@ -44,46 +46,50 @@ const demoData: DemoData = {
   anchors: {
     'run-alice': [
       {
-        runId: 'run-alice',
+        run_id: 'run-alice',
         hole: 1,
         shot: 1,
-        clipId: 'clip-alice-h1s1',
-        tStartMs: 500,
-        tEndMs: 6000,
+        clip_id: 'clip-alice-h1s1',
+        t_start_ms: 500,
+        t_end_ms: 6000,
         version: 1,
-        ts: Date.now(),
+        created_ts: Date.now() - 2000,
+        updated_ts: Date.now() - 1000,
       },
       {
-        runId: 'run-alice',
+        run_id: 'run-alice',
         hole: 1,
         shot: 2,
-        clipId: 'clip-alice-h1s2',
-        tStartMs: 0,
-        tEndMs: 4000,
+        clip_id: 'clip-alice-h1s2',
+        t_start_ms: 0,
+        t_end_ms: 4000,
         version: 1,
-        ts: Date.now(),
+        created_ts: Date.now() - 1500,
+        updated_ts: Date.now() - 500,
       },
     ],
     'run-bob': [
       {
-        runId: 'run-bob',
+        run_id: 'run-bob',
         hole: 1,
         shot: 1,
-        clipId: 'clip-bob-h1s1',
-        tStartMs: 1200,
-        tEndMs: 5000,
+        clip_id: 'clip-bob-h1s1',
+        t_start_ms: 1200,
+        t_end_ms: 5000,
         version: 1,
-        ts: Date.now(),
+        created_ts: Date.now() - 3000,
+        updated_ts: Date.now() - 2000,
       },
       {
-        runId: 'run-bob',
+        run_id: 'run-bob',
         hole: 1,
         shot: 2,
-        clipId: 'clip-bob-h1s2',
-        tStartMs: 300,
-        tEndMs: 4200,
+        clip_id: 'clip-bob-h1s2',
+        t_start_ms: 300,
+        t_end_ms: 4200,
         version: 1,
-        ts: Date.now(),
+        created_ts: Date.now() - 2500,
+        updated_ts: Date.now() - 1500,
       },
     ],
   },
@@ -98,21 +104,21 @@ describe('sg demo smoke', () => {
     __testing.clearCache();
     fetchSpy.mockImplementation((input: RequestInfo | URL) => {
       const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
-      const match = /\/api\/runs\/([^/]+)\/(sg|anchors)$/.exec(url);
+      const match = /\/api\/sg\/runs\/([^/]+)(?:\/(anchors))?$/.exec(url);
       if (!match) {
         return Promise.reject(new Error(`Unexpected request: ${url}`));
       }
       const [, runId, resource] = match;
-      if (resource === 'sg') {
-        const payload = demoData.sg[runId];
+      if (resource === 'anchors') {
+        const payload = demoData.anchors[runId];
         if (!payload) {
-          return Promise.reject(new Error(`Missing sg payload for ${runId}`));
+          return Promise.reject(new Error(`Missing anchors payload for ${runId}`));
         }
         return Promise.resolve(new Response(JSON.stringify(payload), { status: 200 }));
       }
-      const payload = demoData.anchors[runId];
+      const payload = demoData.sg[runId];
       if (!payload) {
-        return Promise.reject(new Error(`Missing anchors payload for ${runId}`));
+        return Promise.reject(new Error(`Missing sg payload for ${runId}`));
       }
       return Promise.resolve(new Response(JSON.stringify(payload), { status: 200 }));
     });
@@ -151,9 +157,9 @@ describe('sg demo smoke', () => {
     );
 
     expect(await screen.findByRole('heading', { name: /strokes-gained leaderboard/i })).toBeTruthy();
-    expect(await screen.findByRole('heading', { name: /top sg shots/i })).toBeTruthy();
+    expect(await screen.findByRole('heading', { name: /top sg-slag/i })).toBeTruthy();
 
-    const deltas = await screen.findAllByLabelText(/strokes gained delta/i);
+    const deltas = await screen.findAllByLabelText(/strokes gained för slaget/i);
     expect(deltas.length).toBeGreaterThan(0);
 
     const user = userEvent.setup();

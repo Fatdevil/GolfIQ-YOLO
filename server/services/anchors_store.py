@@ -62,7 +62,8 @@ def create_or_confirm(run_id: str, anchor: AnchorIn) -> tuple[AnchorOut, bool]:
             tStartMs=anchor.tStartMs,
             tEndMs=anchor.tEndMs,
             version=1,
-            ts=now,
+            createdTs=now,
+            updatedTs=now,
         )
         _ANCHORS[key] = created
         return created, True
@@ -95,7 +96,8 @@ def patch_one(
                 tStartMs=anchor.tStartMs,
                 tEndMs=anchor.tEndMs,
                 version=1,
-                ts=now,
+                createdTs=now,
+                updatedTs=now,
             )
             _ANCHORS[key] = created
             return created
@@ -107,7 +109,7 @@ def patch_one(
         existing.tStartMs = anchor.tStartMs
         existing.tEndMs = anchor.tEndMs
         existing.version += 1
-        existing.ts = now
+        existing.updatedTs = now
         return existing
 
 

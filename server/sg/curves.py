@@ -78,6 +78,31 @@ CURVES: Dict[str, List[Tuple[float, float]]] = {
 _LOG_TAIL_COEFF = 0.08
 
 
+def _interp(points: List[Tuple[float, float]], x: float) -> float:
+    """Piecewise-linear interpolation helper."""
+
+    if not points:
+        raise ValueError("points must not be empty")
+
+    distance = float(x)
+
+    if distance <= points[0][0]:
+        return points[0][1]
+
+    if distance >= points[-1][0]:
+        return points[-1][1]
+
+    for (x1, y1), (x2, y2) in zip(points, points[1:]):
+        if x1 <= distance <= x2:
+            span = x2 - x1
+            if span <= 0:  # pragma: no cover - guard against malformed data
+                return y2
+            fraction = (distance - x1) / span
+            return y1 + fraction * (y2 - y1)
+
+    return points[-1][1]
+
+
 def _validate_curve_points(points: Iterable[Tuple[float, float]]) -> None:
     """Ensure points are strictly increasing in distance."""
 
@@ -115,16 +140,7 @@ def expected_strokes(distance_m: float, lie: str) -> float:
         over = distance - points[-1][0]
         return points[-1][1] + _LOG_TAIL_COEFF * math.log1p(over)
 
-    for (x1, y1), (x2, y2) in zip(points, points[1:]):
-        if x1 <= distance <= x2:
-            span = x2 - x1
-            if span <= 0:  # pragma: no cover - guard against malformed data
-                return y2
-            fraction = (distance - x1) / span
-            return y1 + fraction * (y2 - y1)
-
-    # Fallback (should not be hit if the curves are well-formed).
-    return points[-1][1]
+    return _interp(points, distance)
 
 
-__all__ = ["CURVES", "expected_strokes"]
+__all__ = ["CURVES", "expected_strokes", "_interp"]

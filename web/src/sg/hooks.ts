@@ -3,18 +3,19 @@ import * as React from 'react';
 import { getApiKey } from '@web/api';
 
 export type ShotSG = { hole: number; shot: number; sg_delta: number };
-export type HoleSG = { hole: number; sg: number; shots: ShotSG[] };
-export type RunSG = { runId?: string; holes: HoleSG[]; total_sg: number; shots?: ShotSG[] };
+export type HoleSG = { hole: number; sg_total: number; shots: ShotSG[] };
+export type RunSG = { run_id: string; holes: HoleSG[]; sg_total: number; shots?: ShotSG[] };
 
 export type Anchor = {
-  runId: string;
+  run_id: string;
   hole: number;
   shot: number;
-  clipId: string;
-  tStartMs: number;
-  tEndMs: number;
+  clip_id: string;
+  t_start_ms: number;
+  t_end_ms: number;
   version: number;
-  ts: number;
+  created_ts: number;
+  updated_ts: number;
 };
 
 const authHeaders = (): Record<string, string> => {
@@ -23,7 +24,7 @@ const authHeaders = (): Record<string, string> => {
 };
 
 export async function fetchRunSG(runId: string): Promise<RunSG> {
-  const response = await fetch(`/api/runs/${runId}/sg`, {
+  const response = await fetch(`/api/sg/runs/${runId}`, {
     headers: authHeaders(),
   });
   if (!response.ok) {
@@ -33,7 +34,7 @@ export async function fetchRunSG(runId: string): Promise<RunSG> {
 }
 
 export async function fetchAnchors(runId: string): Promise<Anchor[]> {
-  const response = await fetch(`/api/runs/${runId}/anchors`, {
+  const response = await fetch(`/api/sg/runs/${runId}/anchors`, {
     headers: authHeaders(),
   });
   if (!response.ok) {
@@ -131,7 +132,7 @@ export function useRunSG(runId: string) {
   return { data, loading, error };
 }
 
-export function useAnchors(runId: string) {
+export function useRunAnchors(runId: string) {
   const normalizedRunId = typeof runId === 'string' && runId ? runId : '';
   const initialData = React.useMemo(() => getCachedAnchors(normalizedRunId), [normalizedRunId]);
 
@@ -185,6 +186,8 @@ export function useAnchors(runId: string) {
 
   return { data, loading, error };
 }
+
+export const useAnchors = useRunAnchors;
 
 export const __testing = {
   clearCache() {
