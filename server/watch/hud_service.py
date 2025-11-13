@@ -5,24 +5,22 @@ from __future__ import annotations
 from typing import Optional
 
 from server.watch.hud_schemas import HoleHud, HudTip
-from server.services.watch_tip_bus import _TIPS
+from server.services.watch_tip_bus import get_latest_tip_for_member
 
 
 def _get_latest_tip(member_id: str) -> Optional[HudTip]:
     """Return the most recent tip for the member, if available."""
 
-    tips_for_member = _TIPS.get(member_id, {})
-    if not tips_for_member:
+    tip = get_latest_tip_for_member(member_id)
+    if tip is None:
         return None
 
-    # Preserve insertion order (dicts are ordered in Python 3.7+)
-    last_tip = list(tips_for_member.values())[-1]
     return HudTip(
-        tipId=last_tip.tipId,
-        title=last_tip.title,
-        body=last_tip.body,
-        club=last_tip.club,
-        playsLike_m=last_tip.playsLike_m,
+        tipId=tip.tipId,
+        title=tip.title,
+        body=tip.body,
+        club=tip.club,
+        playsLike_m=tip.playsLike_m,
     )
 
 
