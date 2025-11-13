@@ -1,5 +1,6 @@
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { Mock } from 'vitest';
 
 import * as apiModule from '@web/api';
 import PairWatchDialog from '@web/watch/PairWatchDialog';
@@ -45,9 +46,12 @@ describe('PairWatchDialog', () => {
     expect(screen.getByTestId('join-code').textContent).toContain('123456');
     expect(fetchMock).toHaveBeenCalledTimes(1);
 
-    const [requestUrl, requestInit] = fetchMock.mock.calls[0];
-    expect(String(requestUrl)).toContain('/api/watch/pair/code?memberId=member-1');
-    expect(requestInit).toMatchObject({
+    const fetchMockTyped = (globalThis.fetch as unknown as Mock);
+    const firstCall = fetchMockTyped.mock.calls[0] as [RequestInfo | URL, RequestInit?];
+    const firstUrl = String(firstCall[0]);
+    const firstInit = (firstCall[1] ?? {}) as RequestInit;
+    expect(firstUrl).toContain('/api/watch/pair/code?memberId=member-1');
+    expect(firstInit).toMatchObject({
       method: 'POST',
       headers: expect.objectContaining({
         'x-api-key': 'test-key',
@@ -66,6 +70,9 @@ describe('PairWatchDialog', () => {
     fireEvent.click(screen.getByRole('button', { name: /generate new code/i }));
 
     expect(fetchMock).toHaveBeenCalledTimes(2);
+    const secondCall = fetchMockTyped.mock.calls[1] as [RequestInfo | URL, RequestInit?];
+    const secondUrl = String(secondCall[0]);
+    expect(secondUrl).toContain('/api/watch/pair/code?memberId=member-1');
     const resolveNext = pending.shift();
     expect(resolveNext).toBeDefined();
     await act(async () => {
