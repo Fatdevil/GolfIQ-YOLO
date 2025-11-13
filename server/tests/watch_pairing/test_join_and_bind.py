@@ -67,3 +67,39 @@ def test_bind_rejects_expired_code(monkeypatch) -> None:
         )
     # Once a code is expired and purged it is indistinguishable from an unknown code.
     assert response.status_code == 404
+
+
+def test_bind_with_unknown_code_returns_404() -> None:
+    """Binding a device with a code that never existed should fail with 404."""
+
+    device = watch_devices.register_device()
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/watch/devices/bind",
+            json={"deviceId": device.device_id, "code": "999999"},
+        )
+
+    assert response.status_code == 404
+    detail = response.json().get("detail", "")
+    assert "not found" in detail.lower()
+
+
+def test_device_token_refresh_issues_new_expiration() -> None:
+    """Refreshing a device token should return a token and expiry."""
+
+    device = watch_devices.register_device()
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/watch/devices/token",
+            params={
+                "deviceId": device.device_id,
+                "deviceSecret": device.device_secret,
+            },
+        )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["token"].startswith(device.device_id)
+    assert payload["expTs"] > int(time.time())

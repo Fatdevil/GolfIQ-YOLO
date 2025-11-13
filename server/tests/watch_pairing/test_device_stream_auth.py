@@ -5,9 +5,11 @@ from types import SimpleNamespace
 
 import pytest
 from fastapi import HTTPException
+from fastapi.testclient import TestClient
 from starlette.responses import StreamingResponse
 
 from server.api.routers import watch_pairing
+from server.app import app
 from server.services import watch_devices, watch_tip_bus
 
 
@@ -102,3 +104,25 @@ async def test_stream_requires_token_and_emits_tip(
     assert ("watch.stream.open", {"deviceId": device.device_id}) in emitted
     assert ("watch.stream.close", {"deviceId": device.device_id}) in emitted
     assert unsubscribed == [("mem-stream", queue)]
+
+
+@pytest.mark.timeout(5)
+def test_device_stream_requires_authentication() -> None:
+    """The SSE endpoint should reject requests without a Bearer token."""
+
+    with TestClient(app) as client:
+        response = client.get("/api/watch/devices/stream")
+
+    assert response.status_code == 401
+
+
+@pytest.mark.timeout(5)
+def test_ack_requires_authentication() -> None:
+    """Posting an ACK without device credentials must fail."""
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/watch/devices/ack", json={"tipId": "tip-unauthorized"}
+        )
+
+    assert response.status_code == 401
