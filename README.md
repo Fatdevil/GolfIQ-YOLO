@@ -102,6 +102,10 @@ When `SERVE_WEB=1` the FastAPI server mounts the compiled SPA from `web/dist` an
 
 The UI currently calls the following endpoints: `/cv/mock/analyze`, `/cv/analyze`, `/cv/analyze/video`, and `/runs` (including `/runs/{id}` and `DELETE /runs/{id}`).
 
+### CV / Range tooling
+
+- Range Practice (beta) is available at `/range/practice`. It currently calls `/cv/mock/analyze` to show ball speed, carry, launch, side angle, and a running session summary with averages and dispersion.
+
 ### Calibration wizard
 
 * Open the **Calibration** tab in the web UI and upload a still image from your capture setup (keep the camera square to the target line for the cleanest scale).

@@ -3,7 +3,13 @@ import { defineConfig, configDefaults } from 'vitest/config';
 
 export default defineConfig({
   test: {
-    include: ['tests/**/*.spec.ts', 'tests/**/*.spec.tsx', 'src/**/__tests__/**/*.{ts,tsx}'],
+    include: [
+      'tests/**/*.spec.ts',
+      'tests/**/*.spec.tsx',
+      'src/**/*.test.ts',
+      'src/**/*.test.tsx',
+      'src/**/__tests__/**/*.{ts,tsx}',
+    ],
     exclude: [
       ...configDefaults.exclude,
       '../shared/**',
@@ -15,6 +21,7 @@ export default defineConfig({
     environmentMatchGlobs: [
       ['tests/**/*.spec.tsx', 'jsdom'],
       ['src/**/__tests__/**/*.tsx', 'jsdom'],
+      ['src/**/*.test.tsx', 'jsdom'],
     ],
   },
   resolve: {

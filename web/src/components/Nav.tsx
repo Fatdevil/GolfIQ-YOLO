@@ -89,6 +89,7 @@ function getLinks(): LinkItem[] {
     { to: "/analyze", label: "Analyze" },
     { to: "/calibration", label: "Calibration" },
     { to: "/mock", label: "Mock" },
+    { to: "/range/practice", label: "Range practice" },
     { to: "/runs", label: "Runs" },
     { to: "/reels", label: "Reels" },
     { to: "/field-runs", label: "Field runs" },
