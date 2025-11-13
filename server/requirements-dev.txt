@@ -1,0 +1,2 @@
+-r ../requirements-dev.txt
+pytest-timeout>=2.2
