@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { API, getApiKey } from '@web/api';
 
@@ -15,27 +15,8 @@ type JoinCodeResponse = {
   expTs: number;
 };
 
-type FetchState = 'idle' | 'loading' | 'error';
-
 const WATCH_FEATURE_ENABLED = import.meta.env.VITE_FEATURE_WATCH === '1' || import.meta.env.DEV;
-
-function buildHeaders(): HeadersInit {
-  const apiKey = getApiKey();
-  return apiKey ? { 'x-api-key': apiKey } : {};
-}
-
-async function requestJoinCode(memberId: string): Promise<JoinCodeResponse> {
-  const url = new URL(`${API}/api/watch/pair/code`);
-  url.searchParams.set('memberId', memberId);
-  const response = await fetch(url.toString(), {
-    method: 'POST',
-    headers: buildHeaders(),
-  });
-  if (!response.ok) {
-    throw new Error(`pair code ${response.status}`);
-  }
-  return response.json() as Promise<JoinCodeResponse>;
-}
+type FetchState = 'idle' | 'loading' | 'error';
 
 function computeRemaining(expTs: number): number {
   const now = Math.floor(Date.now() / 1000);
@@ -43,62 +24,96 @@ function computeRemaining(expTs: number): number {
 }
 
 export default function PairWatchDialog({ open, onClose, memberId }: PairWatchDialogProps): JSX.Element | null {
-  const [joinCode, setJoinCode] = useState<JoinCodeResponse | null>(null);
+  const [code, setCode] = useState<string | null>(null);
+  const [expTs, setExpTs] = useState<number | null>(null);
   const [remaining, setRemaining] = useState<number>(0);
   const [status, setStatus] = useState<FetchState>('idle');
   const [error, setError] = useState<string | null>(null);
-  const [refreshIndex, setRefreshIndex] = useState(0);
+  const abortRef = useRef<AbortController | null>(null);
 
-  useEffect(() => {
-    if (!open || !memberId || !WATCH_FEATURE_ENABLED) {
-      setJoinCode(null);
-      setRemaining(0);
+  const loadCode = useCallback(async () => {
+    if (!memberId) {
       return;
     }
 
-    let cancelled = false;
+    abortRef.current?.abort();
+    const ctrl = new AbortController();
+    abortRef.current = ctrl;
+
     setStatus('loading');
     setError(null);
 
-    requestJoinCode(memberId)
-      .then((payload) => {
-        if (!cancelled) {
-          setJoinCode(payload);
-          setRemaining(computeRemaining(payload.expTs));
-          setStatus('idle');
-        }
-      })
-      .catch((err) => {
-        if (!cancelled) {
-          setStatus('error');
-          setError(err instanceof Error ? err.message : 'Unable to generate join code');
-          setJoinCode(null);
-        }
+    try {
+      const url = new URL(`${API}/api/watch/pair/code`);
+      url.searchParams.set('memberId', memberId);
+      const apiKey = getApiKey();
+      const response = await fetch(url.toString(), {
+        method: 'POST',
+        headers: apiKey
+          ? { 'x-api-key': apiKey, 'content-type': 'application/json' }
+          : { 'content-type': 'application/json' },
+        signal: ctrl.signal,
       });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [open, memberId, refreshIndex]);
+      if (!response.ok) {
+        throw new Error(`pair code ${response.status}`);
+      }
+      const payload = (await response.json()) as JoinCodeResponse;
+      setCode(payload.code);
+      setExpTs(payload.expTs);
+      setRemaining(computeRemaining(payload.expTs));
+      setStatus('idle');
+    } catch (err) {
+      if ((err as Error)?.name === 'AbortError') {
+        return;
+      }
+      setStatus('error');
+      setError(err instanceof Error ? err.message : 'Unable to generate join code');
+      setCode(null);
+      setExpTs(null);
+      setRemaining(0);
+    }
+  }, [memberId]);
 
   useEffect(() => {
-    if (!open || !joinCode) {
+    if (!open || !memberId || !WATCH_FEATURE_ENABLED) {
+      setCode(null);
+      setExpTs(null);
+      setRemaining(0);
+      setStatus('idle');
+      setError(null);
+      abortRef.current?.abort();
       return;
     }
-    const tick = () => setRemaining(computeRemaining(joinCode.expTs));
-    tick();
-    const timer = window.setInterval(tick, 1_000);
-    return () => window.clearInterval(timer);
-  }, [open, joinCode]);
+
+    loadCode().catch(() => {});
+
+    return () => {
+      abortRef.current?.abort();
+    };
+  }, [open, memberId, loadCode]);
+
+  useEffect(() => {
+    if (!expTs) {
+      return;
+    }
+
+    const timer = window.setInterval(() => {
+      setRemaining(computeRemaining(expTs));
+    }, 1_000);
+
+    return () => {
+      window.clearInterval(timer);
+    };
+  }, [expTs]);
 
   const bindUrl = useMemo(() => {
-    if (!joinCode) {
+    if (!code) {
       return undefined;
     }
     const url = new URL(`${API}/watch/bind`);
-    url.searchParams.set('code', joinCode.code);
+    url.searchParams.set('code', code);
     return url.toString();
-  }, [joinCode]);
+  }, [code]);
 
   if (!open || !WATCH_FEATURE_ENABLED) {
     return null;
@@ -106,11 +121,11 @@ export default function PairWatchDialog({ open, onClose, memberId }: PairWatchDi
 
   const disabled = !memberId || status === 'loading';
 
-  const requestNewCode = () => {
-    if (status === 'loading') {
+  const handleRegenerate = () => {
+    if (disabled) {
       return;
     }
-    setRefreshIndex((value) => value + 1);
+    loadCode().catch(() => {});
   };
 
   return (
@@ -149,11 +164,14 @@ export default function PairWatchDialog({ open, onClose, memberId }: PairWatchDi
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div>
                   <div className="text-xs uppercase tracking-wide text-slate-400">Join code</div>
-                  <div className="mt-1 text-3xl font-mono tracking-widest text-emerald-300">
-                    {joinCode ? joinCode.code : status === 'loading' ? '••••••' : '------'}
+                  <div
+                    className="mt-1 text-3xl font-mono tracking-widest text-emerald-300"
+                    data-testid="join-code"
+                  >
+                    {code ? code : status === 'loading' ? '••••••' : '------'}
                   </div>
                 </div>
-                {joinCode && bindUrl ? <QrPlaceholder code={joinCode.code} url={bindUrl} /> : null}
+                {code && bindUrl ? <QrPlaceholder code={code} url={bindUrl} /> : null}
               </div>
               <div className="mt-3 flex flex-wrap items-center justify-between gap-3 text-xs text-slate-400">
                 <div>
@@ -161,7 +179,8 @@ export default function PairWatchDialog({ open, onClose, memberId }: PairWatchDi
                 </div>
                 <button
                   type="button"
-                  onClick={requestNewCode}
+                  aria-label="Generate new code"
+                  onClick={handleRegenerate}
                   className="rounded border border-slate-700 px-2 py-1 text-xs font-semibold text-emerald-300 hover:border-emerald-400 disabled:cursor-not-allowed disabled:opacity-60"
                   disabled={disabled}
                 >
@@ -180,7 +199,7 @@ export default function PairWatchDialog({ open, onClose, memberId }: PairWatchDi
             </div>
 
             {import.meta.env.DEV ? (
-              <DevWatchSimulator joinCode={joinCode?.code} />
+              <DevWatchSimulator joinCode={code ?? undefined} />
             ) : null}
           </div>
         )}
