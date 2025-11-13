@@ -8,11 +8,12 @@ import { __testing } from '@web/sg/hooks';
 const runId = 'run-fallback';
 
 const sgPayload: RunSG = {
-  total_sg: 1.1,
+  run_id: runId,
+  sg_total: 1.1,
   holes: [
     {
       hole: 7,
-      sg: 1.1,
+      sg_total: 1.1,
       shots: [
         { hole: 7, shot: 1, sg_delta: 0.6 },
         { hole: 7, shot: 2, sg_delta: 0.5 },
@@ -23,24 +24,26 @@ const sgPayload: RunSG = {
 
 const anchorsPayload: Anchor[] = [
   {
-    runId,
+    run_id: runId,
     hole: 7,
     shot: 1,
-    clipId: 'clip-a',
-    tStartMs: 1200,
-    tEndMs: 2400,
+    clip_id: 'clip-a',
+    t_start_ms: 1200,
+    t_end_ms: 2400,
     version: 1,
-    ts: Date.now(),
+    created_ts: Date.now() - 2000,
+    updated_ts: Date.now() - 1000,
   },
   {
-    runId,
+    run_id: runId,
     hole: 7,
     shot: 2,
-    clipId: 'clip-b',
-    tStartMs: 1800,
-    tEndMs: 2600,
+    clip_id: 'clip-b',
+    t_start_ms: 1800,
+    t_end_ms: 2600,
     version: 1,
-    ts: Date.now(),
+    created_ts: Date.now() - 1500,
+    updated_ts: Date.now() - 500,
   },
 ];
 
@@ -53,11 +56,11 @@ describe('TopSGShots default visibility fallback', () => {
     __testing.clearCache();
     fetchSpy.mockImplementation((input: RequestInfo | URL) => {
       const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
-      if (url.endsWith('/sg')) {
-        return Promise.resolve(new Response(JSON.stringify(sgPayload), { status: 200 }));
-      }
-      if (url.endsWith('/anchors')) {
+      if (url.includes('/api/sg/runs/') && url.endsWith('/anchors')) {
         return Promise.resolve(new Response(JSON.stringify(anchorsPayload), { status: 200 }));
+      }
+      if (url.includes('/api/sg/runs/')) {
+        return Promise.resolve(new Response(JSON.stringify(sgPayload), { status: 200 }));
       }
       return Promise.reject(new Error(`unexpected url ${url}`));
     });

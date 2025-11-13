@@ -2,7 +2,7 @@ import * as React from 'react';
 
 import { useEventContext } from '@web/events/context';
 import { openAndSeekTo } from '@web/player/seek';
-import { useAnchors, useRunSG, type Anchor, type RunSG } from '@web/sg/hooks';
+import { useRunAnchors, useRunSG, type Anchor, type RunSG } from '@web/sg/hooks';
 import { shareAnchor, type AnchorShareResult } from '@web/share/anchor';
 import { isSGFeatureEnabled } from '@web/sg/feature';
 import { SGDeltaBadge } from '@web/sg/SGDeltaBadge';
@@ -44,10 +44,10 @@ function positiveDeltaShots(sg: RunSG | undefined, anchors: Map<string, Anchor>,
         return;
       }
       const anchor = anchors.get(keyFor(holeNumber, shotNumber));
-      if (!anchor?.clipId || typeof anchor.tStartMs !== 'number') {
+      if (!anchor?.clip_id || typeof anchor.t_start_ms !== 'number') {
         return;
       }
-      if (canShow && !canShow(anchor.clipId)) {
+      if (canShow && !canShow(anchor.clip_id)) {
         return;
       }
       rows.push({
@@ -62,7 +62,7 @@ function positiveDeltaShots(sg: RunSG | undefined, anchors: Map<string, Anchor>,
   return rows.sort((a, b) => b.delta - a.delta).slice(0, Math.max(0, limit));
 }
 
-export function TopSGShots({ runId, limit = 5, isClipVisible, title = 'Top SG shots' }: TopSGShotsProps) {
+export function TopSGShots({ runId, limit = 5, isClipVisible, title = 'Top SG-slag' }: TopSGShotsProps) {
   if (!isSGFeatureEnabled()) {
     return null;
   }
@@ -74,7 +74,7 @@ export function TopSGShots({ runId, limit = 5, isClipVisible, title = 'Top SG sh
 
   const normalizedRunId = rawRunId;
   const { data: sg, loading: sgLoading, error: sgError } = useRunSG(normalizedRunId);
-  const { data: anchors, loading: anchorLoading, error: anchorError } = useAnchors(normalizedRunId);
+  const { data: anchors, loading: anchorLoading, error: anchorError } = useRunAnchors(normalizedRunId);
   const eventContext = useEventContext();
   const visibilityGuard = isClipVisible ?? eventContext.isClipVisible;
   const [shared, setShared] = React.useState<Record<string, AnchorShareResult>>({});
@@ -104,10 +104,10 @@ export function TopSGShots({ runId, limit = 5, isClipVisible, title = 'Top SG sh
 
   const handleWatch = React.useCallback(
     (anchor: Anchor) => {
-      if (!anchor?.clipId || typeof anchor.tStartMs !== 'number') {
+      if (!anchor?.clip_id || typeof anchor.t_start_ms !== 'number') {
         return;
       }
-      openAndSeekTo({ clipId: anchor.clipId, tStartMs: anchor.tStartMs, pushUrl: false });
+      openAndSeekTo({ clipId: anchor.clip_id, tStartMs: anchor.t_start_ms, pushUrl: false });
     },
     [],
   );
@@ -126,7 +126,7 @@ export function TopSGShots({ runId, limit = 5, isClipVisible, title = 'Top SG sh
   const error = sgError ?? anchorError;
 
   return (
-    <div aria-label="Top SG Shots" className="space-y-3 rounded-xl border border-slate-800 bg-slate-950/60 p-4 shadow-lg">
+    <div aria-label="Top SG-slag" className="space-y-3 rounded-xl border border-slate-800 bg-slate-950/60 p-4 shadow-lg">
       <div className="flex items-center justify-between gap-2">
         <h3 className="text-lg font-semibold text-slate-100">{title}</h3>
         {isLoading ? <span className="text-xs text-slate-400">Loading…</span> : null}

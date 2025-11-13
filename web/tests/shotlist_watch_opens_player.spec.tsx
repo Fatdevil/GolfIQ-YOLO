@@ -26,11 +26,12 @@ vi.mock('@web/media/useSignedVideoSource', () => ({
 const runId = 'run-watch';
 
 const sgPayload = {
-  total_sg: 0.4,
+  run_id: runId,
+  sg_total: 0.4,
   holes: [
     {
       hole: 1,
-      sg: 0.4,
+      sg_total: 0.4,
       shots: [
         { hole: 1, shot: 1, sg_delta: 0.4 },
       ],
@@ -40,14 +41,15 @@ const sgPayload = {
 
 const anchorsPayload = [
   {
-    runId,
+    run_id: runId,
     hole: 1,
     shot: 1,
-    clipId: 'clip-2',
-    tStartMs: 9876,
-    tEndMs: 12000,
+    clip_id: 'clip-2',
+    t_start_ms: 9876,
+    t_end_ms: 12000,
     version: 1,
-    ts: Date.now(),
+    created_ts: Date.now() - 5000,
+    updated_ts: Date.now() - 1000,
   },
 ];
 
@@ -60,11 +62,11 @@ describe('ShotList integration with PlayerOverlay', () => {
     __testing.clearCache();
     fetchSpy.mockImplementation((input: RequestInfo | URL) => {
       const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
-      if (url.endsWith('/sg')) {
-        return Promise.resolve(new Response(JSON.stringify(sgPayload), { status: 200 }));
-      }
-      if (url.endsWith('/anchors')) {
+      if (url.includes('/api/sg/runs/') && url.endsWith('/anchors')) {
         return Promise.resolve(new Response(JSON.stringify(anchorsPayload), { status: 200 }));
+      }
+      if (url.includes('/api/sg/runs/')) {
+        return Promise.resolve(new Response(JSON.stringify(sgPayload), { status: 200 }));
       }
       if (url.includes('/api/clips/clip-2')) {
         return Promise.resolve(

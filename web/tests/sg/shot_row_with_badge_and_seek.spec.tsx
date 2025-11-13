@@ -9,11 +9,12 @@ import type { Anchor, RunSG } from '@web/sg/hooks';
 const runId = 'run-123';
 
 const sgPayload: RunSG = {
-  total_sg: 0.75,
+  run_id: runId,
+  sg_total: 0.75,
   holes: [
     {
       hole: 1,
-      sg: 0.75,
+      sg_total: 0.75,
       shots: [
         { hole: 1, shot: 1, sg_delta: 0.75 },
       ],
@@ -23,14 +24,15 @@ const sgPayload: RunSG = {
 
 const anchorsPayload: Anchor[] = [
   {
-    runId,
+    run_id: runId,
     hole: 1,
     shot: 1,
-    clipId: 'clip-1',
-    tStartMs: 3210,
-    tEndMs: 6000,
+    clip_id: 'clip-1',
+    t_start_ms: 3210,
+    t_end_ms: 6000,
     version: 1,
-    ts: Date.now(),
+    created_ts: Date.now() - 2000,
+    updated_ts: Date.now() - 1000,
   },
 ];
 
@@ -43,11 +45,11 @@ describe('ShotList watch interactions', () => {
     __testing.clearCache();
     fetchSpy.mockImplementation((input: RequestInfo | URL) => {
       const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
-      if (url.endsWith('/sg')) {
-        return Promise.resolve(new Response(JSON.stringify(sgPayload), { status: 200 }));
-      }
-      if (url.endsWith('/anchors')) {
+      if (url.includes('/api/sg/runs/') && url.endsWith('/anchors')) {
         return Promise.resolve(new Response(JSON.stringify(anchorsPayload), { status: 200 }));
+      }
+      if (url.includes('/api/sg/runs/')) {
+        return Promise.resolve(new Response(JSON.stringify(sgPayload), { status: 200 }));
       }
       return Promise.reject(new Error(`unexpected url ${url}`));
     });

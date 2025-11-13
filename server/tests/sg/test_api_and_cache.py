@@ -103,6 +103,18 @@ def test_run_sg_cached(client, monkeypatch):
     assert any(name == "sg.compute.ms" for name in names)
 
 
+def test_run_sg_v2_endpoint(client):
+    run_id = "run-v2"
+    _seed_run(run_id)
+
+    response = client.get(f"/api/sg/runs/{run_id}")
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["run_id"] == run_id
+    assert "runId" not in payload
+    assert isinstance(payload.get("holes"), list)
+
+
 def test_missing_run_returns_zero(client, monkeypatch):
     run_id = "no-data"
     emitted: List[Tuple[str, dict]] = []
@@ -165,6 +177,57 @@ def test_run_sg_cache_invalidation_on_new_shot(client, monkeypatch):
     names = [name for name, _ in emitted]
     assert names.count("sg.cache.hit") == 0
     assert names.count("sg.cache.miss") == 2
+
+
+def test_anchor_upsert_and_versioning(client, monkeypatch):
+    monkeypatch.setenv("API_KEY", "test-sg-key")
+    monkeypatch.setenv("REQUIRE_API_KEY", "1")
+    run_id = "run-anchor-upsert"
+    headers = {"x-api-key": "test-sg-key"}
+    payload = [
+        {
+            "hole": 1,
+            "shot": 1,
+            "clip_id": "clip-a",
+            "t_start_ms": 500,
+            "t_end_ms": 1500,
+        }
+    ]
+
+    created = client.post(
+        f"/api/sg/runs/{run_id}/anchors", headers=headers, json=payload
+    )
+    assert created.status_code == 200
+    body = created.json()
+    assert body[0]["version"] == 1
+    assert body[0]["clip_id"] == "clip-a"
+
+    same = client.post(f"/api/sg/runs/{run_id}/anchors", headers=headers, json=payload)
+    assert same.status_code == 200
+    assert same.json()[0]["version"] == 1
+
+    updated_payload = [
+        {
+            "hole": 1,
+            "shot": 1,
+            "clip_id": "clip-a",
+            "t_start_ms": 800,
+            "t_end_ms": 1800,
+        }
+    ]
+
+    updated = client.post(
+        f"/api/sg/runs/{run_id}/anchors", headers=headers, json=updated_payload
+    )
+    assert updated.status_code == 200
+    updated_body = updated.json()[0]
+    assert updated_body["version"] == 2
+    assert updated_body["t_start_ms"] == 800
+
+    listed = client.get(f"/api/sg/runs/{run_id}/anchors", headers=headers)
+    assert listed.status_code == 200
+    listed_body = listed.json()
+    assert listed_body[0]["version"] == 2
 
 
 def test_compute_shots_fingerprint_stability():
@@ -237,7 +300,7 @@ def test_compute_and_cache_run_sg_returns_cached_result():
 
     fingerprint = compute_shots_fingerprint(shots)
     first = compute_and_cache_run_sg(run_id, shots, fingerprint)
-    assert first.runId == run_id
+    assert first.run_id == run_id
 
     hits, misses = cache_stats()
     assert hits == 0
@@ -270,22 +333,22 @@ def test_get_run_sg_respects_entry_expiration():
 
     import server.services.sg_cache as sg_cache_module
 
-    entry = sg_cache_module._CACHE._store[run_id]  # type: ignore[attr-defined]
+    entry = sg_cache_module._CACHE._data[run_id]  # type: ignore[attr-defined]
     entry.expires_at = time.time() - 1  # type: ignore[attr-defined]
 
     assert sg_cache_module.get_run_sg(run_id, fingerprint) is None
-    assert run_id not in sg_cache_module._CACHE._store  # type: ignore[attr-defined]
+    assert run_id not in sg_cache_module._CACHE._data  # type: ignore[attr-defined]
 
 
 def test_cache_eviction_removes_oldest_entry():
     import server.services.sg_cache as sg_cache_module
 
-    cache = sg_cache_module._RunSGCache(cap=1, ttl_seconds=60)
-    first = sg_cache_module.RunSG(runId="r1", total_sg=0.0, holes=[], shots=[])
-    second = sg_cache_module.RunSG(runId="r2", total_sg=0.0, holes=[], shots=[])
+    cache = sg_cache_module.RunSGCache(maxsize=1, ttl_seconds=60)
+    first = sg_cache_module.RunSG(run_id="r1", sg_total=0.0, holes=[], shots=[])
+    second = sg_cache_module.RunSG(run_id="r2", sg_total=0.0, holes=[], shots=[])
 
-    cache.set("r1", "fp1", first)
-    cache.set("r2", "fp2", second)
+    cache.put("r1", first, fingerprint="fp1")
+    cache.put("r2", second, fingerprint="fp2")
 
-    assert "r1" not in cache._store  # type: ignore[attr-defined]
-    assert "r2" in cache._store  # type: ignore[attr-defined]
+    assert "r1" not in cache._data  # type: ignore[attr-defined]
+    assert "r2" in cache._data  # type: ignore[attr-defined]

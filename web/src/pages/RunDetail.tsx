@@ -14,7 +14,7 @@ import { useSignedVideoSource } from "@web/media/useSignedVideoSource";
 import { useMediaPlaybackTelemetry } from "@web/media/telemetry";
 import { openAndSeekTo } from "@web/player/seek";
 import { ShotList, type ShotModerationState } from "@web/features/runs/ShotList";
-import { TopSGShots } from "@web/sg/TopSGShots";
+import { TopSGShotsPanel } from "@web/sg/TopSGShotsPanel";
 import { isClipVisible as moderationAllowsClip } from "@web/sg/visibility";
 
 interface RunDetailData {
@@ -587,7 +587,7 @@ export default function RunDetailPage() {
       )}
 
       {!loading && resolvedRunId ? (
-        <TopSGShots runId={resolvedRunId} isClipVisible={resolveClipVisible} />
+        <TopSGShotsPanel runId={resolvedRunId} isClipVisible={resolveClipVisible} />
       ) : null}
 
       {!loading && resolvedRunId ? (

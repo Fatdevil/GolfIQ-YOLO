@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import List
+from typing import List, Optional
 
 from pydantic import AliasChoices, BaseModel, ConfigDict, Field
 
@@ -10,6 +10,9 @@ from pydantic import AliasChoices, BaseModel, ConfigDict, Field
 class ShotEvent(BaseModel):
     """An individual shot observation used to compute strokes gained."""
 
+    run_id: Optional[str] = Field(
+        default=None, validation_alias=AliasChoices("run_id", "runId")
+    )
     hole: int
     shot: int
     distance_before_m: float = Field(
@@ -45,4 +48,13 @@ class HoleSG(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
 
-__all__ = ["HoleSG", "ShotEvent", "ShotSG"]
+class RunSG(BaseModel):
+    run_id: str = Field(alias="runId")
+    sg_total: float = Field(alias="total_sg")
+    holes: List[HoleSG]
+    shots: List[ShotSG] = Field(default_factory=list)
+
+    model_config = ConfigDict(populate_by_name=True)
+
+
+__all__ = ["HoleSG", "RunSG", "ShotEvent", "ShotSG"]

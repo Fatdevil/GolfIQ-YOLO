@@ -6,7 +6,7 @@ from collections import defaultdict
 from typing import Iterable, List, Tuple
 
 from .curves import expected_strokes
-from .schemas import HoleSG, ShotEvent, ShotSG
+from .schemas import HoleSG, RunSG, ShotEvent, ShotSG
 
 
 def _normalise_lie(lie: str) -> str:
@@ -47,16 +47,24 @@ def _shot_delta(event: ShotEvent) -> Tuple[ShotSG, float]:
     return shot, delta
 
 
-def compute_round_sg(
+def compute_run_sg(
     events: Iterable[ShotEvent],
-) -> Tuple[float, List[HoleSG], List[ShotSG]]:
-    """Aggregate strokes-gained results for a run of shots."""
+    *,
+    run_id: str | None = None,
+) -> RunSG:
+    """Compute per-shot, per-hole and total strokes gained for a run."""
+
+    source_events = list(events)
+    if not source_events:
+        resolved_run_id = run_id or ""
+        return RunSG(run_id=resolved_run_id, sg_total=0.0, holes=[], shots=[])
+
+    resolved_run_id = run_id or source_events[0].run_id or ""
 
     shots: List[ShotSG] = []
     hole_totals: dict[int, float] = defaultdict(float)
 
-    # Sort deterministically by hole, then shot number.
-    ordered_events = sorted(events, key=lambda e: (e.hole, e.shot))
+    ordered_events = sorted(source_events, key=lambda e: (e.hole, e.shot))
     for event in ordered_events:
         shot, delta = _shot_delta(event)
         shots.append(shot)
@@ -74,7 +82,16 @@ def compute_round_sg(
         )
 
     total_sg = sum(shot.sg_delta for shot in shots)
-    return total_sg, holes, shots
+    return RunSG(run_id=resolved_run_id, sg_total=total_sg, holes=holes, shots=shots)
 
 
-__all__ = ["compute_round_sg"]
+def compute_round_sg(
+    events: Iterable[ShotEvent],
+) -> Tuple[float, List[HoleSG], List[ShotSG]]:
+    """Backward-compatible tuple return used by older call sites."""
+
+    run = compute_run_sg(events)
+    return run.sg_total, run.holes, run.shots
+
+
+__all__ = ["compute_round_sg", "compute_run_sg"]

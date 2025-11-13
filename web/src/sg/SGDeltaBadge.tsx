@@ -16,7 +16,7 @@ export function SGDeltaBadge({ delta }: { delta: number }) {
   );
 
   return (
-    <span aria-label="Strokes Gained delta" className={className}>
+    <span aria-label="Strokes Gained för slaget" className={className}>
       {display}
     </span>
   );

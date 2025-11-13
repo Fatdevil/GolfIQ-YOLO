@@ -121,7 +121,7 @@ export function EventSGLeaderboard(): JSX.Element | null {
             return;
           }
           const memberId = meta.memberId;
-          const totalRaw = sg?.total_sg;
+          const totalRaw = sg?.sg_total;
           const total = Number.isFinite(totalRaw ?? NaN) ? Number(totalRaw) : 0;
           const thru = computeThru(sg);
           const name = memberNameById.get(memberId) ?? memberId ?? runId;

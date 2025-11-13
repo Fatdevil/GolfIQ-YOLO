@@ -8,17 +8,19 @@ import { __testing } from '@web/sg/hooks';
 
 const runPayloads: Record<string, RunSG> = {
   'run-a': {
-    total_sg: 3.5,
+    run_id: 'run-a',
+    sg_total: 3.5,
     holes: [
-      { hole: 5, sg: 1.5, shots: [{ hole: 5, shot: 1, sg_delta: 1.5 }] },
-      { hole: 12, sg: 2.0, shots: [{ hole: 12, shot: 1, sg_delta: 2.0 }] },
+      { hole: 5, sg_total: 1.5, shots: [{ hole: 5, shot: 1, sg_delta: 1.5 }] },
+      { hole: 12, sg_total: 2.0, shots: [{ hole: 12, shot: 1, sg_delta: 2.0 }] },
     ],
   },
   'run-b': {
-    total_sg: -1.25,
+    run_id: 'run-b',
+    sg_total: -1.25,
     holes: [
-      { hole: 3, sg: -0.5, shots: [{ hole: 3, shot: 1, sg_delta: -0.5 }] },
-      { hole: 9, sg: -0.75, shots: [{ hole: 9, shot: 1, sg_delta: -0.75 }] },
+      { hole: 3, sg_total: -0.5, shots: [{ hole: 3, shot: 1, sg_delta: -0.5 }] },
+      { hole: 9, sg_total: -0.75, shots: [{ hole: 9, shot: 1, sg_delta: -0.75 }] },
     ],
   },
 };
@@ -32,7 +34,7 @@ describe('EventSGLeaderboard', () => {
     __testing.clearCache();
     fetchSpy.mockImplementation((input: RequestInfo | URL) => {
       const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
-      const match = url.match(/\/api\/runs\/(.+?)\/sg/);
+      const match = url.match(/\/api\/sg\/runs\/(.+?)(?:\/?$)/);
       if (match) {
         const runId = match[1];
         const body = runPayloads[runId];
