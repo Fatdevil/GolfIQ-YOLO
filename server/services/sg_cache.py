@@ -2,15 +2,16 @@ from __future__ import annotations
 
 from collections import OrderedDict
 from dataclasses import dataclass
+import hashlib
+import json
 from threading import Lock
 from time import time
-from typing import Optional
+from typing import Iterable, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from server.sg.compile import compile_shot_events
 from server.sg.engine import compute_round_sg
-from server.sg.schemas import HoleSG, ShotSG
+from server.sg.schemas import HoleSG, ShotEvent, ShotSG
 
 
 @dataclass(slots=True)
@@ -43,15 +44,6 @@ class _RunSGCache:
             self._store.pop(run_id, None)
             return True
         return False
-
-    def get(self, run_id: str) -> Optional[RunSG]:
-        with self._lock:
-            entry = self._store.get(run_id)
-            if entry is None or self._purge_if_expired(run_id, entry):
-                return None
-            self._store.move_to_end(run_id)
-            self.hit_count += 1
-            return entry.value
 
     def get_with_fingerprint(self, run_id: str, fingerprint: str) -> Optional[RunSG]:
         with self._lock:
@@ -86,13 +78,34 @@ class _RunSGCache:
 _CACHE = _RunSGCache()
 
 
-def get_run_sg(run_id: str) -> Optional[RunSG]:
-    return _CACHE.get(run_id)
+def compute_shots_fingerprint(shots: Iterable[ShotEvent]) -> str:
+    canonical: list[tuple] = []
+    for shot in shots:
+        data = shot.model_dump(mode="python")
+        canonical.append(
+            (
+                int(data["hole"]),
+                int(data["shot"]),
+                float(data["distance_before_m"]),
+                float(data["distance_after_m"]),
+                str(data.get("lie_before", "")).strip().lower(),
+                str(data.get("lie_after", "")).strip().lower(),
+                json.dumps(data.get("penalty", False), sort_keys=True),
+            )
+        )
+
+    canonical.sort()
+    raw = json.dumps(canonical, separators=(",", ":"))
+    return hashlib.sha1(raw.encode()).hexdigest()
 
 
-def compute_and_cache_run_sg(run_id: str) -> RunSG:
-    shots, fingerprint = compile_shot_events(run_id)
+def get_run_sg(run_id: str, fingerprint: str) -> Optional[RunSG]:
+    return _CACHE.get_with_fingerprint(run_id, fingerprint)
 
+
+def compute_and_cache_run_sg(
+    run_id: str, shots: list[ShotEvent], fingerprint: str
+) -> RunSG:
     cached = _CACHE.get_with_fingerprint(run_id, fingerprint)
     if cached is not None:
         return cached
@@ -124,6 +137,7 @@ __all__ = [
     "RunSG",
     "cache_stats",
     "compute_and_cache_run_sg",
+    "compute_shots_fingerprint",
     "get_run_sg",
     "_reset_cache_for_tests",
 ]

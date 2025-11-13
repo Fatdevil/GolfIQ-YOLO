@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
-from typing import Any, Dict, List, Mapping, Tuple
+from typing import Any, Dict, List, Mapping
 
 from ..api.routers.run_scores import _RECORDED_EVENTS, _RECORDED_EVENTS_LOCK
 
@@ -41,7 +41,7 @@ def _infer_lie_after(
     return before_lie
 
 
-def compile_shot_events(run_id: str) -> Tuple[list[ShotEvent], str]:
+def compile_shot_events(run_id: str) -> list[ShotEvent]:
     events = run_events_snapshot(run_id)
     shots: List[ShotEvent] = []
     for e in events:
@@ -74,7 +74,7 @@ def compile_shot_events(run_id: str) -> Tuple[list[ShotEvent], str]:
                 penalty=penalty,
             )
         )
-    return shots, fingerprint(events)
+    return shots
 
 
 __all__ = ["compile_shot_events", "fingerprint", "run_events_snapshot"]
