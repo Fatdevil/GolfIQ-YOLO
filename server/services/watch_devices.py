@@ -46,11 +46,12 @@ def _new_id(n: int = 12) -> str:
     return base64.urlsafe_b64encode(raw).decode().rstrip("=")
 
 
-def _purge_expired_codes(now: Optional[int] = None) -> None:
+def _purge_expired_codes(now: int | None = None) -> None:
     current = _now_s() if now is None else now
-    expired = [code for code, jc in _CODES.items() if jc.exp_ts <= current]
-    for code in expired:
-        _CODES.pop(code, None)
+    with _LOCK:
+        expired = [code for code, jc in _CODES.items() if jc.exp_ts <= current]
+        for code in expired:
+            _CODES.pop(code, None)
 
 
 def reset() -> None:
@@ -66,10 +67,10 @@ def mint_join_code(member_id: str, ttl_sec: int = 180) -> JoinCode:
         raise ValueError("ttl_sec must be positive")
 
     exp_ts = _now_s() + ttl_sec
+    _purge_expired_codes()
     for _ in range(64):
         code = "".join(str(secrets.randbelow(10)) for _ in range(6))
         with _LOCK:
-            _purge_expired_codes(exp_ts)
             if code in _CODES:
                 continue
             join_code = JoinCode(code=code, member_id=member_id, exp_ts=exp_ts)
@@ -92,8 +93,8 @@ def get_device(device_id: str) -> Optional[Device]:
 
 
 def bind_device_with_code(device_id: str, code: str) -> Device:
+    _purge_expired_codes()
     with _LOCK:
-        _purge_expired_codes()
         device = _DEVICES.get(device_id)
         join_code = _CODES.get(code)
         if device is None or join_code is None:

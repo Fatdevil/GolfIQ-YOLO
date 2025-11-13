@@ -1,4 +1,4 @@
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -90,9 +90,10 @@ describe('DevWatchSimulator', () => {
     source?.emitOpen();
     source?.emitTip({ tipId: 'tip-1', title: 'First tip', body: 'Hello' });
 
-    await screen.findByText(/First tip/);
+    const row = await screen.findByTestId('tip-tip-1');
+    await within(row).findByText(/First tip/i);
 
-    await userEvent.click(screen.getByRole('button', { name: /ack tip/i }));
+    await userEvent.click(within(row).getByRole('button', { name: /ack tip tip-1/i }));
     expect(fetchMock).toHaveBeenCalledTimes(3);
     const ackRequest = fetchMock.mock.calls[2] as FetchCall;
     expect(ackRequest[0]).toBe('http://localhost:9999/api/watch/devices/ack');

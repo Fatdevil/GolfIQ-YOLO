@@ -256,15 +256,20 @@ export default function DevWatchSimulator({ joinCode }: DevWatchSimulatorProps):
       ) : null}
 
       {tips.length > 0 ? (
-        <div className="mt-4 space-y-2">
+        <ul className="mt-4 space-y-2">
           {tips.map((tip) => (
-            <div key={tip.tipId} className="rounded border border-slate-800 bg-slate-900/80 p-2">
+            <li
+              key={tip.tipId}
+              data-testid={`tip-${tip.tipId}`}
+              className="rounded border border-slate-800 bg-slate-900/80 p-2"
+            >
               <div className="text-[11px] font-semibold text-emerald-300">{tip.title ?? tip.tipId}</div>
               {tip.body ? <div className="mt-1 text-[11px] text-slate-200">{tip.body}</div> : null}
               <div className="mt-2 flex items-center justify-between text-[11px] text-slate-400">
                 <span>Tip ID: {tip.tipId}</span>
                 <button
                   type="button"
+                  aria-label={`Ack tip ${tip.tipId}`}
                   className="rounded border border-slate-700 px-2 py-1 text-[11px] font-semibold text-sky-300 hover:border-sky-400 disabled:cursor-not-allowed disabled:opacity-60"
                   onClick={() => acknowledgeTip(tip.tipId)}
                   disabled={ackState.status === 'sending'}
@@ -272,9 +277,9 @@ export default function DevWatchSimulator({ joinCode }: DevWatchSimulatorProps):
                   {ackState.status === 'sending' ? 'Ack…' : 'Ack tip'}
                 </button>
               </div>
-            </div>
+            </li>
           ))}
-        </div>
+        </ul>
       ) : (
         <p className="mt-4 text-[11px] text-slate-500">Tips will appear here when published to the member.</p>
       )}
