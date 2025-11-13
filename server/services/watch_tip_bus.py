@@ -27,6 +27,19 @@ _LOCK = Lock()
 _QUEUE_MAXSIZE = 100
 
 
+def get_latest_tip_for_member(member_id: str) -> Optional[Tip]:
+    """Return the most recently published tip for *member_id* if available."""
+
+    with _LOCK:
+        tips_for_member = _TIPS.get(member_id)
+        if not tips_for_member:
+            return None
+
+        # Dicts preserve insertion order in Python 3.7+, so the most recent
+        # tip is the last value.
+        return next(reversed(tips_for_member.values()))
+
+
 def publish(member_id: str, tip: Tip) -> Tip:
     with _LOCK:
         tips = _TIPS.setdefault(member_id, {})
