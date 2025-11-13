@@ -2,75 +2,79 @@
 
 from __future__ import annotations
 
-from typing import Dict, List
+from collections import defaultdict
+from typing import Iterable, List, Tuple
 
 from .curves import expected_strokes
-from .schemas import HoleSG, RunSGResult, ShotEvent, ShotSG
-
-# Number of penalty strokes *in addition to the swing already counted as -1*
-_PENALTY: Dict[str, float] = {
-    "ob": 1.0,  # stroke-and-distance = +1 penalty; swing already counted
-    "hazard": 1.0,  # lateral / penalty area
-    "unplayable": 1.0,  # drop with one-stroke penalty
-}
+from .schemas import HoleSG, ShotEvent, ShotSG
 
 
-def _post_shot_lie(distance_after: float, previous_lie: str) -> str:
-    """Determine the lie context for the next interpolation."""
-
-    if distance_after <= 0:
-        return "green"
-    if distance_after <= 25:
-        return "green"
-    return previous_lie
-
-
-def shot_sg(
-    before_m: float, after_m: float, before_lie: str, penalty: str | None = None
-) -> float:
-    """Compute strokes-gained delta for a single shot."""
-
-    before_expectation = expected_strokes(before_m, before_lie)
-    after_lie = _post_shot_lie(after_m, before_lie)
-    after_expectation = 0.0 if after_m <= 0 else expected_strokes(after_m, after_lie)
-    delta = before_expectation - after_expectation - 1.0
-
-    if penalty and penalty in _PENALTY:
-        delta -= _PENALTY[penalty]
-
-    return round(delta, 4)
+def _normalise_lie(lie: str) -> str:
+    value = (lie or "").strip().lower()
+    if not value:
+        return "fairway"
+    if value == "holed":
+        return "holed"
+    return value
 
 
-def compute_run_sg(events: List[ShotEvent]) -> RunSGResult:
+def _penalty_value(flag: bool | str | None) -> bool:
+    if isinstance(flag, bool):
+        return flag
+    if isinstance(flag, str):
+        lowered = flag.strip().lower()
+        if not lowered or lowered in {"0", "none", "false"}:
+            return False
+        return True
+    return bool(flag)
+
+
+def _shot_delta(event: ShotEvent) -> Tuple[ShotSG, float]:
+    lie_before = _normalise_lie(event.lie_before)
+    lie_after = _normalise_lie(event.lie_after)
+
+    before_expectation = expected_strokes(event.distance_before_m, lie_before)
+
+    if lie_after == "holed" or event.distance_after_m <= 0:
+        after_expectation = 0.0
+    else:
+        after_expectation = expected_strokes(event.distance_after_m, lie_after)
+
+    penalty = 1.0 if _penalty_value(event.penalty) else 0.0
+    delta = before_expectation - (1.0 + after_expectation + penalty)
+
+    shot = ShotSG(hole=event.hole, shot=event.shot, sg_delta=delta)
+    return shot, delta
+
+
+def compute_round_sg(
+    events: Iterable[ShotEvent],
+) -> Tuple[float, List[HoleSG], List[ShotSG]]:
     """Aggregate strokes-gained results for a run of shots."""
 
-    holes: Dict[int, List[ShotEvent]] = {}
-    for event in events:
-        holes.setdefault(event.hole, []).append(event)
+    shots: List[ShotSG] = []
+    hole_totals: dict[int, float] = defaultdict(float)
 
-    result_holes: List[HoleSG] = []
-    total_sg = 0.0
+    # Sort deterministically by hole, then shot number.
+    ordered_events = sorted(events, key=lambda e: (e.hole, e.shot))
+    for event in ordered_events:
+        shot, delta = _shot_delta(event)
+        shots.append(shot)
+        hole_totals[event.hole] += delta
 
-    for hole_number in sorted(holes):
-        hole_events = sorted(holes[hole_number], key=lambda e: e.shot)
-        hole_sg = 0.0
-        shot_results: List[ShotSG] = []
-
-        for event in hole_events:
-            sg_delta = shot_sg(
-                event.before_m, event.after_m, event.before_lie, event.penalty
+    holes: List[HoleSG] = []
+    for hole_number in sorted(hole_totals):
+        hole_shots = [s for s in shots if s.hole == hole_number]
+        holes.append(
+            HoleSG(
+                hole=hole_number,
+                sg_total=sum(s.sg_delta for s in hole_shots),
+                sg_shots=hole_shots,
             )
-            hole_sg += sg_delta
-            shot_results.append(
-                ShotSG(hole=hole_number, shot=event.shot, sg_delta=sg_delta)
-            )
-
-        result_holes.append(
-            HoleSG(hole=hole_number, sg=round(hole_sg, 4), shots=shot_results)
         )
-        total_sg += hole_sg
 
-    return RunSGResult(holes=result_holes, total_sg=round(total_sg, 4))
+    total_sg = sum(shot.sg_delta for shot in shots)
+    return total_sg, holes, shots
 
 
-__all__ = ["compute_run_sg", "shot_sg"]
+__all__ = ["compute_round_sg"]

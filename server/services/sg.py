@@ -3,81 +3,14 @@
 from __future__ import annotations
 
 from bisect import bisect_left
-from typing import Iterable, Mapping
+from typing import Iterable, Optional
 
-
-_BASELINES: Mapping[str, list[tuple[float, float]]] = {
-    "green": [
-        (0.5, 1.00),
-        (1.5, 1.05),
-        (2.0, 1.08),
-        (3.0, 1.20),
-        (5.0, 1.50),
-        (8.0, 1.70),
-        (10.0, 1.85),
-        (15.0, 2.05),
-        (20.0, 2.20),
-        (30.0, 2.45),
-    ],
-    "sand": [
-        (1.0, 2.10),
-        (5.0, 2.40),
-        (10.0, 2.70),
-        (20.0, 2.95),
-        (40.0, 3.30),
-        (60.0, 3.60),
-        (90.0, 3.95),
-        (120.0, 4.25),
-        (150.0, 4.50),
-        (200.0, 4.80),
-    ],
-    "rough": [
-        (5.0, 2.40),
-        (10.0, 2.70),
-        (20.0, 2.95),
-        (40.0, 3.25),
-        (70.0, 3.65),
-        (100.0, 3.95),
-        (140.0, 4.30),
-        (180.0, 4.55),
-        (220.0, 4.80),
-        (260.0, 5.05),
-    ],
-    "fairway": [
-        (10.0, 2.45),
-        (20.0, 2.70),
-        (40.0, 3.00),
-        (70.0, 3.30),
-        (100.0, 3.55),
-        (140.0, 3.85),
-        (180.0, 4.10),
-        (220.0, 4.30),
-        (260.0, 4.55),
-        (300.0, 4.80),
-    ],
-    "tee": [
-        (40.0, 3.10),
-        (80.0, 3.55),
-        (120.0, 3.95),
-        (160.0, 4.25),
-        (200.0, 4.50),
-        (240.0, 4.75),
-        (280.0, 4.95),
-        (320.0, 5.15),
-        (360.0, 5.35),
-        (400.0, 5.55),
-    ],
-}
-
-
-def _lookup_table(lie: str) -> list[tuple[float, float]]:
-    key = lie.lower().strip() if lie else "fairway"
-    return list(_BASELINES.get(key, _BASELINES["fairway"]))
+from server.sg.curves import expected_strokes as _expected_strokes
 
 
 def _interpolate(distance_m: float, table: Iterable[tuple[float, float]]) -> float:
     sanitized = max(0.0, float(distance_m))
-    points = sorted((max(0.0, d), max(0.0, v)) for d, v in table)
+    points = sorted((max(0.0, float(d)), float(v)) for d, v in table)
     if not points:
         raise ValueError("baseline table requires at least one point")
     if sanitized <= points[0][0]:
@@ -99,25 +32,47 @@ def _interpolate(distance_m: float, table: Iterable[tuple[float, float]]) -> flo
 def expected_strokes(distance_m: float, lie: str = "fairway") -> float:
     """Return expected strokes to hole out for the provided distance and lie."""
 
-    table = _lookup_table(lie)
-    return _interpolate(distance_m, table)
+    return _expected_strokes(distance_m, lie)
+
+
+def _resolve_lie_end(
+    lie_start: str, lie_end: Optional[str], end_distance: float
+) -> str:
+    if lie_end:
+        return lie_end
+    normalized_start = (lie_start or "fairway").strip().lower() or "fairway"
+    if end_distance <= 0:
+        return "holed"
+    if normalized_start == "green" or end_distance <= 25:
+        return "green"
+    return normalized_start
 
 
 def sg_delta(
     start_dist_m: float,
     end_dist_m: float | None,
+    *,
     strokes_used: int,
     lie_start: str = "fairway",
+    lie_end: Optional[str] = None,
+    penalty: bool = False,
 ) -> float:
     """Compute the strokes-gained delta for a single shot or clip."""
 
     if strokes_used < 0:
         raise ValueError("strokes_used must be non-negative")
+
     start_expectation = expected_strokes(start_dist_m, lie=lie_start)
+
     end_expectation = 0.0
     if end_dist_m is not None:
-        end_expectation = expected_strokes(end_dist_m, lie="green")
-    return (start_expectation - end_expectation) - float(strokes_used)
+        end_distance = max(0.0, float(end_dist_m))
+        lie_after = _resolve_lie_end(lie_start, lie_end, end_distance)
+        if lie_after != "holed" and end_distance > 0:
+            end_expectation = expected_strokes(end_distance, lie=lie_after)
+
+    penalty_strokes = 1.0 if penalty else 0.0
+    return start_expectation - (float(strokes_used) + end_expectation + penalty_strokes)
 
 
-__all__ = ["expected_strokes", "sg_delta"]
+__all__ = ["expected_strokes", "sg_delta", "_interpolate"]

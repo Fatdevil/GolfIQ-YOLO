@@ -4,7 +4,7 @@ import { getApiKey } from '@web/api';
 
 export type ShotSG = { hole: number; shot: number; sg_delta: number };
 export type HoleSG = { hole: number; sg: number; shots: ShotSG[] };
-export type RunSG = { holes: HoleSG[]; total_sg: number };
+export type RunSG = { runId?: string; holes: HoleSG[]; total_sg: number; shots?: ShotSG[] };
 
 export type Anchor = {
   runId: string;
