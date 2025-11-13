@@ -106,7 +106,7 @@ def record_clip_metrics(
     sg_delta_value = sg.sg_delta(
         body.start_dist_m,
         body.end_dist_m,
-        body.strokes_used,
+        strokes_used=body.strokes_used,
         lie_start=body.lie_start,
     )
     anchor_sec = _derive_anchor(clip)

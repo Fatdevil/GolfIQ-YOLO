@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from typing import List, Optional
+from typing import List
 
-from pydantic import BaseModel
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field
 
 
 class ShotEvent(BaseModel):
@@ -12,11 +12,19 @@ class ShotEvent(BaseModel):
 
     hole: int
     shot: int
-    ts: int  # milliseconds since epoch
-    before_m: float
-    after_m: float
-    before_lie: str
-    penalty: Optional[str] = None
+    distance_before_m: float = Field(
+        validation_alias=AliasChoices("distance_before_m", "before_m")
+    )
+    distance_after_m: float = Field(
+        default=0.0, validation_alias=AliasChoices("distance_after_m", "after_m")
+    )
+    lie_before: str = Field(validation_alias=AliasChoices("lie_before", "before_lie"))
+    lie_after: str = Field(
+        default="green", validation_alias=AliasChoices("lie_after", "after_lie")
+    )
+    penalty: bool | str | None = Field(default=False)
+
+    model_config = ConfigDict(populate_by_name=True)
 
 
 class ShotSG(BaseModel):
@@ -31,20 +39,10 @@ class HoleSG(BaseModel):
     """Aggregated strokes-gained over a hole."""
 
     hole: int
-    sg: float
-    shots: List[ShotSG]
+    sg_total: float = Field(alias="sg")
+    sg_shots: List[ShotSG] = Field(alias="shots")
+
+    model_config = ConfigDict(populate_by_name=True)
 
 
-class RunSGResult(BaseModel):
-    """Aggregate strokes-gained output for a run/round."""
-
-    holes: List[HoleSG]
-    total_sg: float
-
-
-__all__ = [
-    "HoleSG",
-    "RunSGResult",
-    "ShotEvent",
-    "ShotSG",
-]
+__all__ = ["HoleSG", "ShotEvent", "ShotSG"]
