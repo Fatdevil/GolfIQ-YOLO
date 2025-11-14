@@ -77,3 +77,20 @@ export async function saveTripScores(
     throw toTripApiError("saveTripScores", error);
   }
 }
+
+export async function createTripShareToken(tripId: string): Promise<string> {
+  const response = await fetch(`${TRIP_BASE}/rounds/${tripId}/share`, {
+    method: "POST",
+    headers: withAuth({ "Content-Type": "application/json" }),
+  });
+
+  if (!response.ok) {
+    throw new TripApiError(
+      `createTripShareToken failed: ${response.status}`,
+      response.status
+    );
+  }
+
+  const data = (await response.json()) as { publicToken: string };
+  return data.publicToken;
+}

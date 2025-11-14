@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Link, useParams } from "react-router-dom";
 
@@ -19,6 +19,8 @@ export default function QuickRoundPlayPage() {
   const [suppressedSuggestion, setSuppressedSuggestion] = useState<
     { hole: number; expires: number } | null
   >(null);
+  const [summaryCopied, setSummaryCopied] = useState(false);
+  const summaryCopyTimeout = useRef<number | null>(null);
   const { position, error: geoError } = useGeolocation(autoHoleEnabled);
   const { data: bundle, loading: bundleLoading, error: bundleError } = useCourseBundle(
     round?.courseId
@@ -72,6 +74,14 @@ export default function QuickRoundPlayPage() {
     }
   }, [autoHoleEnabled, suppressedSuggestion]);
 
+  useEffect(() => {
+    return () => {
+      if (summaryCopyTimeout.current !== null) {
+        window.clearTimeout(summaryCopyTimeout.current);
+      }
+    };
+  }, []);
+
   const summary = useMemo(() => {
     if (!round) {
       return null;
@@ -117,6 +127,39 @@ export default function QuickRoundPlayPage() {
   const suggestionReason = suggestion
     ? formatAutoHoleReason(suggestion.reason)
     : null;
+
+  const handleCopySummary = async () => {
+    if (!round || !summary) {
+      return;
+    }
+
+    const summaryText = [
+      `GolfIQ Quick Round – ${round.courseName}`,
+      "",
+      `Date: ${new Date(round.startedAt).toLocaleString()}`,
+      `Score: ${summary.totalStrokes} (${formatToPar(summary.toPar)})`,
+      `Holes: ${round.holes.length}`,
+    ].join("\n");
+
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(summaryText);
+      } else {
+        window.prompt(t("quickRound.share.button"), summaryText);
+      }
+
+      setSummaryCopied(true);
+      if (summaryCopyTimeout.current !== null) {
+        window.clearTimeout(summaryCopyTimeout.current);
+      }
+      summaryCopyTimeout.current = window.setTimeout(() => {
+        setSummaryCopied(false);
+        summaryCopyTimeout.current = null;
+      }, 4000);
+    } catch (error) {
+      console.warn("Failed to copy quick round summary", error);
+    }
+  };
 
   const handleSelectHole = (index: number) => {
     setCurrentHoleNumber(index);
@@ -291,13 +334,35 @@ export default function QuickRoundPlayPage() {
           <h2 className="text-lg font-semibold text-slate-100">
             {t("quickRound.play.summaryTitle")}
           </h2>
-          <div className="mt-4 grid gap-3 sm:grid-cols-3">
-            <SummaryItem
-              label={t("quickRound.play.strokes")}
-              value={summary.totalStrokes.toString()}
-            />
-            <SummaryItem label={t("quickRound.play.par")} value={summary.totalPar.toString()} />
-            <SummaryItem label={t("quickRound.play.toPar")} value={formatToPar(summary.toPar)} />
+          <div className="mt-4 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+            <div className="grid flex-1 gap-3 sm:grid-cols-3">
+              <SummaryItem
+                label={t("quickRound.play.strokes")}
+                value={summary.totalStrokes.toString()}
+              />
+              <SummaryItem
+                label={t("quickRound.play.par")}
+                value={summary.totalPar.toString()}
+              />
+              <SummaryItem
+                label={t("quickRound.play.toPar")}
+                value={formatToPar(summary.toPar)}
+              />
+            </div>
+            <div className="flex flex-col items-start gap-2 sm:items-end">
+              <button
+                type="button"
+                onClick={handleCopySummary}
+                className="inline-flex items-center rounded-md border border-emerald-500/60 px-3 py-1 text-xs font-semibold text-emerald-200 transition hover:bg-emerald-500/10"
+              >
+                {t("quickRound.share.button")}
+              </button>
+              {summaryCopied ? (
+                <p className="text-xs text-emerald-300 sm:text-right">
+                  {t("quickRound.share.copied")}
+                </p>
+              ) : null}
+            </div>
           </div>
         </section>
       )}

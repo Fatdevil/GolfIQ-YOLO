@@ -38,6 +38,7 @@ import MyBagPage from "./pages/bag/MyBagPage";
 import MyGolfIQPage from "./pages/profile/MyGolfIQPage";
 import TripStartPage from "./pages/trip/TripStartPage";
 import TripScoreboardPage from "./pages/trip/TripScoreboardPage";
+import PublicTripScoreboardPage from "./pages/trip/PublicTripScoreboardPage";
 
 export default function App() {
   useCdnPreconnect();
@@ -129,6 +130,7 @@ export default function App() {
           <Route path="/play/:roundId" element={<QuickRoundPlayPage />} />
           <Route path="/trip/start" element={<TripStartPage />} />
           <Route path="/trip/:tripId" element={<TripScoreboardPage />} />
+          <Route path="/trip/share/:token" element={<PublicTripScoreboardPage />} />
           {qaReplayEnabled && <Route path="/qa/replay" element={<ReplayAnalyzerPage />} />}
         </Routes>
       </main>

@@ -1,18 +1,29 @@
 from __future__ import annotations
 
-from typing import List
+from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, ConfigDict, Field
 
 from server.api.security import require_api_key
 from server.trip.models import TripHoleScore, TripPlayer, TripRound
-from server.trip.store import create_trip_round, get_trip_round, upsert_scores
+from server.trip.store import (
+    create_trip_round,
+    get_trip_by_token,
+    get_trip_round,
+    issue_public_token,
+    upsert_scores,
+)
 
 router = APIRouter(
     prefix="/api/trip",
     tags=["trip"],
     dependencies=[Depends(require_api_key)],
+)
+
+public_router = APIRouter(
+    prefix="/public/trip",
+    tags=["trip-public"],
 )
 
 
@@ -74,3 +85,40 @@ def post_scores(trip_id: str, payload: TripScoresIn):
     if not trip:
         raise HTTPException(status_code=404, detail="trip_not_found")
     return trip
+
+
+class TripShareOut(BaseModel):
+    publicToken: str
+
+
+@router.post("/rounds/{trip_id}/share", response_model=TripShareOut)
+def create_share_token(trip_id: str):
+    token = issue_public_token(trip_id)
+    if not token:
+        raise HTTPException(status_code=404, detail="trip_not_found")
+    return TripShareOut(publicToken=token)
+
+
+class PublicTripRound(BaseModel):
+    course_name: str
+    tees_name: Optional[str]
+    holes: int
+    created_ts: float
+    players: List[TripPlayer]
+    scores: List[TripHoleScore]
+
+
+@public_router.get("/rounds/{token}", response_model=PublicTripRound)
+def get_public_trip_round(token: str):
+    trip = get_trip_by_token(token)
+    if not trip:
+        raise HTTPException(status_code=404, detail="trip_not_found")
+
+    return PublicTripRound(
+        course_name=trip.course_name,
+        tees_name=trip.tees_name,
+        holes=trip.holes,
+        created_ts=trip.created_ts,
+        players=trip.players,
+        scores=trip.scores,
+    )

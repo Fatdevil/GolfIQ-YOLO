@@ -27,6 +27,7 @@ class TripRound(BaseModel):
     holes: int
     players: List[TripPlayer]
     scores: List[TripHoleScore] = Field(default_factory=list)
+    public_token: Optional[str] = None
 
 
 def new_trip_round_id() -> str:

@@ -2,7 +2,12 @@ import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useParams } from "react-router-dom";
 
-import { fetchTripRound, saveTripScores, TripApiError } from "../../trip/api";
+import {
+  createTripShareToken,
+  fetchTripRound,
+  saveTripScores,
+  TripApiError,
+} from "../../trip/api";
 import type { TripRound } from "../../trip/types";
 
 export default function TripScoreboardPage() {
@@ -15,6 +20,8 @@ export default function TripScoreboardPage() {
   const [saveError, setSaveError] = useState<string | null>(null);
   const [pending, setPending] = useState<Record<string, number | undefined>>({});
   const [saving, setSaving] = useState(false);
+  const [shareUrl, setShareUrl] = useState<string | null>(null);
+  const [shareError, setShareError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!tripId) {
@@ -150,6 +157,30 @@ export default function TripScoreboardPage() {
     }
   };
 
+  const handleCreateShare = async () => {
+    if (!trip) {
+      return;
+    }
+
+    try {
+      setShareError(null);
+      const token = await createTripShareToken(trip.id);
+      const url = `${window.location.origin}/trip/share/${token}`;
+      setShareUrl(url);
+      if (navigator.clipboard?.writeText) {
+        try {
+          await navigator.clipboard.writeText(url);
+        } catch (clipboardError) {
+          console.warn("Failed to copy share link", clipboardError);
+        }
+      }
+    } catch (err) {
+      console.error(err);
+      setShareUrl(null);
+      setShareError(t("trip.share.error"));
+    }
+  };
+
   if (loading) {
     return (
       <div className="mx-auto max-w-5xl p-4 text-slate-300">
@@ -177,16 +208,46 @@ export default function TripScoreboardPage() {
   return (
     <div className="mx-auto max-w-5xl space-y-8 p-4">
       <header className="rounded-lg border border-slate-800 bg-slate-900/60 p-6 shadow-lg">
-        <h1 className="text-2xl font-semibold text-slate-100">
-          {t("trip.scoreboard.title")}
-        </h1>
-        <p className="mt-2 text-sm text-slate-300">
-          {trip.course_name}
-          {trip.tees_name ? ` • ${trip.tees_name}` : ""}
-        </p>
-        <p className="text-xs text-slate-400">
-          {t("trip.scoreboard.holesLabel", { count: trip.holes })}
-        </p>
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <h1 className="text-2xl font-semibold text-slate-100">
+              {t("trip.scoreboard.title")}
+            </h1>
+            <p className="mt-2 text-sm text-slate-300">
+              {trip.course_name}
+              {trip.tees_name ? ` • ${trip.tees_name}` : ""}
+            </p>
+            <p className="text-xs text-slate-400">
+              {t("trip.scoreboard.holesLabel", { count: trip.holes })}
+            </p>
+          </div>
+          <div className="flex flex-col items-start gap-2 sm:items-end">
+            <button
+              type="button"
+              className="inline-flex items-center rounded-md border border-slate-300 px-3 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+              onClick={handleCreateShare}
+            >
+              {t("trip.share.button")}
+            </button>
+            {shareUrl ? (
+              <p className="max-w-xs break-words text-xs text-emerald-300 sm:text-right">
+                {t("trip.share.copied")}
+                <br />
+                <a
+                  href={shareUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-emerald-200 underline"
+                >
+                  {shareUrl}
+                </a>
+              </p>
+            ) : null}
+            {shareError ? (
+              <p className="text-xs text-rose-300 sm:text-right">{shareError}</p>
+            ) : null}
+          </div>
+        </div>
       </header>
 
       <section className="overflow-x-auto rounded-lg border border-slate-800 bg-slate-900/40 p-4">

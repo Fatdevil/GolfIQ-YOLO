@@ -19,4 +19,5 @@ export type TripRound = {
   holes: number;
   players: TripPlayer[];
   scores: TripHoleScore[];
+  public_token?: string | null;
 };
