@@ -9,6 +9,8 @@ import {
   TripApiError,
 } from "../../trip/api";
 import type { TripRound } from "../../trip/types";
+import { API, getApiKey } from "../../api";
+import { useTripSSE } from "../../trip/useTripSSE";
 
 export default function TripScoreboardPage() {
   const { t } = useTranslation();
@@ -22,6 +24,26 @@ export default function TripScoreboardPage() {
   const [saving, setSaving] = useState(false);
   const [shareUrl, setShareUrl] = useState<string | null>(null);
   const [shareError, setShareError] = useState<string | null>(null);
+
+  const sseUrl = useMemo(() => {
+    if (!trip) {
+      return null;
+    }
+    const apiKey = getApiKey();
+    try {
+      const url = new URL(`${API}/api/trip/rounds/${trip.id}/stream`);
+      if (apiKey) {
+        url.searchParams.set("apiKey", apiKey);
+      }
+      return url.toString();
+    } catch {
+      const query = apiKey ? `?apiKey=${encodeURIComponent(apiKey)}` : "";
+      return `${API}/api/trip/rounds/${trip.id}/stream${query}`;
+    }
+  }, [trip]);
+
+  const liveTrip = useTripSSE(sseUrl);
+  const effectiveTrip = liveTrip ?? trip;
 
   useEffect(() => {
     if (!tripId) {
@@ -63,29 +85,29 @@ export default function TripScoreboardPage() {
 
   const scoresByKey = useMemo(() => {
     const map: Record<string, number | undefined> = {};
-    if (trip) {
-      for (const score of trip.scores) {
+    if (effectiveTrip) {
+      for (const score of effectiveTrip.scores) {
         if (typeof score.strokes === "number") {
           map[`${score.hole}:${score.player_id}`] = score.strokes;
         }
       }
     }
     return map;
-  }, [trip]);
+  }, [effectiveTrip]);
 
   const holes = useMemo(() => {
-    if (!trip) {
+    if (!effectiveTrip) {
       return [];
     }
-    return Array.from({ length: trip.holes }, (_, index) => index + 1);
-  }, [trip]);
+    return Array.from({ length: effectiveTrip.holes }, (_, index) => index + 1);
+  }, [effectiveTrip]);
 
   const leaderboard = useMemo(() => {
-    if (!trip) {
+    if (!effectiveTrip) {
       return [] as { name: string; strokes: number | null }[];
     }
     const totals = new Map<string, number>();
-    for (const score of trip.scores) {
+    for (const score of effectiveTrip.scores) {
       if (typeof score.strokes === "number") {
         totals.set(
           score.player_id,
@@ -93,7 +115,7 @@ export default function TripScoreboardPage() {
         );
       }
     }
-    return trip.players
+    return effectiveTrip.players
       .map((player) => ({
         name: player.name,
         strokes: totals.has(player.id) ? totals.get(player.id)! : null,
@@ -110,7 +132,7 @@ export default function TripScoreboardPage() {
         }
         return a.strokes - b.strokes;
       });
-  }, [trip]);
+  }, [effectiveTrip]);
 
   const handleScoreChange = (key: string, value: string) => {
     setPending((prev) => ({
@@ -120,7 +142,7 @@ export default function TripScoreboardPage() {
   };
 
   const handleSave = async () => {
-    if (!trip) {
+    if (!effectiveTrip) {
       return;
     }
     setSaveError(null);
@@ -141,7 +163,7 @@ export default function TripScoreboardPage() {
 
     setSaving(true);
     try {
-      const updated = await saveTripScores(trip.id, updates);
+      const updated = await saveTripScores(effectiveTrip.id, updates);
       setTrip(updated);
       setPending({});
     } catch (err) {
@@ -158,13 +180,13 @@ export default function TripScoreboardPage() {
   };
 
   const handleCreateShare = async () => {
-    if (!trip) {
+    if (!effectiveTrip) {
       return;
     }
 
     try {
       setShareError(null);
-      const token = await createTripShareToken(trip.id);
+      const token = await createTripShareToken(effectiveTrip.id);
       const url = `${window.location.origin}/trip/share/${token}`;
       setShareUrl(url);
       if (navigator.clipboard?.writeText) {
@@ -197,7 +219,7 @@ export default function TripScoreboardPage() {
     );
   }
 
-  if (!trip) {
+  if (!effectiveTrip) {
     return (
       <div className="mx-auto max-w-5xl p-4 text-slate-300">
         {t("trip.scoreboard.notFound")}
@@ -214,11 +236,11 @@ export default function TripScoreboardPage() {
               {t("trip.scoreboard.title")}
             </h1>
             <p className="mt-2 text-sm text-slate-300">
-              {trip.course_name}
-              {trip.tees_name ? ` • ${trip.tees_name}` : ""}
+              {effectiveTrip.course_name}
+              {effectiveTrip.tees_name ? ` • ${effectiveTrip.tees_name}` : ""}
             </p>
             <p className="text-xs text-slate-400">
-              {t("trip.scoreboard.holesLabel", { count: trip.holes })}
+              {t("trip.scoreboard.holesLabel", { count: effectiveTrip.holes })}
             </p>
           </div>
           <div className="flex flex-col items-start gap-2 sm:items-end">
@@ -246,6 +268,11 @@ export default function TripScoreboardPage() {
             {shareError ? (
               <p className="text-xs text-rose-300 sm:text-right">{shareError}</p>
             ) : null}
+            {liveTrip ? (
+              <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-3 py-1 text-xs font-semibold text-emerald-300">
+                {t("trip.scoreboard.liveUpdating", "Live updating")}
+              </span>
+            ) : null}
           </div>
         </div>
       </header>
@@ -257,7 +284,7 @@ export default function TripScoreboardPage() {
               <th className="px-3 py-2 text-left font-semibold text-slate-300">
                 {t("trip.scoreboard.hole")}
               </th>
-              {trip.players.map((player) => (
+              {effectiveTrip.players.map((player) => (
                 <th
                   key={player.id}
                   className="px-3 py-2 text-left font-semibold text-slate-300"
@@ -271,7 +298,7 @@ export default function TripScoreboardPage() {
             {holes.map((hole) => (
               <tr key={hole}>
                 <td className="px-3 py-2 font-semibold text-slate-300">{hole}</td>
-                {trip.players.map((player) => {
+                {effectiveTrip.players.map((player) => {
                   const key = `${hole}:${player.id}`;
                   const pendingValue = pending[key];
                   const existingValue = scoresByKey[key];

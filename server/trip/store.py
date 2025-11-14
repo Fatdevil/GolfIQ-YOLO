@@ -6,6 +6,7 @@ from threading import Lock
 from typing import Dict, List, Optional
 
 from .models import TripHoleScore, TripPlayer, TripRound, new_trip_round_id
+from .events import publish
 
 _TRIPS: Dict[str, TripRound] = {}
 _LOCK = Lock()
@@ -61,7 +62,9 @@ def upsert_scores(trip_id: str, scores: List[TripHoleScore]) -> Optional[TripRou
             existing[(score.hole, score.player_id)] = score
         trip.scores = list(existing.values())
         _TRIPS[trip_id] = trip
-        return trip
+
+    publish(trip_id, trip.model_dump())
+    return trip
 
 
 def issue_public_token(trip_id: str) -> Optional[str]:

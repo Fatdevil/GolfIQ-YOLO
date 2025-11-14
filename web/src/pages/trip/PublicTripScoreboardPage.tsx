@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 
 import type { TripHoleScore, TripPlayer } from "../../trip/types";
 import { API } from "../../api";
+import { useTripSSE } from "../../trip/useTripSSE";
 
 type PublicTripRound = {
   course_name: string;
@@ -21,6 +22,20 @@ export default function PublicTripScoreboardPage() {
   const [trip, setTrip] = useState<PublicTripRound | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  const sseUrl = useMemo(() => {
+    if (!token) {
+      return null;
+    }
+    try {
+      return new URL(`${API}/public/trip/rounds/${token}/stream`).toString();
+    } catch {
+      return `${API}/public/trip/rounds/${token}/stream`;
+    }
+  }, [token]);
+
+  const liveTrip = useTripSSE(sseUrl);
+  const effectiveTrip = liveTrip ?? trip;
 
   useEffect(() => {
     if (!token) {
@@ -65,31 +80,31 @@ export default function PublicTripScoreboardPage() {
   }, [token, t]);
 
   const holes = useMemo(() => {
-    if (!trip) {
+    if (!effectiveTrip) {
       return [];
     }
-    return Array.from({ length: trip.holes }, (_, index) => index + 1);
-  }, [trip]);
+    return Array.from({ length: effectiveTrip.holes }, (_, index) => index + 1);
+  }, [effectiveTrip]);
 
   const scoresByKey = useMemo(() => {
-    if (!trip) {
+    if (!effectiveTrip) {
       return {} as Record<string, number | undefined>;
     }
     const map: Record<string, number | undefined> = {};
-    for (const score of trip.scores) {
+    for (const score of effectiveTrip.scores) {
       if (typeof score.strokes === "number") {
         map[`${score.hole}:${score.player_id}`] = score.strokes;
       }
     }
     return map;
-  }, [trip]);
+  }, [effectiveTrip]);
 
   const leaderboard = useMemo(() => {
-    if (!trip) {
+    if (!effectiveTrip) {
       return [] as { name: string; strokes: number | null }[];
     }
     const totals = new Map<string, number>();
-    for (const score of trip.scores) {
+    for (const score of effectiveTrip.scores) {
       if (typeof score.strokes === "number") {
         totals.set(
           score.player_id,
@@ -97,7 +112,7 @@ export default function PublicTripScoreboardPage() {
         );
       }
     }
-    return trip.players
+    return effectiveTrip.players
       .map((player) => ({
         name: player.name,
         strokes: totals.has(player.id) ? totals.get(player.id)! : null,
@@ -114,14 +129,14 @@ export default function PublicTripScoreboardPage() {
         }
         return a.strokes - b.strokes;
       });
-  }, [trip]);
+  }, [effectiveTrip]);
 
   const createdAt = useMemo(() => {
-    if (!trip) {
+    if (!effectiveTrip) {
       return "";
     }
-    return new Date(trip.created_ts * 1000).toLocaleString();
-  }, [trip]);
+    return new Date(effectiveTrip.created_ts * 1000).toLocaleString();
+  }, [effectiveTrip]);
 
   if (loading) {
     return (
@@ -145,7 +160,7 @@ export default function PublicTripScoreboardPage() {
     );
   }
 
-  if (!trip) {
+  if (!effectiveTrip) {
     return null;
   }
 
@@ -153,13 +168,18 @@ export default function PublicTripScoreboardPage() {
     <div className="mx-auto max-w-5xl space-y-8 p-4">
       <header className="rounded-lg border border-slate-800 bg-slate-900/60 p-6 shadow-lg">
         <h1 className="text-2xl font-semibold text-slate-100">
-          {trip.course_name}
-          {trip.tees_name ? ` • ${trip.tees_name}` : ""}
+          {effectiveTrip.course_name}
+          {effectiveTrip.tees_name ? ` • ${effectiveTrip.tees_name}` : ""}
         </h1>
         <p className="mt-1 text-sm text-slate-300">{createdAt}</p>
         <p className="text-xs text-slate-400">
-          {trip.holes} {trip.holes === 1 ? "hole" : "holes"}
+          {effectiveTrip.holes} {effectiveTrip.holes === 1 ? "hole" : "holes"}
         </p>
+        {liveTrip ? (
+          <span className="mt-3 inline-flex items-center rounded-full bg-emerald-500/10 px-3 py-1 text-xs font-semibold text-emerald-300">
+            {t("trip.public.liveUpdating", "Watching live")}
+          </span>
+        ) : null}
       </header>
 
       <section className="overflow-x-auto rounded-lg border border-slate-800 bg-slate-900/40 p-4">
@@ -169,7 +189,7 @@ export default function PublicTripScoreboardPage() {
               <th className="px-3 py-2 text-left font-semibold text-slate-300">
                 {t("trip.scoreboard.hole")}
               </th>
-              {trip.players.map((player) => (
+              {effectiveTrip.players.map((player) => (
                 <th
                   key={player.id}
                   className="px-3 py-2 text-left font-semibold text-slate-300"
@@ -183,7 +203,7 @@ export default function PublicTripScoreboardPage() {
             {holes.map((hole) => (
               <tr key={hole} className="odd:bg-slate-900/30">
                 <td className="px-3 py-2 text-left text-slate-400">{hole}</td>
-                {trip.players.map((player) => (
+                {effectiveTrip.players.map((player) => (
                   <td key={player.id} className="px-3 py-2">
                     {scoresByKey[`${hole}:${player.id}`] ?? "-"}
                   </td>
