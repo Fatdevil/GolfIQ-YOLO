@@ -45,7 +45,7 @@ describe("HomeHubPage", () => {
     expect(screen.getByRole("heading", { level: 2, name: /Trip Mode/i })).toBeTruthy();
     expect(screen.getByRole("heading", { level: 2, name: /My GolfIQ/i })).toBeTruthy();
 
-    const links = screen.getAllByRole("link");
+    const links = screen.getAllByRole("link") as HTMLAnchorElement[];
     expect(links.length).toBe(4);
     const hrefs = links.map((link) => link.getAttribute("href"));
     expect(hrefs).toEqual(
