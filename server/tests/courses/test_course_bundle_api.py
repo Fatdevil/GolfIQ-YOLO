@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from fastapi.testclient import TestClient
-
 from server.app import app
 
 _API_KEY = "test-course-key"
