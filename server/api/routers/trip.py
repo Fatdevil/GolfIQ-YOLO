@@ -67,7 +67,10 @@ class TripScoresIn(BaseModel):
 
 @router.post("/rounds/{trip_id}/scores", response_model=TripRound)
 def post_scores(trip_id: str, payload: TripScoresIn):
-    trip = upsert_scores(trip_id, payload.scores)
+    try:
+        trip = upsert_scores(trip_id, payload.scores)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="invalid_score_entries")
     if not trip:
         raise HTTPException(status_code=404, detail="trip_not_found")
     return trip

@@ -42,6 +42,19 @@ def upsert_scores(trip_id: str, scores: List[TripHoleScore]) -> Optional[TripRou
         trip = _TRIPS.get(trip_id)
         if not trip:
             return None
+
+        valid_player_ids = {player.id for player in trip.players}
+
+        for score in scores:
+            if score.hole < 1 or score.hole > trip.holes:
+                raise ValueError(
+                    f"invalid score entry for hole={score.hole} player={score.player_id}"
+                )
+            if score.player_id not in valid_player_ids:
+                raise ValueError(
+                    f"invalid score entry for hole={score.hole} player={score.player_id}"
+                )
+
         existing = {(s.hole, s.player_id): s for s in trip.scores}
         for score in scores:
             existing[(score.hole, score.player_id)] = score
