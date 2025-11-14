@@ -12,7 +12,15 @@ import {
   buildSprayBins,
   scoreTargetBingo,
 } from "../features/range/games";
+import type { TargetBingoResult } from "../features/range/games";
 import { SprayHeatmap } from "../features/range/SprayHeatmap";
+import GhostMatchPanel from "../features/range/GhostMatchPanel";
+import {
+  GhostProfile,
+  createGhostId,
+  getLatestGhost,
+  saveGhost,
+} from "../features/range/ghost";
 
 const MOCK_ANALYZE_BODY = Object.freeze({
   frames: 8,
@@ -91,6 +99,27 @@ export default function RangePracticePage() {
     maxShots: 20,
   });
   const [copyStatus, setCopyStatus] = React.useState<string | null>(null);
+  const [ghost, setGhost] = React.useState<GhostProfile | null>(() => getLatestGhost());
+  const [ghostStatus, setGhostStatus] = React.useState<string | null>(null);
+
+  const makeGhostProfileFromCurrent = React.useCallback(
+    (cfg: TargetBingoConfig, result: TargetBingoResult): GhostProfile => {
+      const createdAt = Date.now();
+      return {
+        id: createGhostId(),
+        createdAt,
+        name: `My ghost – ${cfg.target_m} m (${new Date(createdAt).toLocaleDateString()})`,
+        config: { ...cfg },
+        result: {
+          totalShots: result.totalShots,
+          hits: result.hits,
+          hitRate_pct: result.hitRate_pct,
+          avgAbsError_m: result.avgAbsError_m,
+        },
+      } satisfies GhostProfile;
+    },
+    []
+  );
 
   const summary = React.useMemo(() => computeRangeSummary(shots), [shots]);
   const bingoResult = React.useMemo(
@@ -106,6 +135,14 @@ export default function RangePracticePage() {
     const id = window.setTimeout(() => setCopyStatus(null), 3000);
     return () => window.clearTimeout(id);
   }, [copyStatus]);
+
+  React.useEffect(() => {
+    if (!ghostStatus) {
+      return;
+    }
+    const id = window.setTimeout(() => setGhostStatus(null), 3000);
+    return () => window.clearTimeout(id);
+  }, [ghostStatus]);
 
   async function handleHit() {
     setLoading(true);
@@ -401,11 +438,16 @@ export default function RangePracticePage() {
 
       {mode === "target-bingo" && bingoResult && (
         <div className="rounded-lg border border-slate-800 bg-slate-900/60 p-3 text-xs space-y-3">
-          <div className="flex items-center justify-between">
+          <div className="flex flex-wrap items-center gap-2">
             <h2 className="text-sm font-semibold text-slate-100">Target Bingo</h2>
             <span className="text-slate-400 text-[10px]">
               Målet: {bingoCfg.target_m} m ± {bingoCfg.tolerance_m} m
             </span>
+            {ghost && (
+              <span className="ml-auto rounded bg-slate-800 px-2 py-0.5 text-[10px] text-slate-300">
+                Aktuell Ghost: {ghost.name}
+              </span>
+            )}
           </div>
           {bingoResult.totalShots === 0 ? (
             <div className="text-slate-500">Inga giltiga skott ännu.</div>
@@ -455,7 +497,37 @@ export default function RangePracticePage() {
               </ul>
             </div>
           )}
+          {bingoResult.totalShots >= 5 && (
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  const profile = makeGhostProfileFromCurrent(bingoCfg, bingoResult);
+                  saveGhost(profile);
+                  setGhost(profile);
+                  setGhostStatus("Ghost sparad! Jämför mot denna profil nästa gång.");
+                }}
+                className="rounded-md border border-emerald-600 px-3 py-1 text-[11px] font-semibold text-emerald-300 hover:bg-emerald-600/10"
+              >
+                Spara som Ghost
+              </button>
+              <button
+                type="button"
+                className="rounded-md border border-slate-700 px-3 py-1 text-[11px] text-slate-300"
+                disabled
+              >
+                Visa sparade Ghosts
+              </button>
+              {ghostStatus && (
+                <span className="text-[11px] text-emerald-300">{ghostStatus}</span>
+              )}
+            </div>
+          )}
         </div>
+      )}
+
+      {mode === "target-bingo" && (
+        <GhostMatchPanel cfg={bingoCfg} current={bingoResult ?? null} ghost={ghost} />
       )}
 
       {mode === "target-bingo" && (
