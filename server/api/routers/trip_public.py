@@ -70,7 +70,9 @@ async def stream_trip_public(token: str) -> StreamingResponse:
         subscribe(trip.id, callback)
 
         try:
-            yield f"data: {json.dumps(_public_payload(trip.model_dump()))}\n\n".encode("utf-8")
+            yield f"data: {json.dumps(_public_payload(trip.model_dump()))}\n\n".encode(
+                "utf-8"
+            )
             while True:
                 payload = await queue.get()
                 yield f"data: {json.dumps(payload)}\n\n".encode("utf-8")
