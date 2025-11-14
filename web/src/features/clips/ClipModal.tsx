@@ -32,7 +32,7 @@ function normalizeTtsUrl(clip: ShotClip): string | null {
 }
 
 export function ClipModal({ clip, onClose, onRefetch }: ClipModalProps): JSX.Element {
-  const session = useEventSession() as EventSession & { tournamentSafe?: boolean; coachMode?: boolean };
+  const session = useEventSession() as EventSession & { coachMode?: boolean };
   const { role, safe, memberId } = session;
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);

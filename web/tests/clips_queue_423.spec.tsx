@@ -15,7 +15,7 @@ const listClipCommentaries = vi.mocked(clipsApi.listClipCommentaries);
 const getClipCommentary = vi.mocked(clipsApi.getClipCommentary);
 const postClipCommentaryPlay = vi.mocked(clipsApi.postClipCommentaryPlay);
 
-const session = { role: 'admin' as const, memberId: 'admin-1', safe: false };
+const session = { role: 'admin' as const, memberId: 'admin-1', safe: false, tournamentSafe: false };
 
 function renderPage() {
   return render(

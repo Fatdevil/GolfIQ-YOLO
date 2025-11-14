@@ -12,7 +12,7 @@ type JsonResponse = {
 };
 
 describe('HostLiveWizard token refresh', () => {
-  const adminSession = { ...DEFAULT_SESSION, role: 'admin' as const, memberId: 'admin-99', safe: false };
+  const adminSession = { ...DEFAULT_SESSION, role: 'admin' as const, memberId: 'admin-99', safe: false, tournamentSafe: false };
   const globalAny = globalThis as { fetch?: typeof fetch };
   let originalFetch: typeof fetch | undefined;
   let fetchMock: ReturnType<typeof vi.fn>;

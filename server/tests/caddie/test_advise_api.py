@@ -33,7 +33,17 @@ def test_advise_endpoint_returns_club_and_reasoning() -> None:
     response = client.post("/api/caddie/advise", json=payload)
     assert response.status_code == 200
     data = response.json()
-    assert set(data.keys()) == {"playsLike_m", "club", "reasoning"}
+    assert set(data.keys()) == {
+        "playsLike_m",
+        "club",
+        "reasoning",
+        "confidence",
+        "silent",
+        "silent_reason",
+    }
     assert isinstance(data["playsLike_m"], (int, float))
     assert isinstance(data["club"], str) and data["club"]
     assert isinstance(data["reasoning"], list) and data["reasoning"]
+    assert isinstance(data["confidence"], (int, float))
+    assert data["silent"] is False
+    assert data["silent_reason"] is None

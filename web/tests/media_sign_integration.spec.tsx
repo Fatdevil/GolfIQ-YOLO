@@ -29,7 +29,9 @@ describe('media signing integration', () => {
     vi.stubGlobal('fetch', fetchMock);
 
     const { container } = render(
-      <EventSessionContext.Provider value={{ role: 'spectator', memberId: 'viewer', safe: false }}>
+      <EventSessionContext.Provider
+        value={{ role: 'spectator', memberId: 'viewer', safe: false, tournamentSafe: false }}
+      >
         <ClipModal clip={baseClip} />
       </EventSessionContext.Provider>,
     );
@@ -52,7 +54,9 @@ describe('media signing integration', () => {
     vi.stubGlobal('fetch', fetchMock);
 
     const { container } = render(
-      <EventSessionContext.Provider value={{ role: 'spectator', memberId: 'viewer', safe: false }}>
+      <EventSessionContext.Provider
+        value={{ role: 'spectator', memberId: 'viewer', safe: false, tournamentSafe: false }}
+      >
         <ClipModal clip={{ ...baseClip, id: 'clip-unsigned' }} />
       </EventSessionContext.Provider>,
     );
@@ -73,7 +77,9 @@ describe('media signing integration', () => {
     vi.stubGlobal('fetch', fetchMock);
 
     const { container } = render(
-      <EventSessionContext.Provider value={{ role: 'spectator', memberId: 'viewer', safe: false }}>
+      <EventSessionContext.Provider
+        value={{ role: 'spectator', memberId: 'viewer', safe: false, tournamentSafe: false }}
+      >
         <ClipModal clip={{ ...baseClip, id: 'clip-unsigned' }} />
       </EventSessionContext.Provider>,
     );

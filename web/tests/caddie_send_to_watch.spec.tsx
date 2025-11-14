@@ -22,14 +22,21 @@ describe('CaddieTipPanel send to watch', () => {
       .mockResolvedValueOnce({
         ok: true,
         json: () =>
-          Promise.resolve({ playsLike_m: 152.3, club: '7i', reasoning: ['Target 150 m plays-like'] }),
+          Promise.resolve({
+            playsLike_m: 152.3,
+            club: '7i',
+            reasoning: ['Target 150 m plays-like'],
+            confidence: 0.93,
+            silent: false,
+            silent_reason: null,
+          }),
       })
       .mockResolvedValueOnce({ ok: true });
 
     vi.stubGlobal('fetch', fetchMock);
 
     render(
-      <EventSessionContext.Provider value={{ role: 'spectator', memberId: 'member-123', safe: true }}>
+      <EventSessionContext.Provider value={{ role: 'spectator', memberId: 'member-123', safe: true, tournamentSafe: false }}>
         <CaddieTipPanel runId="run-1" hole={5} shot={2} before_m={140} bearing_deg={10} />
       </EventSessionContext.Provider>,
     );

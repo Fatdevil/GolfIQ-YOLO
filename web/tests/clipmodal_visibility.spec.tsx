@@ -29,7 +29,7 @@ afterEach(() => {
 describe('ClipModal visibility banners and reporting', () => {
   it('shows hidden banner when clip is moderated', () => {
     render(
-      <EventSessionContext.Provider value={{ role: 'spectator', memberId: 'viewer-1', safe: false }}>
+      <EventSessionContext.Provider value={{ role: 'spectator', memberId: 'viewer-1', safe: false, tournamentSafe: false }}>
         <ClipModal clip={{ ...baseClip, hidden: true }} />
       </EventSessionContext.Provider>,
     );
@@ -39,7 +39,7 @@ describe('ClipModal visibility banners and reporting', () => {
 
   it('shows not-visible banner for restricted visibility', () => {
     render(
-      <EventSessionContext.Provider value={{ role: 'spectator', memberId: null, safe: false }}>
+      <EventSessionContext.Provider value={{ role: 'spectator', memberId: null, safe: false, tournamentSafe: false }}>
         <ClipModal clip={{ ...baseClip, visibility: 'event' }} />
       </EventSessionContext.Provider>,
     );
@@ -58,7 +58,7 @@ describe('ClipModal visibility banners and reporting', () => {
 
     const user = userEvent.setup();
     render(
-      <EventSessionContext.Provider value={{ role: 'spectator', memberId: 'viewer-5', safe: false }}>
+      <EventSessionContext.Provider value={{ role: 'spectator', memberId: 'viewer-5', safe: false, tournamentSafe: false }}>
         <ClipModal clip={baseClip} />
       </EventSessionContext.Provider>,
     );

@@ -64,7 +64,7 @@ describe('ClipModal', () => {
 
   it('renders existing commentary when available', () => {
     render(
-      <EventSessionContext.Provider value={{ role: 'spectator', memberId: null, safe: false }}>
+      <EventSessionContext.Provider value={{ role: 'spectator', memberId: null, safe: false, tournamentSafe: false }}>
         <ClipModal clip={baseClip} />
       </EventSessionContext.Provider>,
     );
@@ -76,7 +76,7 @@ describe('ClipModal', () => {
 
   it('shows request button only for admin role', () => {
     render(
-      <EventSessionContext.Provider value={{ role: 'admin', memberId: null, safe: false }}>
+      <EventSessionContext.Provider value={{ role: 'admin', memberId: null, safe: false, tournamentSafe: false }}>
         <ClipModal clip={{ ...baseClip, ai_title: undefined, ai_summary: undefined }} />
       </EventSessionContext.Provider>,
     );
@@ -94,7 +94,7 @@ describe('ClipModal', () => {
     function Wrapper(): JSX.Element {
       const [clip, setClip] = useState<ShotClip>(clipWithRefetch);
       return (
-        <EventSessionContext.Provider value={{ role: 'admin', memberId: 'abc', safe: false }}>
+        <EventSessionContext.Provider value={{ role: 'admin', memberId: 'abc', safe: false, tournamentSafe: false }}>
           <ClipModal
             clip={clip}
             onRefetch={() =>
@@ -124,7 +124,7 @@ describe('ClipModal', () => {
 
   it('renders voice-over control when tts url available', () => {
     render(
-      <EventSessionContext.Provider value={{ role: 'admin', memberId: null, safe: false }}>
+      <EventSessionContext.Provider value={{ role: 'admin', memberId: null, safe: false, tournamentSafe: false }}>
         <ClipModal clip={{ ...baseClip, ai_tts_url: 'https://cdn.example.com/tts.mp3' }} />
       </EventSessionContext.Provider>,
     );
@@ -134,7 +134,7 @@ describe('ClipModal', () => {
 
   it('hides voice-over control when no url', () => {
     render(
-      <EventSessionContext.Provider value={{ role: 'admin', memberId: null, safe: false }}>
+      <EventSessionContext.Provider value={{ role: 'admin', memberId: null, safe: false, tournamentSafe: false }}>
         <ClipModal clip={{ ...baseClip, ai_tts_url: undefined }} />
       </EventSessionContext.Provider>,
     );

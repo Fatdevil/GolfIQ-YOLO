@@ -28,7 +28,7 @@ afterEach(() => {
 describe('Clip commentary safe guard', () => {
   it('hides admin request button and shows banner in safe mode', () => {
     render(
-      <EventSessionContext.Provider value={{ role: 'admin', memberId: 'host-1', safe: true }}>
+      <EventSessionContext.Provider value={{ role: 'admin', memberId: 'host-1', safe: true, tournamentSafe: true }}>
         <ClipModal clip={baseClip} />
       </EventSessionContext.Provider>,
     );
@@ -44,7 +44,7 @@ describe('Clip commentary safe guard', () => {
       .mockResolvedValue({ title: 'ok', summary: 'ok', ttsUrl: null });
 
     render(
-      <EventSessionContext.Provider value={{ role: 'admin', memberId: 'member-7', safe: false }}>
+      <EventSessionContext.Provider value={{ role: 'admin', memberId: 'member-7', safe: false, tournamentSafe: false }}>
         <ClipModal clip={baseClip} />
       </EventSessionContext.Provider>,
     );
@@ -61,7 +61,7 @@ describe('Clip commentary safe guard', () => {
 
   it('does not render request button for spectators', () => {
     render(
-      <EventSessionContext.Provider value={{ role: 'spectator', memberId: 'viewer-9', safe: false }}>
+      <EventSessionContext.Provider value={{ role: 'spectator', memberId: 'viewer-9', safe: false, tournamentSafe: false }}>
         <ClipModal clip={baseClip} />
       </EventSessionContext.Provider>,
     );
@@ -83,7 +83,7 @@ describe('Clip commentary safe guard', () => {
       .mockRejectedValue(error);
 
     render(
-      <EventSessionContext.Provider value={{ role: 'admin', memberId: 'member-7', safe: false }}>
+      <EventSessionContext.Provider value={{ role: 'admin', memberId: 'member-7', safe: false, tournamentSafe: false }}>
         <ClipModal clip={baseClip} />
       </EventSessionContext.Provider>,
     );

@@ -19,7 +19,14 @@ describe('CaddieTipPanel', () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
       json: () =>
-        Promise.resolve({ playsLike_m: 152.3, club: '7i', reasoning: ['Target 150 m plays-like'] }),
+        Promise.resolve({
+          playsLike_m: 152.3,
+          club: '7i',
+          reasoning: ['Target 150 m plays-like'],
+          confidence: 0.92,
+          silent: false,
+          silent_reason: null,
+        }),
     });
     vi.stubGlobal('fetch', fetchMock);
 
@@ -34,6 +41,7 @@ describe('CaddieTipPanel', () => {
       expect.objectContaining({
         method: 'POST',
         headers: expect.objectContaining({ 'Content-Type': 'application/json', 'x-api-key': 'test-key' }),
+        body: expect.stringContaining('"tournamentSafe":false'),
       }),
     );
 

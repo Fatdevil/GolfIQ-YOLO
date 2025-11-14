@@ -32,6 +32,7 @@ def test_event_session_returns_admin_role(repo):
     assert payload["role"] == "admin"
     assert payload["memberId"] == "host-1"
     assert payload["safe"] is False
+    assert payload["tournamentSafe"] is False
     assert isinstance(payload.get("ts"), int)
 
 
@@ -48,6 +49,7 @@ def test_event_session_defaults_to_spectator(repo):
     assert payload["role"] == "spectator"
     assert payload["memberId"] == "guest-5"
     assert payload["safe"] is False
+    assert payload["tournamentSafe"] is False
 
 
 def test_event_session_safe_flag_from_host_state(repo, monkeypatch):
@@ -76,6 +78,7 @@ def test_event_session_safe_flag_from_host_state(repo, monkeypatch):
     payload = response.json()
     assert payload["safe"] is True
     assert payload["role"] == "admin"
+    assert payload["tournamentSafe"] is True
 
 
 def test_event_session_missing_event_returns_404(repo):
@@ -113,6 +116,7 @@ def test_event_session_default_safe_flag_when_host_state_missing(repo, monkeypat
     assert response.status_code == 200
     payload = response.json()
     assert payload["safe"] is False
+    assert payload["tournamentSafe"] is False
 
 
 def test_event_session_uses_event_settings_for_safe_flag(repo, monkeypatch):
@@ -132,6 +136,7 @@ def test_event_session_uses_event_settings_for_safe_flag(repo, monkeypatch):
     assert response.status_code == 200
     payload = response.json()
     assert payload["safe"] is True
+    assert payload["tournamentSafe"] is True
 
 
 def test_event_session_reraises_404_from_host_state(repo, monkeypatch):

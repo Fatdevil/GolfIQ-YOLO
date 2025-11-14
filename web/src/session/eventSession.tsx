@@ -4,14 +4,26 @@ import { createContext, useContext, useEffect, useState, type ReactNode } from '
 import { API } from '../api';
 
 export type EventRole = 'spectator' | 'admin';
-export type EventSession = { role: EventRole; memberId: string | null; safe: boolean };
+export type EventSession = {
+  role: EventRole;
+  memberId: string | null;
+  safe: boolean;
+  tournamentSafe: boolean;
+};
 
-type EventSessionResponse = { role: EventRole; memberId?: string | null; safe?: boolean; ts: number };
+type EventSessionResponse = {
+  role: EventRole;
+  memberId?: string | null;
+  safe?: boolean;
+  tournamentSafe?: boolean;
+  ts: number;
+};
 
 export const DEFAULT_SESSION: EventSession = {
   role: 'spectator',
   memberId: null,
   safe: true,
+  tournamentSafe: false,
 };
 
 const API_KEY = import.meta.env.VITE_API_KEY || '';
@@ -50,7 +62,7 @@ export function bootstrapEventSession(): EventSession {
   const params = new URLSearchParams(globalThis.location?.search ?? '');
   const admin = params.get('admin') === '1' || readDevAdminFlag();
   const memberId = readMemberId();
-  return { role: admin ? 'admin' : 'spectator', memberId, safe: false };
+  return { role: admin ? 'admin' : 'spectator', memberId, safe: false, tournamentSafe: false };
 }
 
 export const fetchEventSession = async (
@@ -65,6 +77,7 @@ export const fetchEventSession = async (
     role: data.role,
     memberId: data.memberId ?? memberId ?? null,
     safe: Boolean(data.safe),
+    tournamentSafe: Boolean(data.tournamentSafe),
   };
 };
 
