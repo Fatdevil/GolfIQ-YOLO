@@ -23,7 +23,7 @@ describe('ClipModal admin visibility', () => {
 
   it('shows admin CTA when session is admin and safe=false', () => {
     render(
-      <EventSessionContext.Provider value={{ role: 'admin', memberId: 'host', safe: false }}>
+      <EventSessionContext.Provider value={{ role: 'admin', memberId: 'host', safe: false, tournamentSafe: false }}>
         <ClipModal clip={clip} />
       </EventSessionContext.Provider>,
     );
@@ -33,7 +33,7 @@ describe('ClipModal admin visibility', () => {
 
   it('hides admin CTA when session is admin but safe=true', () => {
     render(
-      <EventSessionContext.Provider value={{ role: 'admin', memberId: 'host', safe: true }}>
+      <EventSessionContext.Provider value={{ role: 'admin', memberId: 'host', safe: true, tournamentSafe: true }}>
         <ClipModal clip={clip} />
       </EventSessionContext.Provider>,
     );
@@ -44,7 +44,7 @@ describe('ClipModal admin visibility', () => {
 
   it('hides admin CTA for spectators', () => {
     render(
-      <EventSessionContext.Provider value={{ role: 'spectator', memberId: null, safe: false }}>
+      <EventSessionContext.Provider value={{ role: 'spectator', memberId: null, safe: false, tournamentSafe: false }}>
         <ClipModal clip={clip} />
       </EventSessionContext.Provider>,
     );

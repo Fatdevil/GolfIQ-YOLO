@@ -28,6 +28,8 @@ def test_selects_first_sufficient_club(base_request: AdviseIn) -> None:
     result = advise(base_request)
     assert result.club == "7i"
     assert any("plays-like" in line for line in result.reasoning)
+    assert result.silent is False
+    assert result.confidence >= 0.6
 
 
 def test_longest_club_when_none_suffice(base_request: AdviseIn) -> None:
@@ -38,3 +40,5 @@ def test_longest_club_when_none_suffice(base_request: AdviseIn) -> None:
     assert result.club == "8i"
     assert result.playsLike_m >= 1.0
     assert any(line.startswith("Wind head") for line in result.reasoning[-1:])
+    assert result.silent is True
+    assert result.silent_reason == "low_confidence"

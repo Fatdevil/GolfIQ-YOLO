@@ -20,20 +20,20 @@ describe('bootstrapEventSession', () => {
 
   it('returns admin role when query string sets admin=1', () => {
     window.history.replaceState({}, '', `${window.location.pathname}?admin=1`);
-    expect(bootstrapEventSession()).toEqual({ role: 'admin', memberId: null, safe: false });
+    expect(bootstrapEventSession()).toEqual({ role: 'admin', memberId: null, safe: false, tournamentSafe: false });
   });
 
   it('returns admin role when localStorage flag is set', () => {
     localStorage.setItem('event.admin', '1');
-    expect(bootstrapEventSession()).toEqual({ role: 'admin', memberId: null, safe: false });
+    expect(bootstrapEventSession()).toEqual({ role: 'admin', memberId: null, safe: false, tournamentSafe: false });
   });
 
   it('returns stored member id when available', () => {
     localStorage.setItem('event.memberId', 'member-42');
-    expect(bootstrapEventSession()).toEqual({ role: 'spectator', memberId: 'member-42', safe: false });
+    expect(bootstrapEventSession()).toEqual({ role: 'spectator', memberId: 'member-42', safe: false, tournamentSafe: false });
   });
 
   it('returns spectator when no signals present', () => {
-    expect(bootstrapEventSession()).toEqual({ role: 'spectator', memberId: null, safe: false });
+    expect(bootstrapEventSession()).toEqual({ role: 'spectator', memberId: null, safe: false, tournamentSafe: false });
   });
 });

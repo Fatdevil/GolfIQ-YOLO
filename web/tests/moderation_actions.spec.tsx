@@ -12,7 +12,7 @@ vi.mock('@web/features/clips/moderationApi');
 const listModerationQueue = vi.mocked(moderationApi.listModerationQueue);
 const moderateClip = vi.mocked(moderationApi.moderateClip);
 
-const adminSession = { role: 'admin' as const, memberId: 'host-1', safe: false };
+const adminSession = { role: 'admin' as const, memberId: 'host-1', safe: false, tournamentSafe: false };
 
 function renderPage() {
   return render(

@@ -60,5 +60,9 @@
   "bag.carry": "Carry (m)",
   "bag.notes": "Notes",
 
-  "languageSelector.label": "Language"
+  "languageSelector.label": "Language",
+  "caddie.tournament.badge": "Tournament mode",
+  "caddie.silent.lowConfidence": "Caddie is quiet here – not enough data yet.",
+  "caddie.silent.tournament": "Tournament mode – advanced hints are disabled.",
+  "caddie.silent.generic": "Caddie is quiet for this shot."
 }

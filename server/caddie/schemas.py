@@ -39,11 +39,15 @@ class AdviseIn(BaseModel):
     shot: ShotContext
     env: EnvIn
     bag: PlayerBag
+    tournament_safe: bool = Field(default=False, alias="tournamentSafe")
 
 
 class AdviseOut(BaseModel):
     """Advice response payload."""
 
-    playsLike_m: float
-    club: str
-    reasoning: List[str]
+    playsLike_m: Optional[float] = None
+    club: Optional[str] = None
+    reasoning: List[str] = Field(default_factory=list)
+    confidence: float = 1.0
+    silent: bool = False
+    silent_reason: Optional[str] = None

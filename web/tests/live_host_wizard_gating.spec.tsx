@@ -5,7 +5,7 @@ import HostLiveWizard from '@web/features/live/HostLiveWizard';
 import { DEFAULT_SESSION, EventSessionContext } from '@web/session/eventSession';
 
 describe('HostLiveWizard gating', () => {
-  const adminSession = { ...DEFAULT_SESSION, role: 'admin' as const, memberId: 'admin-1', safe: false };
+  const adminSession = { ...DEFAULT_SESSION, role: 'admin' as const, memberId: 'admin-1', safe: false, tournamentSafe: false };
   const globalAny = globalThis as { fetch?: typeof fetch };
   let originalFetch: typeof fetch | undefined;
   let fetchSpy: ReturnType<typeof vi.fn>;
@@ -26,7 +26,7 @@ describe('HostLiveWizard gating', () => {
   });
 
   it('renders nothing for non-admin users', () => {
-    const session = { ...DEFAULT_SESSION, role: 'spectator' as const, safe: false };
+    const session = { ...DEFAULT_SESSION, role: 'spectator' as const, safe: false, tournamentSafe: false };
     const { container } = render(
       <EventSessionContext.Provider value={session}>
         <HostLiveWizard eventId="evt-1" />
@@ -37,7 +37,7 @@ describe('HostLiveWizard gating', () => {
   });
 
   it('renders nothing when safe mode is enabled', () => {
-    const safeSession = { ...adminSession, safe: true };
+    const safeSession = { ...adminSession, safe: true, tournamentSafe: true };
     const { container } = render(
       <EventSessionContext.Provider value={safeSession}>
         <HostLiveWizard eventId="evt-1" />

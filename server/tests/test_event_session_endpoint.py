@@ -32,6 +32,7 @@ def test_event_session_returns_admin_role(repo):
     assert payload["role"] == "admin"
     assert payload["memberId"] == "host-1"
     assert payload["safe"] is False
+    assert payload["tournamentSafe"] is False
     assert isinstance(payload.get("ts"), int)
 
 
@@ -48,6 +49,7 @@ def test_event_session_defaults_to_spectator(repo):
     assert payload["role"] == "spectator"
     assert payload["memberId"] == "guest-5"
     assert payload["safe"] is False
+    assert payload["tournamentSafe"] is False
 
 
 def test_event_session_safe_flag_from_host_state(repo, monkeypatch):
@@ -76,6 +78,33 @@ def test_event_session_safe_flag_from_host_state(repo, monkeypatch):
     payload = response.json()
     assert payload["safe"] is True
     assert payload["role"] == "admin"
+    assert payload["tournamentSafe"] is True
+
+
+def test_event_session_tournament_flag_independent(repo, monkeypatch):
+    events_module = importlib.import_module("server.routes.events")
+    event = repo.create_event("Masters", None, code="TS001")
+    repo.add_member(event["id"], member_id="marshal", name="Marshal", role="admin")
+
+    class _StubState:
+        safe = False
+        tournamentSafe = True
+
+        def model_dump(self, **_: object) -> dict[str, object]:
+            return {"safe": self.safe, "tournamentSafe": self.tournamentSafe}
+
+    monkeypatch.setattr(
+        events_module, "_build_host_state", lambda event_id: _StubState()
+    )
+
+    response = client.get(
+        f"/events/{event['id']}/session", params={"memberId": "marshal"}
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["safe"] is False
+    assert payload["tournamentSafe"] is True
 
 
 def test_event_session_missing_event_returns_404(repo):
@@ -113,6 +142,7 @@ def test_event_session_default_safe_flag_when_host_state_missing(repo, monkeypat
     assert response.status_code == 200
     payload = response.json()
     assert payload["safe"] is False
+    assert payload["tournamentSafe"] is False
 
 
 def test_event_session_uses_event_settings_for_safe_flag(repo, monkeypatch):
@@ -132,6 +162,7 @@ def test_event_session_uses_event_settings_for_safe_flag(repo, monkeypatch):
     assert response.status_code == 200
     payload = response.json()
     assert payload["safe"] is True
+    assert payload["tournamentSafe"] is True
 
 
 def test_event_session_reraises_404_from_host_state(repo, monkeypatch):
@@ -276,3 +307,32 @@ def test_resolve_safe_flag_reads_nested_settings(monkeypatch):
     event = {"settings": {"safe": "maybe", "tvFlags": {"tournament_safe": True}}}
 
     assert events_session_module._resolve_safe_flag("evt-flags", event) is True
+
+
+def test_resolve_tournament_safe_flag_prefers_explicit(monkeypatch):
+    events_module = importlib.import_module("server.routes.events")
+
+    class State:
+        safe = False
+        tournamentSafe = True
+
+        def model_dump(self, **_: object) -> dict[str, object]:
+            return {"safe": self.safe, "tournamentSafe": self.tournamentSafe}
+
+    monkeypatch.setattr(events_module, "_build_host_state", lambda event_id: State())
+
+    event: dict[str, object] = {}
+
+    assert events_session_module._resolve_tournament_safe_flag("evt-ts", event) is True
+
+
+def test_resolve_tournament_safe_flag_falls_back_to_safe(monkeypatch):
+    events_module = importlib.import_module("server.routes.events")
+    monkeypatch.setattr(events_module, "_build_host_state", lambda event_id: None)
+
+    event = {"settings": {"safe": True}}
+
+    assert (
+        events_session_module._resolve_tournament_safe_flag("evt-ts-safe", event)
+        is True
+    )

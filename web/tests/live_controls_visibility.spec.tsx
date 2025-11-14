@@ -48,7 +48,7 @@ describe('Event live controls gating', () => {
   });
 
   it('shows controls for admin when safe=false', async () => {
-    renderHost({ ...DEFAULT_SESSION, role: 'admin', memberId: 'host-1', safe: false });
+    renderHost({ ...DEFAULT_SESSION, role: 'admin', memberId: 'host-1', safe: false, tournamentSafe: false });
 
     expect(await screen.findByRole('button', { name: 'Start' })).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Stop' })).toBeNull();
@@ -57,7 +57,7 @@ describe('Event live controls gating', () => {
   });
 
   it('hides controls when admin session is safe', async () => {
-    renderHost({ ...DEFAULT_SESSION, role: 'admin', memberId: 'host-1', safe: true });
+    renderHost({ ...DEFAULT_SESSION, role: 'admin', memberId: 'host-1', safe: true, tournamentSafe: true });
 
     await screen.findByText('Live controls are disabled in tournament safe mode.');
     expect(screen.queryByRole('button', { name: 'Start' })).toBeNull();

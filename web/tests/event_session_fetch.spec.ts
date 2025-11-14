@@ -11,7 +11,7 @@ describe('fetchEventSession', () => {
 
   it('requests admin session data with memberId', async () => {
     const spy = vi.spyOn(axios, 'get').mockResolvedValue({
-      data: { role: 'admin', memberId: 'host-1', safe: false, ts: 1700000000 },
+      data: { role: 'admin', memberId: 'host-1', safe: false, tournamentSafe: false, ts: 1700000000 },
     });
 
     const session = await fetchEventSession('evt-1', 'host-1');
@@ -20,7 +20,7 @@ describe('fetchEventSession', () => {
       `${API}/events/evt-1/session`,
       expect.objectContaining({ params: { memberId: 'host-1' } }),
     );
-    expect(session).toEqual({ role: 'admin', memberId: 'host-1', safe: false });
+    expect(session).toEqual({ role: 'admin', memberId: 'host-1', safe: false, tournamentSafe: false });
   });
 
   it('defaults safe flag when server omits it', async () => {
@@ -34,12 +34,12 @@ describe('fetchEventSession', () => {
       `${API}/events/evt-2/session`,
       expect.objectContaining({ params: undefined }),
     );
-    expect(session).toEqual({ role: 'spectator', memberId: null, safe: false });
+    expect(session).toEqual({ role: 'spectator', memberId: null, safe: false, tournamentSafe: false });
   });
 
   it('propagates safe=true from response', async () => {
     vi.spyOn(axios, 'get').mockResolvedValue({
-      data: { role: 'admin', memberId: 'host-9', safe: true, ts: 1700000700 },
+      data: { role: 'admin', memberId: 'host-9', safe: true, tournamentSafe: true, ts: 1700000700 },
     });
 
     const session = await fetchEventSession('evt-3', 'host-9');

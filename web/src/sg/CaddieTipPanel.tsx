@@ -1,10 +1,18 @@
 import * as React from 'react';
+import { useTranslation } from 'react-i18next';
 
 import { getApiKey } from '@web/api';
 import { TipConsole } from '@web/dev/TipConsole';
 import { useEventSession } from '@web/session/eventSession';
 
-type Tip = { playsLike_m: number; club: string; reasoning: string[] };
+type Tip = {
+  playsLike_m: number | null;
+  club: string | null;
+  reasoning: string[];
+  confidence: number;
+  silent: boolean;
+  silent_reason?: string | null;
+};
 
 type Props = {
   runId: string;
@@ -17,11 +25,30 @@ type Props = {
 export function CaddieTipPanel({ runId, hole, shot, before_m, bearing_deg }: Props) {
   const session = useEventSession();
   const memberId = session.memberId ?? undefined;
+  const tournamentSafe = session.tournamentSafe ?? false;
   const [loading, setLoading] = React.useState(false);
   const [tip, setTip] = React.useState<Tip | undefined>();
   const [err, setErr] = React.useState<string | undefined>();
   const [sending, setSending] = React.useState(false);
   const [sendErr, setSendErr] = React.useState<string | undefined>();
+  const { t } = useTranslation();
+
+  const activeTip = tip && !tip.silent ? tip : null;
+
+  const silentKey = React.useMemo(() => {
+    if (!tip?.silent) {
+      return null;
+    }
+    switch (tip.silent_reason) {
+      case 'low_confidence':
+        return 'caddie.silent.lowConfidence';
+      case 'tournament_safe':
+        return 'caddie.silent.tournament';
+      default:
+        return 'caddie.silent.generic';
+    }
+  }, [tip?.silent, tip?.silent_reason]);
+  const silentMessage = silentKey ? t(silentKey) : null;
 
   const requestAdvice = React.useCallback(async () => {
     try {
@@ -47,6 +74,7 @@ export function CaddieTipPanel({ runId, hole, shot, before_m, bearing_deg }: Pro
             D: 230,
           },
         },
+        tournamentSafe,
       };
       const headers: Record<string, string> = { 'Content-Type': 'application/json' };
       const apiKey = getApiKey();
@@ -62,17 +90,20 @@ export function CaddieTipPanel({ runId, hole, shot, before_m, bearing_deg }: Pro
         throw new Error('advise failed');
       }
       const payload = (await response.json()) as Tip;
-      setTip(payload);
+      setTip({
+        ...payload,
+        reasoning: Array.isArray(payload.reasoning) ? payload.reasoning : [],
+      });
     } catch (error) {
       setTip(undefined);
       setErr(error instanceof Error ? error.message : 'error');
     } finally {
       setLoading(false);
     }
-  }, [runId, hole, shot, before_m, bearing_deg]);
+  }, [runId, hole, shot, before_m, bearing_deg, tournamentSafe]);
 
   const sendToWatch = React.useCallback(async () => {
-    if (!tip || !memberId) {
+    if (!tip || !memberId || tip.silent) {
       return;
     }
     try {
@@ -105,15 +136,23 @@ export function CaddieTipPanel({ runId, hole, shot, before_m, bearing_deg }: Pro
     }
   }, [memberId, runId, hole, shot, tip]);
 
-  const watchDisabled = sending || !tip || !memberId;
+  const watchDisabled = sending || !activeTip || !memberId;
   const watchTitle = !memberId ? 'Requires a member ID to send tips' : undefined;
+  const showAdvice = Boolean(activeTip);
 
   return (
     <div className="rounded-xl border border-slate-800 bg-slate-950/60 p-3 shadow-sm">
       <div className="flex items-center justify-between gap-2">
-        <div className="font-semibold text-slate-100">Caddie</div>
         <div className="flex items-center gap-2">
-          {tip ? (
+          <div className="font-semibold text-slate-100">Caddie</div>
+          {tournamentSafe ? (
+            <span className="rounded-full bg-amber-500/10 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-amber-300">
+              {t('caddie.tournament.badge')}
+            </span>
+          ) : null}
+        </div>
+        <div className="flex items-center gap-2">
+          {showAdvice ? (
             <button
               className="text-xs font-medium text-slate-200 underline decoration-dashed underline-offset-4 disabled:cursor-not-allowed disabled:opacity-60"
               type="button"
@@ -134,21 +173,32 @@ export function CaddieTipPanel({ runId, hole, shot, before_m, bearing_deg }: Pro
           </button>
         </div>
       </div>
-      {tip ? (
+      {showAdvice && activeTip ? (
         <div className="mt-2 space-y-1 text-sm text-slate-200">
           <div className="flex flex-wrap items-center gap-2">
-            <span className="rounded bg-emerald-500/10 px-2 py-0.5 text-xs text-emerald-200">
-              Club: <strong className="ml-1 text-slate-100">{tip.club}</strong>
-            </span>
-            <span>
-              Plays-like <strong>{Math.round(tip.playsLike_m)} m</strong>
-            </span>
+            {activeTip.club ? (
+              <span className="rounded bg-emerald-500/10 px-2 py-0.5 text-xs text-emerald-200">
+                Club: <strong className="ml-1 text-slate-100">{activeTip.club}</strong>
+              </span>
+            ) : null}
+            {typeof activeTip.playsLike_m === 'number' ? (
+              <span>
+                Plays-like <strong>{Math.round(activeTip.playsLike_m)} m</strong>
+              </span>
+            ) : null}
           </div>
-          <ul className="list-disc pl-5 text-xs text-slate-300">
-            {tip.reasoning.map((line, index) => (
-              <li key={index}>{line}</li>
-            ))}
-          </ul>
+          {activeTip.reasoning.length > 0 ? (
+            <ul className="list-disc pl-5 text-xs text-slate-300">
+              {activeTip.reasoning.map((line, index) => (
+                <li key={index}>{line}</li>
+              ))}
+            </ul>
+          ) : null}
+        </div>
+      ) : null}
+      {tip && tip.silent ? (
+        <div className="mt-3 rounded-lg border border-slate-800/70 bg-slate-900/70 px-3 py-2 text-xs text-slate-300">
+          {silentMessage}
         </div>
       ) : null}
       {err ? <div className="mt-2 text-xs text-rose-400">Error: {err}</div> : null}
