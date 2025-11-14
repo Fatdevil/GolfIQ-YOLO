@@ -35,6 +35,8 @@ import { useCdnPreconnect } from "./media/cdn";
 import { PlayerOverlay } from "@web/player/PlayerOverlay";
 import MyBagPage from "./pages/bag/MyBagPage";
 import MyGolfIQPage from "./pages/profile/MyGolfIQPage";
+import TripStartPage from "./pages/trip/TripStartPage";
+import TripScoreboardPage from "./pages/trip/TripScoreboardPage";
 
 export default function App() {
   useCdnPreconnect();
@@ -124,6 +126,8 @@ export default function App() {
           <Route path="/courses/demo" element={<CourseDemoPage />} />
           <Route path="/play" element={<QuickRoundStartPage />} />
           <Route path="/play/:roundId" element={<QuickRoundPlayPage />} />
+          <Route path="/trip/start" element={<TripStartPage />} />
+          <Route path="/trip/:tripId" element={<TripScoreboardPage />} />
           {qaReplayEnabled && <Route path="/qa/replay" element={<ReplayAnalyzerPage />} />}
         </Routes>
       </main>

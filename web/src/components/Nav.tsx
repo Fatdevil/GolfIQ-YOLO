@@ -98,6 +98,7 @@ function getLinks(t: (key: string) => string): LinkItem[] {
   const base: LinkItem[] = [
     { to: "/", label: t("nav.home") },
     { to: "/play", label: t("nav.playRound") },
+    { to: "/trip/start", label: t("nav.trip") },
     { to: "/analyze", label: "Analyze" },
     { to: "/calibration", label: "Calibration" },
     { to: "/mock", label: "Mock" },
