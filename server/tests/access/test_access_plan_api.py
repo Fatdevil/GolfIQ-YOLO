@@ -43,10 +43,12 @@ def test_marks_specific_keys_as_pro(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setenv("GOLFIQ_PRO_API_KEYS", "vip-key,other")
-    monkeypatch.setenv("API_KEY", "vip-key")
     service.reload_config()
 
-    response = client.get("/api/access/plan", headers={"x-api-key": "vip-key"})
+    base_response = client.get("/api/access/plan", headers={"x-api-key": "test-key"})
+    assert base_response.status_code == 200
+    assert base_response.json() == {"plan": "free"}
 
-    assert response.status_code == 200
-    assert response.json() == {"plan": "pro"}
+    pro_response = client.get("/api/access/plan", headers={"x-api-key": "vip-key"})
+    assert pro_response.status_code == 200
+    assert pro_response.json() == {"plan": "pro"}
