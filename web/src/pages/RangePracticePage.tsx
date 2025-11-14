@@ -3,6 +3,9 @@ import { postMockAnalyze } from "../api";
 import { RangeImpactCard } from "../range/RangeImpactCard";
 import { computeRangeSummary } from "../range/stats";
 import { RangeShot, RangeShotMetrics } from "../range/types";
+import { computeGappingStats, recommendedCarry } from "@web/bag/gapping";
+import { loadBag, updateClubCarry } from "@web/bag/storage";
+import type { BagState } from "@web/bag/types";
 import {
   TargetBingoConfig,
   buildRangeShareSummary,
@@ -70,10 +73,13 @@ function mapMetrics(metrics: AnalyzeMetrics | null | undefined): RangeShotMetric
   };
 }
 
-type RangeMode = "practice" | "target-bingo";
+type RangeMode = "practice" | "target-bingo" | "gapping";
 
 export default function RangePracticePage() {
-  const [club, setClub] = React.useState("7i");
+  const [bag] = React.useState<BagState>(() => loadBag());
+  const [currentClubId, setCurrentClubId] = React.useState<string>(
+    () => bag.clubs[0]?.id ?? "7i"
+  );
   const [shots, setShots] = React.useState<RangeShot[]>([]);
   const [latest, setLatest] = React.useState<RangeShotMetrics | null>(null);
   const [loading, setLoading] = React.useState(false);
@@ -108,11 +114,15 @@ export default function RangePracticePage() {
       const response = (await postMockAnalyze({ ...MOCK_ANALYZE_BODY })) as AnalyzeResponse;
       const metrics = mapMetrics(response.metrics);
       const timestamp = Date.now();
+      const clubEntry = bag.clubs.find((item) => item.id === currentClubId);
+      const clubLabel = clubEntry?.label ?? currentClubId;
       setShots((prev) => {
         const shot: RangeShot = {
           id: `${timestamp}-${prev.length + 1}`,
           ts: timestamp,
-          club,
+          club: clubLabel,
+          clubId: currentClubId,
+          clubLabel,
           metrics,
         };
         return [...prev, shot];
@@ -151,6 +161,34 @@ export default function RangePracticePage() {
 
   const bingoShots = bingoResult?.shots.slice(-5) ?? [];
 
+  const clubOptions = bag.clubs;
+  const currentClub = React.useMemo(
+    () => clubOptions.find((club) => club.id === currentClubId),
+    [clubOptions, currentClubId]
+  );
+
+  const gappingShots = React.useMemo(
+    () => shots.filter((shot) => (shot.clubId ?? shot.club) === currentClubId),
+    [shots, currentClubId]
+  );
+  const gappingStats = React.useMemo(
+    () => (mode === "gapping" ? computeGappingStats(gappingShots) : null),
+    [mode, gappingShots]
+  );
+  const suggestedCarry = React.useMemo(
+    () => (mode === "gapping" ? recommendedCarry(gappingStats) : null),
+    [mode, gappingStats]
+  );
+
+  function handleSaveSuggestedCarry() {
+    if (suggestedCarry == null) {
+      return;
+    }
+    const latestBag = loadBag();
+    updateClubCarry(latestBag, currentClubId, suggestedCarry);
+    setCopyStatus("Bag uppdaterad");
+  }
+
   function formatErrorText(value: number) {
     const rounded = Math.abs(value).toFixed(1);
     if (Math.abs(value) < 0.05) {
@@ -167,16 +205,15 @@ export default function RangePracticePage() {
         <label className="text-sm">
           Club:
           <select
-            value={club}
-            onChange={(event) => setClub(event.target.value)}
+            value={currentClubId}
+            onChange={(event) => setCurrentClubId(event.target.value)}
             className="ml-2 rounded border border-slate-700 bg-slate-950 px-2 py-1 text-sm text-slate-100"
           >
-            <option value="D">Driver</option>
-            <option value="3w">3W</option>
-            <option value="5w">5W</option>
-            <option value="7i">7i</option>
-            <option value="9i">9i</option>
-            <option value="PW">PW</option>
+            {clubOptions.map((option) => (
+              <option key={option.id} value={option.id}>
+                {option.label} ({option.id})
+              </option>
+            ))}
           </select>
         </label>
 
@@ -216,11 +253,22 @@ export default function RangePracticePage() {
           >
             Target Bingo
           </button>
+          <button
+            type="button"
+            onClick={() => setMode("gapping")}
+            className={`px-3 py-1 rounded-md ${
+              mode === "gapping"
+                ? "bg-emerald-600 text-white"
+                : "text-slate-300 hover:text-white"
+            }`}
+          >
+            Gapping
+          </button>
         </div>
 
-        <button
-          type="button"
-          onClick={() => {
+      <button
+        type="button"
+        onClick={() => {
             void handleCopySummary();
           }}
           className="ml-auto px-3 py-1.5 rounded-md border border-emerald-600 text-emerald-400 hover:bg-emerald-600/10"
@@ -292,6 +340,64 @@ export default function RangePracticePage() {
           Side dispersion (σ): {summary.dispersionSideDeg != null ? `${summary.dispersionSideDeg.toFixed(1)}°` : "—"}
         </div>
       </div>
+
+      {mode === "gapping" && (
+        <div className="rounded-lg border border-slate-800 bg-slate-900/60 p-3 text-xs space-y-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-sm font-semibold text-slate-100">Gapping</span>
+            {currentClub && (
+              <span className="text-slate-400 text-[11px]">
+                Klubb: {currentClub.label} ({currentClub.id})
+              </span>
+            )}
+            <div className="ml-auto flex items-center gap-2">
+              <label className="text-[11px] text-slate-300">
+                Klubb
+                <select
+                  value={currentClubId}
+                  onChange={(event) => setCurrentClubId(event.target.value)}
+                  className="ml-2 rounded border border-slate-700 bg-slate-950 px-2 py-1 text-xs text-slate-100"
+                >
+                  {clubOptions.map((option) => (
+                    <option key={option.id} value={option.id}>
+                      {option.label} ({option.id})
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+          </div>
+
+          <div className="grid gap-2 sm:grid-cols-2">
+            <div>Antal slag: {gappingStats?.samples ?? 0}</div>
+            <div>
+              Snitt carry: {gappingStats?.meanCarry_m != null ? `${gappingStats.meanCarry_m.toFixed(1)} m` : "—"}
+            </div>
+            <div>
+              Median (p50): {gappingStats?.p50_m != null ? `${gappingStats.p50_m.toFixed(1)} m` : "—"}
+            </div>
+            <div>
+              Spridning (std): {gappingStats?.std_m != null ? `${gappingStats.std_m.toFixed(1)} m` : "—"}
+            </div>
+          </div>
+
+          {suggestedCarry != null && currentClub && (
+            <div className="rounded border border-emerald-700 bg-emerald-500/10 px-3 py-2 text-xs text-emerald-200">
+              Föreslagen carry för {currentClub.label}: {suggestedCarry.toFixed(1)} m
+            </div>
+          )}
+
+          {suggestedCarry != null && (
+            <button
+              type="button"
+              onClick={handleSaveSuggestedCarry}
+              className="rounded-md border border-emerald-600 px-3 py-1 text-xs font-semibold text-emerald-300 hover:bg-emerald-600/10"
+            >
+              Spara i Min bag
+            </button>
+          )}
+        </div>
+      )}
 
       {mode === "target-bingo" && bingoResult && (
         <div className="rounded-lg border border-slate-800 bg-slate-900/60 p-3 text-xs space-y-3">
@@ -371,7 +477,9 @@ export default function RangePracticePage() {
               .map((shot) => (
                 <li key={shot.id} className="flex justify-between">
                   <span>
-                    {shot.club} • {shot.metrics.ballSpeedMph != null ? `${shot.metrics.ballSpeedMph.toFixed(1)} mph` : "—"}
+                    {(shot.clubLabel ?? shot.club) ?? "—"} •
+                    {" "}
+                    {shot.metrics.ballSpeedMph != null ? `${shot.metrics.ballSpeedMph.toFixed(1)} mph` : "—"}
                   </span>
                   <span className="text-slate-500">
                     {shot.metrics.carryM != null ? `${shot.metrics.carryM.toFixed(0)} m` : "—"}

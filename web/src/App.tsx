@@ -32,6 +32,7 @@ import HomeFeed from "./pages/home/HomeFeed";
 import { EventSessionBoundary } from "./session/EventSessionBoundary";
 import { useCdnPreconnect } from "./media/cdn";
 import { PlayerOverlay } from "@web/player/PlayerOverlay";
+import MyBagPage from "./pages/bag/MyBagPage";
 
 export default function App() {
   useCdnPreconnect();
@@ -116,6 +117,7 @@ export default function App() {
           <Route path="/reels" element={<ReelsComposerPage />} />
           <Route path="/range/practice" element={<RangePracticePage />} />
           <Route path="/range/score" element={<RangeScorePage />} />
+          <Route path="/bag" element={<MyBagPage />} />
           <Route path="/play" element={<QuickRoundStartPage />} />
           <Route path="/play/:roundId" element={<QuickRoundPlayPage />} />
           {qaReplayEnabled && <Route path="/qa/replay" element={<ReplayAnalyzerPage />} />}
