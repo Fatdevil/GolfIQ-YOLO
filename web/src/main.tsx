@@ -6,6 +6,7 @@ import { bootstrapSupabase } from "./bootstrap/supabase";
 import App from "./App";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { TempAltDemo } from "./dev/TempAltDemo";
+import { UserAccessProvider } from "./access/UserAccessContext";
 import "./i18n";
 import "./styles.css";
 import "./sentry";
@@ -29,7 +30,9 @@ if (isTempAltDemo) {
     <React.StrictMode>
       <BrowserRouter>
         <ErrorBoundary>
-          <App />
+          <UserAccessProvider>
+            <App />
+          </UserAccessProvider>
         </ErrorBoundary>
       </BrowserRouter>
     </React.StrictMode>,

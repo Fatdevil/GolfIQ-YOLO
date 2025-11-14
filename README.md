@@ -109,6 +109,14 @@ When `SERVE_WEB=1` the FastAPI server mounts the compiled SPA from `web/dist` an
 
 The UI currently calls the following endpoints: `/cv/mock/analyze`, `/cv/analyze`, `/cv/analyze/video`, and `/runs` (including `/runs/{id}` and `DELETE /runs/{id}`).
 
+### Access plans & feature flags
+
+- `GET /api/access/plan` returns `{ "plan": "free" | "pro" }`. Plans default to `free` but can be overridden with:
+  - `GOLFIQ_DEFAULT_PLAN` – sets the baseline plan for all API keys.
+  - `GOLFIQ_PRO_API_KEYS` – comma separated list of API keys that should be treated as `pro` regardless of the default.
+- The web app wraps `<App />` with `UserAccessProvider`. Components can call `useFeatureFlag(featureId)` or wrap content in `<FeatureGate feature="…">` to show upgrade teasers.
+- `ProBadge` renders a small badge for pro-only surfaces. Advanced UI sections (GhostMatch, Caddie hints, profile insights) now respect these feature gates.
+
 ### Internationalization (i18n)
 
 - The web app uses [`react-i18next`](https://react.i18next.com/) with JSON resources under `web/src/locales/{lang}/common.json`.

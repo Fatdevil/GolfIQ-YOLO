@@ -6,6 +6,7 @@ import { loadAllRoundsFull } from "@/features/quickround/storage";
 import type { QuickRound } from "@/features/quickround/types";
 import { listGhosts } from "@/features/range/ghost";
 import { loadBag } from "@/bag/storage";
+import { FeatureGate } from "@/access/FeatureGate";
 import {
   computeBagSummary,
   computeQuickRoundStats,
@@ -71,19 +72,29 @@ export default function MyGolfIQPage() {
                   value={formatDecimal(quickRoundStats.avgStrokes)}
                 />
               )}
-              {typeof quickRoundStats.avgToPar === "number" && (
-                <StatBlock
-                  label={t("profile.quickRounds.avgToPar")}
-                  value={formatToPar(quickRoundStats.avgToPar)}
-                />
-              )}
-              {typeof quickRoundStats.bestToPar === "number" && (
-                <StatBlock
-                  label={t("profile.quickRounds.bestToPar")}
-                  value={formatToPar(quickRoundStats.bestToPar)}
-                />
-              )}
             </dl>
+
+            <FeatureGate feature="profile.advancedStats">
+              <div className="mt-4 rounded-md border border-emerald-500/30 bg-emerald-500/5 p-4">
+                <h3 className="mb-3 text-sm font-semibold text-emerald-200">
+                  {t("profile.quickRounds.advancedInsights")}
+                </h3>
+                <dl className="grid gap-4 text-sm sm:grid-cols-2">
+                  {typeof quickRoundStats.avgToPar === "number" ? (
+                    <StatBlock
+                      label={t("profile.quickRounds.avgToPar")}
+                      value={formatToPar(quickRoundStats.avgToPar)}
+                    />
+                  ) : null}
+                  {typeof quickRoundStats.bestToPar === "number" ? (
+                    <StatBlock
+                      label={t("profile.quickRounds.bestToPar")}
+                      value={formatToPar(quickRoundStats.bestToPar)}
+                    />
+                  ) : null}
+                </dl>
+              </div>
+            </FeatureGate>
 
             {recentRounds.length > 0 && (
               <div>
@@ -143,36 +154,38 @@ export default function MyGolfIQPage() {
             </dl>
 
             {rangeStats.lastGhost && (
-              <div className="rounded-md border border-slate-800 bg-slate-900/60 p-4">
-                <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
-                  <p className="text-sm font-semibold text-slate-100">
-                    {t("profile.range.lastGhostLabel", { name: rangeStats.lastGhost.name })}
-                  </p>
-                  <p className="text-xs text-slate-400">{formatDate(rangeStats.lastGhost.createdAt)}</p>
+              <FeatureGate feature="profile.advancedStats">
+                <div className="rounded-md border border-slate-800 bg-slate-900/60 p-4">
+                  <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+                    <p className="text-sm font-semibold text-slate-100">
+                      {t("profile.range.lastGhostLabel", { name: rangeStats.lastGhost.name })}
+                    </p>
+                    <p className="text-xs text-slate-400">{formatDate(rangeStats.lastGhost.createdAt)}</p>
+                  </div>
+                  <dl className="mt-4 grid gap-4 text-sm sm:grid-cols-2">
+                    <StatBlock
+                      label={t("profile.range.stats.totalShots")}
+                      value={rangeStats.lastGhost.result.totalShots.toString()}
+                    />
+                    <StatBlock
+                      label={t("profile.range.stats.hits")}
+                      value={rangeStats.lastGhost.result.hits.toString()}
+                    />
+                    <StatBlock
+                      label={t("profile.range.stats.hitRate")}
+                      value={`${formatDecimal(rangeStats.lastGhost.result.hitRate_pct)}%`}
+                    />
+                    <StatBlock
+                      label={t("profile.range.stats.avgError")}
+                      value={
+                        typeof rangeStats.lastGhost.result.avgAbsError_m === "number"
+                          ? `${formatDecimal(rangeStats.lastGhost.result.avgAbsError_m)} m`
+                          : t("profile.range.stats.noErrorData")
+                      }
+                    />
+                  </dl>
                 </div>
-                <dl className="mt-4 grid gap-4 text-sm sm:grid-cols-2">
-                  <StatBlock
-                    label={t("profile.range.stats.totalShots")}
-                    value={rangeStats.lastGhost.result.totalShots.toString()}
-                  />
-                  <StatBlock
-                    label={t("profile.range.stats.hits")}
-                    value={rangeStats.lastGhost.result.hits.toString()}
-                  />
-                  <StatBlock
-                    label={t("profile.range.stats.hitRate")}
-                    value={`${formatDecimal(rangeStats.lastGhost.result.hitRate_pct)}%`}
-                  />
-                  <StatBlock
-                    label={t("profile.range.stats.avgError")}
-                    value={
-                      typeof rangeStats.lastGhost.result.avgAbsError_m === "number"
-                        ? `${formatDecimal(rangeStats.lastGhost.result.avgAbsError_m)} m`
-                        : t("profile.range.stats.noErrorData")
-                    }
-                  />
-                </dl>
-              </div>
+              </FeatureGate>
             )}
           </div>
         )}

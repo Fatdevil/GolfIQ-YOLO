@@ -22,6 +22,7 @@ import {
   getLatestGhost,
   saveGhost,
 } from "../features/range/ghost";
+import { FeatureGate } from "@/access/FeatureGate";
 
 const MOCK_ANALYZE_BODY = Object.freeze({
   frames: 8,
@@ -531,7 +532,9 @@ export default function RangePracticePage() {
       )}
 
       {mode === "target-bingo" && (
-        <GhostMatchPanel cfg={bingoCfg} current={bingoResult ?? null} ghost={ghost} />
+        <FeatureGate feature="range.ghostMatch">
+          <GhostMatchPanel cfg={bingoCfg} current={bingoResult ?? null} ghost={ghost} />
+        </FeatureGate>
       )}
 
       {mode === "target-bingo" && (

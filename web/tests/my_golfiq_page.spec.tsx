@@ -7,6 +7,8 @@ import type { QuickRound } from "@/features/quickround/types";
 import type { GhostProfile } from "@/features/range/ghost";
 import type { BagState } from "@/bag/types";
 
+import { createAccessWrapper } from "./test-helpers/access";
+
 const mockRounds: QuickRound[] = [
   {
     id: "r1",
@@ -84,7 +86,8 @@ describe("MyGolfIQPage", () => {
     render(
       <MemoryRouter>
         <MyGolfIQPage />
-      </MemoryRouter>
+      </MemoryRouter>,
+      { wrapper: createAccessWrapper() },
     );
 
     expect(screen.getByRole("heading", { name: /My GolfIQ/i })).toBeTruthy();

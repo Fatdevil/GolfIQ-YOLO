@@ -13,6 +13,7 @@ from fastapi.staticfiles import StaticFiles
 from server.api.health import health as _health_handler
 from server.api.routers import calibrate as legacy_calibrate
 from server.api.routers import metrics
+from server.api.routers.access import router as access_router
 from server.api.routers.anchors import router as anchors_router
 from server.api.routers import run_scores as api_run_scores
 from server.api.routers import uploads as api_uploads
@@ -133,6 +134,7 @@ app.include_router(calibrate_router)
 app.include_router(coach_profile_router)
 app.include_router(caddie_router)
 app.include_router(caddie_health_router)
+app.include_router(access_router)
 app.include_router(caddie_api_router)
 app.include_router(courses_router)
 app.include_router(hole_detect_router)

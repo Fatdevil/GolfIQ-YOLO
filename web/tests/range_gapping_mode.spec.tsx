@@ -1,9 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
+import type { ReactElement } from "react";
 import userEvent from "@testing-library/user-event";
 
 import RangePracticePage from "../src/pages/RangePracticePage";
 import type { BagState } from "../src/bag/types";
+import { UserAccessContext } from "../src/access/UserAccessContext";
+import type { FeatureId, PlanName } from "../src/access/types";
 
 const { loadBagMock, updateClubCarryMock } = vi.hoisted(() => ({
   loadBagMock: vi.fn(),
@@ -22,6 +25,18 @@ const { postMockAnalyzeMock } = vi.hoisted(() => ({
 vi.mock("../src/api", () => ({
   postMockAnalyze: postMockAnalyzeMock,
 }));
+
+const proAccessValue = {
+  loading: false,
+  plan: "pro" as PlanName,
+  hasFeature: (_feature: FeatureId) => true,
+};
+
+function renderWithAccess(ui: ReactElement) {
+  return render(
+    <UserAccessContext.Provider value={proAccessValue}>{ui}</UserAccessContext.Provider>,
+  );
+}
 
 describe("RangePracticePage gapping mode", () => {
   beforeEach(() => {
@@ -50,7 +65,7 @@ describe("RangePracticePage gapping mode", () => {
       .mockResolvedValueOnce({ metrics: { carry_m: 110 } })
       .mockResolvedValueOnce({ metrics: { carry_m: 120 } });
 
-    render(<RangePracticePage />);
+    renderWithAccess(<RangePracticePage />);
 
     const hitButton = screen.getByRole("button", { name: /Hit & analyze/i });
 

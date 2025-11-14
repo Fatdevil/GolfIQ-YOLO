@@ -2,6 +2,7 @@ import * as React from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { getApiKey } from '@web/api';
+import { FeatureGate } from '@web/access/FeatureGate';
 import { TipConsole } from '@web/dev/TipConsole';
 import { useEventSession } from '@web/session/eventSession';
 
@@ -174,26 +175,30 @@ export function CaddieTipPanel({ runId, hole, shot, before_m, bearing_deg }: Pro
         </div>
       </div>
       {showAdvice && activeTip ? (
-        <div className="mt-2 space-y-1 text-sm text-slate-200">
+        <div className="mt-2 space-y-2 text-sm text-slate-200">
           <div className="flex flex-wrap items-center gap-2">
             {activeTip.club ? (
               <span className="rounded bg-emerald-500/10 px-2 py-0.5 text-xs text-emerald-200">
                 Club: <strong className="ml-1 text-slate-100">{activeTip.club}</strong>
               </span>
             ) : null}
-            {typeof activeTip.playsLike_m === 'number' ? (
-              <span>
-                Plays-like <strong>{Math.round(activeTip.playsLike_m)} m</strong>
-              </span>
-            ) : null}
           </div>
-          {activeTip.reasoning.length > 0 ? (
-            <ul className="list-disc pl-5 text-xs text-slate-300">
-              {activeTip.reasoning.map((line, index) => (
-                <li key={index}>{line}</li>
-              ))}
-            </ul>
-          ) : null}
+          <FeatureGate feature="caddie.advancedHints">
+            <div className="space-y-1 text-xs text-slate-300">
+              {typeof activeTip.playsLike_m === 'number' ? (
+                <div>
+                  Plays-like <strong>{Math.round(activeTip.playsLike_m)} m</strong>
+                </div>
+              ) : null}
+              {activeTip.reasoning.length > 0 ? (
+                <ul className="list-disc pl-5">
+                  {activeTip.reasoning.map((line, index) => (
+                    <li key={index}>{line}</li>
+                  ))}
+                </ul>
+              ) : null}
+            </div>
+          </FeatureGate>
         </div>
       ) : null}
       {tip && tip.silent ? (
