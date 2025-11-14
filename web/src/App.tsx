@@ -30,6 +30,7 @@ import EventLiveViewerPage from "./pages/events/[id]/live-view";
 import LiveViewerPage from "./pages/events/LiveViewerPage";
 import EventTopShotsPage from "./pages/events/[id]/top-shots";
 import HomeFeed from "./pages/home/HomeFeed";
+import { HomeHubPage } from "@/pages/home/HomeHubPage";
 import { EventSessionBoundary } from "./session/EventSessionBoundary";
 import { useCdnPreconnect } from "./media/cdn";
 import { PlayerOverlay } from "@web/player/PlayerOverlay";
@@ -45,7 +46,7 @@ export default function App() {
       <Nav />
       <main className="mx-auto w-full max-w-6xl px-4 pb-20 pt-6">
         <Routes>
-          <Route path="/" element={<HomeFeed />} />
+          <Route path="/" element={<HomeHubPage />} />
           <Route path="/feed" element={<HomeFeed />} />
           <Route path="/analyze" element={<AnalyzePage />} />
           <Route path="/calibration" element={<CalibrationPage />} />

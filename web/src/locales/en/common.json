@@ -8,6 +8,24 @@
   "nav.myBag": "My Bag",
   "nav.coursesDemo": "Courses demo",
 
+  "home.title": "GolfIQ Home",
+  "home.subtitle": "Choose how you want to play or practice today.",
+  "home.plan.loading": "Loading plan…",
+  "home.plan.label": "Your plan: {{plan}}",
+  "home.card.cta": "Open",
+
+  "home.card.quickRound.title": "Quick Round",
+  "home.card.quickRound.description": "Solo scorecard with strokes, putts and strokes-gained overview.",
+
+  "home.card.range.title": "Range practice",
+  "home.card.range.description": "Impact card, Target Bingo, Gapping and GhostMatch for the driving range.",
+
+  "home.card.trip.title": "Trip Mode",
+  "home.card.trip.description": "Multiplayer quick round with a shared scoreboard for your golf trips.",
+
+  "home.card.profile.title": "My GolfIQ",
+  "home.card.profile.description": "See your rounds, range ghosts and bag snapshot in one place.",
+
   "profile.title": "My GolfIQ",
   "profile.subtitle": "Overview of your rounds, range practice and bag.",
   "profile.quickRounds.title": "Quick rounds",
