@@ -27,10 +27,11 @@ class HudTip(BaseModel):
 class HoleHud(BaseModel):
     """Full watch HUD snapshot for a single hole."""
 
-    eventId: str
-    runId: str
-    memberId: str
+    eventId: Optional[str] = None
+    runId: Optional[str] = None
+    memberId: Optional[str] = None
 
+    courseId: Optional[str] = None
     hole: int
     par: Optional[int] = None
     strokeIndex: Optional[int] = None
@@ -43,6 +44,11 @@ class HoleHud(BaseModel):
 
     # Plays-like adjustment for the *next* shot
     playsLike_m: Optional[float] = None
+
+    # Caddie meta
+    caddie_confidence: Optional[float] = None
+    caddie_silent: bool = False
+    caddie_silent_reason: Optional[str] = None
 
     # Wind + env snapshot
     wind_mps: Optional[float] = None

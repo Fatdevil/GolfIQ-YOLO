@@ -2,10 +2,84 @@
 
 from __future__ import annotations
 
-from typing import Optional
+from dataclasses import dataclass
+from typing import Dict, Optional, Tuple
 
-from server.watch.hud_schemas import HoleHud, HudTip
+from server.caddie.advise import advise
+from server.caddie.schemas import AdviseIn, EnvIn, PlayerBag, ShotContext
+from server.courses.hole_detect import haversine_m, suggest_hole
+from server.courses.schemas import CourseBundle, GeoPoint, HoleBundle
+from server.courses.store import get_course_bundle
 from server.services.watch_tip_bus import get_latest_tip_for_member
+from server.storage.runs import load_run
+from server.watch.hud_schemas import HoleHud, HudTip
+
+DEFAULT_BAG_CARRIES_M: Dict[str, float] = {
+    "pw": 120.0,
+    "9i": 135.0,
+    "8i": 150.0,
+    "7i": 160.0,
+    "6i": 170.0,
+    "5i": 185.0,
+    "4i": 195.0,
+    "3h": 205.0,
+    "5w": 215.0,
+    "3w": 230.0,
+}
+
+
+@dataclass
+class _RunContext:
+    event_id: Optional[str] = None
+    course_id: Optional[str] = None
+    tournament_safe: bool = False
+    shots_taken: int = 0
+    sg_delta_total: Optional[float] = None
+    sg_delta_last: Optional[float] = None
+
+
+def _load_run_context(run_id: str) -> _RunContext:
+    run = load_run(run_id)
+    if not run:
+        return _RunContext()
+
+    params = getattr(run, "params", {}) or {}
+    metrics = getattr(run, "metrics", {}) or {}
+
+    event_id = params.get("eventId") or params.get("event_id")
+    course_id = params.get("courseId") or params.get("course_id")
+    if not course_id:
+        course_id = metrics.get("courseId") or metrics.get("course_id")
+
+    tournament_flags = [
+        params.get("tournamentSafe"),
+        params.get("tournament_safe"),
+        metrics.get("tournamentSafe"),
+        metrics.get("tournament_safe"),
+    ]
+    tournament_safe = any(bool(flag) for flag in tournament_flags if flag is not None)
+
+    shots_taken = 0
+    metrics_shots = metrics.get("shotsTaken") or metrics.get("shots_taken")
+    if isinstance(metrics_shots, (int, float)):
+        shots_taken = int(metrics_shots)
+    elif getattr(run, "events", None):
+        try:
+            shots_taken = len(run.events)
+        except TypeError:
+            shots_taken = 0
+
+    sg_total = metrics.get("sg_delta_total") or metrics.get("sgDeltaTotal")
+    sg_last = metrics.get("sg_delta_last_shot") or metrics.get("sgDeltaLastShot")
+
+    return _RunContext(
+        event_id=event_id,
+        course_id=course_id,
+        tournament_safe=tournament_safe,
+        shots_taken=shots_taken,
+        sg_delta_total=sg_total,
+        sg_delta_last=sg_last,
+    )
 
 
 def _get_latest_tip(member_id: str) -> Optional[HudTip]:
@@ -24,30 +98,170 @@ def _get_latest_tip(member_id: str) -> Optional[HudTip]:
     )
 
 
-def build_hole_hud(member_id: str, run_id: str, hole: int) -> HoleHud:
-    """Construct a :class:`HoleHud` snapshot from available stores.
+def _find_hole(bundle: CourseBundle, hole_number: int) -> Optional[HoleBundle]:
+    return next((hole for hole in bundle.holes if hole.number == hole_number), None)
 
-    The implementation is intentionally lightweight for now—distances and other
-    telemetry can be wired in as the geo/shot pipelines solidify.
-    """
 
-    # TODO: integrate run + shot data when those services are plumbed in.
-    sg_delta_total: Optional[float] = None
-    sg_delta_last: Optional[float] = None
-    shots_taken = 0
+def _compute_green_distances(
+    bundle: CourseBundle,
+    hole_number: int,
+    position: Optional[GeoPoint],
+) -> Tuple[Optional[float], Optional[float], Optional[float]]:
+    if not bundle or position is None:
+        return (None, None, None)
+
+    hole = _find_hole(bundle, hole_number)
+    if not hole:
+        return (None, None, None)
+
+    green = hole.green
+    try:
+        to_middle = haversine_m(position, green.middle)
+        to_front = haversine_m(position, green.front)
+        to_back = haversine_m(position, green.back)
+    except Exception:
+        return (None, None, None)
+
+    return (to_middle, to_front, to_back)
+
+
+def _build_caddie_advice(
+    *,
+    run_id: str,
+    hole: int,
+    distance_m: Optional[float],
+    wind_mps: Optional[float],
+    wind_dir_deg: Optional[float],
+    temp_c: Optional[float],
+    elev_delta_m: Optional[float],
+    shots_taken: int,
+    tournament_safe: bool,
+) -> Tuple[
+    Optional[float],
+    Optional[float],
+    bool,
+    Optional[str],
+]:
+    distance = distance_m if distance_m is not None else 150.0
+    if distance <= 0:
+        distance = 150.0
+
+    env = EnvIn(
+        wind_mps=wind_mps if wind_mps is not None else 0.0,
+        wind_dir_deg=wind_dir_deg if wind_dir_deg is not None else 0.0,
+        temp_c=temp_c if temp_c is not None else 20.0,
+        elev_delta_m=elev_delta_m if elev_delta_m is not None else 0.0,
+    )
+    shot = ShotContext(before_m=max(distance, 1.0))
+    bag = PlayerBag(carries_m=DEFAULT_BAG_CARRIES_M)
+
+    try:
+        advice = advise(
+            AdviseIn(
+                runId=run_id,
+                hole=hole,
+                shotNumber=shots_taken + 1 if shots_taken else None,
+                shot=shot,
+                env=env,
+                bag=bag,
+                tournament_safe=tournament_safe,
+            )
+        )
+    except Exception:
+        return (None, None, False, None)
+
+    plays_like = advice.playsLike_m if not advice.silent else None
+    confidence = advice.confidence if advice.confidence is not None else None
+    return (plays_like, confidence, advice.silent, advice.silent_reason)
+
+
+def build_hole_hud(
+    member_id: str,
+    run_id: str,
+    hole: int,
+    *,
+    course_id: Optional[str] = None,
+    gnss: Optional[GeoPoint] = None,
+    wind_mps: Optional[float] = None,
+    wind_dir_deg: Optional[float] = None,
+    temp_c: Optional[float] = None,
+    elev_delta_m: Optional[float] = None,
+) -> HoleHud:
+    """Construct a :class:`HoleHud` snapshot from available stores."""
+
+    run_context = _load_run_context(run_id)
+    if not course_id:
+        course_id = run_context.course_id
+
+    bundle = get_course_bundle(course_id) if course_id else None
+
+    if bundle and gnss:
+        suggestion = suggest_hole(
+            bundle,
+            gnss.lat,
+            gnss.lon,
+            current_hole=hole,
+        )
+        if suggestion and suggestion.confidence >= 0.7:
+            hole = suggestion.hole
+
+    to_green = to_front = to_back = None
+    hole_bundle: Optional[HoleBundle] = None
+    if bundle:
+        hole_bundle = _find_hole(bundle, hole)
+        if gnss:
+            to_green, to_front, to_back = _compute_green_distances(bundle, hole, gnss)
+
+    distance_for_caddie = to_green
+    if distance_for_caddie is None:
+        # fall back to front/back distances before using default
+        for candidate in (to_front, to_back):
+            if candidate is not None:
+                distance_for_caddie = candidate
+                break
+
+    plays_like, caddie_confidence, caddie_silent, caddie_silent_reason = (
+        _build_caddie_advice(
+            run_id=run_id,
+            hole=hole,
+            distance_m=distance_for_caddie,
+            wind_mps=wind_mps,
+            wind_dir_deg=wind_dir_deg,
+            temp_c=temp_c,
+            elev_delta_m=elev_delta_m,
+            shots_taken=run_context.shots_taken,
+            tournament_safe=run_context.tournament_safe,
+        )
+    )
 
     active_tip = _get_latest_tip(member_id)
 
     return HoleHud(
-        eventId="evt-stub",
+        eventId=run_context.event_id,
         runId=run_id,
         memberId=member_id,
+        courseId=course_id,
         hole=hole,
-        shotsTaken=shots_taken,
-        sg_delta_total=sg_delta_total,
-        sg_delta_last_shot=sg_delta_last,
+        par=hole_bundle.par if hole_bundle else None,
+        toGreen_m=to_green,
+        toFront_m=to_front,
+        toBack_m=to_back,
+        playsLike_m=plays_like,
+        caddie_confidence=caddie_confidence,
+        caddie_silent=caddie_silent,
+        caddie_silent_reason=caddie_silent_reason,
+        wind_mps=wind_mps,
+        wind_dir_deg=wind_dir_deg,
+        temp_c=temp_c,
+        elev_delta_m=elev_delta_m,
+        shotsTaken=run_context.shots_taken,
+        sg_delta_total=run_context.sg_delta_total,
+        sg_delta_last_shot=run_context.sg_delta_last,
         activeTip=active_tip,
     )
 
 
-__all__ = ["build_hole_hud"]
+__all__ = [
+    "build_hole_hud",
+    "_compute_green_distances",
+]

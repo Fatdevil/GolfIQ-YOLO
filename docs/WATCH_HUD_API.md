@@ -38,7 +38,14 @@ Request body:
 {
   "memberId": "string",
   "runId": "string",
-  "hole": 1
+  "hole": 1,
+  "courseId": "demo-links",
+  "lat": 37.4331,
+  "lon": -122.1585,
+  "wind_mps": 5.6,
+  "wind_dir_deg": 305,
+  "temp_c": 19.0,
+  "elev_delta_m": -3.2
 }
 ```
 
@@ -49,6 +56,7 @@ Response body (`HoleHud` schema):
   "eventId": "evt-123",
   "runId": "run-456",
   "memberId": "member-789",
+  "courseId": "demo-links",
   "hole": 7,
   "par": 5,
   "strokeIndex": 3,
@@ -57,6 +65,9 @@ Response body (`HoleHud` schema):
   "toBack_m": 176.2,
   "toLayup_m": 95.0,
   "playsLike_m": 157.8,
+  "caddie_confidence": 0.78,
+  "caddie_silent": false,
+  "caddie_silent_reason": null,
   "wind_mps": 6.2,
   "wind_dir_deg": 310,
   "temp_c": 18.5,
@@ -92,11 +103,13 @@ Request body:
   "runId": "string",
   "hole": 7,
   "deviceId": "watch-abc",
+  "courseId": "demo-links",
   "lat": 36.87055,
   "lon": -121.56812,
   "wind_mps": 6.0,
   "wind_dir_deg": 320,
-  "temp_c": 18.0
+  "temp_c": 18.0,
+  "elev_delta_m": -2.5
 }
 ```
 
@@ -105,8 +118,14 @@ Response body (`TickOut` schema):
 ```json
 {
   "hole": 7,
+  "courseId": "demo-links",
   "toGreen_m": 160.0,
+  "toFront_m": 146.5,
+  "toBack_m": 174.3,
   "playsLike_m": 155.5,
+  "caddie_confidence": 0.74,
+  "caddie_silent": false,
+  "caddie_silent_reason": null,
   "activeTip": {
     "tipId": "tip-991",
     "title": "9i knockdown",
@@ -142,6 +161,14 @@ For situations where advanced telemetry is unavailable, the APIs degrade gracefu
 ```
 
 The watch UI should continue rendering the available fields and omit absent data.
+
+### Caddie + Tournament Safety
+
+The HUD always reflects the caddie engine state. When `caddie_silent` is `true`, the
+`playsLike_m` field is suppressed and `caddie_silent_reason` explains why (for example,
+`"tournament_safe"` or `"low_confidence"`). Tournament-safe rounds automatically set
+`caddie_silent` to `true` so the watch never surfaces aggressive recommendations while
+competition guards are active.
 
 ## Refresh Cadence Summary
 
