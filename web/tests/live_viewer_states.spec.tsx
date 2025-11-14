@@ -126,10 +126,12 @@ describe('Live viewer states', () => {
       expect(getLiveState).toHaveBeenCalledTimes(2);
     });
 
-    const loadedNewManifest = HlsMock.instances.some((instance) =>
-      instance.loadSource.mock.calls.some(([url]) => url === 'https://cdn.example/live/master-new.m3u8'),
-    );
-    expect(loadedNewManifest).toBe(true);
+    await waitFor(() => {
+      const loadedNewManifest = HlsMock.instances.some((instance) =>
+        instance.loadSource.mock.calls.some(([url]) => url === 'https://cdn.example/live/master-new.m3u8'),
+      );
+      expect(loadedNewManifest).toBe(true);
+    });
   });
 
   it('enters offline state when live heartbeat expires', async () => {

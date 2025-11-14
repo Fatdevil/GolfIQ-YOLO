@@ -3,6 +3,13 @@ import { postMockAnalyze } from "../api";
 import { RangeImpactCard } from "../range/RangeImpactCard";
 import { computeRangeSummary } from "../range/stats";
 import { RangeShot, RangeShotMetrics } from "../range/types";
+import {
+  TargetBingoConfig,
+  buildRangeShareSummary,
+  buildSprayBins,
+  scoreTargetBingo,
+} from "../features/range/games";
+import { SprayHeatmap } from "../features/range/SprayHeatmap";
 
 const MOCK_ANALYZE_BODY = Object.freeze({
   frames: 8,
@@ -63,14 +70,36 @@ function mapMetrics(metrics: AnalyzeMetrics | null | undefined): RangeShotMetric
   };
 }
 
+type RangeMode = "practice" | "target-bingo";
+
 export default function RangePracticePage() {
   const [club, setClub] = React.useState("7i");
   const [shots, setShots] = React.useState<RangeShot[]>([]);
   const [latest, setLatest] = React.useState<RangeShotMetrics | null>(null);
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
+  const [mode, setMode] = React.useState<RangeMode>("practice");
+  const [bingoCfg, setBingoCfg] = React.useState<TargetBingoConfig>({
+    target_m: 150,
+    tolerance_m: 7,
+    maxShots: 20,
+  });
+  const [copyStatus, setCopyStatus] = React.useState<string | null>(null);
 
-  const summary = computeRangeSummary(shots);
+  const summary = React.useMemo(() => computeRangeSummary(shots), [shots]);
+  const bingoResult = React.useMemo(
+    () => (mode === "target-bingo" ? scoreTargetBingo(shots, bingoCfg) : null),
+    [mode, shots, bingoCfg]
+  );
+  const sprayBins = React.useMemo(() => buildSprayBins(shots, 10), [shots]);
+
+  React.useEffect(() => {
+    if (!copyStatus) {
+      return;
+    }
+    const id = window.setTimeout(() => setCopyStatus(null), 3000);
+    return () => window.clearTimeout(id);
+  }, [copyStatus]);
 
   async function handleHit() {
     setLoading(true);
@@ -95,6 +124,39 @@ export default function RangePracticePage() {
     } finally {
       setLoading(false);
     }
+  }
+
+  async function handleCopySummary() {
+    const summaryPayload = buildRangeShareSummary({
+      mode,
+      bingoConfig: bingoCfg,
+      shots,
+      bingoResult,
+      sessionSummary: summary,
+    });
+    const text = JSON.stringify(summaryPayload, null, 2);
+
+    try {
+      if (navigator.clipboard && typeof navigator.clipboard.writeText === "function") {
+        await navigator.clipboard.writeText(text);
+        setCopyStatus("Sammanfattning kopierad");
+      } else {
+        setCopyStatus("Clipboard saknas i denna miljö");
+      }
+    } catch (err) {
+      console.error("Failed to copy range summary", err);
+      setCopyStatus("Kunde inte kopiera");
+    }
+  }
+
+  const bingoShots = bingoResult?.shots.slice(-5) ?? [];
+
+  function formatErrorText(value: number) {
+    const rounded = Math.abs(value).toFixed(1);
+    if (Math.abs(value) < 0.05) {
+      return "0 m";
+    }
+    return value > 0 ? `+${rounded} m lång` : `−${rounded} m kort`;
   }
 
   return (
@@ -130,6 +192,89 @@ export default function RangePracticePage() {
         </button>
       </div>
 
+      <div className="flex flex-wrap items-center gap-2 text-xs">
+        <div className="flex rounded-lg border border-slate-800 bg-slate-900/60 p-1">
+          <button
+            type="button"
+            onClick={() => setMode("practice")}
+            className={`px-3 py-1 rounded-md ${
+              mode === "practice"
+                ? "bg-emerald-600 text-white"
+                : "text-slate-300 hover:text-white"
+            }`}
+          >
+            Fri träning
+          </button>
+          <button
+            type="button"
+            onClick={() => setMode("target-bingo")}
+            className={`px-3 py-1 rounded-md ${
+              mode === "target-bingo"
+                ? "bg-emerald-600 text-white"
+                : "text-slate-300 hover:text-white"
+            }`}
+          >
+            Target Bingo
+          </button>
+        </div>
+
+        <button
+          type="button"
+          onClick={() => {
+            void handleCopySummary();
+          }}
+          className="ml-auto px-3 py-1.5 rounded-md border border-emerald-600 text-emerald-400 hover:bg-emerald-600/10"
+        >
+          Kopiera sammanfattning
+        </button>
+      </div>
+
+      {copyStatus && <div className="text-xs text-emerald-400">{copyStatus}</div>}
+
+      {mode === "target-bingo" && (
+        <div className="rounded-lg border border-slate-800 bg-slate-900/60 p-3 text-xs grid gap-3 md:grid-cols-3">
+          <label className="flex flex-col gap-1">
+            <span className="text-slate-300">Mål (m)</span>
+            <input
+              type="number"
+              min={50}
+              max={250}
+              value={bingoCfg.target_m}
+              onChange={(event) =>
+                setBingoCfg((prev) => ({ ...prev, target_m: Number(event.target.value) }))
+              }
+              className="rounded border border-slate-700 bg-slate-950 px-2 py-1 text-xs text-slate-100"
+            />
+          </label>
+          <label className="flex flex-col gap-1">
+            <span className="text-slate-300">Tolerans (± m)</span>
+            <input
+              type="number"
+              min={3}
+              max={20}
+              value={bingoCfg.tolerance_m}
+              onChange={(event) =>
+                setBingoCfg((prev) => ({ ...prev, tolerance_m: Number(event.target.value) }))
+              }
+              className="rounded border border-slate-700 bg-slate-950 px-2 py-1 text-xs text-slate-100"
+            />
+          </label>
+          <label className="flex flex-col gap-1">
+            <span className="text-slate-300">Senaste skott</span>
+            <input
+              type="number"
+              min={5}
+              max={50}
+              value={bingoCfg.maxShots}
+              onChange={(event) =>
+                setBingoCfg((prev) => ({ ...prev, maxShots: Number(event.target.value) }))
+              }
+              className="rounded border border-slate-700 bg-slate-950 px-2 py-1 text-xs text-slate-100"
+            />
+          </label>
+        </div>
+      )}
+
       {error && <div className="text-xs text-red-600">{error}</div>}
 
       <RangeImpactCard metrics={latest} />
@@ -147,6 +292,72 @@ export default function RangePracticePage() {
           Side dispersion (σ): {summary.dispersionSideDeg != null ? `${summary.dispersionSideDeg.toFixed(1)}°` : "—"}
         </div>
       </div>
+
+      {mode === "target-bingo" && bingoResult && (
+        <div className="rounded-lg border border-slate-800 bg-slate-900/60 p-3 text-xs space-y-3">
+          <div className="flex items-center justify-between">
+            <h2 className="text-sm font-semibold text-slate-100">Target Bingo</h2>
+            <span className="text-slate-400 text-[10px]">
+              Målet: {bingoCfg.target_m} m ± {bingoCfg.tolerance_m} m
+            </span>
+          </div>
+          {bingoResult.totalShots === 0 ? (
+            <div className="text-slate-500">Inga giltiga skott ännu.</div>
+          ) : (
+            <div className="grid grid-cols-3 gap-3">
+              <div>
+                <div className="text-slate-400">Träffar</div>
+                <div className="text-lg font-semibold text-emerald-400">
+                  {bingoResult.hits} / {bingoResult.totalShots}
+                </div>
+              </div>
+              <div>
+                <div className="text-slate-400">Träffprocent</div>
+                <div className="text-lg font-semibold text-slate-100">
+                  {bingoResult.hitRate_pct.toFixed(0)}%
+                </div>
+              </div>
+              <div>
+                <div className="text-slate-400">Genomsnittligt fel</div>
+                <div className="text-lg font-semibold text-slate-100">
+                  {bingoResult.avgAbsError_m != null
+                    ? `${bingoResult.avgAbsError_m.toFixed(1)} m`
+                    : "—"}
+                </div>
+              </div>
+            </div>
+          )}
+          {bingoResult.totalShots > 0 && (
+            <div className="space-y-1">
+              <div className="text-slate-400">Senaste skotten</div>
+              <ul className="space-y-1">
+                {bingoShots.map((result) => (
+                  <li key={result.shot.id} className="flex items-center gap-2">
+                    <span
+                      className={`h-2.5 w-2.5 rounded-full ${
+                        result.isHit ? "bg-emerald-400" : "bg-red-500"
+                      }`}
+                    />
+                    <span className="text-slate-200">
+                      #{result.index}
+                    </span>
+                    <span className="text-slate-400">
+                      {formatErrorText(result.carryError_m)}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </div>
+      )}
+
+      {mode === "target-bingo" && (
+        <div className="rounded-lg border border-slate-800 bg-slate-900/60 p-3 text-xs">
+          <h2 className="text-sm font-semibold text-slate-100 mb-2">Träffbild</h2>
+          <SprayHeatmap bins={sprayBins} />
+        </div>
+      )}
 
       <div className="max-h-48 overflow-auto rounded-lg border border-slate-800 bg-slate-900/60 p-3 text-xs">
         <div className="font-semibold mb-1">Shot log</div>
