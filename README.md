@@ -109,6 +109,10 @@ When `SERVE_WEB=1` the FastAPI server mounts the compiled SPA from `web/dist` an
 
 The UI currently calls the following endpoints: `/cv/mock/analyze`, `/cv/analyze`, `/cv/analyze/video`, and `/runs` (including `/runs/{id}` and `DELETE /runs/{id}`).
 
+#### Quick Round
+
+- Auto hole detect (beta): when a course bundle is selected and GPS is enabled, the web app can suggest switching to the correct hole based on your location, and you confirm via a “Byt / Ignorera” toast. The heuristic is intentionally conservative and currently relies on the static demo course bundles.
+
 ### CV / Range tooling
 
 - Range Practice (beta) is available at `/range/practice`. It currently calls `/cv/mock/analyze` to show ball speed, carry, launch, side angle, and a running session summary with averages and dispersion.
