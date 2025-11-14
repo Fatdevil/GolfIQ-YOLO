@@ -5,6 +5,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { CaddieTipPanel } from '@web/sg/CaddieTipPanel';
 import { EventSessionContext } from '@web/session/eventSession';
 
+import { createAccessWrapper } from './test-helpers/access';
+
 vi.mock('@web/api', () => ({
   getApiKey: () => 'test-key',
 }));
@@ -39,6 +41,7 @@ describe('CaddieTipPanel send to watch', () => {
       <EventSessionContext.Provider value={{ role: 'spectator', memberId: 'member-123', safe: true, tournamentSafe: false }}>
         <CaddieTipPanel runId="run-1" hole={5} shot={2} before_m={140} bearing_deg={10} />
       </EventSessionContext.Provider>,
+      { wrapper: createAccessWrapper() },
     );
 
     await userEvent.click(screen.getByRole('button', { name: /get advice/i }));

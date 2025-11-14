@@ -4,6 +4,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { CaddieTipPanel } from '@web/sg/CaddieTipPanel';
 
+import { createAccessWrapper } from './test-helpers/access';
+
 vi.mock('@web/api', () => ({
   getApiKey: () => 'test-key',
 }));
@@ -32,6 +34,7 @@ describe('CaddieTipPanel', () => {
 
     render(
       <CaddieTipPanel runId="run-1" hole={1} shot={2} before_m={140} bearing_deg={15} />,
+      { wrapper: createAccessWrapper() },
     );
 
     await userEvent.click(screen.getByRole('button', { name: /get advice/i }));
@@ -64,6 +67,7 @@ describe('CaddieTipPanel', () => {
 
     render(
       <CaddieTipPanel runId="run-1" hole={1} shot={2} before_m={140} bearing_deg={0} />,
+      { wrapper: createAccessWrapper() },
     );
 
     await userEvent.click(screen.getByRole('button', { name: /get advice/i }));

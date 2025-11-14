@@ -5,6 +5,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { CaddieTipPanel } from '@web/sg/CaddieTipPanel';
 import { DEFAULT_SESSION, EventSessionContext } from '@web/session/eventSession';
 
+import { createAccessWrapper } from './test-helpers/access';
+
 vi.mock('@web/api', () => ({
   getApiKey: () => 'test-key',
 }));
@@ -33,7 +35,7 @@ describe('CaddieTipPanel confidence gate', () => {
     });
     vi.stubGlobal('fetch', fetchMock);
 
-    render(<CaddieTipPanel {...baseProps} />);
+    render(<CaddieTipPanel {...baseProps} />, { wrapper: createAccessWrapper() });
 
     await userEvent.click(screen.getByRole('button', { name: /get advice/i }));
 
@@ -63,6 +65,7 @@ describe('CaddieTipPanel confidence gate', () => {
       <EventSessionContext.Provider value={DEFAULT_SESSION}>
         <CaddieTipPanel {...baseProps} />
       </EventSessionContext.Provider>,
+      { wrapper: createAccessWrapper() },
     );
 
     await userEvent.click(screen.getByRole('button', { name: /get advice/i }));
@@ -93,6 +96,7 @@ describe('CaddieTipPanel confidence gate', () => {
       >
         <CaddieTipPanel {...baseProps} />
       </EventSessionContext.Provider>,
+      { wrapper: createAccessWrapper() },
     );
 
     await userEvent.click(screen.getByRole('button', { name: /get advice/i }));

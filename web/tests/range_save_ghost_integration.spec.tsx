@@ -1,4 +1,5 @@
 import { render, screen } from "@testing-library/react";
+import type { ReactElement } from "react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { TargetBingoResult } from "../src/features/range/games";
@@ -57,6 +58,20 @@ vi.mock("../src/api", () => ({
 import RangePracticePage from "../src/pages/RangePracticePage";
 import { saveGhost } from "../src/features/range/ghost";
 import { scoreTargetBingo } from "../src/features/range/games";
+import { UserAccessContext } from "../src/access/UserAccessContext";
+import type { FeatureId, PlanName } from "../src/access/types";
+
+const proAccessValue = {
+  loading: false,
+  plan: "pro" as PlanName,
+  hasFeature: (_feature: FeatureId) => true,
+};
+
+function renderWithAccess(ui: ReactElement) {
+  return render(
+    <UserAccessContext.Provider value={proAccessValue}>{ui}</UserAccessContext.Provider>,
+  );
+}
 
 describe("RangePracticePage ghost integration", () => {
   beforeEach(() => {
@@ -67,7 +82,7 @@ describe("RangePracticePage ghost integration", () => {
   });
 
   it("saves a ghost profile using the current bingo config and result", async () => {
-    render(<RangePracticePage />);
+    renderWithAccess(<RangePracticePage />);
     const user = userEvent.setup();
 
     await user.click(screen.getByRole("button", { name: /Target Bingo/i }));

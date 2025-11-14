@@ -17,6 +17,7 @@
   "profile.quickRounds.avgStrokes": "Average strokes",
   "profile.quickRounds.avgToPar": "Average to par",
   "profile.quickRounds.bestToPar": "Best to par",
+  "profile.quickRounds.advancedInsights": "Pro insights",
   "profile.quickRounds.recent": "Recent rounds",
   "profile.quickRounds.noScore": "No score yet",
 
@@ -64,5 +65,9 @@
   "caddie.tournament.badge": "Tournament mode",
   "caddie.silent.lowConfidence": "Caddie is quiet here – not enough data yet.",
   "caddie.silent.tournament": "Tournament mode – advanced hints are disabled.",
-  "caddie.silent.generic": "Caddie is quiet for this shot."
+  "caddie.silent.generic": "Caddie is quiet for this shot.",
+  "access.loading": "Checking your plan…",
+  "access.proOnlyFeature": "This is a Pro feature.",
+  "access.upgradeTeaser": "Unlock this feature and more by upgrading to GolfIQ Pro (coming soon).",
+  "access.upgradeCta": "Learn more"
 }
