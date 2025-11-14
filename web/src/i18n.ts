@@ -18,6 +18,7 @@ void i18n
     fallbackLng: "en",
     ns: ["common"],
     defaultNS: "common",
+    keySeparator: false,
     interpolation: {
       escapeValue: false,
     },
