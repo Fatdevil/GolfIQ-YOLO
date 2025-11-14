@@ -1,21 +1,26 @@
 import { NavLink } from "react-router-dom";
 import { Menu } from "lucide-react";
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 
 import { useCalibration } from "../hooks/useCalibration";
 import { qaReplayEnabled } from "../config";
 import QueueIndicator from "./QueueIndicator";
+import { LanguageSelector } from "./LanguageSelector";
 
 export default function Nav() {
   const [open, setOpen] = useState(false);
   const { calibration } = useCalibration();
+  const { t } = useTranslation();
+
+  const links = getLinks(t);
 
   return (
     <header className="border-b border-slate-800 bg-slate-900/80 backdrop-blur">
       <div className="mx-auto flex w-full max-w-6xl items-center justify-between px-4 py-4">
         <div className="flex items-center gap-3">
           <NavLink to="/" className="text-lg font-semibold text-emerald-300">
-            GolfIQ
+            {t("app.title")}
           </NavLink>
           {calibration && (
             <span className="rounded-full bg-emerald-500/15 px-2 py-0.5 text-xs font-semibold text-emerald-300">
@@ -24,7 +29,7 @@ export default function Nav() {
           )}
         </div>
         <nav className="hidden gap-6 text-sm font-medium text-slate-300 sm:flex">
-          {getLinks().map((link) => (
+          {links.map((link) => (
             <NavLink
               key={link.to}
               to={link.to}
@@ -38,7 +43,10 @@ export default function Nav() {
             </NavLink>
           ))}
         </nav>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 text-slate-300">
+          <div className="hidden sm:block">
+            <LanguageSelector />
+          </div>
           <QueueIndicator />
           <button
             onClick={() => setOpen((v) => !v)}
@@ -54,13 +62,16 @@ export default function Nav() {
           <div className="mb-3 sm:hidden">
             <QueueIndicator />
           </div>
+          <div className="mb-3 sm:hidden">
+            <LanguageSelector />
+          </div>
           {calibration && (
             <div className="mb-3 rounded bg-emerald-500/10 px-3 py-2 text-xs font-semibold text-emerald-300">
               Calibrated ✓
             </div>
           )}
           <nav className="flex flex-col gap-3 text-sm font-medium text-slate-300">
-            {getLinks().map((link) => (
+            {links.map((link) => (
               <NavLink
                 key={link.to}
                 to={link.to}
@@ -83,15 +94,15 @@ export default function Nav() {
 
 type LinkItem = { to: string; label: string };
 
-function getLinks(): LinkItem[] {
+function getLinks(t: (key: string) => string): LinkItem[] {
   const base: LinkItem[] = [
-    { to: "/", label: "Home" },
-    { to: "/play", label: "Spela runda (solo)" },
+    { to: "/", label: t("nav.home") },
+    { to: "/play", label: t("nav.playRound") },
     { to: "/analyze", label: "Analyze" },
     { to: "/calibration", label: "Calibration" },
     { to: "/mock", label: "Mock" },
-    { to: "/range/practice", label: "Range practice" },
-    { to: "/bag", label: "Min bag" },
+    { to: "/range/practice", label: t("nav.rangePractice") },
+    { to: "/bag", label: t("nav.myBag") },
     { to: "/runs", label: "Runs" },
     { to: "/reels", label: "Reels" },
     { to: "/field-runs", label: "Field runs" },

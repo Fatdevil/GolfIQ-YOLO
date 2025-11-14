@@ -1,4 +1,5 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Link, useNavigate } from "react-router-dom";
 
 import {
@@ -12,6 +13,7 @@ import { useCourseBundle, useCourseIds } from "../../courses/hooks";
 
 export default function QuickRoundStartPage() {
   const navigate = useNavigate();
+  const { t } = useTranslation();
   const [courseName, setCourseName] = useState("");
   const [teesName, setTeesName] = useState("");
   const [holesCount, setHolesCount] = useState<9 | 18>(18);
@@ -53,7 +55,7 @@ export default function QuickRoundStartPage() {
     event.preventDefault();
     const trimmedCourseName = courseName.trim();
     if (!trimmedCourseName) {
-      setError("Ange ett ban-namn");
+      setError(t("quickRound.start.courseNameRequired"));
       return;
     }
     const trimmedTeesName = teesName.trim();
@@ -77,14 +79,16 @@ export default function QuickRoundStartPage() {
   return (
     <div className="space-y-10">
       <section className="rounded-lg border border-slate-800 bg-slate-900/60 p-6 shadow-lg">
-        <h1 className="text-2xl font-semibold text-slate-100">Spela runda</h1>
+        <h1 className="text-2xl font-semibold text-slate-100">
+          {t("quickRound.start.title")}
+        </h1>
         <p className="mt-2 text-sm text-slate-400">
           Starta en snabb solo-runda utan eventkod. Dina resultat sparas lokalt på den här enheten.
         </p>
         <form className="mt-6 space-y-6" onSubmit={handleSubmit}>
           <div className="space-y-2">
             <label className="block text-sm font-medium text-slate-200" htmlFor="courseName">
-              Bana
+              {t("quickRound.start.courseName")}
             </label>
             <input
               id="courseName"
@@ -137,7 +141,7 @@ export default function QuickRoundStartPage() {
           </div>
           <div className="space-y-2">
             <label className="block text-sm font-medium text-slate-200" htmlFor="teesName">
-              Tee (valfritt)
+              {t("quickRound.start.teesName")}
             </label>
             <input
               id="teesName"
@@ -149,7 +153,9 @@ export default function QuickRoundStartPage() {
             />
           </div>
           <div className="space-y-3">
-            <span className="block text-sm font-medium text-slate-200">Antal hål</span>
+            <span className="block text-sm font-medium text-slate-200">
+              {t("quickRound.start.holes")}
+            </span>
             <div className="flex gap-4">
               {[9, 18].map((count) => (
                 <label key={count} className="flex cursor-pointer items-center gap-2 text-sm text-slate-200">
@@ -161,7 +167,7 @@ export default function QuickRoundStartPage() {
                     onChange={() => setHolesCount(count as 9 | 18)}
                     className="h-4 w-4 border-slate-600 bg-slate-900 text-emerald-500 focus:ring-emerald-500"
                   />
-                  {count} hål
+                  {t("quickRound.start.holesOption", { count })}
                 </label>
               ))}
             </div>
@@ -180,7 +186,7 @@ export default function QuickRoundStartPage() {
             type="submit"
             className="w-full rounded bg-emerald-500 px-4 py-2 text-sm font-semibold text-slate-900 transition hover:bg-emerald-400 focus:outline-none focus:ring-2 focus:ring-emerald-300 focus:ring-offset-2 focus:ring-offset-slate-900"
           >
-            Starta runda
+            {t("quickRound.start.startButton")}
           </button>
         </form>
       </section>

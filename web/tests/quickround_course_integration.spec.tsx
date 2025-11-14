@@ -53,9 +53,9 @@ describe("QuickRoundStartPage course integration", () => {
       </MemoryRouter>
     );
 
-    await user.type(screen.getByLabelText(/Bana/i), "Testbanan");
+    await user.type(screen.getByLabelText(/Course name/i), "Testbanan");
     await user.selectOptions(screen.getByLabelText(/Course \(demo bundle\)/i), "demo-links");
-    await user.click(screen.getByRole("button", { name: /Starta runda/i }));
+    await user.click(screen.getByRole("button", { name: /Start round/i }));
 
     expect(saveRoundMock).toHaveBeenCalledTimes(1);
     const savedRound = saveRoundMock.mock.calls[0][0];

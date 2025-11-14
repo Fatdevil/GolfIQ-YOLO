@@ -56,7 +56,7 @@ describe("MyBagPage", () => {
       </MemoryRouter>
     );
 
-    expect(screen.getByText(/Min bag/i)).toBeTruthy();
+    expect(screen.getByText(/My Bag/i)).toBeTruthy();
     expect(screen.getByDisplayValue("7-järn")).toBeTruthy();
 
     const row = screen.getByDisplayValue("7-järn").closest("tr");

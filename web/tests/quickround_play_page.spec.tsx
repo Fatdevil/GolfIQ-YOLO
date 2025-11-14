@@ -91,7 +91,7 @@ describe("QuickRoundPlayPage", () => {
       </MemoryRouter>
     );
 
-    expect(screen.getByText(/Rundan hittades inte/i)).toBeTruthy();
-    expect(screen.getByText(/Tillbaka till start/i)).toBeTruthy();
+    expect(screen.getByText(/Round not found/i)).toBeTruthy();
+    expect(screen.getByText(/Back to start/i)).toBeTruthy();
   });
 });

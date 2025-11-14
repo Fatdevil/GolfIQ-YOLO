@@ -1,5 +1,6 @@
 import 'fake-indexeddb/auto';
 import { vi } from 'vitest';
+import '../src/i18n';
 
 vi.mock('hls.js', () => import('../src/test/mocks/hls'));
 

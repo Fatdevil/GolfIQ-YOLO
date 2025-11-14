@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Link, useParams } from "react-router-dom";
 
 import { loadRound, saveRound } from "../../features/quickround/storage";
@@ -9,6 +10,7 @@ import { useAutoHoleSuggestion } from "../../courses/useAutoHole";
 
 export default function QuickRoundPlayPage() {
   const { roundId } = useParams<{ roundId: string }>();
+  const { t } = useTranslation();
   const [round, setRound] = useState<QuickRound | null>(null);
   const [notFound, setNotFound] = useState(false);
   const [showPutts, setShowPutts] = useState(true);
@@ -94,9 +96,9 @@ export default function QuickRoundPlayPage() {
   if (notFound) {
     return (
       <div className="space-y-4 rounded-lg border border-slate-800 bg-slate-900/50 p-6 text-slate-100">
-        <h1 className="text-xl font-semibold">Rundan hittades inte</h1>
+        <h1 className="text-xl font-semibold">Round not found</h1>
         <Link to="/play" className="text-sm font-semibold text-emerald-300 hover:underline">
-          Tillbaka till start
+          Back to start
         </Link>
       </div>
     );
@@ -265,8 +267,8 @@ export default function QuickRoundPlayPage() {
           <thead className="bg-slate-900/60">
             <tr className="text-left text-xs uppercase tracking-wide text-slate-400">
               <th className="px-4 py-3">Hål</th>
-              <th className="px-4 py-3">Par</th>
-              <th className="px-4 py-3">Slag</th>
+              <th className="px-4 py-3">{t("quickRound.play.par")}</th>
+              <th className="px-4 py-3">{t("quickRound.play.strokes")}</th>
               {showPutts && <th className="px-4 py-3">Puttar</th>}
             </tr>
           </thead>
@@ -286,11 +288,16 @@ export default function QuickRoundPlayPage() {
       </section>
       {summary && (
         <section className="rounded-lg border border-slate-800 bg-slate-900/60 p-6 text-sm text-slate-200">
-          <h2 className="text-lg font-semibold text-slate-100">Summering</h2>
+          <h2 className="text-lg font-semibold text-slate-100">
+            {t("quickRound.play.summaryTitle")}
+          </h2>
           <div className="mt-4 grid gap-3 sm:grid-cols-3">
-            <SummaryItem label="Totalt" value={`${summary.totalStrokes} slag`} />
-            <SummaryItem label="Par" value={summary.totalPar.toString()} />
-            <SummaryItem label="Resultat" value={formatToPar(summary.toPar)} />
+            <SummaryItem
+              label={t("quickRound.play.strokes")}
+              value={summary.totalStrokes.toString()}
+            />
+            <SummaryItem label={t("quickRound.play.par")} value={summary.totalPar.toString()} />
+            <SummaryItem label={t("quickRound.play.toPar")} value={formatToPar(summary.toPar)} />
           </div>
         </section>
       )}
