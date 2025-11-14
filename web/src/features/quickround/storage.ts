@@ -22,6 +22,10 @@ export function loadAllRounds(): QuickRoundSummary[] {
   }));
 }
 
+export function loadAllRoundsFull(): QuickRound[] {
+  return readAllRounds();
+}
+
 export function loadRound(id: string): QuickRound | null {
   const rounds = readAllRounds();
   return rounds.find((round) => round.id === id) ?? null;

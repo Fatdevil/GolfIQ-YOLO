@@ -34,6 +34,7 @@ import { EventSessionBoundary } from "./session/EventSessionBoundary";
 import { useCdnPreconnect } from "./media/cdn";
 import { PlayerOverlay } from "@web/player/PlayerOverlay";
 import MyBagPage from "./pages/bag/MyBagPage";
+import MyGolfIQPage from "./pages/profile/MyGolfIQPage";
 
 export default function App() {
   useCdnPreconnect();
@@ -118,6 +119,7 @@ export default function App() {
           <Route path="/reels" element={<ReelsComposerPage />} />
           <Route path="/range/practice" element={<RangePracticePage />} />
           <Route path="/range/score" element={<RangeScorePage />} />
+          <Route path="/profile" element={<MyGolfIQPage />} />
           <Route path="/bag" element={<MyBagPage />} />
           <Route path="/courses/demo" element={<CourseDemoPage />} />
           <Route path="/play" element={<QuickRoundStartPage />} />

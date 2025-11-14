@@ -27,6 +27,7 @@ export default defineConfig({
   resolve: {
     alias: {
       '@shared': path.resolve(__dirname, '../shared'),
+      '@': path.resolve(__dirname, './src'),
       '@web': path.resolve(__dirname, './src'),
       'hls.js': path.resolve(__dirname, 'src/test/mocks/hls.ts'),
       'expo-device': '/tests/mocks/expo-device.ts',
