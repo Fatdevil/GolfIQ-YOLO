@@ -2,6 +2,7 @@ import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 
+import { API } from "../src/api";
 import PublicTripScoreboardPage from "../src/pages/trip/PublicTripScoreboardPage";
 
 const sampleResponse = {
@@ -44,7 +45,7 @@ describe("PublicTripScoreboardPage", () => {
       screen.getByRole("columnheader", { name: /Alice/i })
     ).toBeTruthy();
     expect(screen.getByRole("columnheader", { name: /Bob/i })).toBeTruthy();
-    expect(fetchMock).toHaveBeenCalledWith("/public/trip/rounds/abc");
+    expect(fetchMock).toHaveBeenCalledWith(`${API}/public/trip/rounds/abc`);
   });
 
   it("handles not found tokens", async () => {

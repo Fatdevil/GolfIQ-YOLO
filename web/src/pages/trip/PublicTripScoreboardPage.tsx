@@ -3,6 +3,7 @@ import { Link, useParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 
 import type { TripHoleScore, TripPlayer } from "../../trip/types";
+import { API } from "../../api";
 
 type PublicTripRound = {
   course_name: string;
@@ -32,7 +33,7 @@ export default function PublicTripScoreboardPage() {
     setLoading(true);
     setError(null);
 
-    fetch(`/public/trip/rounds/${token}`)
+    fetch(`${API}/public/trip/rounds/${token}`)
       .then(async (res) => {
         if (!res.ok) {
           throw new Error(res.status === 404 ? "not_found" : String(res.status));
