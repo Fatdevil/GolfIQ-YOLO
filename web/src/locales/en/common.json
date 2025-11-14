@@ -113,6 +113,11 @@
   "range.practice.mode.practice": "Free practice",
   "range.practice.mode.targetBingo": "Target Bingo",
   "range.practice.mode.gapping": "Gapping",
+  "range.practice.mode.mission": "Missions",
+  "range.mission.select": "Mission",
+  "range.mission.none": "Select a mission",
+  "range.mission.goal": "Goal: {{reps}} good reps this session.",
+  "range.mission.hint.start": "Hit a few shots to see your groove meter fill up.",
   "range.practice.targetBingo.title": "Target Bingo",
   "range.practice.gapping.title": "Gapping",
 

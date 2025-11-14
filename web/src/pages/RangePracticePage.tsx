@@ -1,5 +1,17 @@
 import React from "react";
 import { useTranslation } from "react-i18next";
+import { FeatureGate } from "@/access/FeatureGate";
+import {
+  RANGE_MISSIONS,
+  Mission,
+  MissionId,
+  computeMissionProgress,
+  getMissionById,
+  grooveFillPercent,
+  loadSelectedMissionId,
+  saveSelectedMissionId,
+  clearSelectedMissionId,
+} from "@/features/range/missions";
 import { postMockAnalyze } from "../api";
 import { RangeImpactCard } from "../range/RangeImpactCard";
 import { computeRangeSummary } from "../range/stats";
@@ -22,7 +34,6 @@ import {
   getLatestGhost,
   saveGhost,
 } from "../features/range/ghost";
-import { FeatureGate } from "@/access/FeatureGate";
 
 const MOCK_ANALYZE_BODY = Object.freeze({
   frames: 8,
@@ -83,7 +94,7 @@ function mapMetrics(metrics: AnalyzeMetrics | null | undefined): RangeShotMetric
   };
 }
 
-type RangeMode = "practice" | "target-bingo" | "gapping";
+type RangeMode = "practice" | "target-bingo" | "gapping" | "mission";
 
 export default function RangePracticePage() {
   const { t } = useTranslation();
@@ -96,6 +107,9 @@ export default function RangePracticePage() {
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const [mode, setMode] = React.useState<RangeMode>("practice");
+  const [missionId, setMissionId] = React.useState<MissionId | null>(
+    () => loadSelectedMissionId()
+  );
   const [bingoCfg, setBingoCfg] = React.useState<TargetBingoConfig>({
     target_m: 150,
     tolerance_m: 7,
@@ -104,6 +118,14 @@ export default function RangePracticePage() {
   const [copyStatus, setCopyStatus] = React.useState<string | null>(null);
   const [ghost, setGhost] = React.useState<GhostProfile | null>(() => getLatestGhost());
   const [ghostStatus, setGhostStatus] = React.useState<string | null>(null);
+
+  const mission = missionId ? getMissionById(missionId) ?? null : null;
+
+  React.useEffect(() => {
+    if (missionId && !mission) {
+      setMissionId(null);
+    }
+  }, [missionId, mission]);
 
   const makeGhostProfileFromCurrent = React.useCallback(
     (cfg: TargetBingoConfig, result: TargetBingoResult): GhostProfile => {
@@ -304,11 +326,22 @@ export default function RangePracticePage() {
           >
             {t("range.practice.mode.gapping")}
           </button>
+          <button
+            type="button"
+            onClick={() => setMode("mission")}
+            className={`px-3 py-1 rounded-md ${
+              mode === "mission"
+                ? "bg-emerald-600 text-white"
+                : "text-slate-300 hover:text-white"
+            }`}
+          >
+            {t("range.practice.mode.mission")}
+          </button>
         </div>
 
-      <button
-        type="button"
-        onClick={() => {
+        <button
+          type="button"
+          onClick={() => {
             void handleCopySummary();
           }}
           className="ml-auto px-3 py-1.5 rounded-md border border-emerald-600 text-emerald-400 hover:bg-emerald-600/10"
@@ -318,6 +351,49 @@ export default function RangePracticePage() {
       </div>
 
       {copyStatus && <div className="text-xs text-emerald-400">{copyStatus}</div>}
+
+      {mode === "mission" && (
+        <section className="mt-4 space-y-3">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <label className="text-sm text-slate-700">
+              {t("range.mission.select")}
+              <select
+                className="mt-1 block w-full rounded-md border border-slate-300 px-2 py-1 text-sm"
+                value={missionId ?? ""}
+                onChange={(e) => {
+                  const value = e.target.value as MissionId | "";
+                  if (!value) {
+                    setMissionId(null);
+                    clearSelectedMissionId();
+                    return;
+                  }
+                  setMissionId(value);
+                  saveSelectedMissionId(value);
+                }}
+              >
+                <option value="">{t("range.mission.none")}</option>
+                {RANGE_MISSIONS.map((m) => (
+                  <option key={m.id} value={m.id}>
+                    {m.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+
+          {mission && (
+            <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700">
+              <div className="font-medium">{mission.name}</div>
+              <div className="mt-1 text-slate-500">{mission.description}</div>
+              <div className="mt-1 text-xs text-slate-500">
+                {t("range.mission.goal", { reps: mission.targetReps })}
+              </div>
+            </div>
+          )}
+
+          {mission && <MissionProgressSection mission={mission} shots={shots} />}
+        </section>
+      )}
 
       {mode === "target-bingo" && (
         <div className="rounded-lg border border-slate-800 bg-slate-900/60 p-3 text-xs grid gap-3 md:grid-cols-3">
@@ -571,3 +647,63 @@ export default function RangePracticePage() {
     </div>
   );
 }
+
+type GrooveMeterProps = {
+  mission: Mission;
+  goodReps: number;
+  targetReps: number;
+  fill: number;
+};
+
+const GrooveMeter: React.FC<GrooveMeterProps> = ({
+  goodReps,
+  targetReps,
+  fill,
+}) => (
+  <div className="mt-4">
+    <div className="flex justify-between text-xs text-slate-500 mb-1">
+      <span>{`Good reps: ${goodReps}/${targetReps}`}</span>
+      <span>{`${fill}%`}</span>
+    </div>
+    <div className="h-2 rounded-full bg-slate-200 overflow-hidden">
+      <div
+        className="h-full bg-emerald-500 transition-[width] duration-300"
+        style={{ width: `${fill}%` }}
+      />
+    </div>
+  </div>
+);
+
+type MissionProgressSectionProps = {
+  mission: Mission;
+  shots: RangeShot[];
+};
+
+const MissionProgressSection: React.FC<MissionProgressSectionProps> = ({
+  mission,
+  shots,
+}) => {
+  const { t } = useTranslation();
+  const progress = React.useMemo(
+    () => computeMissionProgress(mission, shots),
+    [mission, shots]
+  );
+  const fill = grooveFillPercent(mission, progress);
+
+  if (progress.totalShots < 3) {
+    return (
+      <p className="mt-2 text-xs text-slate-500">
+        {t("range.mission.hint.start")}
+      </p>
+    );
+  }
+
+  return (
+    <GrooveMeter
+      mission={mission}
+      goodReps={progress.goodReps}
+      targetReps={mission.targetReps}
+      fill={fill}
+    />
+  );
+};
