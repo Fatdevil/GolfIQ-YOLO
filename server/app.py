@@ -20,6 +20,7 @@ from server.api.routers.caddie import router as caddie_api_router
 from server.api.routers.courses import router as courses_router
 from server.api.routers.coach import router as coach_router
 from server.api.routers.coach_feedback import router as coach_feedback_router
+from server.api.routers.hole_detect import router as hole_detect_router
 from server.api.routers.live_tokens import router as live_tokens_router
 from server.api.routers.sg import router as sg_router
 from server.api.routers.share import router as share_router
@@ -134,6 +135,7 @@ app.include_router(caddie_router)
 app.include_router(caddie_health_router)
 app.include_router(caddie_api_router)
 app.include_router(courses_router)
+app.include_router(hole_detect_router)
 app.include_router(bundle_router)
 app.include_router(bundle_index_router)
 app.include_router(feed_router)

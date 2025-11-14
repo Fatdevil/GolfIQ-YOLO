@@ -58,12 +58,17 @@ function mkCourse(): CourseRef {
   };
 }
 
-function updateRepeated(state: AutoHoleState, fix: { lat: number; lon: number; heading_deg?: number }, times: number): AutoHoleState {
+function updateRepeated(
+  state: AutoHoleState,
+  fix: { lat: number; lon: number; heading_deg?: number },
+  times: number,
+  stepMs = 1_000
+): AutoHoleState {
   let current = state;
   const courseData = course();
   let timestamp = Date.now();
   for (let i = 0; i < times; i += 1) {
-    timestamp += 1000;
+    timestamp += stepMs;
     current = updateAutoHole(current, { course: courseData, fix }, timestamp);
   }
   return current;
@@ -77,7 +82,7 @@ test('selects hole near tee or green', () => {
   assert.equal(state.hole, 2);
   assert.equal(state.prevHole, 1);
 
-  state = updateRepeated(state, { lat: 0.0015, lon: 0 }, 3);
+  state = updateRepeated(state, { lat: 0.0015, lon: 0 }, 3, ADVANCE_DWELL_MS);
   assert.equal(state.hole, 3);
 });
 
