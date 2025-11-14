@@ -3,12 +3,16 @@ import { Link, useParams } from "react-router-dom";
 
 import { loadRound, saveRound } from "../../features/quickround/storage";
 import { QuickHole, QuickRound } from "../../features/quickround/types";
+import { useCourseBundle } from "../../courses/hooks";
 
 export default function QuickRoundPlayPage() {
   const { roundId } = useParams<{ roundId: string }>();
   const [round, setRound] = useState<QuickRound | null>(null);
   const [notFound, setNotFound] = useState(false);
   const [showPutts, setShowPutts] = useState(true);
+  const { data: bundle, loading: bundleLoading, error: bundleError } = useCourseBundle(
+    round?.courseId
+  );
 
   useEffect(() => {
     if (!roundId) {
@@ -122,6 +126,14 @@ export default function QuickRoundPlayPage() {
             <p className="text-sm text-slate-400">
               {round.teesName ? `${round.teesName} • ` : ""}Startad {headerDate}
             </p>
+            {round.courseId && (
+              <p className="mt-1 text-xs text-slate-400">
+                {bundleLoading && "Laddar kursinfo…"}
+                {!bundleLoading && bundle &&
+                  `Course bundle: ${bundle.name} (${bundle.country}), ${bundle.holes.length} hål`}
+                {!bundleLoading && bundleError && !bundle && "Kunde inte ladda kursinfo."}
+              </p>
+            )}
           </div>
           <div className="flex items-center gap-4">
             <label className="flex items-center gap-2 text-sm text-slate-200">

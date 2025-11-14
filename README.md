@@ -71,6 +71,13 @@ curl -X POST "http://localhost:8000/cv/analyze/video" \
   ~30 seconds from expiry.
 - `LIVE_SIGN_SECRET` holds the HMAC key used when signing viewer URLs; set to a random hex string in production.
 
+### Courses / GPS (MVP)
+
+- `GET /api/courses` lists available demo course bundle identifiers.
+- `GET /api/courses/{id}/bundle` returns a bundled payload for one course (holes, green front/middle/back, hazards, optional bbox).
+
+These endpoints currently serve static in-memory data for a small demo set so clients can integrate ahead of the full PostGIS-backed catalogue.
+
 ## Web UI
 
 The project ships with a Vite + React single-page app for uploading captures, kicking off mock runs, and browsing persisted runs.

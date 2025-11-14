@@ -17,6 +17,7 @@ from server.api.routers.anchors import router as anchors_router
 from server.api.routers import run_scores as api_run_scores
 from server.api.routers import uploads as api_uploads
 from server.api.routers.caddie import router as caddie_api_router
+from server.api.routers.courses import router as courses_router
 from server.api.routers.coach import router as coach_router
 from server.api.routers.coach_feedback import router as coach_feedback_router
 from server.api.routers.live_tokens import router as live_tokens_router
@@ -132,6 +133,7 @@ app.include_router(coach_profile_router)
 app.include_router(caddie_router)
 app.include_router(caddie_health_router)
 app.include_router(caddie_api_router)
+app.include_router(courses_router)
 app.include_router(bundle_router)
 app.include_router(bundle_index_router)
 app.include_router(feed_router)

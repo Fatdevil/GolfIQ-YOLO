@@ -21,6 +21,7 @@ import CreateEventPage from "./pages/events/new";
 import JoinEventPage from "./pages/join/[code]";
 import QuickRoundStartPage from "./pages/quick/QuickRoundStartPage";
 import QuickRoundPlayPage from "./pages/quick/QuickRoundPlayPage";
+import CourseDemoPage from "./pages/courses/CourseDemoPage";
 import LiveLeaderboardPage from "./pages/events/[id]/live";
 import EventClipsAdminQueue from "./pages/events/[id]/admin/clips";
 import EventClipModerationPage from "./pages/events/[id]/admin/moderation";
@@ -118,6 +119,7 @@ export default function App() {
           <Route path="/range/practice" element={<RangePracticePage />} />
           <Route path="/range/score" element={<RangeScorePage />} />
           <Route path="/bag" element={<MyBagPage />} />
+          <Route path="/courses/demo" element={<CourseDemoPage />} />
           <Route path="/play" element={<QuickRoundStartPage />} />
           <Route path="/play/:roundId" element={<QuickRoundPlayPage />} />
           {qaReplayEnabled && <Route path="/qa/replay" element={<ReplayAnalyzerPage />} />}
