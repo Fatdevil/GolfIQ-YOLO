@@ -6,17 +6,20 @@ import userEvent from "@testing-library/user-event";
 import TripScoreboardPage from "../src/pages/trip/TripScoreboardPage";
 import type { TripRound } from "../src/trip/types";
 
-const { fetchTripRoundMock, saveTripScoresMock } = vi.hoisted(() => ({
-  fetchTripRoundMock: vi.fn<(id: string) => Promise<TripRound>>(),
-  saveTripScoresMock: vi.fn<
-    (id: string, scores: TripRound["scores"])
-    => Promise<TripRound>
-  >(),
-}));
+const { fetchTripRoundMock, saveTripScoresMock, createTripShareTokenMock } =
+  vi.hoisted(() => ({
+    fetchTripRoundMock: vi.fn<(id: string) => Promise<TripRound>>(),
+    saveTripScoresMock: vi.fn<
+      (id: string, scores: TripRound["scores"])
+      => Promise<TripRound>
+    >(),
+    createTripShareTokenMock: vi.fn<(tripId: string) => Promise<string>>(),
+  }));
 
 vi.mock("../src/trip/api", () => ({
   fetchTripRound: fetchTripRoundMock,
   saveTripScores: saveTripScoresMock,
+  createTripShareToken: createTripShareTokenMock,
 }));
 
 describe("TripScoreboardPage", () => {
@@ -36,8 +39,10 @@ describe("TripScoreboardPage", () => {
   beforeEach(() => {
     fetchTripRoundMock.mockReset();
     saveTripScoresMock.mockReset();
+    createTripShareTokenMock.mockReset();
     fetchTripRoundMock.mockResolvedValue(baseTrip);
     saveTripScoresMock.mockResolvedValue({ ...baseTrip });
+    createTripShareTokenMock.mockResolvedValue("token123");
   });
 
   it("renders scoreboard and saves scores", async () => {
@@ -79,5 +84,50 @@ describe("TripScoreboardPage", () => {
     ]);
 
     expect(await screen.findByText("4")).toBeTruthy();
+  });
+
+  it("creates a share link and copies it", async () => {
+    const user = userEvent.setup();
+    const originalClipboard = navigator.clipboard;
+    const writeText = vi.fn().mockResolvedValue(undefined);
+
+    Object.defineProperty(navigator, "clipboard", {
+      value: { writeText },
+      configurable: true,
+    });
+
+    try {
+      render(
+        <MemoryRouter initialEntries={["/trip/trip_abc"]}>
+          <Routes>
+            <Route path="/trip/:tripId" element={<TripScoreboardPage />} />
+          </Routes>
+        </MemoryRouter>
+      );
+
+      const shareButton = await screen.findByRole("button", {
+        name: /Share scoreboard/i,
+      });
+
+      await user.click(shareButton);
+
+      expect(createTripShareTokenMock).toHaveBeenCalledWith("trip_abc");
+      expect(writeText).toHaveBeenCalledWith(
+        `${window.location.origin}/trip/share/token123`
+      );
+      expect(
+        await screen.findByText(/Share link copied to clipboard/i)
+      ).toBeTruthy();
+    } finally {
+      if (originalClipboard) {
+        Object.defineProperty(navigator, "clipboard", {
+          value: originalClipboard,
+          configurable: true,
+        });
+      } else {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        delete (navigator as any).clipboard;
+      }
+    }
   });
 });

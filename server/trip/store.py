@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import time
+import secrets
 from threading import Lock
 from typing import Dict, List, Optional
 
@@ -61,3 +62,22 @@ def upsert_scores(trip_id: str, scores: List[TripHoleScore]) -> Optional[TripRou
         trip.scores = list(existing.values())
         _TRIPS[trip_id] = trip
         return trip
+
+
+def issue_public_token(trip_id: str) -> Optional[str]:
+    with _LOCK:
+        trip = _TRIPS.get(trip_id)
+        if not trip:
+            return None
+        if not trip.public_token:
+            trip.public_token = secrets.token_urlsafe(16)
+            _TRIPS[trip_id] = trip
+        return trip.public_token
+
+
+def get_trip_by_token(token: str) -> Optional[TripRound]:
+    with _LOCK:
+        for trip in _TRIPS.values():
+            if trip.public_token == token:
+                return trip
+        return None

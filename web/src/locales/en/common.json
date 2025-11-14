@@ -67,6 +67,8 @@
   "quickRound.play.strokes": "Strokes",
   "quickRound.play.par": "Par",
   "quickRound.play.toPar": "To par",
+  "quickRound.share.button": "Copy round summary",
+  "quickRound.share.copied": "Round summary copied.",
 
   "trip.start.title": "Trip Mode – Start round",
   "trip.start.subtitle": "Create a shared scoreboard for your group.",
@@ -100,6 +102,12 @@
   "trip.scoreboard.saving": "Saving…",
   "trip.scoreboard.saveError": "Could not save scores.",
   "trip.scoreboard.total": "Total strokes",
+  "trip.share.button": "Share scoreboard",
+  "trip.share.copied": "Share link copied to clipboard.",
+  "trip.share.error": "Could not generate share link.",
+  "trip.public.loading": "Loading trip scoreboard…",
+  "trip.public.notFound": "This trip scoreboard could not be found.",
+  "trip.public.openApp": "Open GolfIQ",
 
   "range.practice.title": "Range practice",
   "range.practice.mode.practice": "Free practice",
