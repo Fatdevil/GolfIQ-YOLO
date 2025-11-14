@@ -1,4 +1,5 @@
 import React from "react";
+import { useTranslation } from "react-i18next";
 import { loadBag, updateClubCarry, upsertClub } from "@web/bag/storage";
 import type { BagState, BagClub } from "@web/bag/types";
 
@@ -14,6 +15,7 @@ function formatTimestamp(timestamp: number): string {
 }
 
 export default function MyBagPage(): JSX.Element {
+  const { t } = useTranslation();
   const [bag, setBag] = React.useState<BagState>(() => loadBag());
   const [showAddForm, setShowAddForm] = React.useState(false);
   const [newClub, setNewClub] = React.useState<{ id: string; label: string }>({
@@ -57,7 +59,7 @@ export default function MyBagPage(): JSX.Element {
   return (
     <div className="mx-auto flex w-full max-w-3xl flex-col gap-6 px-4 py-6">
       <div>
-        <h1 className="text-2xl font-semibold text-slate-100">Min bag</h1>
+        <h1 className="text-2xl font-semibold text-slate-100">{t("bag.title")}</h1>
         <p className="text-sm text-slate-400">
           Senast uppdaterad: {formatTimestamp(bag.updatedAt)}
         </p>
@@ -68,10 +70,10 @@ export default function MyBagPage(): JSX.Element {
           <table className="min-w-full divide-y divide-slate-800 text-sm">
             <thead className="bg-slate-900/80 text-left text-xs uppercase tracking-wide text-slate-400">
               <tr>
-                <th className="px-4 py-3 font-medium">Klubb</th>
+                <th className="px-4 py-3 font-medium">{t("bag.club")}</th>
                 <th className="px-4 py-3 font-medium">Id</th>
-                <th className="px-4 py-3 font-medium">Carry (m)</th>
-                <th className="px-4 py-3 font-medium">Anteckningar</th>
+                <th className="px-4 py-3 font-medium">{t("bag.carry")}</th>
+                <th className="px-4 py-3 font-medium">{t("bag.notes")}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-800 text-slate-200">

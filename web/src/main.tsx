@@ -6,6 +6,7 @@ import { bootstrapSupabase } from "./bootstrap/supabase";
 import App from "./App";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { TempAltDemo } from "./dev/TempAltDemo";
+import "./i18n";
 import "./styles.css";
 import "./sentry";
 

@@ -1,0 +1,34 @@
+{
+  "app.title": "GolfIQ-YOLO",
+  "nav.home": "Home",
+  "nav.playRound": "Play round",
+  "nav.rangePractice": "Range practice",
+  "nav.myBag": "My Bag",
+  "nav.coursesDemo": "Courses demo",
+
+  "quickRound.start.title": "Quick round",
+  "quickRound.start.courseName": "Course name",
+  "quickRound.start.courseNameRequired": "Please enter a course name",
+  "quickRound.start.teesName": "Tees",
+  "quickRound.start.holes": "Holes",
+  "quickRound.start.holesOption": "{{count}} holes",
+  "quickRound.start.startButton": "Start round",
+  "quickRound.play.summaryTitle": "Round summary",
+  "quickRound.play.strokes": "Strokes",
+  "quickRound.play.par": "Par",
+  "quickRound.play.toPar": "To par",
+
+  "range.practice.title": "Range practice",
+  "range.practice.mode.practice": "Free practice",
+  "range.practice.mode.targetBingo": "Target Bingo",
+  "range.practice.mode.gapping": "Gapping",
+  "range.practice.targetBingo.title": "Target Bingo",
+  "range.practice.gapping.title": "Gapping",
+
+  "bag.title": "My Bag",
+  "bag.club": "Club",
+  "bag.carry": "Carry (m)",
+  "bag.notes": "Notes",
+
+  "languageSelector.label": "Language"
+}

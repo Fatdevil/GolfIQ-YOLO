@@ -109,6 +109,12 @@ When `SERVE_WEB=1` the FastAPI server mounts the compiled SPA from `web/dist` an
 
 The UI currently calls the following endpoints: `/cv/mock/analyze`, `/cv/analyze`, `/cv/analyze/video`, and `/runs` (including `/runs/{id}` and `DELETE /runs/{id}`).
 
+### Internationalization (i18n)
+
+- The web app uses [`react-i18next`](https://react.i18next.com/) with JSON resources under `web/src/locales/{lang}/common.json`.
+- English (`en`) is the default (and current) language. The preference is stored in `localStorage["golfiq.lang"]`.
+- To add another language, create a new `common.json` under `web/src/locales/<lang>/`, extend `web/src/i18n.ts` with the resources, and update `SUPPORTED_LANGS` in `web/src/components/LanguageSelector.tsx`.
+
 #### Quick Round
 
 - Auto hole detect (beta): when a course bundle is selected and GPS is enabled, the web app can suggest switching to the correct hole based on your location, and you confirm via a “Byt / Ignorera” toast. The heuristic is intentionally conservative and currently relies on the static demo course bundles.

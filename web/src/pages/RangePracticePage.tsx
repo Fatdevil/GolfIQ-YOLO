@@ -1,4 +1,5 @@
 import React from "react";
+import { useTranslation } from "react-i18next";
 import { postMockAnalyze } from "../api";
 import { RangeImpactCard } from "../range/RangeImpactCard";
 import { computeRangeSummary } from "../range/stats";
@@ -84,6 +85,7 @@ function mapMetrics(metrics: AnalyzeMetrics | null | undefined): RangeShotMetric
 type RangeMode = "practice" | "target-bingo" | "gapping";
 
 export default function RangePracticePage() {
+  const { t } = useTranslation();
   const [bag] = React.useState<BagState>(() => loadBag());
   const [currentClubId, setCurrentClubId] = React.useState<string>(
     () => bag.clubs[0]?.id ?? "7i"
@@ -236,7 +238,7 @@ export default function RangePracticePage() {
 
   return (
     <div className="max-w-2xl mx-auto p-4 flex flex-col gap-4">
-      <h1 className="text-xl font-semibold">Range Practice (beta)</h1>
+      <h1 className="text-xl font-semibold">{t("range.practice.title")}</h1>
 
       <div className="flex gap-2 items-center">
         <label className="text-sm">
@@ -277,7 +279,7 @@ export default function RangePracticePage() {
                 : "text-slate-300 hover:text-white"
             }`}
           >
-            Fri träning
+            {t("range.practice.mode.practice")}
           </button>
           <button
             type="button"
@@ -288,7 +290,7 @@ export default function RangePracticePage() {
                 : "text-slate-300 hover:text-white"
             }`}
           >
-            Target Bingo
+            {t("range.practice.mode.targetBingo")}
           </button>
           <button
             type="button"
@@ -299,7 +301,7 @@ export default function RangePracticePage() {
                 : "text-slate-300 hover:text-white"
             }`}
           >
-            Gapping
+            {t("range.practice.mode.gapping")}
           </button>
         </div>
 
@@ -381,7 +383,9 @@ export default function RangePracticePage() {
       {mode === "gapping" && (
         <div className="rounded-lg border border-slate-800 bg-slate-900/60 p-3 text-xs space-y-2">
           <div className="flex flex-wrap items-center gap-2">
-            <span className="text-sm font-semibold text-slate-100">Gapping</span>
+            <span className="text-sm font-semibold text-slate-100">
+              {t("range.practice.gapping.title")}
+            </span>
             {currentClub && (
               <span className="text-slate-400 text-[11px]">
                 Klubb: {currentClub.label} ({currentClub.id})
