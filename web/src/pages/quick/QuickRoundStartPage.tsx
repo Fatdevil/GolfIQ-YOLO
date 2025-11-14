@@ -8,6 +8,7 @@ import {
   QuickRoundSummary,
 } from "../../features/quickround/storage";
 import { QuickRound } from "../../features/quickround/types";
+import { useCourseBundle, useCourseIds } from "../../courses/hooks";
 
 export default function QuickRoundStartPage() {
   const navigate = useNavigate();
@@ -17,6 +18,14 @@ export default function QuickRoundStartPage() {
   const [showPutts, setShowPutts] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [rounds, setRounds] = useState<QuickRoundSummary[]>([]);
+  const [courseId, setCourseId] = useState<string | undefined>();
+
+  const {
+    data: courseIds,
+    loading: courseIdsLoading,
+    error: courseIdsError,
+  } = useCourseIds();
+  const { data: selectedBundle } = useCourseBundle(courseId);
 
   const dateFormatter = useMemo(
     () =>
@@ -34,6 +43,12 @@ export default function QuickRoundStartPage() {
     setRounds(summaries);
   }, []);
 
+  useEffect(() => {
+    if (selectedBundle && courseName.trim().length === 0) {
+      setCourseName(selectedBundle.name);
+    }
+  }, [selectedBundle, courseName]);
+
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const trimmedCourseName = courseName.trim();
@@ -49,6 +64,7 @@ export default function QuickRoundStartPage() {
     const round: QuickRound = {
       id: createRoundId(),
       courseName: trimmedCourseName,
+      courseId,
       teesName: trimmedTeesName || undefined,
       holes,
       startedAt: new Date().toISOString(),
@@ -84,6 +100,40 @@ export default function QuickRoundStartPage() {
               placeholder="Ex: Bro Hof Slottsbana"
               required
             />
+          </div>
+          <div className="space-y-2">
+            <label
+              className="block text-sm font-medium text-slate-200"
+              htmlFor="courseId"
+            >
+              Course (demo bundle)
+            </label>
+            {courseIdsLoading ? (
+              <p className="text-xs text-slate-400">Laddar demo-banor…</p>
+            ) : courseIdsError ? (
+              <p className="text-xs text-rose-400">Kunde inte hämta demo-banor.</p>
+            ) : (
+              <select
+                id="courseId"
+                value={courseId ?? ""}
+                onChange={(event) =>
+                  setCourseId(event.target.value ? event.target.value : undefined)
+                }
+                className="w-full rounded border border-slate-700 bg-slate-950/80 px-3 py-2 text-sm text-slate-100 focus:border-emerald-400 focus:outline-none focus:ring-1 focus:ring-emerald-400"
+              >
+                <option value="">Ingen demo-bana</option>
+                {(courseIds ?? []).map((id) => (
+                  <option key={id} value={id}>
+                    {id}
+                  </option>
+                ))}
+              </select>
+            )}
+            {courseId && selectedBundle && (
+              <p className="text-xs text-slate-400">
+                {selectedBundle.name} ({selectedBundle.country})
+              </p>
+            )}
           </div>
           <div className="space-y-2">
             <label className="block text-sm font-medium text-slate-200" htmlFor="teesName">

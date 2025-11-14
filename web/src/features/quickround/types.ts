@@ -8,6 +8,7 @@ export type QuickHole = {
 export type QuickRound = {
   id: string;
   courseName: string;
+  courseId?: string;
   teesName?: string;
   holes: QuickHole[];
   startedAt: string;
