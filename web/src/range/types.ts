@@ -11,6 +11,8 @@ export type RangeShot = {
   id: string;
   ts: number;
   club: string;
+  clubId?: string;
+  clubLabel?: string;
   metrics: RangeShotMetrics;
 };
 

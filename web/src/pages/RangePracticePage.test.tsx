@@ -40,6 +40,6 @@ describe("RangePracticePage", () => {
     await screen.findByText("134.0 mph");
     await screen.findByText("180.0 m");
     expect(screen.getByText("Shots: 1")).toBeDefined();
-    expect(screen.getByText(/PW • 134.0 mph/)).toBeDefined();
+    expect(screen.getByText(/Pitching wedge • 134.0 mph/)).toBeDefined();
   });
 });
