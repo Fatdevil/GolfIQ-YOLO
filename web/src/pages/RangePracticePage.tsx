@@ -16,7 +16,13 @@ import {
   saveSelectedMissionId,
   clearSelectedMissionId,
 } from "@/features/range/missions";
-import { postMockAnalyze } from "../api";
+import {
+  type CameraFitness,
+  type RangeAnalyzeRequest,
+  type RangeAnalyzeResponse,
+  postRangeAnalyze,
+} from "@/features/range/api";
+import { CameraFitnessBadge } from "@/features/range/CameraFitnessBadge";
 import { RangeImpactCard } from "../range/RangeImpactCard";
 import { computeRangeSummary } from "../range/stats";
 import { RangeShot, RangeShotMetrics } from "../range/types";
@@ -38,63 +44,89 @@ import {
   getLatestGhost,
   saveGhost,
 } from "../features/range/ghost";
+import { useCalibration } from "../hooks/useCalibration";
+import type { CalibrationSnapshot } from "../hooks/useCalibration";
 
-const MOCK_ANALYZE_BODY = Object.freeze({
-  frames: 8,
-  fps: 120.0,
-  persist: false,
-});
+const DEFAULT_ANALYZE_FRAMES = 8;
+const DEFAULT_REF_LEN_PX = 100;
 
-type AnalyzeMetrics = {
-  ball_speed_mps?: number | null;
-  ball_speed_mph?: number | null;
-  carry_m?: number | null;
-  launch_deg?: number | null;
-  side_angle_deg?: number | null;
-  quality?: string | null;
-  impact_quality?: string | null;
-};
+function computeRefLenPx(calibration: CalibrationSnapshot | null): number {
+  if (!calibration || typeof calibration.metersPerPixel !== "number") {
+    return DEFAULT_REF_LEN_PX;
+  }
+  const metersPerPixel = calibration.metersPerPixel;
+  if (!Number.isFinite(metersPerPixel) || metersPerPixel <= 0) {
+    return DEFAULT_REF_LEN_PX;
+  }
+  return Math.max(1, Math.round(1 / metersPerPixel));
+}
 
-type AnalyzeResponse = {
-  metrics?: AnalyzeMetrics | null;
-};
-
-function normalizeQuality(value: string | null | undefined): "good" | "medium" | "poor" {
-  if (value === "good" || value === "medium" || value === "poor") {
-    return value;
+function mapShotQuality(
+  fitness: CameraFitness | null | undefined,
+  fallbackQuality: string | null | undefined,
+): "good" | "medium" | "poor" {
+  if (fitness) {
+    if (fitness.level === "good") {
+      return "good";
+    }
+    if (fitness.level === "bad") {
+      return "poor";
+    }
+    return "medium";
+  }
+  if (fallbackQuality === "good" || fallbackQuality === "medium" || fallbackQuality === "poor") {
+    return fallbackQuality;
+  }
+  if (fallbackQuality === "warning") {
+    return "medium";
+  }
+  if (fallbackQuality === "bad") {
+    return "poor";
   }
   return "medium";
 }
 
-function mapMetrics(metrics: AnalyzeMetrics | null | undefined): RangeShotMetrics {
-  if (!metrics) {
-    return {
-      ballSpeedMps: null,
-      ballSpeedMph: null,
-      carryM: null,
-      launchDeg: null,
-      sideAngleDeg: null,
-      quality: "medium",
-    };
+function pickNumber(...values: (number | null | undefined)[]): number | null {
+  for (const value of values) {
+    if (typeof value === "number" && Number.isFinite(value)) {
+      return value;
+    }
   }
+  return null;
+}
 
-  const ballSpeedMps =
-    typeof metrics.ball_speed_mps === "number" ? metrics.ball_speed_mps : null;
+function mapRangeMetrics(response: RangeAnalyzeResponse): RangeShotMetrics {
+  const metrics = response.metrics ?? null;
+  const ballSpeedMps = pickNumber(response.ball_speed_mps, metrics?.ball_speed_mps);
   const ballSpeedMph =
-    typeof metrics.ball_speed_mph === "number"
-      ? metrics.ball_speed_mph
-      : ballSpeedMps != null
-        ? ballSpeedMps * 2.23694
-        : null;
+    pickNumber(response.ball_speed_mph, metrics?.ball_speed_mph) ??
+    (ballSpeedMps != null ? ballSpeedMps * 2.23694 : null);
+
+  const fallbackQuality =
+    (typeof metrics?.quality === "string" ? metrics?.quality : null) ??
+    (typeof response.impact_quality === "string" ? response.impact_quality : null) ??
+    (typeof metrics?.impact_quality === "string" ? metrics?.impact_quality : null);
 
   return {
     ballSpeedMps,
     ballSpeedMph,
-    carryM: typeof metrics.carry_m === "number" ? metrics.carry_m : null,
-    launchDeg: typeof metrics.launch_deg === "number" ? metrics.launch_deg : null,
-    sideAngleDeg:
-      typeof metrics.side_angle_deg === "number" ? metrics.side_angle_deg : null,
-    quality: normalizeQuality(metrics.quality ?? metrics.impact_quality ?? null),
+    carryM: pickNumber(response.carry_m, metrics?.carry_m),
+    launchDeg: pickNumber(response.launch_deg, metrics?.launch_deg),
+    sideAngleDeg: pickNumber(response.side_deg, metrics?.side_angle_deg),
+    quality: mapShotQuality(response.quality ?? null, fallbackQuality),
+  };
+}
+
+function buildRangeAnalyzeRequest(
+  calibration: CalibrationSnapshot | null,
+): RangeAnalyzeRequest {
+  const fps = calibration?.fps ?? 120.0;
+  return {
+    frames: DEFAULT_ANALYZE_FRAMES,
+    fps,
+    ref_len_m: 1.0,
+    ref_len_px: computeRefLenPx(calibration),
+    persist: false,
   };
 }
 
@@ -102,6 +134,7 @@ type RangeMode = "practice" | "target-bingo" | "gapping" | "mission";
 
 export default function RangePracticePage() {
   const { t } = useTranslation();
+  const { calibration } = useCalibration();
   const [bag] = React.useState<BagState>(() => loadBag());
   const [currentClubId, setCurrentClubId] = React.useState<string>(
     () => bag.clubs[0]?.id ?? "7i"
@@ -110,6 +143,7 @@ export default function RangePracticePage() {
   const [latest, setLatest] = React.useState<RangeShotMetrics | null>(null);
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
+  const [cameraFitness, setCameraFitness] = React.useState<CameraFitness | null>(null);
   const [mode, setMode] = React.useState<RangeMode>("practice");
   const [missionId, setMissionId] = React.useState<MissionId | null>(
     () => loadSelectedMissionId()
@@ -253,8 +287,10 @@ export default function RangePracticePage() {
     setLoading(true);
     setError(null);
     try {
-      const response = (await postMockAnalyze({ ...MOCK_ANALYZE_BODY })) as AnalyzeResponse;
-      const metrics = mapMetrics(response.metrics);
+      const payload = buildRangeAnalyzeRequest(calibration);
+      const response = await postRangeAnalyze(payload);
+      const metrics = mapRangeMetrics(response);
+      setCameraFitness(response.quality ?? null);
       const timestamp = Date.now();
       const clubEntry = bag.clubs.find((item) => item.id === currentClubId);
       const clubLabel = clubEntry?.label ?? currentClubId;
@@ -342,6 +378,19 @@ export default function RangePracticePage() {
   return (
     <div className="max-w-2xl mx-auto p-4 flex flex-col gap-4">
       <h1 className="text-xl font-semibold">{t("range.practice.title")}</h1>
+
+      {cameraFitness ? (
+        <div>
+          <CameraFitnessBadge quality={cameraFitness} />
+          {cameraFitness.reasons.length ? (
+            <p className="mt-1 text-xs text-slate-500">
+              {cameraFitness.reasons
+                .map((reason) => t(`range.camera.reason.${reason}`, reason))
+                .join(" · ")}
+            </p>
+          ) : null}
+        </div>
+      ) : null}
 
       <div className="flex gap-2 items-center">
         <label className="text-sm">

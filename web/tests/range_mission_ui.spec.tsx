@@ -19,12 +19,12 @@ vi.mock("../src/bag/storage", () => ({
   updateClubCarry: updateClubCarryMock,
 }));
 
-const { postMockAnalyzeMock } = vi.hoisted(() => ({
-  postMockAnalyzeMock: vi.fn(),
+const { postRangeAnalyzeMock } = vi.hoisted(() => ({
+  postRangeAnalyzeMock: vi.fn(),
 }));
 
-vi.mock("../src/api", () => ({
-  postMockAnalyze: postMockAnalyzeMock,
+vi.mock("../src/features/range/api", () => ({
+  postRangeAnalyze: postRangeAnalyzeMock,
 }));
 
 const accessValue = {
@@ -59,7 +59,7 @@ describe("RangePracticePage missions mode", () => {
         club.id === clubId ? { ...club, carry_m: carry } : club
       ),
     }));
-    postMockAnalyzeMock.mockResolvedValue({ metrics: { carry_m: 210 } });
+    postRangeAnalyzeMock.mockResolvedValue({ carry_m: 210 });
   });
 
   it("renders mission selector and groove meter", async () => {
@@ -81,7 +81,7 @@ describe("RangePracticePage missions mode", () => {
     await user.click(hitButton);
     await user.click(hitButton);
 
-    await waitFor(() => expect(postMockAnalyzeMock).toHaveBeenCalledTimes(3));
+    await waitFor(() => expect(postRangeAnalyzeMock).toHaveBeenCalledTimes(3));
 
     const grooveMeter = await screen.findByText(/Good reps:/i);
     expect(grooveMeter.textContent).toMatch(/Good reps:/i);

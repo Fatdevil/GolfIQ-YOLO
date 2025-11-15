@@ -18,12 +18,12 @@ vi.mock("../src/bag/storage", () => ({
   updateClubCarry: updateClubCarryMock,
 }));
 
-const { postMockAnalyzeMock } = vi.hoisted(() => ({
-  postMockAnalyzeMock: vi.fn(),
+const { postRangeAnalyzeMock } = vi.hoisted(() => ({
+  postRangeAnalyzeMock: vi.fn(),
 }));
 
-vi.mock("../src/api", () => ({
-  postMockAnalyze: postMockAnalyzeMock,
+vi.mock("../src/features/range/api", () => ({
+  postRangeAnalyze: postRangeAnalyzeMock,
 }));
 
 const proAccessValue = {
@@ -60,21 +60,21 @@ describe("RangePracticePage gapping mode", () => {
   it("computes stats and saves suggested carry", async () => {
     const user = userEvent.setup();
 
-    postMockAnalyzeMock
-      .mockResolvedValueOnce({ metrics: { carry_m: 100 } })
-      .mockResolvedValueOnce({ metrics: { carry_m: 110 } })
-      .mockResolvedValueOnce({ metrics: { carry_m: 120 } });
+    postRangeAnalyzeMock
+      .mockResolvedValueOnce({ carry_m: 100 })
+      .mockResolvedValueOnce({ carry_m: 110 })
+      .mockResolvedValueOnce({ carry_m: 120 });
 
     renderWithAccess(<RangePracticePage />);
 
     const hitButton = screen.getByRole("button", { name: /Hit & analyze/i });
 
     await user.click(hitButton);
-    await waitFor(() => expect(postMockAnalyzeMock).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(postRangeAnalyzeMock).toHaveBeenCalledTimes(1));
     await user.click(hitButton);
-    await waitFor(() => expect(postMockAnalyzeMock).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(postRangeAnalyzeMock).toHaveBeenCalledTimes(2));
     await user.click(hitButton);
-    await waitFor(() => expect(postMockAnalyzeMock).toHaveBeenCalledTimes(3));
+    await waitFor(() => expect(postRangeAnalyzeMock).toHaveBeenCalledTimes(3));
 
     await user.click(screen.getByRole("button", { name: /Gapping/i }));
 
