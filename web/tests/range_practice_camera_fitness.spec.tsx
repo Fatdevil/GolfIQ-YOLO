@@ -7,37 +7,32 @@ vi.mock("@/features/range/api", () => ({
 }));
 
 import { postRangeAnalyze } from "@/features/range/api";
-import RangePracticePage from "./RangePracticePage";
+import RangePracticePage from "../src/pages/RangePracticePage";
 
 const mockedPostRangeAnalyze = vi.mocked(postRangeAnalyze);
 
-describe("RangePracticePage", () => {
+describe("RangePracticePage camera fitness", () => {
   beforeEach(() => {
     mockedPostRangeAnalyze.mockReset();
   });
 
-  it("logs a shot and updates UI", async () => {
+  it("renders camera fitness badge with reasons", async () => {
     mockedPostRangeAnalyze.mockResolvedValue({
-      ball_speed_mps: 60,
-      ball_speed_mph: 134,
-      carry_m: 180,
-      launch_deg: 12,
-      side_deg: -3,
-      quality: { score: 0.9, level: "good", reasons: [] },
+      ball_speed_mps: 55,
+      quality: { score: 0.42, level: "warning", reasons: ["fps_low", "light_low"] },
     });
 
     render(<RangePracticePage />);
 
     const user = userEvent.setup();
-
-    await user.selectOptions(screen.getByLabelText(/Club/i), "PW");
     await user.click(screen.getByRole("button", { name: /Hit & analyze/i }));
 
     await waitFor(() => expect(mockedPostRangeAnalyze).toHaveBeenCalledTimes(1));
 
-    await screen.findByText("134.0 mph");
-    await screen.findByText("180.0 m");
-    expect(screen.getByText("Shots: 1")).toBeDefined();
-    expect(screen.getByText(/Pitching wedge • 134.0 mph/)).toBeDefined();
+    expect(
+      await screen.findByText(/Camera needs attention/i),
+    ).toBeTruthy();
+    expect(screen.getByText(/Increase frame rate/i)).toBeTruthy();
+    expect(screen.getByText(/Scene too dark/i)).toBeTruthy();
   });
 });

@@ -129,10 +129,12 @@ The UI currently calls the following endpoints: `/cv/mock/analyze`, `/cv/analyze
 
 ### CV / Range tooling
 
-- Range Practice (beta) is available at `/range/practice`. It currently calls `/cv/mock/analyze` to show ball speed, carry, launch, side angle, and a running session summary with averages and dispersion.
+- Range Practice (beta) is available at `/range/practice`. The web client now talks to `/range/practice/analyze`, which selects the configured CV backend and returns normalized metrics together with camera fitness details.
 - Range Games (beta) on `/range/practice`: Target Bingo around a chosen distance, a spray heatmap of your session, and a one-click share summary.
 - GhostMatch (beta) – in Target Bingo you can save a session as a ghost and later compare your hit rate and average error against that ghost in a simple "You vs Ghost" scoreboard.
 - Min bag & Gapping (beta) – configure your clubs under `/bag` and use the Gapping mode on `/range/practice` to update real carry distances.
+
+`RANGE_PRACTICE_CV_BACKEND` controls which analyzer is used in the range practice API (`mock` by default, set to `real` to enable the live CV pipeline). When the real backend is active the Range Practice header surfaces a camera fitness badge with actionable hints (low FPS, blur/light, meters-per-pixel).
 
 ### Calibration wizard
 

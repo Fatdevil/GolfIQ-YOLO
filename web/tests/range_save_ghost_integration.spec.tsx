@@ -51,8 +51,8 @@ vi.mock("../src/features/range/ghost", () => ({
   saveGhost: saveGhostSpy,
 }));
 
-vi.mock("../src/api", () => ({
-  postMockAnalyze: vi.fn(() => Promise.resolve({ metrics: null })),
+vi.mock("../src/features/range/api", () => ({
+  postRangeAnalyze: vi.fn(() => Promise.resolve({ metrics: null })),
 }));
 
 import RangePracticePage from "../src/pages/RangePracticePage";

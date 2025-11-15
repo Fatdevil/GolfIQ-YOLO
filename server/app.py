@@ -53,6 +53,7 @@ from .routes.rollout import router as rollout_router
 from .routes.providers import router as providers_router
 from .routes.moderation import router as moderation_router
 from .routes.media import router as media_router
+from .routes.range_practice import router as range_practice_router
 from .routes.runs import router as runs_router
 from .routes.runs_upload import router as runs_upload_router
 from .routes.events import join_router as events_join_router
@@ -195,6 +196,7 @@ app.include_router(cv_analyze_video_router)
 app.include_router(models_router)
 app.include_router(rollout_router)
 app.include_router(media_router)
+app.include_router(range_practice_router)
 app.include_router(ws_telemetry_router)
 app.include_router(runs_upload_router)
 app.include_router(runs_router)

@@ -145,6 +145,13 @@
   "range.mission.hint.start": "Hit a few shots to see your groove meter fill up.",
   "range.practice.targetBingo.title": "Target Bingo",
   "range.practice.gapping.title": "Gapping",
+  "range.camera.good": "Camera OK",
+  "range.camera.warning": "Camera needs attention",
+  "range.camera.bad": "Camera not suitable for ball tracking",
+  "range.camera.reason.fps_low": "Increase frame rate / shutter speed",
+  "range.camera.reason.blur_high": "Reduce blur – use more light or shorter exposure",
+  "range.camera.reason.mpx_low": "Move closer or use higher resolution",
+  "range.camera.reason.light_low": "Scene too dark – add light",
 
   "bag.title": "My Bag",
   "bag.club": "Club",
