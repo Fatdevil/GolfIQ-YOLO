@@ -33,7 +33,10 @@ def test_camera_fitness_none_when_empty() -> None:
     ],
 )
 def test_maybe_float(metrics, expected) -> None:
-    assert range_analyze._maybe_float(metrics, "ball_speed_mps", "ballSpeedMps") == expected
+    assert (
+        range_analyze._maybe_float(metrics, "ball_speed_mps", "ballSpeedMps")
+        == expected
+    )
 
 
 def test_build_out_normalizes_fields() -> None:
@@ -62,7 +65,9 @@ def test_frames_from_payload_uses_zip(monkeypatch) -> None:
         return frames
 
     monkeypatch.setattr(range_analyze, "frames_from_zip_bytes", fake_frames_from_zip)
-    payload = RangeAnalyzeIn(frames=3, frames_zip_b64=base64.b64encode(b"dummy").decode())
+    payload = RangeAnalyzeIn(
+        frames=3, frames_zip_b64=base64.b64encode(b"dummy").decode()
+    )
 
     result = range_analyze._frames_from_payload(payload)
     assert list(result) == frames
@@ -136,7 +141,11 @@ def test_run_real_analyze_uses_dependencies(monkeypatch) -> None:
             }
         }
 
-    monkeypatch.setattr(range_analyze.CalibrationParams, "from_reference", staticmethod(fake_from_reference))
+    monkeypatch.setattr(
+        range_analyze.CalibrationParams,
+        "from_reference",
+        staticmethod(fake_from_reference),
+    )
     monkeypatch.setattr(range_analyze, "_frames_from_payload", fake_frames)
     monkeypatch.setattr(range_analyze, "analyze_frames", fake_analyze)
 
