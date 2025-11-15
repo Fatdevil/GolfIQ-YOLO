@@ -14,4 +14,5 @@ export type QuickRound = {
   startedAt: string;
   completedAt?: string;
   showPutts?: boolean;
+  handicap?: number;
 };

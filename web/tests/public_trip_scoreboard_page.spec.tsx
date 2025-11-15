@@ -11,8 +11,8 @@ const sampleResponse = {
   holes: 3,
   created_ts: 1_700_000_000,
   players: [
-    { id: "p1", name: "Alice" },
-    { id: "p2", name: "Bob" },
+    { id: "p1", name: "Alice", handicap: 4 },
+    { id: "p2", name: "Bob", handicap: 9 },
   ],
   scores: [
     { hole: 1, player_id: "p1", strokes: 4 },
@@ -45,6 +45,8 @@ describe("PublicTripScoreboardPage", () => {
       screen.getByRole("columnheader", { name: /Alice/i })
     ).toBeTruthy();
     expect(screen.getByRole("columnheader", { name: /Bob/i })).toBeTruthy();
+    expect(screen.getByText(/Gross/i)).toBeTruthy();
+    expect(screen.getByText(/Net/i)).toBeTruthy();
     expect(fetchMock).toHaveBeenCalledWith(`${API}/public/trip/rounds/abc`);
   });
 

@@ -28,12 +28,17 @@ function toTripApiError(action: string, error: unknown): TripApiError {
   return new TripApiError(`${action} failed: ${String(error)}`);
 }
 
+export type TripRoundCreatePlayerInput = {
+  name: string;
+  handicap?: number | null;
+};
+
 export type TripRoundCreateInput = {
   courseName: string;
   courseId?: string;
   teesName?: string;
   holes: number;
-  players: string[];
+  players: TripRoundCreatePlayerInput[];
 };
 
 export async function createTripRound(

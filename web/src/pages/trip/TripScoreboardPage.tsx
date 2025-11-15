@@ -104,7 +104,13 @@ export default function TripScoreboardPage() {
 
   const leaderboard = useMemo(() => {
     if (!effectiveTrip) {
-      return [] as { name: string; strokes: number | null }[];
+      return [] as {
+        id: string;
+        name: string;
+        gross: number | null;
+        handicap: number | null;
+        net: number | null;
+      }[];
     }
     const totals = new Map<string, number>();
     for (const score of effectiveTrip.scores) {
@@ -116,21 +122,53 @@ export default function TripScoreboardPage() {
       }
     }
     return effectiveTrip.players
-      .map((player) => ({
-        name: player.name,
-        strokes: totals.has(player.id) ? totals.get(player.id)! : null,
-      }))
+      .map((player) => {
+        const gross = totals.has(player.id) ? totals.get(player.id)! : null;
+        const handicap =
+          typeof player.handicap === "number" && Number.isFinite(player.handicap)
+            ? player.handicap
+            : null;
+        const net = gross !== null ? gross - (handicap ?? 0) : null;
+        return {
+          id: player.id,
+          name: player.name,
+          gross,
+          handicap,
+          net,
+        };
+      })
       .sort((a, b) => {
-        if (a.strokes === null && b.strokes === null) {
-          return 0;
+        if (a.net === null && b.net === null) {
+          if (a.gross === null && b.gross === null) {
+            return 0;
+          }
+          if (a.gross === null) {
+            return 1;
+          }
+          if (b.gross === null) {
+            return -1;
+          }
+          return a.gross - b.gross;
         }
-        if (a.strokes === null) {
+        if (a.net === null) {
           return 1;
         }
-        if (b.strokes === null) {
+        if (b.net === null) {
           return -1;
         }
-        return a.strokes - b.strokes;
+        if (a.net === b.net) {
+          if (a.gross === null && b.gross === null) {
+            return 0;
+          }
+          if (a.gross === null) {
+            return 1;
+          }
+          if (b.gross === null) {
+            return -1;
+          }
+          return a.gross - b.gross;
+        }
+        return a.net - b.net;
       });
   }, [effectiveTrip]);
 
@@ -343,19 +381,42 @@ export default function TripScoreboardPage() {
         <h2 className="text-lg font-semibold text-slate-100">
           {t("trip.scoreboard.total")}
         </h2>
-        <ul className="mt-3 space-y-2 text-sm text-slate-200">
-          {leaderboard.map((entry) => (
-            <li
-              key={entry.name}
-              className="flex items-center justify-between rounded border border-slate-800 bg-slate-950/40 px-3 py-2"
-            >
-              <span>{entry.name}</span>
-              <span className="font-semibold text-emerald-300">
-                {entry.strokes === null ? "—" : entry.strokes}
-              </span>
-            </li>
-          ))}
-        </ul>
+        <div className="mt-3 overflow-x-auto">
+          <table className="min-w-full divide-y divide-slate-800 text-sm text-slate-200">
+            <thead className="bg-slate-900/50 text-left text-xs uppercase tracking-wide text-slate-400">
+              <tr>
+                <th className="px-3 py-2 font-semibold text-slate-300">
+                  {t("trip.leaderboard.player", "Player")}
+                </th>
+                <th className="px-3 py-2 font-semibold text-slate-300">
+                  {t("trip.leaderboard.gross")}
+                </th>
+                <th className="px-3 py-2 font-semibold text-slate-300">
+                  {t("trip.leaderboard.handicap")}
+                </th>
+                <th className="px-3 py-2 font-semibold text-slate-300">
+                  {t("trip.leaderboard.net")}
+                </th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-800">
+              {leaderboard.map((entry) => (
+                <tr key={entry.id} className="odd:bg-slate-900/40">
+                  <td className="px-3 py-2 font-semibold text-slate-100">{entry.name}</td>
+                  <td className="px-3 py-2">
+                    {entry.gross !== null ? entry.gross : "—"}
+                  </td>
+                  <td className="px-3 py-2">
+                    {entry.handicap !== null ? entry.handicap.toFixed(1) : "—"}
+                  </td>
+                  <td className="px-3 py-2 font-semibold text-emerald-300">
+                    {entry.net !== null ? entry.net.toFixed(1) : "—"}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </section>
     </div>
   );

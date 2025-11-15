@@ -9,6 +9,7 @@ from pydantic import BaseModel, Field
 class TripPlayer(BaseModel):
     id: str
     name: str
+    handicap: float | None = None
 
 
 class TripHoleScore(BaseModel):

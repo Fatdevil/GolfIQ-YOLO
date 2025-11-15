@@ -72,6 +72,12 @@ export default function MyGolfIQPage() {
                   value={formatDecimal(quickRoundStats.avgStrokes)}
                 />
               )}
+              {typeof quickRoundStats.avgNetStrokes === "number" && (
+                <StatBlock
+                  label={t("profile.quickRounds.avgNetStrokes")}
+                  value={formatDecimal(quickRoundStats.avgNetStrokes)}
+                />
+              )}
             </dl>
 
             <FeatureGate feature="profile.advancedStats">
@@ -84,6 +90,12 @@ export default function MyGolfIQPage() {
                     <StatBlock
                       label={t("profile.quickRounds.avgToPar")}
                       value={formatToPar(quickRoundStats.avgToPar)}
+                    />
+                  ) : null}
+                  {typeof quickRoundStats.avgNetToPar === "number" ? (
+                    <StatBlock
+                      label={t("profile.quickRounds.avgNetToPar")}
+                      value={formatToPar(quickRoundStats.avgNetToPar)}
                     />
                   ) : null}
                   {typeof quickRoundStats.bestToPar === "number" ? (

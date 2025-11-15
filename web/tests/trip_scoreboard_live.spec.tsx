@@ -47,8 +47,8 @@ describe("TripScoreboardPage live updates", () => {
     tees_name: "Blue",
     holes: 3,
     players: [
-      { id: "p1", name: "Alice" },
-      { id: "p2", name: "Bob" },
+      { id: "p1", name: "Alice", handicap: 5 },
+      { id: "p2", name: "Bob", handicap: 12 },
     ],
     scores: [],
     course_id: null,

@@ -1,6 +1,7 @@
 import { QuickRound } from "./types";
 
 const STORAGE_KEY = "golfiq.quickRounds.v1";
+const HCP_STORAGE_KEY = "golfiq.quickRound.handicap.v1";
 
 export type QuickRoundSummary = Pick<
   QuickRound,
@@ -45,6 +46,44 @@ export function deleteRound(id: string): void {
   const rounds = readAllRounds();
   const nextRounds = rounds.filter((round) => round.id !== id);
   writeAllRounds(nextRounds);
+}
+
+export function loadDefaultHandicap(): number | null {
+  if (typeof window === "undefined") {
+    return null;
+  }
+  try {
+    const raw = window.localStorage.getItem(HCP_STORAGE_KEY);
+    if (!raw) {
+      return null;
+    }
+    const parsed = Number(raw);
+    return Number.isFinite(parsed) ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+export function saveDefaultHandicap(hcp: number): void {
+  if (typeof window === "undefined") {
+    return;
+  }
+  try {
+    window.localStorage.setItem(HCP_STORAGE_KEY, String(hcp));
+  } catch {
+    // ignore
+  }
+}
+
+export function clearDefaultHandicap(): void {
+  if (typeof window === "undefined") {
+    return;
+  }
+  try {
+    window.localStorage.removeItem(HCP_STORAGE_KEY);
+  } catch {
+    // ignore
+  }
 }
 
 function readAllRounds(): QuickRound[] {

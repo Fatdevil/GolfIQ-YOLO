@@ -2,7 +2,8 @@ from __future__ import annotations
 
 import asyncio
 import json
-from typing import List
+import math
+from typing import List, Union
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
@@ -25,6 +26,11 @@ router = APIRouter(
 )
 
 
+class TripPlayerIn(BaseModel):
+    name: str
+    handicap: float | None = None
+
+
 class TripCreateIn(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
@@ -32,7 +38,7 @@ class TripCreateIn(BaseModel):
     course_id: str | None = Field(default=None, alias="courseId")
     tees_name: str | None = Field(default=None, alias="teesName")
     holes: int
-    players: List[str]
+    players: List[Union[TripPlayerIn, str]]
 
 
 class TripCreateOut(TripRound):
@@ -44,11 +50,29 @@ def create_round(payload: TripCreateIn):
     if payload.holes <= 0 or payload.holes > 36:
         raise HTTPException(status_code=400, detail="invalid_holes")
 
-    players = [
-        TripPlayer(id=f"p{i+1}", name=name.strip())
-        for i, name in enumerate(payload.players)
-        if name.strip()
-    ]
+    players: list[TripPlayer] = []
+    for index, raw_player in enumerate(payload.players):
+        if isinstance(raw_player, str):
+            name = raw_player.strip()
+            handicap = None
+        else:
+            name = raw_player.name.strip()
+            handicap = raw_player.handicap
+
+        if not name:
+            continue
+
+        hcp_value: float | None = None
+        if handicap is not None and math.isfinite(handicap):
+            hcp_value = float(handicap)
+
+        players.append(
+            TripPlayer(
+                id=f"p{index + 1}",
+                name=name,
+                handicap=hcp_value,
+            )
+        )
     if not players:
         raise HTTPException(status_code=400, detail="no_players")
 

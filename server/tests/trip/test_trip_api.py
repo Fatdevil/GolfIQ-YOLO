@@ -20,7 +20,10 @@ def test_create_fetch_and_update_trip_round():
         "courseId": "course_1",
         "teesName": "Blue",
         "holes": 9,
-        "players": ["Alice", "Bob"],
+        "players": [
+            {"name": "Alice", "handicap": 12.5},
+            {"name": "Bob", "handicap": None},
+        ],
     }
 
     response = client.post("/api/trip/rounds", json=create_payload)
@@ -31,6 +34,8 @@ def test_create_fetch_and_update_trip_round():
     assert trip_id.startswith("trip_")
     assert data["holes"] == 9
     assert len(data["players"]) == 2
+    assert data["players"][0]["handicap"] == 12.5
+    assert data["players"][1]["handicap"] is None
 
     fetch_response = client.get(f"/api/trip/rounds/{trip_id}")
     assert fetch_response.status_code == 200
@@ -72,7 +77,10 @@ def test_upsert_scores_rejects_invalid_entries():
     create_payload = {
         "courseName": "Augusta National",
         "holes": 3,
-        "players": ["Ann", "Ben"],
+        "players": [
+            {"name": "Ann", "handicap": 6.0},
+            {"name": "Ben"},
+        ],
     }
 
     response = client.post("/api/trip/rounds", json=create_payload)
@@ -135,7 +143,10 @@ def test_trip_round_validation_errors():
     no_players_payload = {
         "courseName": "Test Course",
         "holes": 9,
-        "players": [" ", ""],
+        "players": [
+            {"name": " ", "handicap": 10},
+            "",
+        ],
     }
 
     response = client.post("/api/trip/rounds", json=no_players_payload)

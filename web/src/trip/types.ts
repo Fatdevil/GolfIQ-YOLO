@@ -1,6 +1,7 @@
 export type TripPlayer = {
   id: string;
   name: string;
+  handicap?: number | null;
 };
 
 export type TripHoleScore = {

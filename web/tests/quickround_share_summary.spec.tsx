@@ -34,6 +34,7 @@ describe("QuickRoundPlayPage share summary", () => {
       ],
       startedAt: "2024-05-01T12:00:00.000Z",
       showPutts: true,
+      handicap: 2,
     };
 
     loadRoundMock.mockReturnValueOnce(round);
@@ -66,6 +67,7 @@ describe("QuickRoundPlayPage share summary", () => {
       const summaryText = writeText.mock.calls[0]?.[0] as string;
       expect(summaryText).toContain("GolfIQ Quick Round – Links Course");
       expect(summaryText).toMatch(/Score: 10/);
+      expect(summaryText).toMatch(/Net: 8\.0/);
       expect(summaryText).toMatch(/Holes: 3/);
       expect(
         await screen.findByText(/Round summary copied/i)

@@ -2,11 +2,15 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Link, useParams } from "react-router-dom";
 
-import { loadRound, saveRound } from "../../features/quickround/storage";
+import {
+  loadRound,
+  saveRound,
+} from "../../features/quickround/storage";
 import { QuickHole, QuickRound } from "../../features/quickround/types";
 import { useCourseBundle } from "../../courses/hooks";
 import { useGeolocation } from "../../hooks/useGeolocation";
 import { useAutoHoleSuggestion } from "../../courses/useAutoHole";
+import { computeQuickRoundSummary } from "../../features/quickround/summary";
 
 export default function QuickRoundPlayPage() {
   const { roundId } = useParams<{ roundId: string }>();
@@ -86,21 +90,7 @@ export default function QuickRoundPlayPage() {
     if (!round) {
       return null;
     }
-    const totalPar = round.holes.reduce((sum, hole) => sum + hole.par, 0);
-    let totalStrokes = 0;
-    let missing = false;
-    for (const hole of round.holes) {
-      if (typeof hole.strokes === "number") {
-        totalStrokes += hole.strokes;
-      } else {
-        missing = true;
-      }
-    }
-    return {
-      totalPar,
-      totalStrokes,
-      toPar: missing ? null : totalStrokes - totalPar,
-    };
+    return computeQuickRoundSummary(round);
   }, [round]);
 
   if (notFound) {
@@ -133,13 +123,19 @@ export default function QuickRoundPlayPage() {
       return;
     }
 
-    const summaryText = [
+    const summaryLines = [
       `GolfIQ Quick Round – ${round.courseName}`,
       "",
       `Date: ${new Date(round.startedAt).toLocaleString()}`,
       `Score: ${summary.totalStrokes} (${formatToPar(summary.toPar)})`,
       `Holes: ${round.holes.length}`,
-    ].join("\n");
+    ];
+
+    if (summary.netStrokes !== null) {
+      summaryLines.splice(4, 0, `Net: ${summary.netStrokes.toFixed(1)} (${formatToPar(summary.netToPar)})`);
+    }
+
+    const summaryText = summaryLines.join("\n");
 
     try {
       if (navigator.clipboard?.writeText) {
@@ -348,6 +344,18 @@ export default function QuickRoundPlayPage() {
                 label={t("quickRound.play.toPar")}
                 value={formatToPar(summary.toPar)}
               />
+              {summary.netStrokes !== null && (
+                <SummaryItem
+                  label={t("quickRound.summary.netStrokes")}
+                  value={summary.netStrokes.toFixed(1)}
+                />
+              )}
+              {summary.netToPar !== null && (
+                <SummaryItem
+                  label={t("quickRound.summary.netResult")}
+                  value={formatToPar(summary.netToPar)}
+                />
+              )}
             </div>
             <div className="flex flex-col items-start gap-2 sm:items-end">
               <button
@@ -507,10 +515,14 @@ function formatToPar(value: number | null): string {
   if (value === null) {
     return "—";
   }
-  if (value === 0) {
+  const rounded = Math.round(value * 10) / 10;
+  if (Math.abs(rounded) < 0.05) {
     return "E";
   }
-  return value > 0 ? `+${value}` : `${value}`;
+  const formatted = Number.isInteger(rounded)
+    ? rounded.toFixed(0)
+    : rounded.toFixed(1);
+  return rounded > 0 ? `+${formatted}` : formatted;
 }
 
 function determineCurrentHoleNumber(holes: QuickHole[]): number {

@@ -6,15 +6,28 @@ import userEvent from "@testing-library/user-event";
 import QuickRoundStartPage from "../src/pages/quick/QuickRoundStartPage";
 import type { QuickRoundSummary } from "../src/features/quickround/storage";
 
-const { saveRoundMock, loadAllRoundsMock, createRoundIdMock } = vi.hoisted(() => ({
+const {
+  saveRoundMock,
+  loadAllRoundsMock,
+  createRoundIdMock,
+  loadDefaultHandicapMock,
+  saveDefaultHandicapMock,
+  clearDefaultHandicapMock,
+} = vi.hoisted(() => ({
   saveRoundMock: vi.fn(),
   loadAllRoundsMock: vi.fn(() => [] as QuickRoundSummary[]),
   createRoundIdMock: vi.fn(() => "qr-mock"),
+  loadDefaultHandicapMock: vi.fn(() => null as number | null),
+  saveDefaultHandicapMock: vi.fn(),
+  clearDefaultHandicapMock: vi.fn(),
 }));
 
 vi.mock("../src/features/quickround/storage", () => ({
   createRoundId: createRoundIdMock,
   loadAllRounds: loadAllRoundsMock,
+  loadDefaultHandicap: loadDefaultHandicapMock,
+  saveDefaultHandicap: saveDefaultHandicapMock,
+  clearDefaultHandicap: clearDefaultHandicapMock,
   saveRound: saveRoundMock,
 }));
 
@@ -39,6 +52,7 @@ describe("QuickRoundStartPage course integration", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     loadAllRoundsMock.mockReturnValue([]);
+    loadDefaultHandicapMock.mockReturnValue(null);
   });
 
   it("saves selected course id", async () => {
