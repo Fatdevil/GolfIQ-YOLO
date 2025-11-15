@@ -2,6 +2,10 @@ import React from "react";
 import { useTranslation } from "react-i18next";
 import { FeatureGate } from "@/access/FeatureGate";
 import {
+  appendRangeSession,
+  computeBasicStats,
+} from "@/features/range/sessions";
+import {
   RANGE_MISSIONS,
   Mission,
   MissionId,
@@ -118,6 +122,8 @@ export default function RangePracticePage() {
   const [copyStatus, setCopyStatus] = React.useState<string | null>(null);
   const [ghost, setGhost] = React.useState<GhostProfile | null>(() => getLatestGhost());
   const [ghostStatus, setGhostStatus] = React.useState<string | null>(null);
+  const [saveStatus, setSaveStatus] = React.useState<string | null>(null);
+  const sessionStartRef = React.useRef<string>(new Date().toISOString());
 
   const mission = missionId ? getMissionById(missionId) ?? null : null;
 
@@ -168,6 +174,80 @@ export default function RangePracticePage() {
     const id = window.setTimeout(() => setGhostStatus(null), 3000);
     return () => window.clearTimeout(id);
   }, [ghostStatus]);
+
+  React.useEffect(() => {
+    if (!saveStatus) {
+      return;
+    }
+    const id = window.setTimeout(() => setSaveStatus(null), 3000);
+    return () => window.clearTimeout(id);
+  }, [saveStatus]);
+
+  const handleEndSession = React.useCallback(() => {
+    if (shots.length === 0) {
+      return;
+    }
+
+    const nowIso = new Date().toISOString();
+    const { shotCount, avgCarry_m, carryStd_m } = computeBasicStats(shots);
+
+    let missionGoodReps: number | null = null;
+    let missionTargetReps: number | null = null;
+    if (mission) {
+      const missionProgress = computeMissionProgress(mission, shots);
+      missionGoodReps = missionProgress.goodReps;
+      missionTargetReps = mission.targetReps;
+    }
+
+    let target_m: number | null = null;
+    let hitRate_pct: number | null = null;
+    let avgError_m: number | null = null;
+    if (mode === "target-bingo") {
+      const bingo = scoreTargetBingo(shots, bingoCfg);
+      if (bingo.totalShots > 0) {
+        target_m = bingoCfg.target_m;
+        hitRate_pct = bingo.hitRate_pct;
+        avgError_m = bingo.avgAbsError_m ?? null;
+      }
+    }
+
+    const sessionStartMs = Date.parse(sessionStartRef.current);
+    const ghostSaved =
+      ghost != null &&
+      Number.isFinite(sessionStartMs) &&
+      ghost.createdAt >= sessionStartMs;
+
+    appendRangeSession({
+      id: `rs-${Date.now().toString(36)}`,
+      startedAt: sessionStartRef.current,
+      endedAt: nowIso,
+      clubId: currentClubId ?? null,
+      missionId: mission?.id ?? missionId ?? null,
+      missionGoodReps,
+      missionTargetReps,
+      avgCarry_m,
+      carryStd_m,
+      shotCount,
+      target_m,
+      hitRate_pct,
+      avgError_m,
+      ghostSaved,
+    });
+
+    sessionStartRef.current = nowIso;
+    setShots([]);
+    setLatest(null);
+    setSaveStatus(t("range.session.saved"));
+  }, [
+    shots,
+    mission,
+    mode,
+    bingoCfg,
+    currentClubId,
+    missionId,
+    ghost,
+    t,
+  ]);
 
   async function handleHit() {
     setLoading(true);
@@ -341,6 +421,15 @@ export default function RangePracticePage() {
 
         <button
           type="button"
+          className="inline-flex items-center rounded-md border border-slate-300 px-3 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+          onClick={handleEndSession}
+          disabled={shots.length === 0}
+        >
+          {t("range.session.endButton")}
+        </button>
+
+        <button
+          type="button"
           onClick={() => {
             void handleCopySummary();
           }}
@@ -351,6 +440,7 @@ export default function RangePracticePage() {
       </div>
 
       {copyStatus && <div className="text-xs text-emerald-400">{copyStatus}</div>}
+      {saveStatus && <div className="text-xs text-emerald-400">{saveStatus}</div>}
 
       {mode === "mission" && (
         <section className="mt-4 space-y-3">
