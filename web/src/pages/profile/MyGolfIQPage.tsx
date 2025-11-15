@@ -12,16 +12,26 @@ import {
   computeQuickRoundStats,
   computeRangeSummary,
 } from "@/profile/stats";
+import {
+  getCoachTag,
+  loadRangeSessions,
+  type RangeSession,
+} from "@/features/range/sessions";
 
 export default function MyGolfIQPage() {
   const { t } = useTranslation();
   const [rounds] = useState(() => loadAllRoundsFull());
   const [ghosts] = useState(() => listGhosts());
   const [bag] = useState(() => loadBag());
+  const [rangeSessions] = useState<RangeSession[]>(() => loadRangeSessions());
 
   const quickRoundStats = useMemo(() => computeQuickRoundStats(rounds), [rounds]);
   const rangeStats = useMemo(() => computeRangeSummary(ghosts), [ghosts]);
   const bagStats = useMemo(() => computeBagSummary(bag), [bag]);
+  const recentRangeSessions = useMemo(
+    () => rangeSessions.slice(0, 5),
+    [rangeSessions]
+  );
 
   const recentRounds = useMemo(() => {
     return [...rounds]
@@ -200,6 +210,58 @@ export default function MyGolfIQPage() {
               </FeatureGate>
             )}
           </div>
+        )}
+      </section>
+
+      <section className="space-y-3 rounded-lg border border-slate-800 bg-slate-900/50 p-5 shadow-sm">
+        <h2 className="text-lg font-semibold text-slate-100">
+          {t("profile.range.sessions.title")}
+        </h2>
+        {recentRangeSessions.length === 0 ? (
+          <p className="text-sm text-slate-300">
+            {t("profile.range.sessions.empty")}
+          </p>
+        ) : (
+          <ul className="space-y-3 text-sm">
+            {recentRangeSessions.map((session) => {
+              const tag = getCoachTag(session);
+              const endedAt = session.endedAt ?? session.startedAt;
+              const dateLabel = endedAt
+                ? new Date(endedAt).toLocaleString()
+                : t("profile.range.sessions.unknownDate");
+              return (
+                <li
+                  key={session.id}
+                  className="flex items-start justify-between gap-3 rounded-lg border border-slate-800 bg-slate-900/60 px-4 py-3"
+                >
+                  <div className="space-y-1">
+                    <div className="text-sm font-medium text-slate-100">{dateLabel}</div>
+                    <div className="text-xs text-slate-400">
+                      {session.missionId
+                        ? t("profile.range.sessions.missionLabel", { mission: session.missionId })
+                        : t("profile.range.sessions.noMission")}
+                    </div>
+                    <div className="text-xs text-slate-400">
+                      {t("profile.range.sessions.shotStats", {
+                        shots: session.shotCount,
+                        avg:
+                          typeof session.avgCarry_m === "number"
+                            ? Math.round(session.avgCarry_m)
+                            : "–",
+                        std:
+                          typeof session.carryStd_m === "number"
+                            ? Math.round(session.carryStd_m)
+                            : "–",
+                      })}
+                    </div>
+                  </div>
+                  <div className="text-xs font-semibold text-emerald-300">
+                    {t(`profile.range.sessions.tag.${tag}`)}
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
         )}
       </section>
 
