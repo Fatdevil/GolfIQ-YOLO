@@ -30,8 +30,8 @@ describe("TripScoreboardPage", () => {
     tees_name: "Blue",
     holes: 3,
     players: [
-      { id: "p1", name: "Alice" },
-      { id: "p2", name: "Bob" },
+      { id: "p1", name: "Alice", handicap: 4 },
+      { id: "p2", name: "Bob", handicap: 10 },
     ],
     scores: [],
   };
@@ -69,6 +69,7 @@ describe("TripScoreboardPage", () => {
     expect(await screen.findByText(/Trip scoreboard/i)).toBeTruthy();
     expect(screen.getAllByText("Alice")).toHaveLength(2);
     expect(screen.getAllByText("Bob")).toHaveLength(2);
+    expect(screen.getByRole("columnheader", { name: /Net/i })).toBeTruthy();
 
     const aliceInput = screen.getByLabelText(/Hole 1 – Alice/i);
     const bobInput = screen.getByLabelText(/Hole 1 – Bob/i);

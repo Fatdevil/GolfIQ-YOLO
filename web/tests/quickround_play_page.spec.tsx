@@ -94,4 +94,31 @@ describe("QuickRoundPlayPage", () => {
     expect(screen.getByText(/Round not found/i)).toBeTruthy();
     expect(screen.getByText(/Back to start/i)).toBeTruthy();
   });
+
+  it("displays net summary when handicap is set", async () => {
+    const round: QuickRound = {
+      id: "qr-555",
+      courseName: "Net Course",
+      holes: [
+        { index: 1, par: 4, strokes: 5 },
+        { index: 2, par: 4, strokes: 4 },
+      ],
+      startedAt: "2024-05-04T10:00:00.000Z",
+      showPutts: true,
+      handicap: 3,
+    };
+    loadRoundMock.mockReturnValueOnce(round);
+
+    render(
+      <MemoryRouter initialEntries={["/play/qr-555"]}>
+        <Routes>
+          <Route path="/play/:roundId" element={<QuickRoundPlayPage />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText(/Net strokes/i)).toBeTruthy();
+    expect(screen.getByText("6.0")).toBeTruthy();
+    expect(screen.getByText(/Net result/i)).toBeTruthy();
+  });
 });

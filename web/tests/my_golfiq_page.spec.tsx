@@ -19,6 +19,7 @@ const mockRounds: QuickRound[] = [
     ],
     startedAt: "2024-08-01T10:00:00.000Z",
     completedAt: "2024-08-01T13:00:00.000Z",
+    handicap: 2,
   },
   {
     id: "r2",
@@ -92,6 +93,7 @@ describe("MyGolfIQPage", () => {
 
     expect(screen.getByRole("heading", { name: /My GolfIQ/i })).toBeTruthy();
     expect(screen.getByText(/Total rounds/i)).toBeTruthy();
+    expect(screen.getByText(/Average net strokes/i)).toBeTruthy();
     expect(screen.getByText(/Championship Course/i)).toBeTruthy();
     expect(screen.getByRole("heading", { level: 2, name: /Range practice/i })).toBeTruthy();
     expect(screen.getByText(/Demo Ghost/i)).toBeTruthy();

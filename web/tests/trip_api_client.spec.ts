@@ -18,8 +18,8 @@ describe("trip api client", () => {
       course_name: "Test Course",
       holes: 9,
       players: [
-        { id: "p1", name: "Alice" },
-        { id: "p2", name: "Bob" },
+        { id: "p1", name: "Alice", handicap: 5 },
+        { id: "p2", name: "Bob", handicap: 8 },
       ],
       scores: [],
     };
@@ -31,7 +31,10 @@ describe("trip api client", () => {
     const payload = {
       courseName: "Test Course",
       holes: 9,
-      players: ["Alice", "Bob"],
+      players: [
+        { name: "Alice", handicap: 8.5 },
+        { name: "Bob" },
+      ],
     };
 
     const result = await createTripRound(payload);
@@ -65,7 +68,7 @@ describe("trip api client", () => {
       created_ts: Date.now(),
       course_name: "Test Course",
       holes: 9,
-      players: [{ id: "p1", name: "Alice" }],
+      players: [{ id: "p1", name: "Alice", handicap: 3 }],
       scores: [{ hole: 1, player_id: "p1", strokes: 4 }],
     };
 

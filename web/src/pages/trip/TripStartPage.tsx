@@ -1,22 +1,41 @@
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 
 import { useCourseBundle, useCourseIds } from "../../courses/hooks";
 import { createTripRound, TripApiError } from "../../trip/api";
+import {
+  clearTripDefaultHandicap,
+  loadTripDefaultHandicap,
+  saveTripDefaultHandicap,
+} from "../../trip/storage";
 
 const MIN_PLAYERS = 2;
 const MAX_PLAYERS = 4;
+
+type PlayerRow = {
+  name: string;
+  handicap: string;
+};
 
 export default function TripStartPage() {
   const { t } = useTranslation();
   const navigate = useNavigate();
 
+  const defaultTripHandicap = useMemo(() => loadTripDefaultHandicap(), []);
+  const defaultHandicapString =
+    defaultTripHandicap != null ? String(defaultTripHandicap) : "";
+
   const [courseName, setCourseName] = useState("");
   const [courseId, setCourseId] = useState<string | undefined>();
   const [teesName, setTeesName] = useState("");
   const [holes, setHoles] = useState<9 | 18>(18);
-  const [players, setPlayers] = useState<string[]>(["", ""]);
+  const [players, setPlayers] = useState<PlayerRow[]>(() =>
+    Array.from({ length: MIN_PLAYERS }, () => ({
+      name: "",
+      handicap: defaultHandicapString,
+    }))
+  );
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
@@ -33,10 +52,18 @@ export default function TripStartPage() {
     }
   }, [selectedBundle, courseName]);
 
-  const handlePlayerChange = (index: number, value: string) => {
+  const handlePlayerNameChange = (index: number, value: string) => {
     setPlayers((prev) => {
       const next = [...prev];
-      next[index] = value;
+      next[index] = { ...next[index], name: value };
+      return next;
+    });
+  };
+
+  const handlePlayerHandicapChange = (index: number, value: string) => {
+    setPlayers((prev) => {
+      const next = [...prev];
+      next[index] = { ...next[index], handicap: value };
       return next;
     });
   };
@@ -46,7 +73,8 @@ export default function TripStartPage() {
       if (prev.length >= MAX_PLAYERS) {
         return prev;
       }
-      return [...prev, ""];
+      const templateHandicap = prev[0]?.handicap ?? defaultHandicapString;
+      return [...prev, { name: "", handicap: templateHandicap }];
     });
   };
 
@@ -69,10 +97,39 @@ export default function TripStartPage() {
       return;
     }
 
-    const trimmedPlayers = players.map((name) => name.trim()).filter(Boolean);
-    if (trimmedPlayers.length < MIN_PLAYERS) {
+    const playerPayloads = players
+      .map((player) => {
+        const name = player.name.trim();
+        if (!name) {
+          return null;
+        }
+        const handicapTrimmed = player.handicap.trim();
+        let handicapValue: number | null = null;
+        if (handicapTrimmed) {
+          const parsed = Number(handicapTrimmed);
+          handicapValue = Number.isFinite(parsed) ? parsed : null;
+        }
+        return { name, handicap: handicapValue };
+      })
+      .filter(
+        (
+          player
+        ): player is { name: string; handicap: number | null } => player !== null
+      );
+
+    if (playerPayloads.length < MIN_PLAYERS) {
       setError(t("trip.start.playersRequired", { count: MIN_PLAYERS }));
       return;
+    }
+
+    const firstHandicap = playerPayloads.find(
+      (player) => typeof player.handicap === "number"
+    )?.handicap;
+
+    if (typeof firstHandicap === "number") {
+      saveTripDefaultHandicap(firstHandicap);
+    } else {
+      clearTripDefaultHandicap();
     }
 
     setSubmitting(true);
@@ -82,7 +139,7 @@ export default function TripStartPage() {
         courseId,
         teesName: teesName.trim() || undefined,
         holes,
-        players: trimmedPlayers,
+        players: playerPayloads,
       });
       navigate(`/trip/${round.id}`);
     } catch (err) {
@@ -199,19 +256,41 @@ export default function TripStartPage() {
             </span>
             <div className="space-y-3">
               {players.map((player, index) => (
-                <div key={index} className="flex items-center gap-3">
+                <div
+                  key={index}
+                  className="flex flex-col gap-2 rounded border border-slate-800 bg-slate-950/50 p-3 sm:flex-row sm:items-center sm:gap-3"
+                >
                   <input
                     type="text"
-                    value={player}
-                    onChange={(event) => handlePlayerChange(index, event.target.value)}
+                    value={player.name}
+                    onChange={(event) =>
+                      handlePlayerNameChange(index, event.target.value)
+                    }
                     className="flex-1 rounded border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 focus:border-emerald-400 focus:outline-none focus:ring-1 focus:ring-emerald-400"
                     placeholder={t("trip.start.playerPlaceholder", { index: index + 1 })}
                   />
+                  <div className="flex items-center gap-2">
+                    <label className="text-xs text-slate-400" htmlFor={`player-handicap-${index}`}>
+                      {t("trip.start.handicap")}
+                    </label>
+                    <input
+                      id={`player-handicap-${index}`}
+                      type="number"
+                      inputMode="decimal"
+                      step="0.1"
+                      value={player.handicap}
+                      onChange={(event) =>
+                        handlePlayerHandicapChange(index, event.target.value)
+                      }
+                      className="w-24 rounded border border-slate-700 bg-slate-950 px-2 py-1 text-sm text-slate-100 focus:border-emerald-400 focus:outline-none focus:ring-1 focus:ring-emerald-400"
+                      placeholder="12.0"
+                    />
+                  </div>
                   {players.length > MIN_PLAYERS && index >= MIN_PLAYERS && (
                     <button
                       type="button"
                       onClick={() => handleRemovePlayer(index)}
-                      className="rounded border border-slate-700 px-2 py-1 text-xs text-slate-300 hover:border-rose-400 hover:text-rose-300"
+                      className="self-start rounded border border-slate-700 px-2 py-1 text-xs text-slate-300 transition hover:border-rose-400 hover:text-rose-300 sm:self-center"
                     >
                       {t("trip.start.removePlayer")}
                     </button>

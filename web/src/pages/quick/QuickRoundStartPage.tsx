@@ -5,6 +5,9 @@ import { Link, useNavigate } from "react-router-dom";
 import {
   createRoundId,
   loadAllRounds,
+  loadDefaultHandicap,
+  saveDefaultHandicap,
+  clearDefaultHandicap,
   saveRound,
   QuickRoundSummary,
 } from "../../features/quickround/storage";
@@ -21,6 +24,10 @@ export default function QuickRoundStartPage() {
   const [error, setError] = useState<string | null>(null);
   const [rounds, setRounds] = useState<QuickRoundSummary[]>([]);
   const [courseId, setCourseId] = useState<string | undefined>();
+  const [handicapInput, setHandicapInput] = useState<string>(() => {
+    const stored = loadDefaultHandicap();
+    return stored != null ? String(stored) : "";
+  });
 
   const {
     data: courseIds,
@@ -63,6 +70,17 @@ export default function QuickRoundStartPage() {
       index: index + 1,
       par: 4,
     }));
+    const trimmedHandicap = handicapInput.trim();
+    let handicap: number | undefined;
+    if (trimmedHandicap) {
+      const parsed = Number(trimmedHandicap);
+      if (Number.isFinite(parsed)) {
+        handicap = parsed;
+        saveDefaultHandicap(parsed);
+      }
+    } else {
+      clearDefaultHandicap();
+    }
     const round: QuickRound = {
       id: createRoundId(),
       courseName: trimmedCourseName,
@@ -71,6 +89,7 @@ export default function QuickRoundStartPage() {
       holes,
       startedAt: new Date().toISOString(),
       showPutts,
+      handicap,
     };
     saveRound(round);
     navigate(`/play/${round.id}`);
@@ -151,6 +170,24 @@ export default function QuickRoundStartPage() {
               className="w-full rounded border border-slate-700 bg-slate-950/80 px-3 py-2 text-sm text-slate-100 focus:border-emerald-400 focus:outline-none focus:ring-1 focus:ring-emerald-400"
               placeholder="Ex: Gul"
             />
+          </div>
+          <div className="space-y-2">
+            <label className="block text-sm font-medium text-slate-200" htmlFor="handicap">
+              {t("quickRound.start.handicap")}
+            </label>
+            <input
+              id="handicap"
+              type="number"
+              inputMode="decimal"
+              step="0.1"
+              value={handicapInput}
+              onChange={(event) => setHandicapInput(event.target.value)}
+              className="w-full rounded border border-slate-700 bg-slate-950/80 px-3 py-2 text-sm text-slate-100 focus:border-emerald-400 focus:outline-none focus:ring-1 focus:ring-emerald-400"
+              placeholder="14.3"
+            />
+            <p className="text-xs text-slate-400">
+              {t("quickRound.start.handicapHelp")}
+            </p>
           </div>
           <div className="space-y-3">
             <span className="block text-sm font-medium text-slate-200">
