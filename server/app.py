@@ -28,7 +28,7 @@ from server.api.routers.share import router as share_router
 from server.api.routers.watch_pairing import router as watch_pairing_router
 from server.api.routers.watch_tips import router as watch_tips_router
 from server.api.routers.watch_hud import router as watch_hud_router
-from server.api.routers.trip import public_router as trip_public_router
+from server.api.routers.trip_public import router as trip_public_router
 from server.api.routers.trip import router as trip_router
 from server.metrics import MetricsMiddleware, metrics_app
 from server.retention.sweeper import sweep_retention_once, sweep_upload_retention
