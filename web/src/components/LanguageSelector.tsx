@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 
 const SUPPORTED_LANGS = [
   { code: "en", label: "English" },
+  { code: "sv", label: "Svenska" },
 ];
 
 export function LanguageSelector() {
