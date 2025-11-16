@@ -27,32 +27,33 @@ const createMockStorage = () => {
 };
 
 describe("calibration status storage", () => {
-  let originalWindow: (Window & typeof globalThis) | undefined;
+  let originalWindow: Window | undefined;
   let originalLocalStorage: Storage | undefined;
 
   beforeEach(() => {
-    originalWindow = (globalThis as typeof globalThis & { window?: Window }).window;
-    originalLocalStorage = (globalThis as typeof globalThis & { localStorage?: Storage }).localStorage;
+    const globalAny = globalThis as any;
+    originalWindow = globalAny.window as Window | undefined;
+    originalLocalStorage = globalAny.localStorage as Storage | undefined;
 
     const mockStorage = createMockStorage();
-    const baseWindow = (originalWindow ?? {}) as Record<string, unknown>;
-    (globalThis as Record<string, unknown>).window = {
-      ...baseWindow,
+    globalAny.window = {
+      ...(originalWindow ?? {}),
       localStorage: mockStorage,
     } as Window;
-    (globalThis as Record<string, unknown>).localStorage = mockStorage;
+    globalAny.localStorage = mockStorage;
   });
 
   afterEach(() => {
+    const globalAny = globalThis as any;
     if (typeof originalWindow === "undefined") {
-      delete (globalThis as Record<string, unknown>).window;
+      delete globalAny.window;
     } else {
-      (globalThis as Record<string, unknown>).window = originalWindow;
+      globalAny.window = originalWindow;
     }
     if (typeof originalLocalStorage === "undefined") {
-      delete (globalThis as Record<string, unknown>).localStorage;
+      delete globalAny.localStorage;
     } else {
-      (globalThis as Record<string, unknown>).localStorage = originalLocalStorage;
+      globalAny.localStorage = originalLocalStorage;
     }
   });
 
