@@ -50,6 +50,8 @@ import {
 } from "../features/range/ghost";
 import { useCalibration } from "../hooks/useCalibration";
 import type { CalibrationSnapshot } from "../hooks/useCalibration";
+import { useUnits } from "@/preferences/UnitsContext";
+import { convertMeters, formatDistance } from "@/utils/distance";
 
 const DEFAULT_ANALYZE_FRAMES = 8;
 const DEFAULT_REF_LEN_PX = 100;
@@ -139,6 +141,7 @@ type RangeMode = "practice" | "target-bingo" | "gapping" | "mission";
 export default function RangePracticePage() {
   const { t } = useTranslation();
   const { calibration } = useCalibration();
+  const { unit } = useUnits();
   const { status: calibrationStatus } = useCalibrationStatus();
   const [bag] = React.useState<BagState>(() => loadBag());
   const [currentClubId, setCurrentClubId] = React.useState<string>(
@@ -178,10 +181,11 @@ export default function RangePracticePage() {
   const makeGhostProfileFromCurrent = React.useCallback(
     (cfg: TargetBingoConfig, result: TargetBingoResult): GhostProfile => {
       const createdAt = Date.now();
+      const targetText = formatDistance(cfg.target_m, unit, { withUnit: true });
       return {
         id: createGhostId(),
         createdAt,
-        name: `My ghost – ${cfg.target_m} m (${new Date(createdAt).toLocaleDateString()})`,
+        name: `My ghost – ${targetText} (${new Date(createdAt).toLocaleDateString()})`,
         config: { ...cfg },
         result: {
           totalShots: result.totalShots,
@@ -191,7 +195,7 @@ export default function RangePracticePage() {
         },
       } satisfies GhostProfile;
     },
-    []
+    [unit]
   );
 
   const summary = React.useMemo(() => computeRangeSummary(shots), [shots]);
@@ -375,13 +379,18 @@ export default function RangePracticePage() {
     setCopyStatus("Bag uppdaterad");
   }
 
-  function formatErrorText(value: number) {
-    const rounded = Math.abs(value).toFixed(1);
-    if (Math.abs(value) < 0.05) {
-      return "0 m";
-    }
-    return value > 0 ? `+${rounded} m lång` : `−${rounded} m kort`;
-  }
+  const formatErrorText = React.useCallback(
+    (value: number) => {
+      const converted = convertMeters(value, unit);
+      const suffix = unit === "metric" ? " m" : " yd";
+      if (converted == null || Math.abs(converted) < 0.5) {
+        return `0${suffix}`;
+      }
+      const rounded = Math.abs(converted).toFixed(1);
+      return value > 0 ? `+${rounded}${suffix} lång` : `−${rounded}${suffix} kort`;
+    },
+    [unit]
+  );
 
   return (
     <div className="max-w-2xl mx-auto p-4 flex flex-col gap-4">
@@ -570,7 +579,7 @@ export default function RangePracticePage() {
       {mode === "target-bingo" && (
         <div className="rounded-lg border border-slate-800 bg-slate-900/60 p-3 text-xs grid gap-3 md:grid-cols-3">
           <label className="flex flex-col gap-1">
-            <span className="text-slate-300">Mål (m)</span>
+            <span className="text-slate-300">Mål ({unit === "metric" ? "m" : "yd"})</span>
             <input
               type="number"
               min={50}
@@ -583,7 +592,7 @@ export default function RangePracticePage() {
             />
           </label>
           <label className="flex flex-col gap-1">
-            <span className="text-slate-300">Tolerans (± m)</span>
+            <span className="text-slate-300">Tolerans (± {unit === "metric" ? "m" : "yd"})</span>
             <input
               type="number"
               min={3}
@@ -622,7 +631,7 @@ export default function RangePracticePage() {
           Avg ball speed: {summary.avgBallSpeedMps != null ? `${(summary.avgBallSpeedMps * 3.6).toFixed(1)} km/h` : "—"}
         </div>
         <div>
-          Avg carry: {summary.avgCarryM != null ? `${summary.avgCarryM.toFixed(1)} m` : "—"}
+          Avg carry: {formatDistance(summary.avgCarryM, unit, { withUnit: true })}
         </div>
         <div>
           Side dispersion (σ): {summary.dispersionSideDeg != null ? `${summary.dispersionSideDeg.toFixed(1)}°` : "—"}
@@ -661,19 +670,19 @@ export default function RangePracticePage() {
           <div className="grid gap-2 sm:grid-cols-2">
             <div>Antal slag: {gappingStats?.samples ?? 0}</div>
             <div>
-              Snitt carry: {gappingStats?.meanCarry_m != null ? `${gappingStats.meanCarry_m.toFixed(1)} m` : "—"}
+              Snitt carry: {formatDistance(gappingStats?.meanCarry_m ?? null, unit, { withUnit: true })}
             </div>
             <div>
-              Median (p50): {gappingStats?.p50_m != null ? `${gappingStats.p50_m.toFixed(1)} m` : "—"}
+              Median (p50): {formatDistance(gappingStats?.p50_m ?? null, unit, { withUnit: true })}
             </div>
             <div>
-              Spridning (std): {gappingStats?.std_m != null ? `${gappingStats.std_m.toFixed(1)} m` : "—"}
+              Spridning (std): {formatDistance(gappingStats?.std_m ?? null, unit, { withUnit: true })}
             </div>
           </div>
 
           {suggestedCarry != null && currentClub && (
             <div className="rounded border border-emerald-700 bg-emerald-500/10 px-3 py-2 text-xs text-emerald-200">
-              Föreslagen carry för {currentClub.label}: {suggestedCarry.toFixed(1)} m
+              Föreslagen carry för {currentClub.label}: {formatDistance(suggestedCarry, unit, { withUnit: true })}
             </div>
           )}
 
@@ -694,7 +703,11 @@ export default function RangePracticePage() {
           <div className="flex flex-wrap items-center gap-2">
             <h2 className="text-sm font-semibold text-slate-100">Target Bingo</h2>
             <span className="text-slate-400 text-[10px]">
-              Målet: {bingoCfg.target_m} m ± {bingoCfg.tolerance_m} m
+              Målet: {formatDistance(bingoCfg.target_m, unit, { withUnit: true })} ± {formatDistance(
+                bingoCfg.tolerance_m,
+                unit,
+                { withUnit: true }
+              )}
             </span>
             {ghost && (
               <span className="ml-auto rounded bg-slate-800 px-2 py-0.5 text-[10px] text-slate-300">
@@ -721,9 +734,7 @@ export default function RangePracticePage() {
               <div>
                 <div className="text-slate-400">Genomsnittligt fel</div>
                 <div className="text-lg font-semibold text-slate-100">
-                  {bingoResult.avgAbsError_m != null
-                    ? `${bingoResult.avgAbsError_m.toFixed(1)} m`
-                    : "—"}
+                  {formatDistance(bingoResult.avgAbsError_m, unit, { withUnit: true })}
                 </div>
               </div>
             </div>
@@ -809,7 +820,7 @@ export default function RangePracticePage() {
                     {shot.metrics.ballSpeedMph != null ? `${shot.metrics.ballSpeedMph.toFixed(1)} mph` : "—"}
                   </span>
                   <span className="text-slate-500">
-                    {shot.metrics.carryM != null ? `${shot.metrics.carryM.toFixed(0)} m` : "—"}
+                    {formatDistance(shot.metrics.carryM, unit, { withUnit: true })}
                   </span>
                 </li>
               ))}

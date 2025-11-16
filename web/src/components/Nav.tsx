@@ -7,6 +7,7 @@ import { useCalibration } from "../hooks/useCalibration";
 import { qaReplayEnabled } from "../config";
 import QueueIndicator from "./QueueIndicator";
 import { LanguageSelector } from "./LanguageSelector";
+import { UnitsSelector } from "./UnitsSelector";
 
 export default function Nav() {
   const [open, setOpen] = useState(false);
@@ -44,8 +45,9 @@ export default function Nav() {
           ))}
         </nav>
         <div className="flex items-center gap-3 text-slate-300">
-          <div className="hidden sm:block">
+          <div className="hidden sm:flex sm:items-center sm:gap-3">
             <LanguageSelector />
+            <UnitsSelector />
           </div>
           <QueueIndicator />
           <button
@@ -62,8 +64,9 @@ export default function Nav() {
           <div className="mb-3 sm:hidden">
             <QueueIndicator />
           </div>
-          <div className="mb-3 sm:hidden">
+          <div className="mb-3 flex flex-wrap items-center gap-3 sm:hidden">
             <LanguageSelector />
+            <UnitsSelector />
           </div>
           {calibration && (
             <div className="mb-3 rounded bg-emerald-500/10 px-3 py-2 text-xs font-semibold text-emerald-300">

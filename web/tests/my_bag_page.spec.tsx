@@ -5,6 +5,7 @@ import { MemoryRouter } from "react-router-dom";
 
 import MyBagPage from "@web/pages/bag/MyBagPage";
 import type { BagState } from "@web/bag/types";
+import { UnitsContext } from "@web/preferences/UnitsContext";
 
 type StorageModule = typeof import("@web/bag/storage");
 
@@ -51,9 +52,11 @@ describe("MyBagPage", () => {
 
   it("renders clubs and allows updating carry", () => {
     render(
-      <MemoryRouter>
-        <MyBagPage />
-      </MemoryRouter>
+      <UnitsContext.Provider value={{ unit: "metric", setUnit: () => {} }}>
+        <MemoryRouter>
+          <MyBagPage />
+        </MemoryRouter>
+      </UnitsContext.Provider>
     );
 
     expect(screen.getByText(/My Bag/i)).toBeTruthy();

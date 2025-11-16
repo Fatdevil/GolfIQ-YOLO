@@ -3,6 +3,7 @@ import { MemoryRouter } from "react-router-dom";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ReactElement } from "react";
+import { UnitsContext } from "../src/preferences/UnitsContext";
 
 import RangePracticePage from "../src/pages/RangePracticePage";
 import type { BagState } from "../src/bag/types";
@@ -36,7 +37,11 @@ const accessValue = {
 function renderWithProviders(ui: ReactElement) {
   return render(
     <MemoryRouter>
-      <UserAccessContext.Provider value={accessValue}>{ui}</UserAccessContext.Provider>
+      <UserAccessContext.Provider value={accessValue}>
+        <UnitsContext.Provider value={{ unit: "metric", setUnit: () => {} }}>
+          {ui}
+        </UnitsContext.Provider>
+      </UserAccessContext.Provider>
     </MemoryRouter>
   );
 }

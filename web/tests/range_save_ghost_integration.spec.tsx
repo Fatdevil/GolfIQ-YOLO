@@ -60,6 +60,7 @@ import { saveGhost } from "../src/features/range/ghost";
 import { scoreTargetBingo } from "../src/features/range/games";
 import { UserAccessContext } from "../src/access/UserAccessContext";
 import type { FeatureId, PlanName } from "../src/access/types";
+import { UnitsContext } from "../src/preferences/UnitsContext";
 
 const proAccessValue = {
   loading: false,
@@ -69,7 +70,11 @@ const proAccessValue = {
 
 function renderWithAccess(ui: ReactElement) {
   return render(
-    <UserAccessContext.Provider value={proAccessValue}>{ui}</UserAccessContext.Provider>,
+    <UserAccessContext.Provider value={proAccessValue}>
+      <UnitsContext.Provider value={{ unit: "metric", setUnit: () => {} }}>
+        {ui}
+      </UnitsContext.Provider>
+    </UserAccessContext.Provider>,
   );
 }
 

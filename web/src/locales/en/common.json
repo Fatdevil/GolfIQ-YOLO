@@ -69,7 +69,7 @@
   "profile.range.sessions.empty": "No range sessions saved yet.",
   "profile.range.sessions.noMission": "No mission selected",
   "profile.range.sessions.missionLabel": "Mission: {{mission}}",
-  "profile.range.sessions.shotStats": "{{shots}} shots · avg {{avg}} m · std {{std}} m",
+  "profile.range.sessions.shotStats": "{{shots}} shots · avg {{avg}} · std {{std}}",
   "profile.range.sessions.unknownDate": "Date unavailable",
   "profile.range.sessions.tag.too_few_shots": "Too few shots – keep going",
   "profile.range.sessions.tag.mission_completed": "Mission completed – great work",
@@ -83,7 +83,7 @@
   "profile.bag.completeBagCta": "Complete your bag",
   "profile.bag.smartSync.title": "Smart Bag suggestions",
   "profile.bag.smartSync.empty": "No suggestions yet. Play a few range sessions with specific clubs.",
-  "profile.bag.smartSync.line": "Current: {{current}} m · Suggested: {{suggested}} m ({{sessions}} sessions)",
+  "profile.bag.smartSync.line": "Current: {{current}} · Suggested: {{suggested}} ({{sessions}} sessions)",
   "profile.bag.smartSync.noCurrent": "not set",
   "profile.bag.smartSync.apply": "Update carry",
   "profile.bag.smartSync.updated": "Updated {{club}} carry from range data.",
@@ -186,7 +186,9 @@
 
   "bag.title": "My Bag",
   "bag.club": "Club",
-  "bag.carry": "Carry (m)",
+  "bag.carry": "Carry ({{unit}})",
+  "bag.noCarry": "No carry yet",
+  "units.label": "Units",
   "bag.notes": "Notes",
 
   "languageSelector.label": "Language",

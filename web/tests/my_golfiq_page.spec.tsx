@@ -1,3 +1,4 @@
+import React from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
@@ -8,6 +9,7 @@ import type { GhostProfile } from "@/features/range/ghost";
 import type { BagState } from "@/bag/types";
 
 import { createAccessWrapper } from "./test-helpers/access";
+import { UnitsContext } from "@/preferences/UnitsContext";
 
 const mockRounds: QuickRound[] = [
   {
@@ -84,11 +86,20 @@ describe("MyGolfIQPage", () => {
   });
 
   it("renders quick round, range and bag summaries", () => {
+    const AccessWrapper = createAccessWrapper();
+    const Wrapper = ({ children }: { children: React.ReactNode }) => (
+      <AccessWrapper>
+        <UnitsContext.Provider value={{ unit: "metric", setUnit: () => {} }}>
+          {children}
+        </UnitsContext.Provider>
+      </AccessWrapper>
+    );
+
     render(
       <MemoryRouter>
         <MyGolfIQPage />
       </MemoryRouter>,
-      { wrapper: createAccessWrapper() },
+      { wrapper: Wrapper },
     );
 
     expect(
