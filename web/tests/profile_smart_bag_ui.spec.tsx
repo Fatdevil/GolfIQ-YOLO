@@ -1,3 +1,4 @@
+import React from "react";
 import { describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
@@ -7,6 +8,7 @@ import type { BagState } from "@/bag/types";
 import type { RangeSession } from "@/features/range/sessions";
 
 import { createAccessWrapper } from "./test-helpers/access";
+import { UnitsContext } from "@/preferences/UnitsContext";
 
 const initialBag: BagState = {
   updatedAt: 0,
@@ -67,11 +69,20 @@ vi.mock("@/features/range/sessions", async () => {
 
 describe("MyGolfIQPage smart bag sync", () => {
   it("shows smart bag suggestions and applies updates", () => {
+    const AccessWrapper = createAccessWrapper();
+    const Wrapper = ({ children }: { children: React.ReactNode }) => (
+      <AccessWrapper>
+        <UnitsContext.Provider value={{ unit: "metric", setUnit: () => {} }}>
+          {children}
+        </UnitsContext.Provider>
+      </AccessWrapper>
+    );
+
     render(
       <MemoryRouter>
         <MyGolfIQPage />
       </MemoryRouter>,
-      { wrapper: createAccessWrapper() }
+      { wrapper: Wrapper }
     );
 
     expect(screen.getByText(/Smart Bag suggestions/i)).toBeTruthy();

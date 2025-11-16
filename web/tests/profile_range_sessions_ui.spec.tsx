@@ -1,6 +1,8 @@
+import React from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
+import { UnitsContext } from "@/preferences/UnitsContext";
 
 import MyGolfIQPage from "@/pages/profile/MyGolfIQPage";
 import type { RangeSession } from "@/features/range/sessions";
@@ -74,11 +76,20 @@ describe("MyGolfIQPage range sessions", () => {
       .mockReturnValueOnce("March 10, 2024, 10:30 AM")
       .mockReturnValueOnce("March 5, 2024, 10:20 AM");
 
+    const AccessWrapper = createAccessWrapper();
+    const Wrapper = ({ children }: { children: React.ReactNode }) => (
+      <AccessWrapper>
+        <UnitsContext.Provider value={{ unit: "metric", setUnit: () => {} }}>
+          {children}
+        </UnitsContext.Provider>
+      </AccessWrapper>
+    );
+
     render(
       <MemoryRouter>
         <MyGolfIQPage />
       </MemoryRouter>,
-      { wrapper: createAccessWrapper() }
+      { wrapper: Wrapper }
     );
 
     localeSpy.mockRestore();
@@ -104,11 +115,20 @@ describe("MyGolfIQPage range sessions", () => {
   it("renders empty state when no sessions are stored", () => {
     mockLoadRangeSessions.mockReturnValue([]);
 
+    const AccessWrapper = createAccessWrapper();
+    const Wrapper = ({ children }: { children: React.ReactNode }) => (
+      <AccessWrapper>
+        <UnitsContext.Provider value={{ unit: "metric", setUnit: () => {} }}>
+          {children}
+        </UnitsContext.Provider>
+      </AccessWrapper>
+    );
+
     render(
       <MemoryRouter>
         <MyGolfIQPage />
       </MemoryRouter>,
-      { wrapper: createAccessWrapper() }
+      { wrapper: Wrapper }
     );
 
     expect(screen.getByText(/No range sessions saved yet\./i)).toBeTruthy();

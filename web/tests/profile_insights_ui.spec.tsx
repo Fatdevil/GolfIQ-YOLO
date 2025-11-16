@@ -1,3 +1,4 @@
+import React from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter } from "react-router-dom";
 import { render, screen } from "@testing-library/react";
@@ -6,6 +7,7 @@ import MyGolfIQPage from "@/pages/profile/MyGolfIQPage";
 import type { QuickRound } from "@/features/quickround/types";
 
 import { createAccessWrapper } from "./test-helpers/access";
+import { UnitsContext } from "@/preferences/UnitsContext";
 
 const mockRounds: QuickRound[] = [
   {
@@ -61,11 +63,20 @@ describe("MyGolfIQPage insights card", () => {
   });
 
   it("renders insights card with strength, focus and suggested mission", () => {
+    const AccessWrapper = createAccessWrapper();
+    const Wrapper = ({ children }: { children: React.ReactNode }) => (
+      <AccessWrapper>
+        <UnitsContext.Provider value={{ unit: "metric", setUnit: () => {} }}>
+          {children}
+        </UnitsContext.Provider>
+      </AccessWrapper>
+    );
+
     render(
       <MemoryRouter>
         <MyGolfIQPage />
       </MemoryRouter>,
-      { wrapper: createAccessWrapper() }
+      { wrapper: Wrapper }
     );
 
     expect(screen.getByText(/My GolfIQ insights/i)).toBeTruthy();

@@ -1,5 +1,8 @@
 import { useCallback, useMemo } from "react";
 import { useLocation } from "react-router-dom";
+import { useUnits } from "@/preferences/UnitsContext";
+import type { DistanceUnit } from "@/preferences/units";
+import { formatDistance } from "@/utils/distance";
 
 type RangeSummary = {
   mode?: string;
@@ -76,7 +79,7 @@ function summarizeClubs(perClub: RangeSummary["perClub"]): ClubSummary[] {
   return entries;
 }
 
-function formatCarryList(targets: RangeSummary["targets"]): string {
+function formatCarryList(targets: RangeSummary["targets"], unit: DistanceUnit): string {
   if (!targets || !targets.length) {
     return "—";
   }
@@ -86,7 +89,7 @@ function formatCarryList(targets: RangeSummary["targets"]): string {
         return target.label;
       }
       if (typeof target?.carry_m === "number") {
-        return `${Math.round(target.carry_m)} m`;
+        return formatDistance(target.carry_m, unit, { withUnit: true });
       }
       return null;
     })
@@ -179,11 +182,12 @@ function drawScoreCard(canvas: HTMLCanvasElement, summary: RangeSummary, clubs: 
 
 export default function RangeScorePage(): JSX.Element {
   const location = useLocation();
+  const { unit } = useUnits();
   const params = useMemo(() => new URLSearchParams(location.search), [location.search]);
   const summary = useMemo(() => decodeSummaryToken(params.get("s")), [params]);
 
   const clubs = useMemo(() => summarizeClubs(summary?.perClub), [summary]);
-  const carries = useMemo(() => formatCarryList(summary?.targets), [summary]);
+  const carries = useMemo(() => formatCarryList(summary?.targets, unit), [summary, unit]);
   const duration = useMemo(
     () => formatDuration(summary?.startedAt ?? null, summary?.endedAt ?? null),
     [summary],

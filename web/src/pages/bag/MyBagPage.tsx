@@ -2,6 +2,8 @@ import React from "react";
 import { useTranslation } from "react-i18next";
 import { loadBag, updateClubCarry, upsertClub } from "@web/bag/storage";
 import type { BagState, BagClub } from "@web/bag/types";
+import { useUnits } from "@/preferences/UnitsContext";
+import { convertMeters, formatDistance } from "@/utils/distance";
 
 function formatTimestamp(timestamp: number): string {
   try {
@@ -16,6 +18,7 @@ function formatTimestamp(timestamp: number): string {
 
 export default function MyBagPage(): JSX.Element {
   const { t } = useTranslation();
+  const { unit } = useUnits();
   const [bag, setBag] = React.useState<BagState>(() => loadBag());
   const [showAddForm, setShowAddForm] = React.useState(false);
   const [newClub, setNewClub] = React.useState<{ id: string; label: string }>({
@@ -23,14 +26,24 @@ export default function MyBagPage(): JSX.Element {
     label: "",
   });
 
-  const handleCarryChange = React.useCallback((club: BagClub, value: string) => {
-    const trimmed = value.trim();
-    const parsed = trimmed === "" ? null : Number(trimmed);
-    if (parsed !== null && !Number.isFinite(parsed)) {
-      return;
-    }
-    setBag((prev) => updateClubCarry(prev, club.id, parsed));
-  }, []);
+  const handleCarryChange = React.useCallback(
+    (club: BagClub, value: string) => {
+      const trimmed = value.trim();
+      if (trimmed === "") {
+        setBag((prev) => updateClubCarry(prev, club.id, null));
+        return;
+      }
+
+      const parsed = Number(trimmed);
+      if (!Number.isFinite(parsed)) {
+        return;
+      }
+
+      const meters = unit === "imperial" ? parsed / 1.0936133 : parsed;
+      setBag((prev) => updateClubCarry(prev, club.id, meters));
+    },
+    [unit]
+  );
 
   const handleLabelChange = React.useCallback((club: BagClub, value: string) => {
     setBag((prev) => upsertClub(prev, { id: club.id, label: value }));
@@ -72,7 +85,9 @@ export default function MyBagPage(): JSX.Element {
               <tr>
                 <th className="px-4 py-3 font-medium">{t("bag.club")}</th>
                 <th className="px-4 py-3 font-medium">Id</th>
-                <th className="px-4 py-3 font-medium">{t("bag.carry")}</th>
+                <th className="px-4 py-3 font-medium">
+                  {t("bag.carry", { unit: unit === "metric" ? "m" : "yd" })}
+                </th>
                 <th className="px-4 py-3 font-medium">{t("bag.notes")}</th>
               </tr>
             </thead>
@@ -96,11 +111,20 @@ export default function MyBagPage(): JSX.Element {
                     <input
                       type="number"
                       inputMode="decimal"
-                      value={club.carry_m ?? ""}
+                      value={
+                        club.carry_m == null
+                          ? ""
+                          : Math.round((convertMeters(club.carry_m, unit) ?? 0) * 10) / 10
+                      }
                       onChange={(event) => handleCarryChange(club, event.target.value)}
                       className="w-full rounded border border-slate-700 bg-slate-950 px-2 py-1 text-sm text-slate-100 focus:border-emerald-500 focus:outline-none"
                       placeholder="—"
                     />
+                    <p className="mt-1 text-xs text-slate-500">
+                      {club.carry_m != null
+                        ? formatDistance(club.carry_m, unit, { withUnit: true })
+                        : t("bag.noCarry")}
+                    </p>
                   </td>
                   <td className="px-4 py-3">
                     <input

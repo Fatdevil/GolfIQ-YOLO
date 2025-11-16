@@ -20,9 +20,12 @@ import {
 } from "@/features/range/sessions";
 import { computeCarrySuggestions, type CarrySuggestion } from "@/bag/smart_sync";
 import { computeInsights } from "@/profile/insights";
+import { useUnits } from "@/preferences/UnitsContext";
+import { formatDistance } from "@/utils/distance";
 
 export default function MyGolfIQPage() {
   const { t } = useTranslation();
+  const { unit } = useUnits();
   const [rounds] = useState(() => loadAllRoundsFull());
   const [ghosts] = useState(() => listGhosts());
   const [bagState, setBagState] = useState(() => loadBag());
@@ -269,7 +272,7 @@ export default function MyGolfIQPage() {
                     label={t("profile.range.stats.avgError")}
                     value={
                       typeof rangeStats.lastGhost.result.avgAbsError_m === "number"
-                        ? `${formatDecimal(rangeStats.lastGhost.result.avgAbsError_m)} m`
+                        ? formatDistance(rangeStats.lastGhost.result.avgAbsError_m, unit, { withUnit: true })
                         : t("profile.range.stats.noErrorData")
                     }
                   />
@@ -296,6 +299,8 @@ export default function MyGolfIQPage() {
               const dateLabel = endedAt
                 ? new Date(endedAt).toLocaleString()
                 : t("profile.range.sessions.unknownDate");
+              const avgCarryText = formatDistance(session.avgCarry_m, unit, { withUnit: true });
+              const stdCarryText = formatDistance(session.carryStd_m, unit, { withUnit: true });
               return (
                 <li
                   key={session.id}
@@ -311,14 +316,8 @@ export default function MyGolfIQPage() {
                     <div className="text-xs text-slate-400">
                       {t("profile.range.sessions.shotStats", {
                         shots: session.shotCount,
-                        avg:
-                          typeof session.avgCarry_m === "number"
-                            ? Math.round(session.avgCarry_m)
-                            : "–",
-                        std:
-                          typeof session.carryStd_m === "number"
-                            ? Math.round(session.carryStd_m)
-                            : "–",
+                        avg: avgCarryText,
+                        std: stdCarryText,
                       })}
                     </div>
                   </div>
@@ -367,20 +366,23 @@ export default function MyGolfIQPage() {
             </p>
           ) : (
             <ul className="space-y-2 text-sm">
-              {suggestions.slice(0, 5).map((suggestion) => (
-                <li
-                  key={suggestion.clubId}
-                  className="flex items-center justify-between gap-2 rounded-lg bg-slate-50 px-3 py-2"
-                >
-                  <div>
-                    <div className="font-medium">{suggestion.clubLabel}</div>
-                    <div className="text-xs text-slate-500">
-                      {t("profile.bag.smartSync.line", {
-                        current:
-                          suggestion.currentCarry_m != null
-                            ? suggestion.currentCarry_m
-                            : t("profile.bag.smartSync.noCurrent"),
-                        suggested: suggestion.suggestedCarry_m,
+              {suggestions.slice(0, 5).map((suggestion) => {
+                const currentCarryText =
+                  suggestion.currentCarry_m != null
+                    ? formatDistance(suggestion.currentCarry_m, unit, { withUnit: true })
+                    : t("profile.bag.smartSync.noCurrent");
+                const suggestedCarryText = formatDistance(suggestion.suggestedCarry_m, unit, { withUnit: true });
+                return (
+                  <li
+                    key={suggestion.clubId}
+                    className="flex items-center justify-between gap-2 rounded-lg bg-slate-50 px-3 py-2"
+                  >
+                    <div>
+                      <div className="font-medium">{suggestion.clubLabel}</div>
+                      <div className="text-xs text-slate-500">
+                        {t("profile.bag.smartSync.line", {
+                        current: currentCarryText,
+                        suggested: suggestedCarryText,
                         sessions: suggestion.sampleCount,
                       })}
                     </div>
@@ -393,7 +395,8 @@ export default function MyGolfIQPage() {
                     {t("profile.bag.smartSync.apply")}
                   </button>
                 </li>
-              ))}
+              );
+            })}
             </ul>
           )}
         </section>

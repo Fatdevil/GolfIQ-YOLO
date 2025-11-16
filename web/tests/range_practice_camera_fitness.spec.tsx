@@ -1,3 +1,4 @@
+import React from "react";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -8,6 +9,7 @@ vi.mock("@/features/range/api", () => ({
 
 import { postRangeAnalyze } from "@/features/range/api";
 import RangePracticePage from "../src/pages/RangePracticePage";
+import { UnitsContext } from "@/preferences/UnitsContext";
 
 const mockedPostRangeAnalyze = vi.mocked(postRangeAnalyze);
 
@@ -22,7 +24,7 @@ describe("RangePracticePage camera fitness", () => {
       quality: { score: 0.42, level: "warning", reasons: ["fps_low", "light_low"] },
     });
 
-    render(<RangePracticePage />);
+    renderWithUnits(<RangePracticePage />);
 
     const user = userEvent.setup();
     await user.click(screen.getByRole("button", { name: /Hit & analyze/i }));
@@ -40,3 +42,11 @@ describe("RangePracticePage camera fitness", () => {
     ).toBeTruthy();
   });
 });
+
+function renderWithUnits(ui: React.ReactElement) {
+  return render(
+    <UnitsContext.Provider value={{ unit: "metric", setUnit: () => {} }}>
+      {ui}
+    </UnitsContext.Provider>
+  );
+}

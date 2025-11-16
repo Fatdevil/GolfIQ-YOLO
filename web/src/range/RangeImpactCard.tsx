@@ -1,4 +1,6 @@
 import React from "react";
+import { useUnits } from "@/preferences/UnitsContext";
+import { formatDistance } from "@/utils/distance";
 import { RangeShotMetrics } from "./types";
 
 type Props = {
@@ -6,6 +8,8 @@ type Props = {
 };
 
 export function RangeImpactCard({ metrics }: Props) {
+  const { unit } = useUnits();
+
   if (!metrics) {
     return (
       <div className="border border-slate-800 rounded-lg bg-slate-900/50 p-4 text-sm text-slate-400">
@@ -37,7 +41,7 @@ export function RangeImpactCard({ metrics }: Props) {
         <div>
           <div className="text-slate-500">Carry</div>
           <div className="font-medium text-slate-100">
-            {carryM != null ? `${carryM.toFixed(1)} m` : "—"}
+            {formatDistance(carryM, unit, { withUnit: true })}
           </div>
         </div>
         <div>

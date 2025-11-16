@@ -7,6 +7,7 @@ import App from "./App";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { TempAltDemo } from "./dev/TempAltDemo";
 import { UserAccessProvider } from "./access/UserAccessContext";
+import { UnitsProvider } from "@/preferences/UnitsContext";
 import "./i18n";
 import "./styles.css";
 import "./sentry";
@@ -31,7 +32,9 @@ if (isTempAltDemo) {
       <BrowserRouter>
         <ErrorBoundary>
           <UserAccessProvider>
-            <App />
+            <UnitsProvider>
+              <App />
+            </UnitsProvider>
           </UserAccessProvider>
         </ErrorBoundary>
       </BrowserRouter>

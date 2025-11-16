@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import type { ReactElement } from "react";
+import { UnitsContext } from "../src/preferences/UnitsContext";
 import userEvent from "@testing-library/user-event";
 
 import RangePracticePage from "../src/pages/RangePracticePage";
@@ -34,7 +35,11 @@ const proAccessValue = {
 
 function renderWithAccess(ui: ReactElement) {
   return render(
-    <UserAccessContext.Provider value={proAccessValue}>{ui}</UserAccessContext.Provider>,
+    <UserAccessContext.Provider value={proAccessValue}>
+      <UnitsContext.Provider value={{ unit: "metric", setUnit: () => {} }}>
+        {ui}
+      </UnitsContext.Provider>
+    </UserAccessContext.Provider>,
   );
 }
 
@@ -79,7 +84,7 @@ describe("RangePracticePage gapping mode", () => {
     await user.click(screen.getByRole("button", { name: /Gapping/i }));
 
     await screen.findByText(/Antal slag: 3/);
-    expect(screen.getByText(/Föreslagen carry/).textContent).toContain("110.0 m");
+    expect(screen.getByText(/Föreslagen carry/).textContent).toContain("110 m");
 
     const saveButton = screen.getByRole("button", { name: /Spara i Min bag/i });
     await user.click(saveButton);
