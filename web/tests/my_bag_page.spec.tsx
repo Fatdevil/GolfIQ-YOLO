@@ -41,6 +41,10 @@ vi.mock("@web/bag/storage", () => {
 
 let storage: StorageModule;
 
+const loadBagMock = () => storage.loadBag as unknown as ReturnType<typeof vi.fn>;
+const updateClubCarryMock = () =>
+  storage.updateClubCarry as unknown as ReturnType<typeof vi.fn>;
+
 beforeAll(async () => {
   storage = await import("@web/bag/storage");
 });
@@ -48,6 +52,7 @@ beforeAll(async () => {
 describe("MyBagPage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    loadBagMock().mockReturnValue(mockBag);
   });
 
   it("renders clubs and allows updating carry", () => {
@@ -68,5 +73,32 @@ describe("MyBagPage", () => {
     fireEvent.change(carryInput, { target: { value: "150" } });
 
     expect(storage.updateClubCarry).toHaveBeenCalledWith(expect.any(Object), "7i", 150);
+  });
+
+  it("converts imperial inputs to meters while displaying yards", () => {
+    const imperialBag: BagState = {
+      updatedAt: Date.now(),
+      clubs: [{ id: "7i", label: "7-iron", carry_m: 150, notes: null }],
+    };
+    loadBagMock().mockReturnValue(imperialBag);
+
+    render(
+      <UnitsContext.Provider value={{ unit: "imperial", setUnit: () => {} }}>
+        <MemoryRouter>
+          <MyBagPage />
+        </MemoryRouter>
+      </UnitsContext.Provider>
+    );
+
+    const row = screen.getByDisplayValue("7-iron").closest("tr");
+    expect(row).not.toBeNull();
+    const carryInput = within(row as HTMLElement).getByPlaceholderText("—") as HTMLInputElement;
+
+    expect(Number(carryInput.value)).toBeCloseTo(164, 1);
+
+    fireEvent.change(carryInput, { target: { value: "180" } });
+
+    const savedMeters = updateClubCarryMock().mock.calls[0][2];
+    expect(savedMeters).toBeCloseTo(164.6, 1);
   });
 });
