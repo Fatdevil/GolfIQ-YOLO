@@ -27,18 +27,33 @@ const createMockStorage = () => {
 };
 
 describe("calibration status storage", () => {
+  let originalWindow: (Window & typeof globalThis) | undefined;
+  let originalLocalStorage: Storage | undefined;
+
   beforeEach(() => {
+    originalWindow = (globalThis as typeof globalThis & { window?: Window }).window;
+    originalLocalStorage = (globalThis as typeof globalThis & { localStorage?: Storage }).localStorage;
+
     const mockStorage = createMockStorage();
+    const baseWindow = (originalWindow ?? {}) as Record<string, unknown>;
     (globalThis as Record<string, unknown>).window = {
-      ...((globalThis as Record<string, unknown>).window as Record<string, unknown> | undefined),
+      ...baseWindow,
       localStorage: mockStorage,
     } as Window;
     (globalThis as Record<string, unknown>).localStorage = mockStorage;
   });
 
   afterEach(() => {
-    delete (globalThis as Record<string, unknown>).localStorage;
-    delete (globalThis as Record<string, unknown>).window;
+    if (typeof originalWindow === "undefined") {
+      delete (globalThis as Record<string, unknown>).window;
+    } else {
+      (globalThis as Record<string, unknown>).window = originalWindow;
+    }
+    if (typeof originalLocalStorage === "undefined") {
+      delete (globalThis as Record<string, unknown>).localStorage;
+    } else {
+      (globalThis as Record<string, unknown>).localStorage = originalLocalStorage;
+    }
   });
 
   it("returns uncalibrated when storage empty", () => {
