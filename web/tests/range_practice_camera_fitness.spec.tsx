@@ -32,7 +32,11 @@ describe("RangePracticePage camera fitness", () => {
     expect(
       await screen.findByText(/Camera needs attention/i),
     ).toBeTruthy();
-    expect(screen.getByText(/Increase frame rate/i)).toBeTruthy();
-    expect(screen.getByText(/Scene too dark/i)).toBeTruthy();
+    expect(
+      screen.getByText(/Increase frame rate or shutter speed/i),
+    ).toBeTruthy();
+    expect(
+      screen.getByText(/Scene is too dark – add light or move to a brighter spot./i),
+    ).toBeTruthy();
   });
 });

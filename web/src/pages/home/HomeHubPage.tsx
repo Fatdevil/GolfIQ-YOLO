@@ -5,6 +5,7 @@ import { Link } from "react-router-dom";
 import { useUserAccess } from "@/access/UserAccessContext";
 import { ProBadge } from "@/access/ProBadge";
 import { BetaBadge } from "@/access/BetaBadge";
+import { useCalibrationStatus } from "@/features/range/useCalibrationStatus";
 
 type ModeCardProps = {
   title: string;
@@ -36,6 +37,7 @@ const ModeCard: React.FC<ModeCardProps> = ({ title, description, to, badge }) =>
 export const HomeHubPage: React.FC = () => {
   const { t } = useTranslation();
   const { plan, loading: accessLoading } = useUserAccess();
+  const { status: calibStatus } = useCalibrationStatus();
 
   return (
     <div className="max-w-5xl mx-auto px-4 py-6 space-y-6">
@@ -64,6 +66,11 @@ export const HomeHubPage: React.FC = () => {
           description={t("home.card.range.description")}
           badge={
             <div className="flex flex-col items-end gap-1">
+              {calibStatus.calibrated ? (
+                <span className="inline-flex items-center rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700">
+                  {t("home.card.range.calibrated")}
+                </span>
+              ) : null}
               {plan === "pro" ? <ProBadge /> : null}
               <BetaBadge />
             </div>

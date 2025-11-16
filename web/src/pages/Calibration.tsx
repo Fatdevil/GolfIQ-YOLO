@@ -12,6 +12,7 @@ import {
   postCalibrationMeasure,
 } from "../api";
 import { CalibrationSnapshot, useCalibration } from "../hooks/useCalibration";
+import { useCalibrationStatus } from "@/features/range/useCalibrationStatus";
 
 type Point = { x: number; y: number };
 type Quality = CalibrationMeasureResponse["quality"];
@@ -104,6 +105,7 @@ export default function CalibrationPage() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const { calibration, saveCalibration } = useCalibration();
+  const { markCalibrated } = useCalibrationStatus();
 
   useEffect(() => {
     return () => {
@@ -265,6 +267,7 @@ export default function CalibrationPage() {
       points,
     };
     saveCalibration(snapshot);
+    markCalibrated();
   };
 
   const qualityInfo = result ? qualityCopy[result.quality] : null;

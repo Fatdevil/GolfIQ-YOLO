@@ -24,6 +24,9 @@ import {
   postRangeAnalyze,
 } from "@/features/range/api";
 import { CameraFitnessBadge } from "@/features/range/CameraFitnessBadge";
+import { CalibrationGuide } from "@/features/range/CalibrationGuide";
+import { useCalibrationStatus } from "@/features/range/useCalibrationStatus";
+import { loadCalibrationStatus } from "@/features/range/calibrationStatus";
 import { RangeImpactCard } from "../range/RangeImpactCard";
 import { computeRangeSummary } from "../range/stats";
 import { RangeShot, RangeShotMetrics } from "../range/types";
@@ -136,6 +139,7 @@ type RangeMode = "practice" | "target-bingo" | "gapping" | "mission";
 export default function RangePracticePage() {
   const { t } = useTranslation();
   const { calibration } = useCalibration();
+  const { status: calibrationStatus } = useCalibrationStatus();
   const [bag] = React.useState<BagState>(() => loadBag());
   const [currentClubId, setCurrentClubId] = React.useState<string>(
     () => bag.clubs[0]?.id ?? "7i"
@@ -158,6 +162,9 @@ export default function RangePracticePage() {
   const [ghost, setGhost] = React.useState<GhostProfile | null>(() => getLatestGhost());
   const [ghostStatus, setGhostStatus] = React.useState<string | null>(null);
   const [saveStatus, setSaveStatus] = React.useState<string | null>(null);
+  const [showCalibrationGuide, setShowCalibrationGuide] = React.useState<boolean>(
+    () => !loadCalibrationStatus().calibrated,
+  );
   const sessionStartRef = React.useRef<string>(new Date().toISOString());
 
   const mission = missionId ? getMissionById(missionId) ?? null : null;
@@ -380,18 +387,35 @@ export default function RangePracticePage() {
     <div className="max-w-2xl mx-auto p-4 flex flex-col gap-4">
       <h1 className="text-xl font-semibold">{t("range.practice.title")}</h1>
 
-      {cameraFitness ? (
-        <div>
-          <CameraFitnessBadge quality={cameraFitness} />
-          {cameraFitness.reasons.length ? (
-            <p className="mt-1 text-xs text-slate-500">
-              {cameraFitness.reasons
-                .map((reason) => t(`range.camera.reason.${reason}`, reason))
-                .join(" · ")}
-            </p>
-          ) : null}
+      <section className="mb-3 flex flex-wrap items-center gap-3 text-xs">
+        <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 py-1">
+          <span className="font-medium text-slate-700">
+            {t("range.calibration.label")}
+          </span>
+          {calibrationStatus.calibrated ? (
+            <span className="text-emerald-700">
+              {t("range.calibration.status.calibrated")}
+            </span>
+          ) : (
+            <span className="text-amber-700">
+              {t("range.calibration.status.notCalibrated")}
+            </span>
+          )}
+          <button
+            type="button"
+            className="ml-1 underline text-sky-700 hover:text-sky-800"
+            onClick={() => setShowCalibrationGuide(true)}
+          >
+            {t("range.calibration.action.openGuide")}
+          </button>
         </div>
-      ) : null}
+
+        {cameraFitness && <CameraFitnessBadge quality={cameraFitness} />}
+      </section>
+
+      {showCalibrationGuide && (
+        <CalibrationGuide onClose={() => setShowCalibrationGuide(false)} />
+      )}
 
       <div className="flex gap-2 items-center">
         <label className="text-sm">
