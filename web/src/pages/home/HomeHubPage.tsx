@@ -4,6 +4,7 @@ import { Link } from "react-router-dom";
 
 import { useUserAccess } from "@/access/UserAccessContext";
 import { ProBadge } from "@/access/ProBadge";
+import { BetaBadge } from "@/access/BetaBadge";
 
 type ModeCardProps = {
   title: string;
@@ -61,12 +62,18 @@ export const HomeHubPage: React.FC = () => {
           to="/range/practice"
           title={t("home.card.range.title")}
           description={t("home.card.range.description")}
-          badge={plan === "pro" ? <ProBadge /> : undefined}
+          badge={
+            <div className="flex flex-col items-end gap-1">
+              {plan === "pro" ? <ProBadge /> : null}
+              <BetaBadge />
+            </div>
+          }
         />
         <ModeCard
           to="/trip/start"
           title={t("home.card.trip.title")}
           description={t("home.card.trip.description")}
+          badge={<BetaBadge />}
         />
         <ModeCard
           to="/profile"

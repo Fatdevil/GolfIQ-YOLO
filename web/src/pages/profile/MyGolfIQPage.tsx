@@ -7,6 +7,7 @@ import type { QuickRound } from "@/features/quickround/types";
 import { listGhosts } from "@/features/range/ghost";
 import { loadBag, updateClubCarry } from "@/bag/storage";
 import { FeatureGate } from "@/access/FeatureGate";
+import { BetaBadge } from "@/access/BetaBadge";
 import {
   computeBagSummary,
   computeQuickRoundStats,
@@ -63,53 +64,58 @@ export default function MyGolfIQPage() {
         <p className="mt-1 text-sm text-slate-400">{t("profile.subtitle")}</p>
       </div>
 
-      <section className="space-y-3 rounded-xl border border-slate-200 bg-white p-4">
-        <h2 className="text-sm font-semibold text-slate-800">
-          {t("profile.insights.title")}
-        </h2>
-        {insights.strengths.length === 0 && insights.focuses.length === 0 ? (
-          <p className="text-sm text-slate-500">{t("profile.insights.empty")}</p>
-        ) : (
-          <div className="grid grid-cols-1 gap-4 text-sm sm:grid-cols-2">
-            <div>
-              <h3 className="mb-1 text-xs font-semibold uppercase text-emerald-700">
-                {t("profile.insights.strengths")}
-              </h3>
-              {insights.strengths.length === 0 ? (
-                <p className="text-xs text-slate-500">{t("profile.insights.noneYet")}</p>
-              ) : (
-                <ul className="list-disc space-y-1 pl-4">
-                  {insights.strengths.map((insight) => (
-                    <li key={insight.id}>{t(`profile.insights.${insight.id}`)}</li>
-                  ))}
-                </ul>
-              )}
-            </div>
-            <div>
-              <h3 className="mb-1 text-xs font-semibold uppercase text-rose-700">
-                {t("profile.insights.focuses")}
-              </h3>
-              {insights.focuses.length === 0 ? (
-                <p className="text-xs text-slate-500">{t("profile.insights.noneYet")}</p>
-              ) : (
-                <ul className="list-disc space-y-1 pl-4">
-                  {insights.focuses.map((insight) => (
-                    <li key={insight.id}>{t(`profile.insights.${insight.id}`)}</li>
-                  ))}
-                </ul>
-              )}
-            </div>
+      <FeatureGate feature="profile.insights">
+        <section className="space-y-3 rounded-xl border border-slate-200 bg-white p-4">
+          <div className="flex items-center justify-between gap-3">
+            <h2 className="text-sm font-semibold text-slate-800">
+              {t("profile.insights.title")}
+            </h2>
+            <BetaBadge />
           </div>
-        )}
+          {insights.strengths.length === 0 && insights.focuses.length === 0 ? (
+            <p className="text-sm text-slate-500">{t("profile.insights.empty")}</p>
+          ) : (
+            <div className="grid grid-cols-1 gap-4 text-sm sm:grid-cols-2">
+              <div>
+                <h3 className="mb-1 text-xs font-semibold uppercase text-emerald-700">
+                  {t("profile.insights.strengths")}
+                </h3>
+                {insights.strengths.length === 0 ? (
+                  <p className="text-xs text-slate-500">{t("profile.insights.noneYet")}</p>
+                ) : (
+                  <ul className="list-disc space-y-1 pl-4">
+                    {insights.strengths.map((insight) => (
+                      <li key={insight.id}>{t(`profile.insights.${insight.id}`)}</li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+              <div>
+                <h3 className="mb-1 text-xs font-semibold uppercase text-rose-700">
+                  {t("profile.insights.focuses")}
+                </h3>
+                {insights.focuses.length === 0 ? (
+                  <p className="text-xs text-slate-500">{t("profile.insights.noneYet")}</p>
+                ) : (
+                  <ul className="list-disc space-y-1 pl-4">
+                    {insights.focuses.map((insight) => (
+                      <li key={insight.id}>{t(`profile.insights.${insight.id}`)}</li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            </div>
+          )}
 
-        {insights.suggestedMission && (
-          <div className="mt-2 rounded-lg bg-sky-50 px-3 py-2 text-xs text-sky-800">
-            {t("profile.insights.suggestedMission", {
-              mission: insights.suggestedMission,
-            })}
-          </div>
-        )}
-      </section>
+          {insights.suggestedMission && (
+            <div className="mt-2 rounded-lg bg-sky-50 px-3 py-2 text-xs text-sky-800">
+              {t("profile.insights.suggestedMission", {
+                mission: insights.suggestedMission,
+              })}
+            </div>
+          )}
+        </section>
+      </FeatureGate>
 
       <section className="rounded-lg border border-slate-800 bg-slate-900/50 p-5 shadow-sm">
         <div className="flex items-center justify-between gap-4">
@@ -155,33 +161,31 @@ export default function MyGolfIQPage() {
               )}
             </dl>
 
-            <FeatureGate feature="profile.advancedStats">
-              <div className="mt-4 rounded-md border border-emerald-500/30 bg-emerald-500/5 p-4">
-                <h3 className="mb-3 text-sm font-semibold text-emerald-200">
-                  {t("profile.quickRounds.advancedInsights")}
-                </h3>
-                <dl className="grid gap-4 text-sm sm:grid-cols-2">
-                  {typeof quickRoundStats.avgToPar === "number" ? (
-                    <StatBlock
-                      label={t("profile.quickRounds.avgToPar")}
-                      value={formatToPar(quickRoundStats.avgToPar)}
-                    />
-                  ) : null}
-                  {typeof quickRoundStats.avgNetToPar === "number" ? (
-                    <StatBlock
-                      label={t("profile.quickRounds.avgNetToPar")}
-                      value={formatToPar(quickRoundStats.avgNetToPar)}
-                    />
-                  ) : null}
-                  {typeof quickRoundStats.bestToPar === "number" ? (
-                    <StatBlock
-                      label={t("profile.quickRounds.bestToPar")}
-                      value={formatToPar(quickRoundStats.bestToPar)}
-                    />
-                  ) : null}
-                </dl>
-              </div>
-            </FeatureGate>
+            <div className="mt-4 rounded-md border border-emerald-500/30 bg-emerald-500/5 p-4">
+              <h3 className="mb-3 text-sm font-semibold text-emerald-200">
+                {t("profile.quickRounds.advancedInsights")}
+              </h3>
+              <dl className="grid gap-4 text-sm sm:grid-cols-2">
+                {typeof quickRoundStats.avgToPar === "number" ? (
+                  <StatBlock
+                    label={t("profile.quickRounds.avgToPar")}
+                    value={formatToPar(quickRoundStats.avgToPar)}
+                  />
+                ) : null}
+                {typeof quickRoundStats.avgNetToPar === "number" ? (
+                  <StatBlock
+                    label={t("profile.quickRounds.avgNetToPar")}
+                    value={formatToPar(quickRoundStats.avgNetToPar)}
+                  />
+                ) : null}
+                {typeof quickRoundStats.bestToPar === "number" ? (
+                  <StatBlock
+                    label={t("profile.quickRounds.bestToPar")}
+                    value={formatToPar(quickRoundStats.bestToPar)}
+                  />
+                ) : null}
+              </dl>
+            </div>
 
             {recentRounds.length > 0 && (
               <div>
@@ -241,38 +245,36 @@ export default function MyGolfIQPage() {
             </dl>
 
             {rangeStats.lastGhost && (
-              <FeatureGate feature="profile.advancedStats">
-                <div className="rounded-md border border-slate-800 bg-slate-900/60 p-4">
-                  <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
-                    <p className="text-sm font-semibold text-slate-100">
-                      {t("profile.range.lastGhostLabel", { name: rangeStats.lastGhost.name })}
-                    </p>
-                    <p className="text-xs text-slate-400">{formatDate(rangeStats.lastGhost.createdAt)}</p>
-                  </div>
-                  <dl className="mt-4 grid gap-4 text-sm sm:grid-cols-2">
-                    <StatBlock
-                      label={t("profile.range.stats.totalShots")}
-                      value={rangeStats.lastGhost.result.totalShots.toString()}
-                    />
-                    <StatBlock
-                      label={t("profile.range.stats.hits")}
-                      value={rangeStats.lastGhost.result.hits.toString()}
-                    />
-                    <StatBlock
-                      label={t("profile.range.stats.hitRate")}
-                      value={`${formatDecimal(rangeStats.lastGhost.result.hitRate_pct)}%`}
-                    />
-                    <StatBlock
-                      label={t("profile.range.stats.avgError")}
-                      value={
-                        typeof rangeStats.lastGhost.result.avgAbsError_m === "number"
-                          ? `${formatDecimal(rangeStats.lastGhost.result.avgAbsError_m)} m`
-                          : t("profile.range.stats.noErrorData")
-                      }
-                    />
-                  </dl>
+              <div className="rounded-md border border-slate-800 bg-slate-900/60 p-4">
+                <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+                  <p className="text-sm font-semibold text-slate-100">
+                    {t("profile.range.lastGhostLabel", { name: rangeStats.lastGhost.name })}
+                  </p>
+                  <p className="text-xs text-slate-400">{formatDate(rangeStats.lastGhost.createdAt)}</p>
                 </div>
-              </FeatureGate>
+                <dl className="mt-4 grid gap-4 text-sm sm:grid-cols-2">
+                  <StatBlock
+                    label={t("profile.range.stats.totalShots")}
+                    value={rangeStats.lastGhost.result.totalShots.toString()}
+                  />
+                  <StatBlock
+                    label={t("profile.range.stats.hits")}
+                    value={rangeStats.lastGhost.result.hits.toString()}
+                  />
+                  <StatBlock
+                    label={t("profile.range.stats.hitRate")}
+                    value={`${formatDecimal(rangeStats.lastGhost.result.hitRate_pct)}%`}
+                  />
+                  <StatBlock
+                    label={t("profile.range.stats.avgError")}
+                    value={
+                      typeof rangeStats.lastGhost.result.avgAbsError_m === "number"
+                        ? `${formatDecimal(rangeStats.lastGhost.result.avgAbsError_m)} m`
+                        : t("profile.range.stats.noErrorData")
+                    }
+                  />
+                </dl>
+              </div>
             )}
           </div>
         )}
@@ -351,46 +353,51 @@ export default function MyGolfIQPage() {
         </div>
       </section>
 
-      <section className="rounded-xl border border-slate-200 bg-white p-4 space-y-3">
-        <h2 className="text-sm font-semibold text-slate-800">
-          {t("profile.bag.smartSync.title")}
-        </h2>
-        {suggestions.length === 0 ? (
-          <p className="text-sm text-slate-500">
-            {t("profile.bag.smartSync.empty")}
-          </p>
-        ) : (
-          <ul className="space-y-2 text-sm">
-            {suggestions.slice(0, 5).map((suggestion) => (
-              <li
-                key={suggestion.clubId}
-                className="flex items-center justify-between gap-2 rounded-lg bg-slate-50 px-3 py-2"
-              >
-                <div>
-                  <div className="font-medium">{suggestion.clubLabel}</div>
-                  <div className="text-xs text-slate-500">
-                    {t("profile.bag.smartSync.line", {
-                      current:
-                        suggestion.currentCarry_m != null
-                          ? suggestion.currentCarry_m
-                          : t("profile.bag.smartSync.noCurrent"),
-                      suggested: suggestion.suggestedCarry_m,
-                      sessions: suggestion.sampleCount,
-                    })}
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  className="inline-flex items-center rounded-md border border-emerald-500 px-3 py-1 text-xs font-semibold text-emerald-700 hover:bg-emerald-50"
-                  onClick={() => handleApplySuggestion(suggestion)}
+      <FeatureGate feature="profile.smartBagSuggestions">
+        <section className="rounded-xl border border-slate-200 bg-white p-4 space-y-3">
+          <div className="flex items-center justify-between gap-3">
+            <h2 className="text-sm font-semibold text-slate-800">
+              {t("profile.bag.smartSync.title")}
+            </h2>
+            <BetaBadge />
+          </div>
+          {suggestions.length === 0 ? (
+            <p className="text-sm text-slate-500">
+              {t("profile.bag.smartSync.empty")}
+            </p>
+          ) : (
+            <ul className="space-y-2 text-sm">
+              {suggestions.slice(0, 5).map((suggestion) => (
+                <li
+                  key={suggestion.clubId}
+                  className="flex items-center justify-between gap-2 rounded-lg bg-slate-50 px-3 py-2"
                 >
-                  {t("profile.bag.smartSync.apply")}
-                </button>
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
+                  <div>
+                    <div className="font-medium">{suggestion.clubLabel}</div>
+                    <div className="text-xs text-slate-500">
+                      {t("profile.bag.smartSync.line", {
+                        current:
+                          suggestion.currentCarry_m != null
+                            ? suggestion.currentCarry_m
+                            : t("profile.bag.smartSync.noCurrent"),
+                        suggested: suggestion.suggestedCarry_m,
+                        sessions: suggestion.sampleCount,
+                      })}
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    className="inline-flex items-center rounded-md border border-emerald-500 px-3 py-1 text-xs font-semibold text-emerald-700 hover:bg-emerald-50"
+                    onClick={() => handleApplySuggestion(suggestion)}
+                  >
+                    {t("profile.bag.smartSync.apply")}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+      </FeatureGate>
     </div>
   );
 }

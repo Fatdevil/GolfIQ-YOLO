@@ -156,6 +156,7 @@
   "range.practice.mode.mission": "Missions",
   "range.session.endButton": "End session & save",
   "range.session.saved": "Range session saved.",
+  "range.mission.header": "Range missions",
   "range.mission.select": "Mission",
   "range.mission.none": "Select a mission",
   "range.mission.goal": "Goal: {{reps}} good reps this session.",

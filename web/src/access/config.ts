@@ -3,13 +3,21 @@ import type { FeatureMatrix } from "./types";
 export const FEATURE_MATRIX: FeatureMatrix = {
   free: [
     "range.targetBingo",
-    "range.gapping",
+    "range.missions",
+    "range.sessionHistory",
+    "trip.share",
   ],
   pro: [
     "range.targetBingo",
+    "range.missions",
+    "range.sessionHistory",
     "range.ghostMatch",
-    "range.gapping",
-    "caddie.advancedHints",
-    "profile.advancedStats",
+    "range.smartBag",
+    "range.cameraFitness",
+    "trip.share",
+    "trip.liveSSE",
+    "profile.insights",
+    "profile.smartBagSuggestions",
+    "watch.hud",
   ],
 };
