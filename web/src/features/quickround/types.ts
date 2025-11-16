@@ -7,6 +7,7 @@ export type QuickHole = {
 
 export type QuickRound = {
   id: string;
+  runId?: string;
   courseName: string;
   courseId?: string;
   teesName?: string;
@@ -15,4 +16,5 @@ export type QuickRound = {
   completedAt?: string;
   showPutts?: boolean;
   handicap?: number;
+  memberId?: string | null;
 };

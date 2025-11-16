@@ -14,6 +14,17 @@ import {
 import { QuickRound } from "../../features/quickround/types";
 import { useCourseBundle, useCourseIds } from "../../courses/hooks";
 
+function readStoredMemberId(): string | null {
+  if (typeof window === "undefined") {
+    return null;
+  }
+  try {
+    return window.localStorage.getItem("event.memberId");
+  } catch {
+    return null;
+  }
+}
+
 export default function QuickRoundStartPage() {
   const navigate = useNavigate();
   const { t } = useTranslation();
@@ -81,8 +92,10 @@ export default function QuickRoundStartPage() {
     } else {
       clearDefaultHandicap();
     }
+    const roundId = createRoundId();
     const round: QuickRound = {
-      id: createRoundId(),
+      id: roundId,
+      runId: roundId,
       courseName: trimmedCourseName,
       courseId,
       teesName: trimmedTeesName || undefined,
@@ -90,6 +103,7 @@ export default function QuickRoundStartPage() {
       startedAt: new Date().toISOString(),
       showPutts,
       handicap,
+      memberId: readStoredMemberId(),
     };
     saveRound(round);
     navigate(`/play/${round.id}`);
