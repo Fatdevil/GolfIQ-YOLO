@@ -18,6 +18,7 @@ import {
   type RangeSession,
 } from "@/features/range/sessions";
 import { computeCarrySuggestions, type CarrySuggestion } from "@/bag/smart_sync";
+import { computeInsights } from "@/profile/insights";
 
 export default function MyGolfIQPage() {
   const { t } = useTranslation();
@@ -32,6 +33,10 @@ export default function MyGolfIQPage() {
   const suggestions = useMemo<CarrySuggestion[]>(
     () => computeCarrySuggestions(bagState, rangeSessions),
     [bagState, rangeSessions]
+  );
+  const insights = useMemo(
+    () => computeInsights({ rounds, rangeSessions }),
+    [rounds, rangeSessions]
   );
   const recentRangeSessions = useMemo(
     () => rangeSessions.slice(0, 5),
@@ -57,6 +62,54 @@ export default function MyGolfIQPage() {
         <h1 className="text-2xl font-semibold text-slate-100">{t("profile.title")}</h1>
         <p className="mt-1 text-sm text-slate-400">{t("profile.subtitle")}</p>
       </div>
+
+      <section className="space-y-3 rounded-xl border border-slate-200 bg-white p-4">
+        <h2 className="text-sm font-semibold text-slate-800">
+          {t("profile.insights.title")}
+        </h2>
+        {insights.strengths.length === 0 && insights.focuses.length === 0 ? (
+          <p className="text-sm text-slate-500">{t("profile.insights.empty")}</p>
+        ) : (
+          <div className="grid grid-cols-1 gap-4 text-sm sm:grid-cols-2">
+            <div>
+              <h3 className="mb-1 text-xs font-semibold uppercase text-emerald-700">
+                {t("profile.insights.strengths")}
+              </h3>
+              {insights.strengths.length === 0 ? (
+                <p className="text-xs text-slate-500">{t("profile.insights.noneYet")}</p>
+              ) : (
+                <ul className="list-disc space-y-1 pl-4">
+                  {insights.strengths.map((insight) => (
+                    <li key={insight.id}>{t(`profile.insights.${insight.id}`)}</li>
+                  ))}
+                </ul>
+              )}
+            </div>
+            <div>
+              <h3 className="mb-1 text-xs font-semibold uppercase text-rose-700">
+                {t("profile.insights.focuses")}
+              </h3>
+              {insights.focuses.length === 0 ? (
+                <p className="text-xs text-slate-500">{t("profile.insights.noneYet")}</p>
+              ) : (
+                <ul className="list-disc space-y-1 pl-4">
+                  {insights.focuses.map((insight) => (
+                    <li key={insight.id}>{t(`profile.insights.${insight.id}`)}</li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          </div>
+        )}
+
+        {insights.suggestedMission && (
+          <div className="mt-2 rounded-lg bg-sky-50 px-3 py-2 text-xs text-sky-800">
+            {t("profile.insights.suggestedMission", {
+              mission: insights.suggestedMission,
+            })}
+          </div>
+        )}
+      </section>
 
       <section className="rounded-lg border border-slate-800 bg-slate-900/50 p-5 shadow-sm">
         <div className="flex items-center justify-between gap-4">
