@@ -91,7 +91,9 @@ describe("MyGolfIQPage", () => {
       { wrapper: createAccessWrapper() },
     );
 
-    expect(screen.getByRole("heading", { name: /My GolfIQ/i })).toBeTruthy();
+    expect(
+      screen.getByRole("heading", { name: /My GolfIQ/i, level: 1 })
+    ).toBeTruthy();
     expect(screen.getByText(/Total rounds/i)).toBeTruthy();
     expect(screen.getByText(/Average net strokes/i)).toBeTruthy();
     expect(screen.getByText(/Championship Course/i)).toBeTruthy();
