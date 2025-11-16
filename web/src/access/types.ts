@@ -2,10 +2,16 @@ export type PlanName = "free" | "pro";
 
 export type FeatureId =
   | "range.targetBingo"
+  | "range.missions"
+  | "range.sessionHistory"
   | "range.ghostMatch"
-  | "range.gapping"
-  | "caddie.advancedHints"
-  | "profile.advancedStats";
+  | "range.smartBag"
+  | "range.cameraFitness"
+  | "trip.share"
+  | "trip.liveSSE"
+  | "profile.insights"
+  | "profile.smartBagSuggestions"
+  | "watch.hud";
 
 export type AccessPlan = {
   plan: PlanName;

@@ -1,6 +1,7 @@
 import React from "react";
 import { useTranslation } from "react-i18next";
 import { FeatureGate } from "@/access/FeatureGate";
+import { BetaBadge } from "@/access/BetaBadge";
 import {
   appendRangeSession,
   computeBasicStats,
@@ -493,6 +494,14 @@ export default function RangePracticePage() {
 
       {mode === "mission" && (
         <section className="mt-4 space-y-3">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-center gap-2">
+              <h2 className="text-sm font-semibold text-slate-100">
+                {t("range.mission.header")}
+              </h2>
+              <BetaBadge />
+            </div>
+          </div>
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <label className="text-sm text-slate-700">
               {t("range.mission.select")}

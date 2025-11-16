@@ -2,6 +2,8 @@ import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useParams } from "react-router-dom";
 
+import { BetaBadge } from "@/access/BetaBadge";
+
 import {
   createTripShareToken,
   fetchTripRound,
@@ -307,9 +309,12 @@ export default function TripScoreboardPage() {
               <p className="text-xs text-rose-300 sm:text-right">{shareError}</p>
             ) : null}
             {liveTrip ? (
-              <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-3 py-1 text-xs font-semibold text-emerald-300">
-                {t("trip.scoreboard.liveUpdating", "Live updating")}
-              </span>
+              <div className="inline-flex items-center gap-2 rounded-full bg-emerald-500/10 px-3 py-1">
+                <span className="text-xs font-semibold text-emerald-300">
+                  {t("trip.scoreboard.liveUpdating", "Live updating")}
+                </span>
+                <BetaBadge />
+              </div>
             ) : null}
           </div>
         </div>

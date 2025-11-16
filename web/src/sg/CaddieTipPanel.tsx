@@ -183,7 +183,7 @@ export function CaddieTipPanel({ runId, hole, shot, before_m, bearing_deg }: Pro
               </span>
             ) : null}
           </div>
-          <FeatureGate feature="caddie.advancedHints">
+          <FeatureGate feature="watch.hud">
             <div className="space-y-1 text-xs text-slate-300">
               {typeof activeTip.playsLike_m === 'number' ? (
                 <div>

@@ -90,8 +90,11 @@ describe("TripScoreboardPage live updates", () => {
       ],
     };
 
-    const source = MockEventSource.instances[0];
-    expect(source).toBeDefined();
+    const source = await waitFor(() => {
+      const instance = MockEventSource.instances[0];
+      expect(instance).toBeDefined();
+      return instance;
+    });
 
     await act(async () => {
       source.emit(updatedTrip);
