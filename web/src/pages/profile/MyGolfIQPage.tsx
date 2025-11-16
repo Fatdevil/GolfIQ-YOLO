@@ -1,11 +1,11 @@
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 
 import { loadAllRoundsFull } from "@/features/quickround/storage";
 import type { QuickRound } from "@/features/quickround/types";
 import { listGhosts } from "@/features/range/ghost";
-import { loadBag } from "@/bag/storage";
+import { loadBag, updateClubCarry } from "@/bag/storage";
 import { FeatureGate } from "@/access/FeatureGate";
 import {
   computeBagSummary,
@@ -17,17 +17,22 @@ import {
   loadRangeSessions,
   type RangeSession,
 } from "@/features/range/sessions";
+import { computeCarrySuggestions, type CarrySuggestion } from "@/bag/smart_sync";
 
 export default function MyGolfIQPage() {
   const { t } = useTranslation();
   const [rounds] = useState(() => loadAllRoundsFull());
   const [ghosts] = useState(() => listGhosts());
-  const [bag] = useState(() => loadBag());
+  const [bagState, setBagState] = useState(() => loadBag());
   const [rangeSessions] = useState<RangeSession[]>(() => loadRangeSessions());
 
   const quickRoundStats = useMemo(() => computeQuickRoundStats(rounds), [rounds]);
   const rangeStats = useMemo(() => computeRangeSummary(ghosts), [ghosts]);
-  const bagStats = useMemo(() => computeBagSummary(bag), [bag]);
+  const bagStats = useMemo(() => computeBagSummary(bagState), [bagState]);
+  const suggestions = useMemo<CarrySuggestion[]>(
+    () => computeCarrySuggestions(bagState, rangeSessions),
+    [bagState, rangeSessions]
+  );
   const recentRangeSessions = useMemo(
     () => rangeSessions.slice(0, 5),
     [rangeSessions]
@@ -38,6 +43,13 @@ export default function MyGolfIQPage() {
       .sort((a, b) => new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime())
       .slice(0, 5);
   }, [rounds]);
+
+  const handleApplySuggestion = useCallback(
+    (suggestion: CarrySuggestion) => {
+      setBagState((prev) => updateClubCarry(prev, suggestion.clubId, suggestion.suggestedCarry_m));
+    },
+    []
+  );
 
   return (
     <div className="mx-auto max-w-4xl space-y-6 px-4 py-6">
@@ -284,6 +296,47 @@ export default function MyGolfIQPage() {
             </Link>
           )}
         </div>
+      </section>
+
+      <section className="rounded-xl border border-slate-200 bg-white p-4 space-y-3">
+        <h2 className="text-sm font-semibold text-slate-800">
+          {t("profile.bag.smartSync.title")}
+        </h2>
+        {suggestions.length === 0 ? (
+          <p className="text-sm text-slate-500">
+            {t("profile.bag.smartSync.empty")}
+          </p>
+        ) : (
+          <ul className="space-y-2 text-sm">
+            {suggestions.slice(0, 5).map((suggestion) => (
+              <li
+                key={suggestion.clubId}
+                className="flex items-center justify-between gap-2 rounded-lg bg-slate-50 px-3 py-2"
+              >
+                <div>
+                  <div className="font-medium">{suggestion.clubLabel}</div>
+                  <div className="text-xs text-slate-500">
+                    {t("profile.bag.smartSync.line", {
+                      current:
+                        suggestion.currentCarry_m != null
+                          ? suggestion.currentCarry_m
+                          : t("profile.bag.smartSync.noCurrent"),
+                      suggested: suggestion.suggestedCarry_m,
+                      sessions: suggestion.sampleCount,
+                    })}
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  className="inline-flex items-center rounded-md border border-emerald-500 px-3 py-1 text-xs font-semibold text-emerald-700 hover:bg-emerald-50"
+                  onClick={() => handleApplySuggestion(suggestion)}
+                >
+                  {t("profile.bag.smartSync.apply")}
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
       </section>
     </div>
   );

@@ -69,6 +69,12 @@
   "profile.bag.title": "Bag snapshot",
   "profile.bag.clubsWithCarry": "{{count}} of {{total}} clubs have a carry distance set.",
   "profile.bag.completeBagCta": "Complete your bag",
+  "profile.bag.smartSync.title": "Smart Bag suggestions",
+  "profile.bag.smartSync.empty": "No suggestions yet. Play a few range sessions with specific clubs.",
+  "profile.bag.smartSync.line": "Current: {{current}} m · Suggested: {{suggested}} m ({{sessions}} sessions)",
+  "profile.bag.smartSync.noCurrent": "not set",
+  "profile.bag.smartSync.apply": "Update carry",
+  "profile.bag.smartSync.updated": "Updated {{club}} carry from range data.",
 
   "quickRound.start.title": "Quick round",
   "quickRound.start.courseName": "Course name",
