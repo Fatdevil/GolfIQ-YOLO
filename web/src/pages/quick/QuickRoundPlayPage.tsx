@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Link, useParams } from "react-router-dom";
 
@@ -11,6 +11,7 @@ import { useCourseBundle } from "../../courses/hooks";
 import { useGeolocation } from "../../hooks/useGeolocation";
 import { useAutoHoleSuggestion } from "../../courses/useAutoHole";
 import { computeQuickRoundSummary } from "../../features/quickround/summary";
+import { syncQuickRoundToWatch } from "../../features/watch/api";
 
 export default function QuickRoundPlayPage() {
   const { roundId } = useParams<{ roundId: string }>();
@@ -24,6 +25,11 @@ export default function QuickRoundPlayPage() {
     { hole: number; expires: number } | null
   >(null);
   const [summaryCopied, setSummaryCopied] = useState(false);
+  const [watchStatus, setWatchStatus] = useState<
+    { deviceId: string | null; synced: boolean } | null
+  >(null);
+  const [watchError, setWatchError] = useState<string | null>(null);
+  const [watchSyncing, setWatchSyncing] = useState(false);
   const summaryCopyTimeout = useRef<number | null>(null);
   const { position, error: geoError } = useGeolocation(autoHoleEnabled);
   const { data: bundle, loading: bundleLoading, error: bundleError } = useCourseBundle(
@@ -92,6 +98,45 @@ export default function QuickRoundPlayPage() {
     }
     return computeQuickRoundSummary(round);
   }, [round]);
+
+  const memberId = useMemo(
+    () => round?.memberId ?? readStoredMemberId(),
+    [round?.memberId]
+  );
+  const runId = round?.runId ?? round?.id;
+
+  const syncWatch = useCallback(
+    async (holeNumber: number) => {
+      if (!runId || !memberId) {
+        setWatchStatus((current) => current ?? { deviceId: null, synced: false });
+        return;
+      }
+
+      setWatchSyncing(true);
+      try {
+        const result = await syncQuickRoundToWatch({
+          memberId,
+          runId,
+          courseId: round?.courseId ?? null,
+          hole: holeNumber,
+        });
+        setWatchStatus(result);
+        setWatchError(null);
+      } catch (error) {
+        setWatchError(t("quickRound.watch.error"));
+      } finally {
+        setWatchSyncing(false);
+      }
+    },
+    [memberId, round?.courseId, runId, t]
+  );
+
+  useEffect(() => {
+    if (!round) {
+      return;
+    }
+    void syncWatch(currentHoleNumber);
+  }, [round?.id, currentHoleNumber, syncWatch]);
 
   if (notFound) {
     return (
@@ -247,6 +292,27 @@ export default function QuickRoundPlayPage() {
     <>
       <div className="space-y-8 text-slate-100">
         <header className="rounded-lg border border-slate-800 bg-slate-900/60 p-6">
+          <section
+            className="mb-2 flex flex-wrap items-center justify-between gap-2 text-xs"
+            data-testid="quickround-watch-status"
+          >
+            <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 py-1">
+              <span className="font-medium text-slate-700">
+                {t("quickRound.watch.label")}
+              </span>
+              {watchStatus?.deviceId ? (
+                <span className="text-emerald-700">
+                  {watchStatus.synced
+                    ? t("quickRound.watch.synced")
+                    : t("quickRound.watch.paired")}
+                </span>
+              ) : (
+                <span className="text-slate-500">{t("quickRound.watch.noWatch")}</span>
+              )}
+              {watchSyncing && <span className="text-slate-400">…</span>}
+            </div>
+            {watchError ? <span className="text-rose-400">{watchError}</span> : null}
+          </section>
           <div className="flex flex-wrap items-center justify-between gap-4">
             <div>
               <h1 className="text-2xl font-semibold text-slate-100">{round.courseName}</h1>
@@ -509,6 +575,17 @@ function SummaryItem({ label, value }: SummaryItemProps) {
       <p className="mt-1 text-lg font-semibold text-slate-100">{value}</p>
     </div>
   );
+}
+
+function readStoredMemberId(): string | null {
+  if (typeof window === "undefined") {
+    return null;
+  }
+  try {
+    return window.localStorage.getItem("event.memberId");
+  } catch {
+    return null;
+  }
 }
 
 function formatToPar(value: number | null): string {

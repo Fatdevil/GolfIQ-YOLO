@@ -28,6 +28,7 @@ from server.api.routers.share import router as share_router
 from server.api.routers.watch_pairing import router as watch_pairing_router
 from server.api.routers.watch_tips import router as watch_tips_router
 from server.api.routers.watch_hud import router as watch_hud_router
+from server.api.routers.watch_quickround import router as watch_quickround_router
 from server.api.routers.trip_public import router as trip_public_router
 from server.api.routers.trip import router as trip_router
 from server.metrics import MetricsMiddleware, metrics_app
@@ -159,6 +160,7 @@ app.include_router(share_router)
 app.include_router(watch_tips_router)
 app.include_router(watch_pairing_router)
 app.include_router(watch_hud_router)
+app.include_router(watch_quickround_router)
 app.include_router(trip_public_router)
 app.include_router(trip_router)
 if os.getenv("APP_ENV", "").lower() not in {"production", "prod"}:

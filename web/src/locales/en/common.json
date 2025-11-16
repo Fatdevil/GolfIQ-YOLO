@@ -105,6 +105,11 @@
   "quickRound.summary.netResult": "Net result",
   "quickRound.share.button": "Copy round summary",
   "quickRound.share.copied": "Round summary copied.",
+  "quickRound.watch.label": "Watch HUD",
+  "quickRound.watch.noWatch": "No watch",
+  "quickRound.watch.paired": "Paired",
+  "quickRound.watch.synced": "Synced",
+  "quickRound.watch.error": "Watch sync failed",
 
   "trip.start.title": "Trip Mode – Start round",
   "trip.start.subtitle": "Create a shared scoreboard for your group.",

@@ -92,6 +92,21 @@ def get_device(device_id: str) -> Optional[Device]:
         return replace(device) if device else None
 
 
+def get_primary_device_for_member(member_id: str) -> Optional[Device]:
+    """Return the most recently seen device bound to *member_id*, if any."""
+
+    with _LOCK:
+        candidates = [
+            device
+            for device in _DEVICES.values()
+            if device.bound_member_id == member_id
+        ]
+        if not candidates:
+            return None
+        latest = max(candidates, key=lambda dev: dev.last_seen_ts)
+        return replace(latest)
+
+
 def bind_device_with_code(device_id: str, code: str) -> Device:
     _purge_expired_codes()
     with _LOCK:
