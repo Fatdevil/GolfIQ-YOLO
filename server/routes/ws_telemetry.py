@@ -4,12 +4,14 @@ import os
 from pathlib import Path
 from typing import Dict, List, Set
 
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect, status
+from fastapi import HTTPException
 
 from server.flight_recorder import record, should_record
+from server.security import require_api_key
 from server.schemas.telemetry import Telemetry, TelemetrySample
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(require_api_key)])
 
 
 class ConnectionManager:
@@ -88,8 +90,23 @@ def _flight_recorder_dir() -> Path:
     return _DEFAULT_FLIGHT_DIR
 
 
+def _authorize_websocket(websocket: WebSocket) -> bool:
+    try:
+        require_api_key(
+            x_api_key=websocket.headers.get("x-api-key"),
+            api_key_query=websocket.query_params.get("apiKey"),
+        )
+        return True
+    except HTTPException:
+        return False
+
+
 @router.websocket("/ws/telemetry")
 async def telemetry_ws(websocket: WebSocket) -> None:
+    if not _authorize_websocket(websocket):
+        await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+        return
+
     await manager.connect(websocket)
     try:
         while True:
