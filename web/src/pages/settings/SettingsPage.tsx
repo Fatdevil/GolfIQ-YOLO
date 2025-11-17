@@ -5,12 +5,14 @@ import { useUserAccess } from "@/access/UserAccessContext";
 import { LanguageSelector } from "@/components/LanguageSelector";
 import { UnitsSelector } from "@/components/UnitsSelector";
 import { useNotifications } from "@/notifications/NotificationContext";
+import { useUserSession } from "@/user/UserSessionContext";
 import { resetLocalData, type ResetableKey } from "@/preferences/resetLocalData";
 
 export const SettingsPage: React.FC = () => {
   const { t } = useTranslation();
   const { plan } = useUserAccess();
   const { notify } = useNotifications();
+  const { session } = useUserSession();
 
   const [selectedKeys, setSelectedKeys] = useState<ResetableKey[]>([]);
 
@@ -48,6 +50,29 @@ export const SettingsPage: React.FC = () => {
         <div className="text-xs text-slate-500">
           {t("settings.plan.label", { plan })}
         </div>
+        {session && (
+          <div className="mt-1 flex items-center gap-2 text-[11px] text-slate-500">
+            <span>
+              {t("settings.userId.label")}: {session.userId}
+            </span>
+            <button
+              type="button"
+              className="underline hover:text-slate-700"
+              onClick={async () => {
+                try {
+                  if (navigator.clipboard?.writeText) {
+                    await navigator.clipboard.writeText(session.userId);
+                    notify("success", t("settings.userId.copied"));
+                  }
+                } catch {
+                  notify("error", t("settings.userId.copyError"));
+                }
+              }}
+            >
+              {t("settings.userId.copy")}
+            </button>
+          </div>
+        )}
       </section>
 
       <section className="rounded-xl border border-slate-200 bg-white p-4 space-y-3">

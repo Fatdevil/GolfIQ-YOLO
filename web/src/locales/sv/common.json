@@ -194,6 +194,10 @@
   "settings.section.general": "Allmänt",
   "settings.section.data": "Lokal data",
   "settings.plan.label": "Aktiv plan: {{plan}}",
+  "settings.userId.label": "Användar-ID",
+  "settings.userId.copy": "Kopiera",
+  "settings.userId.copied": "Användar-ID kopierat.",
+  "settings.userId.copyError": "Kunde inte kopiera användar-ID.",
 
   "settings.link": "Inställningar",
 
