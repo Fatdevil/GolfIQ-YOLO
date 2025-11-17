@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from "react";
+import { setCurrentUserId } from "@/user/currentUserId";
 import type { UserSession } from "./sessionStorage";
 import { loadUserSession, createNewUserSession } from "./sessionStorage";
 
@@ -20,12 +21,9 @@ export const UserSessionProvider: React.FC<{ children: React.ReactNode }> = ({
   useEffect(() => {
     try {
       const existing = loadUserSession();
-      if (existing) {
-        setSession(existing);
-      } else {
-        const created = createNewUserSession();
-        setSession(created);
-      }
+      const nextSession = existing ?? createNewUserSession();
+      setSession(nextSession);
+      setCurrentUserId(nextSession.userId);
     } finally {
       setLoading(false);
     }
