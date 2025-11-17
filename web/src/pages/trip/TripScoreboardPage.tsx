@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import { useParams } from "react-router-dom";
 
 import { BetaBadge } from "@/access/BetaBadge";
+import { useNotifications } from "@/notifications/NotificationContext";
 
 import {
   createTripShareToken,
@@ -17,6 +18,7 @@ import { useTripSSE } from "../../trip/useTripSSE";
 export default function TripScoreboardPage() {
   const { t } = useTranslation();
   const { tripId } = useParams<{ tripId: string }>();
+  const { notify } = useNotifications();
 
   const [trip, setTrip] = useState<TripRound | null>(null);
   const [loading, setLoading] = useState(true);
@@ -230,16 +232,13 @@ export default function TripScoreboardPage() {
       const url = `${window.location.origin}/trip/share/${token}`;
       setShareUrl(url);
       if (navigator.clipboard?.writeText) {
-        try {
-          await navigator.clipboard.writeText(url);
-        } catch (clipboardError) {
-          console.warn("Failed to copy share link", clipboardError);
-        }
+        await navigator.clipboard.writeText(url);
       }
+      notify("success", t("trip.share.copied"));
     } catch (err) {
       console.error(err);
-      setShareUrl(null);
       setShareError(t("trip.share.error"));
+      notify("error", t("trip.share.error"));
     }
   };
 

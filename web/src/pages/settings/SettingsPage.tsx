@@ -4,11 +4,13 @@ import { useTranslation } from "react-i18next";
 import { useUserAccess } from "@/access/UserAccessContext";
 import { LanguageSelector } from "@/components/LanguageSelector";
 import { UnitsSelector } from "@/components/UnitsSelector";
+import { useNotifications } from "@/notifications/NotificationContext";
 import { resetLocalData, type ResetableKey } from "@/preferences/resetLocalData";
 
 export const SettingsPage: React.FC = () => {
   const { t } = useTranslation();
   const { plan } = useUserAccess();
+  const { notify } = useNotifications();
 
   const [selectedKeys, setSelectedKeys] = useState<ResetableKey[]>([]);
 
@@ -23,6 +25,7 @@ export const SettingsPage: React.FC = () => {
     if (!window.confirm(t("settings.reset.confirm"))) return;
     resetLocalData(selectedKeys);
     setSelectedKeys([]);
+    notify("success", t("settings.reset.done"));
   };
 
   return (

@@ -3,6 +3,7 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 
+import { NotificationProvider } from "../src/notifications/NotificationContext";
 import { UnitsProvider } from "@/preferences/UnitsContext";
 import { SettingsPage } from "@/pages/settings/SettingsPage";
 
@@ -26,14 +27,16 @@ describe("SettingsPage", () => {
     mockUseUserAccess.mockReturnValue({ plan: "free" });
   });
 
-  it("renders headings, selectors, and reset options", () => {
-    render(
-      <MemoryRouter>
-        <UnitsProvider>
-          <SettingsPage />
-        </UnitsProvider>
-      </MemoryRouter>
-    );
+    it("renders headings, selectors, and reset options", () => {
+      render(
+        <NotificationProvider>
+          <MemoryRouter>
+            <UnitsProvider>
+              <SettingsPage />
+            </UnitsProvider>
+          </MemoryRouter>
+        </NotificationProvider>
+      );
 
     expect(screen.getByRole("heading", { level: 1, name: /Settings/i })).toBeTruthy();
     expect(screen.getByText(/^Language$/i)).toBeTruthy();
@@ -46,13 +49,15 @@ describe("SettingsPage", () => {
   it("enables reset button when a checkbox is selected", async () => {
     const user = userEvent.setup();
 
-    render(
-      <MemoryRouter>
-        <UnitsProvider>
-          <SettingsPage />
-        </UnitsProvider>
-      </MemoryRouter>
-    );
+      render(
+        <NotificationProvider>
+          <MemoryRouter>
+            <UnitsProvider>
+              <SettingsPage />
+            </UnitsProvider>
+          </MemoryRouter>
+        </NotificationProvider>
+      );
 
     const resetButtons = screen.getAllByRole("button", { name: /Reset selected data/i });
     const resetButton = resetButtons[0] as HTMLButtonElement;

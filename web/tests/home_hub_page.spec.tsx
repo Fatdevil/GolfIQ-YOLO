@@ -20,6 +20,7 @@ vi.mock("@/access/UserAccessContext", () => ({
   useUserAccess: mockUseUserAccess,
 }));
 
+import { NotificationProvider } from "../src/notifications/NotificationContext";
 import { HomeHubPage } from "@/pages/home/HomeHubPage";
 
 describe("HomeHubPage", () => {
@@ -34,9 +35,11 @@ describe("HomeHubPage", () => {
 
   it("renders the main heading and all mode cards", () => {
     render(
-      <MemoryRouter>
-        <HomeHubPage />
-      </MemoryRouter>,
+      <NotificationProvider>
+        <MemoryRouter>
+          <HomeHubPage />
+        </MemoryRouter>
+      </NotificationProvider>,
     );
 
     expect(screen.getByRole("heading", { level: 1, name: /GolfIQ Home/i })).toBeTruthy();
@@ -61,9 +64,11 @@ describe("HomeHubPage", () => {
     });
 
     render(
-      <MemoryRouter>
-        <HomeHubPage />
-      </MemoryRouter>,
+      <NotificationProvider>
+        <MemoryRouter>
+          <HomeHubPage />
+        </MemoryRouter>
+      </NotificationProvider>,
     );
 
     expect(screen.getAllByText("Pro").length).toBeGreaterThan(0);

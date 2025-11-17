@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen, within } from "@testing-library/react";
 
 import TripScoreboardPage from "../src/pages/trip/TripScoreboardPage";
+import { NotificationProvider } from "../src/notifications/NotificationContext";
 import type { TripRound } from "../src/trip/types";
 
 const { fetchTripRoundMock } = vi.hoisted(() => ({
@@ -44,11 +45,13 @@ describe("TripScoreboardPage net leaderboard", () => {
     fetchTripRoundMock.mockResolvedValueOnce(trip);
 
     render(
-      <MemoryRouter initialEntries={["/trip/trip_net"]}>
-        <Routes>
-          <Route path="/trip/:tripId" element={<TripScoreboardPage />} />
-        </Routes>
-      </MemoryRouter>
+      <NotificationProvider>
+        <MemoryRouter initialEntries={["/trip/trip_net"]}>
+          <Routes>
+            <Route path="/trip/:tripId" element={<TripScoreboardPage />} />
+          </Routes>
+        </MemoryRouter>
+      </NotificationProvider>
     );
 
     const tables = await screen.findAllByRole("table");

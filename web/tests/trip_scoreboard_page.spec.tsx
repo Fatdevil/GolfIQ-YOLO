@@ -4,6 +4,7 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import TripScoreboardPage from "../src/pages/trip/TripScoreboardPage";
+import { NotificationProvider } from "../src/notifications/NotificationContext";
 import type { TripRound } from "../src/trip/types";
 
 const { fetchTripRoundMock, saveTripScoresMock, createTripShareTokenMock } =
@@ -59,11 +60,13 @@ describe("TripScoreboardPage", () => {
     saveTripScoresMock.mockResolvedValueOnce(updatedTrip);
 
     render(
-      <MemoryRouter initialEntries={["/trip/trip_abc"]}>
-        <Routes>
-          <Route path="/trip/:tripId" element={<TripScoreboardPage />} />
-        </Routes>
-      </MemoryRouter>
+      <NotificationProvider>
+        <MemoryRouter initialEntries={["/trip/trip_abc"]}>
+          <Routes>
+            <Route path="/trip/:tripId" element={<TripScoreboardPage />} />
+          </Routes>
+        </MemoryRouter>
+      </NotificationProvider>
     );
 
     expect(await screen.findByText(/Trip scoreboard/i)).toBeTruthy();
@@ -99,11 +102,13 @@ describe("TripScoreboardPage", () => {
 
     try {
       render(
-        <MemoryRouter initialEntries={["/trip/trip_abc"]}>
-          <Routes>
-            <Route path="/trip/:tripId" element={<TripScoreboardPage />} />
-          </Routes>
-        </MemoryRouter>
+        <NotificationProvider>
+          <MemoryRouter initialEntries={["/trip/trip_abc"]}>
+            <Routes>
+              <Route path="/trip/:tripId" element={<TripScoreboardPage />} />
+            </Routes>
+          </MemoryRouter>
+        </NotificationProvider>
       );
 
       const shareButton = await screen.findByRole("button", {

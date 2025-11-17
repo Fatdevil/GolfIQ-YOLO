@@ -3,6 +3,7 @@ import { act, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import TripScoreboardPage from "../src/pages/trip/TripScoreboardPage";
+import { NotificationProvider } from "../src/notifications/NotificationContext";
 import type { TripRound } from "../src/trip/types";
 
 class MockEventSource {
@@ -72,11 +73,13 @@ describe("TripScoreboardPage live updates", () => {
 
   it("updates scoreboard when SSE delivers new scores", async () => {
     render(
-      <MemoryRouter initialEntries={["/trip/trip_live"]}>
-        <Routes>
-          <Route path="/trip/:tripId" element={<TripScoreboardPage />} />
-        </Routes>
-      </MemoryRouter>
+      <NotificationProvider>
+        <MemoryRouter initialEntries={["/trip/trip_live"]}>
+          <Routes>
+            <Route path="/trip/:tripId" element={<TripScoreboardPage />} />
+          </Routes>
+        </MemoryRouter>
+      </NotificationProvider>
     );
 
     const aliceInput = await screen.findByLabelText(/Hole 1 – Alice/i);
