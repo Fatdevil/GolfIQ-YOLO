@@ -187,12 +187,13 @@ export function ClipModal({ clip, onClose, onRefetch }: ClipModalProps): JSX.Ele
     if (!clip.id || isAdmin || reporting || reportSubmitted) {
       return;
     }
+    const reporter = memberId?.trim() || null;
     setReporting(true);
     setReportError(null);
     try {
       await reportClip(clip.id, {
         reason: 'user_report',
-        reporter: memberId ?? null,
+        reporter,
       });
       setReportSubmitted(true);
     } catch (err) {

@@ -74,4 +74,30 @@ describe('ClipModal visibility banners and reporting', () => {
 
     await screen.findByRole('button', { name: /reported/i });
   });
+
+  it('allows reporting a clip without member id', async () => {
+    reportClip.mockResolvedValue({
+      id: 'report-2',
+      clipId: 'clip-visibility',
+      reason: 'user_report',
+      status: 'open',
+      ts: new Date('2024-03-10T10:00:00Z').toISOString(),
+    });
+
+    const user = userEvent.setup();
+    render(
+      <EventSessionContext.Provider value={{ role: 'spectator', memberId: null, safe: false, tournamentSafe: false }}>
+        <ClipModal clip={baseClip} />
+      </EventSessionContext.Provider>,
+    );
+
+    await user.click(screen.getByRole('button', { name: /report clip/i }));
+
+    await waitFor(() => {
+      expect(reportClip).toHaveBeenCalledWith('clip-visibility', {
+        reason: 'user_report',
+        reporter: null,
+      });
+    });
+  });
 });

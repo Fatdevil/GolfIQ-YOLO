@@ -27,7 +27,8 @@ export const DEFAULT_SESSION: EventSession = {
 };
 
 const API_KEY = import.meta.env.VITE_API_KEY || '';
-const DEV_SESSION_FALLBACK_ENABLED = import.meta.env.VITE_DEV_SESSION_FALLBACK === 'true';
+const DEV_SESSION_FALLBACK_ENABLED =
+  import.meta.env.DEV && import.meta.env.VITE_DEV_SESSION_FALLBACK === 'true';
 
 const buildHeaders = () => (API_KEY ? { 'x-api-key': API_KEY } : {});
 
