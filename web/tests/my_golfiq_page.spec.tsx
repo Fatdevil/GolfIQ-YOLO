@@ -9,9 +9,6 @@ import type { GhostProfile } from "@/features/range/ghost";
 import type { BagState } from "@/bag/types";
 import { UserSessionProvider } from "@/user/UserSessionContext";
 
-import { createAccessWrapper } from "./test-helpers/access";
-import { UnitsContext } from "@/preferences/UnitsContext";
-
 const mockRounds: QuickRound[] = [
   {
     id: "r1",
@@ -68,6 +65,8 @@ const mockBag: BagState = {
 const loadAllRoundsFull = vi.hoisted(() => () => mockRounds);
 const listGhosts = vi.hoisted(() => () => mockGhosts);
 const loadBag = vi.hoisted(() => () => mockBag);
+const loadRangeSessions = vi.hoisted(() => () => []);
+const migrateLocalHistoryOnce = vi.hoisted(() => vi.fn(() => Promise.resolve()));
 
 vi.mock("@/features/quickround/storage", () => ({
   loadAllRoundsFull,
@@ -81,38 +80,35 @@ vi.mock("@/bag/storage", () => ({
   loadBag,
 }));
 
+vi.mock("@/features/range/sessions", () => ({
+  loadRangeSessions,
+}));
+
+vi.mock("@/user/historyMigration", () => ({
+  migrateLocalHistoryOnce,
+}));
+
 describe("MyGolfIQPage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
   it("renders quick round, range and bag summaries", () => {
-    const AccessWrapper = createAccessWrapper();
-    const Wrapper = ({ children }: { children: React.ReactNode }) => (
-      <UserSessionProvider>
-        <AccessWrapper>
-          <UnitsContext.Provider value={{ unit: "metric", setUnit: () => {} }}>
-            {children}
-          </UnitsContext.Provider>
-        </AccessWrapper>
-      </UserSessionProvider>
-    );
-
     render(
       <MemoryRouter>
         <MyGolfIQPage />
       </MemoryRouter>,
-      { wrapper: Wrapper },
+      { wrapper: UserSessionProvider },
     );
 
     expect(
       screen.getByRole("heading", { name: /My GolfIQ/i, level: 1 })
     ).toBeTruthy();
     expect(screen.getByText(/Total rounds/i)).toBeTruthy();
-    expect(screen.getByText(/Average net strokes/i)).toBeTruthy();
+    expect(screen.getByText(/Completed rounds/i)).toBeTruthy();
     expect(screen.getByText(/Championship Course/i)).toBeTruthy();
     expect(screen.getByRole("heading", { level: 2, name: /Range practice/i })).toBeTruthy();
-    expect(screen.getByText(/Demo Ghost/i)).toBeTruthy();
+    expect(screen.getByText(/Ghost profiles/i)).toBeTruthy();
     expect(screen.getByText(/Bag snapshot/i)).toBeTruthy();
     expect(screen.getByText(/Complete your bag/i)).toBeTruthy();
   });

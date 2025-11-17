@@ -8,8 +8,6 @@ export type QuickRoundSummaryStats = {
   avgStrokes?: number;
   avgToPar?: number;
   bestToPar?: number;
-  avgNetStrokes?: number;
-  avgNetToPar?: number;
 };
 
 export type RangeSummaryStats = {
@@ -26,72 +24,60 @@ export function computeQuickRoundStats(rounds: QuickRound[]): QuickRoundSummaryS
   const totalRounds = rounds.length;
   const completedRounds = rounds.filter((round) => Boolean(round.completedAt)).length;
 
-  const scoredRounds = rounds.filter(
+  const completedWithScores = rounds.filter(
     (round) =>
       Boolean(round.completedAt) &&
-      round.holes.some((hole) => typeof hole.strokes === "number" && !Number.isNaN(hole.strokes))
+      round.holes.some(
+        (hole) => typeof hole.strokes === "number" && Number.isFinite(hole.strokes)
+      )
   );
 
-  if (scoredRounds.length === 0) {
-    return {
-      totalRounds,
-      completedRounds,
-    };
+  if (completedWithScores.length === 0) {
+    return { totalRounds, completedRounds };
   }
 
   let totalStrokes = 0;
   let totalToPar = 0;
   let bestToPar: number | undefined;
-  let processedRounds = 0;
-  let totalNetStrokes = 0;
-  let totalNetToPar = 0;
-  let netRounds = 0;
+  let countedRounds = 0;
 
-  scoredRounds.forEach((round) => {
+  completedWithScores.forEach((round) => {
     let strokesTotal = 0;
     let parTotal = 0;
+    let hasData = false;
 
     round.holes.forEach((hole) => {
-      if (typeof hole.strokes === "number" && !Number.isNaN(hole.strokes)) {
+      if (typeof hole.strokes === "number" && Number.isFinite(hole.strokes)) {
         strokesTotal += hole.strokes;
-        parTotal += typeof hole.par === "number" && !Number.isNaN(hole.par) ? hole.par : 0;
+        parTotal += typeof hole.par === "number" && Number.isFinite(hole.par) ? hole.par : 0;
+        hasData = true;
       }
     });
 
-    if (strokesTotal === 0 && parTotal === 0) {
+    if (!hasData) {
       return;
     }
 
     const toPar = strokesTotal - parTotal;
     totalStrokes += strokesTotal;
     totalToPar += toPar;
-    processedRounds += 1;
+    countedRounds += 1;
+
     if (bestToPar === undefined || toPar < bestToPar) {
       bestToPar = toPar;
     }
-
-    if (
-      typeof round.handicap === "number" &&
-      Number.isFinite(round.handicap)
-    ) {
-      const netStrokes = strokesTotal - round.handicap;
-      const netToPar = netStrokes - parTotal;
-      totalNetStrokes += netStrokes;
-      totalNetToPar += netToPar;
-      netRounds += 1;
-    }
   });
 
-  const count = processedRounds;
+  if (countedRounds === 0) {
+    return { totalRounds, completedRounds };
+  }
 
   return {
     totalRounds,
     completedRounds,
-    avgStrokes: count > 0 ? totalStrokes / count : undefined,
-    avgToPar: count > 0 ? totalToPar / count : undefined,
-    bestToPar: count > 0 ? bestToPar : undefined,
-    avgNetStrokes: netRounds > 0 ? totalNetStrokes / netRounds : undefined,
-    avgNetToPar: netRounds > 0 ? totalNetToPar / netRounds : undefined,
+    avgStrokes: totalStrokes / countedRounds,
+    avgToPar: totalToPar / countedRounds,
+    bestToPar,
   };
 }
 

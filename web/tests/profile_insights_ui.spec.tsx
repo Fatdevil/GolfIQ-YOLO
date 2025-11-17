@@ -4,97 +4,44 @@ import { MemoryRouter } from "react-router-dom";
 import { render, screen } from "@testing-library/react";
 
 import MyGolfIQPage from "@/pages/profile/MyGolfIQPage";
-import type { QuickRound } from "@/features/quickround/types";
 
-import { createAccessWrapper } from "./test-helpers/access";
-import { UnitsContext } from "@/preferences/UnitsContext";
 import { UserSessionProvider } from "@/user/UserSessionContext";
 
-const mockRounds: QuickRound[] = [
-  {
-    id: "round-1",
-    courseName: "Mock Course",
-    holes: [
-      { index: 1, par: 4, strokes: 4 },
-      { index: 2, par: 5, strokes: 6 },
-    ],
-    startedAt: "2024-07-01T10:00:00.000Z",
-    completedAt: "2024-07-01T14:00:00.000Z",
-    handicap: 2,
-  },
-];
-
-const loadAllRoundsFull = vi.hoisted(() => () => mockRounds);
-const listGhosts = vi.hoisted(() => () => []);
-const loadBag = vi.hoisted(() => () => ({ updatedAt: Date.now(), clubs: [] }));
-const loadRangeSessions = vi.hoisted(() => () => []);
-const getCoachTag = vi.hoisted(() => () => "mixed_results");
-const mockComputeInsights = vi.hoisted(() =>
-  vi.fn(() => ({
-    strengths: [{ id: "rounds.good_net_scoring", kind: "strength" }],
-    focuses: [{ id: "range.mission_completion_low", kind: "focus" }],
-    suggestedMission: "wedge-ladder",
-  }))
-);
-
 vi.mock("@/features/quickround/storage", () => ({
-  loadAllRoundsFull,
+  loadAllRoundsFull: () => [],
 }));
 
 vi.mock("@/features/range/ghost", () => ({
-  listGhosts,
+  listGhosts: () => [],
 }));
 
 vi.mock("@/bag/storage", () => ({
-  loadBag,
+  loadBag: () => ({ updatedAt: Date.now(), clubs: [] }),
 }));
 
 vi.mock("@/features/range/sessions", () => ({
-  loadRangeSessions,
-  getCoachTag,
+  loadRangeSessions: () => [],
 }));
 
-vi.mock("@/profile/insights", () => ({
-  computeInsights: mockComputeInsights,
-}));
-vi.mock("@/user/UserSessionContext", () => ({
-  UserSessionProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
-  useUserSession: () => ({ session: { userId: "test-user", createdAt: "" }, loading: false }),
+vi.mock("@/user/historyMigration", () => ({
+  migrateLocalHistoryOnce: () => Promise.resolve(),
 }));
 
-describe("MyGolfIQPage insights card", () => {
+describe("MyGolfIQPage empty states", () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
-  it("renders insights card with strength, focus and suggested mission", () => {
-    const AccessWrapper = createAccessWrapper();
-    const Wrapper = ({ children }: { children: React.ReactNode }) => (
-      <UserSessionProvider>
-        <AccessWrapper>
-          <UnitsContext.Provider value={{ unit: "metric", setUnit: () => {} }}>
-            {children}
-          </UnitsContext.Provider>
-        </AccessWrapper>
-      </UserSessionProvider>
-    );
-
+  it("shows empty messages when no local data is stored", () => {
     render(
       <MemoryRouter>
         <MyGolfIQPage />
       </MemoryRouter>,
-      { wrapper: Wrapper }
+      { wrapper: UserSessionProvider }
     );
 
-    expect(screen.getByText(/My GolfIQ insights/i)).toBeTruthy();
-    expect(
-      screen.getByText(/You often score well net compared to your handicap/i)
-    ).toBeTruthy();
-    expect(
-      screen.getByText(/You rarely complete your range missions/i)
-    ).toBeTruthy();
-    expect(
-      screen.getByText(/Suggested range mission: wedge-ladder/i)
-    ).toBeTruthy();
+    expect(screen.getByText(/You have not recorded any quick rounds yet/i)).toBeTruthy();
+    expect(screen.getByText(/No range ghosts saved yet/i)).toBeTruthy();
+    expect(screen.getByText(/0 of 0 clubs/i)).toBeTruthy();
   });
 });

@@ -53,8 +53,6 @@ describe("profile stats helpers", () => {
     expect(stats.avgStrokes).toBeCloseTo(7);
     expect(stats.avgToPar).toBeCloseTo(0);
     expect(stats.bestToPar).toBe(-1);
-    expect(stats.avgNetStrokes).toBeCloseTo(5.5);
-    expect(stats.avgNetToPar).toBeCloseTo(-1.5);
   });
 
   it("handles quick rounds without scores", () => {
@@ -79,8 +77,6 @@ describe("profile stats helpers", () => {
     expect(stats.avgStrokes).toBeUndefined();
     expect(stats.avgToPar).toBeUndefined();
     expect(stats.bestToPar).toBeUndefined();
-    expect(stats.avgNetStrokes).toBeUndefined();
-    expect(stats.avgNetToPar).toBeUndefined();
   });
 
   it("summarises range ghosts", () => {
