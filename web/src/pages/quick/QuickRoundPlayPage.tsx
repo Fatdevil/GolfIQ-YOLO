@@ -3,6 +3,9 @@ import { useTranslation } from "react-i18next";
 import { Link, useParams } from "react-router-dom";
 
 import { useNotifications } from "@/notifications/NotificationContext";
+import { useUserSession } from "@/user/UserSessionContext";
+import { postQuickRoundSnapshots } from "@/user/historyApi";
+import { mapQuickRoundToSnapshot } from "@/user/historySync";
 
 import {
   loadRound,
@@ -19,6 +22,8 @@ export default function QuickRoundPlayPage() {
   const { roundId } = useParams<{ roundId: string }>();
   const { t } = useTranslation();
   const { notify } = useNotifications();
+  const { session: userSession } = useUserSession();
+  const userId = userSession?.userId ?? null;
   const [round, setRound] = useState<QuickRound | null>(null);
   const [notFound, setNotFound] = useState(false);
   const [showPutts, setShowPutts] = useState(true);
@@ -293,6 +298,12 @@ export default function QuickRoundPlayPage() {
         showPutts,
       };
       saveRound(updated);
+      if (userId && updated.completedAt) {
+        const snapshot = mapQuickRoundToSnapshot(updated);
+        void Promise.resolve(postQuickRoundSnapshots([snapshot])).catch(() => {
+          // ignore for local-first
+        });
+      }
       return updated;
     });
   };

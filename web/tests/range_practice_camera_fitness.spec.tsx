@@ -6,10 +6,14 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 vi.mock("@/features/range/api", () => ({
   postRangeAnalyze: vi.fn(),
 }));
+vi.mock("@/user/historyApi", () => ({
+  postRangeSessionSnapshots: vi.fn(),
+}));
 
 import { postRangeAnalyze } from "@/features/range/api";
 import RangePracticePage from "../src/pages/RangePracticePage";
 import { UnitsContext } from "@/preferences/UnitsContext";
+import { UserSessionProvider } from "@/user/UserSessionContext";
 
 const mockedPostRangeAnalyze = vi.mocked(postRangeAnalyze);
 
@@ -45,8 +49,10 @@ describe("RangePracticePage camera fitness", () => {
 
 function renderWithUnits(ui: React.ReactElement) {
   return render(
-    <UnitsContext.Provider value={{ unit: "metric", setUnit: () => {} }}>
-      {ui}
-    </UnitsContext.Provider>
+    <UserSessionProvider>
+      <UnitsContext.Provider value={{ unit: "metric", setUnit: () => {} }}>
+        {ui}
+      </UnitsContext.Provider>
+    </UserSessionProvider>
   );
 }

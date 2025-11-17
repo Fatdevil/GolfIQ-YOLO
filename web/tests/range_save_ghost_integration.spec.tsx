@@ -54,6 +54,9 @@ vi.mock("../src/features/range/ghost", () => ({
 vi.mock("../src/features/range/api", () => ({
   postRangeAnalyze: vi.fn(() => Promise.resolve({ metrics: null })),
 }));
+vi.mock("../src/user/historyApi", () => ({
+  postRangeSessionSnapshots: vi.fn(),
+}));
 
 import RangePracticePage from "../src/pages/RangePracticePage";
 import { saveGhost } from "../src/features/range/ghost";
@@ -61,6 +64,7 @@ import { scoreTargetBingo } from "../src/features/range/games";
 import { UserAccessContext } from "../src/access/UserAccessContext";
 import type { FeatureId, PlanName } from "../src/access/types";
 import { UnitsContext } from "../src/preferences/UnitsContext";
+import { UserSessionProvider } from "../src/user/UserSessionContext";
 
 const proAccessValue = {
   loading: false,
@@ -70,11 +74,13 @@ const proAccessValue = {
 
 function renderWithAccess(ui: ReactElement) {
   return render(
-    <UserAccessContext.Provider value={proAccessValue}>
-      <UnitsContext.Provider value={{ unit: "metric", setUnit: () => {} }}>
-        {ui}
-      </UnitsContext.Provider>
-    </UserAccessContext.Provider>,
+    <UserSessionProvider>
+      <UserAccessContext.Provider value={proAccessValue}>
+        <UnitsContext.Provider value={{ unit: "metric", setUnit: () => {} }}>
+          {ui}
+        </UnitsContext.Provider>
+      </UserAccessContext.Provider>
+    </UserSessionProvider>,
   );
 }
 

@@ -6,6 +6,7 @@ import userEvent from "@testing-library/user-event";
 import QuickRoundPlayPage from "../src/pages/quick/QuickRoundPlayPage";
 import { NotificationProvider } from "../src/notifications/NotificationContext";
 import type { QuickRound } from "../src/features/quickround/types";
+import { UserSessionProvider } from "../src/user/UserSessionContext";
 
 const { loadRoundMock, saveRoundMock } = vi.hoisted(() => ({
   loadRoundMock: vi.fn(),
@@ -15,6 +16,9 @@ const { loadRoundMock, saveRoundMock } = vi.hoisted(() => ({
 vi.mock("../src/features/quickround/storage", () => ({
   loadRound: loadRoundMock,
   saveRound: saveRoundMock,
+}));
+vi.mock("../src/user/historyApi", () => ({
+  postQuickRoundSnapshots: vi.fn(),
 }));
 
 describe("QuickRoundPlayPage share summary", () => {
@@ -50,7 +54,8 @@ describe("QuickRoundPlayPage share summary", () => {
     });
 
     try {
-      render(
+    render(
+      <UserSessionProvider>
         <NotificationProvider>
           <MemoryRouter initialEntries={["/play/qr-1"]}>
             <Routes>
@@ -58,7 +63,8 @@ describe("QuickRoundPlayPage share summary", () => {
             </Routes>
           </MemoryRouter>
         </NotificationProvider>
-      );
+      </UserSessionProvider>
+    );
 
       const button = await screen.findByRole("button", {
         name: /Copy round summary/i,
