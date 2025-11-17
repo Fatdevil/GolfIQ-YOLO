@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 
@@ -22,10 +22,14 @@ import { computeCarrySuggestions, type CarrySuggestion } from "@/bag/smart_sync"
 import { computeInsights } from "@/profile/insights";
 import { useUnits } from "@/preferences/UnitsContext";
 import { formatDistance } from "@/utils/distance";
+import { useUserSession } from "@/user/UserSessionContext";
+import { migrateLocalHistoryOnce } from "@/user/historyMigration";
 
 export default function MyGolfIQPage() {
   const { t } = useTranslation();
   const { unit } = useUnits();
+  const { session: userSession } = useUserSession();
+  const userId = userSession?.userId ?? null;
   const [rounds] = useState(() => loadAllRoundsFull());
   const [ghosts] = useState(() => listGhosts());
   const [bagState, setBagState] = useState(() => loadBag());
@@ -52,6 +56,19 @@ export default function MyGolfIQPage() {
       .sort((a, b) => new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime())
       .slice(0, 5);
   }, [rounds]);
+
+  useEffect(() => {
+    if (!userId) return;
+    if (!rounds || !rangeSessions) return;
+
+    void (async () => {
+      try {
+        await migrateLocalHistoryOnce(userId, rounds, rangeSessions);
+      } catch {
+        // silent failure for v1
+      }
+    })();
+  }, [userId, rounds, rangeSessions]);
 
   const handleApplySuggestion = useCallback(
     (suggestion: CarrySuggestion) => {

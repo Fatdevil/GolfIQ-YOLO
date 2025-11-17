@@ -7,6 +7,7 @@ import { waitFor } from "@testing-library/react";
 import QuickRoundPlayPage from "../src/pages/quick/QuickRoundPlayPage";
 import { NotificationProvider } from "../src/notifications/NotificationContext";
 import type { QuickRound } from "../src/features/quickround/types";
+import { UserSessionProvider } from "../src/user/UserSessionContext";
 
 const { loadRoundMock, saveRoundMock, useGeolocationMock, useAutoHoleSuggestionMock, clearSuggestionMock } = vi.hoisted(() => ({
   loadRoundMock: vi.fn(),
@@ -27,6 +28,9 @@ vi.mock("../src/hooks/useGeolocation", () => ({
 
 vi.mock("../src/courses/useAutoHole", () => ({
   useAutoHoleSuggestion: useAutoHoleSuggestionMock,
+}));
+vi.mock("../src/user/historyApi", () => ({
+  postQuickRoundSnapshots: vi.fn(),
 }));
 
 describe("QuickRoundPlayPage auto-hole integration", () => {
@@ -66,13 +70,15 @@ describe("QuickRoundPlayPage auto-hole integration", () => {
     const user = userEvent.setup();
 
     render(
-      <NotificationProvider>
-        <MemoryRouter initialEntries={["/play/qr-auto"]}>
-          <Routes>
-            <Route path="/play/:roundId" element={<QuickRoundPlayPage />} />
-          </Routes>
-        </MemoryRouter>
-      </NotificationProvider>
+      <UserSessionProvider>
+        <NotificationProvider>
+          <MemoryRouter initialEntries={["/play/qr-auto"]}>
+            <Routes>
+              <Route path="/play/:roundId" element={<QuickRoundPlayPage />} />
+            </Routes>
+          </MemoryRouter>
+        </NotificationProvider>
+      </UserSessionProvider>
     );
 
     expect(await screen.findByText(/Aktivt hål: 1/i)).toBeTruthy();

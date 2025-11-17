@@ -52,6 +52,9 @@ import { useCalibration } from "../hooks/useCalibration";
 import type { CalibrationSnapshot } from "../hooks/useCalibration";
 import { useUnits } from "@/preferences/UnitsContext";
 import { convertMeters, formatDistance } from "@/utils/distance";
+import { useUserSession } from "@/user/UserSessionContext";
+import { postRangeSessionSnapshots } from "@/user/historyApi";
+import { mapRangeSessionToSnapshot } from "@/user/historySync";
 
 const DEFAULT_ANALYZE_FRAMES = 8;
 const DEFAULT_REF_LEN_PX = 100;
@@ -143,6 +146,8 @@ export default function RangePracticePage() {
   const { calibration } = useCalibration();
   const { unit } = useUnits();
   const { status: calibrationStatus } = useCalibrationStatus();
+  const { session: userSession } = useUserSession();
+  const userId = userSession?.userId ?? null;
   const [bag] = React.useState<BagState>(() => loadBag());
   const [currentClubId, setCurrentClubId] = React.useState<string>(
     () => bag.clubs[0]?.id ?? "7i"
@@ -263,7 +268,7 @@ export default function RangePracticePage() {
       Number.isFinite(sessionStartMs) &&
       ghost.createdAt >= sessionStartMs;
 
-    appendRangeSession({
+    const session = {
       id: `rs-${Date.now().toString(36)}`,
       startedAt: sessionStartRef.current,
       endedAt: nowIso,
@@ -278,7 +283,16 @@ export default function RangePracticePage() {
       hitRate_pct,
       avgError_m,
       ghostSaved,
-    });
+    };
+
+    appendRangeSession(session);
+
+    if (userId) {
+      const snapshot = mapRangeSessionToSnapshot(session);
+      void Promise.resolve(postRangeSessionSnapshots([snapshot])).catch(() => {
+        // silent fail for local-first storage
+      });
+    }
 
     sessionStartRef.current = nowIso;
     setShots([]);
@@ -292,6 +306,7 @@ export default function RangePracticePage() {
     currentClubId,
     missionId,
     ghost,
+    userId,
     t,
   ]);
 

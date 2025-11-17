@@ -9,6 +9,7 @@ import type { RangeSession } from "@/features/range/sessions";
 import type { QuickRound } from "@/features/quickround/types";
 import type { GhostProfile } from "@/features/range/ghost";
 import type { BagState } from "@/bag/types";
+import { UserSessionProvider } from "@/user/UserSessionContext";
 
 import { createAccessWrapper } from "./test-helpers/access";
 
@@ -38,6 +39,10 @@ vi.mock("@/features/range/ghost", () => ({
 
 vi.mock("@/bag/storage", () => ({
   loadBag: mockLoadBag,
+}));
+vi.mock("@/user/UserSessionContext", () => ({
+  UserSessionProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+  useUserSession: () => ({ session: { userId: "test-user", createdAt: "" }, loading: false }),
 }));
 
 describe("MyGolfIQPage range sessions", () => {
@@ -78,11 +83,13 @@ describe("MyGolfIQPage range sessions", () => {
 
     const AccessWrapper = createAccessWrapper();
     const Wrapper = ({ children }: { children: React.ReactNode }) => (
-      <AccessWrapper>
-        <UnitsContext.Provider value={{ unit: "metric", setUnit: () => {} }}>
-          {children}
-        </UnitsContext.Provider>
-      </AccessWrapper>
+      <UserSessionProvider>
+        <AccessWrapper>
+          <UnitsContext.Provider value={{ unit: "metric", setUnit: () => {} }}>
+            {children}
+          </UnitsContext.Provider>
+        </AccessWrapper>
+      </UserSessionProvider>
     );
 
     render(
@@ -117,11 +124,13 @@ describe("MyGolfIQPage range sessions", () => {
 
     const AccessWrapper = createAccessWrapper();
     const Wrapper = ({ children }: { children: React.ReactNode }) => (
-      <AccessWrapper>
-        <UnitsContext.Provider value={{ unit: "metric", setUnit: () => {} }}>
-          {children}
-        </UnitsContext.Provider>
-      </AccessWrapper>
+      <UserSessionProvider>
+        <AccessWrapper>
+          <UnitsContext.Provider value={{ unit: "metric", setUnit: () => {} }}>
+            {children}
+          </UnitsContext.Provider>
+        </AccessWrapper>
+      </UserSessionProvider>
     );
 
     render(

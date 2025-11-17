@@ -9,6 +9,7 @@ import type { RangeSession } from "@/features/range/sessions";
 
 import { createAccessWrapper } from "./test-helpers/access";
 import { UnitsContext } from "@/preferences/UnitsContext";
+import { UserSessionProvider } from "@/user/UserSessionContext";
 
 const initialBag: BagState = {
   updatedAt: 0,
@@ -66,16 +67,22 @@ vi.mock("@/features/range/sessions", async () => {
     loadRangeSessions: () => mockSessions,
   };
 });
+vi.mock("@/user/UserSessionContext", () => ({
+  UserSessionProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+  useUserSession: () => ({ session: { userId: "test-user", createdAt: "" }, loading: false }),
+}));
 
 describe("MyGolfIQPage smart bag sync", () => {
   it("shows smart bag suggestions and applies updates", () => {
     const AccessWrapper = createAccessWrapper();
     const Wrapper = ({ children }: { children: React.ReactNode }) => (
-      <AccessWrapper>
-        <UnitsContext.Provider value={{ unit: "metric", setUnit: () => {} }}>
-          {children}
-        </UnitsContext.Provider>
-      </AccessWrapper>
+      <UserSessionProvider>
+        <AccessWrapper>
+          <UnitsContext.Provider value={{ unit: "metric", setUnit: () => {} }}>
+            {children}
+          </UnitsContext.Provider>
+        </AccessWrapper>
+      </UserSessionProvider>
     );
 
     render(

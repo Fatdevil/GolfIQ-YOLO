@@ -7,6 +7,7 @@ import MyGolfIQPage from "@/pages/profile/MyGolfIQPage";
 import type { QuickRound } from "@/features/quickround/types";
 import type { GhostProfile } from "@/features/range/ghost";
 import type { BagState } from "@/bag/types";
+import { UserSessionProvider } from "@/user/UserSessionContext";
 
 import { createAccessWrapper } from "./test-helpers/access";
 import { UnitsContext } from "@/preferences/UnitsContext";
@@ -88,11 +89,13 @@ describe("MyGolfIQPage", () => {
   it("renders quick round, range and bag summaries", () => {
     const AccessWrapper = createAccessWrapper();
     const Wrapper = ({ children }: { children: React.ReactNode }) => (
-      <AccessWrapper>
-        <UnitsContext.Provider value={{ unit: "metric", setUnit: () => {} }}>
-          {children}
-        </UnitsContext.Provider>
-      </AccessWrapper>
+      <UserSessionProvider>
+        <AccessWrapper>
+          <UnitsContext.Provider value={{ unit: "metric", setUnit: () => {} }}>
+            {children}
+          </UnitsContext.Provider>
+        </AccessWrapper>
+      </UserSessionProvider>
     );
 
     render(

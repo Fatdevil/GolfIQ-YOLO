@@ -5,6 +5,7 @@ import { render, screen, waitFor } from "@testing-library/react";
 import QuickRoundPlayPage from "../src/pages/quick/QuickRoundPlayPage";
 import { NotificationProvider } from "../src/notifications/NotificationContext";
 import { QuickRound } from "../src/features/quickround/types";
+import { UserSessionProvider } from "../src/user/UserSessionContext";
 
 const { loadRoundMock, saveRoundMock } = vi.hoisted(() => ({
   loadRoundMock: vi.fn(),
@@ -16,6 +17,9 @@ const syncMock = vi.fn();
 vi.mock("../src/features/quickround/storage", () => ({
   loadRound: loadRoundMock,
   saveRound: saveRoundMock,
+}));
+vi.mock("../src/user/historyApi", () => ({
+  postQuickRoundSnapshots: vi.fn(),
 }));
 
 vi.mock("../src/features/watch/api", () => ({
@@ -42,13 +46,15 @@ describe("QuickRound watch sync", () => {
     loadRoundMock.mockReturnValueOnce(round);
 
     render(
-      <NotificationProvider>
-        <MemoryRouter initialEntries={["/play/qr-watch-1"]}>
-          <Routes>
-            <Route path="/play/:roundId" element={<QuickRoundPlayPage />} />
-          </Routes>
-        </MemoryRouter>
-      </NotificationProvider>
+      <UserSessionProvider>
+        <NotificationProvider>
+          <MemoryRouter initialEntries={["/play/qr-watch-1"]}>
+            <Routes>
+              <Route path="/play/:roundId" element={<QuickRoundPlayPage />} />
+            </Routes>
+          </MemoryRouter>
+        </NotificationProvider>
+      </UserSessionProvider>
     );
 
     const statuses = await screen.findAllByTestId("quickround-watch-status");
@@ -81,13 +87,15 @@ describe("QuickRound watch sync", () => {
     loadRoundMock.mockReturnValueOnce(round);
 
     render(
-      <NotificationProvider>
-        <MemoryRouter initialEntries={["/play/qr-watch-2"]}>
-          <Routes>
-            <Route path="/play/:roundId" element={<QuickRoundPlayPage />} />
-          </Routes>
-        </MemoryRouter>
-      </NotificationProvider>
+      <UserSessionProvider>
+        <NotificationProvider>
+          <MemoryRouter initialEntries={["/play/qr-watch-2"]}>
+            <Routes>
+              <Route path="/play/:roundId" element={<QuickRoundPlayPage />} />
+            </Routes>
+          </MemoryRouter>
+        </NotificationProvider>
+      </UserSessionProvider>
     );
 
     const statuses = await screen.findAllByTestId("quickround-watch-status");

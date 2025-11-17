@@ -8,6 +8,7 @@ import RangePracticePage from "../src/pages/RangePracticePage";
 import type { BagState } from "../src/bag/types";
 import { UserAccessContext } from "../src/access/UserAccessContext";
 import type { FeatureId, PlanName } from "../src/access/types";
+import { UserSessionProvider } from "../src/user/UserSessionContext";
 
 const { loadBagMock, updateClubCarryMock } = vi.hoisted(() => ({
   loadBagMock: vi.fn(),
@@ -26,6 +27,9 @@ const { postRangeAnalyzeMock } = vi.hoisted(() => ({
 vi.mock("../src/features/range/api", () => ({
   postRangeAnalyze: postRangeAnalyzeMock,
 }));
+vi.mock("../src/user/historyApi", () => ({
+  postRangeSessionSnapshots: vi.fn(),
+}));
 
 const proAccessValue = {
   loading: false,
@@ -35,11 +39,13 @@ const proAccessValue = {
 
 function renderWithAccess(ui: ReactElement) {
   return render(
-    <UserAccessContext.Provider value={proAccessValue}>
-      <UnitsContext.Provider value={{ unit: "metric", setUnit: () => {} }}>
-        {ui}
-      </UnitsContext.Provider>
-    </UserAccessContext.Provider>,
+    <UserSessionProvider>
+      <UserAccessContext.Provider value={proAccessValue}>
+        <UnitsContext.Provider value={{ unit: "metric", setUnit: () => {} }}>
+          {ui}
+        </UnitsContext.Provider>
+      </UserAccessContext.Provider>
+    </UserSessionProvider>,
   );
 }
 
