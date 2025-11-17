@@ -37,6 +37,10 @@ export async function migrateLocalHistoryOnce(
   const qrSnaps = quickRounds.map(mapQuickRoundToSnapshot);
   const rsSnaps = rangeSessions.map(mapRangeSessionToSnapshot);
 
+  if (qrSnaps.length === 0 && rsSnaps.length === 0) {
+    return;
+  }
+
   try {
     if (qrSnaps.length > 0) {
       await postQuickRoundSnapshots(qrSnaps);

@@ -68,7 +68,15 @@ describe("history migration", () => {
     vi.unstubAllGlobals();
   });
 
-  it("migrates once per user", async () => {
+  it("does not mark migrated when there is no data", async () => {
+    await migrateLocalHistoryOnce("user-1", [], []);
+
+    expect(postQuickRoundSnapshots).not.toHaveBeenCalled();
+    expect(postRangeSessionSnapshots).not.toHaveBeenCalled();
+    expect(hasMigratedHistory("user-1")).toBe(false);
+  });
+
+  it("migrates once per user when data exists", async () => {
     await migrateLocalHistoryOnce("user-1", rounds, rangeSessions);
 
     expect(postQuickRoundSnapshots).toHaveBeenCalledTimes(1);
@@ -79,5 +87,15 @@ describe("history migration", () => {
 
     expect(postQuickRoundSnapshots).toHaveBeenCalledTimes(1);
     expect(postRangeSessionSnapshots).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not mark migrated when posting fails", async () => {
+    postRangeSessionSnapshots.mockRejectedValueOnce(new Error("fail"));
+
+    await migrateLocalHistoryOnce("user-1", rounds, rangeSessions);
+
+    expect(postQuickRoundSnapshots).toHaveBeenCalledTimes(1);
+    expect(postRangeSessionSnapshots).toHaveBeenCalledTimes(1);
+    expect(hasMigratedHistory("user-1")).toBe(false);
   });
 });
