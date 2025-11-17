@@ -39,6 +39,7 @@ import MyGolfIQPage from "./pages/profile/MyGolfIQPage";
 import TripStartPage from "./pages/trip/TripStartPage";
 import TripScoreboardPage from "./pages/trip/TripScoreboardPage";
 import PublicTripScoreboardPage from "./pages/trip/PublicTripScoreboardPage";
+import { SettingsPage } from "@/pages/settings/SettingsPage";
 
 export default function App() {
   useCdnPreconnect();
@@ -125,6 +126,7 @@ export default function App() {
           <Route path="/range/score" element={<RangeScorePage />} />
           <Route path="/profile" element={<MyGolfIQPage />} />
           <Route path="/bag" element={<MyBagPage />} />
+          <Route path="/settings" element={<SettingsPage />} />
           <Route path="/courses/demo" element={<CourseDemoPage />} />
           <Route path="/play" element={<QuickRoundStartPage />} />
           <Route path="/play/:roundId" element={<QuickRoundPlayPage />} />

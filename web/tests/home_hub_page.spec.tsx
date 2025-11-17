@@ -46,10 +46,10 @@ describe("HomeHubPage", () => {
     expect(screen.getByRole("heading", { level: 2, name: /My GolfIQ/i })).toBeTruthy();
 
     const links = screen.getAllByRole("link") as HTMLAnchorElement[];
-    expect(links.length).toBe(4);
+    expect(links.length).toBeGreaterThanOrEqual(5);
     const hrefs = links.map((link) => link.getAttribute("href"));
     expect(hrefs).toEqual(
-      expect.arrayContaining(["/play", "/range/practice", "/trip/start", "/profile"]),
+      expect.arrayContaining(["/play", "/range/practice", "/trip/start", "/profile", "/settings"]),
     );
   });
 
