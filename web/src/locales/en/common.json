@@ -27,6 +27,16 @@
   "home.card.profile.title": "My GolfIQ",
   "home.card.profile.description": "See your rounds, range ghosts and bag snapshot in one place.",
 
+  "onboarding.home.title": "Welcome to GolfIQ-YOLO",
+  "onboarding.home.subtitle": "Here’s a quick overview of what you can do:",
+  "onboarding.home.point.quickRound": "Use Quick Round as your digital scorecard on the course.",
+  "onboarding.home.point.range": "Use Range Practice for ball speed, carry and missions on the driving range.",
+  "onboarding.home.point.trip": "Use Trip Mode for group rounds and live leaderboards on golf trips.",
+  "onboarding.home.point.profile": "Check My GolfIQ to see your progress, insights and Smart Bag suggestions.",
+  "onboarding.home.demoButton": "Show demo profile",
+  "onboarding.home.demoSeeding": "Loading demo…",
+  "onboarding.home.dismiss": "Got it, hide this",
+
   "profile.title": "My GolfIQ",
   "profile.subtitle": "Overview of your rounds, range practice and bag.",
   "profile.insights.title": "My GolfIQ insights",

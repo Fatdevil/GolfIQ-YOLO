@@ -1,11 +1,13 @@
-import React from "react";
+import React, { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 
 import { useUserAccess } from "@/access/UserAccessContext";
 import { ProBadge } from "@/access/ProBadge";
 import { BetaBadge } from "@/access/BetaBadge";
 import { useCalibrationStatus } from "@/features/range/useCalibrationStatus";
+import { useOnboarding } from "@/onboarding/useOnboarding";
+import { seedDemoData } from "@/onboarding/demoSeed";
 
 type ModeCardProps = {
   title: string;
@@ -36,8 +38,12 @@ const ModeCard: React.FC<ModeCardProps> = ({ title, description, to, badge }) =>
 
 export const HomeHubPage: React.FC = () => {
   const { t } = useTranslation();
+  const navigate = useNavigate();
   const { plan, loading: accessLoading } = useUserAccess();
   const { status: calibStatus } = useCalibrationStatus();
+  const { state: onboarding, markHomeSeen } = useOnboarding();
+  const [seeding, setSeeding] = useState(false);
+  const showOnboarding = !onboarding.homeSeen;
 
   return (
     <div className="max-w-5xl mx-auto px-4 py-6 space-y-6">
@@ -53,6 +59,49 @@ export const HomeHubPage: React.FC = () => {
           {plan === "pro" && <ProBadge />}
         </div>
       </header>
+
+      {showOnboarding && (
+        <div className="mb-4 rounded-xl border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-900">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <div className="font-semibold">{t("onboarding.home.title")}</div>
+              <p className="mt-1 text-xs text-sky-800">{t("onboarding.home.subtitle")}</p>
+              <ul className="mt-2 list-disc space-y-1 pl-5 text-xs">
+                <li>{t("onboarding.home.point.quickRound")}</li>
+                <li>{t("onboarding.home.point.range")}</li>
+                <li>{t("onboarding.home.point.trip")}</li>
+                <li>{t("onboarding.home.point.profile")}</li>
+              </ul>
+            </div>
+            <div className="flex flex-col items-end gap-2">
+              <button
+                type="button"
+                className="inline-flex items-center rounded-md border border-sky-600 px-3 py-1 text-xs font-semibold text-sky-800 hover:bg-sky-100 disabled:opacity-40"
+                onClick={async () => {
+                  setSeeding(true);
+                  try {
+                    await seedDemoData();
+                    markHomeSeen();
+                    navigate("/profile");
+                  } finally {
+                    setSeeding(false);
+                  }
+                }}
+                disabled={seeding}
+              >
+                {seeding ? t("onboarding.home.demoSeeding") : t("onboarding.home.demoButton")}
+              </button>
+              <button
+                type="button"
+                className="text-xs text-sky-800 hover:underline"
+                onClick={markHomeSeen}
+              >
+                {t("onboarding.home.dismiss")}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <section className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <ModeCard
