@@ -21,6 +21,13 @@ vi.mock("@/access/UserAccessContext", () => ({
   useUserAccess: mockUseUserAccess,
 }));
 
+vi.mock("@/user/UserSessionContext", () => ({
+  useUserSession: () => ({
+    session: { userId: "test-user-id", createdAt: "2025-01-01T00:00:00Z" },
+    loading: false,
+  }),
+}));
+
 describe("SettingsPage", () => {
   beforeEach(() => {
     mockUseUserAccess.mockReset();

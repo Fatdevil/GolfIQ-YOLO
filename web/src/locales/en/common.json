@@ -207,7 +207,11 @@
   "settings.section.general": "General",
   "settings.section.data": "Local data",
   "settings.plan.label": "Current plan: {{plan}}",
-  
+  "settings.userId.label": "User ID",
+  "settings.userId.copy": "Copy",
+  "settings.userId.copied": "User ID copied to clipboard.",
+  "settings.userId.copyError": "Could not copy the user ID.",
+
   "settings.link": "Settings",
   
   "settings.reset.description": "These options only affect data stored on this device. They do not touch any backend data.",
