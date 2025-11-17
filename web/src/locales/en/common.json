@@ -189,6 +189,23 @@
   "range.camera.reason.mpx_low": "Move the phone closer so the ball and club occupy more of the frame.",
   "range.camera.reason.light_low": "Scene is too dark – add light or move to a brighter spot.",
 
+  "settings.title": "Settings",
+  "settings.subtitle": "Manage your GolfIQ preferences and local data.",
+  "settings.section.general": "General",
+  "settings.section.data": "Local data",
+  "settings.plan.label": "Current plan: {{plan}}",
+  
+  "settings.link": "Settings",
+  
+  "settings.reset.description": "These options only affect data stored on this device. They do not touch any backend data.",
+  "settings.reset.quickRounds": "Quick Round history",
+  "settings.reset.bag": "Bag & club carries",
+  "settings.reset.rangeSessions": "Range session history",
+  "settings.reset.calibration": "Range calibration status",
+  "settings.reset.preferences": "Language & units",
+  "settings.reset.button": "Reset selected data",
+  "settings.reset.confirm": "Are you sure you want to reset the selected data on this device?",
+
   "bag.title": "My Bag",
   "bag.club": "Club",
   "bag.carry": "Carry ({{unit}})",

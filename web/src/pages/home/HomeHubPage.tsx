@@ -89,6 +89,12 @@ export const HomeHubPage: React.FC = () => {
           badge={plan === "pro" ? <ProBadge /> : undefined}
         />
       </section>
+
+      <footer className="mt-4 text-xs text-slate-500">
+        <Link to="/settings" className="underline hover:text-slate-700">
+          {t("settings.link")}
+        </Link>
+      </footer>
     </div>
   );
 };
