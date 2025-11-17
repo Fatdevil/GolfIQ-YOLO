@@ -8,6 +8,7 @@ import { BetaBadge } from "@/access/BetaBadge";
 import { useCalibrationStatus } from "@/features/range/useCalibrationStatus";
 import { useOnboarding } from "@/onboarding/useOnboarding";
 import { seedDemoData } from "@/onboarding/demoSeed";
+import { useNotifications } from "@/notifications/NotificationContext";
 
 type ModeCardProps = {
   title: string;
@@ -44,6 +45,7 @@ export const HomeHubPage: React.FC = () => {
   const { state: onboarding, markHomeSeen } = useOnboarding();
   const [seeding, setSeeding] = useState(false);
   const showOnboarding = !onboarding.homeSeen;
+  const { notify } = useNotifications();
 
   return (
     <div className="max-w-5xl mx-auto px-4 py-6 space-y-6">
@@ -82,7 +84,11 @@ export const HomeHubPage: React.FC = () => {
                   try {
                     await seedDemoData();
                     markHomeSeen();
+                    notify("success", t("onboarding.home.demoDone"));
                     navigate("/profile");
+                  } catch (error) {
+                    console.error(error);
+                    notify("error", t("onboarding.home.demoError"));
                   } finally {
                     setSeeding(false);
                   }

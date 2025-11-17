@@ -23,6 +23,7 @@ vi.mock("@/features/range/useCalibrationStatus", () => ({
   useCalibrationStatus: () => ({ status: { calibrated: false } }),
 }));
 
+import { NotificationProvider } from "../src/notifications/NotificationContext";
 import { HomeHubPage } from "@/pages/home/HomeHubPage";
 
 describe("HomeHubPage onboarding", () => {
@@ -35,9 +36,11 @@ describe("HomeHubPage onboarding", () => {
 
   it("shows onboarding card with actions when home not seen", () => {
     render(
-      <MemoryRouter>
-        <HomeHubPage />
-      </MemoryRouter>,
+      <NotificationProvider>
+        <MemoryRouter>
+          <HomeHubPage />
+        </MemoryRouter>
+      </NotificationProvider>,
     );
 
     expect(screen.getByText("Welcome to GolfIQ-YOLO")).toBeTruthy();
@@ -47,9 +50,11 @@ describe("HomeHubPage onboarding", () => {
 
   it("dismisses onboarding when clicking got it", async () => {
     const initial = render(
-      <MemoryRouter>
-        <HomeHubPage />
-      </MemoryRouter>,
+      <NotificationProvider>
+        <MemoryRouter>
+          <HomeHubPage />
+        </MemoryRouter>
+      </NotificationProvider>,
     );
 
     const dismissButtons = screen.getAllByText("Got it, hide this");
@@ -60,9 +65,11 @@ describe("HomeHubPage onboarding", () => {
     mockLoadOnboardingState.mockReturnValue({ homeSeen: true });
     initial.unmount();
     render(
-      <MemoryRouter>
-        <HomeHubPage />
-      </MemoryRouter>,
+      <NotificationProvider>
+        <MemoryRouter>
+          <HomeHubPage />
+        </MemoryRouter>
+      </NotificationProvider>,
     );
 
     expect(screen.queryByText("Welcome to GolfIQ-YOLO")).toBeNull();
@@ -70,9 +77,11 @@ describe("HomeHubPage onboarding", () => {
 
   it("triggers demo seeding when clicking demo button", async () => {
     render(
-      <MemoryRouter>
-        <HomeHubPage />
-      </MemoryRouter>,
+      <NotificationProvider>
+        <MemoryRouter>
+          <HomeHubPage />
+        </MemoryRouter>
+      </NotificationProvider>,
     );
 
     const demoButtons = screen.getAllByText("Show demo profile");

@@ -22,6 +22,7 @@ vi.mock("@/access/UserAccessContext", () => ({
   useUserAccess: mockUseUserAccess,
 }));
 
+import { NotificationProvider } from "../src/notifications/NotificationContext";
 import { HomeHubPage } from "@/pages/home/HomeHubPage";
 
 describe("HomeHubPage calibration chip", () => {
@@ -32,9 +33,11 @@ describe("HomeHubPage calibration chip", () => {
 
   it("renders Calibrated chip when status is true", () => {
     render(
-      <MemoryRouter>
-        <HomeHubPage />
-      </MemoryRouter>,
+      <NotificationProvider>
+        <MemoryRouter>
+          <HomeHubPage />
+        </MemoryRouter>
+      </NotificationProvider>,
     );
 
     expect(screen.getByText(/Calibrated/i)).toBeTruthy();

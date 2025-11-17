@@ -4,6 +4,7 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import QuickRoundPlayPage from "../src/pages/quick/QuickRoundPlayPage";
+import { NotificationProvider } from "../src/notifications/NotificationContext";
 import { QuickRound } from "../src/features/quickround/types";
 
 const { loadRoundMock, saveRoundMock } = vi.hoisted(() => ({
@@ -37,11 +38,13 @@ describe("QuickRoundPlayPage", () => {
     const user = userEvent.setup();
 
     render(
-      <MemoryRouter initialEntries={["/play/qr-123"]}>
-        <Routes>
-          <Route path="/play/:roundId" element={<QuickRoundPlayPage />} />
-        </Routes>
-      </MemoryRouter>
+      <NotificationProvider>
+        <MemoryRouter initialEntries={["/play/qr-123"]}>
+          <Routes>
+            <Route path="/play/:roundId" element={<QuickRoundPlayPage />} />
+          </Routes>
+        </MemoryRouter>
+      </NotificationProvider>
     );
 
     const strokesInput = await screen.findByLabelText("Slag hål 1");
@@ -65,11 +68,13 @@ describe("QuickRoundPlayPage", () => {
     const user = userEvent.setup();
 
     render(
-      <MemoryRouter initialEntries={["/play/qr-999"]}>
-        <Routes>
-          <Route path="/play/:roundId" element={<QuickRoundPlayPage />} />
-        </Routes>
-      </MemoryRouter>
+      <NotificationProvider>
+        <MemoryRouter initialEntries={["/play/qr-999"]}>
+          <Routes>
+            <Route path="/play/:roundId" element={<QuickRoundPlayPage />} />
+          </Routes>
+        </MemoryRouter>
+      </NotificationProvider>
     );
 
     const buttons = await screen.findAllByRole("button", { name: /Avsluta runda/i });
@@ -84,11 +89,13 @@ describe("QuickRoundPlayPage", () => {
     loadRoundMock.mockReturnValueOnce(null);
 
     render(
-      <MemoryRouter initialEntries={["/play/missing"]}>
-        <Routes>
-          <Route path="/play/:roundId" element={<QuickRoundPlayPage />} />
-        </Routes>
-      </MemoryRouter>
+      <NotificationProvider>
+        <MemoryRouter initialEntries={["/play/missing"]}>
+          <Routes>
+            <Route path="/play/:roundId" element={<QuickRoundPlayPage />} />
+          </Routes>
+        </MemoryRouter>
+      </NotificationProvider>
     );
 
     expect(screen.getByText(/Round not found/i)).toBeTruthy();
@@ -110,11 +117,13 @@ describe("QuickRoundPlayPage", () => {
     loadRoundMock.mockReturnValueOnce(round);
 
     render(
-      <MemoryRouter initialEntries={["/play/qr-555"]}>
-        <Routes>
-          <Route path="/play/:roundId" element={<QuickRoundPlayPage />} />
-        </Routes>
-      </MemoryRouter>
+      <NotificationProvider>
+        <MemoryRouter initialEntries={["/play/qr-555"]}>
+          <Routes>
+            <Route path="/play/:roundId" element={<QuickRoundPlayPage />} />
+          </Routes>
+        </MemoryRouter>
+      </NotificationProvider>
     );
 
     expect(await screen.findByText(/Net strokes/i)).toBeTruthy();

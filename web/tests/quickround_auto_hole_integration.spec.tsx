@@ -5,6 +5,7 @@ import userEvent from "@testing-library/user-event";
 import { waitFor } from "@testing-library/react";
 
 import QuickRoundPlayPage from "../src/pages/quick/QuickRoundPlayPage";
+import { NotificationProvider } from "../src/notifications/NotificationContext";
 import type { QuickRound } from "../src/features/quickround/types";
 
 const { loadRoundMock, saveRoundMock, useGeolocationMock, useAutoHoleSuggestionMock, clearSuggestionMock } = vi.hoisted(() => ({
@@ -65,11 +66,13 @@ describe("QuickRoundPlayPage auto-hole integration", () => {
     const user = userEvent.setup();
 
     render(
-      <MemoryRouter initialEntries={["/play/qr-auto"]}>
-        <Routes>
-          <Route path="/play/:roundId" element={<QuickRoundPlayPage />} />
-        </Routes>
-      </MemoryRouter>
+      <NotificationProvider>
+        <MemoryRouter initialEntries={["/play/qr-auto"]}>
+          <Routes>
+            <Route path="/play/:roundId" element={<QuickRoundPlayPage />} />
+          </Routes>
+        </MemoryRouter>
+      </NotificationProvider>
     );
 
     expect(await screen.findByText(/Aktivt hål: 1/i)).toBeTruthy();

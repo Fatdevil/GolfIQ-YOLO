@@ -2,6 +2,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Link, useParams } from "react-router-dom";
 
+import { useNotifications } from "@/notifications/NotificationContext";
+
 import {
   loadRound,
   saveRound,
@@ -16,6 +18,7 @@ import { syncQuickRoundToWatch } from "../../features/watch/api";
 export default function QuickRoundPlayPage() {
   const { roundId } = useParams<{ roundId: string }>();
   const { t } = useTranslation();
+  const { notify } = useNotifications();
   const [round, setRound] = useState<QuickRound | null>(null);
   const [notFound, setNotFound] = useState(false);
   const [showPutts, setShowPutts] = useState(true);
@@ -124,11 +127,12 @@ export default function QuickRoundPlayPage() {
         setWatchError(null);
       } catch (error) {
         setWatchError(t("quickRound.watch.error"));
+        notify("error", t("quickRound.watch.error"));
       } finally {
         setWatchSyncing(false);
       }
     },
-    [memberId, round?.courseId, runId, t]
+    [memberId, notify, round?.courseId, runId, t]
   );
 
   useEffect(() => {
@@ -185,20 +189,25 @@ export default function QuickRoundPlayPage() {
     try {
       if (navigator.clipboard?.writeText) {
         await navigator.clipboard.writeText(summaryText);
+
+        setSummaryCopied(true);
+        if (summaryCopyTimeout.current !== null) {
+          window.clearTimeout(summaryCopyTimeout.current);
+        }
+        summaryCopyTimeout.current = window.setTimeout(() => {
+          setSummaryCopied(false);
+          summaryCopyTimeout.current = null;
+        }, 4000);
+
+        notify("success", t("quickRound.share.copied"));
       } else {
         window.prompt(t("quickRound.share.button"), summaryText);
+        notify("error", t("quickRound.share.error"));
       }
-
-      setSummaryCopied(true);
-      if (summaryCopyTimeout.current !== null) {
-        window.clearTimeout(summaryCopyTimeout.current);
-      }
-      summaryCopyTimeout.current = window.setTimeout(() => {
-        setSummaryCopied(false);
-        summaryCopyTimeout.current = null;
-      }, 4000);
     } catch (error) {
       console.warn("Failed to copy quick round summary", error);
+      setSummaryCopied(false);
+      notify("error", t("quickRound.share.error"));
     }
   };
 

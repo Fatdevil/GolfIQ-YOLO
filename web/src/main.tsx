@@ -8,6 +8,8 @@ import { ErrorBoundary } from "./components/ErrorBoundary";
 import { TempAltDemo } from "./dev/TempAltDemo";
 import { UserAccessProvider } from "./access/UserAccessContext";
 import { UnitsProvider } from "@/preferences/UnitsContext";
+import { NotificationProvider } from "@/notifications/NotificationContext";
+import { ToastContainer } from "@/notifications/ToastContainer";
 import "./i18n";
 import "./styles.css";
 import "./sentry";
@@ -33,7 +35,10 @@ if (isTempAltDemo) {
         <ErrorBoundary>
           <UserAccessProvider>
             <UnitsProvider>
-              <App />
+              <NotificationProvider>
+                <App />
+                <ToastContainer />
+              </NotificationProvider>
             </UnitsProvider>
           </UserAccessProvider>
         </ErrorBoundary>

@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 
 import QuickRoundPlayPage from "../src/pages/quick/QuickRoundPlayPage";
+import { NotificationProvider } from "../src/notifications/NotificationContext";
 import { QuickRound } from "../src/features/quickround/types";
 
 const { loadRoundMock, saveRoundMock } = vi.hoisted(() => ({
@@ -41,11 +42,13 @@ describe("QuickRound watch sync", () => {
     loadRoundMock.mockReturnValueOnce(round);
 
     render(
-      <MemoryRouter initialEntries={["/play/qr-watch-1"]}>
-        <Routes>
-          <Route path="/play/:roundId" element={<QuickRoundPlayPage />} />
-        </Routes>
-      </MemoryRouter>
+      <NotificationProvider>
+        <MemoryRouter initialEntries={["/play/qr-watch-1"]}>
+          <Routes>
+            <Route path="/play/:roundId" element={<QuickRoundPlayPage />} />
+          </Routes>
+        </MemoryRouter>
+      </NotificationProvider>
     );
 
     const statuses = await screen.findAllByTestId("quickround-watch-status");
@@ -78,11 +81,13 @@ describe("QuickRound watch sync", () => {
     loadRoundMock.mockReturnValueOnce(round);
 
     render(
-      <MemoryRouter initialEntries={["/play/qr-watch-2"]}>
-        <Routes>
-          <Route path="/play/:roundId" element={<QuickRoundPlayPage />} />
-        </Routes>
-      </MemoryRouter>
+      <NotificationProvider>
+        <MemoryRouter initialEntries={["/play/qr-watch-2"]}>
+          <Routes>
+            <Route path="/play/:roundId" element={<QuickRoundPlayPage />} />
+          </Routes>
+        </MemoryRouter>
+      </NotificationProvider>
     );
 
     const statuses = await screen.findAllByTestId("quickround-watch-status");
