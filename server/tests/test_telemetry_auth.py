@@ -3,7 +3,6 @@ from __future__ import annotations
 import pytest
 from fastapi import status
 from fastapi.testclient import TestClient
-from starlette.websockets import WebSocketDisconnect
 
 from server.app import app
 
