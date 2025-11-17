@@ -25,6 +25,7 @@ from server.api.routers.hole_detect import router as hole_detect_router
 from server.api.routers.live_tokens import router as live_tokens_router
 from server.api.routers.sg import router as sg_router
 from server.api.routers.share import router as share_router
+from server.api.routers.user_history import router as user_history_router
 from server.api.routers.watch_pairing import router as watch_pairing_router
 from server.api.routers.watch_tips import router as watch_tips_router
 from server.api.routers.watch_hud import router as watch_hud_router
@@ -163,6 +164,7 @@ app.include_router(watch_hud_router)
 app.include_router(watch_quickround_router)
 app.include_router(trip_public_router)
 app.include_router(trip_router)
+app.include_router(user_history_router)
 if os.getenv("APP_ENV", "").lower() not in {"production", "prod"}:
     from server.dev.seed_s16 import router as seed_s16_router
 

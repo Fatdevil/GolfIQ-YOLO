@@ -1,4 +1,5 @@
 import axios from "axios";
+import { getCurrentUserId } from "@/user/currentUserId";
 
 import type { GrossNetMode, TvFlags } from "@shared/events/types";
 
@@ -8,8 +9,29 @@ const API_KEY = import.meta.env.VITE_API_KEY || "";
 export const getApiKey = () => API_KEY;
 
 /** Return default headers incl. x-api-key if present. */
-export const withAuth = (extra: Record<string, string> = {}) =>
-  (API_KEY ? { "x-api-key": API_KEY, ...extra } : extra);
+export const withAuth = (extra: Record<string, string> = {}) => {
+  const userId = getCurrentUserId();
+  return {
+    ...(API_KEY ? { "x-api-key": API_KEY } : {}),
+    ...(userId ? { "x-user-id": userId } : {}),
+    ...extra,
+  };
+};
+
+export async function apiFetch(
+  path: string,
+  options: RequestInit = {}
+): Promise<Response> {
+  const existingHeaders =
+    typeof Headers !== "undefined" && options.headers instanceof Headers
+      ? Object.fromEntries(options.headers.entries())
+      : ((options.headers as Record<string, string>) ?? {});
+  const headers = withAuth(existingHeaders);
+  return fetch(`${API}${path}`, {
+    ...options,
+    headers,
+  });
+}
 
 export { API };
 
