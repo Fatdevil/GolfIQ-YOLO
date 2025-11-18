@@ -1,0 +1,543 @@
+{
+  "id": "norrmjole_gk",
+  "name": "Norrmj\u00f6le GK",
+  "country": "Sweden",
+  "tees": [
+    "yellow",
+    "white"
+  ],
+  "holes": [
+    {
+      "hole": 1,
+      "par": 4,
+      "polyline": [
+        [
+          63.72,
+          20.2
+        ],
+        [
+          63.72025,
+          20.2003
+        ],
+        [
+          63.7205,
+          20.20055
+        ]
+      ],
+      "green_center": [
+        63.7205,
+        20.20055
+      ],
+      "hazards": [
+        {
+          "type": "water",
+          "note": "Creek crossing",
+          "severity": "low"
+        }
+      ]
+    },
+    {
+      "hole": 2,
+      "par": 5,
+      "polyline": [
+        [
+          63.7208,
+          20.20084
+        ],
+        [
+          63.72105,
+          20.20114
+        ],
+        [
+          63.7213,
+          20.20139
+        ]
+      ],
+      "green_center": [
+        63.7213,
+        20.20139
+      ],
+      "hazards": [
+        {
+          "type": "water",
+          "note": "Creek crossing",
+          "severity": "low"
+        }
+      ]
+    },
+    {
+      "hole": 3,
+      "par": 4,
+      "polyline": [
+        [
+          63.7216,
+          20.20168
+        ],
+        [
+          63.72185,
+          20.20198
+        ],
+        [
+          63.7221,
+          20.20223
+        ]
+      ],
+      "green_center": [
+        63.7221,
+        20.20223
+      ],
+      "hazards": [
+        {
+          "type": "bunker",
+          "note": "Left greenside bunker",
+          "severity": "moderate"
+        }
+      ]
+    },
+    {
+      "hole": 4,
+      "par": 3,
+      "polyline": [
+        [
+          63.7224,
+          20.20252
+        ],
+        [
+          63.72265,
+          20.20282
+        ],
+        [
+          63.7229,
+          20.20307
+        ]
+      ],
+      "green_center": [
+        63.7229,
+        20.20307
+      ],
+      "hazards": [
+        {
+          "type": "water",
+          "note": "Creek crossing",
+          "severity": "low"
+        }
+      ]
+    },
+    {
+      "hole": 5,
+      "par": 4,
+      "polyline": [
+        [
+          63.7232,
+          20.20336
+        ],
+        [
+          63.72345,
+          20.20366
+        ],
+        [
+          63.7237,
+          20.20391
+        ]
+      ],
+      "green_center": [
+        63.7237,
+        20.20391
+      ],
+      "hazards": [
+        {
+          "type": "water",
+          "note": "Creek crossing",
+          "severity": "low"
+        }
+      ]
+    },
+    {
+      "hole": 6,
+      "par": 4,
+      "polyline": [
+        [
+          63.724,
+          20.2042
+        ],
+        [
+          63.72425,
+          20.2045
+        ],
+        [
+          63.7245,
+          20.20475
+        ]
+      ],
+      "green_center": [
+        63.7245,
+        20.20475
+      ],
+      "hazards": [
+        {
+          "type": "bunker",
+          "note": "Left greenside bunker",
+          "severity": "moderate"
+        }
+      ]
+    },
+    {
+      "hole": 7,
+      "par": 5,
+      "polyline": [
+        [
+          63.7248,
+          20.20504
+        ],
+        [
+          63.72505,
+          20.20534
+        ],
+        [
+          63.7253,
+          20.20559
+        ]
+      ],
+      "green_center": [
+        63.7253,
+        20.20559
+      ],
+      "hazards": [
+        {
+          "type": "water",
+          "note": "Creek crossing",
+          "severity": "low"
+        }
+      ]
+    },
+    {
+      "hole": 8,
+      "par": 3,
+      "polyline": [
+        [
+          63.7256,
+          20.20588
+        ],
+        [
+          63.72585,
+          20.20618
+        ],
+        [
+          63.7261,
+          20.20643
+        ]
+      ],
+      "green_center": [
+        63.7261,
+        20.20643
+      ],
+      "hazards": [
+        {
+          "type": "water",
+          "note": "Creek crossing",
+          "severity": "low"
+        }
+      ]
+    },
+    {
+      "hole": 9,
+      "par": 4,
+      "polyline": [
+        [
+          63.7264,
+          20.20672
+        ],
+        [
+          63.72665,
+          20.20702
+        ],
+        [
+          63.7269,
+          20.20727
+        ]
+      ],
+      "green_center": [
+        63.7269,
+        20.20727
+      ],
+      "hazards": [
+        {
+          "type": "bunker",
+          "note": "Left greenside bunker",
+          "severity": "moderate"
+        }
+      ]
+    },
+    {
+      "hole": 10,
+      "par": 4,
+      "polyline": [
+        [
+          63.7272,
+          20.20756
+        ],
+        [
+          63.72745,
+          20.20786
+        ],
+        [
+          63.7277,
+          20.20811
+        ]
+      ],
+      "green_center": [
+        63.7277,
+        20.20811
+      ],
+      "hazards": [
+        {
+          "type": "water",
+          "note": "Creek crossing",
+          "severity": "low"
+        }
+      ]
+    },
+    {
+      "hole": 11,
+      "par": 5,
+      "polyline": [
+        [
+          63.728,
+          20.2084
+        ],
+        [
+          63.72825,
+          20.2087
+        ],
+        [
+          63.7285,
+          20.20895
+        ]
+      ],
+      "green_center": [
+        63.7285,
+        20.20895
+      ],
+      "hazards": [
+        {
+          "type": "water",
+          "note": "Creek crossing",
+          "severity": "low"
+        }
+      ]
+    },
+    {
+      "hole": 12,
+      "par": 4,
+      "polyline": [
+        [
+          63.7288,
+          20.20924
+        ],
+        [
+          63.72905,
+          20.20954
+        ],
+        [
+          63.7293,
+          20.20979
+        ]
+      ],
+      "green_center": [
+        63.7293,
+        20.20979
+      ],
+      "hazards": [
+        {
+          "type": "bunker",
+          "note": "Left greenside bunker",
+          "severity": "moderate"
+        }
+      ]
+    },
+    {
+      "hole": 13,
+      "par": 3,
+      "polyline": [
+        [
+          63.7296,
+          20.21008
+        ],
+        [
+          63.72985,
+          20.21038
+        ],
+        [
+          63.7301,
+          20.21063
+        ]
+      ],
+      "green_center": [
+        63.7301,
+        20.21063
+      ],
+      "hazards": [
+        {
+          "type": "water",
+          "note": "Creek crossing",
+          "severity": "low"
+        }
+      ]
+    },
+    {
+      "hole": 14,
+      "par": 4,
+      "polyline": [
+        [
+          63.7304,
+          20.21092
+        ],
+        [
+          63.73065,
+          20.21122
+        ],
+        [
+          63.7309,
+          20.21147
+        ]
+      ],
+      "green_center": [
+        63.7309,
+        20.21147
+      ],
+      "hazards": [
+        {
+          "type": "water",
+          "note": "Creek crossing",
+          "severity": "low"
+        }
+      ]
+    },
+    {
+      "hole": 15,
+      "par": 4,
+      "polyline": [
+        [
+          63.7312,
+          20.21176
+        ],
+        [
+          63.73145,
+          20.21206
+        ],
+        [
+          63.7317,
+          20.21231
+        ]
+      ],
+      "green_center": [
+        63.7317,
+        20.21231
+      ],
+      "hazards": [
+        {
+          "type": "bunker",
+          "note": "Left greenside bunker",
+          "severity": "moderate"
+        }
+      ]
+    },
+    {
+      "hole": 16,
+      "par": 5,
+      "polyline": [
+        [
+          63.732,
+          20.2126
+        ],
+        [
+          63.73225,
+          20.2129
+        ],
+        [
+          63.7325,
+          20.21315
+        ]
+      ],
+      "green_center": [
+        63.7325,
+        20.21315
+      ],
+      "hazards": [
+        {
+          "type": "water",
+          "note": "Creek crossing",
+          "severity": "low"
+        }
+      ]
+    },
+    {
+      "hole": 17,
+      "par": 3,
+      "polyline": [
+        [
+          63.7328,
+          20.21344
+        ],
+        [
+          63.73305,
+          20.21374
+        ],
+        [
+          63.7333,
+          20.21399
+        ]
+      ],
+      "green_center": [
+        63.7333,
+        20.21399
+      ],
+      "hazards": [
+        {
+          "type": "water",
+          "note": "Creek crossing",
+          "severity": "low"
+        }
+      ]
+    },
+    {
+      "hole": 18,
+      "par": 4,
+      "polyline": [
+        [
+          63.7336,
+          20.21428
+        ],
+        [
+          63.73385,
+          20.21458
+        ],
+        [
+          63.7341,
+          20.21483
+        ]
+      ],
+      "green_center": [
+        63.7341,
+        20.21483
+      ],
+      "hazards": [
+        {
+          "type": "bunker",
+          "note": "Left greenside bunker",
+          "severity": "moderate"
+        }
+      ]
+    }
+  ],
+  "bbox": [
+    [
+      63.719,
+      20.199
+    ],
+    [
+      63.735,
+      20.215
+    ]
+  ]
+}
