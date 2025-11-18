@@ -40,6 +40,15 @@ const mockRounds: QuickRound[] = [
     ],
     startedAt: "2024-07-15T09:00:00.000Z",
   },
+  {
+    id: "r4",
+    holes: [
+      { index: 1, par: 4, strokes: 5 },
+      { index: 2, par: 4, strokes: 4 },
+    ],
+    startedAt: "2024-07-10T09:00:00.000Z",
+    completedAt: "2024-07-10T11:00:00.000Z",
+  },
 ];
 
 const mockGhosts: GhostProfile[] = [
@@ -107,6 +116,7 @@ describe("MyGolfIQPage", () => {
     expect(screen.getByText(/Total rounds/i)).toBeTruthy();
     expect(screen.getByText(/Completed rounds/i)).toBeTruthy();
     expect(screen.getByText(/Championship Course/i)).toBeTruthy();
+    expect(screen.getByText(/Unknown course/i)).toBeTruthy();
     expect(screen.getByRole("heading", { level: 2, name: /Range practice/i })).toBeTruthy();
     expect(screen.getByText(/Ghost profiles/i)).toBeTruthy();
     expect(screen.getByText(/Bag snapshot/i)).toBeTruthy();

@@ -166,6 +166,7 @@ export default function QuickRoundPlayPage() {
     dateStyle: "short",
     timeStyle: "short",
   });
+  const courseTitle = round.courseName ?? t("profile.quickRounds.unknownCourse");
 
   const autoHoleAvailable = Boolean(round.courseId);
   const suggestionReason = suggestion
@@ -178,7 +179,7 @@ export default function QuickRoundPlayPage() {
     }
 
     const summaryLines = [
-      `GolfIQ Quick Round – ${round.courseName}`,
+      `GolfIQ Quick Round – ${courseTitle}`,
       "",
       `Date: ${new Date(round.startedAt).toLocaleString()}`,
       `Score: ${summary.totalStrokes} (${formatToPar(summary.toPar)})`,
@@ -335,7 +336,7 @@ export default function QuickRoundPlayPage() {
           </section>
           <div className="flex flex-wrap items-center justify-between gap-4">
             <div>
-              <h1 className="text-2xl font-semibold text-slate-100">{round.courseName}</h1>
+              <h1 className="text-2xl font-semibold text-slate-100">{courseTitle}</h1>
               <p className="text-sm text-slate-400">
                 {round.teesName ? `${round.teesName} • ` : ""}Startad {headerDate}
               </p>

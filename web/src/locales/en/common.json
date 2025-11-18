@@ -64,6 +64,7 @@
   "profile.quickRounds.avgNetToPar": "Average net result",
   "profile.quickRounds.advancedInsights": "Pro insights",
   "profile.quickRounds.recent": "Recent rounds",
+  "profile.quickRounds.unknownCourse": "Unknown course",
   "profile.quickRounds.noScore": "No score yet",
 
   "profile.range.title": "Range practice",
@@ -109,6 +110,8 @@
   "quickRound.start.handicap": "Handicap (optional)",
   "quickRound.start.handicapHelp": "(Optional) Used to compute net score; simple gross – handicap (v1).",
   "quickRound.start.startButton": "Start round",
+  "quickround.course.label": "Course",
+  "quickround.course.none": "No course selected",
   "quickRound.play.summaryTitle": "Round summary",
   "quickRound.play.strokes": "Strokes",
   "quickRound.play.par": "Par",

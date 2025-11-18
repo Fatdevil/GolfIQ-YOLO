@@ -5,7 +5,7 @@ const HCP_STORAGE_KEY = "golfiq.quickRound.handicap.v1";
 
 export type QuickRoundSummary = Pick<
   QuickRound,
-  "id" | "courseName" | "teesName" | "startedAt" | "completedAt"
+  "id" | "courseId" | "courseName" | "teesName" | "startedAt" | "completedAt"
 >;
 
 export function createRoundId(): string {
@@ -14,8 +14,9 @@ export function createRoundId(): string {
 
 export function loadAllRounds(): QuickRoundSummary[] {
   const rounds = readAllRounds();
-  return rounds.map(({ id, courseName, teesName, startedAt, completedAt }) => ({
+  return rounds.map(({ id, courseId, courseName, teesName, startedAt, completedAt }) => ({
     id,
+    courseId,
     courseName,
     teesName,
     startedAt,

@@ -35,6 +35,21 @@ export async function apiFetch(
 
 export { API };
 
+export type BundleIndexItem = {
+  courseId: string;
+  name: string;
+  holes: number;
+  version?: number;
+  ttlSec?: number;
+};
+
+export async function fetchBundleIndex(): Promise<BundleIndexItem[]> {
+  const response = await axios.get<BundleIndexItem[]>(`${API}/bundle/index`, {
+    headers: withAuth(),
+  });
+  return response.data;
+}
+
 export type CreateEventBody = {
   name: string;
   emoji?: string;
