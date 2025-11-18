@@ -87,7 +87,9 @@ def _to_event(payload: CaddieTelemetryIn) -> CaddieTelemetryEvent:
             end_distance_to_pin_m=payload.endDistanceToPin_m,
             result_category=payload.resultCategory,
         )
-    raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="unknown caddie telemetry type")
+    raise HTTPException(
+        status_code=status.HTTP_400_BAD_REQUEST, detail="unknown caddie telemetry type"
+    )
 
 
 @router.post("/api/caddie/telemetry")

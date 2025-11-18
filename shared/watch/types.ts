@@ -14,9 +14,22 @@ export type CaddieAdviceV1 = {
   risk?: 'safe' | 'neutral' | 'aggressive' | null;
 };
 
+export type CaddieAcceptedMsg = {
+  type: 'CADDIE_ACCEPTED_V1';
+  club: string;
+  runId?: string | null;
+  memberId?: string | null;
+  courseId?: string | null;
+  hole?: number | null;
+  shotIndex?: number | null;
+  selectedClub?: string | null;
+  recommendedClub?: string | null;
+  adviceId?: string | null;
+};
+
 export type WatchMsg =
   | { type: 'CADDIE_ADVICE_V1'; advice: CaddieAdviceV1 }
-  | { type: 'CADDIE_ACCEPTED_V1'; club: string }
+  | CaddieAcceptedMsg
   | {
       type: 'CADDIE_ADVICE_SHOWN_V1';
       club: string;

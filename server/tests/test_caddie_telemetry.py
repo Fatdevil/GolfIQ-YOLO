@@ -82,8 +82,12 @@ class _Capture:
 
 def test_ingest_caddie_telemetry(monkeypatch: pytest.MonkeyPatch) -> None:
     capture = _Capture()
-    monkeypatch.setattr(caddie_telemetry.ws_telemetry.manager, "broadcast", capture.broadcast)
-    monkeypatch.setattr(caddie_telemetry.ws_telemetry, "should_record", lambda pct: False)
+    monkeypatch.setattr(
+        caddie_telemetry.ws_telemetry.manager, "broadcast", capture.broadcast
+    )
+    monkeypatch.setattr(
+        caddie_telemetry.ws_telemetry, "should_record", lambda pct: False
+    )
 
     client = TestClient(app)
 
@@ -96,7 +100,9 @@ def test_ingest_caddie_telemetry(monkeypatch: pytest.MonkeyPatch) -> None:
         "targetDistance_m": 150,
     }
 
-    resp = client.post("/api/caddie/telemetry", json=payload, headers={"x-api-key": "secret"})
+    resp = client.post(
+        "/api/caddie/telemetry", json=payload, headers={"x-api-key": "secret"}
+    )
 
     assert resp.status_code == 200
     assert resp.json()["accepted"] == 1
@@ -104,9 +110,13 @@ def test_ingest_caddie_telemetry(monkeypatch: pytest.MonkeyPatch) -> None:
     assert capture.messages[0]["recommendedClub"] == "8i"
 
 
-def test_ingest_caddie_telemetry_missing_required(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_ingest_caddie_telemetry_missing_required(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     monkeypatch.setattr(caddie_telemetry.ws_telemetry.manager, "broadcast", lambda message: 0)  # type: ignore[arg-type]
-    monkeypatch.setattr(caddie_telemetry.ws_telemetry, "should_record", lambda pct: False)
+    monkeypatch.setattr(
+        caddie_telemetry.ws_telemetry, "should_record", lambda pct: False
+    )
 
     client = TestClient(app)
 
@@ -117,6 +127,8 @@ def test_ingest_caddie_telemetry_missing_required(monkeypatch: pytest.MonkeyPatc
         "hole": 4,
     }
 
-    resp = client.post("/api/caddie/telemetry", json=payload, headers={"x-api-key": "secret"})
+    resp = client.post(
+        "/api/caddie/telemetry", json=payload, headers={"x-api-key": "secret"}
+    )
 
     assert resp.status_code == 422

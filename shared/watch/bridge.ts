@@ -157,11 +157,32 @@ function parseWatchMessage(raw: unknown): WatchMsg | null {
     return null;
   }
   if (type === 'CADDIE_ACCEPTED_V1') {
-    const club = typeof record.club === 'string' ? record.club.trim() : '';
+    const selectedClub = typeof record.selectedClub === 'string' ? record.selectedClub.trim() : '';
+    const recommendedClub =
+      typeof record.recommendedClub === 'string' ? record.recommendedClub.trim() : '';
+    const clubField = typeof record.club === 'string' ? record.club.trim() : '';
+    const club = selectedClub || recommendedClub || clubField;
     if (!club) {
       return null;
     }
-    return { type: 'CADDIE_ACCEPTED_V1', club } satisfies WatchMsg;
+    const runId = typeof record.runId === 'string' ? record.runId : undefined;
+    const memberId = typeof record.memberId === 'string' ? record.memberId : undefined;
+    const courseId = typeof record.courseId === 'string' ? record.courseId : undefined;
+    const holeCandidate = typeof record.hole === 'number' ? record.hole : Number(record.hole);
+    const shotCandidate = record.shotIndex;
+    const adviceId = typeof record.adviceId === 'string' ? record.adviceId : undefined;
+    return {
+      type: 'CADDIE_ACCEPTED_V1',
+      club,
+      selectedClub: selectedClub || null,
+      recommendedClub: recommendedClub || null,
+      runId,
+      memberId,
+      courseId,
+      hole: Number.isFinite(holeCandidate) ? Number(holeCandidate) : undefined,
+      shotIndex: typeof shotCandidate === 'number' ? shotCandidate : undefined,
+      adviceId,
+    } satisfies WatchMsg;
   }
   if (type === 'CADDIE_ADVICE_SHOWN_V1') {
     const recommended = typeof record.recommendedClub === 'string' ? record.recommendedClub.trim() : '';
@@ -707,3 +728,4 @@ export const WatchBridge = {
 };
 
 export { queueOverlaySnapshotInternal as queueOverlaySnapshot };
+export { parseWatchMessage };
