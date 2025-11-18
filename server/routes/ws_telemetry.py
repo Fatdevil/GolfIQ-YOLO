@@ -6,6 +6,7 @@ from typing import Dict, List, Set
 
 from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect, status
 from fastapi import HTTPException
+from pydantic import BaseModel
 
 from server.flight_recorder import record, should_record
 from server.security import require_api_key
@@ -119,7 +120,18 @@ async def telemetry_ws(websocket: WebSocket) -> None:
 
 @router.post("/telemetry")
 async def publish_telemetry(payload: Telemetry) -> Dict[str, object]:
-    message = _dump_model(payload)
+    return await dispatch_telemetry(payload)
+
+
+@router.post("/telemetry/batch", status_code=202)
+async def ingest_telemetry_batch(samples: List[TelemetrySample]) -> Dict[str, int]:
+    return {"accepted": len(samples), "delivered": 0}
+
+
+async def dispatch_telemetry(model: BaseModel) -> Dict[str, object]:
+    """Broadcast a telemetry model and optionally record it to disk."""
+
+    message = _dump_model(model)
     delivered = await manager.broadcast(message)
 
     recorded = False
@@ -128,8 +140,3 @@ async def publish_telemetry(payload: Telemetry) -> Dict[str, object]:
         recorded = True
 
     return {"accepted": 1, "delivered": delivered, "recorded": recorded}
-
-
-@router.post("/telemetry/batch", status_code=202)
-async def ingest_telemetry_batch(samples: List[TelemetrySample]) -> Dict[str, int]:
-    return {"accepted": len(samples), "delivered": 0}

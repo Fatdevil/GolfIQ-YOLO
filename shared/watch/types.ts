@@ -16,7 +16,17 @@ export type CaddieAdviceV1 = {
 
 export type WatchMsg =
   | { type: 'CADDIE_ADVICE_V1'; advice: CaddieAdviceV1 }
-  | { type: 'CADDIE_ACCEPTED_V1'; club: string };
+  | { type: 'CADDIE_ACCEPTED_V1'; club: string }
+  | {
+      type: 'CADDIE_ADVICE_SHOWN_V1';
+      club: string;
+      runId?: string | null;
+      memberId?: string | null;
+      courseId?: string | null;
+      hole?: number | null;
+      shotIndex?: number | null;
+      targetDistance_m?: number | null;
+    };
 
 export type WatchOverlayMini = {
   fmb: { f: number; m: number; b: number };

@@ -163,6 +163,27 @@ function parseWatchMessage(raw: unknown): WatchMsg | null {
     }
     return { type: 'CADDIE_ACCEPTED_V1', club } satisfies WatchMsg;
   }
+  if (type === 'CADDIE_ADVICE_SHOWN_V1') {
+    const recommended = typeof record.recommendedClub === 'string' ? record.recommendedClub.trim() : '';
+    const clubField = typeof record.club === 'string' ? record.club.trim() : '';
+    const club = recommended || clubField;
+    if (!club) {
+      return null;
+    }
+    const holeCandidate = typeof record.hole === 'number' ? record.hole : Number(record.hole);
+    const shotCandidate = record.shotIndex;
+    const distanceCandidate = record.targetDistance_m;
+    return {
+      type: 'CADDIE_ADVICE_SHOWN_V1',
+      club,
+      runId: typeof record.runId === 'string' ? record.runId : undefined,
+      memberId: typeof record.memberId === 'string' ? record.memberId : undefined,
+      courseId: typeof record.courseId === 'string' ? record.courseId : undefined,
+      hole: Number.isFinite(holeCandidate) ? Number(holeCandidate) : undefined,
+      shotIndex: typeof shotCandidate === 'number' ? shotCandidate : undefined,
+      targetDistance_m: typeof distanceCandidate === 'number' ? distanceCandidate : undefined,
+    } satisfies WatchMsg;
+  }
   if (type === 'CADDIE_ADVICE_V1') {
     const adviceRaw = record.advice && typeof record.advice === 'object' ? (record.advice as Record<string, unknown>) : null;
     if (adviceRaw) {

@@ -211,7 +211,8 @@ class WatchConnectorIOS: RCTEventEmitter, WCSessionDelegate {
 
   func session(_ session: WCSession, didReceiveMessage message: [String : Any]) {
     guard hasListeners else { return }
-    guard let type = message["type"] as? String, type == "CADDIE_ACCEPTED_V1" else { return }
+    guard let type = message["type"] as? String,
+          type == "CADDIE_ACCEPTED_V1" || type == "CADDIE_ADVICE_SHOWN_V1" else { return }
     if let data = try? JSONSerialization.data(withJSONObject: message),
        let json = String(data: data, encoding: .utf8) {
       sendEvent(withName: messageEventName, body: ["json": json])
