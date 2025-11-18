@@ -9,6 +9,7 @@ final class WatchHUDModel: ObservableObject {
     private let decoder: JSONDecoder
     private var toastWorkItem: DispatchWorkItem?
     private var sendMessageHandler: (([String: Any]) -> Void)?
+    private var lastAdviceSignature: String?
 
     init(decoder: JSONDecoder = JSONDecoder()) {
         self.decoder = decoder
@@ -30,14 +31,16 @@ final class WatchHUDModel: ObservableObject {
     }
 
     private func publish(_ snapshot: HUD?) {
-        if Thread.isMainThread {
+        let apply = { [weak self] in
+            guard let self else { return }
             hud = snapshot
             advice = snapshot?.caddie
+            handleAdviceShownIfNeeded(snapshot)
+        }
+        if Thread.isMainThread {
+            apply()
         } else {
-            DispatchQueue.main.async { [weak self] in
-                self?.hud = snapshot
-                self?.advice = snapshot?.caddie
-            }
+            DispatchQueue.main.async(execute: apply)
         }
     }
 
@@ -70,6 +73,7 @@ final class WatchHUDModel: ObservableObject {
                 self?.advice = hint
             }
         }
+        handleAdviceShownIfNeeded(hud)
     }
 
     func applyAdvicePayload(_ payload: [String: Any]) {
@@ -103,7 +107,41 @@ final class WatchHUDModel: ObservableObject {
 
     func acceptAdvice() {
         guard let current = advice else { return }
-        sendMessageHandler?(["type": "CADDIE_ACCEPTED_V1", "club": current.club])
+        var payload: [String: Any] = [
+            "type": "CADDIE_ACCEPTED_V1",
+            "club": current.club,
+            "recommendedClub": current.club,
+            "selectedClub": current.club,
+        ]
+        if let ctx = hud {
+            if let memberId = ctx.memberId { payload["memberId"] = memberId }
+            if let runId = ctx.runId { payload["runId"] = runId }
+            if let courseId = ctx.courseId { payload["courseId"] = courseId }
+            if let hole = ctx.hole?.number { payload["hole"] = hole }
+            if let shotIndex = ctx.nextShotIndex { payload["shotIndex"] = shotIndex }
+        }
+        sendMessageHandler?(payload)
+    }
+
+    private func handleAdviceShownIfNeeded(_ snapshot: HUD?) {
+        guard let hint = snapshot?.caddie else { return }
+        let signature = [snapshot?.runId ?? "", String(snapshot?.hole?.number ?? -1), hint.club, String(hint.carryM)].joined(separator: "#")
+        guard signature != lastAdviceSignature else { return }
+        lastAdviceSignature = signature
+
+        var payload: [String: Any] = [
+            "type": "CADDIE_ADVICE_SHOWN_V1",
+            "recommendedClub": hint.club,
+            "targetDistance_m": hint.carryM,
+        ]
+        if let ctx = snapshot {
+            if let memberId = ctx.memberId { payload["memberId"] = memberId }
+            if let runId = ctx.runId { payload["runId"] = runId }
+            if let courseId = ctx.courseId { payload["courseId"] = courseId }
+            if let hole = ctx.hole?.number { payload["hole"] = hole }
+            if let shotIndex = ctx.nextShotIndex { payload["shotIndex"] = shotIndex }
+        }
+        sendMessageHandler?(payload)
     }
 
     // MARK: - Presentation helpers
@@ -131,6 +169,13 @@ final class WatchHUDModel: ObservableObject {
 }
 
 struct HUD: Decodable, Equatable {
+    struct TelemetryContext: Decodable, Equatable {
+        let memberId: String?
+        let runId: String?
+        let courseId: String?
+        let shotsTaken: Int?
+    }
+
     struct Hole: Decodable, Equatable {
         let number: Int
         let par: Int?
@@ -244,6 +289,10 @@ struct HUD: Decodable, Equatable {
     let caddie: CaddieHint?
     let overlayMini: OverlayMini?
     let hole: Hole?
+    let memberId: String?
+    let runId: String?
+    let courseId: String?
+    let shotsTaken: Int?
 
     private enum CodingKeys: String, CodingKey {
         case version = "v"
@@ -256,6 +305,15 @@ struct HUD: Decodable, Equatable {
         case caddie
         case overlayMini
         case hole
+        case memberId
+        case runId
+        case courseId
+        case shotsTaken
+    }
+
+    var nextShotIndex: Int? {
+        guard let shots = shotsTaken else { return nil }
+        return shots + 1
     }
 }
 

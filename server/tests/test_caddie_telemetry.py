@@ -1,65 +1,134 @@
 import pytest
+from fastapi.testclient import TestClient
 
-from server.services.caddie_core import telemetry
-
-
-class FakeMetric:
-    def __init__(self):
-        self.calls = []
-
-    def labels(self, **labels):
-        self.calls.append(labels)
-        return self
-
-    def observe(self, value):
-        self.calls.append({"observe": value})
-
-    def inc(self):
-        self.calls.append({"inc": 1})
+from server.app import app
+from server.routes import caddie_telemetry
+from server.schemas.caddie_telemetry import (
+    CADDIE_ADVICE_ACCEPTED_V1,
+    CADDIE_ADVICE_SHOWN_V1,
+    SHOT_OUTCOME_V1,
+)
+from server.services import caddie_telemetry as builders
 
 
-def test_record_recommendation_metrics_observes_histogram_and_counter(monkeypatch):
-    histogram = FakeMetric()
-    counter = FakeMetric()
-    factors_histogram = FakeMetric()
+def test_build_advice_shown_event() -> None:
+    event = builders.build_caddie_advice_shown_event(
+        member_id="m1",
+        run_id="r1",
+        hole=5,
+        recommended_club="7i",
+        shot_index=2,
+        course_id="c1",
+        target_distance_m=145.0,
+        advice_id="adv-1",
+    )
 
-    monkeypatch.setattr(telemetry, "_inference_histogram", histogram, raising=False)
-    monkeypatch.setattr(telemetry, "_request_counter", counter, raising=False)
+    assert event.type == CADDIE_ADVICE_SHOWN_V1
+    assert event.memberId == "m1"
+    assert event.runId == "r1"
+    assert event.hole == 5
+    assert event.shotIndex == 2
+    assert event.courseId == "c1"
+    assert event.recommendedClub == "7i"
+    assert event.targetDistance_m == 145.0
+    assert event.adviceId == "adv-1"
+
+
+def test_build_advice_accepted_event_defaults_selected() -> None:
+    event = builders.build_caddie_advice_accepted_event(
+        member_id="m1",
+        run_id="r1",
+        hole=3,
+        recommended_club="PW",
+    )
+
+    assert event.type == CADDIE_ADVICE_ACCEPTED_V1
+    assert event.selectedClub == "PW"
+    assert event.recommendedClub == "PW"
+
+
+def test_build_shot_outcome_event() -> None:
+    event = builders.build_shot_outcome_event(
+        member_id="m1",
+        run_id="r1",
+        hole=9,
+        club="9i",
+        carry_m=120.5,
+        end_distance_to_pin_m=8.3,
+        result_category="green",
+    )
+
+    assert event.type == SHOT_OUTCOME_V1
+    assert event.club == "9i"
+    assert event.carry_m == 120.5
+    assert event.endDistanceToPin_m == 8.3
+    assert event.resultCategory == "green"
+
+
+@pytest.fixture(autouse=True)
+def _api_key(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("API_KEY", "secret")
+    monkeypatch.setenv("REQUIRE_API_KEY", "1")
+
+
+class _Capture:
+    def __init__(self) -> None:
+        self.messages: list[dict[str, object]] = []
+
+    async def broadcast(self, message: dict[str, object]) -> int:
+        self.messages.append(message)
+        return 1
+
+
+def test_ingest_caddie_telemetry(monkeypatch: pytest.MonkeyPatch) -> None:
+    capture = _Capture()
     monkeypatch.setattr(
-        telemetry, "_factors_histogram", factors_histogram, raising=False
+        caddie_telemetry.ws_telemetry.manager, "broadcast", capture.broadcast
+    )
+    monkeypatch.setattr(
+        caddie_telemetry.ws_telemetry, "should_record", lambda pct: False
     )
 
-    telemetry.record_recommendation_metrics(
-        duration_ms=32.5,
-        scenario="range",
-        confidence="high",
-        factors_count=3,
+    client = TestClient(app)
+
+    payload = {
+        "type": CADDIE_ADVICE_SHOWN_V1,
+        "memberId": "m1",
+        "runId": "r1",
+        "hole": 4,
+        "recommendedClub": "8i",
+        "targetDistance_m": 150,
+    }
+
+    resp = client.post(
+        "/api/caddie/telemetry", json=payload, headers={"x-api-key": "secret"}
     )
 
-    assert histogram.calls[0]["scenario"] == "range"
-    assert histogram.calls[0]["confidence"] == "high"
-    assert histogram.calls[1]["observe"] == pytest.approx(32.5)
-
-    assert counter.calls[0]["scenario"] == "range"
-    assert counter.calls[0]["confidence"] == "high"
-    assert counter.calls[1]["inc"] == 1
-
-    assert factors_histogram.calls[0]["scenario"] == "range"
-    assert factors_histogram.calls[0]["confidence"] == "high"
-    assert factors_histogram.calls[1]["observe"] == 3
+    assert resp.status_code == 200
+    assert resp.json()["accepted"] == 1
+    assert capture.messages[0]["type"] == CADDIE_ADVICE_SHOWN_V1
+    assert capture.messages[0]["recommendedClub"] == "8i"
 
 
-def test_build_structured_log_payload_includes_build_info(monkeypatch):
-    monkeypatch.setenv("BUILD_VERSION", "v1.2.3")
-    monkeypatch.setenv("GIT_SHA", "abc1234")
-
-    payload = telemetry.build_structured_log_payload(
-        telemetry_id="cad-1",
-        recommendation={"club": "7i", "confidence": "medium"},
-        explain_score=[{"name": "target_gap", "weight": 0.4, "direction": "positive"}],
+def test_ingest_caddie_telemetry_missing_required(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(caddie_telemetry.ws_telemetry.manager, "broadcast", lambda message: 0)  # type: ignore[arg-type]
+    monkeypatch.setattr(
+        caddie_telemetry.ws_telemetry, "should_record", lambda pct: False
     )
 
-    assert payload["telemetry_id"] == "cad-1"
-    assert payload["build_version"] == "v1.2.3"
-    assert payload["git_sha"] == "abc1234"
-    assert payload["explain_score"][0]["name"] == "target_gap"
+    client = TestClient(app)
+
+    payload = {
+        "type": CADDIE_ADVICE_ACCEPTED_V1,
+        "memberId": "m1",
+        "runId": "r1",
+        "hole": 4,
+    }
+
+    resp = client.post(
+        "/api/caddie/telemetry", json=payload, headers={"x-api-key": "secret"}
+    )
+
+    assert resp.status_code == 422

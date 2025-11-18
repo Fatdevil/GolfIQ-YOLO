@@ -51,5 +51,44 @@ final class WatchHUDModelTests: XCTestCase {
         model.acceptAdvice()
         XCTAssertEqual(captured?["type"] as? String, "CADDIE_ACCEPTED_V1")
         XCTAssertEqual(captured?["club"] as? String, "8i")
+        XCTAssertEqual(captured?["recommendedClub"] as? String, "8i")
+    }
+
+    func testAdviceShownTelemetrySentOnce() {
+        let model = WatchHUDModel()
+        var messages: [[String: Any]] = []
+        model.registerMessageSender { payload in
+            messages.append(payload)
+        }
+
+        let hud = HUD(
+            version: 1,
+            timestamp: 1,
+            fmb: .init(front: 150, middle: 155, back: 160),
+            playsLikePct: 1.0,
+            wind: .init(mps: 3.0, deg: 90.0),
+            strategy: nil,
+            tournamentSafe: true,
+            caddie: .init(club: "9i", carryM: 135.0, totalM: nil, aim: nil, risk: .neutral, confidence: nil),
+            overlayMini: nil,
+            hole: .init(number: 3, par: nil),
+            memberId: "m1",
+            runId: "r1",
+            courseId: "c1",
+            shotsTaken: 1
+        )
+
+        model.update(with: hud)
+        model.update(with: hud)
+
+        XCTAssertEqual(messages.count, 1)
+        let payload = try XCTUnwrap(messages.first)
+        XCTAssertEqual(payload["type"] as? String, "CADDIE_ADVICE_SHOWN_V1")
+        XCTAssertEqual(payload["recommendedClub"] as? String, "9i")
+        XCTAssertEqual(payload["memberId"] as? String, "m1")
+        XCTAssertEqual(payload["runId"] as? String, "r1")
+        XCTAssertEqual(payload["courseId"] as? String, "c1")
+        XCTAssertEqual(payload["hole"] as? Int, 3)
+        XCTAssertEqual(payload["shotIndex"] as? Int, 2)
     }
 }

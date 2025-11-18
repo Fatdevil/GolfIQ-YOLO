@@ -392,3 +392,35 @@ describe('WatchBridge messaging', () => {
     expect(sendMessage.mock.calls[0][0]).toContain('"type":"CADDIE_ADVICE_V1"');
   });
 });
+
+describe('parseWatchMessage', () => {
+  it('preserves caddie accepted context', async () => {
+    vi.resetModules();
+    const { parseWatchMessage } = await import('../../../shared/watch/bridge');
+
+    const parsed = parseWatchMessage({
+      type: 'CADDIE_ACCEPTED_V1',
+      runId: 'run-123',
+      hole: 7,
+      memberId: 'mem-9',
+      courseId: 'course-5',
+      selectedClub: '8i',
+      recommendedClub: '7i',
+      shotIndex: 2,
+      adviceId: 'adv-99',
+    });
+
+    expect(parsed).toMatchObject({
+      type: 'CADDIE_ACCEPTED_V1',
+      club: '8i',
+      selectedClub: '8i',
+      recommendedClub: '7i',
+      runId: 'run-123',
+      memberId: 'mem-9',
+      courseId: 'course-5',
+      hole: 7,
+      shotIndex: 2,
+      adviceId: 'adv-99',
+    });
+  });
+});
