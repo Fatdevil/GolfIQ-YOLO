@@ -2,6 +2,7 @@ import { FormEvent, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Link, useNavigate } from "react-router-dom";
 
+import { fetchBundleIndex, type BundleIndexItem } from "@/api";
 import {
   createRoundId,
   loadAllRounds,
@@ -12,7 +13,6 @@ import {
   QuickRoundSummary,
 } from "../../features/quickround/storage";
 import { QuickRound } from "../../features/quickround/types";
-import { useCourseBundle, useCourseIds } from "../../courses/hooks";
 
 function readStoredMemberId(): string | null {
   if (typeof window === "undefined") {
@@ -34,18 +34,12 @@ export default function QuickRoundStartPage() {
   const [showPutts, setShowPutts] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [rounds, setRounds] = useState<QuickRoundSummary[]>([]);
-  const [courseId, setCourseId] = useState<string | undefined>();
+  const [courses, setCourses] = useState<BundleIndexItem[]>([]);
+  const [selectedCourseId, setSelectedCourseId] = useState<string | undefined>();
   const [handicapInput, setHandicapInput] = useState<string>(() => {
     const stored = loadDefaultHandicap();
     return stored != null ? String(stored) : "";
   });
-
-  const {
-    data: courseIds,
-    loading: courseIdsLoading,
-    error: courseIdsError,
-  } = useCourseIds();
-  const { data: selectedBundle } = useCourseBundle(courseId);
 
   const dateFormatter = useMemo(
     () =>
@@ -64,15 +58,39 @@ export default function QuickRoundStartPage() {
   }, []);
 
   useEffect(() => {
-    if (selectedBundle && courseName.trim().length === 0) {
-      setCourseName(selectedBundle.name);
+    let cancelled = false;
+
+    fetchBundleIndex()
+      .then((list) => {
+        if (!cancelled) {
+          setCourses(list);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setCourses([]);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    const selected = courses.find((course) => course.courseId === selectedCourseId);
+    if (selected && courseName.trim().length === 0) {
+      setCourseName(selected.name);
     }
-  }, [selectedBundle, courseName]);
+  }, [selectedCourseId, courses, courseName]);
 
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    const selectedCourse = courses.find((course) => course.courseId === selectedCourseId);
     const trimmedCourseName = courseName.trim();
-    if (!trimmedCourseName) {
+    const finalCourseName = trimmedCourseName || selectedCourse?.name || "";
+
+    if (!finalCourseName) {
       setError(t("quickRound.start.courseNameRequired"));
       return;
     }
@@ -96,8 +114,8 @@ export default function QuickRoundStartPage() {
     const round: QuickRound = {
       id: roundId,
       runId: roundId,
-      courseName: trimmedCourseName,
-      courseId,
+      courseName: finalCourseName,
+      courseId: selectedCourse?.courseId,
       teesName: trimmedTeesName || undefined,
       holes,
       startedAt: new Date().toISOString(),
@@ -139,38 +157,28 @@ export default function QuickRoundStartPage() {
             />
           </div>
           <div className="space-y-2">
-            <label
-              className="block text-sm font-medium text-slate-200"
-              htmlFor="courseId"
-            >
-              Course (demo bundle)
+            <label className="block text-sm font-medium text-slate-200" htmlFor="courseId">
+              {t("quickround.course.label")}
             </label>
-            {courseIdsLoading ? (
-              <p className="text-xs text-slate-400">Laddar demo-banor…</p>
-            ) : courseIdsError ? (
-              <p className="text-xs text-rose-400">Kunde inte hämta demo-banor.</p>
-            ) : (
-              <select
-                id="courseId"
-                value={courseId ?? ""}
-                onChange={(event) =>
-                  setCourseId(event.target.value ? event.target.value : undefined)
+            <select
+              id="courseId"
+              value={selectedCourseId ?? ""}
+              onChange={(event) => {
+                const value = event.target.value ? event.target.value : undefined;
+                setSelectedCourseId(value);
+                if (error && (value || courseName.trim().length > 0)) {
+                  setError(null);
                 }
-                className="w-full rounded border border-slate-700 bg-slate-950/80 px-3 py-2 text-sm text-slate-100 focus:border-emerald-400 focus:outline-none focus:ring-1 focus:ring-emerald-400"
-              >
-                <option value="">Ingen demo-bana</option>
-                {(courseIds ?? []).map((id) => (
-                  <option key={id} value={id}>
-                    {id}
-                  </option>
-                ))}
-              </select>
-            )}
-            {courseId && selectedBundle && (
-              <p className="text-xs text-slate-400">
-                {selectedBundle.name} ({selectedBundle.country})
-              </p>
-            )}
+              }}
+              className="w-full rounded border border-slate-700 bg-slate-950/80 px-3 py-2 text-sm text-slate-100 focus:border-emerald-400 focus:outline-none focus:ring-1 focus:ring-emerald-400"
+            >
+              <option value="">{t("quickround.course.none")}</option>
+              {courses.map((course) => (
+                <option key={course.courseId} value={course.courseId}>
+                  {course.name} ({course.holes})
+                </option>
+              ))}
+            </select>
           </div>
           <div className="space-y-2">
             <label className="block text-sm font-medium text-slate-200" htmlFor="teesName">
@@ -247,13 +255,15 @@ export default function QuickRoundStartPage() {
           <p className="mt-3 text-sm text-slate-400">Du har inga sparade snabbrundor ännu.</p>
         ) : (
           <ul className="mt-4 space-y-3">
-            {rounds.map((round) => (
-              <li key={round.id} className="rounded border border-slate-800 bg-slate-950/40 p-4">
-                <Link to={`/play/${round.id}`} className="flex flex-col gap-1 text-sm text-slate-200">
-                  <span className="text-base font-semibold text-slate-100">{round.courseName}</span>
-                  <span className="text-xs text-slate-400">
-                    Startad {dateFormatter.format(new Date(round.startedAt))}
-                  </span>
+              {rounds.map((round) => (
+                <li key={round.id} className="rounded border border-slate-800 bg-slate-950/40 p-4">
+                  <Link to={`/play/${round.id}`} className="flex flex-col gap-1 text-sm text-slate-200">
+                    <span className="text-base font-semibold text-slate-100">
+                      {round.courseName ?? t("profile.quickRounds.unknownCourse")}
+                    </span>
+                    <span className="text-xs text-slate-400">
+                      Startad {dateFormatter.format(new Date(round.startedAt))}
+                    </span>
                   <span className="text-xs font-semibold text-emerald-300">
                     {round.completedAt ? "Klar" : "Pågår"}
                   </span>

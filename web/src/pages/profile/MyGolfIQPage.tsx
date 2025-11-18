@@ -96,13 +96,14 @@ export function MyGolfIQPage() {
                 <ul className="divide-y divide-slate-800 overflow-hidden rounded-md border border-slate-800">
                   {recentRounds.map((round) => {
                     const toPar = computeRoundToPar(round);
+                    const courseLabel = round.courseName ?? t("profile.quickRounds.unknownCourse");
                     return (
                       <li
                         key={round.id}
                         className="flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
                       >
                         <div>
-                          <p className="text-sm font-medium text-slate-100">{round.courseName}</p>
+                          <p className="text-sm font-medium text-slate-100">{courseLabel}</p>
                           <p className="text-xs text-slate-400">{formatDate(round.startedAt)}</p>
                         </div>
                         <div className="text-sm font-semibold text-slate-100">

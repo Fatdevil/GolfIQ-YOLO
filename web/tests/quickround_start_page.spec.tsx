@@ -22,6 +22,8 @@ const {
   clearDefaultHandicapMock: vi.fn(),
 }));
 
+const fetchBundleIndexMock = vi.hoisted(() => vi.fn(async () => []));
+
 vi.mock("../src/features/quickround/storage", () => ({
   createRoundId: createRoundIdMock,
   loadAllRounds: loadAllRoundsMock,
@@ -31,11 +33,16 @@ vi.mock("../src/features/quickround/storage", () => ({
   saveRound: saveRoundMock,
 }));
 
+vi.mock("@/api", () => ({
+  fetchBundleIndex: fetchBundleIndexMock,
+}));
+
 describe("QuickRoundStartPage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     loadAllRoundsMock.mockReturnValue([]);
     loadDefaultHandicapMock.mockReturnValue(null);
+    fetchBundleIndexMock.mockResolvedValue([]);
   });
 
   it("creates a round and navigates to play view", async () => {

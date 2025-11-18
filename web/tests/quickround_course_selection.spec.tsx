@@ -1,6 +1,6 @@
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import QuickRoundStartPage from "../src/pages/quick/QuickRoundStartPage";
@@ -13,20 +13,16 @@ const {
   loadDefaultHandicapMock,
   saveDefaultHandicapMock,
   clearDefaultHandicapMock,
+  fetchBundleIndexMock,
 } = vi.hoisted(() => ({
   saveRoundMock: vi.fn(),
   loadAllRoundsMock: vi.fn(() => [] as QuickRoundSummary[]),
-  createRoundIdMock: vi.fn(() => "qr-mock"),
+  createRoundIdMock: vi.fn(() => "qr-hero"),
   loadDefaultHandicapMock: vi.fn(() => null as number | null),
   saveDefaultHandicapMock: vi.fn(),
   clearDefaultHandicapMock: vi.fn(),
+  fetchBundleIndexMock: vi.fn(),
 }));
-
-const fetchBundleIndexMock = vi.hoisted(() =>
-  vi.fn(async () => [
-    { courseId: "demo-links", name: "Demo Links", holes: 18, version: 1 },
-  ])
-);
 
 vi.mock("../src/features/quickround/storage", () => ({
   createRoundId: createRoundIdMock,
@@ -41,15 +37,17 @@ vi.mock("@/api", () => ({
   fetchBundleIndex: fetchBundleIndexMock,
 }));
 
-describe("QuickRoundStartPage course integration", () => {
+describe("QuickRoundStartPage course selection", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     loadAllRoundsMock.mockReturnValue([]);
-    loadDefaultHandicapMock.mockReturnValue(null);
-    fetchBundleIndexMock.mockClear();
+    fetchBundleIndexMock.mockResolvedValue([
+      { courseId: "hero-18", name: "Hero Ridge", holes: 18 },
+      { courseId: "hero-9", name: "Nine Hills", holes: 9 },
+    ]);
   });
 
-  it("saves selected course id", async () => {
+  it("stores hero course metadata when starting a round", async () => {
     const user = userEvent.setup();
 
     render(
@@ -61,32 +59,19 @@ describe("QuickRoundStartPage course integration", () => {
       </MemoryRouter>
     );
 
-    await user.type(screen.getByLabelText(/Course name/i), "Testbanan");
-    await screen.findByRole("option", { name: /Demo Links \(18\)/i });
-    await user.selectOptions(screen.getByLabelText(/^Course$/i), "demo-links");
+    await screen.findByRole("option", { name: /Hero Ridge \(18\)/i });
+    const courseSelect = screen.getByLabelText(/^Course$/i);
+    await user.selectOptions(courseSelect, "hero-18");
+
+    const courseNameInput = screen.getByLabelText(/Course name/i) as HTMLInputElement;
+    await waitFor(() => expect(courseNameInput.value).toBe("Hero Ridge"));
+
     await user.click(screen.getByRole("button", { name: /Start round/i }));
 
     expect(saveRoundMock).toHaveBeenCalledTimes(1);
     const savedRound = saveRoundMock.mock.calls[0][0];
-    expect(savedRound.courseId).toBe("demo-links");
+    expect(savedRound.courseId).toBe("hero-18");
+    expect(savedRound.courseName).toBe("Hero Ridge");
     expect(screen.getByTestId("play-page")).toBeTruthy();
-  });
-
-  it("renders course selector when ids are available", async () => {
-    const user = userEvent.setup();
-
-    render(
-      <MemoryRouter initialEntries={["/play"]}>
-        <Routes>
-          <Route path="/play" element={<QuickRoundStartPage />} />
-        </Routes>
-      </MemoryRouter>
-    );
-
-    await screen.findByRole("option", { name: /Demo Links \(18\)/i });
-    expect(screen.getByLabelText(/^Course$/i)).toBeTruthy();
-    await user.selectOptions(screen.getByLabelText(/^Course$/i), "demo-links");
-    const courseNameInput = screen.getByLabelText(/Course name/i) as HTMLInputElement;
-    expect(courseNameInput.value).toBe("Demo Links");
   });
 });
