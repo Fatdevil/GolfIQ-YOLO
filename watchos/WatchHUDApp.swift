@@ -13,7 +13,8 @@ struct WatchHUDApp: App {
 
     var body: some Scene {
         WindowGroup {
-            ContentView(model: model)
+            HUDMainView()
+                .environmentObject(model)
         }
     }
 }
