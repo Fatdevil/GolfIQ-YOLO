@@ -5,14 +5,10 @@ import json
 from pathlib import Path
 from typing import Any, Mapping, NotRequired, TypedDict
 
-try:  # Python 3.11+
-    from typing import Literal
-except ImportError:  # pragma: no cover - fallback for older runtimes
-    from typing_extensions import Literal  # type: ignore
-
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import JSONResponse
 
+from server.bundles import CourseBundle, get_bundle
 from server.config.bundle_config import get_bundle_ttl, is_bundle_enabled
 
 router = APIRouter(tags=["bundle"])
@@ -28,8 +24,8 @@ class CourseFeatureGreenPin(TypedDict, total=False):
 
 
 class CourseFeatureGreen(TypedDict, total=False):
-    sections: list[Literal["front", "middle", "back"]]
-    fatSide: Literal["L", "R"]
+    sections: list[str]
+    fatSide: str
     pin: CourseFeatureGreenPin
 
 
@@ -37,14 +33,16 @@ class CourseFeature(TypedDict, total=False):
     id: str
     type: str
     geometry: dict[str, Any]
+    properties: dict[str, Any]
     green: NotRequired[CourseFeatureGreen]
 
 
-class CourseBundlePayload(TypedDict):
-    courseId: str
-    version: int
-    ttlSec: int
-    features: list[CourseFeature]
+def _compute_etag(payload: Mapping[str, Any]) -> str:
+    canonical = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode(
+        "utf-8"
+    )
+    digest = hashlib.sha256(canonical).hexdigest()[:16]
+    return digest
 
 
 def _load_features(course_id: str) -> list[CourseFeature]:
@@ -61,28 +59,74 @@ def _load_features(course_id: str) -> list[CourseFeature]:
     return []
 
 
-def _compute_etag(payload: Mapping[str, Any]) -> str:
-    canonical = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode(
-        "utf-8"
-    )
-    digest = hashlib.sha256(canonical).hexdigest()[:16]
-    return digest
+def _coordinates_from_polyline(
+    polyline: list[tuple[float, float]],
+) -> list[list[float]]:
+    coordinates: list[list[float]] = []
+    for lat, lon in polyline:
+        coordinates.append([float(lon), float(lat)])
+    return coordinates
 
 
-@router.get("/bundle/course/{course_id}")
-async def get_course_bundle(course_id: str, request: Request) -> JSONResponse:
+def _hero_bundle_to_features(bundle: CourseBundle) -> list[CourseFeature]:
+    features: list[CourseFeature] = []
+    for hole in bundle.holes:
+        properties: dict[str, Any] = {"hole": hole.hole, "par": hole.par}
+        if hole.green_center:
+            properties["greenCenter"] = {
+                "lat": hole.green_center[0],
+                "lon": hole.green_center[1],
+            }
+        if bundle.tees:
+            properties["tees"] = list(bundle.tees)
+        if hole.hazards:
+            properties["hazards"] = hole.hazards
+
+        feature: CourseFeature = {
+            "id": f"hole-{hole.hole}",
+            "type": "Feature",
+            "geometry": {
+                "type": "LineString",
+                "coordinates": _coordinates_from_polyline(hole.polyline),
+            },
+            "properties": properties,
+        }
+        features.append(feature)
+    return features
+
+
+@router.post("/bundle/course/{course_id}")
+@router.get("/bundle/course/{course_id}", include_in_schema=False)
+async def bundle_course(course_id: str, request: Request) -> JSONResponse:
     remote_config = getattr(getattr(request, "state", object()), "remote_config", None)
     if not is_bundle_enabled(remote_config):
         raise HTTPException(status_code=404, detail="bundle disabled")
 
+    hero_bundle = get_bundle(course_id)
+    course_features = _hero_bundle_to_features(hero_bundle) if hero_bundle else []
+
+    if not hero_bundle:
+        course_features = _load_features(course_id)
+
+    course_file = COURSES_DIR / f"{course_id}.json"
+    if not hero_bundle and not course_features and not course_file.exists():
+        raise HTTPException(status_code=404, detail="Unknown course_id")
+
     ttl = get_bundle_ttl(remote_config)
-    features = _load_features(course_id)
-    payload: CourseBundlePayload = {
-        "courseId": course_id,
+    payload: dict[str, Any] = {
+        "courseId": hero_bundle.id if hero_bundle else course_id,
         "version": _VERSION,
         "ttlSec": ttl,
-        "features": features,
+        "features": course_features,
     }
+
+    if hero_bundle:
+        payload["name"] = hero_bundle.name
+        if hero_bundle.country:
+            payload["country"] = hero_bundle.country
+        if hero_bundle.tees:
+            payload["tees"] = list(hero_bundle.tees)
+
     etag = _compute_etag(payload)
     headers = {
         "ETag": f'W/"{etag}"',
@@ -91,4 +135,4 @@ async def get_course_bundle(course_id: str, request: Request) -> JSONResponse:
     return JSONResponse(payload, headers=headers)
 
 
-__all__ = ["router"]
+__all__ = ["router", "COURSES_DIR"]
