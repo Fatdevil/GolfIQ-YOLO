@@ -25,6 +25,10 @@ final class WatchHUDModel: ObservableObject {
         }
     }
 
+    func update(with snapshot: HUD) {
+        publish(snapshot)
+    }
+
     private func publish(_ snapshot: HUD?) {
         if Thread.isMainThread {
             hud = snapshot
@@ -101,9 +105,37 @@ final class WatchHUDModel: ObservableObject {
         guard let current = advice else { return }
         sendMessageHandler?(["type": "CADDIE_ACCEPTED_V1", "club": current.club])
     }
+
+    // MARK: - Presentation helpers
+
+    var holeNumber: Int? { hud?.hole?.number }
+
+    var par: Int? { hud?.hole?.par }
+
+    var toFront_m: Double? { hud?.fmb.front }
+
+    var toMiddle_m: Double? { hud?.fmb.middle }
+
+    var toBack_m: Double? { hud?.fmb.back }
+
+    var playsLikePct: Double? { hud?.playsLikePct }
+
+    var playsLikeAdjustment_m: Double? {
+        guard let pct = playsLikePct, let middle = toMiddle_m else { return nil }
+        return middle * pct / 100.0
+    }
+
+    var currentAdvice: HUD.CaddieHint? { advice ?? hud?.caddie }
+
+    var isSilent: Bool { hud != nil && currentAdvice == nil }
 }
 
 struct HUD: Decodable, Equatable {
+    struct Hole: Decodable, Equatable {
+        let number: Int
+        let par: Int?
+    }
+
     struct Distances: Decodable, Equatable {
         let front: Double
         let middle: Double
@@ -211,6 +243,7 @@ struct HUD: Decodable, Equatable {
     let tournamentSafe: Bool
     let caddie: CaddieHint?
     let overlayMini: OverlayMini?
+    let hole: Hole?
 
     private enum CodingKeys: String, CodingKey {
         case version = "v"
@@ -222,5 +255,38 @@ struct HUD: Decodable, Equatable {
         case tournamentSafe
         case caddie
         case overlayMini
+        case hole
+    }
+}
+
+extension WatchHUDModel {
+    static func previewModel() -> WatchHUDModel {
+        let model = WatchHUDModel()
+        let hint = HUD.CaddieHint(
+            club: "8i",
+            carryM: 142,
+            totalM: 152,
+            aim: .init(dir: .L, offsetM: 4),
+            risk: .neutral,
+            confidence: 0.72
+        )
+        let overlay = HUD.OverlayMini(
+            fmb: .init(f: 128, m: 136, b: 144),
+            pin: .init(section: .middle)
+        )
+        let snapshot = HUD(
+            version: 1,
+            timestamp: Date().timeIntervalSince1970,
+            fmb: .init(front: 134, middle: 141, back: 148),
+            playsLikePct: 5.2,
+            wind: .init(mps: 3.4, deg: 215),
+            strategy: .init(profile: .neutral, offsetM: -3, carryM: 140),
+            tournamentSafe: false,
+            caddie: hint,
+            overlayMini: overlay,
+            hole: .init(number: 7, par: 4)
+        )
+        model.update(with: snapshot)
+        return model
     }
 }
