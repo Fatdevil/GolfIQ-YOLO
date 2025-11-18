@@ -50,6 +50,54 @@ export async function fetchBundleIndex(): Promise<BundleIndexItem[]> {
   return response.data;
 }
 
+export type HudTip = {
+  tipId: string;
+  title: string;
+  body: string;
+  club?: string | null;
+  playsLike_m?: number | null;
+};
+
+export type HoleHud = {
+  hole: number;
+  courseId?: string | null;
+  par?: number | null;
+  toGreen_m?: number | null;
+  toFront_m?: number | null;
+  toBack_m?: number | null;
+  playsLike_m?: number | null;
+  caddie_confidence?: number | null;
+  caddie_silent?: boolean;
+  caddie_silent_reason?: string | null;
+  wind_mps?: number | null;
+  wind_dir_deg?: number | null;
+  temp_c?: number | null;
+  elev_delta_m?: number | null;
+  activeTip?: HudTip | null;
+};
+
+export type HudQuery = {
+  memberId: string;
+  runId: string;
+  courseId?: string;
+  hole: number;
+  lat?: number;
+  lon?: number;
+  wind_mps?: number;
+  wind_dir_deg?: number;
+  temp_c?: number;
+  elev_delta_m?: number;
+};
+
+export async function getHoleHud(query: HudQuery): Promise<HoleHud> {
+  const response = await axios.post<HoleHud>(
+    `${API}/api/watch/hud/hole`,
+    query,
+    { headers: withAuth({ "Content-Type": "application/json" }) },
+  );
+  return response.data;
+}
+
 export type CreateEventBody = {
   name: string;
   emoji?: string;
