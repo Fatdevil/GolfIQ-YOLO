@@ -15,6 +15,7 @@ router = APIRouter(tags=["bundle"])
 
 class BundleIndexItem(BaseModel):
     id: str
+    courseId: str
     name: str
     holes: int
     country: str | None = None
@@ -38,6 +39,7 @@ async def bundle_index(request: Request) -> JSONResponse:
     payload = [
         {
             "id": bundle.id,
+            "courseId": bundle.id,
             "name": bundle.name,
             "holes": len(bundle.holes),
             "country": bundle.country,

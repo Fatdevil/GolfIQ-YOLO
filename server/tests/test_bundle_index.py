@@ -20,7 +20,15 @@ def test_bundle_index_lists_hero_courses() -> None:
     assert isinstance(manifest, list)
     assert len(manifest) >= 5
 
-    hero = next((course for course in manifest if course["id"] == "norrmjole_gk"), None)
+    hero = next(
+        (
+            course
+            for course in manifest
+            if course["id"] == "norrmjole_gk"
+            and course.get("courseId") == "norrmjole_gk"
+        ),
+        None,
+    )
     assert hero is not None
     assert hero["holes"] == 18
 

@@ -3,6 +3,7 @@ import os
 from fastapi.testclient import TestClient
 
 from server.app import app
+from server.config.bundle_config import DEFAULT_BUNDLE_TTL_SECONDS
 
 
 client = TestClient(app)
@@ -18,13 +19,15 @@ def test_bundle_route_returns_payload() -> None:
     assert response.status_code == 200
     payload = response.json()
 
-    assert payload["id"] == "norrmjole_gk"
+    assert payload["courseId"] == "norrmjole_gk"
+    assert payload["version"] == 1
+    assert payload["ttlSec"] == DEFAULT_BUNDLE_TTL_SECONDS
     assert payload["name"]
-    assert len(payload["holes"]) == 18
-    for hole in payload["holes"]:
-        assert hole["hole"]
-        assert hole["par"]
-        assert hole["polyline"]
+    assert len(payload["features"]) == 18
+    for feature in payload["features"]:
+        assert feature["id"]
+        assert feature["geometry"]["coordinates"]
+        assert feature["properties"]["par"]
 
 
 def test_bundle_route_returns_404_for_unknown_course() -> None:
