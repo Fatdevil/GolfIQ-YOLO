@@ -10,6 +10,8 @@ function parseNumber(value: string): number | undefined {
 
 export function HudPreviewPage() {
   const [courses, setCourses] = useState<BundleIndexItem[]>([]);
+  const [memberId, setMemberId] = useState<string>("preview-member");
+  const [runId, setRunId] = useState<string>("preview-run");
   const [selectedCourseId, setSelectedCourseId] = useState<string>("");
   const [hole, setHole] = useState<number>(1);
   const [lat, setLat] = useState<string>("");
@@ -40,6 +42,8 @@ export function HudPreviewPage() {
     setHud(null);
 
     const query: HudQuery = {
+      memberId,
+      runId,
       hole,
       courseId: selectedCourseId || undefined,
       lat: parseNumber(lat),
@@ -68,6 +72,29 @@ export function HudPreviewPage() {
       </div>
 
       <div className="grid gap-4 rounded-md border border-slate-800 bg-slate-900 p-4 shadow">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <label className="flex flex-col gap-1 text-sm font-medium" htmlFor="memberId">
+            Member ID
+            <input
+              id="memberId"
+              type="text"
+              className="rounded border border-slate-700 bg-slate-800 p-2 text-slate-100"
+              value={memberId}
+              onChange={(e) => setMemberId(e.target.value)}
+            />
+          </label>
+          <label className="flex flex-col gap-1 text-sm font-medium" htmlFor="runId">
+            Run ID
+            <input
+              id="runId"
+              type="text"
+              className="rounded border border-slate-700 bg-slate-800 p-2 text-slate-100"
+              value={runId}
+              onChange={(e) => setRunId(e.target.value)}
+            />
+          </label>
+        </div>
+
         <label className="flex flex-col gap-1 text-sm font-medium" htmlFor="course">
           Course
           <select

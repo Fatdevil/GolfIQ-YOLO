@@ -77,6 +77,8 @@ export type HoleHud = {
 };
 
 export type HudQuery = {
+  memberId: string;
+  runId: string;
   courseId?: string;
   hole: number;
   lat?: number;

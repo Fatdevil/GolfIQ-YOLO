@@ -17,7 +17,14 @@ describe("watch HUD api client", () => {
       .mockResolvedValue({ data: responsePayload } as never);
 
     const { getHoleHud, API } = await import("@/api");
-    const query = { hole: 1, courseId: "links_crest", lat: 56.41, lon: -2.79 };
+    const query = {
+      memberId: "preview-member",
+      runId: "preview-run",
+      hole: 1,
+      courseId: "links_crest",
+      lat: 56.41,
+      lon: -2.79,
+    };
 
     const result = await getHoleHud(query);
 

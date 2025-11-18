@@ -47,9 +47,11 @@ def get_hole_hud(payload: HudQuery) -> HoleHud:
         elev_delta_m=payload.elev_delta_m,
     )
 
+    detected_hole = hole_hud.hole
+
     if payload.courseId and payload.lat is not None and payload.lon is not None:
         distances = compute_hole_distances_from_bundle(
-            payload.courseId, payload.hole, payload.lat, payload.lon
+            payload.courseId, detected_hole, payload.lat, payload.lon
         )
         if distances is not None:
             hole_hud.toFront_m = distances["toFront_m"]
@@ -108,12 +110,13 @@ def post_hud_tick(payload: TickIn) -> TickOut:
     )
     has_new_tip = hud.activeTip is not None
 
+    detected_hole = hud.hole
     to_front = hud.toFront_m
     to_green = hud.toGreen_m
     to_back = hud.toBack_m
     if payload.courseId and payload.lat is not None and payload.lon is not None:
         distances = compute_hole_distances_from_bundle(
-            payload.courseId, payload.hole, payload.lat, payload.lon
+            payload.courseId, detected_hole, payload.lat, payload.lon
         )
         if distances is not None:
             to_front = distances["toFront_m"]

@@ -41,6 +41,8 @@ describe("HudPreviewPage", () => {
 
     await waitFor(() =>
       expect(getHoleHud).toHaveBeenCalledWith({
+        memberId: "preview-member",
+        runId: "preview-run",
         courseId: "links_crest",
         hole: 1,
         lat: 56.41,
