@@ -103,6 +103,15 @@ struct HUDMainView: View {
                         .lineLimit(2)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
+                Button(action: {
+                    hudModel.acceptAdvice()
+                }) {
+                    Text("Use club")
+                        .font(.caption2.weight(.semibold))
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.mini)
             } else if hudModel.isSilent {
                 Text("Caddie silent")
                     .font(.caption2)
