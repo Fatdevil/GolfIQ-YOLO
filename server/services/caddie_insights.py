@@ -107,6 +107,8 @@ def compute_caddie_insights(
 
     to_ts = now or datetime.now(timezone.utc)
     from_ts = to_ts - window
+    from_date = from_ts.date()
+    to_date = to_ts.date()
 
     advice_shown = 0
     advice_accepted = 0
@@ -127,7 +129,10 @@ def compute_caddie_insights(
         if event_ts is None:
             event_ts = to_ts
 
-        if event_ts < from_ts or event_ts > to_ts:
+        # Insights operate on day granularity to ensure boundary-day events without
+        # timestamps are still included.
+        event_date = event_ts.date()
+        if event_date < from_date or event_date > to_date:
             continue
 
         club = (
@@ -172,11 +177,13 @@ def load_member_events(
 
     to_ts = now or datetime.now(timezone.utc)
     from_ts = to_ts - window
+    from_date = from_ts.date()
+    to_date = to_ts.date()
 
     events: list[Mapping[str, object]] = []
     for path in sorted(directory.glob("flight-*.jsonl"), reverse=True):
         file_date = _extract_date_from_filename(path)
-        if file_date and file_date < from_ts.date():
+        if file_date and file_date < from_date:
             break
 
         try:
@@ -197,9 +204,8 @@ def load_member_events(
                         continue
 
                     event_ts = _coerce_ts(merged, fallback_date=file_date)
-                    if event_ts is not None and (
-                        event_ts < from_ts or event_ts > to_ts
-                    ):
+                    event_date = event_ts.date() if event_ts else file_date
+                    if event_date and (event_date < from_date or event_date > to_date):
                         continue
 
                     events.append(merged)
