@@ -1,6 +1,6 @@
 import React from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 
 import MyGolfIQPage from "@/pages/profile/MyGolfIQPage";
@@ -76,6 +76,8 @@ const listGhosts = vi.hoisted(() => () => mockGhosts);
 const loadBag = vi.hoisted(() => () => mockBag);
 const loadRangeSessions = vi.hoisted(() => () => []);
 const migrateLocalHistoryOnce = vi.hoisted(() => vi.fn(() => Promise.resolve()));
+const mockUseCaddieMemberId = vi.hoisted(() => vi.fn());
+const mockFetchCaddieInsights = vi.hoisted(() => vi.fn());
 
 vi.mock("@/features/quickround/storage", () => ({
   loadAllRoundsFull,
@@ -97,9 +99,19 @@ vi.mock("@/user/historyMigration", () => ({
   migrateLocalHistoryOnce,
 }));
 
+vi.mock("@/profile/memberIdentity", () => ({
+  useCaddieMemberId: () => mockUseCaddieMemberId(),
+}));
+
+vi.mock("@/api/caddieInsights", () => ({
+  fetchCaddieInsights: (...args: Parameters<typeof mockFetchCaddieInsights>) =>
+    mockFetchCaddieInsights(...args),
+}));
+
 describe("MyGolfIQPage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockUseCaddieMemberId.mockReturnValue(undefined);
   });
 
   it("renders quick round, range and bag summaries", () => {
@@ -121,5 +133,65 @@ describe("MyGolfIQPage", () => {
     expect(screen.getByText(/Ghost profiles/i)).toBeTruthy();
     expect(screen.getByText(/Bag snapshot/i)).toBeTruthy();
     expect(screen.getByText(/Complete your bag/i)).toBeTruthy();
+  });
+
+  it("shows caddie insights when telemetry exists", async () => {
+    const sampleInsights = {
+      memberId: "member-123",
+      from_ts: "2024-01-01T00:00:00Z",
+      to_ts: "2024-02-01T00:00:00Z",
+      advice_shown: 10,
+      advice_accepted: 7,
+      accept_rate: 0.7,
+      per_club: [
+        { club: "7i", shown: 5, accepted: 4 },
+        { club: "PW", shown: 3, accepted: 2 },
+      ],
+    };
+    mockUseCaddieMemberId.mockReturnValue("member-123");
+    mockFetchCaddieInsights.mockResolvedValue(sampleInsights);
+
+    render(
+      <MemoryRouter>
+        <MyGolfIQPage />
+      </MemoryRouter>,
+      { wrapper: UserSessionProvider },
+    );
+
+    await waitFor(() =>
+      expect(mockFetchCaddieInsights).toHaveBeenCalledWith("member-123", 30),
+    );
+
+    expect(await screen.findByText(/Advice shown/i)).toBeTruthy();
+    expect(screen.getByText("10")).toBeTruthy();
+    expect(screen.getByText("7i")).toBeTruthy();
+    expect(screen.getByText("70%" )).toBeTruthy();
+  });
+
+  it("shows empty caddie state when no advice has been recorded", async () => {
+    const emptyInsights = {
+      memberId: "member-123",
+      from_ts: "2024-01-01T00:00:00Z",
+      to_ts: "2024-02-01T00:00:00Z",
+      advice_shown: 0,
+      advice_accepted: 0,
+      accept_rate: null,
+      per_club: [],
+    };
+    mockUseCaddieMemberId.mockReturnValue("member-123");
+    mockFetchCaddieInsights.mockResolvedValue(emptyInsights);
+
+    render(
+      <MemoryRouter>
+        <MyGolfIQPage />
+      </MemoryRouter>,
+      { wrapper: UserSessionProvider },
+    );
+
+    await waitFor(() => expect(mockFetchCaddieInsights).toHaveBeenCalled());
+
+    expect(
+      await screen.findByText(/We haven't recorded any caddie advice for you yet/i),
+    ).toBeTruthy();
   });
 });

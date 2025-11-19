@@ -1,7 +1,8 @@
 import axios from "axios";
 import { describe, expect, it, vi } from "vitest";
 
-import { API, fetchCaddieInsights } from "@/api";
+import { API } from "@/api";
+import { fetchCaddieInsights } from "@/api/caddieInsights";
 
 vi.mock("axios");
 

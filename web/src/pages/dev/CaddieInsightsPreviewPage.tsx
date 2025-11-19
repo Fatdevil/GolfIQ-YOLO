@@ -1,6 +1,6 @@
 import { useState } from "react";
 
-import { fetchCaddieInsights, type CaddieInsights } from "@/api";
+import { fetchCaddieInsights, type CaddieInsights } from "@/api/caddieInsights";
 
 function formatPercent(value: number | null): string {
   if (value === null) return "N/A";
