@@ -113,7 +113,11 @@ def test_ingest_caddie_telemetry(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_ingest_caddie_telemetry_missing_required(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(caddie_telemetry.ws_telemetry.manager, "broadcast", lambda message: 0)  # type: ignore[arg-type]
+    monkeypatch.setattr(
+        caddie_telemetry.ws_telemetry.manager,
+        "broadcast",
+        lambda message: 0,  # type: ignore[arg-type]
+    )
     monkeypatch.setattr(
         caddie_telemetry.ws_telemetry, "should_record", lambda pct: False
     )

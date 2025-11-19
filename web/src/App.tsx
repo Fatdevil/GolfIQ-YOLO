@@ -40,6 +40,7 @@ import TripStartPage from "./pages/trip/TripStartPage";
 import TripScoreboardPage from "./pages/trip/TripScoreboardPage";
 import PublicTripScoreboardPage from "./pages/trip/PublicTripScoreboardPage";
 import { SettingsPage } from "@/pages/settings/SettingsPage";
+import { CaddieInsightsPreviewPage } from "@/pages/dev/CaddieInsightsPreviewPage";
 import HudPreviewPage from "./pages/dev/HudPreviewPage";
 
 export default function App() {
@@ -129,6 +130,7 @@ export default function App() {
           <Route path="/bag" element={<MyBagPage />} />
           <Route path="/settings" element={<SettingsPage />} />
           <Route path="/courses/demo" element={<CourseDemoPage />} />
+          <Route path="/dev/caddie-insights" element={<CaddieInsightsPreviewPage />} />
           <Route path="/dev/hud-preview" element={<HudPreviewPage />} />
           <Route path="/play" element={<QuickRoundStartPage />} />
           <Route path="/play/:roundId" element={<QuickRoundPlayPage />} />
