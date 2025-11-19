@@ -40,6 +40,7 @@ from .routes.bundle import router as bundle_router
 from .routes.bundle_index import router as bundle_index_router
 from .routes.coach_profile import router as coach_profile_router
 from .routes.caddie_health import router as caddie_health_router
+from .routes.caddie_insights import router as caddie_insights_router
 from .routes.caddie_recommend import router as caddie_router
 from .routes.caddie_telemetry import router as caddie_telemetry_router
 from .routes.calibrate import router as calibrate_router
@@ -141,6 +142,7 @@ app.include_router(coach_profile_router)
 app.include_router(caddie_router)
 app.include_router(caddie_health_router)
 app.include_router(caddie_telemetry_router)
+app.include_router(caddie_insights_router)
 app.include_router(access_router)
 app.include_router(caddie_api_router)
 app.include_router(courses_router)
