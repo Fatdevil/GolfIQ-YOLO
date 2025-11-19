@@ -72,6 +72,36 @@ def test_compute_caddie_insights_counts() -> None:
     assert per_club["8i"].accepted == 0
 
 
+def test_compute_caddie_insights_no_matching_events() -> None:
+    now = datetime(2024, 6, 1, tzinfo=timezone.utc)
+    window = timedelta(days=14)
+
+    events: list[dict[str, object]] = [
+        {
+            "type": "CADDIE_ADVICE_SHOWN_V1",
+            "memberId": "other",
+            "ts": (now - timedelta(days=1)).timestamp() * 1000,
+        },
+        {
+            "type": "CADDIE_ADVICE_ACCEPTED_V1",
+            "memberId": "other",
+            "ts": (now - timedelta(days=2)).timestamp() * 1000,
+        },
+        {
+            "type": "UNRELATED",
+            "memberId": "m1",
+            "ts": (now - timedelta(days=3)).timestamp() * 1000,
+        },
+    ]
+
+    insights = compute_caddie_insights(events, member_id="m1", window=window, now=now)
+
+    assert insights.advice_shown == 0
+    assert insights.advice_accepted == 0
+    assert insights.accept_rate is None
+    assert insights.per_club == []
+
+
 def test_caddie_insights_endpoint(monkeypatch: pytest.MonkeyPatch) -> None:
     fake_now = datetime(2024, 2, 1, tzinfo=timezone.utc)
     expected = CaddieInsights(
@@ -231,3 +261,14 @@ def test_load_member_events_mixes_ts_and_file_dates(
     assert "CADDIE_ADVICE_SHOWN_V1" in types
     assert "CADDIE_ADVICE_ACCEPTED_V1" in types
     assert len(events) == 3
+
+
+def test_load_member_events_missing_directory(monkeypatch: pytest.MonkeyPatch) -> None:
+    missing_dir = Path("/tmp/non-existent-flight")
+    monkeypatch.setenv("FLIGHT_RECORDER_DIR", str(missing_dir))
+
+    events = load_member_events(
+        "m1", timedelta(days=1), now=datetime(2024, 1, 1, tzinfo=timezone.utc)
+    )
+
+    assert events == []
