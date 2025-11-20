@@ -21,7 +21,7 @@ from server.api.routers.caddie import router as caddie_api_router
 from server.api.routers.courses import router as courses_router
 from server.api.routers.coach import router as coach_router
 from server.api.routers.coach_feedback import router as coach_feedback_router
-from server.api.routers.hole_detect import router as hole_detect_router
+from server.api.routers.hole_detect import router as auto_hole_router
 from server.api.routers.live_tokens import router as live_tokens_router
 from server.api.routers.sg import router as sg_router
 from server.api.routers.share import router as share_router
@@ -52,6 +52,7 @@ from .routes.cv_analyze import router as cv_analyze_router
 from .routes.cv_analyze_video import router as cv_analyze_video_router
 from .routes.cv_mock import router as cv_mock_router
 from .routes.feed import router as feed_router
+from .routes.hole_detect import router as hole_detect_router
 from .routes.models import router as models_router
 from .routes.rollout import router as rollout_router
 from .routes.providers import router as providers_router
@@ -146,10 +147,11 @@ app.include_router(caddie_insights_router)
 app.include_router(access_router)
 app.include_router(caddie_api_router)
 app.include_router(courses_router)
-app.include_router(hole_detect_router)
+app.include_router(auto_hole_router)
 app.include_router(bundle_router)
 app.include_router(bundle_index_router)
 app.include_router(feed_router)
+app.include_router(hole_detect_router)
 app.include_router(bench_router)
 app.include_router(course_bundle_router)
 app.include_router(clips_router)
