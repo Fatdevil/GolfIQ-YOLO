@@ -25,6 +25,7 @@ class HudQuery(BaseModel):
     wind_dir_deg: float | None = None
     temp_c: float | None = None
     elev_delta_m: float | None = None
+    autoDetectHole: bool = True
 
 
 @router.post("/api/watch/hud/hole", response_model=HoleHud)
@@ -45,6 +46,7 @@ def get_hole_hud(payload: HudQuery) -> HoleHud:
         wind_dir_deg=payload.wind_dir_deg,
         temp_c=payload.temp_c,
         elev_delta_m=payload.elev_delta_m,
+        auto_detect_hole=payload.autoDetectHole,
     )
 
     detected_hole = hole_hud.hole
@@ -73,6 +75,7 @@ class TickIn(BaseModel):
     wind_dir_deg: float | None = None
     temp_c: float | None = None
     elev_delta_m: float | None = None
+    autoDetectHole: bool = True
 
 
 class TickOut(BaseModel):
@@ -107,6 +110,7 @@ def post_hud_tick(payload: TickIn) -> TickOut:
         wind_dir_deg=payload.wind_dir_deg,
         temp_c=payload.temp_c,
         elev_delta_m=payload.elev_delta_m,
+        auto_detect_hole=payload.autoDetectHole,
     )
     has_new_tip = hud.activeTip is not None
 
