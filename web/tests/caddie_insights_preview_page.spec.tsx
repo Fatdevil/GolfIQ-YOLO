@@ -18,7 +18,7 @@ const mockInsights = {
 
 const fetchCaddieInsights = vi.fn().mockResolvedValue(mockInsights);
 
-vi.mock("@/api", () => ({ fetchCaddieInsights }));
+vi.mock("@/api/caddieInsights", () => ({ fetchCaddieInsights }));
 
 describe("CaddieInsightsPreviewPage", () => {
   it("loads telemetry insights for a member", async () => {
