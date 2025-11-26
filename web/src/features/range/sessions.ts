@@ -3,6 +3,8 @@ import type { MissionId } from "@/features/range/missions";
 
 export type RangeSessionId = string;
 
+export type RangeGameType = "TARGET_BINGO_V1";
+
 export type RangeSession = {
   id: RangeSessionId;
   startedAt: string;
@@ -22,6 +24,10 @@ export type RangeSession = {
   avgError_m?: number | null;
 
   ghostSaved?: boolean;
+
+  gameType?: RangeGameType;
+  bingoLines?: number;
+  bingoHits?: number;
 };
 
 const STORAGE_KEY = "golfiq.range.sessions.v1";
