@@ -7,6 +7,8 @@ import MyGolfIQPage from "@/pages/profile/MyGolfIQPage";
 
 import { UserSessionProvider } from "@/user/UserSessionContext";
 
+const mockUseCoachInsights = vi.hoisted(() => vi.fn(() => ({ status: "empty" } as const)));
+
 vi.mock("@/bag/storage", () => ({
   loadBag: () => ({
     updatedAt: 0,
@@ -31,6 +33,10 @@ vi.mock("@/features/range/sessions", () => ({
 
 vi.mock("@/user/historyMigration", () => ({
   migrateLocalHistoryOnce: () => Promise.resolve(),
+}));
+
+vi.mock("@/profile/useCoachInsights", () => ({
+  useCoachInsights: () => mockUseCoachInsights(),
 }));
 
 vi.mock("@/access/PlanProvider", () => ({

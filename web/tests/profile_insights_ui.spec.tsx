@@ -7,6 +7,8 @@ import MyGolfIQPage from "@/pages/profile/MyGolfIQPage";
 
 import { UserSessionProvider } from "@/user/UserSessionContext";
 
+const mockUseCoachInsights = vi.hoisted(() => vi.fn(() => ({ status: "empty" } as const)));
+
 vi.mock("@/features/quickround/storage", () => ({
   loadAllRoundsFull: () => [],
 }));
@@ -27,6 +29,10 @@ vi.mock("@/user/historyMigration", () => ({
   migrateLocalHistoryOnce: () => Promise.resolve(),
 }));
 
+vi.mock("@/profile/useCoachInsights", () => ({
+  useCoachInsights: () => mockUseCoachInsights(),
+}));
+
 vi.mock("@/access/PlanProvider", () => ({
   PlanProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
   usePlan: () => ({ plan: "PRO", setPlan: vi.fn(), hasFeature: () => true }),
@@ -35,6 +41,7 @@ vi.mock("@/access/PlanProvider", () => ({
 describe("MyGolfIQPage empty states", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockUseCoachInsights.mockReturnValue({ status: "empty" });
   });
 
   it("shows empty messages when no local data is stored", () => {
