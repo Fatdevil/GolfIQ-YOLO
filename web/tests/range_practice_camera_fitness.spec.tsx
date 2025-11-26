@@ -9,6 +9,10 @@ vi.mock("@/features/range/api", () => ({
 vi.mock("@/user/historyApi", () => ({
   postRangeSessionSnapshots: vi.fn(),
 }));
+vi.mock("@/access/PlanProvider", () => ({
+  PlanProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+  usePlan: () => ({ plan: "PRO", setPlan: vi.fn(), hasFeature: () => true }),
+}));
 
 import { postRangeAnalyze } from "@/features/range/api";
 import RangePracticePage from "../src/pages/RangePracticePage";

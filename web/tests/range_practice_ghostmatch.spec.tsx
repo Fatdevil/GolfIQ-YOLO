@@ -40,6 +40,10 @@ vi.mock("@/features/range/sessions", async () => {
 vi.mock("@/user/historyApi", () => ({
   postRangeSessionSnapshots: vi.fn().mockResolvedValue(undefined),
 }));
+vi.mock("@/access/PlanProvider", () => ({
+  PlanProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+  usePlan: () => ({ plan: "PRO", setPlan: vi.fn(), hasFeature: () => true }),
+}));
 
 vi.mock("@/user/UserSessionContext", () => ({
   UserSessionProvider: ({ children }: { children: React.ReactNode }) => (

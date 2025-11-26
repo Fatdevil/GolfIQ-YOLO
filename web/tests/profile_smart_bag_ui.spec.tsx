@@ -33,6 +33,11 @@ vi.mock("@/user/historyMigration", () => ({
   migrateLocalHistoryOnce: () => Promise.resolve(),
 }));
 
+vi.mock("@/access/PlanProvider", () => ({
+  PlanProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+  usePlan: () => ({ plan: "PRO", setPlan: vi.fn(), hasFeature: () => true }),
+}));
+
 describe("MyGolfIQPage bag snapshot", () => {
   it("shows a CTA when some clubs are missing carry distances", () => {
     render(

@@ -30,6 +30,10 @@ vi.mock("../src/features/range/api", () => ({
 vi.mock("../src/user/historyApi", () => ({
   postRangeSessionSnapshots: vi.fn(),
 }));
+vi.mock("../src/access/PlanProvider", () => ({
+  PlanProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+  usePlan: () => ({ plan: "PRO", setPlan: vi.fn(), hasFeature: () => true }),
+}));
 
 const proAccessValue = {
   loading: false,
