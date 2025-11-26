@@ -46,23 +46,25 @@ _CATEGORY_DISTANCE_HINTS: Dict[SgCategory, float] = {
 
 
 def baseline_strokes(distance_m: float | None, is_putt: bool) -> float:
-    """Very simple baseline strokes for a given lie.
+    """Very simple expected strokes for the *first* shot in a category.
 
-    This is deliberately conservative; it gives us repeatable numbers for a v1
-    preview without trying to match tour-grade SG curves.
+    These values are intentionally modest so that if a player needs more shots
+    than expected within a category, the SG value will go negative. Conversely,
+    using fewer strokes than the baseline yields a positive SG for that
+    category.
     """
 
     if is_putt:
-        return 1.8
+        return 1.5
     if distance_m is None:
         return 1.0
     if distance_m > 200:
-        return 3.5
+        return 1.4
     if distance_m > 100:
-        return 2.8
+        return 1.3
     if distance_m > 30:
-        return 2.2
-    return 1.5
+        return 1.1
+    return 0.9
 
 
 def _categorize_anchor(anchor: AnchorOut, total_shots: int) -> SgCategory:
@@ -93,7 +95,10 @@ def compute_sg_preview_for_run(
 
     Each anchor is treated as a single stroke. We assign a category based on the
     shot index within the hole, derive a simple baseline using rough distance
-    hints per category and compute ``sg = baseline - 1`` per shot.
+    hints per category, and compare the expected strokes for that category to
+    the actual stroke count within the hole. Baselines are only applied to the
+    first shot we see in a category for a hole so that taking extra strokes in a
+    category can push SG negative.
     """
 
     anchors_by_hole: Dict[int, List[AnchorOut]] = defaultdict(list)
@@ -106,19 +111,26 @@ def compute_sg_preview_for_run(
     for hole, hole_anchors in sorted(anchors_by_hole.items()):
         hole_anchors.sort(key=lambda item: item.shot)
         hole_totals = _init_category_totals()
+        hole_baselines = _init_category_totals()
         total_shots = len(hole_anchors)
 
         for anchor in hole_anchors:
             category = _categorize_anchor(anchor, total_shots)
-            baseline = baseline_strokes(
-                _CATEGORY_DISTANCE_HINTS.get(category),
-                is_putt=category is SgCategory.PUTT,
-            )
-            sg_value = baseline - 1.0
-            hole_totals[category] += sg_value
+            if hole_baselines[category] == 0.0:
+                hole_baselines[category] = baseline_strokes(
+                    _CATEGORY_DISTANCE_HINTS.get(category),
+                    is_putt=category is SgCategory.PUTT,
+                )
+            hole_totals[category] += 1.0
+
+        hole_sg_by_cat = {
+            category: hole_baselines[category] - hole_totals[category]
+            for category in SgCategory
+        }
+        for category, sg_value in hole_sg_by_cat.items():
             round_totals[category] += sg_value
 
-        hole_previews.append(HoleSgPreview(hole=hole, sg_by_cat=hole_totals))
+        hole_previews.append(HoleSgPreview(hole=hole, sg_by_cat=hole_sg_by_cat))
 
     total_sg = sum(round_totals.values())
 
@@ -129,4 +141,3 @@ def compute_sg_preview_for_run(
         sg_by_cat=round_totals,
         holes=hole_previews,
     )
-

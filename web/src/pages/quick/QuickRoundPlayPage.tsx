@@ -742,8 +742,10 @@ function biggestLeakCategory(preview: RoundSgPreview): SgCategory | null {
   if (entries.length === 0) {
     return null;
   }
-  return entries.reduce<[SgCategory, number]>((worst, current) =>
-    current[1] < worst[1] ? current : worst
+  const [first, ...rest] = entries;
+  return rest.reduce<[SgCategory, number]>(
+    (worst, current) => (current[1] < worst[1] ? current : worst),
+    first
   )[0];
 }
 

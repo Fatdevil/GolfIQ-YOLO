@@ -24,4 +24,3 @@ def get_sg_preview(run_id: str) -> RoundSgPreview:
         course_id = run.params.get("courseId") or run.params.get("course_id")
 
     return compute_sg_preview_for_run(run_id, anchors, course_id=course_id)
-

@@ -32,12 +32,19 @@ def test_compute_sg_preview_groups_by_category() -> None:
     run_id = "run-preview"
     build_anchor = _anchor_factory(run_id)
     anchors: Iterable[AnchorOut] = [
+        # Hole 1: tidy hole with one putt
         build_anchor(1, 1),
         build_anchor(1, 2),
+        build_anchor(1, 3),
+        # Hole 2: messy hole with several short-game shots
         build_anchor(2, 1),
         build_anchor(2, 2),
         build_anchor(2, 3),
         build_anchor(2, 4),
+        build_anchor(2, 5),
+        build_anchor(2, 6),
+        build_anchor(2, 7),
+        build_anchor(2, 8),
     ]
 
     preview = compute_sg_preview_for_run(run_id, anchors, course_id="course-1")
@@ -48,13 +55,16 @@ def test_compute_sg_preview_groups_by_category() -> None:
     assert set(preview.sg_by_cat.keys()) == set(SgCategory)
 
     expected_totals = {
-        SgCategory.TEE: 5.0,
-        SgCategory.APPROACH: 1.8,
-        SgCategory.SHORT: 0.5,
-        SgCategory.PUTT: 1.6,
+        SgCategory.TEE: 0.8,
+        SgCategory.APPROACH: 0.6,
+        SgCategory.SHORT: -4.1,
+        SgCategory.PUTT: 1.0,
     }
-    assert preview.sg_by_cat == {k: pytest.approx(v) for k, v in expected_totals.items()}
+    assert preview.sg_by_cat == {
+        k: pytest.approx(v) for k, v in expected_totals.items()
+    }
     assert preview.total_sg == pytest.approx(sum(expected_totals.values()))
+    assert preview.total_sg < 0  # round can go negative when extra strokes are taken
 
 
 def test_sg_preview_endpoint(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -96,4 +106,3 @@ def test_sg_preview_endpoint(monkeypatch: pytest.MonkeyPatch) -> None:
 
     missing = client.get("/api/sg/run/missing", headers={"x-api-key": "test-key"})
     assert missing.status_code == 404
-
