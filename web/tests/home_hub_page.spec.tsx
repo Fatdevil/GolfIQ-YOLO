@@ -1,76 +1,67 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { Mock } from "vitest";
 import { render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 
-type MockAccessState = {
-  plan: "free" | "pro";
-  loading: boolean;
-  hasFeature: () => boolean;
-};
+import { HomeHubPage } from "@/pages/home/HomeHubPage";
 
-const mockUseUserAccess = vi.hoisted(() =>
-  vi.fn((): MockAccessState => ({
-    plan: "free",
-    loading: false,
-    hasFeature: () => false,
-  })),
-);
-
-vi.mock("@/access/UserAccessContext", () => ({
-  useUserAccess: mockUseUserAccess,
+vi.mock("@/access/PlanProvider", () => ({
+  usePlan: vi.fn(),
 }));
 
-import { NotificationProvider } from "../src/notifications/NotificationContext";
-import { HomeHubPage } from "@/pages/home/HomeHubPage";
+vi.mock("@/access/UserAccessContext", () => ({
+  useUserAccess: vi.fn(),
+  useFeatureFlag: vi.fn().mockReturnValue({ enabled: true, loading: false }),
+}));
+
+import { usePlan } from "@/access/PlanProvider";
+import { useUserAccess, useFeatureFlag } from "@/access/UserAccessContext";
+
+const mockUsePlan = usePlan as unknown as Mock;
+const mockUseUserAccess = useUserAccess as unknown as Mock;
+const mockUseFeatureFlag = useFeatureFlag as unknown as Mock;
+
+const renderHome = () => {
+  return render(
+    <MemoryRouter>
+      <HomeHubPage />
+    </MemoryRouter>,
+  );
+};
 
 describe("HomeHubPage", () => {
   beforeEach(() => {
-    mockUseUserAccess.mockReset();
-    mockUseUserAccess.mockReturnValue({
-      plan: "free",
-      loading: false,
-      hasFeature: () => false,
-    });
+    mockUsePlan.mockReturnValue({ plan: "FREE", hasFeature: vi.fn(), setPlan: vi.fn() });
+    mockUseUserAccess.mockReturnValue({ plan: undefined, loading: true, hasFeature: vi.fn() });
+    mockUseFeatureFlag.mockReturnValue({ enabled: true, loading: false });
   });
 
-  it("renders the main heading and all mode cards", () => {
-    render(
-      <NotificationProvider>
-        <MemoryRouter>
-          <HomeHubPage />
-        </MemoryRouter>
-      </NotificationProvider>,
-    );
+  it("renders home hub with entry cards and free plan badge", () => {
+    renderHome();
 
-    expect(screen.getByRole("heading", { level: 1, name: /GolfIQ Home/i })).toBeTruthy();
-    expect(screen.getByRole("heading", { level: 2, name: /Quick Round/i })).toBeTruthy();
-    expect(screen.getByRole("heading", { level: 2, name: /Range practice/i })).toBeTruthy();
-    expect(screen.getByRole("heading", { level: 2, name: /Trip Mode/i })).toBeTruthy();
-    expect(screen.getByRole("heading", { level: 2, name: /My GolfIQ/i })).toBeTruthy();
-
-    const links = screen.getAllByRole("link") as HTMLAnchorElement[];
-    expect(links.length).toBeGreaterThanOrEqual(5);
-    const hrefs = links.map((link) => link.getAttribute("href"));
-    expect(hrefs).toEqual(
-      expect.arrayContaining(["/play", "/range/practice", "/trip/start", "/profile", "/settings"]),
-    );
+    expect(screen.getByText(/GolfIQ Home/i)).toBeTruthy();
+    expect(screen.getByRole("link", { name: /Start Quick Round/i })).toBeTruthy();
+    expect(screen.getByRole("link", { name: /Open range practice/i })).toBeTruthy();
+    expect(screen.getByRole("link", { name: /View My GolfIQ/i })).toBeTruthy();
+    expect(screen.getAllByText(/Free/i).length).toBeGreaterThan(0);
   });
 
-  it("shows the Pro badge when the user plan is pro", () => {
-    mockUseUserAccess.mockReturnValue({
-      plan: "pro",
-      loading: false,
-      hasFeature: () => true,
-    });
+  it("prefers backend plan when available to show pro state", async () => {
+    mockUsePlan.mockReturnValue({ plan: "FREE", hasFeature: vi.fn(), setPlan: vi.fn() });
+    mockUseUserAccess.mockReturnValue({ plan: "pro", loading: false, hasFeature: vi.fn() });
 
-    render(
-      <NotificationProvider>
-        <MemoryRouter>
-          <HomeHubPage />
-        </MemoryRouter>
-      </NotificationProvider>,
-    );
+    renderHome();
 
-    expect(screen.getAllByText("Pro").length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Pro/i).length).toBeGreaterThan(0);
+    expect(await screen.findByText(/Caddie insights unlocked/i)).toBeTruthy();
+  });
+
+  it("falls back to local plan when backend plan is not loaded", () => {
+    mockUsePlan.mockReturnValue({ plan: "FREE", hasFeature: vi.fn(), setPlan: vi.fn() });
+    mockUseUserAccess.mockReturnValue({ plan: undefined, loading: true, hasFeature: vi.fn() });
+
+    renderHome();
+
+    expect(screen.getAllByText(/Free/i).length).toBeGreaterThan(0);
   });
 });

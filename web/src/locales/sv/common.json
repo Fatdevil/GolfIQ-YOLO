@@ -7,6 +7,37 @@
   "nav.profile": "Min GolfIQ",
   "nav.myBag": "Min bag",
   "nav.coursesDemo": "Ban-demo",
+
+  "home.nav.home": "Hem",
+
+  "home.header.title": "GolfIQ Hem",
+  "home.header.subtitle": "Din startpunkt för rundor, range-spel och insikter.",
+
+  "home.quick.title": "Spela runda",
+  "home.quick.subtitle": "Starta en Quick Round med GPS-baserad håldetektering på hero-banor.",
+  "home.quick.button": "Starta Quick Round",
+  "home.quick.badge": "GPS + scorekort",
+
+  "home.range.title": "Range & spel",
+  "home.range.subtitle": "Träna med Target Bingo eller utmana dina gamla pass med GhostMatch.",
+  "home.range.button": "Öppna range-träning",
+  "home.range.badge.bingo": "Bingo",
+  "home.range.badge.ghostmatch": "GhostMatch (Pro)",
+
+  "home.profile.title": "My GolfIQ",
+  "home.profile.subtitle": "Se dina rundor, rangepass, caddie-insikter och SG-förhandsvisning.",
+  "home.profile.button": "Öppna My GolfIQ",
+  "home.profile.metricsPlaceholder": "Registrerade rundor: —  •  Rangepass: —",
+
+  "home.pro.title": "Lås upp GolfIQ Pro",
+  "home.pro.subtitle": "Få caddie-insikter, Strokes Gained och avancerade range-spel.",
+  "home.pro.button": "Testa Pro-läge",
+  "home.pro.unlocked.caddie": "Caddie-insikter upplåsta",
+  "home.pro.unlocked.sg": "Strokes Gained-preview tillgänglig",
+  "home.pro.unlocked.range": "GhostMatch och Bingo på rangen",
+  "home.pro.feature.caddie": "Caddie-insikter på varje runda",
+  "home.pro.feature.sg": "Strokes Gained-förhandsvisning efter rundor",
+  "home.pro.feature.ghost": "GhostMatch-utmaningar på rangen",
   "home.title": "GolfIQ Hem",
   "home.subtitle": "Välj hur du vill spela eller träna idag.",
   "home.plan.loading": "Laddar plan…",

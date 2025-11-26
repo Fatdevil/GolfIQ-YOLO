@@ -8,6 +8,37 @@
   "nav.myBag": "My Bag",
   "nav.coursesDemo": "Courses demo",
 
+  "home.nav.home": "Home",
+
+  "home.header.title": "GolfIQ Home",
+  "home.header.subtitle": "Your starting point for rounds, range games and insights.",
+
+  "home.quick.title": "Play a round",
+  "home.quick.subtitle": "Start a Quick Round with GPS-aware hole suggestions on hero courses.",
+  "home.quick.button": "Start Quick Round",
+  "home.quick.badge": "GPS + scorecard",
+
+  "home.range.title": "Range practice & games",
+  "home.range.subtitle": "Practice with Target Bingo or challenge your previous sessions with GhostMatch.",
+  "home.range.button": "Open range practice",
+  "home.range.badge.bingo": "Bingo",
+  "home.range.badge.ghostmatch": "GhostMatch (Pro)",
+
+  "home.profile.title": "My GolfIQ",
+  "home.profile.subtitle": "See your rounds, range sessions, caddie insights and SG preview.",
+  "home.profile.button": "View My GolfIQ",
+  "home.profile.metricsPlaceholder": "Rounds tracked: —  •  Range sessions: —",
+
+  "home.pro.title": "Unlock GolfIQ Pro",
+  "home.pro.subtitle": "Get caddie insights, strokes-gained preview and advanced range games.",
+  "home.pro.button": "Try Pro mode",
+  "home.pro.unlocked.caddie": "Caddie insights unlocked",
+  "home.pro.unlocked.sg": "Strokes-gained preview available",
+  "home.pro.unlocked.range": "GhostMatch and Bingo at the range",
+  "home.pro.feature.caddie": "Caddie insights on every round",
+  "home.pro.feature.sg": "Strokes-gained preview after rounds",
+  "home.pro.feature.ghost": "GhostMatch challenges at the range",
+
   "home.title": "GolfIQ Home",
   "home.subtitle": "Choose how you want to play or practice today.",
   "home.plan.loading": "Loading plan…",

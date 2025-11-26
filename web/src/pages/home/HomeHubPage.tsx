@@ -1,155 +1,177 @@
-import React, { useState } from "react";
+import React from "react";
 import { useTranslation } from "react-i18next";
-import { Link, useNavigate } from "react-router-dom";
+import { Link } from "react-router-dom";
 
+import { FeatureGate } from "@/access/FeatureGate";
+import { UpgradeGate } from "@/access/UpgradeGate";
+import { usePlan } from "@/access/PlanProvider";
+import type { PlanId } from "@/access/plan";
 import { useUserAccess } from "@/access/UserAccessContext";
-import { ProBadge } from "@/access/ProBadge";
-import { BetaBadge } from "@/access/BetaBadge";
-import { useCalibrationStatus } from "@/features/range/useCalibrationStatus";
-import { useOnboarding } from "@/onboarding/useOnboarding";
-import { seedDemoData } from "@/onboarding/demoSeed";
-import { useNotifications } from "@/notifications/NotificationContext";
 
-type ModeCardProps = {
+const Card: React.FC<{
   title: string;
-  description: string;
-  to: string;
-  badge?: React.ReactNode;
-};
+  subtitle: string;
+  action: React.ReactNode;
+  footer?: React.ReactNode;
+  children?: React.ReactNode;
+}> = ({ title, subtitle, action, children, footer }) => (
+  <div className="flex h-full flex-col justify-between rounded-xl border border-slate-800 bg-slate-900/60 p-5 shadow-sm">
+    <div className="space-y-2">
+      <div>
+        <h2 className="text-lg font-semibold text-slate-100">{title}</h2>
+        <p className="text-sm text-slate-400">{subtitle}</p>
+      </div>
+      {children}
+    </div>
+    <div className="mt-4 flex items-center justify-between gap-3">
+      {footer}
+      {action}
+    </div>
+  </div>
+);
 
-const ModeCard: React.FC<ModeCardProps> = ({ title, description, to, badge }) => {
+const GhostMatchBadge: React.FC = () => {
+  const { hasFeature } = usePlan();
   const { t } = useTranslation();
 
   return (
-    <Link
-      to={to}
-      className="group flex flex-col justify-between rounded-xl border border-slate-200 bg-white p-4 shadow-sm transition-shadow hover:shadow-md"
-    >
-      <div className="flex items-start justify-between gap-2">
-        <div>
-          <h2 className="text-lg font-semibold text-slate-900 group-hover:text-sky-600">{title}</h2>
-          <p className="mt-1 text-sm text-slate-500">{description}</p>
-        </div>
-        {badge}
-      </div>
-      <div className="mt-3 text-xs font-medium text-sky-600 group-hover:underline">{t("home.card.cta")}</div>
-    </Link>
+    <FeatureGate feature="range.ghostMatch">
+      {hasFeature("RANGE_GHOSTMATCH") ? (
+        <span className="inline-flex items-center rounded-full bg-emerald-500/10 px-2 py-0.5 text-[11px] font-semibold text-emerald-200">
+          {t("home.range.badge.ghostmatch")}
+        </span>
+      ) : (
+        <span className="inline-flex items-center rounded-full bg-amber-500/10 px-2 py-0.5 text-[11px] font-semibold text-amber-200">
+          {t("home.range.badge.ghostmatch")}
+        </span>
+      )}
+    </FeatureGate>
   );
 };
 
 export const HomeHubPage: React.FC = () => {
   const { t } = useTranslation();
-  const navigate = useNavigate();
-  const { plan, loading: accessLoading } = useUserAccess();
-  const { status: calibStatus } = useCalibrationStatus();
-  const { state: onboarding, markHomeSeen } = useOnboarding();
-  const [seeding, setSeeding] = useState(false);
-  const showOnboarding = !onboarding.homeSeen;
-  const { notify } = useNotifications();
+  const { plan: localPlan } = usePlan();
+  const { plan: backendPlan } = useUserAccess();
+
+  const effectivePlan: PlanId =
+    backendPlan === "pro" || backendPlan === "free"
+      ? backendPlan === "pro"
+        ? "PRO"
+        : "FREE"
+      : localPlan;
+  const isPro = effectivePlan === "PRO";
 
   return (
-    <div className="max-w-5xl mx-auto px-4 py-6 space-y-6">
+    <div className="max-w-5xl mx-auto px-4 py-6 space-y-4">
       <header className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-2xl font-semibold">{t("home.title")}</h1>
-          <p className="text-sm text-slate-400">{t("home.subtitle")}</p>
+          <div className="text-xs font-semibold uppercase tracking-wide text-emerald-200/80">GolfIQ</div>
+          <h1 className="text-2xl font-semibold text-slate-50">{t("home.header.title")}</h1>
+          <p className="text-sm text-slate-400">{t("home.header.subtitle")}</p>
         </div>
-        <div className="flex items-center gap-2 text-sm">
-          <span className="text-slate-400">
-            {accessLoading ? t("home.plan.loading") : t("home.plan.label", { plan })}
+        <div className="inline-flex items-center rounded-full border border-slate-700 bg-slate-900 px-3 py-1 text-xs text-slate-100">
+          <span className="font-semibold text-emerald-200">{t("app.title")}</span>
+          <span className="ml-2 inline-flex items-center px-2 py-[2px] rounded-full border text-[10px] font-semibold">
+            {effectivePlan === "PRO" ? t("access.plan.pro") : t("access.plan.free")}
           </span>
-          {plan === "pro" && <ProBadge />}
         </div>
       </header>
 
-      {showOnboarding && (
-        <div className="mb-4 rounded-xl border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-900">
-          <div className="flex items-start justify-between gap-3">
-            <div>
-              <div className="font-semibold">{t("onboarding.home.title")}</div>
-              <p className="mt-1 text-xs text-sky-800">{t("onboarding.home.subtitle")}</p>
-              <ul className="mt-2 list-disc space-y-1 pl-5 text-xs">
-                <li>{t("onboarding.home.point.quickRound")}</li>
-                <li>{t("onboarding.home.point.range")}</li>
-                <li>{t("onboarding.home.point.trip")}</li>
-                <li>{t("onboarding.home.point.profile")}</li>
-              </ul>
-            </div>
-            <div className="flex flex-col items-end gap-2">
-              <button
-                type="button"
-                className="inline-flex items-center rounded-md border border-sky-600 px-3 py-1 text-xs font-semibold text-sky-800 hover:bg-sky-100 disabled:opacity-40"
-                onClick={async () => {
-                  setSeeding(true);
-                  try {
-                    await seedDemoData();
-                    markHomeSeen();
-                    notify("success", t("onboarding.home.demoDone"));
-                    navigate("/profile");
-                  } catch (error) {
-                    console.error(error);
-                    notify("error", t("onboarding.home.demoError"));
-                  } finally {
-                    setSeeding(false);
-                  }
-                }}
-                disabled={seeding}
-              >
-                {seeding ? t("onboarding.home.demoSeeding") : t("onboarding.home.demoButton")}
-              </button>
-              <button
-                type="button"
-                className="text-xs text-sky-800 hover:underline"
-                onClick={markHomeSeen}
-              >
-                {t("onboarding.home.dismiss")}
-              </button>
+      <div className="grid gap-4 md:grid-cols-2">
+        <Card
+          title={t("home.quick.title")}
+          subtitle={t("home.quick.subtitle")}
+          action={
+            <Link
+              to="/play"
+              className="inline-flex items-center justify-center rounded-lg bg-emerald-500 px-4 py-2 text-sm font-semibold text-white shadow hover:bg-emerald-400"
+            >
+              {t("home.quick.button")}
+            </Link>
+          }
+        >
+          <div className="text-xs text-slate-400">
+            <div className="inline-flex items-center rounded-full bg-emerald-500/10 px-2 py-0.5 font-semibold text-emerald-200">
+              {t("home.quick.badge")}
             </div>
           </div>
-        </div>
-      )}
+        </Card>
 
-      <section className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-        <ModeCard
-          to="/play"
-          title={t("home.card.quickRound.title")}
-          description={t("home.card.quickRound.description")}
-        />
-        <ModeCard
-          to="/range/practice"
-          title={t("home.card.range.title")}
-          description={t("home.card.range.description")}
-          badge={
-            <div className="flex flex-col items-end gap-1">
-              {calibStatus.calibrated ? (
-                <span className="inline-flex items-center rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700">
-                  {t("home.card.range.calibrated")}
-                </span>
-              ) : null}
-              {plan === "pro" ? <ProBadge /> : null}
-              <BetaBadge />
+        <Card
+          title={t("home.range.title")}
+          subtitle={t("home.range.subtitle")}
+          action={
+            <Link
+              to="/range/practice"
+              className="inline-flex items-center justify-center rounded-lg bg-emerald-500 px-4 py-2 text-sm font-semibold text-white shadow hover:bg-emerald-400"
+            >
+              {t("home.range.button")}
+            </Link>
+          }
+          footer={
+            <div className="flex flex-wrap gap-2 text-[11px] font-semibold text-emerald-200">
+              <span className="inline-flex items-center rounded-full bg-emerald-500/10 px-2 py-0.5">
+                {t("home.range.badge.bingo")}
+              </span>
+              <GhostMatchBadge />
             </div>
           }
         />
-        <ModeCard
-          to="/trip/start"
-          title={t("home.card.trip.title")}
-          description={t("home.card.trip.description")}
-          badge={<BetaBadge />}
-        />
-        <ModeCard
-          to="/profile"
-          title={t("home.card.profile.title")}
-          description={t("home.card.profile.description")}
-          badge={plan === "pro" ? <ProBadge /> : undefined}
-        />
-      </section>
 
-      <footer className="mt-4 text-xs text-slate-500">
-        <Link to="/settings" className="underline hover:text-slate-700">
-          {t("settings.link")}
-        </Link>
-      </footer>
+        <Card
+          title={t("home.profile.title")}
+          subtitle={t("home.profile.subtitle")}
+          action={
+            <Link
+              to="/profile"
+              className="inline-flex items-center justify-center rounded-lg bg-slate-100 px-4 py-2 text-sm font-semibold text-slate-900 shadow hover:bg-white"
+            >
+              {t("home.profile.button")}
+            </Link>
+          }
+          footer={<div className="text-xs text-slate-400">{t("home.profile.metricsPlaceholder")}</div>}
+        />
+
+        {isPro ? (
+          <Card
+            title={t("home.pro.title")}
+            subtitle={t("home.pro.subtitle")}
+            action={
+              <div className="rounded-lg bg-emerald-500/10 px-3 py-2 text-xs font-semibold text-emerald-200">
+                {t("access.plan.pro")}
+              </div>
+            }
+          >
+            <ul className="list-disc space-y-1 pl-5 text-xs text-slate-300">
+              <li>{t("home.pro.unlocked.caddie")}</li>
+              <li>{t("home.pro.unlocked.sg")}</li>
+              <li>{t("home.pro.unlocked.range")}</li>
+            </ul>
+          </Card>
+        ) : (
+          <UpgradeGate feature="CADDIE_INSIGHTS">
+            <Card
+              title={t("home.pro.title")}
+              subtitle={t("home.pro.subtitle")}
+              action={
+                <Link
+                  to="/profile"
+                  className="inline-flex items-center justify-center rounded-lg bg-emerald-500 px-4 py-2 text-sm font-semibold text-white shadow hover:bg-emerald-400"
+                >
+                  {t("home.pro.button")}
+                </Link>
+              }
+            >
+              <div className="space-y-1 text-xs text-slate-300">
+                <div>• {t("home.pro.feature.caddie")}</div>
+                <div>• {t("home.pro.feature.sg")}</div>
+                <div>• {t("home.pro.feature.ghost")}</div>
+              </div>
+            </Card>
+          </UpgradeGate>
+        )}
+      </div>
     </div>
   );
 };
