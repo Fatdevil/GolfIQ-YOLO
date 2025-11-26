@@ -14,7 +14,7 @@ import {
 import { QuickHole, QuickRound } from "../../features/quickround/types";
 import { useCourseBundle } from "../../courses/hooks";
 import { useGeolocation } from "../../hooks/useGeolocation";
-import { useAutoHoleSuggestion } from "../../courses/useAutoHole";
+import { useAutoHoleSuggest } from "@/features/quickround/useAutoHoleSuggest";
 import { computeQuickRoundSummary } from "../../features/quickround/summary";
 import { syncQuickRoundToWatch } from "../../features/watch/api";
 
@@ -43,12 +43,14 @@ export default function QuickRoundPlayPage() {
   const { data: bundle, loading: bundleLoading, error: bundleError } = useCourseBundle(
     round?.courseId
   );
-  const { suggestion, clear: clearSuggestion } = useAutoHoleSuggestion({
-    courseId: round?.courseId,
-    currentHole: currentHoleNumber,
-    position,
+  const autoHoleState = useAutoHoleSuggest({
     enabled: autoHoleEnabled && Boolean(round?.courseId),
+    courseId: round?.courseId,
+    lastHole: currentHoleNumber,
+    lat: position?.lat,
+    lon: position?.lon,
   });
+  const suggestion = autoHoleState.status === "suggested" ? autoHoleState.suggestion : null;
 
   useEffect(() => {
     if (!roundId) {
@@ -63,7 +65,7 @@ export default function QuickRoundPlayPage() {
     setRound(existing);
     setShowPutts(existing.showPutts ?? true);
     setCurrentHoleNumber(determineCurrentHoleNumber(existing.holes));
-    setAutoHoleEnabled(false);
+    setAutoHoleEnabled(Boolean(existing.courseId));
     setSuppressedSuggestion(null);
   }, [roundId]);
 
@@ -74,17 +76,10 @@ export default function QuickRoundPlayPage() {
   }, [round?.courseId, autoHoleEnabled]);
 
   useEffect(() => {
-    if (!suggestion || !suppressedSuggestion) {
-      return;
+    if (suppressedSuggestion && suppressedSuggestion.expires <= Date.now()) {
+      setSuppressedSuggestion(null);
     }
-    if (suppressedSuggestion.hole === suggestion.suggestedHole) {
-      if (suppressedSuggestion.expires > Date.now()) {
-        clearSuggestion();
-      } else {
-        setSuppressedSuggestion(null);
-      }
-    }
-  }, [suggestion, suppressedSuggestion, clearSuggestion]);
+  }, [suppressedSuggestion]);
 
   useEffect(() => {
     if (!autoHoleEnabled && suppressedSuggestion) {
@@ -169,9 +164,16 @@ export default function QuickRoundPlayPage() {
   const courseTitle = round.courseName ?? t("profile.quickRounds.unknownCourse");
 
   const autoHoleAvailable = Boolean(round.courseId);
-  const suggestionReason = suggestion
-    ? formatAutoHoleReason(suggestion.reason)
-    : null;
+  const hasSuppressedActiveSuggestion =
+    suggestion &&
+    suppressedSuggestion &&
+    suppressedSuggestion.hole === suggestion.hole &&
+    suppressedSuggestion.expires > Date.now();
+  const shouldShowSuggestion =
+    autoHoleEnabled &&
+    suggestion &&
+    suggestion.hole !== currentHoleNumber &&
+    !hasSuppressedActiveSuggestion;
 
   const handleCopySummary = async () => {
     if (!round || !summary) {
@@ -219,7 +221,6 @@ export default function QuickRoundPlayPage() {
 
   const handleSelectHole = (index: number) => {
     setCurrentHoleNumber(index);
-    clearSuggestion();
     setSuppressedSuggestion(null);
   };
 
@@ -230,7 +231,6 @@ export default function QuickRoundPlayPage() {
     }
     setAutoHoleEnabled(value);
     if (!value) {
-      clearSuggestion();
       setSuppressedSuggestion(null);
     }
   };
@@ -239,20 +239,18 @@ export default function QuickRoundPlayPage() {
     if (!suggestion) {
       return;
     }
-    setCurrentHoleNumber(suggestion.suggestedHole);
-    clearSuggestion();
+    setCurrentHoleNumber(suggestion.hole);
     setSuppressedSuggestion(null);
   };
 
   const handleIgnoreSuggestion = () => {
-    const ignoredHole = suggestion?.suggestedHole;
+    const ignoredHole = suggestion?.hole;
     if (ignoredHole) {
       setSuppressedSuggestion({
         hole: ignoredHole,
         expires: Date.now() + 30_000,
       });
     }
-    clearSuggestion();
   };
 
   const handleHoleChange = (next: QuickHole) => {
@@ -369,7 +367,7 @@ export default function QuickRoundPlayPage() {
                     onChange={(event) => handleAutoHoleToggle(event.target.checked)}
                     className="h-4 w-4 border-slate-600 bg-slate-900 text-emerald-500 focus:ring-emerald-500 disabled:cursor-not-allowed disabled:border-slate-700 disabled:text-slate-600"
                   />
-                  Auto hole detect (beta)
+                  {t("quickround.autoHole.label")}
                 </label>
                 {!autoHoleAvailable && (
                   <span className="text-xs text-slate-500 sm:ml-2">Kräver kursbundle</span>
@@ -382,12 +380,44 @@ export default function QuickRoundPlayPage() {
               )}
             </div>
           </div>
-          {autoHoleEnabled && geoError && (
-            <p className="mt-2 text-xs text-amber-300 sm:text-right">
-              Kunde inte hämta GPS: {geoError.message}
-            </p>
-          )}
-        </header>
+        {autoHoleEnabled && geoError && (
+          <p className="mt-2 text-xs text-amber-300 sm:text-right">
+            Kunde inte hämta GPS: {geoError.message}
+          </p>
+        )}
+      </header>
+      {shouldShowSuggestion && suggestion && (
+        <div className="rounded-lg border border-emerald-500/50 bg-slate-900/70 p-3 text-xs text-slate-100">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <p className="font-semibold">
+                {t("quickround.autoHole.suggestedHole", { hole: suggestion.hole })}
+              </p>
+              <p className="text-[10px] text-slate-400">
+                {t("quickround.autoHole.distance", {
+                  distance: Math.round(suggestion.distance_m),
+                })}
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={handleIgnoreSuggestion}
+                className="text-[10px] font-semibold text-slate-300 underline hover:text-slate-100"
+              >
+                {t("quickround.autoHole.ignore")}
+              </button>
+              <button
+                type="button"
+                onClick={handleAcceptSuggestion}
+                className="rounded bg-emerald-500 px-3 py-1 text-[10px] font-semibold text-slate-900 transition hover:bg-emerald-400"
+              >
+                {t("quickround.autoHole.accept")}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       <section className="overflow-x-auto rounded-lg border border-slate-800 bg-slate-900/40">
         <table className="min-w-full divide-y divide-slate-800 text-sm">
           <thead className="bg-slate-900/60">
@@ -472,30 +502,6 @@ export default function QuickRoundPlayPage() {
         </button>
       </div>
       </div>
-      {autoHoleEnabled && suggestion && (
-        <div className="fixed bottom-6 left-1/2 z-50 w-[calc(100%-2rem)] max-w-sm -translate-x-1/2 rounded-lg border border-emerald-500/50 bg-slate-950/90 p-4 text-sm text-slate-100 shadow-lg backdrop-blur">
-          <p>
-            Byt till hål {suggestion.suggestedHole}?
-            {suggestionReason ? ` (reason: ${suggestionReason})` : ""}
-          </p>
-          <div className="mt-3 flex items-center justify-end gap-3">
-            <button
-              type="button"
-              onClick={handleIgnoreSuggestion}
-              className="rounded px-3 py-1 text-sm font-semibold text-slate-300 transition hover:text-slate-100"
-            >
-              Ignorera
-            </button>
-            <button
-              type="button"
-              onClick={handleAcceptSuggestion}
-              className="rounded bg-emerald-500 px-4 py-1 text-sm font-semibold text-slate-900 transition hover:bg-emerald-400"
-            >
-              Byt
-            </button>
-          </div>
-        </div>
-      )}
     </>
   );
 }
@@ -632,14 +638,4 @@ function determineCurrentHoleNumber(holes: QuickHole[]): number {
     return pending.index;
   }
   return holes[holes.length - 1]?.index ?? 1;
-}
-
-function formatAutoHoleReason(reason: string): string {
-  const map: Record<string, string> = {
-    closest_tee: "nära tee",
-    closest_green: "nära green",
-    between_green_and_next_tee: "mellan green och nästa tee",
-    stay_on_current: "behåll nuvarande hål",
-  };
-  return map[reason] ?? reason;
 }
