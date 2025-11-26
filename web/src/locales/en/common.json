@@ -66,6 +66,7 @@
   "profile.quickRounds.recent": "Recent rounds",
   "profile.quickRounds.unknownCourse": "Unknown course",
   "profile.quickRounds.noScore": "No score yet",
+  "profile.sg.previewHint": "Tip: Open a completed Quick Round to see a strokes-gained preview per category.",
 
   "profile.range.title": "Range practice",
   "profile.range.empty": "No range ghosts saved yet. Try Target Bingo and save a ghost.",
@@ -146,6 +147,12 @@
   "quickRound.watch.paired": "Paired",
   "quickRound.watch.synced": "Synced",
   "quickRound.watch.error": "Watch sync failed",
+  "quickround.sg.title": "Strokes Gained preview",
+  "quickround.sg.subtitle": "Early estimate of where you gain or lose the most strokes.",
+  "quickround.sg.total": "Total SG (vs baseline): {{value}}",
+  "quickround.sg.category": "{{category}}: {{value}}",
+  "quickround.sg.error": "Could not load SG preview for this round.",
+  "quickround.sg.biggestLeak": "Biggest opportunity: {{category}}",
 
   "trip.start.title": "Trip Mode – Start round",
   "trip.start.subtitle": "Create a shared scoreboard for your group.",

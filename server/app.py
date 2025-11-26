@@ -61,6 +61,7 @@ from .routes.media import router as media_router
 from .routes.range_practice import router as range_practice_router
 from .routes.runs import router as runs_router
 from .routes.runs_upload import router as runs_upload_router
+from .routes.sg_preview import router as sg_preview_router
 from .routes.events import join_router as events_join_router
 from .routes.events import router as events_router
 from .routes.events_session import router as events_session_router
@@ -159,6 +160,7 @@ app.include_router(clips_events_router)
 app.include_router(commentary_router)
 app.include_router(metrics.router)
 app.include_router(anchors_router)
+app.include_router(sg_preview_router)
 app.include_router(api_uploads.router)
 app.include_router(api_run_scores.router)
 app.include_router(live_tokens_router)
