@@ -8,6 +8,7 @@ from server.bundles import geometry
 from server.bundles.models import CourseBundle as HeroCourseBundle, CourseHole
 from server.caddie.schemas import AdviseOut
 from server.courses.schemas import CourseBundle, GeoPoint, GreenFMB, HoleBundle
+from server.services.hole_detect import SuggestedHole
 from server.watch import hud_service
 
 client = TestClient(app, raise_server_exceptions=True)
@@ -148,3 +149,55 @@ def test_watch_hud_respects_manual_hole_when_disabled(
     assert response.status_code == 200
     payload = response.json()
     assert payload["hole"] == 1
+
+
+def test_watch_hud_overrides_when_confident(
+    _patch_hero_bundle: None, _patch_legacy_bundle: None
+) -> None:
+    response = client.post(
+        "/api/watch/hud/hole",
+        json={
+            "memberId": "mem-hero",
+            "runId": "run-hero",
+            "hole": 2,
+            "courseId": "hero-course",
+            "lat": 37.00118,
+            "lon": -122.0,
+        },
+        headers={"x-api-key": "test-key"},
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["hole"] == 3
+
+
+def test_watch_hud_does_not_override_on_low_confidence(
+    monkeypatch: pytest.MonkeyPatch,
+    _patch_hero_bundle: None,
+    _patch_legacy_bundle: None,
+) -> None:
+    monkeypatch.setattr(
+        hud_service,
+        "suggest_hole_for_location",
+        lambda **kwargs: SuggestedHole(
+            hole=9, distance_m=400.0, confidence=0.0, reason="low_confidence_test"
+        ),
+    )
+
+    response = client.post(
+        "/api/watch/hud/hole",
+        json={
+            "memberId": "mem-hero",
+            "runId": "run-hero",
+            "hole": 5,
+            "courseId": "hero-course",
+            "lat": 40.0,
+            "lon": -120.0,
+        },
+        headers={"x-api-key": "test-key"},
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["hole"] == 5

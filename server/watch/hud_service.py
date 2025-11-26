@@ -31,6 +31,10 @@ DEFAULT_BAG_CARRIES_M: Dict[str, float] = {
     "3w": 230.0,
 }
 
+# Suggestions below this confidence are treated as too weak to override the requested
+# hole when auto-detect is enabled.
+AUTO_DETECT_MIN_CONFIDENCE = 0.2
+
 
 @dataclass
 class _RunContext:
@@ -152,8 +156,9 @@ def resolve_hole_number(
             lon=gnss.lon,
             last_hole=requested_hole,
         )
-        if suggestion:
+        if suggestion and suggestion.confidence >= AUTO_DETECT_MIN_CONFIDENCE:
             return (suggestion.hole, suggestion)
+        suggestion = None
 
     if legacy_bundle:
         legacy_suggestion = suggest_hole(
