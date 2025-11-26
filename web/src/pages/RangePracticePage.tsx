@@ -5,6 +5,7 @@ import { BetaBadge } from "@/access/BetaBadge";
 import {
   appendRangeSession,
   computeBasicStats,
+  type RangeGameType,
 } from "@/features/range/sessions";
 import {
   RANGE_MISSIONS,
@@ -34,12 +35,19 @@ import { computeGappingStats, recommendedCarry } from "@web/bag/gapping";
 import { loadBag, updateClubCarry } from "@web/bag/storage";
 import type { BagState } from "@web/bag/types";
 import {
-  TargetBingoConfig,
+  TargetBingoConfig as ClassicTargetBingoConfig,
   buildRangeShareSummary,
   buildSprayBins,
   scoreTargetBingo,
 } from "../features/range/games";
-import type { TargetBingoResult } from "../features/range/games";
+import type { TargetBingoResult as ClassicTargetBingoResult } from "../features/range/games";
+import {
+  createDefaultTargetBingoConfig,
+  createInitialBingoState,
+  registerShotOnBingo,
+  type TargetBand,
+  type TargetBingoState,
+} from "@/features/range/games/types";
 import { SprayHeatmap } from "../features/range/SprayHeatmap";
 import GhostMatchPanel from "../features/range/GhostMatchPanel";
 import {
@@ -158,10 +166,16 @@ export default function RangePracticePage() {
   const [error, setError] = React.useState<string | null>(null);
   const [cameraFitness, setCameraFitness] = React.useState<CameraFitness | null>(null);
   const [mode, setMode] = React.useState<RangeMode>("practice");
+  const [gameMode, setGameMode] = React.useState<
+    "none" | RangeGameType
+  >("none");
+  const [bingoState, setBingoState] = React.useState<TargetBingoState | null>(
+    null
+  );
   const [missionId, setMissionId] = React.useState<MissionId | null>(
     () => loadSelectedMissionId()
   );
-  const [bingoCfg, setBingoCfg] = React.useState<TargetBingoConfig>({
+  const [bingoCfg, setBingoCfg] = React.useState<ClassicTargetBingoConfig>({
     target_m: 150,
     tolerance_m: 7,
     maxShots: 20,
@@ -184,7 +198,10 @@ export default function RangePracticePage() {
   }, [missionId, mission]);
 
   const makeGhostProfileFromCurrent = React.useCallback(
-    (cfg: TargetBingoConfig, result: TargetBingoResult): GhostProfile => {
+    (
+      cfg: ClassicTargetBingoConfig,
+      result: ClassicTargetBingoResult,
+    ): GhostProfile => {
       const createdAt = Date.now();
       const targetText = formatDistance(cfg.target_m, unit, { withUnit: true });
       return {
@@ -205,7 +222,10 @@ export default function RangePracticePage() {
 
   const summary = React.useMemo(() => computeRangeSummary(shots), [shots]);
   const bingoResult = React.useMemo(
-    () => (mode === "target-bingo" ? scoreTargetBingo(shots, bingoCfg) : null),
+    () =>
+      mode === "target-bingo"
+        ? scoreTargetBingo(shots, bingoCfg)
+        : null,
     [mode, shots, bingoCfg]
   );
   const sprayBins = React.useMemo(() => buildSprayBins(shots, 10), [shots]);
@@ -268,6 +288,19 @@ export default function RangePracticePage() {
       Number.isFinite(sessionStartMs) &&
       ghost.createdAt >= sessionStartMs;
 
+    let gameType: RangeGameType | undefined;
+    let bingoLines: number | undefined;
+    let bingoHits: number | undefined;
+
+    if (gameMode === "TARGET_BINGO_V1" && bingoState) {
+      gameType = "TARGET_BINGO_V1";
+      bingoLines = bingoState.completedLines;
+      bingoHits = Object.values(bingoState.hitsByCell).reduce(
+        (sum, value) => sum + value,
+        0
+      );
+    }
+
     const session = {
       id: `rs-${Date.now().toString(36)}`,
       startedAt: sessionStartRef.current,
@@ -283,6 +316,9 @@ export default function RangePracticePage() {
       hitRate_pct,
       avgError_m,
       ghostSaved,
+      gameType,
+      bingoLines,
+      bingoHits,
     };
 
     appendRangeSession(session);
@@ -297,11 +333,16 @@ export default function RangePracticePage() {
     sessionStartRef.current = nowIso;
     setShots([]);
     setLatest(null);
+    if (gameMode === "TARGET_BINGO_V1" && bingoState) {
+      setBingoState(createInitialBingoState(bingoState.config));
+    }
     setSaveStatus(t("range.session.saved"));
   }, [
     shots,
     mission,
     mode,
+    gameMode,
+    bingoState,
     bingoCfg,
     currentClubId,
     missionId,
@@ -332,6 +373,11 @@ export default function RangePracticePage() {
         };
         return [...prev, shot];
       });
+      if (gameMode === "TARGET_BINGO_V1") {
+        setBingoState((prev) =>
+          prev ? registerShotOnBingo(prev, metrics.carryM) : prev
+        );
+      }
       setLatest(metrics);
     } catch (err) {
       const message = err instanceof Error ? err.message : "Failed to analyze shot";
@@ -380,6 +426,29 @@ export default function RangePracticePage() {
     () => (mode === "gapping" ? computeGappingStats(gappingShots) : null),
     [mode, gappingShots]
   );
+  const bingoHitTotal = React.useMemo(
+    () =>
+      bingoState
+        ? Object.values(bingoState.hitsByCell).reduce(
+            (sum, count) => sum + count,
+            0
+          )
+        : 0,
+    [bingoState]
+  );
+  const bingoGrid = React.useMemo(() => {
+    if (!bingoState) return [] as TargetBand[][];
+    const rows: TargetBand[][] = [];
+    for (let r = 0; r < bingoState.config.rows; r += 1) {
+      rows.push(
+        bingoState.config.bands.slice(
+          r * bingoState.config.columns,
+          (r + 1) * bingoState.config.columns
+        )
+      );
+    }
+    return rows;
+  }, [bingoState]);
   const suggestedCarry = React.useMemo(
     () => (mode === "gapping" ? recommendedCarry(gappingStats) : null),
     [mode, gappingStats]
@@ -440,6 +509,33 @@ export default function RangePracticePage() {
       {showCalibrationGuide && (
         <CalibrationGuide onClose={() => setShowCalibrationGuide(false)} />
       )}
+
+      <div className="flex flex-wrap items-center gap-3 text-sm">
+        <label className="flex items-center gap-2 text-slate-200">
+          {t("range.bingo.title")}
+          <select
+            value={gameMode}
+            onChange={(e) => {
+              const value = e.target.value as "none" | RangeGameType;
+              setGameMode(value);
+              if (value === "TARGET_BINGO_V1") {
+                const cfg = createDefaultTargetBingoConfig();
+                setBingoState(createInitialBingoState(cfg));
+                setMode("target-bingo");
+              } else {
+                setBingoState(null);
+                if (mode === "target-bingo") {
+                  setMode("practice");
+                }
+              }
+            }}
+            className="rounded border border-slate-700 bg-slate-950 px-2 py-1 text-sm text-slate-100"
+          >
+            <option value="none">{t("range.mode.plain")}</option>
+            <option value="TARGET_BINGO_V1">{t("range.mode.bingo")}</option>
+          </select>
+        </label>
+      </div>
 
       <div className="flex gap-2 items-center">
         <label className="text-sm">
@@ -587,11 +683,80 @@ export default function RangePracticePage() {
             </div>
           )}
 
-          {mission && <MissionProgressSection mission={mission} shots={shots} />}
+      {mission && <MissionProgressSection mission={mission} shots={shots} />}
+    </section>
+  )}
+
+      {gameMode === "TARGET_BINGO_V1" && bingoState && (
+        <section className="rounded-lg border border-slate-800 bg-slate-900/60 p-3 text-xs space-y-3">
+          <div className="flex flex-wrap items-center gap-2">
+            <div>
+              <h2 className="text-sm font-semibold text-slate-100">
+                {t("range.bingo.title")}
+              </h2>
+              <p className="text-slate-400">{t("range.bingo.subtitle")}</p>
+            </div>
+            {bingoState.isComplete && (
+              <span className="ml-auto rounded-full bg-emerald-600/20 px-3 py-1 text-[11px] font-semibold text-emerald-300">
+                Bingo!
+              </span>
+            )}
+          </div>
+
+          <div
+            className="grid gap-2"
+            style={{
+              gridTemplateColumns: `repeat(${bingoState.config.columns}, minmax(0, 1fr))`,
+            }}
+          >
+            {bingoGrid.map((row, rowIndex) =>
+              row.map((band, colIndex) => {
+                const hits = bingoState.hitsByCell[band.id] ?? 0;
+                return (
+                  <div
+                    key={`${band.id}-${rowIndex}-${colIndex}`}
+                    className={`rounded-md border px-2 py-2 ${
+                      hits > 0
+                        ? "border-emerald-500/60 bg-emerald-900/30"
+                        : "border-slate-800 bg-slate-950"
+                    }`}
+                  >
+                    <div className="text-[11px] text-slate-400">
+                      {`${formatDistance(band.minCarry_m, unit, { withUnit: true })} – ${formatDistance(band.maxCarry_m, unit, { withUnit: true })}`}
+                    </div>
+                    <div className="text-lg font-semibold text-slate-100">
+                      {hits}
+                    </div>
+                  </div>
+                );
+              })
+            )}
+          </div>
+
+          <div className="flex flex-wrap gap-3 text-[11px] text-slate-300">
+            <span
+              data-testid="bingo-targets"
+              className="inline-flex items-center gap-1 rounded bg-slate-800 px-2 py-1"
+            >
+              {t("range.bingo.grid.header")}: {bingoHitTotal}
+            </span>
+            <span
+              data-testid="bingo-lines"
+              className="inline-flex items-center gap-1 rounded bg-slate-800 px-2 py-1"
+            >
+              {t("range.bingo.lines", { count: bingoState.completedLines })}
+            </span>
+            <span
+              data-testid="bingo-shots"
+              className="inline-flex items-center gap-1 rounded bg-slate-800 px-2 py-1"
+            >
+              {t("range.bingo.shots", { count: bingoState.totalShots })}
+            </span>
+          </div>
         </section>
       )}
 
-      {mode === "target-bingo" && (
+      {mode === "target-bingo" && gameMode !== "TARGET_BINGO_V1" && (
         <div className="rounded-lg border border-slate-800 bg-slate-900/60 p-3 text-xs grid gap-3 md:grid-cols-3">
           <label className="flex flex-col gap-1">
             <span className="text-slate-300">Mål ({unit === "metric" ? "m" : "yd"})</span>
@@ -805,7 +970,7 @@ export default function RangePracticePage() {
         </div>
       )}
 
-      {mode === "target-bingo" && (
+      {mode === "target-bingo" && gameMode !== "TARGET_BINGO_V1" && (
         <FeatureGate feature="range.ghostMatch">
           <GhostMatchPanel cfg={bingoCfg} current={bingoResult ?? null} ghost={ghost} />
         </FeatureGate>

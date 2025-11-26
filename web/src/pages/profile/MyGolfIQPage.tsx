@@ -28,6 +28,18 @@ export function MyGolfIQPage() {
   const ghosts = useMemo(() => listGhosts(), []);
   const bag = useMemo(() => loadBag(), []);
   const rangeSessions = useMemo(() => loadRangeSessions(), []);
+  const bingoSessions = useMemo(
+    () => rangeSessions.filter((session) => session.gameType === "TARGET_BINGO_V1"),
+    [rangeSessions]
+  );
+  const bestBingoLines = useMemo(
+    () =>
+      bingoSessions.reduce(
+        (max, session) => Math.max(max, session.bingoLines ?? 0),
+        0
+      ),
+    [bingoSessions]
+  );
 
   const [insights, setInsights] = useState<CaddieInsights | null>(null);
   const [loadingInsights, setLoadingInsights] = useState(false);
@@ -185,6 +197,15 @@ export function MyGolfIQPage() {
             <dl className="grid gap-4 text-sm sm:grid-cols-2">
               <StatItem label={t("profile.range.ghostCount") } value={rangeStats.ghostCount} />
             </dl>
+
+            {bingoSessions.length > 0 && (
+              <p className="text-xs text-emerald-300">
+                {t("profile.range.bingoSummary", {
+                  count: bingoSessions.length,
+                  best: bestBingoLines,
+                })}
+              </p>
+            )}
 
             {rangeStats.lastGhost && (
               <div className="rounded-md border border-slate-800 bg-slate-900/70 p-4 space-y-2">
