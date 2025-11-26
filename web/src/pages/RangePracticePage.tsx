@@ -5,7 +5,10 @@ import { BetaBadge } from "@/access/BetaBadge";
 import {
   appendRangeSession,
   computeBasicStats,
+  formatRangeSessionLabel,
+  loadRangeSessions,
   type RangeGameType,
+  type RangeSession,
 } from "@/features/range/sessions";
 import {
   RANGE_MISSIONS,
@@ -56,6 +59,12 @@ import {
   getLatestGhost,
   saveGhost,
 } from "../features/range/ghost";
+import {
+  createGhostMatchStats,
+  formatSignedDelta,
+  incrementGhostStats,
+  type GhostMatchLiveStats,
+} from "../features/range/ghostMatch";
 import { useCalibration } from "../hooks/useCalibration";
 import type { CalibrationSnapshot } from "../hooks/useCalibration";
 import { useUnits } from "@/preferences/UnitsContext";
@@ -148,6 +157,7 @@ function buildRangeAnalyzeRequest(
 }
 
 type RangeMode = "practice" | "target-bingo" | "gapping" | "mission";
+type RangeGameMode = "none" | RangeGameType;
 
 export default function RangePracticePage() {
   const { t } = useTranslation();
@@ -166,9 +176,7 @@ export default function RangePracticePage() {
   const [error, setError] = React.useState<string | null>(null);
   const [cameraFitness, setCameraFitness] = React.useState<CameraFitness | null>(null);
   const [mode, setMode] = React.useState<RangeMode>("practice");
-  const [gameMode, setGameMode] = React.useState<
-    "none" | RangeGameType
-  >("none");
+  const [gameMode, setGameMode] = React.useState<RangeGameMode>("none");
   const [bingoState, setBingoState] = React.useState<TargetBingoState | null>(
     null
   );
@@ -183,11 +191,23 @@ export default function RangePracticePage() {
   const [copyStatus, setCopyStatus] = React.useState<string | null>(null);
   const [ghost, setGhost] = React.useState<GhostProfile | null>(() => getLatestGhost());
   const [ghostStatus, setGhostStatus] = React.useState<string | null>(null);
+  const [ghostSession, setGhostSession] = React.useState<RangeSession | null>(
+    null
+  );
+  const [ghostStats, setGhostStats] = React.useState<GhostMatchLiveStats | null>(
+    null
+  );
   const [saveStatus, setSaveStatus] = React.useState<string | null>(null);
   const [showCalibrationGuide, setShowCalibrationGuide] = React.useState<boolean>(
     () => !loadCalibrationStatus().calibrated,
   );
+  const ghostCandidates = React.useMemo(() => loadRangeSessions(), []);
   const sessionStartRef = React.useRef<string>(new Date().toISOString());
+  const ghostSessionOptions = React.useMemo(
+    () => ghostCandidates.slice().reverse(),
+    [ghostCandidates],
+  );
+  const hasGhostCandidates = ghostSessionOptions.length > 0;
 
   const mission = missionId ? getMissionById(missionId) ?? null : null;
 
@@ -254,6 +274,13 @@ export default function RangePracticePage() {
     return () => window.clearTimeout(id);
   }, [saveStatus]);
 
+  React.useEffect(() => {
+    if (gameMode !== "GHOSTMATCH_V1") {
+      setGhostSession(null);
+      setGhostStats(null);
+    }
+  }, [gameMode]);
+
   const handleEndSession = React.useCallback(() => {
     if (shots.length === 0) {
       return;
@@ -291,6 +318,10 @@ export default function RangePracticePage() {
     let gameType: RangeGameType | undefined;
     let bingoLines: number | undefined;
     let bingoHits: number | undefined;
+    let ghostSessionId: string | undefined;
+    let ghostLabel: string | undefined;
+    let ghostShots: number | undefined;
+    let ghostScoreDelta: number | undefined;
 
     if (gameMode === "TARGET_BINGO_V1" && bingoState) {
       gameType = "TARGET_BINGO_V1";
@@ -299,6 +330,14 @@ export default function RangePracticePage() {
         (sum, value) => sum + value,
         0
       );
+    }
+
+    if (gameMode === "GHOSTMATCH_V1" && ghostSession) {
+      gameType = "GHOSTMATCH_V1";
+      ghostSessionId = ghostSession.id;
+      ghostLabel = formatRangeSessionLabel(ghostSession);
+      ghostShots = ghostSession.shotCount;
+      ghostScoreDelta = ghostStats?.deltaShots;
     }
 
     const session = {
@@ -319,6 +358,10 @@ export default function RangePracticePage() {
       gameType,
       bingoLines,
       bingoHits,
+      ghostSessionId,
+      ghostLabel,
+      ghostShots,
+      ghostScoreDelta,
     };
 
     appendRangeSession(session);
@@ -336,6 +379,9 @@ export default function RangePracticePage() {
     if (gameMode === "TARGET_BINGO_V1" && bingoState) {
       setBingoState(createInitialBingoState(bingoState.config));
     }
+    if (gameMode === "GHOSTMATCH_V1" && ghostSession) {
+      setGhostStats(createGhostMatchStats(ghostSession));
+    }
     setSaveStatus(t("range.session.saved"));
   }, [
     shots,
@@ -347,6 +393,8 @@ export default function RangePracticePage() {
     currentClubId,
     missionId,
     ghost,
+    ghostSession,
+    ghostStats,
     userId,
     t,
   ]);
@@ -377,6 +425,9 @@ export default function RangePracticePage() {
         setBingoState((prev) =>
           prev ? registerShotOnBingo(prev, metrics.carryM) : prev
         );
+      }
+      if (gameMode === "GHOSTMATCH_V1" && ghostSession) {
+        setGhostStats((prev) => incrementGhostStats(prev));
       }
       setLatest(metrics);
     } catch (err) {
@@ -516,7 +567,11 @@ export default function RangePracticePage() {
           <select
             value={gameMode}
             onChange={(e) => {
-              const value = e.target.value as "none" | RangeGameType;
+              const value = e.target.value as RangeGameMode;
+              if (value === "GHOSTMATCH_V1" && ghostCandidates.length === 0) {
+                setGameMode("none");
+                return;
+              }
               setGameMode(value);
               if (value === "TARGET_BINGO_V1") {
                 const cfg = createDefaultTargetBingoConfig();
@@ -533,9 +588,83 @@ export default function RangePracticePage() {
           >
             <option value="none">{t("range.mode.plain")}</option>
             <option value="TARGET_BINGO_V1">{t("range.mode.bingo")}</option>
+            <option
+              value="GHOSTMATCH_V1"
+              disabled={ghostCandidates.length === 0}
+            >
+              {t("range.mode.ghost")}
+            </option>
           </select>
         </label>
       </div>
+
+      {gameMode === "GHOSTMATCH_V1" && (
+        <div className="rounded-lg border border-slate-800 bg-slate-900/60 p-3 text-xs space-y-2">
+          {!hasGhostCandidates ? (
+            <p className="text-slate-400">{t("range.ghost.noneSelected")}</p>
+          ) : (
+            <>
+              <label
+                className="flex flex-col gap-1 text-slate-200"
+                htmlFor="ghost-session-select"
+              >
+                <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+                  {t("range.mode.ghost")}
+                </span>
+                <select
+                  id="ghost-session-select"
+                  value={ghostSession?.id ?? ""}
+                  onChange={(e) => {
+                    const selected =
+                      ghostSessionOptions.find((x) => x.id === e.target.value) ??
+                      null;
+                    setGhostSession(selected);
+                    setGhostStats(createGhostMatchStats(selected));
+                  }}
+                  className="rounded border border-slate-700 bg-slate-950 px-2 py-1 text-sm text-slate-100"
+                >
+                  <option value="">{t("range.ghost.noneSelected")}</option>
+                  {ghostSessionOptions.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {formatRangeSessionLabel(s)}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              {ghostSession && (
+                <div className="mt-3 rounded border border-slate-200/60 bg-slate-50 p-2 text-xs text-slate-800">
+                  <div className="font-semibold">{t("range.ghost.title")}</div>
+                  <div className="text-[11px] text-slate-500">
+                    {t("range.ghost.subtitle")}
+                  </div>
+
+                  <div className="mt-2 flex justify-between">
+                    <div>
+                      <div>
+                        {t("range.ghost.ghostShots", {
+                          count: ghostStats?.ghostShots ?? ghostSession.shotCount ?? 0,
+                        })}
+                      </div>
+                      <div>
+                        {t("range.ghost.currentShots", {
+                          count: ghostStats?.currentShots ?? 0,
+                        })}
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <div className="text-[11px]">{t("range.ghost.deltaLabel")}</div>
+                      <div className="font-mono">
+                        {formatSignedDelta(ghostStats?.deltaShots ?? 0)}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      )}
 
       <div className="flex gap-2 items-center">
         <label className="text-sm">

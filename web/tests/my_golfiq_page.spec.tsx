@@ -8,6 +8,7 @@ import type { QuickRound } from "@/features/quickround/types";
 import type { GhostProfile } from "@/features/range/ghost";
 import type { BagState } from "@/bag/types";
 import { UserSessionProvider } from "@/user/UserSessionContext";
+import type { RangeSession } from "@/features/range/sessions";
 
 const mockRounds: QuickRound[] = [
   {
@@ -74,7 +75,7 @@ const mockBag: BagState = {
 const loadAllRoundsFull = vi.hoisted(() => () => mockRounds);
 const listGhosts = vi.hoisted(() => () => mockGhosts);
 const loadBag = vi.hoisted(() => () => mockBag);
-const loadRangeSessions = vi.hoisted(() => () => []);
+const loadRangeSessions = vi.hoisted(() => vi.fn((): RangeSession[] => []));
 const migrateLocalHistoryOnce = vi.hoisted(() => vi.fn(() => Promise.resolve()));
 const mockUseCaddieMemberId = vi.hoisted(() => vi.fn());
 const mockFetchCaddieInsights = vi.hoisted(() => vi.fn());
@@ -112,6 +113,7 @@ describe("MyGolfIQPage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockUseCaddieMemberId.mockReturnValue(undefined);
+    loadRangeSessions.mockReturnValue([]);
   });
 
   it("renders quick round, range and bag summaries", () => {
@@ -192,6 +194,38 @@ describe("MyGolfIQPage", () => {
 
     expect(
       await screen.findByText(/We haven't recorded any caddie advice for you yet/i),
+    ).toBeTruthy();
+  });
+
+  it("summarizes ghost match range sessions", () => {
+    loadRangeSessions.mockReturnValue([
+      {
+        id: "rs-1",
+        startedAt: "2025-05-01T10:00:00.000Z",
+        endedAt: "2025-05-01T11:00:00.000Z",
+        shotCount: 12,
+        gameType: "GHOSTMATCH_V1",
+        ghostScoreDelta: -2,
+      },
+      {
+        id: "rs-2",
+        startedAt: "2025-05-02T10:00:00.000Z",
+        endedAt: "2025-05-02T11:00:00.000Z",
+        shotCount: 15,
+        gameType: "GHOSTMATCH_V1",
+        ghostScoreDelta: 1,
+      },
+    ]);
+
+    render(
+      <MemoryRouter>
+        <MyGolfIQPage />
+      </MemoryRouter>,
+      { wrapper: UserSessionProvider },
+    );
+
+    expect(
+      screen.getByText(/Ghost matches: 2, best delta: -2 shots vs ghost/i),
     ).toBeTruthy();
   });
 });
