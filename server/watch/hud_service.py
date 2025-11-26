@@ -5,11 +5,15 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Dict, Optional, Tuple
 
+from server.bundles.models import CourseBundle as HeroCourseBundle
+from server.bundles.storage import get_bundle as get_hero_bundle
 from server.caddie.advise import advise
 from server.caddie.schemas import AdviseIn, EnvIn, PlayerBag, ShotContext
 from server.courses.hole_detect import haversine_m, suggest_hole
-from server.courses.schemas import CourseBundle, GeoPoint, HoleBundle
+from server.courses.schemas import CourseBundle as LegacyCourseBundle
+from server.courses.schemas import GeoPoint, HoleBundle
 from server.courses.store import get_course_bundle
+from server.services.hole_detect import SuggestedHole, suggest_hole_for_location
 from server.services.watch_tip_bus import get_latest_tip_for_member
 from server.storage.runs import load_run
 from server.watch.hud_schemas import HoleHud, HudTip
@@ -26,6 +30,10 @@ DEFAULT_BAG_CARRIES_M: Dict[str, float] = {
     "5w": 215.0,
     "3w": 230.0,
 }
+
+# Suggestions below this confidence are treated as too weak to override the requested
+# hole when auto-detect is enabled.
+AUTO_DETECT_MIN_CONFIDENCE = 0.2
 
 
 @dataclass
@@ -98,12 +106,12 @@ def _get_latest_tip(member_id: str) -> Optional[HudTip]:
     )
 
 
-def _find_hole(bundle: CourseBundle, hole_number: int) -> Optional[HoleBundle]:
+def _find_hole(bundle: LegacyCourseBundle, hole_number: int) -> Optional[HoleBundle]:
     return next((hole for hole in bundle.holes if hole.number == hole_number), None)
 
 
 def _compute_green_distances(
-    bundle: CourseBundle,
+    bundle: LegacyCourseBundle,
     hole_number: int,
     position: Optional[GeoPoint],
 ) -> Tuple[Optional[float], Optional[float], Optional[float]]:
@@ -123,6 +131,43 @@ def _compute_green_distances(
         return (None, None, None)
 
     return (to_middle, to_front, to_back)
+
+
+def resolve_hole_number(
+    *,
+    hero_bundle: Optional[HeroCourseBundle],
+    legacy_bundle: Optional[LegacyCourseBundle],
+    requested_hole: int,
+    gnss: Optional[GeoPoint],
+    auto_detect: bool,
+) -> Tuple[int, Optional[SuggestedHole]]:
+    """Resolve which hole to use for HUD rendering."""
+
+    hole = requested_hole
+    suggestion: Optional[SuggestedHole] = None
+
+    if not auto_detect or gnss is None:
+        return (hole, None)
+
+    if hero_bundle:
+        suggestion = suggest_hole_for_location(
+            bundle=hero_bundle,
+            lat=gnss.lat,
+            lon=gnss.lon,
+            last_hole=requested_hole,
+        )
+        if suggestion and suggestion.confidence >= AUTO_DETECT_MIN_CONFIDENCE:
+            return (suggestion.hole, suggestion)
+        suggestion = None
+
+    if legacy_bundle:
+        legacy_suggestion = suggest_hole(
+            legacy_bundle, gnss.lat, gnss.lon, current_hole=requested_hole
+        )
+        if legacy_suggestion:
+            hole = legacy_suggestion.hole
+
+    return (hole, suggestion)
 
 
 def _build_caddie_advice(
@@ -186,6 +231,7 @@ def build_hole_hud(
     wind_dir_deg: Optional[float] = None,
     temp_c: Optional[float] = None,
     elev_delta_m: Optional[float] = None,
+    auto_detect_hole: bool = True,
 ) -> HoleHud:
     """Construct a :class:`HoleHud` snapshot from available stores."""
 
@@ -194,16 +240,15 @@ def build_hole_hud(
         course_id = run_context.course_id
 
     bundle = get_course_bundle(course_id) if course_id else None
+    hero_bundle = get_hero_bundle(course_id) if course_id else None
 
-    if bundle and gnss:
-        suggestion = suggest_hole(
-            bundle,
-            gnss.lat,
-            gnss.lon,
-            current_hole=hole,
-        )
-        if suggestion and suggestion.confidence >= 0.7:
-            hole = suggestion.hole
+    hole, _ = resolve_hole_number(
+        hero_bundle=hero_bundle,
+        legacy_bundle=bundle,
+        requested_hole=hole,
+        gnss=gnss,
+        auto_detect=auto_detect_hole,
+    )
 
     to_green = to_front = to_back = None
     hole_bundle: Optional[HoleBundle] = None
