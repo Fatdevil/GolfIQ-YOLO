@@ -1,6 +1,6 @@
 import React from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 
 import MyGolfIQPage from "@/pages/profile/MyGolfIQPage";
@@ -11,6 +11,7 @@ import { UserSessionProvider } from "@/user/UserSessionContext";
 import type { RangeSession } from "@/features/range/sessions";
 import { PlanProvider } from "@/access/PlanProvider";
 import type { CoachInsightsState } from "@/profile/useCoachInsights";
+import type { MemberSgSummary } from "@/api/sgSummary";
 
 const mockRounds: QuickRound[] = [
   {
@@ -81,6 +82,7 @@ const loadRangeSessions = vi.hoisted(() => vi.fn((): RangeSession[] => []));
 const migrateLocalHistoryOnce = vi.hoisted(() => vi.fn(() => Promise.resolve()));
 const mockUseCaddieMemberId = vi.hoisted(() => vi.fn());
 const mockFetchCaddieInsights = vi.hoisted(() => vi.fn());
+const mockFetchMemberSgSummary = vi.hoisted(() => vi.fn());
 const mockUseCoachInsights = vi.hoisted(() =>
   vi.fn<() => CoachInsightsState>(() => ({ status: "empty" })),
 );
@@ -114,6 +116,12 @@ vi.mock("@/api/caddieInsights", () => ({
     mockFetchCaddieInsights(...args),
 }));
 
+vi.mock("@/api/sgSummary", () => ({
+  fetchMemberSgSummary: (
+    ...args: Parameters<typeof mockFetchMemberSgSummary>
+  ) => mockFetchMemberSgSummary(...args),
+}));
+
 vi.mock("@/profile/useCoachInsights", () => ({
   useCoachInsights: () => mockUseCoachInsights(),
 }));
@@ -124,6 +132,13 @@ describe("MyGolfIQPage", () => {
     mockUseCaddieMemberId.mockReturnValue(undefined);
     mockUseCoachInsights.mockReturnValue({ status: "empty" });
     loadRangeSessions.mockReturnValue([]);
+    mockFetchMemberSgSummary.mockImplementation(async (memberId: string) => ({
+      memberId,
+      runIds: [],
+      total_sg: 0,
+      avg_sg_per_round: 0,
+      per_category: {} as never,
+    }));
   });
 
   afterEach(() => {
@@ -205,6 +220,40 @@ describe("MyGolfIQPage", () => {
     expect(
       await screen.findByText(/We haven't recorded any caddie advice for you yet/i),
     ).toBeTruthy();
+  });
+
+  it("renders SG summary when member data exists", async () => {
+    const summary: MemberSgSummary = {
+      memberId: "member-123",
+      runIds: ["run-1", "run-2"],
+      total_sg: 0.7,
+      avg_sg_per_round: 0.35,
+      per_category: {
+        TEE: { category: "TEE", total_sg: 0.2, avg_sg: 0.1, rounds: 2 },
+        APPROACH: { category: "APPROACH", total_sg: 0.4, avg_sg: 0.2, rounds: 2 },
+        SHORT: { category: "SHORT", total_sg: 0.2, avg_sg: 0.1, rounds: 2 },
+        PUTT: { category: "PUTT", total_sg: -0.1, avg_sg: -0.05, rounds: 2 },
+      },
+    };
+
+    window.localStorage.setItem("golfiq_plan_v1", "PRO");
+    mockUseCaddieMemberId.mockReturnValue("member-123");
+    mockFetchMemberSgSummary.mockResolvedValue(summary);
+
+    renderPage();
+
+    await waitFor(() =>
+      expect(mockFetchMemberSgSummary).toHaveBeenCalledWith("member-123", 5),
+    );
+
+    const sgSection = screen.getByText(/Strokes Gained summary/i).closest("section");
+    expect(sgSection).toBeTruthy();
+    const scoped = within(sgSection as HTMLElement);
+    expect(
+      scoped.getByText(/Average SG per round \(last 2 rounds\): 0.35/i),
+    ).toBeTruthy();
+    expect(scoped.getByText(/tee/i)).toBeTruthy();
+    expect(scoped.getAllByText("0.10")[0]).toBeTruthy();
   });
 
   it("summarizes ghost match range sessions", () => {
