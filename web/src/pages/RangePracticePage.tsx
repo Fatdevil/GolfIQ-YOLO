@@ -1,6 +1,7 @@
 import React from "react";
 import { useTranslation } from "react-i18next";
 import { BetaBadge } from "@/access/BetaBadge";
+import { FeatureGate } from "@/access/FeatureGate";
 import { UpgradeGate } from "@/access/UpgradeGate";
 import {
   appendRangeSession,
@@ -1100,9 +1101,11 @@ export default function RangePracticePage() {
       )}
 
       {mode === "target-bingo" && gameMode !== "TARGET_BINGO_V1" && (
-        <UpgradeGate feature="RANGE_GHOSTMATCH">
-          <GhostMatchPanel cfg={bingoCfg} current={bingoResult ?? null} ghost={ghost} />
-        </UpgradeGate>
+        <FeatureGate feature="range.ghostMatch">
+          <UpgradeGate feature="RANGE_GHOSTMATCH">
+            <GhostMatchPanel cfg={bingoCfg} current={bingoResult ?? null} ghost={ghost} />
+          </UpgradeGate>
+        </FeatureGate>
       )}
 
       {mode === "target-bingo" && (

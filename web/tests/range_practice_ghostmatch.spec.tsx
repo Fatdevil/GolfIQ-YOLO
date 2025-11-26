@@ -4,6 +4,7 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import RangePracticePage from "@/pages/RangePracticePage";
+import { UserAccessContext } from "@/access/UserAccessContext";
 import { UnitsContext } from "@/preferences/UnitsContext";
 import type { DistanceUnit } from "@/preferences/units";
 import { UserSessionProvider } from "@/user/UserSessionContext";
@@ -57,9 +58,11 @@ const mockedPostRangeAnalyze = vi.mocked(postRangeAnalyze);
 function renderWithUnit(unit: DistanceUnit, ui: React.ReactElement) {
   return render(
     <UserSessionProvider>
-      <UnitsContext.Provider value={{ unit, setUnit: () => {} }}>
-        {ui}
-      </UnitsContext.Provider>
+      <UserAccessContext.Provider value={{ loading: false, plan: "pro", hasFeature: () => true }}>
+        <UnitsContext.Provider value={{ unit, setUnit: () => {} }}>
+          {ui}
+        </UnitsContext.Provider>
+      </UserAccessContext.Provider>
     </UserSessionProvider>,
   );
 }
