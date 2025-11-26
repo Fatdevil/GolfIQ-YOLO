@@ -99,7 +99,7 @@ type LinkItem = { to: string; label: string };
 
 function getLinks(t: (key: string) => string): LinkItem[] {
   const base: LinkItem[] = [
-    { to: "/", label: t("nav.home") },
+    { to: "/", label: t("home.nav.home") },
     { to: "/play", label: t("nav.playRound") },
     { to: "/trip/start", label: t("nav.trip") },
     { to: "/analyze", label: "Analyze" },

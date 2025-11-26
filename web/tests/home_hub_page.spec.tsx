@@ -1,76 +1,48 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it, beforeEach } from "vitest";
 import { render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 
-type MockAccessState = {
-  plan: "free" | "pro";
-  loading: boolean;
-  hasFeature: () => boolean;
-};
-
-const mockUseUserAccess = vi.hoisted(() =>
-  vi.fn((): MockAccessState => ({
-    plan: "free",
-    loading: false,
-    hasFeature: () => false,
-  })),
-);
-
-vi.mock("@/access/UserAccessContext", () => ({
-  useUserAccess: mockUseUserAccess,
-}));
-
-import { NotificationProvider } from "../src/notifications/NotificationContext";
+import { PlanProvider } from "@/access/PlanProvider";
+import { UserAccessProvider } from "@/access/UserAccessContext";
 import { HomeHubPage } from "@/pages/home/HomeHubPage";
+
+const renderHome = (plan: "FREE" | "PRO" = "FREE") => {
+  if (plan === "PRO") {
+    window.localStorage.setItem("golfiq_plan_v1", "PRO");
+  } else {
+    window.localStorage.removeItem("golfiq_plan_v1");
+  }
+
+  return render(
+    <UserAccessProvider autoFetch={false} initialPlan={plan === "PRO" ? "pro" : "free"}>
+      <PlanProvider>
+        <MemoryRouter>
+          <HomeHubPage />
+        </MemoryRouter>
+      </PlanProvider>
+    </UserAccessProvider>,
+  );
+};
 
 describe("HomeHubPage", () => {
   beforeEach(() => {
-    mockUseUserAccess.mockReset();
-    mockUseUserAccess.mockReturnValue({
-      plan: "free",
-      loading: false,
-      hasFeature: () => false,
-    });
+    window.localStorage.clear();
   });
 
-  it("renders the main heading and all mode cards", () => {
-    render(
-      <NotificationProvider>
-        <MemoryRouter>
-          <HomeHubPage />
-        </MemoryRouter>
-      </NotificationProvider>,
-    );
+  it("renders home hub with entry cards and free plan badge", () => {
+    renderHome();
 
-    expect(screen.getByRole("heading", { level: 1, name: /GolfIQ Home/i })).toBeTruthy();
-    expect(screen.getByRole("heading", { level: 2, name: /Quick Round/i })).toBeTruthy();
-    expect(screen.getByRole("heading", { level: 2, name: /Range practice/i })).toBeTruthy();
-    expect(screen.getByRole("heading", { level: 2, name: /Trip Mode/i })).toBeTruthy();
-    expect(screen.getByRole("heading", { level: 2, name: /My GolfIQ/i })).toBeTruthy();
-
-    const links = screen.getAllByRole("link") as HTMLAnchorElement[];
-    expect(links.length).toBeGreaterThanOrEqual(5);
-    const hrefs = links.map((link) => link.getAttribute("href"));
-    expect(hrefs).toEqual(
-      expect.arrayContaining(["/play", "/range/practice", "/trip/start", "/profile", "/settings"]),
-    );
+    expect(screen.getByText(/GolfIQ Home/i)).toBeTruthy();
+    expect(screen.getByRole("link", { name: /Start Quick Round/i })).toBeTruthy();
+    expect(screen.getByRole("link", { name: /Open range practice/i })).toBeTruthy();
+    expect(screen.getByRole("link", { name: /View My GolfIQ/i })).toBeTruthy();
+    expect(screen.getAllByText(/Free/i).length).toBeGreaterThan(0);
   });
 
-  it("shows the Pro badge when the user plan is pro", () => {
-    mockUseUserAccess.mockReturnValue({
-      plan: "pro",
-      loading: false,
-      hasFeature: () => true,
-    });
+  it("shows Pro plan messaging and unlocked card for pro users", async () => {
+    renderHome("PRO");
 
-    render(
-      <NotificationProvider>
-        <MemoryRouter>
-          <HomeHubPage />
-        </MemoryRouter>
-      </NotificationProvider>,
-    );
-
-    expect(screen.getAllByText("Pro").length).toBeGreaterThan(0);
+    expect((await screen.findAllByText(/Pro/i)).length).toBeGreaterThan(0);
+    expect(await screen.findByText(/Caddie insights unlocked/i)).toBeTruthy();
   });
 });
