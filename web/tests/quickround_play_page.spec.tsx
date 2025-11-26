@@ -27,6 +27,10 @@ vi.mock("@/user/UserSessionContext", () => ({
   UserSessionProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
   useUserSession: () => ({ session: { userId: "test-user", createdAt: "" }, loading: false }),
 }));
+vi.mock("@/access/PlanProvider", () => ({
+  PlanProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+  usePlan: () => ({ plan: "PRO", setPlan: vi.fn(), hasFeature: () => true }),
+}));
 
 describe("QuickRoundPlayPage", () => {
   beforeEach(() => {

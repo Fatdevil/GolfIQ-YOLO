@@ -108,6 +108,14 @@
   "profile.caddie.table.shown": "Visat",
   "profile.caddie.table.accepted": "Accepterat",
   "profile.caddie.table.acceptRate": "Accepterings%",
+
+  "access.plan.free": "Gratis",
+  "access.plan.pro": "Pro",
+
+  "access.upgrade.title": "Lås upp hela GolfIQ",
+  "access.upgrade.message": "Den här funktionen ingår i Pro-planen. Uppgradera för att se djupare statistik och coachning.",
+  "access.upgrade.buttonLabel": "Testa Pro-läge",
+  "access.upgrade.planLabel": "Aktiv plan: {{plan}}",
   "quickRound.start.title": "Snabbrunda",
   "quickRound.start.courseName": "Bana",
   "quickRound.start.courseNameRequired": "Ange banans namn",

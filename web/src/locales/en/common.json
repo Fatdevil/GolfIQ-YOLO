@@ -117,6 +117,14 @@
   "profile.caddie.table.accepted": "Accepted",
   "profile.caddie.table.acceptRate": "Accept %",
 
+  "access.plan.free": "Free",
+  "access.plan.pro": "Pro",
+
+  "access.upgrade.title": "Unlock full GolfIQ",
+  "access.upgrade.message": "This feature is available on the Pro plan. Upgrade to see deeper stats and coaching.",
+  "access.upgrade.buttonLabel": "Try Pro mode",
+  "access.upgrade.planLabel": "Current plan: {{plan}}",
+
   "quickRound.start.title": "Quick round",
   "quickRound.start.courseName": "Course name",
   "quickRound.start.courseNameRequired": "Please enter a course name",

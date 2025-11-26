@@ -1,6 +1,6 @@
 import React from "react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 
 import MyGolfIQPage from "@/pages/profile/MyGolfIQPage";
@@ -9,6 +9,7 @@ import type { GhostProfile } from "@/features/range/ghost";
 import type { BagState } from "@/bag/types";
 import { UserSessionProvider } from "@/user/UserSessionContext";
 import type { RangeSession } from "@/features/range/sessions";
+import { PlanProvider } from "@/access/PlanProvider";
 
 const mockRounds: QuickRound[] = [
   {
@@ -116,13 +117,23 @@ describe("MyGolfIQPage", () => {
     loadRangeSessions.mockReturnValue([]);
   });
 
-  it("renders quick round, range and bag summaries", () => {
+  afterEach(() => {
+    window.localStorage.clear();
+    cleanup();
+  });
+
+  const renderPage = () =>
     render(
       <MemoryRouter>
-        <MyGolfIQPage />
+        <PlanProvider>
+          <MyGolfIQPage />
+        </PlanProvider>
       </MemoryRouter>,
       { wrapper: UserSessionProvider },
     );
+
+  it("renders quick round, range and bag summaries", () => {
+    renderPage();
 
     expect(
       screen.getByRole("heading", { name: /My GolfIQ/i, level: 1 })
@@ -153,12 +164,7 @@ describe("MyGolfIQPage", () => {
     mockUseCaddieMemberId.mockReturnValue("member-123");
     mockFetchCaddieInsights.mockResolvedValue(sampleInsights);
 
-    render(
-      <MemoryRouter>
-        <MyGolfIQPage />
-      </MemoryRouter>,
-      { wrapper: UserSessionProvider },
-    );
+    renderPage();
 
     await waitFor(() =>
       expect(mockFetchCaddieInsights).toHaveBeenCalledWith("member-123", 30),
@@ -183,12 +189,7 @@ describe("MyGolfIQPage", () => {
     mockUseCaddieMemberId.mockReturnValue("member-123");
     mockFetchCaddieInsights.mockResolvedValue(emptyInsights);
 
-    render(
-      <MemoryRouter>
-        <MyGolfIQPage />
-      </MemoryRouter>,
-      { wrapper: UserSessionProvider },
-    );
+    renderPage();
 
     await waitFor(() => expect(mockFetchCaddieInsights).toHaveBeenCalled());
 
@@ -217,15 +218,26 @@ describe("MyGolfIQPage", () => {
       },
     ]);
 
-    render(
-      <MemoryRouter>
-        <MyGolfIQPage />
-      </MemoryRouter>,
-      { wrapper: UserSessionProvider },
-    );
+    renderPage();
 
     expect(
       screen.getByText(/Ghost matches: 2, best delta: -2 shots vs ghost/i),
     ).toBeTruthy();
+  });
+
+  it("shows upgrade overlay for free users on caddie insights", () => {
+    renderPage();
+
+    expect(screen.getAllByText(/Unlock full GolfIQ/).length).toBeGreaterThan(0);
+  });
+
+  it("hides upgrade overlay for pro users", async () => {
+    window.localStorage.setItem("golfiq_plan_v1", "PRO");
+
+    renderPage();
+
+    await waitFor(() =>
+      expect(screen.queryByText(/Unlock full GolfIQ/)).toBeNull(),
+    );
   });
 });
