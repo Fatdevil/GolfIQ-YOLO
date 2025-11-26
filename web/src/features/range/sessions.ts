@@ -3,7 +3,7 @@ import type { MissionId } from "@/features/range/missions";
 
 export type RangeSessionId = string;
 
-export type RangeGameType = "TARGET_BINGO_V1";
+export type RangeGameType = "TARGET_BINGO_V1" | "GHOSTMATCH_V1";
 
 export type RangeSession = {
   id: RangeSessionId;
@@ -28,6 +28,11 @@ export type RangeSession = {
   gameType?: RangeGameType;
   bingoLines?: number;
   bingoHits?: number;
+
+  ghostSessionId?: string;
+  ghostLabel?: string;
+  ghostShots?: number;
+  ghostScoreDelta?: number;
 };
 
 const STORAGE_KEY = "golfiq.range.sessions.v1";
@@ -59,6 +64,22 @@ export function appendRangeSession(session: RangeSession): void {
   sessions.unshift(session);
   const capped = sessions.slice(0, 50);
   saveRangeSessions(capped);
+}
+
+export function formatRangeSessionLabel(session: RangeSession): string {
+  const dateLabel =
+    typeof session.startedAt === "string" && session.startedAt.length >= 10
+      ? session.startedAt.slice(0, 10)
+      : "Unknown date";
+
+  const descriptor =
+    session.gameType === "TARGET_BINGO_V1"
+      ? "Target Bingo"
+      : session.clubId ?? "Range";
+
+  const shotLabel = `${session.shotCount ?? 0} shots`;
+
+  return [dateLabel, descriptor, shotLabel].join(" · ");
 }
 
 export function computeBasicStats(shots: RangeShot[]): {

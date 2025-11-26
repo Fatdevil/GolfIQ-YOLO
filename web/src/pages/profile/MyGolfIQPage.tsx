@@ -40,6 +40,21 @@ export function MyGolfIQPage() {
       ),
     [bingoSessions]
   );
+  const ghostMatchSessions = useMemo(
+    () => rangeSessions.filter((session) => session.gameType === "GHOSTMATCH_V1"),
+    [rangeSessions]
+  );
+  const bestGhostDelta = useMemo(
+    () =>
+      ghostMatchSessions.reduce(
+        (best, session) =>
+          typeof session.ghostScoreDelta === "number"
+            ? Math.min(best, session.ghostScoreDelta)
+            : best,
+        Number.POSITIVE_INFINITY,
+      ),
+    [ghostMatchSessions],
+  );
 
   const [insights, setInsights] = useState<CaddieInsights | null>(null);
   const [loadingInsights, setLoadingInsights] = useState(false);
@@ -203,6 +218,16 @@ export function MyGolfIQPage() {
                 {t("profile.range.bingoSummary", {
                   count: bingoSessions.length,
                   best: bestBingoLines,
+                })}
+              </p>
+            )}
+
+            {ghostMatchSessions.length > 0 && (
+              <p className="text-xs text-slate-600">
+                {t("profile.range.ghostSummary", {
+                  count: ghostMatchSessions.length,
+                  bestDelta:
+                    bestGhostDelta === Number.POSITIVE_INFINITY ? 0 : bestGhostDelta,
                 })}
               </p>
             )}
