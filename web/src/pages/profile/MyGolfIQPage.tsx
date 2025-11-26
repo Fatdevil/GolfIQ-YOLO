@@ -176,11 +176,12 @@ export function MyGolfIQPage() {
                             : t("profile.quickRounds.noScore")}
                         </div>
                       </li>
-                    );
-                  })}
-                </ul>
-              </div>
+                  );
+                })}
+              </ul>
+            </div>
             )}
+            <p className="text-xs text-slate-500">{t("profile.sg.previewHint")}</p>
           </div>
         )}
       </section>

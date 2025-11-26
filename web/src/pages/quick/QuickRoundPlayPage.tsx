@@ -6,6 +6,7 @@ import { useNotifications } from "@/notifications/NotificationContext";
 import { useUserSession } from "@/user/UserSessionContext";
 import { postQuickRoundSnapshots } from "@/user/historyApi";
 import { mapQuickRoundToSnapshot } from "@/user/historySync";
+import { fetchSgPreview, type RoundSgPreview, type SgCategory } from "@/api/sgPreview";
 
 import {
   loadRound,
@@ -17,6 +18,8 @@ import { useGeolocation } from "../../hooks/useGeolocation";
 import { useAutoHoleSuggest } from "@/features/quickround/useAutoHoleSuggest";
 import { computeQuickRoundSummary } from "../../features/quickround/summary";
 import { syncQuickRoundToWatch } from "../../features/watch/api";
+
+const SG_CATEGORIES: SgCategory[] = ["TEE", "APPROACH", "SHORT", "PUTT"];
 
 export default function QuickRoundPlayPage() {
   const { roundId } = useParams<{ roundId: string }>();
@@ -38,6 +41,10 @@ export default function QuickRoundPlayPage() {
   >(null);
   const [watchError, setWatchError] = useState<string | null>(null);
   const [watchSyncing, setWatchSyncing] = useState(false);
+  const [sgPreview, setSgPreview] = useState<RoundSgPreview | null>(null);
+  const [sgStatus, setSgStatus] = useState<
+    "idle" | "loading" | "loaded" | "error"
+  >("idle");
   const summaryCopyTimeout = useRef<number | null>(null);
   const { position, error: geoError } = useGeolocation(autoHoleEnabled);
   const { data: bundle, loading: bundleLoading, error: bundleError } = useCourseBundle(
@@ -82,6 +89,29 @@ export default function QuickRoundPlayPage() {
   }, [suppressedSuggestion]);
 
   useEffect(() => {
+    if (!round?.completedAt) {
+      setSgPreview(null);
+      setSgStatus("idle");
+      return;
+    }
+    if (!round.runId) {
+      setSgStatus("error");
+      setSgPreview(null);
+      return;
+    }
+
+    setSgStatus("loading");
+    fetchSgPreview(round.runId)
+      .then((data) => {
+        setSgPreview(data);
+        setSgStatus("loaded");
+      })
+      .catch(() => {
+        setSgStatus("error");
+      });
+  }, [round?.completedAt, round?.runId]);
+
+  useEffect(() => {
     if (!autoHoleEnabled && suppressedSuggestion) {
       setSuppressedSuggestion(null);
     }
@@ -107,6 +137,10 @@ export default function QuickRoundPlayPage() {
     [round?.memberId]
   );
   const runId = round?.runId ?? round?.id;
+  const worstSgCategory = useMemo(
+    () => (sgPreview ? biggestLeakCategory(sgPreview) : null),
+    [sgPreview]
+  );
 
   const syncWatch = useCallback(
     async (holeNumber: number) => {
@@ -491,6 +525,59 @@ export default function QuickRoundPlayPage() {
           </div>
         </section>
       )}
+      {round?.completedAt && (
+        <section className="rounded-lg border border-slate-800 bg-slate-900/60 p-6 text-sm text-slate-200">
+          <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h2 className="text-lg font-semibold text-slate-100">
+                {t("quickround.sg.title")}
+              </h2>
+              <p className="text-xs text-slate-400">
+                {t("quickround.sg.subtitle")}
+              </p>
+            </div>
+            {sgStatus === "loading" && (
+              <span className="text-xs text-slate-400">Loading…</span>
+            )}
+          </div>
+          {sgStatus === "error" && (
+            <p className="mt-3 text-xs text-rose-300">{t("quickround.sg.error")}</p>
+          )}
+          {sgStatus === "loaded" && sgPreview && (
+            <div className="mt-4 space-y-3">
+              <p className="text-sm font-semibold text-slate-100">
+                {t("quickround.sg.total", { value: formatSgValue(sgPreview.total_sg) })}
+              </p>
+              <dl className="grid gap-2 sm:grid-cols-2">
+                {SG_CATEGORIES.map((category) => {
+                  const value = sgPreview.sg_by_cat?.[category] ?? 0;
+                  const label = categoryLabel(category);
+                  return (
+                    <div
+                      key={category}
+                      className="flex items-center justify-between rounded border border-slate-800/60 bg-slate-950/40 px-3 py-2"
+                    >
+                      <dt className="text-xs uppercase tracking-wide text-slate-400">
+                        {t("quickround.sg.category", { category: label, value: formatSgValue(value) })}
+                      </dt>
+                      <dd className="text-sm font-semibold text-slate-100">
+                        {formatSgValue(value)}
+                      </dd>
+                    </div>
+                  );
+                })}
+              </dl>
+              {worstSgCategory && (
+                <p className="text-xs text-slate-400">
+                  {t("quickround.sg.biggestLeak", {
+                    category: categoryLabel(worstSgCategory),
+                  })}
+                </p>
+              )}
+            </div>
+          )}
+        </section>
+      )}
       <div>
         <button
           type="button"
@@ -627,6 +714,39 @@ function formatToPar(value: number | null): string {
     ? rounded.toFixed(0)
     : rounded.toFixed(1);
   return rounded > 0 ? `+${formatted}` : formatted;
+}
+
+function formatSgValue(value: number): string {
+  const rounded = Math.round(value * 10) / 10;
+  const formatted = rounded.toFixed(1);
+  return rounded > 0 ? `+${formatted}` : formatted;
+}
+
+function categoryLabel(category: SgCategory): string {
+  switch (category) {
+    case "TEE":
+      return "Tee";
+    case "APPROACH":
+      return "Approach";
+    case "SHORT":
+      return "Short game";
+    case "PUTT":
+      return "Putting";
+    default:
+      return category;
+  }
+}
+
+function biggestLeakCategory(preview: RoundSgPreview): SgCategory | null {
+  const entries = Object.entries(preview.sg_by_cat ?? {}) as [SgCategory, number][];
+  if (entries.length === 0) {
+    return null;
+  }
+  const [first, ...rest] = entries;
+  return rest.reduce<[SgCategory, number]>(
+    (worst, current) => (current[1] < worst[1] ? current : worst),
+    first
+  )[0];
 }
 
 function determineCurrentHoleNumber(holes: QuickHole[]): number {
