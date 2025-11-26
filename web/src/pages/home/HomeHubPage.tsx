@@ -5,6 +5,8 @@ import { Link } from "react-router-dom";
 import { FeatureGate } from "@/access/FeatureGate";
 import { UpgradeGate } from "@/access/UpgradeGate";
 import { usePlan } from "@/access/PlanProvider";
+import type { PlanId } from "@/access/plan";
+import { useUserAccess } from "@/access/UserAccessContext";
 
 const Card: React.FC<{
   title: string;
@@ -49,8 +51,16 @@ const GhostMatchBadge: React.FC = () => {
 
 export const HomeHubPage: React.FC = () => {
   const { t } = useTranslation();
-  const { plan } = usePlan();
-  const isPro = plan === "PRO";
+  const { plan: localPlan } = usePlan();
+  const { plan: backendPlan } = useUserAccess();
+
+  const effectivePlan: PlanId =
+    backendPlan === "pro" || backendPlan === "free"
+      ? backendPlan === "pro"
+        ? "PRO"
+        : "FREE"
+      : localPlan;
+  const isPro = effectivePlan === "PRO";
 
   return (
     <div className="max-w-5xl mx-auto px-4 py-6 space-y-4">
@@ -63,7 +73,7 @@ export const HomeHubPage: React.FC = () => {
         <div className="inline-flex items-center rounded-full border border-slate-700 bg-slate-900 px-3 py-1 text-xs text-slate-100">
           <span className="font-semibold text-emerald-200">{t("app.title")}</span>
           <span className="ml-2 inline-flex items-center px-2 py-[2px] rounded-full border text-[10px] font-semibold">
-            {plan === "PRO" ? t("access.plan.pro") : t("access.plan.free")}
+            {effectivePlan === "PRO" ? t("access.plan.pro") : t("access.plan.free")}
           </span>
         </div>
       </header>

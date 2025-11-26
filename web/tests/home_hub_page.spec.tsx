@@ -1,32 +1,39 @@
-import { describe, expect, it, beforeEach } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { Mock } from "vitest";
 import { render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 
-import { PlanProvider } from "@/access/PlanProvider";
-import { UserAccessProvider } from "@/access/UserAccessContext";
 import { HomeHubPage } from "@/pages/home/HomeHubPage";
 
-const renderHome = (plan: "FREE" | "PRO" = "FREE") => {
-  if (plan === "PRO") {
-    window.localStorage.setItem("golfiq_plan_v1", "PRO");
-  } else {
-    window.localStorage.removeItem("golfiq_plan_v1");
-  }
+vi.mock("@/access/PlanProvider", () => ({
+  usePlan: vi.fn(),
+}));
 
+vi.mock("@/access/UserAccessContext", () => ({
+  useUserAccess: vi.fn(),
+  useFeatureFlag: vi.fn().mockReturnValue({ enabled: true, loading: false }),
+}));
+
+import { usePlan } from "@/access/PlanProvider";
+import { useUserAccess, useFeatureFlag } from "@/access/UserAccessContext";
+
+const mockUsePlan = usePlan as unknown as Mock;
+const mockUseUserAccess = useUserAccess as unknown as Mock;
+const mockUseFeatureFlag = useFeatureFlag as unknown as Mock;
+
+const renderHome = () => {
   return render(
-    <UserAccessProvider autoFetch={false} initialPlan={plan === "PRO" ? "pro" : "free"}>
-      <PlanProvider>
-        <MemoryRouter>
-          <HomeHubPage />
-        </MemoryRouter>
-      </PlanProvider>
-    </UserAccessProvider>,
+    <MemoryRouter>
+      <HomeHubPage />
+    </MemoryRouter>,
   );
 };
 
 describe("HomeHubPage", () => {
   beforeEach(() => {
-    window.localStorage.clear();
+    mockUsePlan.mockReturnValue({ plan: "FREE", hasFeature: vi.fn(), setPlan: vi.fn() });
+    mockUseUserAccess.mockReturnValue({ plan: undefined, loading: true, hasFeature: vi.fn() });
+    mockUseFeatureFlag.mockReturnValue({ enabled: true, loading: false });
   });
 
   it("renders home hub with entry cards and free plan badge", () => {
@@ -39,10 +46,22 @@ describe("HomeHubPage", () => {
     expect(screen.getAllByText(/Free/i).length).toBeGreaterThan(0);
   });
 
-  it("shows Pro plan messaging and unlocked card for pro users", async () => {
-    renderHome("PRO");
+  it("prefers backend plan when available to show pro state", async () => {
+    mockUsePlan.mockReturnValue({ plan: "FREE", hasFeature: vi.fn(), setPlan: vi.fn() });
+    mockUseUserAccess.mockReturnValue({ plan: "pro", loading: false, hasFeature: vi.fn() });
 
-    expect((await screen.findAllByText(/Pro/i)).length).toBeGreaterThan(0);
+    renderHome();
+
+    expect(screen.getAllByText(/Pro/i).length).toBeGreaterThan(0);
     expect(await screen.findByText(/Caddie insights unlocked/i)).toBeTruthy();
+  });
+
+  it("falls back to local plan when backend plan is not loaded", () => {
+    mockUsePlan.mockReturnValue({ plan: "FREE", hasFeature: vi.fn(), setPlan: vi.fn() });
+    mockUseUserAccess.mockReturnValue({ plan: undefined, loading: true, hasFeature: vi.fn() });
+
+    renderHome();
+
+    expect(screen.getAllByText(/Free/i).length).toBeGreaterThan(0);
   });
 });
