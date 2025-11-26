@@ -21,12 +21,14 @@ import { useCaddieMemberId } from "@/profile/memberIdentity";
 import { migrateLocalHistoryOnce } from "@/user/historyMigration";
 import { useUserSession } from "@/user/UserSessionContext";
 import { loadRangeSessions } from "@/features/range/sessions";
+import { useCoachInsights } from "@/profile/useCoachInsights";
 
 export function MyGolfIQPage() {
   const { t } = useTranslation();
   const { session: userSession } = useUserSession();
   const { plan } = usePlan();
   const memberId = useCaddieMemberId();
+  const coach = useCoachInsights();
   const rounds = useMemo(() => loadAllRoundsFull(), []);
   const ghosts = useMemo(() => listGhosts(), []);
   const bag = useMemo(() => loadBag(), []);
@@ -297,96 +299,150 @@ export function MyGolfIQPage() {
       </section>
 
       <UpgradeGate feature="CADDIE_INSIGHTS">
-        <section className="rounded-lg border border-slate-800 bg-slate-900/60 p-5 shadow-sm">
-          <div className="space-y-1">
-            <h2 className="text-lg font-semibold text-slate-50">{t("profile.caddie.title")}</h2>
-            <p className="text-sm text-slate-400">{t("profile.caddie.subtitle")}</p>
-          </div>
+        <div className="space-y-4">
+          <section className="rounded-lg border border-slate-800 bg-slate-900/60 p-5 shadow-sm">
+            <header className="flex items-center justify-between">
+              <div className="space-y-1">
+                <h2 className="text-lg font-semibold text-slate-50">{t("profile.coach.title")}</h2>
+                <p className="text-xs text-slate-400">{t("profile.coach.subtitle")}</p>
+              </div>
+            </header>
 
-          <div className="mt-4 space-y-3 text-sm text-slate-200">
-            {!memberId ? (
-              <p className="text-slate-300">{t("profile.caddie.noMember")}</p>
-            ) : (
-              <>
-                {insightsError && (
-                  <div className="rounded-md border border-amber-800 bg-amber-900/40 px-3 py-2 text-amber-100">
-                    {t("profile.caddie.loadFailed")}
-                  </div>
-                )}
-
-                {loadingInsights && !insights && (
-                  <p className="text-slate-300">{t("profile.caddie.loading")}</p>
-                )}
-
-                {insights && insights.advice_shown > 0 && (
-                  <div className="space-y-4">
-                    <dl className="grid gap-4 text-sm sm:grid-cols-3">
-                      <StatItem
-                        label={t("profile.caddie.summary.shown")}
-                        value={insights.advice_shown}
-                      />
-                      <StatItem
-                        label={t("profile.caddie.summary.accepted")}
-                        value={insights.advice_accepted}
-                      />
-                      <StatItem
-                        label={t("profile.caddie.summary.acceptRate")}
-                        value={
-                          typeof insights.accept_rate === "number"
-                            ? `${formatNumber(insights.accept_rate * 100)}%`
-                            : "—"
-                        }
-                      />
-                    </dl>
-
-                    {topClubStats.length > 0 && (
-                      <div className="overflow-hidden rounded-md border border-slate-800">
-                        <table className="min-w-full divide-y divide-slate-800 text-sm">
-                          <thead className="bg-slate-900/50 text-slate-400">
-                            <tr>
-                              <th className="px-4 py-2 text-left font-medium">
-                                {t("profile.caddie.table.club")}
-                              </th>
-                              <th className="px-4 py-2 text-right font-medium">
-                                {t("profile.caddie.table.shown")}
-                              </th>
-                              <th className="px-4 py-2 text-right font-medium">
-                                {t("profile.caddie.table.accepted")}
-                              </th>
-                              <th className="px-4 py-2 text-right font-medium">
-                                {t("profile.caddie.table.acceptRate")}
-                              </th>
-                            </tr>
-                          </thead>
-                          <tbody className="divide-y divide-slate-800 bg-slate-900/30 text-slate-100">
-                            {topClubStats.map((club) => {
-                              const clubAcceptRate =
-                                club.shown > 0
-                                  ? `${formatNumber((club.accepted / club.shown) * 100)}%`
-                                  : "—";
-                              return (
-                                <tr key={club.club}>
-                                  <td className="px-4 py-2 font-medium">{club.club}</td>
-                                  <td className="px-4 py-2 text-right">{club.shown}</td>
-                                  <td className="px-4 py-2 text-right">{club.accepted}</td>
-                                  <td className="px-4 py-2 text-right">{clubAcceptRate}</td>
-                                </tr>
-                              );
-                            })}
-                          </tbody>
-                        </table>
-                      </div>
-                    )}
-                  </div>
-                )}
-
-                {insights && insights.advice_shown === 0 && !loadingInsights && (
-                  <p className="text-slate-300">{t("profile.caddie.empty")}</p>
-                )}
-              </>
+            {coach.status === "loading" && (
+              <p className="mt-3 text-xs text-slate-400">{t("profile.coach.loading")}</p>
             )}
-          </div>
-        </section>
+
+            {coach.status === "error" && (
+              <p className="mt-3 text-xs text-amber-400">{t("profile.coach.error")}</p>
+            )}
+
+            {coach.status === "empty" && (
+              <p className="mt-3 text-xs text-slate-400">{t("profile.coach.empty")}</p>
+            )}
+
+            {coach.status === "ready" && (
+              <div className="mt-3 space-y-2 text-xs text-slate-100">
+                <ul className="space-y-1">
+                  {coach.suggestions.map((s, idx) => {
+                    if (s.type === "sg" && s.categoryKey) {
+                      return (
+                        <li key={idx}>
+                          {t(s.messageKey, {
+                            category: t(`coach.sg.category.${s.categoryKey}`),
+                          })}
+                        </li>
+                      );
+                    }
+                    if (s.type === "caddie" && s.club) {
+                      return <li key={idx}>{t(s.messageKey, { club: s.club })}</li>;
+                    }
+                    return null;
+                  })}
+                </ul>
+
+                <div className="flex gap-3">
+                  <Link className="text-[11px] underline text-emerald-300" to="/range/practice">
+                    {t("profile.coach.cta.range")}
+                  </Link>
+                  <Link className="text-[11px] underline text-emerald-300" to="/play">
+                    {t("profile.coach.cta.quick")}
+                  </Link>
+                </div>
+              </div>
+            )}
+          </section>
+
+          <section className="rounded-lg border border-slate-800 bg-slate-900/60 p-5 shadow-sm">
+            <div className="space-y-1">
+              <h2 className="text-lg font-semibold text-slate-50">{t("profile.caddie.title")}</h2>
+              <p className="text-sm text-slate-400">{t("profile.caddie.subtitle")}</p>
+            </div>
+
+            <div className="mt-4 space-y-3 text-sm text-slate-200">
+              {!memberId ? (
+                <p className="text-slate-300">{t("profile.caddie.noMember")}</p>
+              ) : (
+                <>
+                  {insightsError && (
+                    <div className="rounded-md border border-amber-800 bg-amber-900/40 px-3 py-2 text-amber-100">
+                      {t("profile.caddie.loadFailed")}
+                    </div>
+                  )}
+
+                  {loadingInsights && !insights && (
+                    <p className="text-slate-300">{t("profile.caddie.loading")}</p>
+                  )}
+
+                  {insights && insights.advice_shown > 0 && (
+                    <div className="space-y-4">
+                      <dl className="grid gap-4 text-sm sm:grid-cols-3">
+                        <StatItem
+                          label={t("profile.caddie.summary.shown")}
+                          value={insights.advice_shown}
+                        />
+                        <StatItem
+                          label={t("profile.caddie.summary.accepted")}
+                          value={insights.advice_accepted}
+                        />
+                        <StatItem
+                          label={t("profile.caddie.summary.acceptRate")}
+                          value={
+                            typeof insights.accept_rate === "number"
+                              ? `${formatNumber(insights.accept_rate * 100)}%`
+                              : "—"
+                          }
+                        />
+                      </dl>
+
+                      {topClubStats.length > 0 && (
+                        <div className="overflow-hidden rounded-md border border-slate-800">
+                          <table className="min-w-full divide-y divide-slate-800 text-sm">
+                            <thead className="bg-slate-900/50 text-slate-400">
+                              <tr>
+                                <th className="px-4 py-2 text-left font-medium">
+                                  {t("profile.caddie.table.club")}
+                                </th>
+                                <th className="px-4 py-2 text-right font-medium">
+                                  {t("profile.caddie.table.shown")}
+                                </th>
+                                <th className="px-4 py-2 text-right font-medium">
+                                  {t("profile.caddie.table.accepted")}
+                                </th>
+                                <th className="px-4 py-2 text-right font-medium">
+                                  {t("profile.caddie.table.acceptRate")}
+                                </th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-800 bg-slate-900/30 text-slate-100">
+                              {topClubStats.map((club) => {
+                                const clubAcceptRate =
+                                  club.shown > 0
+                                    ? `${formatNumber((club.accepted / club.shown) * 100)}%`
+                                    : "—";
+                                return (
+                                  <tr key={club.club}>
+                                    <td className="px-4 py-2 font-medium">{club.club}</td>
+                                    <td className="px-4 py-2 text-right">{club.shown}</td>
+                                    <td className="px-4 py-2 text-right">{club.accepted}</td>
+                                    <td className="px-4 py-2 text-right">{clubAcceptRate}</td>
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {insights && insights.advice_shown === 0 && !loadingInsights && (
+                    <p className="text-slate-300">{t("profile.caddie.empty")}</p>
+                  )}
+                </>
+              )}
+            </div>
+          </section>
+        </div>
       </UpgradeGate>
     </div>
   );

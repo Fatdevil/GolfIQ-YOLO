@@ -10,6 +10,7 @@ import type { BagState } from "@/bag/types";
 import { UserSessionProvider } from "@/user/UserSessionContext";
 import type { RangeSession } from "@/features/range/sessions";
 import { PlanProvider } from "@/access/PlanProvider";
+import type { CoachInsightsState } from "@/profile/useCoachInsights";
 
 const mockRounds: QuickRound[] = [
   {
@@ -80,6 +81,9 @@ const loadRangeSessions = vi.hoisted(() => vi.fn((): RangeSession[] => []));
 const migrateLocalHistoryOnce = vi.hoisted(() => vi.fn(() => Promise.resolve()));
 const mockUseCaddieMemberId = vi.hoisted(() => vi.fn());
 const mockFetchCaddieInsights = vi.hoisted(() => vi.fn());
+const mockUseCoachInsights = vi.hoisted(() =>
+  vi.fn<() => CoachInsightsState>(() => ({ status: "empty" })),
+);
 
 vi.mock("@/features/quickround/storage", () => ({
   loadAllRoundsFull,
@@ -110,10 +114,15 @@ vi.mock("@/api/caddieInsights", () => ({
     mockFetchCaddieInsights(...args),
 }));
 
+vi.mock("@/profile/useCoachInsights", () => ({
+  useCoachInsights: () => mockUseCoachInsights(),
+}));
+
 describe("MyGolfIQPage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockUseCaddieMemberId.mockReturnValue(undefined);
+    mockUseCoachInsights.mockReturnValue({ status: "empty" });
     loadRangeSessions.mockReturnValue([]);
   });
 
@@ -239,5 +248,24 @@ describe("MyGolfIQPage", () => {
     await waitFor(() =>
       expect(screen.queryByText(/Unlock full GolfIQ/)).toBeNull(),
     );
+  });
+
+  it("renders coach insights when available", () => {
+    mockUseCoachInsights.mockReturnValue({
+      status: "ready",
+      suggestions: [
+        {
+          type: "sg",
+          severity: "high",
+          categoryKey: "tee",
+          messageKey: "coach.sg.biggestLeak.high",
+        },
+      ],
+    });
+
+    renderPage();
+
+    expect(screen.getByText(/Coach insights/i)).toBeTruthy();
+    expect(screen.getByText(/losing a lot of strokes/i)).toBeTruthy();
   });
 });

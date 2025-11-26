@@ -7,6 +7,8 @@ import MyGolfIQPage from "@/pages/profile/MyGolfIQPage";
 import type { GhostProfile } from "@/features/range/ghost";
 import { UserSessionProvider } from "@/user/UserSessionContext";
 
+const mockUseCoachInsights = vi.hoisted(() => vi.fn(() => ({ status: "empty" } as const)));
+
 const ghosts: GhostProfile[] = [
   {
     id: "g1",
@@ -37,6 +39,10 @@ vi.mock("@/user/historyMigration", () => ({
   migrateLocalHistoryOnce: () => Promise.resolve(),
 }));
 
+vi.mock("@/profile/useCoachInsights", () => ({
+  useCoachInsights: () => mockUseCoachInsights(),
+}));
+
 vi.mock("@/access/PlanProvider", () => ({
   PlanProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
   usePlan: () => ({ plan: "PRO", setPlan: vi.fn(), hasFeature: () => true }),
@@ -45,6 +51,7 @@ vi.mock("@/access/PlanProvider", () => ({
 describe("MyGolfIQPage range overview", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockUseCoachInsights.mockReturnValue({ status: "empty" });
   });
 
   it("shows the latest ghost stats", () => {
