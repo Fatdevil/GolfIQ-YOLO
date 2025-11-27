@@ -1,0 +1,66 @@
+{
+  "backend": {
+    "root": "server/",
+    "app": "server/app.py",
+    "routers": [
+      "server/routes/*.py",
+      "server/api/routers/*.py"
+    ],
+    "services": [
+      "server/watch/hud_service.py",
+      "server/storage/runs.py",
+      "server/caddie/*",
+      "server/courses/*"
+    ],
+    "config": [
+      "server/config/*",
+      "server/security.py",
+      "server/auth.py"
+    ]
+  },
+  "web": {
+    "root": "web/",
+    "routes": "web/src/App.tsx",
+    "api_clients": [
+      "web/src/api.ts",
+      "web/src/api",
+      "web/src/hooks"
+    ],
+    "ui": [
+      "web/src/pages",
+      "web/src/components",
+      "web/src/player"
+    ]
+  },
+  "watch": {
+    "backend": [
+      "server/api/routers/watch_hud.py",
+      "server/api/routers/watch_pairing.py",
+      "server/api/routers/watch_quickround.py",
+      "server/watch/hud_service.py"
+    ],
+    "clients": [
+      "watchos/",
+      "android/",
+      "ios/"
+    ]
+  },
+  "cv_engine": {
+    "modules": [
+      "cv_engine/calibration",
+      "cv_engine/impact",
+      "cv_engine/pipeline"
+    ]
+  },
+  "ci": {
+    "workflows": [
+      ".github/workflows/ci.yml",
+      ".github/workflows/web.yml",
+      ".github/workflows/android-ci.yml",
+      ".github/workflows/ios-ci.yml",
+      ".github/workflows/cv-engine-coverage.yml",
+      ".github/workflows/static-analysis.yml",
+      ".github/workflows/release.yml"
+    ]
+  }
+}
