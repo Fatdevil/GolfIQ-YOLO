@@ -8,6 +8,7 @@ import { postQuickRoundSnapshots } from "@/user/historyApi";
 import { mapQuickRoundToSnapshot } from "@/user/historySync";
 import { fetchSgPreview, type RoundSgPreview } from "@/api/sgPreview";
 import { UpgradeGate } from "@/access/UpgradeGate";
+import { QuickRoundCoachSection } from "./QuickRoundCoachSection";
 import { SgPreviewCard } from "./SgPreviewCard";
 
 import {
@@ -536,6 +537,9 @@ export default function QuickRoundPlayPage() {
             <SgPreviewCard status={sgStatus} preview={sgPreview} />
           </section>
         </UpgradeGate>
+      )}
+      {round?.completedAt && (
+        <QuickRoundCoachSection sgStatus={sgStatus} sgPreview={sgPreview} />
       )}
       <div>
         <button

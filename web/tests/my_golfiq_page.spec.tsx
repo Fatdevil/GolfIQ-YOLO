@@ -10,7 +10,6 @@ import type { BagState } from "@/bag/types";
 import { UserSessionProvider } from "@/user/UserSessionContext";
 import type { RangeSession } from "@/features/range/sessions";
 import { UserAccessProvider } from "@/access/UserAccessContext";
-import type { CoachInsightsState } from "@/profile/useCoachInsights";
 import type { MemberSgSummary } from "@/api/sgSummary";
 
 const mockRounds: QuickRound[] = [
@@ -83,9 +82,6 @@ const migrateLocalHistoryOnce = vi.hoisted(() => vi.fn(() => Promise.resolve()))
 const mockUseCaddieMemberId = vi.hoisted(() => vi.fn());
 const mockFetchCaddieInsights = vi.hoisted(() => vi.fn());
 const mockFetchMemberSgSummary = vi.hoisted(() => vi.fn());
-const mockUseCoachInsights = vi.hoisted(() =>
-  vi.fn<() => CoachInsightsState>(() => ({ status: "empty" })),
-);
 
 vi.mock("@/features/quickround/storage", () => ({
   loadAllRoundsFull,
@@ -122,15 +118,10 @@ vi.mock("@/api/sgSummary", () => ({
   ) => mockFetchMemberSgSummary(...args),
 }));
 
-vi.mock("@/profile/useCoachInsights", () => ({
-  useCoachInsights: () => mockUseCoachInsights(),
-}));
-
 describe("MyGolfIQPage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockUseCaddieMemberId.mockReturnValue(undefined);
-    mockUseCoachInsights.mockReturnValue({ status: "empty" });
     loadRangeSessions.mockReturnValue([]);
     mockFetchMemberSgSummary.mockImplementation(async (memberId: string) => ({
       memberId,
@@ -300,22 +291,26 @@ describe("MyGolfIQPage", () => {
     );
   });
 
-  it("renders coach insights when available", () => {
-    mockUseCoachInsights.mockReturnValue({
-      status: "ready",
-      suggestions: [
-        {
-          type: "sg",
-          severity: "high",
-          categoryKey: "tee",
-          messageKey: "coach.sg.biggestLeak.high",
-        },
-      ],
-    });
+  it("renders coach insights when available", async () => {
+    mockUseCaddieMemberId.mockReturnValue("member-123");
+    mockFetchMemberSgSummary.mockResolvedValue({
+      memberId: "member-123",
+      runIds: ["run-1"],
+      total_sg: -2,
+      avg_sg_per_round: -2,
+      per_category: {
+        TEE: { category: "TEE", total_sg: -1.5, avg_sg: -1.5, rounds: 1 },
+        APPROACH: { category: "APPROACH", total_sg: -0.3, avg_sg: -0.3, rounds: 1 },
+        SHORT: { category: "SHORT", total_sg: 0.2, avg_sg: 0.2, rounds: 1 },
+        PUTT: { category: "PUTT", total_sg: -0.4, avg_sg: -0.4, rounds: 1 },
+      },
+    } as MemberSgSummary);
 
-    renderPage();
+    renderPage("pro");
 
-    expect(screen.getByText(/Coach insights/i)).toBeTruthy();
-    expect(screen.getByText(/losing a lot of strokes/i)).toBeTruthy();
+    expect(await screen.findByText(/Coach action plan/i)).toBeTruthy();
+    expect(
+      await screen.findByText(/Focus on Tee shots — you lost 1\.5 strokes/i),
+    ).toBeTruthy();
   });
 });
