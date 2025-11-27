@@ -1,3 +1,4 @@
+import { describe, expect, it } from "vitest";
 import { fireEvent, render, screen } from "@testing-library/react";
 
 import type { RoundSgPreview } from "@/api/sgPreview";
@@ -56,7 +57,8 @@ describe("SgPreviewCard", () => {
   it("shows SG help copy when toggled", () => {
     render(<SgPreviewCard status="loaded" preview={samplePreview} />);
 
-    fireEvent.click(screen.getByText("What is SG?"));
+    const infoButtons = screen.getAllByText("What is SG?");
+    fireEvent.click(infoButtons[0]);
     expect(
       screen.getByText(/compares your performance to a scratch golfer baseline/i)
     ).toBeInTheDocument();
