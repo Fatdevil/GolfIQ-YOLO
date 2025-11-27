@@ -68,6 +68,11 @@ export type HeroCourseTee = {
   slope?: number | null;
 };
 
+export type HeroHoleSummary = {
+  number?: number;
+  par?: number;
+};
+
 export type HeroCourseSummary = {
   id: string;
   name: string;
@@ -77,6 +82,7 @@ export type HeroCourseSummary = {
   holes: number;
   par: number;
   lengthsByTee?: Record<string, number>;
+  holeDetails?: HeroHoleSummary[];
 };
 
 export async function fetchBundleIndex(): Promise<BundleIndexItem[]> {

@@ -141,16 +141,31 @@ export default function QuickRoundStartPage() {
     const trimmedCourseName = courseName.trim();
     const finalCourseName = trimmedCourseName || selectedCourse?.name || "";
     const finalCourseId = selectedCourse?.courseId ?? selectedCourseId;
+    const selectedHero = heroCourses.find((course) => course.id === selectedHeroCourseId);
 
     if (!finalCourseName) {
       setError(t("quickRound.start.courseNameRequired"));
       return;
     }
     const trimmedTeesName = teesName.trim();
-    const holes: QuickRound["holes"] = Array.from({ length: holesCount }, (_, index) => ({
-      index: index + 1,
-      par: 4,
-    }));
+    const heroHoleMetadata = selectedHero?.holeDetails;
+    let holes: QuickRound["holes"];
+    if (heroHoleMetadata && heroHoleMetadata.length > 0) {
+      holes = heroHoleMetadata.map((hole, index) => ({
+        index: hole.number ?? index + 1,
+        par: hole.par ?? 4,
+      }));
+    } else if (selectedHero?.holes) {
+      holes = Array.from({ length: selectedHero.holes }, (_, index) => ({
+        index: index + 1,
+        par: 4,
+      }));
+    } else {
+      holes = Array.from({ length: holesCount }, (_, index) => ({
+        index: index + 1,
+        par: 4,
+      }));
+    }
     const trimmedHandicap = handicapInput.trim();
     let handicap: number | undefined;
     if (trimmedHandicap) {
