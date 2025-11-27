@@ -68,6 +68,11 @@ class PoseAdapter:
     def get_internal_metrics(self) -> Dict[str, Optional[float]]:
         return self.derive_metrics()
 
+    def get_history(self) -> List[PoseResult]:
+        """Return a copy of the accumulated pose history for downstream metrics."""
+
+        return list(self._history)
+
     def _tilt_from_history(
         self, history: Sequence[PoseResult], left_key: str, right_key: str
     ) -> Optional[float]:

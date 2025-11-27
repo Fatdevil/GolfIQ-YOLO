@@ -12,7 +12,8 @@ export type FeatureKey =
   | "COACH_PLAN"
   | "RANGE_BINGO"
   | "RANGE_GHOSTMATCH"
-  | "HUD_PREVIEW";
+  | "HUD_PREVIEW"
+  | "KINEMATIC_SEQUENCE";
 
 export type PlanFeatureMatrix = Record<PlanId, Record<FeatureKey, boolean>>;
 
@@ -26,6 +27,7 @@ export const PLAN_FEATURES: PlanFeatureMatrix = {
     RANGE_BINGO: true,
     RANGE_GHOSTMATCH: false,
     HUD_PREVIEW: false,
+    KINEMATIC_SEQUENCE: false,
   },
   PRO: {
     CADDIE_INSIGHTS: true,
@@ -34,6 +36,7 @@ export const PLAN_FEATURES: PlanFeatureMatrix = {
     RANGE_BINGO: true,
     RANGE_GHOSTMATCH: true,
     HUD_PREVIEW: true,
+    KINEMATIC_SEQUENCE: true,
   },
 };
 

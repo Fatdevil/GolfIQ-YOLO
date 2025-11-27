@@ -16,6 +16,10 @@ import { openAndSeekTo } from "@web/player/seek";
 import { ShotList, type ShotModerationState } from "@web/features/runs/ShotList";
 import { TopSGShotsPanel } from "@web/sg/TopSGShotsPanel";
 import { isClipVisible as moderationAllowsClip } from "@web/sg/visibility";
+import { useAccessPlan } from "@/access/UserAccessContext";
+import { UpgradeGate } from "@/access/UpgradeGate";
+import SequencePreviewCard from "@/sequence/SequencePreviewCard";
+import type { KinematicSequence, SequenceOrder } from "@/types/sequence";
 
 interface RunDetailData {
   run_id?: string;
@@ -36,6 +40,7 @@ export default function RunDetailPage() {
   const lastPlaysLikeTier = useRef<string | null>(null);
   const lastAssignSignature = useRef<string | null>(null);
   const backViewVideoRef = useRef<HTMLVideoElement | null>(null);
+  const { isPro, loading: accessLoading } = useAccessPlan();
 
   const backView = useMemo(() => extractBackViewPayload(data), [data]);
   const backViewVideoUrl = backView?.videoUrl ?? null;
@@ -231,6 +236,11 @@ export default function RunDetailPage() {
     }
     return sources;
   }, [data]);
+
+  const sequence = useMemo<KinematicSequence | null>(
+    () => findSequence(metricSources),
+    [metricSources],
+  );
 
   const selectString = useCallback(
     (keys: string[]): string | undefined => {
@@ -613,6 +623,18 @@ export default function RunDetailPage() {
         </div>
       )}
 
+      {!loading && (
+        <div className="space-y-3">
+          {accessLoading ? null : isPro ? (
+            <SequencePreviewCard sequence={sequence} />
+          ) : (
+            <UpgradeGate feature="KINEMATIC_SEQUENCE">
+              <SequencePreviewCard sequence={sequence} />
+            </UpgradeGate>
+          )}
+        </div>
+      )}
+
       {!loading && visualTracerEnabled && backView && (
         <div className="space-y-4 rounded-xl border border-slate-800 bg-slate-900/60 p-4 shadow-lg">
           <div className="relative aspect-video w-full overflow-hidden rounded-lg border border-slate-800/60 bg-slate-950/60">
@@ -701,4 +723,88 @@ export default function RunDetailPage() {
       />
     </section>
   );
+}
+
+function pickMetricNumber(
+  record: Record<string, unknown>,
+  keys: string[],
+): number | null {
+  for (const key of keys) {
+    const value = record[key];
+    if (typeof value === "number" && Number.isFinite(value)) {
+      return value;
+    }
+  }
+  return null;
+}
+
+function normalizeSequenceOrder(raw: unknown): SequenceOrder | null {
+  if (!raw || typeof raw !== "object") return null;
+  const record = raw as Record<string, unknown>;
+  const peakOrderRaw = record["peakOrder"] ?? record["peak_order"];
+  const peakOrder = Array.isArray(peakOrderRaw)
+    ? peakOrderRaw.filter((item): item is string => typeof item === "string")
+    : [];
+  const isIdealValue = record["isIdeal"] ?? record["is_ideal"];
+  const isIdeal = typeof isIdealValue === "boolean" ? isIdealValue : false;
+  if (!peakOrder.length && !isIdeal) {
+    return null;
+  }
+  return { peakOrder, isIdeal };
+}
+
+function normalizeSequence(raw: unknown): KinematicSequence | null {
+  if (!raw || typeof raw !== "object") return null;
+  const record = raw as Record<string, unknown>;
+  const maxShoulderRotation = pickMetricNumber(record, [
+    "maxShoulderRotation",
+    "max_shoulder_rotation",
+  ]);
+  const maxHipRotation = pickMetricNumber(record, [
+    "maxHipRotation",
+    "max_hip_rotation",
+  ]);
+  const maxXFactor = pickMetricNumber(record, ["maxXFactor", "max_x_factor"]);
+  const shoulderPeakFrame = pickMetricNumber(record, [
+    "shoulderPeakFrame",
+    "shoulder_peak_frame",
+  ]);
+  const hipPeakFrame = pickMetricNumber(record, ["hipPeakFrame", "hip_peak_frame"]);
+  const xFactorPeakFrame = pickMetricNumber(record, [
+    "xFactorPeakFrame",
+    "x_factor_peak_frame",
+  ]);
+  const sequenceOrder = normalizeSequenceOrder(
+    record["sequenceOrder"] ?? record["sequence_order"],
+  );
+
+  if (
+    maxShoulderRotation === null &&
+    maxHipRotation === null &&
+    maxXFactor === null &&
+    !sequenceOrder
+  ) {
+    return null;
+  }
+
+  return {
+    maxShoulderRotation: maxShoulderRotation ?? null,
+    maxHipRotation: maxHipRotation ?? null,
+    maxXFactor: maxXFactor ?? null,
+    shoulderPeakFrame: shoulderPeakFrame ?? null,
+    hipPeakFrame: hipPeakFrame ?? null,
+    xFactorPeakFrame: xFactorPeakFrame ?? null,
+    sequenceOrder: sequenceOrder ?? null,
+  };
+}
+
+function findSequence(sources: Record<string, unknown>[]): KinematicSequence | null {
+  for (const source of sources) {
+    const record = source as Record<string, unknown>;
+    const normalized = normalizeSequence(record["sequence"]);
+    if (normalized) {
+      return normalized;
+    }
+  }
+  return null;
 }

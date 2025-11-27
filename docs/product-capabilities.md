@@ -6,6 +6,7 @@ GolfIQ-YOLO levererar CV-baserad golfanalys, liveevent och watch/HUD-stöd via F
 ## Free vs Pro
 - **Free**: Fokus på range-upplevelsen med Target Bingo, missions och möjlighet att dela resor; grundläggande HUD/scoreboard och bag-hantering ingår.
 - **Pro**: Låser upp SG-preview och SG-sammanfattningar, caddie-insikter/coach-kort (trust-score och trender per klubb), GhostMatch och HUD-preview/hero-kursdata. Planstatus hämtas från `/api/access/plan` och injiceras via web-accessprovidern.
+- **Pro**: Kinematic sequence v1: axel- och höftrotation, X-factor och enkel sekvensordning (höfter → axlar → armar → klubba).【F:cv_engine/sequence/rotation_sequence.py†L11-L211】【F:web/src/pages/RunDetail.tsx†L626-L636】
 - **Coach v2** (Pro): Personliga SG-drivna handlingsplaner (range + on-course missions) visas på Quick Round-sammanfattning och My GolfIQ.
 
 ## On-course

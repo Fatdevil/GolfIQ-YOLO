@@ -38,6 +38,7 @@ GolfIQ-YOLO är ett plattformspaket för golfanalys med FastAPI-backend, React-w
 
 ## Data, lagring & modeller
 - Runs lagras filbaserat under `data/runs` med struktur `run.json` och valfri `impact_preview.zip`. Dataklassen `RunRecord` innehåller run-id, tidsstämpel, källa, mode, params, metrics och eventlistor.【F:server/storage/runs.py†L16-L121】
+- CV-engine beräknar kinematisk sekvens (axel-/höftrotation, X-factor och sekvensordning) i `cv_engine/sequence/rotation_sequence.py` och bäddar in resultatet i run-metrics via pipelinen (`cv_engine/pipeline/analyze.py`).【F:cv_engine/sequence/rotation_sequence.py†L11-L211】【F:cv_engine/pipeline/analyze.py†L224-L264】
 - Coursebundles: både legacy (`server/courses`) och “hero” bundles (`server/bundles`) används för hål- och green-geometri, inkl. avståndsberäkning för HUD.【F:server/watch/hud_service.py†L11-L37】
 - Hero-katalog: `server/bundles/hero_catalog.json` kopplar id till hero-banor och matas ut via `/api/courses/hero` för Quick Round och HUD.【F:server/bundles/hero_catalog.json†L1-L16】【F:server/api/routers/courses.py†L7-L34】
 - Watch-tippar och caddie-råd hämtas via services (`server/services/watch_tip_bus`, `server/caddie/advise`) och serialiseras in i HUD-scheman (`server/watch/hud_schemas.py`).【F:server/watch/hud_service.py†L11-L59】
