@@ -27,6 +27,7 @@ const fetchBundleIndexMock = vi.hoisted(() =>
     { courseId: "demo-links", name: "Demo Links", holes: 18, version: 1 },
   ])
 );
+const fetchHeroCoursesMock = vi.hoisted(() => vi.fn(async () => []));
 
 vi.mock("../src/features/quickround/storage", () => ({
   createRoundId: createRoundIdMock,
@@ -39,6 +40,7 @@ vi.mock("../src/features/quickround/storage", () => ({
 
 vi.mock("@/api", () => ({
   fetchBundleIndex: fetchBundleIndexMock,
+  fetchHeroCourses: fetchHeroCoursesMock,
 }));
 
 describe("QuickRoundStartPage course integration", () => {
@@ -47,6 +49,7 @@ describe("QuickRoundStartPage course integration", () => {
     loadAllRoundsMock.mockReturnValue([]);
     loadDefaultHandicapMock.mockReturnValue(null);
     fetchBundleIndexMock.mockClear();
+    fetchHeroCoursesMock.mockResolvedValue([]);
   });
 
   it("saves selected course id", async () => {

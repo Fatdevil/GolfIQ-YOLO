@@ -1,0 +1,18 @@
+{
+  "courses": [
+    {
+      "id": "demo-links",
+      "name": "Demo Links Hero",
+      "country": "USA",
+      "city": "Palo Alto",
+      "file": "demo_links_hero.json"
+    },
+    {
+      "id": "demo-parkland",
+      "name": "Demo Parkland Hero",
+      "country": "Scotland",
+      "city": "Edinburgh",
+      "file": "demo_parkland_hero.json"
+    }
+  ]
+}

@@ -14,6 +14,7 @@ const {
   saveDefaultHandicapMock,
   clearDefaultHandicapMock,
   fetchBundleIndexMock,
+  fetchHeroCoursesMock,
 } = vi.hoisted(() => ({
   saveRoundMock: vi.fn(),
   loadAllRoundsMock: vi.fn(() => [] as QuickRoundSummary[]),
@@ -22,6 +23,7 @@ const {
   saveDefaultHandicapMock: vi.fn(),
   clearDefaultHandicapMock: vi.fn(),
   fetchBundleIndexMock: vi.fn(),
+  fetchHeroCoursesMock: vi.fn(),
 }));
 
 vi.mock("../src/features/quickround/storage", () => ({
@@ -35,6 +37,7 @@ vi.mock("../src/features/quickround/storage", () => ({
 
 vi.mock("@/api", () => ({
   fetchBundleIndex: fetchBundleIndexMock,
+  fetchHeroCourses: fetchHeroCoursesMock,
 }));
 
 describe("QuickRoundStartPage course selection", () => {
@@ -45,6 +48,7 @@ describe("QuickRoundStartPage course selection", () => {
       { courseId: "hero-18", name: "Hero Ridge", holes: 18 },
       { courseId: "hero-9", name: "Nine Hills", holes: 9 },
     ]);
+    fetchHeroCoursesMock.mockResolvedValue([]);
   });
 
   it("stores hero course metadata when starting a round", async () => {
