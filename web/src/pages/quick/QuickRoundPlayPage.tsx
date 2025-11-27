@@ -6,8 +6,9 @@ import { useNotifications } from "@/notifications/NotificationContext";
 import { useUserSession } from "@/user/UserSessionContext";
 import { postQuickRoundSnapshots } from "@/user/historyApi";
 import { mapQuickRoundToSnapshot } from "@/user/historySync";
-import { fetchSgPreview, type RoundSgPreview, type SgCategory } from "@/api/sgPreview";
+import { fetchSgPreview, type RoundSgPreview } from "@/api/sgPreview";
 import { UpgradeGate } from "@/access/UpgradeGate";
+import { SgPreviewCard } from "./SgPreviewCard";
 
 import {
   loadRound,
@@ -19,8 +20,6 @@ import { useGeolocation } from "../../hooks/useGeolocation";
 import { useAutoHoleSuggest } from "@/features/quickround/useAutoHoleSuggest";
 import { computeQuickRoundSummary } from "../../features/quickround/summary";
 import { syncQuickRoundToWatch } from "../../features/watch/api";
-
-const SG_CATEGORIES: SgCategory[] = ["TEE", "APPROACH", "SHORT", "PUTT"];
 
 export default function QuickRoundPlayPage() {
   const { roundId } = useParams<{ roundId: string }>();
@@ -138,11 +137,6 @@ export default function QuickRoundPlayPage() {
     [round?.memberId]
   );
   const runId = round?.runId ?? round?.id;
-  const worstSgCategory = useMemo(
-    () => (sgPreview ? biggestLeakCategory(sgPreview) : null),
-    [sgPreview]
-  );
-
   const syncWatch = useCallback(
     async (holeNumber: number) => {
       if (!runId || !memberId) {
@@ -538,46 +532,8 @@ export default function QuickRoundPlayPage() {
                   {t("quickround.sg.subtitle")}
                 </p>
               </div>
-              {sgStatus === "loading" && (
-                <span className="text-xs text-slate-400">Loading…</span>
-              )}
             </div>
-            {sgStatus === "error" && (
-              <p className="mt-3 text-xs text-rose-300">{t("quickround.sg.error")}</p>
-            )}
-            {sgStatus === "loaded" && sgPreview && (
-              <div className="mt-4 space-y-3">
-                <p className="text-sm font-semibold text-slate-100">
-                  {t("quickround.sg.total", { value: formatSgValue(sgPreview.total_sg) })}
-                </p>
-                <dl className="grid gap-2 sm:grid-cols-2">
-                  {SG_CATEGORIES.map((category) => {
-                    const value = sgPreview.sg_by_cat?.[category] ?? 0;
-                    const label = categoryLabel(category);
-                    return (
-                      <div
-                        key={category}
-                        className="flex items-center justify-between rounded border border-slate-800/60 bg-slate-950/40 px-3 py-2"
-                      >
-                        <dt className="text-xs uppercase tracking-wide text-slate-400">
-                          {t("quickround.sg.category", { category: label, value: formatSgValue(value) })}
-                        </dt>
-                        <dd className="text-sm font-semibold text-slate-100">
-                          {formatSgValue(value)}
-                        </dd>
-                      </div>
-                    );
-                  })}
-                </dl>
-                {worstSgCategory && (
-                  <p className="text-xs text-slate-400">
-                    {t("quickround.sg.biggestLeak", {
-                      category: categoryLabel(worstSgCategory),
-                    })}
-                  </p>
-                )}
-              </div>
-            )}
+            <SgPreviewCard status={sgStatus} preview={sgPreview} />
           </section>
         </UpgradeGate>
       )}
@@ -717,39 +673,6 @@ function formatToPar(value: number | null): string {
     ? rounded.toFixed(0)
     : rounded.toFixed(1);
   return rounded > 0 ? `+${formatted}` : formatted;
-}
-
-function formatSgValue(value: number): string {
-  const rounded = Math.round(value * 10) / 10;
-  const formatted = rounded.toFixed(1);
-  return rounded > 0 ? `+${formatted}` : formatted;
-}
-
-function categoryLabel(category: SgCategory): string {
-  switch (category) {
-    case "TEE":
-      return "Tee";
-    case "APPROACH":
-      return "Approach";
-    case "SHORT":
-      return "Short game";
-    case "PUTT":
-      return "Putting";
-    default:
-      return category;
-  }
-}
-
-function biggestLeakCategory(preview: RoundSgPreview): SgCategory | null {
-  const entries = Object.entries(preview.sg_by_cat ?? {}) as [SgCategory, number][];
-  if (entries.length === 0) {
-    return null;
-  }
-  const [first, ...rest] = entries;
-  return rest.reduce<[SgCategory, number]>(
-    (worst, current) => (current[1] < worst[1] ? current : worst),
-    first
-  )[0];
 }
 
 function determineCurrentHoleNumber(holes: QuickHole[]): number {

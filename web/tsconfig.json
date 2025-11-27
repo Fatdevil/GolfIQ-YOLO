@@ -19,7 +19,7 @@
       "vitest": ["./node_modules/vitest"],
       "vitest/*": ["./node_modules/vitest/*"]
     },
-    "types": ["vitest/globals", "vite/client"]
+    "types": ["vitest/globals", "vite/client", "@testing-library/jest-dom"]
   },
   "include": [
     "src",
