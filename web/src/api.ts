@@ -1,4 +1,4 @@
-import axios from "axios";
+import axios, { type AxiosInstance, type AxiosRequestHeaders } from "axios";
 import { getCurrentUserId } from "@/user/currentUserId";
 
 import type { GrossNetMode, TvFlags } from "@shared/events/types";
@@ -17,6 +17,24 @@ export const withAuth = (extra: Record<string, string> = {}) => {
     ...extra,
   };
 };
+
+const baseClient: AxiosInstance =
+  typeof axios.create === "function"
+    ? axios.create({ baseURL: API })
+    : (axios as unknown as AxiosInstance);
+
+if (baseClient?.interceptors?.request) {
+  baseClient.interceptors.request.use((config) => {
+    const mergedHeaders: AxiosRequestHeaders = {
+      ...(config.headers ?? {}),
+      ...withAuth(),
+    } as AxiosRequestHeaders;
+    config.headers = mergedHeaders;
+    return config;
+  });
+}
+
+export const apiClient = baseClient;
 
 export async function apiFetch(
   path: string,

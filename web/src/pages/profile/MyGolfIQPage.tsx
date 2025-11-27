@@ -15,6 +15,7 @@ import {
   fetchCaddieInsights,
   type CaddieInsights,
 } from "@/api/caddieInsights";
+import { fetchMemberSgSummary, type MemberSgSummary } from "@/api/sgSummary";
 import { UpgradeGate } from "@/access/UpgradeGate";
 import { usePlan } from "@/access/PlanProvider";
 import { useCaddieMemberId } from "@/profile/memberIdentity";
@@ -64,6 +65,9 @@ export function MyGolfIQPage() {
   const [insights, setInsights] = useState<CaddieInsights | null>(null);
   const [loadingInsights, setLoadingInsights] = useState(false);
   const [insightsError, setInsightsError] = useState<string | null>(null);
+  const [sgSummary, setSgSummary] = useState<MemberSgSummary | null>(null);
+  const [sgSummaryStatus, setSgSummaryStatus] =
+    useState<"idle" | "loading" | "ready" | "empty" | "error">("idle");
 
   const qrStats = useMemo(() => computeQuickRoundStats(rounds), [rounds]);
   const rangeStats = useMemo(() => computeRangeSummary(ghosts), [ghosts]);
@@ -104,6 +108,38 @@ export function MyGolfIQPage() {
       .finally(() => {
         setLoadingInsights(false);
       });
+  }, [memberId]);
+
+  useEffect(() => {
+    if (!memberId) {
+      setSgSummary(null);
+      setSgSummaryStatus("empty");
+      return;
+    }
+
+    let cancelled = false;
+    setSgSummaryStatus("loading");
+
+    fetchMemberSgSummary(memberId, 5)
+      .then((data) => {
+        if (cancelled) return;
+        if (!data.runIds.length) {
+          setSgSummary(null);
+          setSgSummaryStatus("empty");
+        } else {
+          setSgSummary(data);
+          setSgSummaryStatus("ready");
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setSgSummaryStatus("error");
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
   }, [memberId]);
 
   useEffect(() => {
@@ -297,6 +333,73 @@ export function MyGolfIQPage() {
           )}
         </div>
       </section>
+
+      <UpgradeGate feature="SG_PREVIEW">
+        <section className="rounded-lg border border-slate-800 bg-slate-900/60 p-5 shadow-sm space-y-2">
+          <header className="flex items-center justify-between">
+            <div>
+              <h2 className="text-lg font-semibold text-slate-50">
+                {t("profile.sgSummary.title")}
+              </h2>
+              <p className="text-xs text-slate-400">{t("profile.sgSummary.subtitle")}</p>
+            </div>
+          </header>
+
+          {sgSummaryStatus === "loading" && (
+            <p className="text-xs text-slate-400">{t("profile.sgSummary.loading")}</p>
+          )}
+
+          {sgSummaryStatus === "error" && (
+            <p className="text-xs text-amber-400">{t("profile.sgSummary.error")}</p>
+          )}
+
+          {sgSummaryStatus === "empty" && (
+            <p className="text-xs text-slate-400">{t("profile.sgSummary.empty")}</p>
+          )}
+
+          {sgSummaryStatus === "ready" && sgSummary && (
+            <div className="space-y-3 text-xs text-slate-100">
+              <p className="text-sm font-medium text-slate-100">
+                {t("profile.sgSummary.total", {
+                  value: sgSummary.avg_sg_per_round.toFixed(2),
+                  rounds: sgSummary.runIds.length,
+                })}
+              </p>
+
+              <div className="overflow-hidden rounded-md border border-slate-800">
+                <table className="min-w-full divide-y divide-slate-800 text-[11px]">
+                  <thead className="bg-slate-900/60 text-slate-400">
+                    <tr>
+                      <th className="px-4 py-2 text-left font-medium">
+                        {t("profile.sgSummary.catHeader")}
+                      </th>
+                      <th className="px-4 py-2 text-right font-medium">
+                        {t("profile.sgSummary.avgHeader")}
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-800 bg-slate-900/40 text-slate-100">
+                    {(["TEE", "APPROACH", "SHORT", "PUTT"] as const).map((cat) => {
+                      const catSummary = sgSummary.per_category[cat];
+                      if (!catSummary) return null;
+                      return (
+                        <tr key={cat}>
+                          <td className="px-4 py-2 font-medium">
+                            {t(`coach.sg.category.${cat.toLowerCase()}`)}
+                          </td>
+                          <td className="px-4 py-2 text-right font-mono">
+                            {catSummary.avg_sg.toFixed(2)}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+        </section>
+      </UpgradeGate>
 
       <UpgradeGate feature="CADDIE_INSIGHTS">
         <div className="space-y-4">
