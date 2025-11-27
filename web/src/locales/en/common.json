@@ -345,5 +345,15 @@
   "access.loading": "Checking your plan…",
   "access.proOnlyFeature": "This is a Pro feature.",
   "access.upgradeTeaser": "Unlock this feature and more by upgrading to GolfIQ Pro (coming soon).",
-  "access.upgradeCta": "Learn more"
+  "access.upgradeCta": "Learn more",
+
+  "onboarding.title": "Get started with GolfIQ",
+  "onboarding.subtitle": "Complete these steps or load demo data to see your insights.",
+  "onboarding.seed.button": "Fill with demo data",
+  "onboarding.seed.success": "Demo data added – open My GolfIQ to explore your stats.",
+  "onboarding.task.home": "Visit the home hub",
+  "onboarding.task.quick": "Play a Quick Round",
+  "onboarding.task.range": "Do a range session",
+  "onboarding.task.profile": "Open My GolfIQ",
+  "onboarding.allDone": "Nice! You’ve completed the getting started checklist."
 }

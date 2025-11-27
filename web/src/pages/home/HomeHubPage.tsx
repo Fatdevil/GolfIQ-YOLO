@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Link } from "react-router-dom";
 
@@ -7,6 +7,13 @@ import { UpgradeGate } from "@/access/UpgradeGate";
 import { usePlan } from "@/access/PlanProvider";
 import type { PlanId } from "@/access/plan";
 import { useUserAccess } from "@/access/UserAccessContext";
+import {
+  computeOnboardingChecklist,
+  markHomeSeen,
+  type OnboardingChecklist,
+} from "@/onboarding/checklist";
+import { seedDemoData } from "@/demo/demoData";
+import { useNotifications } from "@/notifications/NotificationContext";
 
 const Card: React.FC<{
   title: string;
@@ -53,6 +60,21 @@ export const HomeHubPage: React.FC = () => {
   const { t } = useTranslation();
   const { plan: localPlan } = usePlan();
   const { plan: backendPlan } = useUserAccess();
+  const { notify } = useNotifications();
+  const [checklist, setChecklist] = useState<OnboardingChecklist>(() =>
+    computeOnboardingChecklist(),
+  );
+
+  useEffect(() => {
+    markHomeSeen();
+    setChecklist(computeOnboardingChecklist());
+  }, []);
+
+  const handleSeedDemo = async () => {
+    await seedDemoData();
+    setChecklist(computeOnboardingChecklist());
+    notify("success", t("onboarding.seed.success"));
+  };
 
   const effectivePlan: PlanId =
     backendPlan === "pro" || backendPlan === "free"
@@ -77,6 +99,57 @@ export const HomeHubPage: React.FC = () => {
           </span>
         </div>
       </header>
+
+      <section className="space-y-3 rounded-xl border border-slate-800 bg-slate-900/60 p-4">
+        <header className="flex items-center justify-between gap-3">
+          <div>
+            <h2 className="text-sm font-semibold text-slate-100">
+              {t("onboarding.title")}
+            </h2>
+            <p className="text-[11px] text-slate-400">
+              {t("onboarding.subtitle")}
+            </p>
+          </div>
+          {!checklist.allDone && (
+            <button
+              type="button"
+              onClick={handleSeedDemo}
+              data-testid="seed-demo-data"
+              className="text-[11px] rounded border border-emerald-300/40 bg-emerald-500/10 px-3 py-1 font-semibold text-emerald-100 hover:bg-emerald-500/20"
+            >
+              {t("onboarding.seed.button")}
+            </button>
+          )}
+        </header>
+
+        <ul className="space-y-2 text-[11px]">
+          {checklist.tasks.map((task) => (
+            <li key={task.id} className="flex items-center gap-2 text-slate-200">
+              <span
+                className={
+                  "inline-flex h-3 w-3 rounded-full border " +
+                  (task.done
+                    ? "border-emerald-400 bg-emerald-500"
+                    : "border-slate-500")
+                }
+              />
+              <span
+                className={
+                  task.done ? "text-slate-400 line-through" : "text-slate-100"
+                }
+              >
+                {t(task.labelKey)}
+              </span>
+            </li>
+          ))}
+        </ul>
+
+        {checklist.allDone && (
+          <p className="text-[11px] font-semibold text-emerald-200">
+            {t("onboarding.allDone")}
+          </p>
+        )}
+      </section>
 
       <div className="grid gap-4 md:grid-cols-2">
         <Card
