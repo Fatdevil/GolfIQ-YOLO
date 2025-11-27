@@ -55,16 +55,28 @@ def test_compute_sg_preview_groups_by_category() -> None:
     assert set(preview.sg_by_cat.keys()) == set(SgCategory)
 
     expected_totals = {
-        SgCategory.TEE: 0.8,
+        SgCategory.TEE: 1.0,
         SgCategory.APPROACH: 0.6,
-        SgCategory.SHORT: -4.1,
-        SgCategory.PUTT: 1.0,
+        SgCategory.SHORT: -4.05,
+        SgCategory.PUTT: 0.9,
     }
     assert preview.sg_by_cat == {
         k: pytest.approx(v) for k, v in expected_totals.items()
     }
     assert preview.total_sg == pytest.approx(sum(expected_totals.values()))
     assert preview.total_sg < 0  # round can go negative when extra strokes are taken
+    assert preview.round_summary is not None
+    assert preview.round_summary.worst_category == SgCategory.SHORT
+    assert len(preview.round_summary.categories) == 4
+
+    assert all(
+        hole.sg_total == pytest.approx(sum(hole.sg_by_cat.values()))
+        for hole in preview.holes
+    )
+    assert {hole.hole for hole in preview.holes} == {1, 2}
+    assert preview.holes[1 - 1].gross_score == 3
+    assert preview.holes[0].worst_category == SgCategory.APPROACH
+    assert preview.holes[1].worst_category == SgCategory.SHORT
 
 
 def test_sg_preview_endpoint(monkeypatch: pytest.MonkeyPatch) -> None:
