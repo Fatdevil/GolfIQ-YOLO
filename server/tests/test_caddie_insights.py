@@ -65,11 +65,19 @@ def test_compute_caddie_insights_counts() -> None:
     assert insights.advice_accepted == 1
     assert insights.accept_rate == 0.5
 
+    assert insights.recent_window_days == 7
+    assert insights.clubs
+
     per_club = {entry.club: entry for entry in insights.per_club}
     assert per_club["7i"].shown == 1
     assert per_club["7i"].accepted == 1
     assert per_club["8i"].shown == 1
     assert per_club["8i"].accepted == 0
+
+    club_insights = {entry.club_id: entry for entry in insights.clubs}
+    assert club_insights["7i"].total_tips == 1
+    assert club_insights["7i"].ignored == 0
+    assert club_insights["8i"].ignored == 1
 
 
 def test_compute_caddie_insights_no_matching_events() -> None:
@@ -100,6 +108,99 @@ def test_compute_caddie_insights_no_matching_events() -> None:
     assert insights.advice_accepted == 0
     assert insights.accept_rate is None
     assert insights.per_club == []
+    assert insights.clubs == []
+
+
+def test_compute_caddie_insights_trust_and_recent_window() -> None:
+    now = datetime(2024, 3, 1, tzinfo=timezone.utc)
+    window = timedelta(days=60)
+
+    events: list[dict[str, object]] = [
+        {  # recent accepted
+            "type": "CADDIE_ADVICE_ACCEPTED_V1",
+            "memberId": "m1",
+            "ts": (now - timedelta(days=2)).timestamp() * 1000,
+            "recommendedClub": "7i",
+        },
+        {  # recent shown only
+            "type": "CADDIE_ADVICE_SHOWN_V1",
+            "memberId": "m1",
+            "ts": (now - timedelta(days=3)).timestamp() * 1000,
+            "recommendedClub": "7i",
+        },
+        {  # lifetime accepted outside recent window
+            "type": "CADDIE_ADVICE_ACCEPTED_V1",
+            "memberId": "m1",
+            "ts": (now - timedelta(days=20)).timestamp() * 1000,
+            "recommendedClub": "7i",
+        },
+        {
+            "type": "CADDIE_ADVICE_SHOWN_V1",
+            "memberId": "m1",
+            "ts": (now - timedelta(days=1)).timestamp() * 1000,
+            "recommendedClub": "3w",
+        },
+        {
+            "type": "CADDIE_ADVICE_ACCEPTED_V1",
+            "memberId": "m1",
+            "ts": (now - timedelta(days=40)).timestamp() * 1000,
+            "recommendedClub": "3w",
+        },
+    ]
+
+    insights = compute_caddie_insights(events, member_id="m1", window=window, now=now)
+
+    by_club = {entry.club_id: entry for entry in insights.clubs}
+
+    assert insights.recent_window_days == 7
+    seven_iron = by_club["7i"]
+    assert seven_iron.total_tips == 2
+    assert seven_iron.recent_total == 1
+    assert seven_iron.recent_accepted == 1
+    assert seven_iron.accepted == 2
+    assert seven_iron.trust_score == pytest.approx(1.0, rel=1e-3)
+
+    three_wood = by_club["3w"]
+    assert three_wood.total_tips == 1
+    assert three_wood.recent_total == 1
+    assert three_wood.accepted == 1
+    assert three_wood.recent_accepted == 0
+    assert three_wood.trust_score < seven_iron.trust_score
+
+
+def test_missing_ts_uses_file_date_for_recency() -> None:
+    now = datetime(2024, 6, 10, tzinfo=timezone.utc)
+    window = timedelta(days=30)
+    file_date = (now - timedelta(days=20)).date()
+
+    events: list[dict[str, object]] = [
+        {
+            "type": "CADDIE_ADVICE_SHOWN_V1",
+            "memberId": "m1",
+            "recommendedClub": "7i",
+            "file_ts": file_date,
+        },
+        {
+            "type": "CADDIE_ADVICE_SHOWN_V1",
+            "memberId": "m1",
+            "ts": (now - timedelta(days=1)).timestamp() * 1000,
+            "recommendedClub": "7i",
+        },
+        {
+            "type": "CADDIE_ADVICE_ACCEPTED_V1",
+            "memberId": "m1",
+            "ts": (now - timedelta(days=1)).timestamp() * 1000,
+            "recommendedClub": "7i",
+        },
+    ]
+
+    insights = compute_caddie_insights(events, member_id="m1", window=window, now=now)
+
+    seven_iron = next(entry for entry in insights.clubs if entry.club_id == "7i")
+    assert seven_iron.total_tips == 2
+    assert seven_iron.recent_total == 1
+    assert seven_iron.recent_accepted == 1
+    assert seven_iron.trust_score < 1.0
 
 
 def test_caddie_insights_endpoint(monkeypatch: pytest.MonkeyPatch) -> None:

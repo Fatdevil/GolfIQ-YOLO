@@ -14,10 +14,11 @@ import {
 import {
   fetchCaddieInsights,
   type CaddieInsights,
+  type ClubInsight,
 } from "@/api/caddieInsights";
 import { fetchMemberSgSummary, type MemberSgSummary } from "@/api/sgSummary";
 import { UpgradeGate } from "@/access/UpgradeGate";
-import { useAccessPlan } from "@/access/UserAccessContext";
+import { useAccessFeatures, useAccessPlan } from "@/access/UserAccessContext";
 import { useCaddieMemberId } from "@/profile/memberIdentity";
 import { migrateLocalHistoryOnce } from "@/user/historyMigration";
 import { useUserSession } from "@/user/UserSessionContext";
@@ -30,6 +31,7 @@ export function MyGolfIQPage() {
   const { t } = useTranslation();
   const { session: userSession } = useUserSession();
   const { plan } = useAccessPlan();
+  const { hasPlanFeature } = useAccessFeatures();
   const memberId = useCaddieMemberId();
   const rounds = useMemo(() => loadAllRoundsFull(), []);
   const ghosts = useMemo(() => listGhosts(), []);
@@ -98,10 +100,40 @@ export function MyGolfIQPage() {
   const qrStats = useMemo(() => computeQuickRoundStats(rounds), [rounds]);
   const rangeStats = useMemo(() => computeRangeSummary(ghosts), [ghosts]);
   const bagStats = useMemo(() => computeBagSummary(bag), [bag]);
-  const topClubStats = useMemo(() => {
+  const clubInsights = useMemo<ClubInsight[]>(() => {
     if (!insights) return [];
-    return [...insights.per_club].sort((a, b) => b.shown - a.shown).slice(0, 5);
+    if (insights.clubs?.length) return insights.clubs;
+    return insights.per_club.map((club) => ({
+      club_id: club.club,
+      total_tips: club.shown,
+      accepted: club.accepted,
+      ignored: Math.max(club.shown - club.accepted, 0),
+      recent_accepted: club.accepted,
+      recent_total: club.shown,
+      trust_score: club.shown > 0 ? club.accepted / club.shown : 0,
+    }));
   }, [insights]);
+
+  const topClubStats = useMemo(() => {
+    if (!clubInsights.length) return [];
+    return [...clubInsights].sort((a, b) => b.total_tips - a.total_tips).slice(0, 5);
+  }, [clubInsights]);
+
+  const mostTrustedClub = useMemo(() => {
+    const valid = clubInsights.filter((club) => club.total_tips > 0);
+    if (!valid.length) return null;
+    return valid.reduce((best, current) =>
+      current.trust_score > best.trust_score ? current : best,
+    );
+  }, [clubInsights]);
+
+  const leastTrustedClub = useMemo(() => {
+    const valid = clubInsights.filter((club) => club.total_tips > 0);
+    if (!valid.length) return null;
+    return valid.reduce((worst, current) =>
+      current.trust_score < worst.trust_score ? current : worst,
+    );
+  }, [clubInsights]);
 
   const recentRounds = useMemo(() => {
     return [...rounds]
@@ -118,7 +150,7 @@ export function MyGolfIQPage() {
   }, []);
 
   useEffect(() => {
-    if (!memberId) {
+    if (!memberId || !hasPlanFeature("CADDIE_INSIGHTS")) {
       setInsights(null);
       setLoadingInsights(false);
       return;
@@ -138,7 +170,7 @@ export function MyGolfIQPage() {
       .finally(() => {
         setLoadingInsights(false);
       });
-  }, [memberId]);
+  }, [hasPlanFeature, memberId]);
 
   useEffect(() => {
     if (!memberId) {
@@ -479,6 +511,37 @@ export function MyGolfIQPage() {
                         />
                       </dl>
 
+                      {mostTrustedClub && (
+                        <div className="grid gap-3 sm:grid-cols-2">
+                          <div className="rounded-md border border-emerald-800 bg-emerald-900/20 px-4 py-3 text-emerald-50">
+                            <p className="text-[11px] font-semibold uppercase tracking-wide text-emerald-300">
+                              Most trusted
+                            </p>
+                            <p className="text-lg font-semibold">{mostTrustedClub.club_id}</p>
+                            <p className="text-sm text-emerald-100/80">
+                              Trust {formatNumber(mostTrustedClub.trust_score * 100)}% • Recent{' '}
+                              {formatAcceptPercent(
+                                mostTrustedClub.recent_accepted,
+                                mostTrustedClub.recent_total,
+                              )}
+                            </p>
+                          </div>
+
+                          {leastTrustedClub && (
+                            <div className="rounded-md border border-amber-800 bg-amber-900/20 px-4 py-3 text-amber-50">
+                              <p className="text-[11px] font-semibold uppercase tracking-wide text-amber-300">
+                                Often ignored
+                              </p>
+                              <p className="text-lg font-semibold">{leastTrustedClub.club_id}</p>
+                              <p className="text-sm text-amber-100/80">
+                                Trust {formatNumber(leastTrustedClub.trust_score * 100)}% • Ignored{' '}
+                                {leastTrustedClub.ignored} tips
+                              </p>
+                            </div>
+                          )}
+                        </div>
+                      )}
+
                       {topClubStats.length > 0 && (
                         <div className="overflow-hidden rounded-md border border-slate-800">
                           <table className="min-w-full divide-y divide-slate-800 text-sm">
@@ -493,23 +556,22 @@ export function MyGolfIQPage() {
                                 <th className="px-4 py-2 text-right font-medium">
                                   {t("profile.caddie.table.accepted")}
                                 </th>
-                                <th className="px-4 py-2 text-right font-medium">
-                                  {t("profile.caddie.table.acceptRate")}
-                                </th>
+                                <th className="px-4 py-2 text-right font-medium">Trust</th>
+                                <th className="px-4 py-2 text-right font-medium">Recent</th>
                               </tr>
                             </thead>
                             <tbody className="divide-y divide-slate-800 bg-slate-900/30 text-slate-100">
                               {topClubStats.map((club) => {
-                                const clubAcceptRate =
-                                  club.shown > 0
-                                    ? `${formatNumber((club.accepted / club.shown) * 100)}%`
-                                    : "—";
+                                const trustPercent = `${formatNumber(club.trust_score * 100)}%`;
                                 return (
-                                  <tr key={club.club}>
-                                    <td className="px-4 py-2 font-medium">{club.club}</td>
-                                    <td className="px-4 py-2 text-right">{club.shown}</td>
+                                  <tr key={club.club_id}>
+                                    <td className="px-4 py-2 font-medium">{club.club_id}</td>
+                                    <td className="px-4 py-2 text-right">{club.total_tips}</td>
                                     <td className="px-4 py-2 text-right">{club.accepted}</td>
-                                    <td className="px-4 py-2 text-right">{clubAcceptRate}</td>
+                                    <td className="px-4 py-2 text-right">{trustPercent}</td>
+                                    <td className="px-4 py-2 text-right">
+                                      {formatAcceptPercent(club.recent_accepted, club.recent_total)}
+                                    </td>
                                   </tr>
                                 );
                               })}
@@ -576,6 +638,11 @@ function formatDate(value: string | number): string {
 function formatNumber(value: number): string {
   const rounded = Math.round(value * 10) / 10;
   return Number.isInteger(rounded) ? rounded.toFixed(0) : rounded.toFixed(1);
+}
+
+function formatAcceptPercent(accepted: number, total: number): string {
+  if (!total) return "—";
+  return `${formatNumber((accepted / total) * 100)}%`;
 }
 
 function StatItem({ label, value }: { label: string; value: string | number }) {
