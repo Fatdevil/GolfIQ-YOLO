@@ -58,7 +58,20 @@ const mockedPostRangeAnalyze = vi.mocked(postRangeAnalyze);
 function renderWithUnit(unit: DistanceUnit, ui: React.ReactElement) {
   return render(
     <UserSessionProvider>
-      <UserAccessContext.Provider value={{ loading: false, plan: "pro", hasFeature: () => true }}>
+      <UserAccessContext.Provider
+        value={{
+          loading: false,
+          plan: "pro",
+          hasFeature: () => true,
+          hasPlanFeature: () => true,
+          isPro: true,
+          isFree: false,
+          refresh: async () => undefined,
+          trial: null,
+          expiresAt: null,
+          error: undefined,
+        }}
+      >
         <UnitsContext.Provider value={{ unit, setUnit: () => {} }}>
           {ui}
         </UnitsContext.Provider>

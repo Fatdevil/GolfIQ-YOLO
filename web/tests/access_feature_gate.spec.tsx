@@ -14,7 +14,22 @@ type ContextValue = {
 
 const createWrapper = (value: ContextValue) =>
   function Wrapper({ children }: { children: ReactNode }) {
-    return <UserAccessContext.Provider value={value}>{children}</UserAccessContext.Provider>;
+    return (
+      <UserAccessContext.Provider
+        value={{
+          trial: null,
+          expiresAt: null,
+          error: undefined,
+          isPro: value.plan === "pro",
+          isFree: value.plan === "free",
+          hasPlanFeature: () => value.plan === "pro",
+          refresh: async () => undefined,
+          ...value,
+        }}
+      >
+        {children}
+      </UserAccessContext.Provider>
+    );
   };
 
 describe("FeatureGate", () => {

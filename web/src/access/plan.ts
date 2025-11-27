@@ -10,7 +10,8 @@ export type FeatureKey =
   | "CADDIE_INSIGHTS"
   | "SG_PREVIEW"
   | "RANGE_BINGO"
-  | "RANGE_GHOSTMATCH";
+  | "RANGE_GHOSTMATCH"
+  | "HUD_PREVIEW";
 
 export type PlanFeatureMatrix = Record<PlanId, Record<FeatureKey, boolean>>;
 
@@ -22,12 +23,14 @@ export const PLAN_FEATURES: PlanFeatureMatrix = {
     SG_PREVIEW: false,
     RANGE_BINGO: true,
     RANGE_GHOSTMATCH: false,
+    HUD_PREVIEW: false,
   },
   PRO: {
     CADDIE_INSIGHTS: true,
     SG_PREVIEW: true,
     RANGE_BINGO: true,
     RANGE_GHOSTMATCH: true,
+    HUD_PREVIEW: true,
   },
 };
 

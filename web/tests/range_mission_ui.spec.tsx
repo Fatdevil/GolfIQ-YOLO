@@ -40,6 +40,13 @@ const accessValue = {
   loading: false,
   plan: "pro" as PlanName,
   hasFeature: (_feature: FeatureId) => true,
+  hasPlanFeature: () => true,
+  isPro: true,
+  isFree: false,
+  refresh: async () => undefined,
+  trial: null,
+  expiresAt: null,
+  error: undefined,
 };
 
 function renderWithProviders(ui: ReactElement) {

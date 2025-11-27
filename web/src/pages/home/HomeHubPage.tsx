@@ -4,9 +4,7 @@ import { Link } from "react-router-dom";
 
 import { FeatureGate } from "@/access/FeatureGate";
 import { UpgradeGate } from "@/access/UpgradeGate";
-import { usePlan } from "@/access/PlanProvider";
-import type { PlanId } from "@/access/plan";
-import { useUserAccess } from "@/access/UserAccessContext";
+import { useAccessFeatures, useAccessPlan } from "@/access/UserAccessContext";
 import {
   computeOnboardingChecklist,
   markHomeSeen,
@@ -38,12 +36,14 @@ const Card: React.FC<{
 );
 
 const GhostMatchBadge: React.FC = () => {
-  const { hasFeature } = usePlan();
+  const { hasPlanFeature } = useAccessFeatures();
   const { t } = useTranslation();
+
+  const enabled = hasPlanFeature("RANGE_GHOSTMATCH");
 
   return (
     <FeatureGate feature="range.ghostMatch">
-      {hasFeature("RANGE_GHOSTMATCH") ? (
+      {enabled ? (
         <span className="inline-flex items-center rounded-full bg-emerald-500/10 px-2 py-0.5 text-[11px] font-semibold text-emerald-200">
           {t("home.range.badge.ghostmatch")}
         </span>
@@ -58,8 +58,7 @@ const GhostMatchBadge: React.FC = () => {
 
 export const HomeHubPage: React.FC = () => {
   const { t } = useTranslation();
-  const { plan: localPlan } = usePlan();
-  const { plan: backendPlan } = useUserAccess();
+  const { plan, isPro } = useAccessPlan();
   const { notify } = useNotifications();
   const [checklist, setChecklist] = useState<OnboardingChecklist>(() =>
     computeOnboardingChecklist(),
@@ -76,13 +75,7 @@ export const HomeHubPage: React.FC = () => {
     notify("success", t("onboarding.seed.success"));
   };
 
-  const effectivePlan: PlanId =
-    backendPlan === "pro" || backendPlan === "free"
-      ? backendPlan === "pro"
-        ? "PRO"
-        : "FREE"
-      : localPlan;
-  const isPro = effectivePlan === "PRO";
+  const effectivePlan = plan === "pro" ? "PRO" : "FREE";
 
   return (
     <div className="max-w-5xl mx-auto px-4 py-6 space-y-4">

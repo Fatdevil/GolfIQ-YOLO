@@ -17,7 +17,7 @@ import {
 } from "@/api/caddieInsights";
 import { fetchMemberSgSummary, type MemberSgSummary } from "@/api/sgSummary";
 import { UpgradeGate } from "@/access/UpgradeGate";
-import { usePlan } from "@/access/PlanProvider";
+import { useAccessPlan } from "@/access/UserAccessContext";
 import { useCaddieMemberId } from "@/profile/memberIdentity";
 import { migrateLocalHistoryOnce } from "@/user/historyMigration";
 import { useUserSession } from "@/user/UserSessionContext";
@@ -28,7 +28,7 @@ import { markProfileSeen } from "@/onboarding/checklist";
 export function MyGolfIQPage() {
   const { t } = useTranslation();
   const { session: userSession } = useUserSession();
-  const { plan } = usePlan();
+  const { plan } = useAccessPlan();
   const memberId = useCaddieMemberId();
   const coach = useCoachInsights();
   const rounds = useMemo(() => loadAllRoundsFull(), []);
@@ -160,7 +160,7 @@ export function MyGolfIQPage() {
         <div className="flex items-center gap-3">
           <h1 className="text-2xl font-semibold">{t("profile.title")}</h1>
           <span className="inline-flex items-center px-2 py-[2px] rounded-full border border-slate-700 bg-slate-900/60 text-[10px] font-semibold uppercase tracking-wide text-slate-200">
-            {plan === "PRO" ? t("access.plan.pro") : t("access.plan.free")}
+            {plan === "pro" ? t("access.plan.pro") : t("access.plan.free")}
           </span>
         </div>
         <p className="text-sm text-slate-500">{t("profile.subtitle")}</p>

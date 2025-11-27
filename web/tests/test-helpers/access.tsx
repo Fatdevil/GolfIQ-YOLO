@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 
 import { UserAccessContext } from "@/access/UserAccessContext";
+import type { FeatureKey } from "@/access/plan";
 import type { FeatureId, PlanName } from "@/access/types";
 
 export type AccessOptions = {
@@ -20,6 +21,13 @@ export function createAccessWrapper(options: AccessOptions = {}) {
     plan,
     loading,
     hasFeature,
+    hasPlanFeature: (_feature: FeatureKey) => (plan === "pro" ? true : hasFeature(_feature as FeatureId)),
+    isPro: plan === "pro",
+    isFree: plan === "free",
+    refresh: async () => undefined,
+    trial: null,
+    expiresAt: null,
+    error: undefined,
   };
 
   return function AccessWrapper({ children }: { children: ReactNode }) {

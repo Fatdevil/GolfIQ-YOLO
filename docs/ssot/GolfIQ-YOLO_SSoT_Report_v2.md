@@ -54,6 +54,7 @@ GolfIQ-YOLO är ett plattformspaket för golfanalys med FastAPI-backend, React-w
 ## Konfiguration & secrets (översikt)
 - Miljövariabler styr API-nyckel (`API_KEY`), CORS (`CORS_ALLOW_ORIGINS`), retention (dirs, TTL), live tokens (`LIVE_SIGN_SECRET`), CV-mode (`YOLO_*`, `RANGE_PRACTICE_CV_BACKEND`) och filkataloger (`RUNS_UPLOAD_DIR`, `RUNS_TTL_DAYS`).【F:server/app.py†L76-L200】【F:README.md†L1-L80】
 - Watch pairing använder signerade device tokens genererade från device secrets; inga hemligheter checkas in i repo.【F:server/api/routers/watch_pairing.py†L120-L170】
+- Planstatus (free/pro) levereras via `/api/access/plan` baserat på miljökonfig (`GOLFIQ_DEFAULT_PLAN`, `GOLFIQ_PRO_API_KEYS`) och är single source of truth för webaccess.【F:server/api/routers/access.py†L1-L21】【F:server/access/config.py†L16-L41】
 
 ## Risker, teknisk skuld & förbättringar
 - Stor router-yta med blandning av legacy (`/routes`) och nya (`/api/routers`) kan leda till duplicerade endpoints och korsande auth-mönster; föreslår konsolidering och dokumentation av prefix.

@@ -3,6 +3,10 @@
 ## Översikt
 GolfIQ-YOLO levererar CV-baserad golfanalys, liveevent och watch/HUD-stöd via FastAPI-backend och en React-baserad webapp. Funktionerna nedan beskriver vad användaren kan göra idag, med referenser till underliggande moduler.
 
+## Free vs Pro
+- **Free**: Fokus på range-upplevelsen med Target Bingo, missions och möjlighet att dela resor; grundläggande HUD/scoreboard och bag-hantering ingår.
+- **Pro**: Låser upp SG-preview och SG-sammanfattningar, caddie-insikter/coach-kort, GhostMatch och HUD-preview/hero-kursdata. Planstatus hämtas från `/api/access/plan` och injiceras via web-accessprovidern.
+
 ## On-course
 - **Live events och leaderboards**: Användare kan skapa och följa liveevents, inklusive host-läge, viewer-läge och top-shots. Webbrutter `/events/:id/live`, `/events/:id/live-host` och `/events/:id/live-view` stöds av live-endpoints i `server/routes/live.py` och event-board i `server/routes/events.py`.【F:web/src/App.tsx†L64-L118】【F:server/app.py†L182-L186】
 - **Snabbrunda (Quick Round) med watch-synk**: Webben erbjuder `/play` och `/play/:roundId` för snabbrunda, medan `/api/watch/quickround/sync` skickar HUD-data till primärenhet efter hålvalidering.【F:web/src/App.tsx†L135-L139】【F:server/api/routers/watch_quickround.py†L14-L62】

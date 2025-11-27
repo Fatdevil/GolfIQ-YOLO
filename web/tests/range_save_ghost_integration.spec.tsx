@@ -57,11 +57,6 @@ vi.mock("../src/features/range/api", () => ({
 vi.mock("../src/user/historyApi", () => ({
   postRangeSessionSnapshots: vi.fn(),
 }));
-vi.mock("../src/access/PlanProvider", () => ({
-  PlanProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
-  usePlan: () => ({ plan: "PRO", setPlan: vi.fn(), hasFeature: () => true }),
-}));
-
 import RangePracticePage from "../src/pages/RangePracticePage";
 import { saveGhost } from "../src/features/range/ghost";
 import { scoreTargetBingo } from "../src/features/range/games";
@@ -73,7 +68,14 @@ import { UserSessionProvider } from "../src/user/UserSessionContext";
 const proAccessValue = {
   loading: false,
   plan: "pro" as PlanName,
+  isPro: true,
+  isFree: false,
+  trial: null,
+  expiresAt: null,
+  error: undefined,
+  refresh: vi.fn(),
   hasFeature: (_feature: FeatureId) => true,
+  hasPlanFeature: () => true,
 };
 
 function renderWithAccess(ui: ReactElement) {
