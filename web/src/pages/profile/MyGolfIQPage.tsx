@@ -22,15 +22,15 @@ import { useCaddieMemberId } from "@/profile/memberIdentity";
 import { migrateLocalHistoryOnce } from "@/user/historyMigration";
 import { useUserSession } from "@/user/UserSessionContext";
 import { loadRangeSessions } from "@/features/range/sessions";
-import { useCoachInsights } from "@/profile/useCoachInsights";
 import { markProfileSeen } from "@/onboarding/checklist";
+import { buildCoachRecommendations, type SgSummaryForRun } from "@/coach/coachLogic";
+import { CoachPlanCard } from "@/coach/CoachPlanCard";
 
 export function MyGolfIQPage() {
   const { t } = useTranslation();
   const { session: userSession } = useUserSession();
   const { plan } = useAccessPlan();
   const memberId = useCaddieMemberId();
-  const coach = useCoachInsights();
   const rounds = useMemo(() => loadAllRoundsFull(), []);
   const ghosts = useMemo(() => listGhosts(), []);
   const bag = useMemo(() => loadBag(), []);
@@ -69,6 +69,31 @@ export function MyGolfIQPage() {
   const [sgSummary, setSgSummary] = useState<MemberSgSummary | null>(null);
   const [sgSummaryStatus, setSgSummaryStatus] =
     useState<"idle" | "loading" | "ready" | "empty" | "error">("idle");
+
+  const coachSummary = useMemo<SgSummaryForRun | null>(() => {
+    if (!sgSummary) return null;
+    return {
+      total_sg: sgSummary.avg_sg_per_round,
+      sg_by_cat: {
+        TEE: sgSummary.per_category.TEE?.avg_sg ?? 0,
+        APPROACH: sgSummary.per_category.APPROACH?.avg_sg ?? 0,
+        SHORT: sgSummary.per_category.SHORT?.avg_sg ?? 0,
+        PUTT: sgSummary.per_category.PUTT?.avg_sg ?? 0,
+      },
+    };
+  }, [sgSummary]);
+
+  const coachRecommendations = useMemo(
+    () => (coachSummary ? buildCoachRecommendations({ sgSummary: coachSummary }) : []),
+    [coachSummary],
+  );
+
+  const coachStatus: "loading" | "error" | "empty" | "ready" = useMemo(() => {
+    if (sgSummaryStatus === "loading") return "loading";
+    if (sgSummaryStatus === "error") return "error";
+    if (!coachSummary) return "empty";
+    return coachRecommendations.length > 0 ? "ready" : "empty";
+  }, [coachSummary, coachRecommendations.length, sgSummaryStatus]);
 
   const qrStats = useMemo(() => computeQuickRoundStats(rounds), [rounds]);
   const rangeStats = useMemo(() => computeRangeSummary(ghosts), [ghosts]);
@@ -406,60 +431,12 @@ export function MyGolfIQPage() {
         </section>
       </UpgradeGate>
 
+      <UpgradeGate feature="COACH_PLAN">
+        <CoachPlanCard status={coachStatus} recommendations={coachRecommendations} />
+      </UpgradeGate>
+
       <UpgradeGate feature="CADDIE_INSIGHTS">
         <div className="space-y-4">
-          <section className="rounded-lg border border-slate-800 bg-slate-900/60 p-5 shadow-sm">
-            <header className="flex items-center justify-between">
-              <div className="space-y-1">
-                <h2 className="text-lg font-semibold text-slate-50">{t("profile.coach.title")}</h2>
-                <p className="text-xs text-slate-400">{t("profile.coach.subtitle")}</p>
-              </div>
-            </header>
-
-            {coach.status === "loading" && (
-              <p className="mt-3 text-xs text-slate-400">{t("profile.coach.loading")}</p>
-            )}
-
-            {coach.status === "error" && (
-              <p className="mt-3 text-xs text-amber-400">{t("profile.coach.error")}</p>
-            )}
-
-            {coach.status === "empty" && (
-              <p className="mt-3 text-xs text-slate-400">{t("profile.coach.empty")}</p>
-            )}
-
-            {coach.status === "ready" && (
-              <div className="mt-3 space-y-2 text-xs text-slate-100">
-                <ul className="space-y-1">
-                  {coach.suggestions.map((s, idx) => {
-                    if (s.type === "sg" && s.categoryKey) {
-                      return (
-                        <li key={idx}>
-                          {t(s.messageKey, {
-                            category: t(`coach.sg.category.${s.categoryKey}`),
-                          })}
-                        </li>
-                      );
-                    }
-                    if (s.type === "caddie" && s.club) {
-                      return <li key={idx}>{t(s.messageKey, { club: s.club })}</li>;
-                    }
-                    return null;
-                  })}
-                </ul>
-
-                <div className="flex gap-3">
-                  <Link className="text-[11px] underline text-emerald-300" to="/range/practice">
-                    {t("profile.coach.cta.range")}
-                  </Link>
-                  <Link className="text-[11px] underline text-emerald-300" to="/play">
-                    {t("profile.coach.cta.quick")}
-                  </Link>
-                </div>
-              </div>
-            )}
-          </section>
-
           <section className="rounded-lg border border-slate-800 bg-slate-900/60 p-5 shadow-sm">
             <div className="space-y-1">
               <h2 className="text-lg font-semibold text-slate-50">{t("profile.caddie.title")}</h2>

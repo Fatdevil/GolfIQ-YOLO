@@ -6,6 +6,7 @@ GolfIQ-YOLO levererar CV-baserad golfanalys, liveevent och watch/HUD-stöd via F
 ## Free vs Pro
 - **Free**: Fokus på range-upplevelsen med Target Bingo, missions och möjlighet att dela resor; grundläggande HUD/scoreboard och bag-hantering ingår.
 - **Pro**: Låser upp SG-preview och SG-sammanfattningar, caddie-insikter/coach-kort, GhostMatch och HUD-preview/hero-kursdata. Planstatus hämtas från `/api/access/plan` och injiceras via web-accessprovidern.
+- **Coach v2** (Pro): Personliga SG-drivna handlingsplaner (range + on-course missions) visas på Quick Round-sammanfattning och My GolfIQ.
 
 ## On-course
 - **Live events och leaderboards**: Användare kan skapa och följa liveevents, inklusive host-läge, viewer-läge och top-shots. Webbrutter `/events/:id/live`, `/events/:id/live-host` och `/events/:id/live-view` stöds av live-endpoints i `server/routes/live.py` och event-board i `server/routes/events.py`.【F:web/src/App.tsx†L64-L118】【F:server/app.py†L182-L186】
