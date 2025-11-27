@@ -24,12 +24,16 @@ class CaddieClubStats(BaseModel):
 
 class ClubInsight(BaseModel):
     club_id: str = Field(..., description="Identifier for the club, e.g. 7i or PW")
-    total_tips: int = Field(..., description="Lifetime tips shown for this club in the window")
+    total_tips: int = Field(
+        ..., description="Lifetime tips shown for this club in the window"
+    )
     accepted: int = Field(..., description="Lifetime accepted tips for this club")
     ignored: int = Field(..., description="Lifetime ignored tips for this club")
     recent_accepted: int = Field(..., description="Accepted tips in the recent window")
     recent_total: int = Field(..., description="Tips shown in the recent window")
-    trust_score: float = Field(..., description="Weighted trust score 0-1 using recent + lifetime accept rates")
+    trust_score: float = Field(
+        ..., description="Weighted trust score 0-1 using recent + lifetime accept rates"
+    )
 
 
 class CaddieInsights(BaseModel):
@@ -44,7 +48,7 @@ class CaddieInsights(BaseModel):
         None, description="Start timestamp for the recent slice used in trust scoring"
     )
     recent_window_days: int | None = Field(
-        None, description="Number of days considered \"recent\" for trends"
+        None, description='Number of days considered "recent" for trends'
     )
     clubs: list[ClubInsight] = Field(
         default_factory=list,
@@ -72,39 +76,50 @@ def _merge_payload(event: Mapping[str, object]) -> Dict[str, object]:
 
 
 def _coerce_ts(
-    payload: Mapping[str, object], fallback_date: date | None
+    payload: Mapping[str, object], fallback: object | None
 ) -> datetime | None:
+    def _parse_candidate(value: object | None) -> datetime | None:
+        if isinstance(value, datetime):
+            return value.astimezone(timezone.utc)
+        if isinstance(value, date):
+            return datetime.combine(value, time.min, tzinfo=timezone.utc)
+        if isinstance(value, (int, float)):
+            seconds = float(value)
+            if seconds > 1e12:
+                seconds = seconds / 1000.0
+            return datetime.fromtimestamp(seconds, timezone.utc)
+        if isinstance(value, str):
+            cleaned = value.strip()
+            if cleaned.endswith("Z"):
+                cleaned = cleaned[:-1] + "+00:00"
+            try:
+                parsed = datetime.fromisoformat(cleaned)
+            except ValueError:
+                parsed = None
+            if parsed:
+                if parsed.tzinfo is None:
+                    parsed = parsed.replace(tzinfo=timezone.utc)
+                else:
+                    parsed = parsed.astimezone(timezone.utc)
+                return parsed
+        return None
+
     candidate = payload.get("ts") or payload.get("timestampMs")
-    if isinstance(candidate, (int, float)):
-        seconds = float(candidate)
-        if seconds > 1e12:
-            seconds = seconds / 1000.0
-        return datetime.fromtimestamp(seconds, timezone.utc)
+    parsed = _parse_candidate(candidate)
+    if parsed:
+        return parsed
 
     raw_ts = payload.get("timestamp")
-    if isinstance(raw_ts, (int, float)):
-        seconds = float(raw_ts)
-        if seconds > 1e12:
-            seconds = seconds / 1000.0
-        return datetime.fromtimestamp(seconds, timezone.utc)
-    if isinstance(raw_ts, str):
-        cleaned = raw_ts.strip()
-        if cleaned.endswith("Z"):
-            cleaned = cleaned[:-1] + "+00:00"
-        try:
-            parsed = datetime.fromisoformat(cleaned)
-        except ValueError:
-            parsed = None
+    parsed = _parse_candidate(raw_ts)
+    if parsed:
+        return parsed
+
+    for alt_key in ("file_ts", "run_ts", "ingested_at", "captured_at"):
+        parsed = _parse_candidate(payload.get(alt_key))
         if parsed:
-            if parsed.tzinfo is None:
-                parsed = parsed.replace(tzinfo=timezone.utc)
-            else:
-                parsed = parsed.astimezone(timezone.utc)
             return parsed
 
-    if fallback_date:
-        return datetime.combine(fallback_date, time.min, tzinfo=timezone.utc)
-    return None
+    return _parse_candidate(fallback)
 
 
 def _extract_date_from_filename(path: Path) -> date | None:
@@ -152,7 +167,8 @@ def compute_caddie_insights(
         if event_type not in CADDIE_TYPES:
             continue
 
-        event_ts = _coerce_ts(payload, fallback_date=None)
+        fallback_ts = payload.get("_event_ts") or payload.get("file_ts") or None
+        event_ts = _coerce_ts(payload, fallback=fallback_ts)
         if event_ts is None:
             event_ts = to_ts
 
@@ -252,8 +268,20 @@ def load_member_events(
     events: list[Mapping[str, object]] = []
     for path in sorted(directory.glob("flight-*.jsonl"), reverse=True):
         file_date = _extract_date_from_filename(path)
+        file_ts_fallback: datetime | date | None = None
         if file_date and file_date < from_date:
             break
+        if file_date:
+            file_ts_fallback = datetime.combine(
+                file_date, time.min, tzinfo=timezone.utc
+            )
+        else:
+            try:
+                file_ts_fallback = datetime.fromtimestamp(
+                    path.stat().st_mtime, timezone.utc
+                )
+            except OSError:
+                file_ts_fallback = None
 
         try:
             with path.open("r", encoding="utf-8") as handle:
@@ -269,10 +297,15 @@ def load_member_events(
                         continue
 
                     merged = _merge_payload(payload)
+                    if file_ts_fallback and "file_ts" not in merged:
+                        merged["file_ts"] = file_ts_fallback
                     if merged.get("memberId") != member_id:
                         continue
 
-                    event_ts = _coerce_ts(merged, fallback_date=file_date)
+                    file_fallback = merged.get("file_ts") or file_ts_fallback
+                    event_ts = _coerce_ts(merged, fallback=file_fallback)
+                    if event_ts:
+                        merged.setdefault("_event_ts", event_ts)
                     event_date = event_ts.date() if event_ts else file_date
                     if event_date and (event_date < from_date or event_date > to_date):
                         continue

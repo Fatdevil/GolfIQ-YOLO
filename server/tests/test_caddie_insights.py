@@ -168,6 +168,41 @@ def test_compute_caddie_insights_trust_and_recent_window() -> None:
     assert three_wood.trust_score < seven_iron.trust_score
 
 
+def test_missing_ts_uses_file_date_for_recency() -> None:
+    now = datetime(2024, 6, 10, tzinfo=timezone.utc)
+    window = timedelta(days=30)
+    file_date = (now - timedelta(days=20)).date()
+
+    events: list[dict[str, object]] = [
+        {
+            "type": "CADDIE_ADVICE_SHOWN_V1",
+            "memberId": "m1",
+            "recommendedClub": "7i",
+            "file_ts": file_date,
+        },
+        {
+            "type": "CADDIE_ADVICE_SHOWN_V1",
+            "memberId": "m1",
+            "ts": (now - timedelta(days=1)).timestamp() * 1000,
+            "recommendedClub": "7i",
+        },
+        {
+            "type": "CADDIE_ADVICE_ACCEPTED_V1",
+            "memberId": "m1",
+            "ts": (now - timedelta(days=1)).timestamp() * 1000,
+            "recommendedClub": "7i",
+        },
+    ]
+
+    insights = compute_caddie_insights(events, member_id="m1", window=window, now=now)
+
+    seven_iron = next(entry for entry in insights.clubs if entry.club_id == "7i")
+    assert seven_iron.total_tips == 2
+    assert seven_iron.recent_total == 1
+    assert seven_iron.recent_accepted == 1
+    assert seven_iron.trust_score < 1.0
+
+
 def test_caddie_insights_endpoint(monkeypatch: pytest.MonkeyPatch) -> None:
     fake_now = datetime(2024, 2, 1, tzinfo=timezone.utc)
     expected = CaddieInsights(
