@@ -168,6 +168,8 @@ describe("MyGolfIQPage", () => {
       memberId: "member-123",
       from_ts: "2024-01-01T00:00:00Z",
       to_ts: "2024-02-01T00:00:00Z",
+      recent_from_ts: "2024-01-25T00:00:00Z",
+      recent_window_days: 7,
       advice_shown: 10,
       advice_accepted: 7,
       accept_rate: 0.7,
@@ -175,11 +177,12 @@ describe("MyGolfIQPage", () => {
         { club: "7i", shown: 5, accepted: 4 },
         { club: "PW", shown: 3, accepted: 2 },
       ],
+      clubs: [],
     };
     mockUseCaddieMemberId.mockReturnValue("member-123");
     mockFetchCaddieInsights.mockResolvedValue(sampleInsights);
 
-    renderPage();
+    renderPage("pro");
 
     await waitFor(() =>
       expect(mockFetchCaddieInsights).toHaveBeenCalledWith("member-123", 30),
@@ -187,7 +190,7 @@ describe("MyGolfIQPage", () => {
 
     expect(await screen.findByText(/Advice shown/i)).toBeTruthy();
     expect(screen.getByText("10")).toBeTruthy();
-    expect(screen.getByText("7i")).toBeTruthy();
+    expect(screen.getAllByText("7i").length).toBeGreaterThan(0);
     expect(screen.getByText("70%" )).toBeTruthy();
   });
 
@@ -196,15 +199,18 @@ describe("MyGolfIQPage", () => {
       memberId: "member-123",
       from_ts: "2024-01-01T00:00:00Z",
       to_ts: "2024-02-01T00:00:00Z",
+      recent_from_ts: "2024-01-25T00:00:00Z",
+      recent_window_days: 7,
       advice_shown: 0,
       advice_accepted: 0,
       accept_rate: null,
       per_club: [],
+      clubs: [],
     };
     mockUseCaddieMemberId.mockReturnValue("member-123");
     mockFetchCaddieInsights.mockResolvedValue(emptyInsights);
 
-    renderPage();
+    renderPage("pro");
 
     await waitFor(() => expect(mockFetchCaddieInsights).toHaveBeenCalled());
 

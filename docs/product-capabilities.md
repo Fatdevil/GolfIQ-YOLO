@@ -5,7 +5,7 @@ GolfIQ-YOLO levererar CV-baserad golfanalys, liveevent och watch/HUD-stöd via F
 
 ## Free vs Pro
 - **Free**: Fokus på range-upplevelsen med Target Bingo, missions och möjlighet att dela resor; grundläggande HUD/scoreboard och bag-hantering ingår.
-- **Pro**: Låser upp SG-preview och SG-sammanfattningar, caddie-insikter/coach-kort, GhostMatch och HUD-preview/hero-kursdata. Planstatus hämtas från `/api/access/plan` och injiceras via web-accessprovidern.
+- **Pro**: Låser upp SG-preview och SG-sammanfattningar, caddie-insikter/coach-kort (trust-score och trender per klubb), GhostMatch och HUD-preview/hero-kursdata. Planstatus hämtas från `/api/access/plan` och injiceras via web-accessprovidern.
 - **Coach v2** (Pro): Personliga SG-drivna handlingsplaner (range + on-course missions) visas på Quick Round-sammanfattning och My GolfIQ.
 
 ## On-course
@@ -22,7 +22,7 @@ GolfIQ-YOLO levererar CV-baserad golfanalys, liveevent och watch/HUD-stöd via F
 ## Admin/coach
 - **Eventmoderation och clip-kö**: Admin-rutter `/events/:id/admin/clips` och `/events/:id/admin/moderation` ger kö- och modereringsvyer för inspelade klipp från event.【F:web/src/App.tsx†L96-L110】
 - **Feedback- och device dashboards**: `/admin/feedback` visar inkommande feedback, medan `/device-dashboard` exponerar enhetsstatus för fälttester.【F:web/src/App.tsx†L123-L125】
-- **Caddie-insikter och SG**: Utvecklarvy `/dev/caddie-insights` presenterar caddieinsikter; backend tillhandahåller SG-data via `/api/sg/*` och previews via `/api/sg/run/{run_id}`/`/api/sg/member/{member_id}`.【F:web/src/App.tsx†L133-L134】【F:server/api/routers/sg.py†L92-L109】【F:server/routes/sg_preview.py†L15-L15】【F:server/routes/sg_summary.py†L18-L18】
+- **Caddie-insikter och SG**: Utvecklarvy `/dev/caddie-insights` visar v2-trender med trust-score per klubb (recent vs lifetime) och backend tillhandahåller SG-data via `/api/sg/*` samt previews via `/api/sg/run/{run_id}`/`/api/sg/member/{member_id}`.【F:web/src/App.tsx†L133-L134】【F:server/api/routers/sg.py†L92-L109】【F:server/routes/sg_preview.py†L15-L15】【F:server/routes/sg_summary.py†L18-L18】
 
 ## Delning och historik
 - **Run-historik och delning**: `/runs` och `/runs/:id` visar sparade runs; backend lagrar och returnerar run-metrics via `/runs`-API och lagringsmodulen `server/storage/runs.py`. Delning sker via `/share/:id` och API:et `/api/share/anchor` + `/s/{sid}` för publika länkar.【F:web/src/App.tsx†L55-L61】【F:server/routes/runs.py†L10-L60】【F:server/storage/runs.py†L16-L121】【F:server/api/routers/share.py†L40-L81】

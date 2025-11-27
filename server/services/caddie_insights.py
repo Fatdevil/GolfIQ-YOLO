@@ -19,6 +19,17 @@ class CaddieClubStats(BaseModel):
     club: str
     shown: int
     accepted: int
+    ignored: int | None = None
+
+
+class ClubInsight(BaseModel):
+    club_id: str = Field(..., description="Identifier for the club, e.g. 7i or PW")
+    total_tips: int = Field(..., description="Lifetime tips shown for this club in the window")
+    accepted: int = Field(..., description="Lifetime accepted tips for this club")
+    ignored: int = Field(..., description="Lifetime ignored tips for this club")
+    recent_accepted: int = Field(..., description="Accepted tips in the recent window")
+    recent_total: int = Field(..., description="Tips shown in the recent window")
+    trust_score: float = Field(..., description="Weighted trust score 0-1 using recent + lifetime accept rates")
 
 
 class CaddieInsights(BaseModel):
@@ -29,6 +40,16 @@ class CaddieInsights(BaseModel):
     advice_accepted: int
     accept_rate: float | None
     per_club: list[CaddieClubStats]
+    recent_from_ts: datetime | None = Field(
+        None, description="Start timestamp for the recent slice used in trust scoring"
+    )
+    recent_window_days: int | None = Field(
+        None, description="Number of days considered \"recent\" for trends"
+    )
+    clubs: list[ClubInsight] = Field(
+        default_factory=list,
+        description="Per-club insights including recent vs lifetime stats and trust score",
+    )
 
 
 CADDIE_TYPES = {CADDIE_ADVICE_SHOWN_V1, CADDIE_ADVICE_ACCEPTED_V1}
@@ -100,6 +121,7 @@ def compute_caddie_insights(
     window: timedelta,
     *,
     now: datetime | None = None,
+    recent_window: timedelta | None = None,
 ) -> CaddieInsights:
     """
     Aggregate caddie telemetry for ``member_id`` within ``window`` ending at ``now``.
@@ -113,8 +135,13 @@ def compute_caddie_insights(
     advice_shown = 0
     advice_accepted = 0
     per_club: Dict[str, MutableMapping[str, int]] = defaultdict(
-        lambda: {"shown": 0, "accepted": 0}
+        lambda: {"shown": 0, "accepted": 0, "recent_shown": 0, "recent_accepted": 0}
     )
+
+    recency_window = recent_window or timedelta(days=7)
+    if recency_window > window:
+        recency_window = window
+    recent_from_ts = to_ts - recency_window
 
     for event in events:
         payload = _merge_payload(event)
@@ -141,21 +168,60 @@ def compute_caddie_insights(
             or payload.get("club")
         )
 
+        is_recent = event_ts >= recent_from_ts
+
         if event_type == CADDIE_ADVICE_SHOWN_V1:
             advice_shown += 1
             if isinstance(club, str):
                 per_club[club]["shown"] += 1
+                if is_recent:
+                    per_club[club]["recent_shown"] += 1
         elif event_type == CADDIE_ADVICE_ACCEPTED_V1:
             advice_accepted += 1
             if isinstance(club, str):
                 per_club[club]["accepted"] += 1
+                if is_recent:
+                    per_club[club]["recent_accepted"] += 1
 
     accept_rate = advice_accepted / advice_shown if advice_shown > 0 else None
 
-    per_club_stats = [
-        CaddieClubStats(club=club, shown=stats["shown"], accepted=stats["accepted"])
-        for club, stats in sorted(per_club.items())
-    ]
+    per_club_stats = []
+    for club, stats in sorted(per_club.items()):
+        total_tips = max(stats["shown"], stats["accepted"])
+        per_club_stats.append(
+            CaddieClubStats(
+                club=club,
+                shown=total_tips,
+                accepted=stats["accepted"],
+                ignored=max(total_tips - stats["accepted"], 0),
+            )
+        )
+
+    club_insights: list[ClubInsight] = []
+    for club, stats in sorted(per_club.items()):
+        shown = max(stats["shown"], stats["accepted"])
+        accepted = stats["accepted"]
+        recent_shown = max(stats["recent_shown"], stats["recent_accepted"])
+        recent_accepted = stats["recent_accepted"]
+
+        lifetime_accept_rate = accepted / shown if shown > 0 else 0.0
+        recent_accept_rate = (
+            recent_accepted / recent_shown if recent_shown > 0 else lifetime_accept_rate
+        )
+        # Recent performance is weighted heavier to capture current behaviour trends.
+        trust_score = 0.7 * recent_accept_rate + 0.3 * lifetime_accept_rate
+
+        club_insights.append(
+            ClubInsight(
+                club_id=club,
+                total_tips=shown,
+                accepted=accepted,
+                ignored=max(shown - accepted, 0),
+                recent_accepted=recent_accepted,
+                recent_total=recent_shown,
+                trust_score=trust_score,
+            )
+        )
 
     return CaddieInsights(
         memberId=member_id,
@@ -165,6 +231,9 @@ def compute_caddie_insights(
         advice_accepted=advice_accepted,
         accept_rate=accept_rate,
         per_club=per_club_stats,
+        recent_from_ts=recent_from_ts,
+        recent_window_days=int(recency_window.total_seconds() // 86400),
+        clubs=club_insights,
     )
 
 
@@ -224,6 +293,7 @@ def load_and_compute_caddie_insights(
 
 __all__ = [
     "CaddieClubStats",
+    "ClubInsight",
     "CaddieInsights",
     "compute_caddie_insights",
     "load_member_events",

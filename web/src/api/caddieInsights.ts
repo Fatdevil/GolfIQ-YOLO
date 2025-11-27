@@ -6,6 +6,17 @@ export type CaddieClubStats = {
   club: string;
   shown: number;
   accepted: number;
+  ignored?: number | null;
+};
+
+export type ClubInsight = {
+  club_id: string;
+  total_tips: number;
+  accepted: number;
+  ignored: number;
+  recent_accepted: number;
+  recent_total: number;
+  trust_score: number;
 };
 
 export type CaddieInsights = {
@@ -16,6 +27,9 @@ export type CaddieInsights = {
   advice_accepted: number;
   accept_rate: number | null;
   per_club: CaddieClubStats[];
+  recent_from_ts: string | null;
+  recent_window_days: number | null;
+  clubs: ClubInsight[];
 };
 
 export async function fetchCaddieInsights(

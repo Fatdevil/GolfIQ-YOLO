@@ -3,10 +3,14 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 
+import { UserAccessProvider } from "@/access/UserAccessContext";
+
 const mockInsights = {
   memberId: "member-1",
   from_ts: "2024-01-01T00:00:00Z",
   to_ts: "2024-02-01T00:00:00Z",
+  recent_from_ts: "2024-01-25T00:00:00Z",
+  recent_window_days: 7,
   advice_shown: 4,
   advice_accepted: 3,
   accept_rate: 0.75,
@@ -14,6 +18,7 @@ const mockInsights = {
     { club: "7i", shown: 2, accepted: 1 },
     { club: "PW", shown: 2, accepted: 2 },
   ],
+  clubs: [],
 };
 
 const fetchCaddieInsights = vi.fn().mockResolvedValue(mockInsights);
@@ -30,7 +35,9 @@ describe("CaddieInsightsPreviewPage", () => {
 
     render(
       <MemoryRouter>
-        <CaddieInsightsPreviewPage />
+        <UserAccessProvider autoFetch={false} initialPlan="pro">
+          <CaddieInsightsPreviewPage />
+        </UserAccessProvider>
       </MemoryRouter>,
     );
 
@@ -45,7 +52,7 @@ describe("CaddieInsightsPreviewPage", () => {
 
     expect(await screen.findByText(/advice shown/i)).toBeTruthy();
     expect(screen.getByText("4")).toBeTruthy();
-    expect(screen.getByText("7i")).toBeTruthy();
-    expect(screen.getByText("50%")).toBeTruthy();
+    expect(screen.getAllByText("7i").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("50%").length).toBeGreaterThan(0);
   });
 });

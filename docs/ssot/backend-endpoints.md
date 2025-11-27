@@ -76,7 +76,7 @@ Tabellerna nedan listar centrala API:er baserat på routerdefinitionerna. Alla e
 | Metod | Path | Beskrivning | Router/fil |
 |-------|------|-------------|------------|
 | POST | /api/caddie/advise | Returnerar klubbrekommendation. | `server/api/routers/caddie.py` |
-| GET | /api/caddie/insights | Hämtar caddieinsikter (prestanda). | `server/routes/caddie_insights.py` |
+| GET | /api/caddie/insights | Hämtar caddieinsikter (accept/ignore per klubb, recent vs lifetime trust). | `server/routes/caddie_insights.py` |
 | POST | /api/caddie/telemetry | Uppladdning av telemetri för caddie. | `server/routes/caddie_telemetry.py` |
 | GET | /api/sg/run/{run_id} | Stroke-gain preview för run. | `server/routes/sg_preview.py` |
 | GET | /api/sg/member/{member_id} | SG-sammanfattning per medlem. | `server/routes/sg_summary.py` |
