@@ -1,6 +1,6 @@
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 
 import QuickRoundPlayPage from "../src/pages/quick/QuickRoundPlayPage";
 import { NotificationProvider } from "../src/notifications/NotificationContext";
@@ -64,7 +64,23 @@ describe("QuickRound SG preview", () => {
       courseId: "course-1",
       total_sg: 0.7,
       sg_by_cat: { TEE: -0.5, APPROACH: 0.4, SHORT: 0.0, PUTT: 0.8 },
-      holes: [],
+      round_summary: { worst_category: "TEE" },
+      holes: [
+        {
+          hole: 1,
+          gross_score: 4,
+          sg_total: -0.1,
+          sg_by_cat: { TEE: -0.2, APPROACH: 0.1, SHORT: 0, PUTT: 0 },
+          worst_category: "TEE",
+        },
+        {
+          hole: 2,
+          gross_score: 3,
+          sg_total: 0.8,
+          sg_by_cat: { TEE: -0.3, APPROACH: 0.4, SHORT: 0.2, PUTT: 0.5 },
+          worst_category: "TEE",
+        },
+      ],
     });
 
     render(
@@ -82,9 +98,15 @@ describe("QuickRound SG preview", () => {
     const headers = await screen.findAllByText(/Strokes Gained preview/i);
     expect(headers.length).toBeGreaterThan(0);
     await waitFor(() => expect(fetchSgPreviewMock).toHaveBeenCalledWith("run-123"));
-    expect(screen.getByText(/Total SG \(vs baseline\): \+0\.7/i)).toBeTruthy();
-    expect(screen.getByText(/Tee: -0.5/i)).toBeTruthy();
-    expect(screen.getByText(/Putting: \+0.8/i)).toBeTruthy();
+    expect(await screen.findByText(/Round SG/i)).toBeInTheDocument();
+    expect(screen.getByText(/\+0\.7/)).toBeInTheDocument();
+    expect(screen.getByText(/Biggest leak: Tee/i)).toBeInTheDocument();
+
+    const sgTable = screen.getByText(/SG total/i).closest("table");
+    expect(sgTable).toBeTruthy();
+    const sgTableQueries = within(sgTable as HTMLTableElement);
+    expect(sgTableQueries.getByText(/-0\.1/)).toBeInTheDocument();
+    expect(sgTableQueries.getByText(/\+0\.8/)).toBeInTheDocument();
   });
 
   it("shows error state when fetching fails", async () => {
@@ -115,9 +137,7 @@ describe("QuickRound SG preview", () => {
     const headers = await screen.findAllByText(/Strokes Gained preview/i);
     expect(headers.length).toBeGreaterThan(0);
     await waitFor(() => expect(fetchSgPreviewMock).toHaveBeenCalled());
-    expect(
-      await screen.findByText(/Could not load SG preview for this round/i)
-    ).toBeTruthy();
+    expect(await screen.findByText(/Could not load strokes-gained preview/i)).toBeTruthy();
   });
 });
 
