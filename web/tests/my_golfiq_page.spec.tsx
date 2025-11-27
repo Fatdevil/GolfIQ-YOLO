@@ -248,12 +248,15 @@ describe("MyGolfIQPage", () => {
 
     const sgSection = screen.getByText(/Strokes Gained summary/i).closest("section");
     expect(sgSection).toBeTruthy();
+
     const scoped = within(sgSection as HTMLElement);
-    expect(
-      scoped.getByText(/Average SG per round \(last 2 rounds\): 0.35/i),
-    ).toBeTruthy();
-    expect(scoped.getByText(/tee/i)).toBeTruthy();
-    expect(scoped.getAllByText("0.10")[0]).toBeTruthy();
+
+    const summaryText = await scoped.findByText(
+      /Average SG per round \(last 2 rounds\): 0\.35/i,
+    );
+    expect(summaryText).toBeTruthy();
+    expect(await scoped.findByText(/tee/i)).toBeTruthy();
+    expect((await scoped.findAllByText("0.10"))[0]).toBeTruthy();
   });
 
   it("summarizes ghost match range sessions", () => {
