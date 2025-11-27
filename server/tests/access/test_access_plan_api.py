@@ -24,7 +24,7 @@ def test_returns_free_plan_by_default(client: TestClient) -> None:
     response = client.get("/api/access/plan", headers={"x-api-key": "test-key"})
 
     assert response.status_code == 200
-    assert response.json() == {"plan": "free"}
+    assert response.json() == {"plan": "free", "trial": None, "expires_at": None}
 
 
 def test_respects_default_plan_override(
@@ -36,7 +36,7 @@ def test_respects_default_plan_override(
     response = client.get("/api/access/plan", headers={"x-api-key": "test-key"})
 
     assert response.status_code == 200
-    assert response.json() == {"plan": "pro"}
+    assert response.json() == {"plan": "pro", "trial": None, "expires_at": None}
 
 
 def test_marks_specific_keys_as_pro(
@@ -47,8 +47,8 @@ def test_marks_specific_keys_as_pro(
 
     base_response = client.get("/api/access/plan", headers={"x-api-key": "test-key"})
     assert base_response.status_code == 200
-    assert base_response.json() == {"plan": "free"}
+    assert base_response.json() == {"plan": "free", "trial": None, "expires_at": None}
 
     pro_response = client.get("/api/access/plan", headers={"x-api-key": "vip-key"})
     assert pro_response.status_code == 200
-    assert pro_response.json() == {"plan": "pro"}
+    assert pro_response.json() == {"plan": "pro", "trial": None, "expires_at": None}

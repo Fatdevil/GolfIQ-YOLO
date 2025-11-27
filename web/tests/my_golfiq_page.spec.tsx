@@ -9,7 +9,7 @@ import type { GhostProfile } from "@/features/range/ghost";
 import type { BagState } from "@/bag/types";
 import { UserSessionProvider } from "@/user/UserSessionContext";
 import type { RangeSession } from "@/features/range/sessions";
-import { PlanProvider } from "@/access/PlanProvider";
+import { UserAccessProvider } from "@/access/UserAccessContext";
 import type { CoachInsightsState } from "@/profile/useCoachInsights";
 import type { MemberSgSummary } from "@/api/sgSummary";
 
@@ -146,12 +146,12 @@ describe("MyGolfIQPage", () => {
     cleanup();
   });
 
-  const renderPage = () =>
+  const renderPage = (initialPlan: "free" | "pro" = "free") =>
     render(
       <MemoryRouter>
-        <PlanProvider>
+        <UserAccessProvider autoFetch={false} initialPlan={initialPlan}>
           <MyGolfIQPage />
-        </PlanProvider>
+        </UserAccessProvider>
       </MemoryRouter>,
       { wrapper: UserSessionProvider },
     );
@@ -293,9 +293,7 @@ describe("MyGolfIQPage", () => {
   });
 
   it("hides upgrade overlay for pro users", async () => {
-    window.localStorage.setItem("golfiq_plan_v1", "PRO");
-
-    renderPage();
+    renderPage("pro");
 
     await waitFor(() =>
       expect(screen.queryByText(/Unlock full GolfIQ/)).toBeNull(),

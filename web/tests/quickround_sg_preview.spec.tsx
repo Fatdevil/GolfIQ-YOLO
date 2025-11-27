@@ -7,6 +7,7 @@ import { NotificationProvider } from "../src/notifications/NotificationContext";
 import type { QuickRound } from "@/features/quickround/types";
 import { UserSessionProvider } from "@/user/UserSessionContext";
 import { postQuickRoundSnapshots } from "@/user/historyApi";
+import { UserAccessProvider } from "@/access/UserAccessContext";
 
 const { loadRoundMock, saveRoundMock, fetchSgPreviewMock } = vi.hoisted(() => ({
   loadRoundMock: vi.fn(),
@@ -34,11 +35,6 @@ vi.mock("@/user/UserSessionContext", () => ({
   UserSessionProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
   useUserSession: () => ({ session: { userId: "test-user", createdAt: "" }, loading: false }),
 }));
-vi.mock("@/access/PlanProvider", () => ({
-  PlanProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
-  usePlan: () => ({ plan: "PRO", setPlan: vi.fn(), hasFeature: () => true }),
-}));
-
 describe("QuickRound SG preview", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -85,13 +81,15 @@ describe("QuickRound SG preview", () => {
 
     render(
       <UserSessionProvider>
-        <NotificationProvider>
-          <MemoryRouter initialEntries={["/play/qr-sg"]}>
-            <Routes>
-              <Route path="/play/:roundId" element={<QuickRoundPlayPage />} />
-            </Routes>
-          </MemoryRouter>
-        </NotificationProvider>
+        <UserAccessProvider autoFetch={false} initialPlan="pro">
+          <NotificationProvider>
+            <MemoryRouter initialEntries={["/play/qr-sg"]}>
+              <Routes>
+                <Route path="/play/:roundId" element={<QuickRoundPlayPage />} />
+              </Routes>
+            </MemoryRouter>
+          </NotificationProvider>
+        </UserAccessProvider>
       </UserSessionProvider>
     );
 
@@ -124,13 +122,15 @@ describe("QuickRound SG preview", () => {
 
     render(
       <UserSessionProvider>
-        <NotificationProvider>
-          <MemoryRouter initialEntries={["/play/qr-sg-error"]}>
-            <Routes>
-              <Route path="/play/:roundId" element={<QuickRoundPlayPage />} />
-            </Routes>
-          </MemoryRouter>
-        </NotificationProvider>
+        <UserAccessProvider autoFetch={false} initialPlan="pro">
+          <NotificationProvider>
+            <MemoryRouter initialEntries={["/play/qr-sg-error"]}>
+              <Routes>
+                <Route path="/play/:roundId" element={<QuickRoundPlayPage />} />
+              </Routes>
+            </MemoryRouter>
+          </NotificationProvider>
+        </UserAccessProvider>
       </UserSessionProvider>
     );
 

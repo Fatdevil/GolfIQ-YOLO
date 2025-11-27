@@ -15,6 +15,8 @@ export type FeatureId =
 
 export type AccessPlan = {
   plan: PlanName;
+  trial?: boolean | null;
+  expires_at?: string | null;
 };
 
 export type FeatureMatrix = Record<PlanName, FeatureId[]>;

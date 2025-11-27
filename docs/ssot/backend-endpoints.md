@@ -66,7 +66,7 @@ Tabellerna nedan listar centrala API:er baserat på routerdefinitionerna. Alla e
 ## Delning, åtkomst & scoring
 | Metod | Path | Beskrivning | Router/fil |
 |-------|------|-------------|------------|
-| GET | /api/access/plan | Returnerar användarens plan (`free`/`pro`). | `server/api/routers/access.py` |
+| GET | /api/access/plan | Returnerar användarens plan (`free`/`pro`) samt ev. `trial` och `expires_at`. | `server/api/routers/access.py` |
 | POST | /api/share/anchor | Skapar delningsankare. | `server/api/routers/share.py` |
 | GET | /s/{sid} | Hämtar delningspayload. | `server/api/routers/share.py` |
 | GET | /s/{sid}/o | Öppnar delning (redirect/översikt). | `server/api/routers/share.py` |

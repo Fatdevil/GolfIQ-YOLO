@@ -1,7 +1,7 @@
 import React from "react";
 import { useTranslation } from "react-i18next";
 
-import { usePlan } from "./PlanProvider";
+import { useAccessFeatures, useAccessPlan } from "./UserAccessContext";
 import type { FeatureKey } from "./plan";
 
 type Props = {
@@ -10,10 +10,17 @@ type Props = {
 };
 
 export const UpgradeGate: React.FC<Props> = ({ feature, children }) => {
-  const { hasFeature, plan, setPlan } = usePlan();
+  const { hasPlanFeature } = useAccessFeatures();
+  const { plan, loading, refresh } = useAccessPlan();
   const { t } = useTranslation();
 
-  if (hasFeature(feature)) {
+  const planLabel = plan?.toUpperCase?.() ?? plan;
+
+  if (loading) {
+    return <div className="text-xs text-slate-400">{t("access.loading")}</div>;
+  }
+
+  if (hasPlanFeature(feature)) {
     return <>{children}</>;
   }
 
@@ -26,12 +33,12 @@ export const UpgradeGate: React.FC<Props> = ({ feature, children }) => {
         <button
           type="button"
           className="text-[11px] px-3 py-1 rounded bg-emerald-600 text-white font-semibold"
-          onClick={() => setPlan("PRO")}
+          onClick={refresh}
         >
           {t("access.upgrade.buttonLabel")}
         </button>
         <div className="mt-1 text-[10px] text-slate-500">
-          {t("access.upgrade.planLabel", { plan })}
+          {t("access.upgrade.planLabel", { plan: planLabel })}
         </div>
       </div>
     </div>

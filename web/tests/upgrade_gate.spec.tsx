@@ -3,19 +3,31 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { UpgradeGate } from "@/access/UpgradeGate";
 
-const mockUsePlan = vi.fn();
+const mockUseAccessPlan = vi.fn();
+const mockUseAccessFeatures = vi.fn();
 
-vi.mock("@/access/PlanProvider", () => ({
-  usePlan: () => mockUsePlan(),
+vi.mock("@/access/UserAccessContext", () => ({
+  useAccessPlan: () => mockUseAccessPlan(),
+  useAccessFeatures: () => mockUseAccessFeatures(),
 }));
 
 describe("UpgradeGate", () => {
   beforeEach(() => {
-    mockUsePlan.mockReset();
-    mockUsePlan.mockReturnValue({
-      plan: "FREE",
-      setPlan: vi.fn(),
+    mockUseAccessPlan.mockReset();
+    mockUseAccessFeatures.mockReset();
+
+    mockUseAccessPlan.mockReturnValue({
+      plan: "free",
+      isPro: false,
+      isFree: true,
+      loading: false,
+      refresh: vi.fn(),
+      error: undefined,
+    });
+    mockUseAccessFeatures.mockReturnValue({
+      hasPlanFeature: () => false,
       hasFeature: () => false,
+      loading: false,
     });
   });
 
@@ -24,10 +36,18 @@ describe("UpgradeGate", () => {
   });
 
   it("shows upgrade overlay when feature is disabled", () => {
-    mockUsePlan.mockReturnValue({
-      plan: "FREE",
-      setPlan: vi.fn(),
+    mockUseAccessPlan.mockReturnValue({
+      plan: "free",
+      isPro: false,
+      isFree: true,
+      loading: false,
+      refresh: vi.fn(),
+      error: undefined,
+    });
+    mockUseAccessFeatures.mockReturnValue({
+      hasPlanFeature: () => false,
       hasFeature: () => false,
+      loading: false,
     });
 
     render(
@@ -42,10 +62,18 @@ describe("UpgradeGate", () => {
   });
 
   it("renders children directly when feature is enabled", () => {
-    mockUsePlan.mockReturnValue({
-      plan: "PRO",
-      setPlan: vi.fn(),
+    mockUseAccessPlan.mockReturnValue({
+      plan: "pro",
+      isPro: true,
+      isFree: false,
+      loading: false,
+      refresh: vi.fn(),
+      error: undefined,
+    });
+    mockUseAccessFeatures.mockReturnValue({
+      hasPlanFeature: () => true,
       hasFeature: () => true,
+      loading: false,
     });
 
     render(

@@ -5,12 +5,9 @@ import { MemoryRouter } from "react-router-dom";
 
 import { HomeHubPage } from "@/pages/home/HomeHubPage";
 
-vi.mock("@/access/PlanProvider", () => ({
-  usePlan: vi.fn(),
-}));
-
 vi.mock("@/access/UserAccessContext", () => ({
-  useUserAccess: vi.fn(),
+  useAccessPlan: vi.fn(),
+  useAccessFeatures: vi.fn(),
   useFeatureFlag: vi.fn().mockReturnValue({ enabled: true, loading: false }),
 }));
 
@@ -27,8 +24,7 @@ vi.mock("@/notifications/NotificationContext", () => ({
   useNotifications: () => ({ notify: vi.fn() }),
 }));
 
-import { usePlan } from "@/access/PlanProvider";
-import { useUserAccess, useFeatureFlag } from "@/access/UserAccessContext";
+import { useAccessFeatures, useAccessPlan, useFeatureFlag } from "@/access/UserAccessContext";
 import {
   computeOnboardingChecklist,
   markHomeSeen,
@@ -36,8 +32,8 @@ import {
 } from "@/onboarding/checklist";
 import { seedDemoData } from "@/demo/demoData";
 
-const mockUsePlan = usePlan as unknown as Mock;
-const mockUseUserAccess = useUserAccess as unknown as Mock;
+const mockUseAccessPlan = useAccessPlan as unknown as Mock;
+const mockUseAccessFeatures = useAccessFeatures as unknown as Mock;
 const mockUseFeatureFlag = useFeatureFlag as unknown as Mock;
 const mockComputeOnboardingChecklist =
   computeOnboardingChecklist as unknown as Mock;
@@ -64,8 +60,21 @@ const renderHome = () => {
 
 describe("HomeHubPage", () => {
   beforeEach(() => {
-    mockUsePlan.mockReturnValue({ plan: "FREE", hasFeature: vi.fn(), setPlan: vi.fn() });
-    mockUseUserAccess.mockReturnValue({ plan: undefined, loading: true, hasFeature: vi.fn() });
+    mockUseAccessPlan.mockReturnValue({
+      plan: "free",
+      isPro: false,
+      isFree: true,
+      trial: null,
+      expiresAt: null,
+      loading: false,
+      refresh: vi.fn(),
+      error: undefined,
+    });
+    mockUseAccessFeatures.mockReturnValue({
+      hasFeature: vi.fn().mockReturnValue(true),
+      hasPlanFeature: vi.fn().mockReturnValue(false),
+      loading: false,
+    });
     mockUseFeatureFlag.mockReturnValue({ enabled: true, loading: false });
     mockComputeOnboardingChecklist.mockReturnValue({ ...baseChecklist });
     mockMarkHomeSeen.mockClear();
@@ -83,8 +92,21 @@ describe("HomeHubPage", () => {
   });
 
   it("prefers backend plan when available to show pro state", async () => {
-    mockUsePlan.mockReturnValue({ plan: "FREE", hasFeature: vi.fn(), setPlan: vi.fn() });
-    mockUseUserAccess.mockReturnValue({ plan: "pro", loading: false, hasFeature: vi.fn() });
+    mockUseAccessPlan.mockReturnValue({
+      plan: "pro",
+      isPro: true,
+      isFree: false,
+      trial: null,
+      expiresAt: null,
+      loading: false,
+      refresh: vi.fn(),
+      error: undefined,
+    });
+    mockUseAccessFeatures.mockReturnValue({
+      hasFeature: vi.fn().mockReturnValue(true),
+      hasPlanFeature: vi.fn().mockReturnValue(true),
+      loading: false,
+    });
 
     renderHome();
 
@@ -93,8 +115,16 @@ describe("HomeHubPage", () => {
   });
 
   it("falls back to local plan when backend plan is not loaded", () => {
-    mockUsePlan.mockReturnValue({ plan: "FREE", hasFeature: vi.fn(), setPlan: vi.fn() });
-    mockUseUserAccess.mockReturnValue({ plan: undefined, loading: true, hasFeature: vi.fn() });
+    mockUseAccessPlan.mockReturnValue({
+      plan: "free",
+      isPro: false,
+      isFree: true,
+      trial: null,
+      expiresAt: null,
+      loading: true,
+      refresh: vi.fn(),
+      error: undefined,
+    });
 
     renderHome();
 

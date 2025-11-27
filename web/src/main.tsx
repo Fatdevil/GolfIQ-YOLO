@@ -7,7 +7,6 @@ import App from "./App";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { TempAltDemo } from "./dev/TempAltDemo";
 import { UserAccessProvider } from "./access/UserAccessContext";
-import { PlanProvider } from "./access/PlanProvider";
 import { UnitsProvider } from "@/preferences/UnitsContext";
 import { UserSessionProvider } from "@/user/UserSessionContext";
 import { NotificationProvider } from "@/notifications/NotificationContext";
@@ -36,16 +35,14 @@ if (isTempAltDemo) {
       <BrowserRouter>
         <ErrorBoundary>
           <UserAccessProvider>
-            <PlanProvider>
-              <UnitsProvider>
-                <UserSessionProvider>
-                  <NotificationProvider>
-                    <App />
-                    <ToastContainer />
-                  </NotificationProvider>
-                </UserSessionProvider>
-              </UnitsProvider>
-            </PlanProvider>
+            <UnitsProvider>
+              <UserSessionProvider>
+                <NotificationProvider>
+                  <App />
+                  <ToastContainer />
+                </NotificationProvider>
+              </UserSessionProvider>
+            </UnitsProvider>
           </UserAccessProvider>
         </ErrorBoundary>
       </BrowserRouter>
