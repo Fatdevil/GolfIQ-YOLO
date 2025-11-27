@@ -330,5 +330,15 @@
   "access.loading": "Kontrollerar din plan…",
   "access.proOnlyFeature": "Detta är en Pro-funktion.",
   "access.upgradeTeaser": "Lås upp denna funktion m.fl. genom att uppgradera till GolfIQ Pro (kommer snart).",
-  "access.upgradeCta": "Läs mer"
+  "access.upgradeCta": "Läs mer",
+
+  "onboarding.title": "Kom igång med GolfIQ",
+  "onboarding.subtitle": "Gör stegen nedan eller fyll med demo-data för att se dina insikter.",
+  "onboarding.seed.button": "Fyll med demo-data",
+  "onboarding.seed.success": "Demo-data tillagd – öppna My GolfIQ för att utforska din statistik.",
+  "onboarding.task.home": "Besök startsidan",
+  "onboarding.task.quick": "Spela en Quick Round",
+  "onboarding.task.range": "Gör ett rangepass",
+  "onboarding.task.profile": "Öppna My GolfIQ",
+  "onboarding.allDone": "Snyggt! Du har gjort klart kom-igång-listan."
 }

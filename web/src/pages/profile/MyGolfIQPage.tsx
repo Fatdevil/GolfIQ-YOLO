@@ -23,6 +23,7 @@ import { migrateLocalHistoryOnce } from "@/user/historyMigration";
 import { useUserSession } from "@/user/UserSessionContext";
 import { loadRangeSessions } from "@/features/range/sessions";
 import { useCoachInsights } from "@/profile/useCoachInsights";
+import { markProfileSeen } from "@/onboarding/checklist";
 
 export function MyGolfIQPage() {
   const { t } = useTranslation();
@@ -86,6 +87,10 @@ export function MyGolfIQPage() {
   }, [rounds]);
 
   const userId = userSession?.userId ?? "";
+
+  useEffect(() => {
+    markProfileSeen();
+  }, []);
 
   useEffect(() => {
     if (!memberId) {
