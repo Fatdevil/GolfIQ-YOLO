@@ -6,6 +6,8 @@ GolfIQ-YOLO levererar CV-baserad golfanalys, liveevent och watch/HUD-stöd via F
 ## On-course
 - **Live events och leaderboards**: Användare kan skapa och följa liveevents, inklusive host-läge, viewer-läge och top-shots. Webbrutter `/events/:id/live`, `/events/:id/live-host` och `/events/:id/live-view` stöds av live-endpoints i `server/routes/live.py` och event-board i `server/routes/events.py`.【F:web/src/App.tsx†L64-L118】【F:server/app.py†L182-L186】
 - **Snabbrunda (Quick Round) med watch-synk**: Webben erbjuder `/play` och `/play/:roundId` för snabbrunda, medan `/api/watch/quickround/sync` skickar HUD-data till primärenhet efter hålvalidering.【F:web/src/App.tsx†L135-L139】【F:server/api/routers/watch_quickround.py†L14-L62】
+- **Hero-banor för snabbrunda**: `/play` visar kuraterade hero-banor med tee-längder från `/api/courses/hero`, så spelare snabbt kan välja färdiga banpaket med HUD-geometri.【F:web/src/pages/quick/QuickRoundStartPage.tsx†L96-L181】【F:server/api/routers/courses.py†L7-L34】
+- **Fördefinierade hero-kataloger**: Backend läser hero-katalogen och bundle-filer för att hålla ihop namn, plats och HUD-redo geometri utan att ändra befintliga bundle-endpoints.【F:server/bundles/hero_catalog.py†L1-L112】【F:server/bundles/hero_courses/demo_links_hero.json†L1-L41】
 - **HUD i handleden**: Watch-klienter kan hämta fullständiga HUD-snapshots och tick-uppdateringar med plays-like, tips och green-avstånd via `/api/watch/hud/hole` och `/api/watch/hud/tick`, genererade av `build_hole_hud`.【F:server/api/routers/watch_hud.py†L12-L119】【F:server/watch/hud_service.py†L1-L112】
 
 ## Range/practice

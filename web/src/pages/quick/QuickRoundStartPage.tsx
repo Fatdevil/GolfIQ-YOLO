@@ -2,7 +2,13 @@ import { FormEvent, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Link, useNavigate } from "react-router-dom";
 
-import { fetchBundleIndex, type BundleIndexItem } from "@/api";
+import {
+  fetchBundleIndex,
+  fetchHeroCourses,
+  type BundleIndexItem,
+  type HeroCourseSummary,
+  type HeroCourseTee,
+} from "@/api";
 import {
   createRoundId,
   loadAllRounds,
@@ -35,6 +41,10 @@ export default function QuickRoundStartPage() {
   const [error, setError] = useState<string | null>(null);
   const [rounds, setRounds] = useState<QuickRoundSummary[]>([]);
   const [courses, setCourses] = useState<BundleIndexItem[]>([]);
+  const [heroCourses, setHeroCourses] = useState<HeroCourseSummary[]>([]);
+  const [selectedHeroCourseId, setSelectedHeroCourseId] =
+    useState<string>();
+  const [selectedHeroTeeId, setSelectedHeroTeeId] = useState<string>();
   const [selectedCourseId, setSelectedCourseId] = useState<string | undefined>();
   const [handicapInput, setHandicapInput] = useState<string>(() => {
     const stored = loadDefaultHandicap();
@@ -78,27 +88,84 @@ export default function QuickRoundStartPage() {
   }, []);
 
   useEffect(() => {
+    let cancelled = false;
+
+    fetchHeroCourses()
+      .then((list) => {
+        if (!cancelled) {
+          setHeroCourses(list);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setHeroCourses([]);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
     const selected = courses.find((course) => course.courseId === selectedCourseId);
     if (selected && courseName.trim().length === 0) {
       setCourseName(selected.name);
     }
   }, [selectedCourseId, courses, courseName]);
 
+  useEffect(() => {
+    const selectedHero = heroCourses.find((course) => course.id === selectedHeroCourseId);
+    if (!selectedHero) {
+      return;
+    }
+
+    setSelectedCourseId(selectedHero.id);
+    setCourseName(selectedHero.name);
+
+    if (selectedHero.tees.length > 0) {
+      const preferredTee =
+        selectedHero.tees.find((tee) => tee.id === selectedHeroTeeId) || selectedHero.tees[0];
+      if (preferredTee) {
+        setSelectedHeroTeeId(preferredTee.id);
+        if (teesName.trim().length === 0) {
+          setTeesName(preferredTee.label);
+        }
+      }
+    }
+  }, [selectedHeroCourseId, selectedHeroTeeId, heroCourses, teesName]);
+
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const selectedCourse = courses.find((course) => course.courseId === selectedCourseId);
     const trimmedCourseName = courseName.trim();
     const finalCourseName = trimmedCourseName || selectedCourse?.name || "";
+    const finalCourseId = selectedCourse?.courseId ?? selectedCourseId;
+    const selectedHero = heroCourses.find((course) => course.id === selectedHeroCourseId);
 
     if (!finalCourseName) {
       setError(t("quickRound.start.courseNameRequired"));
       return;
     }
     const trimmedTeesName = teesName.trim();
-    const holes: QuickRound["holes"] = Array.from({ length: holesCount }, (_, index) => ({
-      index: index + 1,
-      par: 4,
-    }));
+    const heroHoleMetadata = selectedHero?.holeDetails;
+    let holes: QuickRound["holes"];
+    if (heroHoleMetadata && heroHoleMetadata.length > 0) {
+      holes = heroHoleMetadata.map((hole, index) => ({
+        index: hole.number ?? index + 1,
+        par: hole.par ?? 4,
+      }));
+    } else if (selectedHero?.holes) {
+      holes = Array.from({ length: selectedHero.holes }, (_, index) => ({
+        index: index + 1,
+        par: 4,
+      }));
+    } else {
+      holes = Array.from({ length: holesCount }, (_, index) => ({
+        index: index + 1,
+        par: 4,
+      }));
+    }
     const trimmedHandicap = handicapInput.trim();
     let handicap: number | undefined;
     if (trimmedHandicap) {
@@ -115,7 +182,7 @@ export default function QuickRoundStartPage() {
       id: roundId,
       runId: roundId,
       courseName: finalCourseName,
-      courseId: selectedCourse?.courseId,
+      courseId: finalCourseId,
       teesName: trimmedTeesName || undefined,
       holes,
       startedAt: new Date().toISOString(),
@@ -165,6 +232,8 @@ export default function QuickRoundStartPage() {
               value={selectedCourseId ?? ""}
               onChange={(event) => {
                 const value = event.target.value ? event.target.value : undefined;
+                setSelectedHeroCourseId(undefined);
+                setSelectedHeroTeeId(undefined);
                 setSelectedCourseId(value);
                 if (error && (value || courseName.trim().length > 0)) {
                   setError(null);
@@ -180,6 +249,74 @@ export default function QuickRoundStartPage() {
               ))}
             </select>
           </div>
+          {heroCourses.length > 0 ? (
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-medium text-slate-200">
+                  {t("quickRound.start.heroCourses")}
+                </span>
+                <span className="text-xs text-slate-400">
+                  {t("quickRound.start.heroCoursesHelp")}
+                </span>
+              </div>
+              <div className="grid gap-3 md:grid-cols-2">
+                {heroCourses.map((course) => {
+                  const selected = course.id === selectedHeroCourseId;
+                  return (
+                    <button
+                      key={course.id}
+                      type="button"
+                      onClick={() => {
+                        setSelectedHeroCourseId(course.id);
+                        setSelectedHeroTeeId(course.tees[0]?.id);
+                        setError(null);
+                      }}
+                      className={`rounded border px-4 py-3 text-left transition ${
+                        selected
+                          ? "border-emerald-400 bg-emerald-500/10"
+                          : "border-slate-800 bg-slate-950/50 hover:border-slate-700"
+                      }`}
+                    >
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <div className="text-sm font-semibold text-slate-100">{course.name}</div>
+                          <div className="text-xs text-slate-400">
+                            {[course.city, course.country].filter(Boolean).join(", ")}
+                          </div>
+                        </div>
+                        <div className="text-right text-xs text-slate-300">
+                          <div>{course.holes} hål</div>
+                          <div>Par {course.par}</div>
+                        </div>
+                      </div>
+                      {course.tees.length > 0 && (
+                        <div className="mt-2 flex flex-wrap gap-2 text-[11px] text-slate-300">
+                          {course.tees.map((tee) => (
+                            <span
+                              key={tee.id}
+                              className="rounded-full border border-slate-700 px-2 py-0.5"
+                            >
+                              {tee.label}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+              {selectedHeroCourseId && (
+                <HeroTeeSelector
+                  course={heroCourses.find((course) => course.id === selectedHeroCourseId)}
+                  selectedTeeId={selectedHeroTeeId}
+                  onSelectTee={(tee) => {
+                    setSelectedHeroTeeId(tee.id);
+                    setTeesName(tee.label);
+                  }}
+                />
+              )}
+            </div>
+          ) : null}
           <div className="space-y-2">
             <label className="block text-sm font-medium text-slate-200" htmlFor="teesName">
               {t("quickRound.start.teesName")}
@@ -273,6 +410,56 @@ export default function QuickRoundStartPage() {
           </ul>
         )}
       </section>
+    </div>
+  );
+}
+
+function HeroTeeSelector({
+  course,
+  selectedTeeId,
+  onSelectTee,
+}: {
+  course?: HeroCourseSummary;
+  selectedTeeId?: string;
+  onSelectTee: (tee: HeroCourseTee) => void;
+}) {
+  const { t } = useTranslation();
+
+  if (!course || course.tees.length === 0) {
+    return null;
+  }
+
+  const selected = course.tees.find((tee) => tee.id === selectedTeeId) ?? course.tees[0];
+
+  return (
+    <div className="space-y-2">
+      <label className="block text-sm font-medium text-slate-200" htmlFor="heroTee">
+        {t("quickRound.start.heroTeeLabel")}
+      </label>
+      <select
+        id="heroTee"
+        value={selected?.id ?? ""}
+        onChange={(event) => {
+          const tee = course.tees.find((candidate) => candidate.id === event.target.value);
+          if (tee) {
+            onSelectTee(tee);
+          }
+        }}
+        className="w-full rounded border border-slate-700 bg-slate-950/80 px-3 py-2 text-sm text-slate-100 focus:border-emerald-400 focus:outline-none focus:ring-1 focus:ring-emerald-400"
+      >
+        {course.tees.map((tee) => {
+          const length = course.lengthsByTee?.[tee.id];
+          const labelParts = [tee.label];
+          if (typeof length === "number") {
+            labelParts.push(`${length} m`);
+          }
+          return (
+            <option key={tee.id} value={tee.id}>
+              {labelParts.join(" • ")}
+            </option>
+          );
+        })}
+      </select>
     </div>
   );
 }

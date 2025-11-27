@@ -1,0 +1,45 @@
+{
+  "id": "demo-links",
+  "name": "Demo Links Hero",
+  "country": "USA",
+  "city": "Palo Alto",
+  "tees": [
+    { "id": "white", "label": "White", "rating": 71.2, "slope": 128 },
+    { "id": "blue", "label": "Blue", "rating": 73.0, "slope": 132 }
+  ],
+  "holes": [
+    {
+      "number": 1,
+      "par": 4,
+      "teeCenter": { "lat": 37.4318, "lon": -122.161 },
+      "green": {
+        "front": { "lat": 37.4329, "lon": -122.1588 },
+        "middle": { "lat": 37.4332, "lon": -122.1583 },
+        "back": { "lat": 37.4334, "lon": -122.1578 }
+      },
+      "lengths": { "white": 360, "blue": 380 }
+    },
+    {
+      "number": 2,
+      "par": 3,
+      "teeCenter": { "lat": 37.4326, "lon": -122.16 },
+      "green": {
+        "front": { "lat": 37.4335, "lon": -122.158 },
+        "middle": { "lat": 37.4337, "lon": -122.1576 },
+        "back": { "lat": 37.4339, "lon": -122.1571 }
+      },
+      "lengths": { "white": 150, "blue": 170 }
+    },
+    {
+      "number": 3,
+      "par": 5,
+      "teeCenter": { "lat": 37.4312, "lon": -122.1598 },
+      "green": {
+        "front": { "lat": 37.4342, "lon": -122.156 },
+        "middle": { "lat": 37.4344, "lon": -122.1555 },
+        "back": { "lat": 37.4347, "lon": -122.1551 }
+      },
+      "lengths": { "white": 475, "blue": 495 }
+    }
+  ]
+}

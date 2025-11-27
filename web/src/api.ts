@@ -61,8 +61,39 @@ export type BundleIndexItem = {
   ttlSec?: number;
 };
 
+export type HeroCourseTee = {
+  id: string;
+  label: string;
+  rating?: number | null;
+  slope?: number | null;
+};
+
+export type HeroHoleSummary = {
+  number?: number;
+  par?: number;
+};
+
+export type HeroCourseSummary = {
+  id: string;
+  name: string;
+  country?: string | null;
+  city?: string | null;
+  tees: HeroCourseTee[];
+  holes: number;
+  par: number;
+  lengthsByTee?: Record<string, number>;
+  holeDetails?: HeroHoleSummary[];
+};
+
 export async function fetchBundleIndex(): Promise<BundleIndexItem[]> {
   const response = await axios.get<BundleIndexItem[]>(`${API}/bundle/index`, {
+    headers: withAuth(),
+  });
+  return response.data;
+}
+
+export async function fetchHeroCourses(): Promise<HeroCourseSummary[]> {
+  const response = await axios.get<HeroCourseSummary[]>(`${API}/api/courses/hero`, {
     headers: withAuth(),
   });
   return response.data;

@@ -34,6 +34,7 @@ Tabellerna nedan listar centrala API:er baserat på routerdefinitionerna. Alla e
 | Metod | Path | Beskrivning | Router/fil |
 |-------|------|-------------|------------|
 | GET | /api/courses | Lista kursbundles (demo). | `server/api/routers/courses.py` |
+| GET | /api/courses/hero | Lista kuraterade hero-banor med tee-data. | `server/api/routers/courses.py` |
 | GET | /api/courses/{id}/bundle | Hämta kursbundle med hål/green-data. | `server/api/routers/courses.py` |
 | GET | /courses | Lista kurser (legacy). | `server/routes/course_bundle.py` |
 | GET | /course/{course_id} | Hämta kursdefinition. | `server/routes/course_bundle.py` |

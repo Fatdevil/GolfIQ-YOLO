@@ -1,0 +1,45 @@
+{
+  "id": "demo-parkland",
+  "name": "Demo Parkland Hero",
+  "country": "Scotland",
+  "city": "Edinburgh",
+  "tees": [
+    { "id": "yellow", "label": "Yellow", "rating": 70.5, "slope": 124 },
+    { "id": "blue", "label": "Blue", "rating": 72.1, "slope": 129 }
+  ],
+  "holes": [
+    {
+      "number": 1,
+      "par": 4,
+      "teeCenter": { "lat": 55.9489, "lon": -3.2039 },
+      "green": {
+        "front": { "lat": 55.9497, "lon": -3.2014 },
+        "middle": { "lat": 55.9499, "lon": -3.2009 },
+        "back": { "lat": 55.9501, "lon": -3.2003 }
+      },
+      "lengths": { "yellow": 340, "blue": 365 }
+    },
+    {
+      "number": 2,
+      "par": 4,
+      "teeCenter": { "lat": 55.9493, "lon": -3.2035 },
+      "green": {
+        "front": { "lat": 55.9502, "lon": -3.2007 },
+        "middle": { "lat": 55.9504, "lon": -3.2002 },
+        "back": { "lat": 55.9506, "lon": -3.1998 }
+      },
+      "lengths": { "yellow": 355, "blue": 370 }
+    },
+    {
+      "number": 3,
+      "par": 3,
+      "teeCenter": { "lat": 55.9497, "lon": -3.2028 },
+      "green": {
+        "front": { "lat": 55.9505, "lon": -3.1999 },
+        "middle": { "lat": 55.9507, "lon": -3.1994 },
+        "back": { "lat": 55.9508, "lon": -3.199 }
+      },
+      "lengths": { "yellow": 160, "blue": 175 }
+    }
+  ]
+}

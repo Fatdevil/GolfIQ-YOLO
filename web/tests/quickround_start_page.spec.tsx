@@ -23,6 +23,7 @@ const {
 }));
 
 const fetchBundleIndexMock = vi.hoisted(() => vi.fn(async () => []));
+const fetchHeroCoursesMock = vi.hoisted(() => vi.fn(async () => []));
 
 vi.mock("../src/features/quickround/storage", () => ({
   createRoundId: createRoundIdMock,
@@ -35,6 +36,7 @@ vi.mock("../src/features/quickround/storage", () => ({
 
 vi.mock("@/api", () => ({
   fetchBundleIndex: fetchBundleIndexMock,
+  fetchHeroCourses: fetchHeroCoursesMock,
 }));
 
 describe("QuickRoundStartPage", () => {
@@ -43,6 +45,7 @@ describe("QuickRoundStartPage", () => {
     loadAllRoundsMock.mockReturnValue([]);
     loadDefaultHandicapMock.mockReturnValue(null);
     fetchBundleIndexMock.mockResolvedValue([]);
+    fetchHeroCoursesMock.mockResolvedValue([]);
   });
 
   it("creates a round and navigates to play view", async () => {
