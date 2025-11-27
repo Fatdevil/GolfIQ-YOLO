@@ -7,6 +7,19 @@ export type SgCategory = "TEE" | "APPROACH" | "SHORT" | "PUTT";
 export type HoleSgPreview = {
   hole: number;
   sg_by_cat: Record<SgCategory, number>;
+  sg_total?: number;
+  gross_score?: number;
+  worst_category?: SgCategory | null;
+};
+
+export type RoundSgCategorySummary = {
+  category: SgCategory;
+  sg: number;
+};
+
+export type RoundSgSummary = {
+  worst_category: SgCategory | null;
+  categories: RoundSgCategorySummary[];
 };
 
 export type RoundSgPreview = {
@@ -15,6 +28,7 @@ export type RoundSgPreview = {
   total_sg: number;
   sg_by_cat: Record<SgCategory, number>;
   holes: HoleSgPreview[];
+  round_summary?: RoundSgSummary;
 };
 
 export async function fetchSgPreview(runId: string): Promise<RoundSgPreview> {
