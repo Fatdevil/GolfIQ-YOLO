@@ -2,6 +2,7 @@ import { Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 
 import type { CoachRecommendation } from "@/coach/coachLogic";
+import { pickMissionForCategory } from "@/range/missions";
 
 type CoachPlanCardProps = {
   status: "loading" | "error" | "empty" | "ready";
@@ -54,9 +55,19 @@ export function CoachPlanCard({ status, recommendations }: CoachPlanCardProps) {
           </ol>
 
           <div className="flex flex-wrap gap-3 text-[11px]">
-            <Link className="underline text-emerald-300" to="/range/practice">
-              {t("profile.coach.cta.range")}
-            </Link>
+            {recommendations.map((rec) => {
+              const mission = pickMissionForCategory(rec.focusCategory)[0];
+              if (!mission) return null;
+              return (
+                <Link
+                  key={`${rec.focusCategory}-${mission.id}`}
+                  className="underline text-emerald-300"
+                  to={`/range/practice?missionId=${mission.id}`}
+                >
+                  {t("profile.coach.cta.range")}
+                </Link>
+              );
+            })}
             <Link className="underline text-emerald-300" to="/play">
               {t("profile.coach.cta.quick")}
             </Link>

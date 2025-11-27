@@ -17,6 +17,7 @@ export type RangeAnalyzeRequest = {
   persist?: boolean;
   run_name?: string | null;
   smoothing_window?: number;
+  mission_id?: string | null;
 };
 
 export type RangeAnalyzeResponse = {

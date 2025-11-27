@@ -1,10 +1,14 @@
 import type { RoundSgPreview, SgCategory } from "@/api/sgPreview";
+import { pickMissionForCategory } from "@/range/missions";
+import type { MissionId } from "@/range/missions";
 
 export type CoachCategory = "tee" | "approach" | "short" | "putt";
 
 export interface CoachRangeMission {
   type: "range";
   description: string;
+  missionId?: MissionId;
+  missionLabel?: string;
 }
 
 export interface CoachOnCourseMission {
@@ -93,6 +97,7 @@ export function buildCoachRecommendations(input: CoachInput): CoachRecommendatio
 
   return candidates.map(([cat, value]) => {
     const reason = `Focus on ${COACH_CATEGORY_LABEL[cat]} — you lost ${formatLeak(value)} strokes vs the baseline.`;
+    const mission = pickMissionForCategory(cat)[0];
 
     return {
       focusCategory: cat,
@@ -100,6 +105,8 @@ export function buildCoachRecommendations(input: CoachInput): CoachRecommendatio
       rangeMission: {
         type: "range",
         description: RANGE_MISSION[cat],
+        missionId: mission?.id,
+        missionLabel: mission?.label,
       },
       onCourseMission: {
         type: "on-course",

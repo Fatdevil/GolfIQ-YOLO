@@ -40,6 +40,10 @@ class RangeAnalyzeIn(BaseModel):
     frames_zip_b64: str | None = Field(
         default=None, description="Optional base64-encoded ZIP with captured frames"
     )
+    mission_id: str | None = Field(
+        default=None,
+        description="Optional mission identifier used by the client for range missions",
+    )
 
 
 class CameraFitness(BaseModel):

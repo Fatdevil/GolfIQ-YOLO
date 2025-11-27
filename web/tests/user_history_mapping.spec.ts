@@ -29,7 +29,7 @@ describe("history mapping", () => {
   });
 
   it("maps range session fields", () => {
-    const missionId: MissionId = "fairway-finder";
+    const missionId: MissionId = "driver_fairway_challenge";
     const session: RangeSession = {
       id: "rs-1",
       startedAt: "2024-02-01T10:00:00.000Z",

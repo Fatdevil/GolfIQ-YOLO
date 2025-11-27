@@ -116,22 +116,31 @@ export function computeInsights(input: InsightsInput): InsightsResult {
       focuses.push({ id: "range.mission_completion_low", kind: "focus" });
     }
 
-    const wedgeMissionRatio = averageRatioForMission(recentSessions, "wedge-ladder");
+    const wedgeMissionRatio = averageRatioForMission(
+      recentSessions,
+      "wedge_ladder_60_100",
+    );
     if (wedgeMissionRatio != null && wedgeMissionRatio < 1) {
-      suggestedMission = "wedge-ladder";
+      suggestedMission = "wedge_ladder_60_100";
     }
 
     if (!suggestedMission) {
-      const fairwayMissionRatio = averageRatioForMission(recentSessions, "fairway-finder");
+      const fairwayMissionRatio = averageRatioForMission(
+        recentSessions,
+        "driver_fairway_challenge",
+      );
       if (fairwayMissionRatio != null && fairwayMissionRatio < 1) {
-        suggestedMission = "fairway-finder";
+        suggestedMission = "driver_fairway_challenge";
       }
     }
 
     if (!suggestedMission) {
-      const stockMissionRatio = averageRatioForMission(recentSessions, "stock-yardage");
+      const stockMissionRatio = averageRatioForMission(
+        recentSessions,
+        "approach_band_80_130",
+      );
       if (stockMissionRatio != null && stockMissionRatio < 1) {
-        suggestedMission = "stock-yardage";
+        suggestedMission = "approach_band_80_130";
       }
     }
 
@@ -140,7 +149,7 @@ export function computeInsights(input: InsightsInput): InsightsResult {
     }
 
     if (!suggestedMission && recentSessions.length > 0) {
-      suggestedMission = "wedge-ladder";
+      suggestedMission = "wedge_ladder_60_100";
     }
   }
 

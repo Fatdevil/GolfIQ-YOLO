@@ -49,11 +49,11 @@ const accessValue = {
   error: undefined,
 };
 
-function renderWithProviders(ui: ReactElement) {
+function renderWithProviders(ui: ReactElement, access = accessValue) {
   return render(
     <MemoryRouter>
       <UserSessionProvider>
-        <UserAccessContext.Provider value={accessValue}>
+        <UserAccessContext.Provider value={access}>
           <UnitsContext.Provider value={{ unit: "metric", setUnit: () => {} }}>
             {ui}
           </UnitsContext.Provider>
@@ -84,19 +84,23 @@ describe("RangePracticePage missions mode", () => {
     postRangeAnalyzeMock.mockResolvedValue({ carry_m: 210 });
   });
 
-  it("renders mission selector and groove meter", async () => {
+  it("renders mission selector and mission progress for Pro", async () => {
     const user = userEvent.setup();
 
     renderWithProviders(<RangePracticePage />);
 
-    await user.click(screen.getByRole("button", { name: /Missions/i }));
+    await user.click(screen.getAllByTestId("mission-mode-button")[0]);
 
-    const missionSelect = await screen.findByLabelText(/Mission/i);
+    const missionSelect = await screen.findByLabelText(/Mission/i, { selector: "select" });
     expect(missionSelect).toBeInstanceOf(HTMLSelectElement);
 
-    await user.selectOptions(missionSelect, "Fairway Finder");
+    await user.selectOptions(missionSelect, "Driver fairway challenge");
 
-    await waitFor(() => expect(window.localStorage.getItem("golfiq.range.mission.v1")).toBe("fairway-finder"));
+    await waitFor(() =>
+      expect(window.localStorage.getItem("golfiq.range.mission.v2")).toBe(
+        "driver_fairway_challenge",
+      ),
+    );
 
     const hitButton = screen.getByRole("button", { name: /Hit & analyze/i });
     await user.click(hitButton);
@@ -105,8 +109,25 @@ describe("RangePracticePage missions mode", () => {
 
     await waitFor(() => expect(postRangeAnalyzeMock).toHaveBeenCalledTimes(3));
 
-    const grooveMeter = await screen.findByText(/Good reps:/i);
-    expect(grooveMeter.textContent).toMatch(/Good reps:/i);
-    expect(screen.getAllByText(/Fairway Finder/).length).toBeGreaterThan(0);
+    await screen.findByText(/Hits in mission targets/i);
+    expect(screen.getByText(/3\s*\/\s*3/)).toBeInTheDocument();
+    expect(screen.getAllByText(/Driver fairway challenge/).length).toBeGreaterThan(0);
+  });
+
+  it("gates missions for free users", async () => {
+    const user = userEvent.setup();
+    const freeAccess = {
+      ...accessValue,
+      plan: "free" as PlanName,
+      isPro: false,
+      isFree: true,
+    };
+
+    renderWithProviders(<RangePracticePage />, freeAccess);
+
+    const buttons = screen.getAllByTestId("mission-mode-button");
+    await user.click(buttons[buttons.length - 1]);
+
+    await screen.findByTestId("mission-upgrade-message");
   });
 });
