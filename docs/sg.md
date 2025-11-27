@@ -2,6 +2,8 @@
 
 This module provides a lightweight, on-device strokes-gained implementation that is safe to ship with the QA HUD tooling.
 
+- Quick Round summaries surface a per-hole SG breakdown plus the worst category for the round.
+
 ## Baseline tables
 
 The expected-strokes tables live in [`shared/sg/baseline.ts`](../shared/sg/baseline.ts). They intentionally use coarse distance buckets so that the calculations remain fast and stable without relying on external dependencies. Distances are expressed in metres and cover:
