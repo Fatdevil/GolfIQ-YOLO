@@ -14,6 +14,7 @@ from cv_engine.metrics.angle import compute_side_angle
 from cv_engine.metrics.carry_v1 import estimate_carry
 from cv_engine.metrics.launch_mono import estimate_vertical_launch
 from cv_engine.pose.adapter import PoseAdapter
+from cv_engine.sequence import analyze_kinematic_sequence
 from cv_engine.tracking.factory import get_tracker
 from observability.otel import span
 from server.telemetry import record_pose_metrics, record_stage_latency
@@ -229,6 +230,12 @@ def analyze_frames(
         events = [e.frame_index for e in impact_events]
         confidence = max((e.confidence for e in impact_events), default=0.0)
 
+        sequence_metrics = analyze_kinematic_sequence(
+            pose_history=pose_adapter.get_history(),
+            club_track=club_track_px,
+            events=events,
+        )
+
         postproc_start = perf_counter()
         with span("cv.stage.persist"):
             if len(ball_track_px) < 2 or len(club_track_px) < 2:
@@ -252,6 +259,8 @@ def analyze_frames(
                         "quality": base_quality,
                     }
                 )
+            if sequence_metrics is not None:
+                metrics["sequence"] = sequence_metrics
         persist_ms = (perf_counter() - postproc_start) * 1000.0
         timings["persist_ms"] = persist_ms
         record_stage_latency("persist", persist_ms)
