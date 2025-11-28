@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, Header
+from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 
 from server.access.models import PlanName
@@ -31,7 +31,7 @@ class HudQuery(BaseModel):
 
 @router.post("/api/watch/hud/hole", response_model=HoleHud)
 def get_hole_hud(
-    payload: HudQuery, x_api_key: str | None = Header(default=None, alias="x-api-key")
+    payload: HudQuery, api_key: str | None = Depends(require_api_key)
 ) -> HoleHud:
     """Return a full HUD snapshot for the requested hole."""
 
@@ -50,7 +50,7 @@ def get_hole_hud(
         temp_c=payload.temp_c,
         elev_delta_m=payload.elev_delta_m,
         auto_detect_hole=payload.autoDetectHole,
-        api_key=x_api_key,
+        api_key=api_key,
     )
 
     detected_hole = hole_hud.hole
@@ -99,7 +99,7 @@ class TickOut(BaseModel):
 
 @router.post("/api/watch/hud/tick", response_model=TickOut)
 def post_hud_tick(
-    payload: TickIn, x_api_key: str | None = Header(default=None, alias="x-api-key")
+    payload: TickIn, api_key: str | None = Depends(require_api_key)
 ) -> TickOut:
     """Lightweight heartbeat endpoint that returns minimal HUD deltas."""
 
@@ -118,7 +118,7 @@ def post_hud_tick(
         temp_c=payload.temp_c,
         elev_delta_m=payload.elev_delta_m,
         auto_detect_hole=payload.autoDetectHole,
-        api_key=x_api_key,
+        api_key=api_key,
     )
     has_new_tip = hud.activeTip is not None
 

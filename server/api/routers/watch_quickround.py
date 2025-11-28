@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, Header, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 
 from server.api.security import require_api_key
@@ -33,7 +33,7 @@ class QuickRoundSyncOut(BaseModel):
 @router.post("/sync", response_model=QuickRoundSyncOut)
 def sync_quickround_to_watch(
     payload: QuickRoundSyncIn,
-    x_api_key: str | None = Header(default=None, alias="x-api-key"),
+    api_key: str | None = Depends(require_api_key),
 ) -> QuickRoundSyncOut:
     if payload.hole < 1:
         raise HTTPException(
@@ -58,7 +58,7 @@ def sync_quickround_to_watch(
         hole=payload.hole,
         course_id=payload.courseId,
         gnss=None,
-        api_key=x_api_key,
+        api_key=api_key,
     )
 
     sent = send_hud_to_device(device.device_id, hud)
