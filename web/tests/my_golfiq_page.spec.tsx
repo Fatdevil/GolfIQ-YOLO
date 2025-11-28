@@ -82,6 +82,8 @@ const migrateLocalHistoryOnce = vi.hoisted(() => vi.fn(() => Promise.resolve()))
 const mockUseCaddieMemberId = vi.hoisted(() => vi.fn());
 const mockFetchCaddieInsights = vi.hoisted(() => vi.fn());
 const mockFetchMemberSgSummary = vi.hoisted(() => vi.fn());
+const mockFetchCoachRoundSummary = vi.hoisted(() => vi.fn());
+const mockUseNotifications = vi.hoisted(() => vi.fn(() => ({ notify: vi.fn() })));
 
 vi.mock("@/features/quickround/storage", () => ({
   loadAllRoundsFull,
@@ -116,6 +118,15 @@ vi.mock("@/api/sgSummary", () => ({
   fetchMemberSgSummary: (
     ...args: Parameters<typeof mockFetchMemberSgSummary>
   ) => mockFetchMemberSgSummary(...args),
+}));
+
+vi.mock("@/api/coachSummary", () => ({
+  fetchCoachRoundSummary: (...args: Parameters<typeof mockFetchCoachRoundSummary>) =>
+    mockFetchCoachRoundSummary(...args),
+}));
+
+vi.mock("@/notifications/NotificationContext", () => ({
+  useNotifications: () => mockUseNotifications(),
 }));
 
 describe("MyGolfIQPage", () => {
@@ -299,6 +310,7 @@ describe("MyGolfIQPage", () => {
 
   it("renders coach insights when available", async () => {
     mockUseCaddieMemberId.mockReturnValue("member-123");
+    mockRounds[0] = { ...mockRounds[0], runId: "run-1" };
     mockFetchMemberSgSummary.mockResolvedValue({
       memberId: "member-123",
       runIds: ["run-1"],
@@ -312,11 +324,27 @@ describe("MyGolfIQPage", () => {
       },
     } as MemberSgSummary);
 
+    mockFetchCoachRoundSummary.mockResolvedValue({
+      run_id: "run-1",
+      sg_by_category: [],
+      sg_per_hole: [],
+      diagnosis: {
+        run_id: "run-1",
+        findings: [
+          {
+            id: "tee_inconsistency",
+            category: "tee",
+            severity: "critical",
+            title: "Tee issues",
+            message: "Losing strokes off the tee",
+          },
+        ],
+      },
+    });
+
     renderPage("pro");
 
-    expect(await screen.findByText(/Coach action plan/i)).toBeTruthy();
-    expect(
-      await screen.findByText(/Focus on Tee shots — you lost 1\.5 strokes/i),
-    ).toBeTruthy();
+    expect(await screen.findByText(/Coach diagnosis/i)).toBeTruthy();
+    expect(await screen.findByText(/Tee issues/i)).toBeTruthy();
   });
 });

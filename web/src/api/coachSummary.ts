@@ -2,6 +2,24 @@ import axios from "axios";
 
 import { API, withAuth } from "@/api";
 
+export type CoachCategory = "tee" | "approach" | "short" | "putt" | "sequence" | "strategy";
+
+export type CoachFinding = {
+  id: string;
+  category: CoachCategory;
+  severity: "info" | "warning" | "critical";
+  title: string;
+  message: string;
+  evidence?: Record<string, unknown>;
+  suggested_missions?: string[];
+  suggested_focus?: string[];
+};
+
+export type CoachDiagnosis = {
+  run_id: string;
+  findings: CoachFinding[];
+};
+
 export type CoachSgCategory = {
   name: "tee" | "approach" | "short" | "putt";
   sg: number;
@@ -48,6 +66,7 @@ export type CoachRoundSummary = {
   sequence?: CoachSequenceSummary | null;
   caddie?: CoachCaddieHighlight | null;
   mission?: CoachMissionSummary | null;
+  diagnosis?: CoachDiagnosis | null;
 };
 
 export async function fetchCoachRoundSummary(
@@ -55,6 +74,14 @@ export async function fetchCoachRoundSummary(
 ): Promise<CoachRoundSummary> {
   const response = await axios.get<CoachRoundSummary>(
     `${API}/api/coach/round-summary/${runId}`,
+    { headers: withAuth() },
+  );
+  return response.data;
+}
+
+export async function fetchCoachDiagnosis(runId: string): Promise<CoachDiagnosis> {
+  const response = await axios.get<CoachDiagnosis>(
+    `${API}/api/coach/diagnosis/${runId}`,
     { headers: withAuth() },
   );
   return response.data;

@@ -1,31 +1,52 @@
-import { useMemo } from "react";
+import { useEffect, useState } from "react";
 
-import type { RoundSgPreview } from "@/api/sgPreview";
+import { fetchCoachRoundSummary, type CoachDiagnosis } from "@/api/coachSummary";
 import { UpgradeGate } from "@/access/UpgradeGate";
-import { CoachPlanCard } from "@/coach/CoachPlanCard";
-import { buildCoachRecommendations } from "@/coach/coachLogic";
+import { useAccessPlan } from "@/access/UserAccessContext";
+import { CoachDiagnosisCard } from "@/coach/CoachDiagnosisCard";
 
 type Props = {
-  sgStatus: "idle" | "loading" | "loaded" | "error";
-  sgPreview: RoundSgPreview | null;
+  runId: string | null;
 };
 
-export function QuickRoundCoachSection({ sgPreview, sgStatus }: Props) {
-  const recommendations = useMemo(() => {
-    if (!sgPreview) return [];
-    return buildCoachRecommendations({ sgSummary: sgPreview });
-  }, [sgPreview]);
+export function QuickRoundCoachSection({ runId }: Props) {
+  const { isPro, loading: planLoading } = useAccessPlan();
+  const [diagnosis, setDiagnosis] = useState<CoachDiagnosis | null>(null);
+  const [status, setStatus] = useState<"loading" | "error" | "empty" | "ready">("empty");
 
-  const status: "loading" | "error" | "empty" | "ready" = useMemo(() => {
-    if (sgStatus === "loading" || sgStatus === "idle") return "loading";
-    if (sgStatus === "error") return "error";
-    if (!sgPreview) return "empty";
-    return recommendations.length > 0 ? "ready" : "empty";
-  }, [sgPreview, sgStatus, recommendations.length]);
+  useEffect(() => {
+    if (planLoading) {
+      setStatus("loading");
+      return;
+    }
+    if (!isPro || !runId) {
+      setDiagnosis(null);
+      setStatus("empty");
+      return;
+    }
+
+    let cancelled = false;
+    setStatus("loading");
+    fetchCoachRoundSummary(runId)
+      .then((summary) => {
+        if (cancelled) return;
+        setDiagnosis(summary.diagnosis ?? null);
+        setStatus("ready");
+      })
+      .catch(() => {
+        if (!cancelled) setStatus("error");
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isPro, planLoading, runId]);
+
+  if (!runId) return null;
 
   return (
     <UpgradeGate feature="COACH_PLAN">
-      <CoachPlanCard status={status} recommendations={recommendations} />
+      <CoachDiagnosisCard diagnosis={diagnosis} status={status} />
     </UpgradeGate>
   );
 }

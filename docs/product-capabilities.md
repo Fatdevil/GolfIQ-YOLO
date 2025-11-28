@@ -10,6 +10,7 @@ GolfIQ-YOLO levererar CV-baserad golfanalys, liveevent och watch/HUD-stöd via F
 - **Pro**: Watch HUD v1.1 – pro-plan ger plays-like + caddie-tips i watch/web-HUD medan free-plan får basavstånd och uppgraderingshintar.【F:server/watch/hud_service.py†L130-L172】【F:web/src/pages/dev/HudPreviewCard.tsx†L8-L83】
 - **Coach v2** (Pro): Personliga SG-drivna handlingsplaner (range + on-course missions) visas på Quick Round-sammanfattning och My GolfIQ.
 - **Pro**: Coach share summary v1 – exporterar en sammanfogad rund-sammanfattning (SG preview, kinematik, caddie-trust och ev. range-mission) via /api/coach/round-summary och delningsknappar på Quick Round/My GolfIQ.【F:server/services/coach_summary.py†L17-L173】【F:web/src/coach/ShareWithCoachButton.tsx†L1-L50】
+- **Pro**: Coach v3 – regelbaserad diagnosmotor som kombinerar SG v2, kinematic sequence v1, caddie-insights v2 och range-missioner. Resultatet exponeras i coach share, dedikerat /api/coach/diagnosis och webbutkikkar på Quick Round/MyGolfIQ.【F:server/services/coach_diagnostics.py†L1-L214】【F:server/api/routers/coach.py†L1-L33】【F:web/src/coach/CoachDiagnosisCard.tsx†L1-L89】
 - **Pro**: Range Bingo v2 – missionsbaserad range-träning med Coach-länkade fokusområden och målkorridorer, gated via accessplanen.
 
 ## On-course

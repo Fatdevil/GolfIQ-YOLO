@@ -7,12 +7,14 @@ from fastapi import HTTPException, status
 
 from server.schemas.coach_summary import (
     CoachCaddieHighlight,
+    CoachDiagnosis,
     CoachHoleSg,
     CoachMissionSummary,
     CoachRoundSummary,
     CoachSequenceSummary,
     CoachSgCategory,
 )
+from server.services.coach_diagnostics import build_diagnosis_for_run
 from server.services.anchors_store import list_run
 from server.services.caddie_insights import (
     ClubInsight,
@@ -246,6 +248,14 @@ def build_coach_summary_for_run(
     )
     caddie_highlight = _build_caddie_highlight(member_id)
     mission_summary = _build_mission_summary(run)
+    diagnosis: CoachDiagnosis | None = None
+
+    try:
+        diagnosis = build_diagnosis_for_run(run_id)
+    except HTTPException:
+        raise
+    except Exception:
+        diagnosis = None
 
     return CoachRoundSummary(
         run_id=run.run_id,
@@ -260,6 +270,7 @@ def build_coach_summary_for_run(
         sequence=sequence_summary,
         caddie=caddie_highlight,
         mission=mission_summary,
+        diagnosis=diagnosis,
     )
 
 
