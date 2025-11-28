@@ -2,16 +2,27 @@ import { describe, expect, it, vi } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
+import { UserAccessProvider } from "@/access/UserAccessContext";
 
-const mockBundles = [
-  { courseId: "links_crest", name: "Links Crest", holes: 18 },
-  { courseId: "pine_dunes", name: "Pine Dunes", holes: 18 },
-];
+const { fetchBundleIndex, getHoleHud } = vi.hoisted(() => {
+  const bundles = [
+    { courseId: "links_crest", name: "Links Crest", holes: 18 },
+    { courseId: "pine_dunes", name: "Pine Dunes", holes: 18 },
+  ];
 
-const mockHud = { hole: 1, toFront_m: 150, toGreen_m: 160, toBack_m: 170 };
+  const hud = {
+    hole: 1,
+    plan: "pro",
+    toFront_m: 150,
+    toGreen_m: 160,
+    toBack_m: 170,
+  };
 
-const fetchBundleIndex = vi.fn().mockResolvedValue(mockBundles);
-const getHoleHud = vi.fn().mockResolvedValue(mockHud);
+  return {
+    fetchBundleIndex: vi.fn().mockResolvedValue(bundles),
+    getHoleHud: vi.fn().mockResolvedValue(hud),
+  };
+});
 
 vi.mock("@/api", () => ({
   fetchBundleIndex,
@@ -25,7 +36,9 @@ describe("HudPreviewPage", () => {
 
     render(
       <MemoryRouter>
-        <HudPreviewPage />
+        <UserAccessProvider autoFetch={false} initialPlan="pro">
+          <HudPreviewPage />
+        </UserAccessProvider>
       </MemoryRouter>,
     );
 
@@ -51,6 +64,6 @@ describe("HudPreviewPage", () => {
     );
 
     expect(await screen.findByText(/toFront_m/)).toBeTruthy();
-    expect(await screen.findByText(/150/)).toBeTruthy();
+    expect((await screen.findAllByText(/150 m/)).length).toBeGreaterThan(0);
   });
 });

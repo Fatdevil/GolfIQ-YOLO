@@ -6,6 +6,8 @@ from typing import List, Optional
 
 from pydantic import BaseModel
 
+from server.access.models import PlanName
+
 
 class MapPoint(BaseModel):
     """Lat/lon representation for map overlays."""
@@ -26,6 +28,9 @@ class HudTip(BaseModel):
 
 class HoleHud(BaseModel):
     """Full watch HUD snapshot for a single hole."""
+
+    # Access control
+    plan: PlanName = "free"
 
     eventId: Optional[str] = None
     runId: Optional[str] = None

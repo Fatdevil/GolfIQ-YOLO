@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Header
 from pydantic import BaseModel
 
+from server.access.models import PlanName
 from server.bundles.geometry import compute_hole_distances_from_bundle
 from server.courses.schemas import GeoPoint
 from server.security import require_api_key
@@ -29,7 +30,9 @@ class HudQuery(BaseModel):
 
 
 @router.post("/api/watch/hud/hole", response_model=HoleHud)
-def get_hole_hud(payload: HudQuery) -> HoleHud:
+def get_hole_hud(
+    payload: HudQuery, x_api_key: str | None = Header(default=None, alias="x-api-key")
+) -> HoleHud:
     """Return a full HUD snapshot for the requested hole."""
 
     gnss = None
@@ -47,6 +50,7 @@ def get_hole_hud(payload: HudQuery) -> HoleHud:
         temp_c=payload.temp_c,
         elev_delta_m=payload.elev_delta_m,
         auto_detect_hole=payload.autoDetectHole,
+        api_key=x_api_key,
     )
 
     detected_hole = hole_hud.hole
@@ -81,6 +85,7 @@ class TickIn(BaseModel):
 class TickOut(BaseModel):
     hole: int
     courseId: str | None = None
+    plan: PlanName = "free"
     toGreen_m: float | None = None
     toFront_m: float | None = None
     toBack_m: float | None = None
@@ -93,7 +98,9 @@ class TickOut(BaseModel):
 
 
 @router.post("/api/watch/hud/tick", response_model=TickOut)
-def post_hud_tick(payload: TickIn) -> TickOut:
+def post_hud_tick(
+    payload: TickIn, x_api_key: str | None = Header(default=None, alias="x-api-key")
+) -> TickOut:
     """Lightweight heartbeat endpoint that returns minimal HUD deltas."""
 
     gnss = None
@@ -111,6 +118,7 @@ def post_hud_tick(payload: TickIn) -> TickOut:
         temp_c=payload.temp_c,
         elev_delta_m=payload.elev_delta_m,
         auto_detect_hole=payload.autoDetectHole,
+        api_key=x_api_key,
     )
     has_new_tip = hud.activeTip is not None
 
@@ -129,6 +137,7 @@ def post_hud_tick(payload: TickIn) -> TickOut:
     return TickOut(
         hole=hud.hole,
         courseId=hud.courseId,
+        plan=hud.plan,
         toGreen_m=to_green,
         toFront_m=to_front,
         toBack_m=to_back,

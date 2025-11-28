@@ -5,6 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Dict, Optional, Tuple
 
+from server.access.config import lookup_plan_for_key
+from server.access.models import PlanName
 from server.bundles.models import CourseBundle as HeroCourseBundle
 from server.bundles.storage import get_bundle as get_hero_bundle
 from server.caddie.advise import advise
@@ -34,6 +36,14 @@ DEFAULT_BAG_CARRIES_M: Dict[str, float] = {
 # Suggestions below this confidence are treated as too weak to override the requested
 # hole when auto-detect is enabled.
 AUTO_DETECT_MIN_CONFIDENCE = 0.2
+
+
+def _resolve_plan(*, api_key: Optional[str], override: Optional[PlanName]) -> PlanName:
+    """Return the active plan for the request, defaulting to config."""
+
+    if override:
+        return override
+    return lookup_plan_for_key(api_key)
 
 
 @dataclass
@@ -232,9 +242,12 @@ def build_hole_hud(
     temp_c: Optional[float] = None,
     elev_delta_m: Optional[float] = None,
     auto_detect_hole: bool = True,
+    plan: Optional[PlanName] = None,
+    api_key: Optional[str] = None,
 ) -> HoleHud:
     """Construct a :class:`HoleHud` snapshot from available stores."""
 
+    plan_name = _resolve_plan(api_key=api_key, override=plan)
     run_context = _load_run_context(run_id)
     if not course_id:
         course_id = run_context.course_id
@@ -265,8 +278,17 @@ def build_hole_hud(
                 distance_for_caddie = candidate
                 break
 
-    plays_like, caddie_confidence, caddie_silent, caddie_silent_reason = (
-        _build_caddie_advice(
+    pro_enabled = plan_name == "pro"
+    plays_like = caddie_confidence = caddie_silent_reason = None
+    caddie_silent = False
+
+    if pro_enabled:
+        (
+            plays_like,
+            caddie_confidence,
+            caddie_silent,
+            caddie_silent_reason,
+        ) = _build_caddie_advice(
             run_id=run_id,
             hole=hole,
             distance_m=distance_for_caddie,
@@ -277,14 +299,17 @@ def build_hole_hud(
             shots_taken=run_context.shots_taken,
             tournament_safe=run_context.tournament_safe,
         )
-    )
+    else:
+        caddie_silent = True
+        caddie_silent_reason = "plan_gated"
 
-    active_tip = _get_latest_tip(member_id)
+    active_tip = _get_latest_tip(member_id) if pro_enabled else None
 
     return HoleHud(
         eventId=run_context.event_id,
         runId=run_id,
         memberId=member_id,
+        plan=plan_name,
         courseId=course_id,
         hole=hole,
         par=hole_bundle.par if hole_bundle else None,

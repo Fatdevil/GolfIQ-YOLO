@@ -60,6 +60,7 @@ def test_watch_hud_tick_returns_distances_and_caddie_fields(
     monkeypatch.setattr(
         hud_service, "load_run", lambda run_id: _DummyRun(tournament_safe=False)
     )
+    monkeypatch.setattr(hud_service, "lookup_plan_for_key", lambda _key: "pro")
     monkeypatch.setattr(
         hud_service,
         "suggest_hole",
@@ -116,6 +117,7 @@ def test_watch_hud_tick_respects_tournament_safe(
     monkeypatch.setattr(
         hud_service, "load_run", lambda run_id: _DummyRun(tournament_safe=True)
     )
+    monkeypatch.setattr(hud_service, "lookup_plan_for_key", lambda _key: "pro")
     monkeypatch.setattr(
         hud_service,
         "suggest_hole",

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, Header, HTTPException, status
 from pydantic import BaseModel
 
 from server.api.security import require_api_key
@@ -31,7 +31,10 @@ class QuickRoundSyncOut(BaseModel):
 
 
 @router.post("/sync", response_model=QuickRoundSyncOut)
-def sync_quickround_to_watch(payload: QuickRoundSyncIn) -> QuickRoundSyncOut:
+def sync_quickround_to_watch(
+    payload: QuickRoundSyncIn,
+    x_api_key: str | None = Header(default=None, alias="x-api-key"),
+) -> QuickRoundSyncOut:
     if payload.hole < 1:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, detail="hole must be positive"
@@ -55,6 +58,7 @@ def sync_quickround_to_watch(payload: QuickRoundSyncIn) -> QuickRoundSyncOut:
         hole=payload.hole,
         course_id=payload.courseId,
         gnss=None,
+        api_key=x_api_key,
     )
 
     sent = send_hud_to_device(device.device_id, hud)

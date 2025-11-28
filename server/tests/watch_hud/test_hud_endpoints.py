@@ -17,6 +17,7 @@ def test_get_hole_hud_basic() -> None:
     )
     assert response.status_code == 200
     hud = response.json()
+    assert hud["plan"] in {"free", "pro"}
     assert hud["memberId"] == "m1"
     assert hud["runId"] == "r1"
     assert hud["hole"] == 1
@@ -31,4 +32,5 @@ def test_hud_tick_returns_minimal_snapshot() -> None:
     assert response.status_code == 200
     data = response.json()
     assert data["hole"] == 1
+    assert data["plan"] in {"free", "pro"}
     assert "hasNewTip" in data

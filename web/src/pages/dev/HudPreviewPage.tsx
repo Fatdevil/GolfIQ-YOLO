@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { fetchBundleIndex, getHoleHud } from "@/api";
 import { UpgradeGate } from "@/access/UpgradeGate";
 import type { BundleIndexItem, HoleHud, HudQuery } from "@/api";
+import { HudPreviewCard } from "./HudPreviewCard";
 
 function parseNumber(value: string): number | undefined {
   if (!value.trim()) return undefined;
@@ -159,6 +160,15 @@ export function HudPreviewPage() {
           </button>
 
           {error && <p className="text-sm text-red-400">{error}</p>}
+        </div>
+
+        <div className="space-y-2">
+          <h2 className="text-xl font-semibold">HUD layout</h2>
+          {hud ? (
+            <HudPreviewCard hud={hud} />
+          ) : (
+            <p className="text-sm text-slate-400">No HUD loaded yet.</p>
+          )}
         </div>
 
         <div className="space-y-2">
