@@ -1,49 +1,55 @@
 # Backend-endpoints
 
-Tabellerna nedan listar centrala API:er baserat på routerdefinitionerna. Alla endpoints använder API-nyckel om inte annat anges.
+Tabellerna nedan summerar centrala API:er enligt routerdefinitionerna. De flesta endpoints kräver `x-api-key` via `require_api_key` om inte annat anges.
 
 ## Hälsa och metrics
 | Metod | Path | Beskrivning | Router/fil |
 |-------|------|-------------|------------|
-| GET | /health | Hälsokontroll med versionsfält. | `server/app.py` |
+| GET | /health | Hälsokontroll med build/git metadata. | `server/app.py` |
 | GET | /metrics | Prometheus-export av requestmetrics. | `server/app.py` |
 
-## CV & kalibrering
+## CV, kalibrering och range
 | Metod | Path | Beskrivning | Router/fil |
 |-------|------|-------------|------------|
-| POST | /cv/mock/analyze | Genererar syntetiska events/metrics och kan persistera run. | `server/routes/cv_mock.py` |
+| POST | /cv/mock/analyze | Genererar syntetiska events/metrics och kan spara run. | `server/routes/cv_mock.py` |
 | POST | /cv/analyze | Analyserar ZIP-uppladdade frames (real pipeline). | `server/routes/cv_analyze.py` |
 | POST | /cv/analyze/video | Analyserar video-upload och extraherar metrics. | `server/routes/cv_analyze_video.py` |
 | POST | /range/practice/analyze | CV-analys för range practice (mock eller real backend). | `server/routes/range_practice.py` |
 | POST | /calibrate/measure | Beräknar meters-per-pixel och kvalitetsindikatorer. | `server/routes/calibrate.py` |
-| GET | /calibrate | API för kalibreringsresurser (legacy). | `server/api/routers/calibrate.py` |
+| GET | /calibrate | Enkel skalfunktion (legacy API). | `server/api/routers/calibrate.py` |
 
-## Runs & uploads
+## Runs, uploads och anchors
 | Metod | Path | Beskrivning | Router/fil |
 |-------|------|-------------|------------|
 | GET | /runs | Lista senaste runs med sammanfattande metrics. | `server/routes/runs.py` |
 | GET | /runs/{run_id} | Hämta run med params/metrics/events. | `server/routes/runs.py` |
 | DELETE | /runs/{run_id} | Ta bort run och associerade filer. | `server/routes/runs.py` |
-| POST | /runs/hud | Spara HUD-filer kopplade till run-upload. | `server/routes/runs_upload.py` |
-| POST | /runs/round | Registrera run-identifierare för upload. | `server/routes/runs_upload.py` |
-| GET | /runs/{run_id} (uploads) | Hämta uppladdningsmetadata för run. | `server/routes/runs_upload.py` |
-| POST | /runs/upload-url | Skapa presigned PUT-url för ZIP-upload. | `server/routes/runs_upload.py` |
-| POST | /runs/upload | Ladda upp ZIP direkt till serverns lagring. | `server/routes/runs_upload.py` |
+| POST | /runs/hud | Spara HUD-payload (JSON-array) för delad run. | `server/routes/runs_upload.py` |
+| POST | /runs/round | Registrera rund-payload för delning. | `server/routes/runs_upload.py` |
+| GET | /runs/{run_id} (uploads) | Hämta uppladdningsmetadata eller delad payload. | `server/routes/runs_upload.py` |
+| POST | /runs/upload-url | Skapa presigned PUT-url för ZIP-upload (S3) eller fs-info. | `server/routes/runs_upload.py` |
+| POST | /runs/upload | Ladda upp ZIP direkt till serverns lagring (fs-backend). | `server/routes/runs_upload.py` |
+| POST | /api/runs/{run_id}/score | Idempotent registrering av score-event per run. | `server/api/routers/run_scores.py` |
+| POST | /api/runs/{run_id}/anchors | Skapa/konfirmera shot-ankare (clip + tidsintervall). | `server/api/routers/anchors.py` |
+| GET | /api/runs/{run_id}/anchors | Lista ankare för run. | `server/api/routers/anchors.py` |
+| GET | /api/runs/{run_id}/anchors/{hole}/{shot} | Hämta specifikt ankare. | `server/api/routers/anchors.py` |
+| PATCH | /api/runs/{run_id}/anchors/{hole}/{shot} | Patcha ankare med versionskontroll. | `server/api/routers/anchors.py` |
 
 ## Course & bundles
 | Metod | Path | Beskrivning | Router/fil |
 |-------|------|-------------|------------|
-| GET | /api/courses | Lista kursbundles (demo). | `server/api/routers/courses.py` |
-| GET | /api/courses/hero | Lista kuraterade hero-banor med tee-data. | `server/api/routers/courses.py` |
+| GET | /api/courses | Lista kursbundles (hero/legacy). | `server/api/routers/courses.py` |
 | GET | /api/courses/{id}/bundle | Hämta kursbundle med hål/green-data. | `server/api/routers/courses.py` |
-| GET | /courses | Lista kurser (legacy). | `server/routes/course_bundle.py` |
-| GET | /course/{course_id} | Hämta kursdefinition. | `server/routes/course_bundle.py` |
+| GET | /api/courses/hero | Lista kuraterade hero-banor med tee-data. | `server/api/routers/courses.py` |
+| GET | /courses | Lista legacy-kurser. | `server/routes/course_bundle.py` |
+| GET | /course/{course_id} | Hämta kursdefinition (legacy). | `server/routes/course_bundle.py` |
 | GET | /course/{course_id}/holes | Lista hål i kurs. | `server/routes/course_bundle.py` |
 | GET | /course/{course_id}/holes/{hole_number} | Detaljdata för hål. | `server/routes/course_bundle.py` |
-| POST | /bundle/course/{course_id} | Bygger och sparar bundlad kurs. | `server/routes/bundle.py` |
+| POST | /bundle/course/{course_id} | Bygg och spara bundle. | `server/routes/bundle.py` |
 | GET | /bundle/index | Index över tillgängliga bundles. | `server/routes/bundle_index.py` |
+| POST | /api/auto-hole | Auto-detektera hål utifrån GNSS + courseId. | `server/api/routers/hole_detect.py` |
 
-## Events & live
+## Events, live och feed
 | Metod | Path | Beskrivning | Router/fil |
 |-------|------|-------------|------------|
 | GET | /events/{event_id}/board | Hämtar leaderboard/boarddata. | `server/routes/events.py` |
@@ -51,8 +57,8 @@ Tabellerna nedan listar centrala API:er baserat på routerdefinitionerna. Alla e
 | POST | /events/{event_id}/start | Startar liveomgång. | `server/routes/events.py` |
 | POST | /events/{event_id}/pause | Pausar liveomgång. | `server/routes/events.py` |
 | POST | /events/{event_id}/close | Stänger event. | `server/routes/events.py` |
-| POST | /events/{event_id}/code/regenerate | Skapar nytt join-kod. | `server/routes/events.py` |
-| POST | /events/{event_id}/settings | Uppdaterar eventinställningar. | `server/routes/events.py` |
+| POST | /events/{event_id}/code/regenerate | Skapar ny join-kod. | `server/routes/events.py` |
+| PATCH | /events/{event_id}/settings | Uppdaterar eventinställningar. | `server/routes/events.py` |
 | POST | /live/heartbeat | Uppdaterar live-status och returnerar state. | `server/routes/live.py` |
 | POST | /live/start | Initierar live-session. | `server/routes/live.py` |
 | POST | /live/stop | Stoppar live-session. | `server/routes/live.py` |
@@ -62,36 +68,42 @@ Tabellerna nedan listar centrala API:er baserat på routerdefinitionerna. Alla e
 | POST | /live/exchange_invite | Byter invite-token mot viewer-länk. | `server/routes/live.py` |
 | POST | /api/events/{event_id}/live/viewer-token | Skapar viewer-token (API-namnrymd). | `server/api/routers/live_tokens.py` |
 | GET | /api/events/{event_id}/live/refresh | Förlänger viewer-token. | `server/api/routers/live_tokens.py` |
+| GET | /feed/home | Startsidesfeed (top-shots + live) med ETag-cache. | `server/routes/feed.py` |
 
 ## Delning, åtkomst & scoring
 | Metod | Path | Beskrivning | Router/fil |
 |-------|------|-------------|------------|
-| GET | /api/access/plan | Returnerar användarens plan (`free`/`pro`) samt ev. `trial` och `expires_at`. | `server/api/routers/access.py` |
-| POST | /api/share/anchor | Skapar delningsankare. | `server/api/routers/share.py` |
-| GET | /s/{sid} | Hämtar delningspayload. | `server/api/routers/share.py` |
-| GET | /s/{sid}/o | Öppnar delning (redirect/översikt). | `server/api/routers/share.py` |
-| POST | /api/runs/{run_id}/score | Sparar scoring för run. | `server/api/routers/run_scores.py` |
+| GET | /api/access/plan | Returnerar användarens plan (`free`/`pro`). | `server/api/routers/access.py` |
+| POST | /api/share/anchor | Skapar kortlänk för shot-ankare (kräver public clip). | `server/api/routers/share.py` |
+| GET | /s/{sid} | Redirect till delningsmål. | `server/api/routers/share.py` |
+| GET | /s/{sid}/o | OG/preview för delning. | `server/api/routers/share.py` |
+| GET | /api/user/history/quickrounds | Lista quickround-historik (kräver user-id header). | `server/api/routers/user_history.py` |
+| POST | /api/user/history/quickrounds | Spara quickround-historik. | `server/api/routers/user_history.py` |
+| GET | /api/user/history/rangesessions | Lista range-sessioner för användare. | `server/api/routers/user_history.py` |
+| POST | /api/user/history/rangesessions | Spara range-sessioner. | `server/api/routers/user_history.py` |
 
-## Caddie, SG & range
+## Caddie, SG & coach
 | Metod | Path | Beskrivning | Router/fil |
 |-------|------|-------------|------------|
-| POST | /api/caddie/advise | Returnerar klubbrekommendation. | `server/api/routers/caddie.py` |
-| GET | /api/caddie/insights | Hämtar caddieinsikter (accept/ignore per klubb, recent vs lifetime trust). | `server/routes/caddie_insights.py` |
-| POST | /api/caddie/telemetry | Uppladdning av telemetri för caddie. | `server/routes/caddie_telemetry.py` |
-| GET | /api/coach/round-summary/{run_id} | Coach-delning v1: SG-preview, sekvens och caddie highlights för run (Pro). | `server/api/routers/coach.py` |
-| GET | /api/sg/run/{run_id} | Stroke-gain preview för run. | `server/routes/sg_preview.py` |
-| GET | /api/sg/member/{member_id} | SG-sammanfattning per medlem. | `server/routes/sg_summary.py` |
-| GET | /api/runs/{run_id}/sg | SG-data för run. | `server/api/routers/sg.py` |
-| POST | /api/sg/runs/{run_id}/anchors | Skapar SG-ankare. | `server/api/routers/sg.py` |
-| GET | /api/sg/runs/{run_id}/anchors | Listar SG-ankare. | `server/api/routers/sg.py` |
+| POST | /api/caddie/advise | Returnerar plays-like och klubbrekommendation. | `server/api/routers/caddie.py` |
+| POST | /coach | Genererar textbaserat coach-svar (LLM). | `server/api/routers/coach.py` |
+| POST | /coach/feedback | Coach-feedback med rate limit och valfri run-metrics. | `server/api/routers/coach_feedback.py` |
+| GET | /api/coach/round-summary/{run_id} | Coach-sammanfattning (Pro-gated). | `server/api/routers/coach.py` |
+| GET | /api/coach/diagnosis/{run_id} | Diagnos (rule-based) för run (Pro-gated). | `server/api/routers/coach.py` |
+| GET | /api/runs/{run_id}/sg | Strokes-gained data (alias). | `server/api/routers/sg.py` |
+| GET | /api/sg/runs/{run_id} | SG v2 med hål- och skottlista. | `server/api/routers/sg.py` |
+| POST | /api/sg/runs/{run_id}/anchors | Upsert SG-ankare. | `server/api/routers/sg.py` |
+| GET | /api/sg/runs/{run_id}/anchors | Lista SG-ankare. | `server/api/routers/sg.py` |
+| GET | /api/sg/run/{run_id} | SG-preview (legacy). | `server/routes/sg_preview.py` |
+| GET | /api/sg/member/{member_id} | SG-sammanfattning per medlem (legacy). | `server/routes/sg_summary.py` |
 
-## Watch/HUD
+## Watch/HUD & pairing
 | Metod | Path | Beskrivning | Router/fil |
 |-------|------|-------------|------------|
-| POST | /api/watch/hud/hole | Full HUD-snapshot för valt hål. | `server/api/routers/watch_hud.py` |
-| POST | /api/watch/hud/tick | Lättviktsuppdatering (avstånd/tips). | `server/api/routers/watch_hud.py` |
-| POST | /api/watch/pair/code | Skapar join-kod för pairing. | `server/api/routers/watch_pairing.py` |
-| POST | /api/watch/devices/register | Registrerar watch-enhet. | `server/api/routers/watch_pairing.py` |
+| POST | /api/watch/hud/hole | Full HUD-snapshot för valt/auto-detekterat hål. | `server/api/routers/watch_hud.py` |
+| POST | /api/watch/hud/tick | Lättviktsuppdatering (avstånd/plays-like/tips). | `server/api/routers/watch_hud.py` |
+| POST | /api/watch/pair/code | Skapar join-kod för pairing (rate-limited). | `server/api/routers/watch_pairing.py` |
+| POST | /api/watch/devices/register | Registrerar watch-enhet (device-secret). | `server/api/routers/watch_pairing.py` |
 | POST | /api/watch/devices/bind | Binder enhet till medlem via kod. | `server/api/routers/watch_pairing.py` |
 | POST | /api/watch/devices/token | Förnyar enhetstoken. | `server/api/routers/watch_pairing.py` |
 | GET | /api/watch/devices/stream | SSE-stream av tips/notiser. | `server/api/routers/watch_pairing.py` |
@@ -99,6 +111,17 @@ Tabellerna nedan listar centrala API:er baserat på routerdefinitionerna. Alla e
 | POST | /api/watch/quickround/sync | Pushar Quick Round HUD till primärenhet. | `server/api/routers/watch_quickround.py` |
 | POST | /api/watch/{member_id}/tips | Posta en tip till medlem. | `server/api/routers/watch_tips.py` |
 | GET | /api/watch/{member_id}/tips/stream | SSE-stream för tips. | `server/api/routers/watch_tips.py` |
+
+## Trip och delning
+| Metod | Path | Beskrivning | Router/fil |
+|-------|------|-------------|------------|
+| POST | /api/trip/rounds | Skapa trip-round med spelare/tees. | `server/api/routers/trip.py` |
+| GET | /api/trip/rounds/{trip_id} | Hämta trip-round. | `server/api/routers/trip.py` |
+| GET | /api/trip/rounds/{trip_id}/stream | SSE för privat trip-round. | `server/api/routers/trip.py` |
+| POST | /api/trip/rounds/{trip_id}/scores | Uppdatera trip-scorekort. | `server/api/routers/trip.py` |
+| POST | /api/trip/rounds/{trip_id}/share | Skapa public token för trip-round. | `server/api/routers/trip.py` |
+| GET | /public/trip/rounds/{token} | Publik vy av trip-round. | `server/api/routers/trip_public.py` |
+| GET | /public/trip/rounds/{token}/stream | Publik SSE-ström av trip. | `server/api/routers/trip_public.py` |
 
 ## Telemetry & providers
 | Metod | Path | Beskrivning | Router/fil |
