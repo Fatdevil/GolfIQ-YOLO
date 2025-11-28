@@ -546,7 +546,7 @@ export default function QuickRoundPlayPage() {
         </UpgradeGate>
       )}
       {round?.completedAt && (
-        <QuickRoundCoachSection sgStatus={sgStatus} sgPreview={sgPreview} />
+        <QuickRoundCoachSection runId={round.runId ?? null} />
       )}
       <div>
         <button

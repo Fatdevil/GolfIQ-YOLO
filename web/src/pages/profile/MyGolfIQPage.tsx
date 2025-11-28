@@ -24,14 +24,25 @@ import { migrateLocalHistoryOnce } from "@/user/historyMigration";
 import { useUserSession } from "@/user/UserSessionContext";
 import { loadRangeSessions } from "@/features/range/sessions";
 import { markProfileSeen } from "@/onboarding/checklist";
-import { buildCoachRecommendations, type SgSummaryForRun } from "@/coach/coachLogic";
-import { CoachPlanCard } from "@/coach/CoachPlanCard";
 import { ShareWithCoachButton } from "@/coach/ShareWithCoachButton";
+import { fetchCoachRoundSummary, type CoachDiagnosis } from "@/api/coachSummary";
+
+type FindingSeverity = "none" | "info" | "warning" | "critical";
+
+const COACH_CATEGORIES = ["tee", "approach", "short", "putt", "sequence", "strategy"] as const;
+const COACH_CATEGORY_LABELS: Record<(typeof COACH_CATEGORIES)[number], string> = {
+  tee: "Tee",
+  approach: "Approach",
+  short: "Short game",
+  putt: "Putting",
+  sequence: "Sequence",
+  strategy: "Strategy",
+};
 
 export function MyGolfIQPage() {
   const { t } = useTranslation();
   const { session: userSession } = useUserSession();
-  const { plan } = useAccessPlan();
+  const { plan, isPro, loading: planLoading } = useAccessPlan();
   const { hasPlanFeature } = useAccessFeatures();
   const memberId = useCaddieMemberId();
   const rounds = useMemo(() => loadAllRoundsFull(), []);
@@ -72,31 +83,9 @@ export function MyGolfIQPage() {
   const [sgSummary, setSgSummary] = useState<MemberSgSummary | null>(null);
   const [sgSummaryStatus, setSgSummaryStatus] =
     useState<"idle" | "loading" | "ready" | "empty" | "error">("idle");
-
-  const coachSummary = useMemo<SgSummaryForRun | null>(() => {
-    if (!sgSummary) return null;
-    return {
-      total_sg: sgSummary.avg_sg_per_round,
-      sg_by_cat: {
-        TEE: sgSummary.per_category.TEE?.avg_sg ?? 0,
-        APPROACH: sgSummary.per_category.APPROACH?.avg_sg ?? 0,
-        SHORT: sgSummary.per_category.SHORT?.avg_sg ?? 0,
-        PUTT: sgSummary.per_category.PUTT?.avg_sg ?? 0,
-      },
-    };
-  }, [sgSummary]);
-
-  const coachRecommendations = useMemo(
-    () => (coachSummary ? buildCoachRecommendations({ sgSummary: coachSummary }) : []),
-    [coachSummary],
-  );
-
-  const coachStatus: "loading" | "error" | "empty" | "ready" = useMemo(() => {
-    if (sgSummaryStatus === "loading") return "loading";
-    if (sgSummaryStatus === "error") return "error";
-    if (!coachSummary) return "empty";
-    return coachRecommendations.length > 0 ? "ready" : "empty";
-  }, [coachSummary, coachRecommendations.length, sgSummaryStatus]);
+  const [diagnosis, setDiagnosis] = useState<CoachDiagnosis | null>(null);
+  const [diagnosisStatus, setDiagnosisStatus] =
+    useState<"idle" | "loading" | "ready" | "empty" | "error">("idle");
 
   const qrStats = useMemo(() => computeQuickRoundStats(rounds), [rounds]);
   const rangeStats = useMemo(() => computeRangeSummary(ghosts), [ghosts]);
@@ -151,6 +140,37 @@ export function MyGolfIQPage() {
       )
       .find((round) => Boolean(round.runId));
   }, [rounds]);
+
+  const coachCategoryStatus = useMemo(() => {
+    const rank: Record<FindingSeverity, number> = {
+      critical: 0,
+      warning: 1,
+      info: 2,
+      none: 3,
+    };
+
+    const base: Record<string, { severity: FindingSeverity; title?: string }> = {};
+    COACH_CATEGORIES.forEach((cat) => {
+      base[cat] = { severity: "none" };
+    });
+
+    (diagnosis?.findings ?? []).forEach((finding) => {
+      const current = base[finding.category] ?? { severity: "none" as FindingSeverity };
+      const currentRank = rank[current.severity];
+      const nextRank = rank[(finding.severity as FindingSeverity) ?? "none"] ?? rank.none;
+      if (nextRank < currentRank) {
+        base[finding.category] = {
+          severity: finding.severity as FindingSeverity,
+          title: finding.title,
+        };
+      } else if (!current.title) {
+        current.title = finding.title;
+        base[finding.category] = current;
+      }
+    });
+
+    return base;
+  }, [diagnosis]);
 
   const userId = userSession?.userId ?? "";
 
@@ -212,6 +232,34 @@ export function MyGolfIQPage() {
       cancelled = true;
     };
   }, [memberId]);
+
+  useEffect(() => {
+    if (planLoading) {
+      setDiagnosisStatus("loading");
+      return;
+    }
+    if (!isPro || !latestRunWithId?.runId) {
+      setDiagnosis(null);
+      setDiagnosisStatus("empty");
+      return;
+    }
+
+    let cancelled = false;
+    setDiagnosisStatus("loading");
+    fetchCoachRoundSummary(latestRunWithId.runId)
+      .then((summary) => {
+        if (cancelled) return;
+        setDiagnosis(summary.diagnosis ?? null);
+        setDiagnosisStatus("ready");
+      })
+      .catch(() => {
+        if (!cancelled) setDiagnosisStatus("error");
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isPro, latestRunWithId?.runId, planLoading]);
 
   useEffect(() => {
     if (!userId) return;
@@ -473,7 +521,58 @@ export function MyGolfIQPage() {
       </UpgradeGate>
 
       <UpgradeGate feature="COACH_PLAN">
-        <CoachPlanCard status={coachStatus} recommendations={coachRecommendations} />
+        <section className="rounded-lg border border-slate-800 bg-slate-900/60 p-5 shadow-sm space-y-3">
+          <div className="flex items-center justify-between gap-2">
+            <div>
+              <h2 className="text-lg font-semibold text-slate-50">Coach diagnosis</h2>
+              <p className="text-xs text-slate-400">Latest findings across tee, approach, short game, putting, and sequence.</p>
+            </div>
+            {latestRunWithId?.startedAt && (
+              <p className="text-[11px] text-slate-500">Latest run: {formatDate(latestRunWithId.startedAt)}</p>
+            )}
+          </div>
+
+          {(planLoading || diagnosisStatus === "loading") && (
+            <p className="text-xs text-slate-400">Loading coach diagnosis…</p>
+          )}
+
+          {diagnosisStatus === "error" && (
+            <p className="text-xs text-amber-400">Could not load coach diagnosis right now.</p>
+          )}
+
+          {diagnosisStatus === "empty" && (
+            <p className="text-xs text-slate-400">
+              Play a Quick Round with Pro access to generate a fresh diagnosis.
+            </p>
+          )}
+
+          {diagnosisStatus === "ready" && (
+            <div className="grid gap-3 sm:grid-cols-2">
+              {COACH_CATEGORIES.map((cat) => {
+                const status = coachCategoryStatus[cat] ?? { severity: "none" as FindingSeverity };
+                const badge = severityBadge(status.severity);
+                return (
+                  <div
+                    key={cat}
+                    className="rounded-md border border-slate-800 bg-slate-900/40 p-3 space-y-1"
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="text-sm font-semibold text-slate-100">{COACH_CATEGORY_LABELS[cat]}</p>
+                      <span
+                        className={`inline-flex items-center rounded-full border px-2 py-[2px] text-[11px] font-semibold uppercase tracking-wide ${badge.className}`}
+                      >
+                        {badge.label}
+                      </span>
+                    </div>
+                    <p className="text-xs text-slate-400">
+                      {status.title ?? "No issues flagged in this category."}
+                    </p>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </section>
       </UpgradeGate>
 
       {latestRunWithId?.runId ? (
@@ -653,6 +752,19 @@ function formatDate(value: string | number): string {
 function formatNumber(value: number): string {
   const rounded = Math.round(value * 10) / 10;
   return Number.isInteger(rounded) ? rounded.toFixed(0) : rounded.toFixed(1);
+}
+
+function severityBadge(severity: FindingSeverity): { label: string; className: string } {
+  switch (severity) {
+    case "critical":
+      return { label: "Critical", className: "border-rose-500/50 bg-rose-500/10 text-rose-200" };
+    case "warning":
+      return { label: "Warning", className: "border-amber-500/50 bg-amber-500/10 text-amber-200" };
+    case "info":
+      return { label: "Info", className: "border-sky-500/50 bg-sky-500/10 text-sky-200" };
+    default:
+      return { label: "OK", className: "border-emerald-500/40 bg-emerald-500/10 text-emerald-200" };
+  }
 }
 
 function formatAcceptPercent(accepted: number, total: number): string {
