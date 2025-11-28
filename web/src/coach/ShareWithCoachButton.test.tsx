@@ -1,20 +1,25 @@
-import { cleanup, render, screen } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import React from "react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { describe, expect, it, vi, afterEach, beforeEach } from "vitest";
 
 import { ShareWithCoachButton } from "./ShareWithCoachButton";
 
-const fetchCoachRoundSummary = vi.fn();
+const createCoachShare = vi.fn();
 const notify = vi.fn();
 const useAccessPlan = vi.fn();
 
-vi.mock("@/api/coachSummary", () => ({
-  fetchCoachRoundSummary: (...args: unknown[]) => fetchCoachRoundSummary(...args),
+vi.mock("@/api/coachShare", () => ({
+  createCoachShare: (...args: unknown[]) => createCoachShare(...args),
 }));
 
 vi.mock("@/access/UserAccessContext", () => ({
   useAccessPlan: () => useAccessPlan(),
-  useAccessFeatures: () => ({ hasPlanFeature: () => false }),
+}));
+
+vi.mock("@/access/UpgradeGate", () => ({
+  UpgradeGate: ({ children }: { children: React.ReactNode }) => (
+    <div data-testid="upgrade-gate">{children}</div>
+  ),
 }));
 
 vi.mock("@/notifications/NotificationContext", () => ({
@@ -25,39 +30,53 @@ vi.mock("react-i18next", () => ({
   useTranslation: () => ({ t: (key: string) => key }),
 }));
 
-afterEach(() => {
-  cleanup();
-  vi.clearAllMocks();
-});
-
 describe("ShareWithCoachButton", () => {
-  it("fetches and copies the summary for pro users", async () => {
+  beforeEach(() => {
     useAccessPlan.mockReturnValue({ isPro: true, loading: false });
-    fetchCoachRoundSummary.mockResolvedValue({
-      run_id: "run-123",
-      sg_by_category: [],
-      sg_per_hole: [],
+    createCoachShare.mockResolvedValue({ url: "/s/demo", sid: "demo" });
+    notify.mockReset();
+    (navigator as Navigator & { clipboard?: { writeText?: ReturnType<typeof vi.fn> } }).clipboard = {
+      writeText: vi.fn().mockResolvedValue(undefined),
+    };
+  });
+
+  afterEach(() => {
+    cleanup();
+    vi.clearAllMocks();
+  });
+
+  it("creates a share link and copies it", async () => {
+    render(<ShareWithCoachButton runId="run-1" />);
+
+    fireEvent.click(screen.getByRole("button"));
+
+    await waitFor(() => {
+      expect(createCoachShare).toHaveBeenCalledWith("run-1");
     });
 
-    const writeText = vi.fn();
-    Object.assign(navigator, { clipboard: { writeText } });
-
-    render(<ShareWithCoachButton runId="run-123" />);
-
-    await userEvent.click(screen.getByText("coach.share.button"));
-
-    expect(fetchCoachRoundSummary).toHaveBeenCalledWith("run-123");
-    expect(writeText).toHaveBeenCalledTimes(1);
+    expect(navigator.clipboard?.writeText).toHaveBeenCalledWith(
+      new URL("/s/demo", window.location.origin).toString(),
+    );
     expect(notify).toHaveBeenCalledWith("success", "coach.share.copied");
   });
 
-  it("shows upgrade gate for free users", () => {
+  it("wraps content in upgrade gate for free plans", () => {
     useAccessPlan.mockReturnValue({ isPro: false, loading: false });
-    fetchCoachRoundSummary.mockResolvedValue({ run_id: "run-1", sg_by_category: [], sg_per_hole: [] });
 
-    render(<ShareWithCoachButton runId="run-1" />);
+    render(<ShareWithCoachButton runId="run-2" />);
 
-    expect(screen.getByText("coach.share.button")).toBeInTheDocument();
-    expect(screen.getByText("access.upgrade.title")).toBeInTheDocument();
+    expect(screen.getByTestId("upgrade-gate")).toBeInTheDocument();
+  });
+
+  it("notifies on error", async () => {
+    createCoachShare.mockRejectedValue(new Error("boom"));
+
+    render(<ShareWithCoachButton runId="run-err" />);
+
+    fireEvent.click(screen.getByRole("button"));
+
+    await waitFor(() => {
+      expect(notify).toHaveBeenCalledWith("error", "coach.share.error");
+    });
   });
 });

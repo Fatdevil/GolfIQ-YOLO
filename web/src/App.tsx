@@ -42,6 +42,7 @@ import PublicTripScoreboardPage from "./pages/trip/PublicTripScoreboardPage";
 import { SettingsPage } from "@/pages/settings/SettingsPage";
 import { CaddieInsightsPreviewPage } from "@/pages/dev/CaddieInsightsPreviewPage";
 import HudPreviewPage from "./pages/dev/HudPreviewPage";
+import CoachShareReportPage from "./pages/coach/CoachShareReportPage";
 
 export default function App() {
   useCdnPreconnect();
@@ -137,6 +138,7 @@ export default function App() {
           <Route path="/trip/start" element={<TripStartPage />} />
           <Route path="/trip/:tripId" element={<TripScoreboardPage />} />
           <Route path="/trip/share/:token" element={<PublicTripScoreboardPage />} />
+          <Route path="/coach/share/:sid" element={<CoachShareReportPage />} />
           {qaReplayEnabled && <Route path="/qa/replay" element={<ReplayAnalyzerPage />} />}
         </Routes>
       </main>

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from threading import Lock
-from typing import Dict, Optional
+from typing import Any, Callable, Dict, Optional
 import secrets
 import time
 
@@ -18,6 +18,7 @@ class ShortLink:
     image: Optional[str]
     created_ts: int
     clip_id: Optional[str] = None
+    payload: Optional[dict[str, Any]] = None
 
 
 _STORE: Dict[str, ShortLink] = {}
@@ -30,12 +31,13 @@ def _new_id(n: int = 8) -> str:
 
 
 def create(
-    url: str,
+    url: str | Callable[[str], str],
     title: str,
     description: str,
     image: Optional[str],
     *,
     clip_id: Optional[str] = None,
+    payload: Optional[dict[str, Any]] = None,
 ) -> ShortLink:
     """Persist a short link and return the stored record."""
 
@@ -43,14 +45,16 @@ def create(
         sid = _new_id()
         while sid in _STORE:
             sid = _new_id()
+        resolved_url = url(sid) if callable(url) else url
         sl = ShortLink(
             sid=sid,
-            url=url,
+            url=resolved_url,
             title=title,
             description=description,
             image=image,
             created_ts=int(time.time() * 1000),
             clip_id=clip_id,
+            payload=payload,
         )
         _STORE[sid] = sl
         return sl
