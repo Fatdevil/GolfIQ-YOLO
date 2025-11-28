@@ -29,6 +29,8 @@ import { loadRangeSessions } from "@/features/range/sessions";
 import { markProfileSeen } from "@/onboarding/checklist";
 import { ShareWithCoachButton } from "@/coach/ShareWithCoachButton";
 import { fetchCoachRoundSummary, type CoachDiagnosis } from "@/api/coachSummary";
+import { fetchDemoProfile, type DemoProfileResponse } from "@/api/demo";
+import { DemoProvider, ONBOARDING_COMPLETED_KEY, useDemoMode } from "@/demo/DemoContext";
 
 type FindingSeverity = "none" | "info" | "warning" | "critical";
 
@@ -43,11 +45,20 @@ const COACH_CATEGORY_LABELS: Record<(typeof COACH_CATEGORIES)[number], string> =
 };
 
 export function MyGolfIQPage() {
+  return (
+    <DemoProvider>
+      <MyGolfIQPageContent />
+    </DemoProvider>
+  );
+}
+
+function MyGolfIQPageContent() {
   const { t } = useTranslation();
   const { session: userSession } = useUserSession();
   const { plan, isPro, loading: planLoading } = useAccessPlan();
   const { hasPlanFeature } = useAccessFeatures();
   const memberId = useCaddieMemberId();
+  const { demoMode, setDemoMode } = useDemoMode();
   const rounds = useMemo(() => loadAllRoundsFull(), []);
   const ghosts = useMemo(() => listGhosts(), []);
   const bag = useMemo(() => loadBag(), []);
@@ -80,6 +91,31 @@ export function MyGolfIQPage() {
     [ghostMatchSessions],
   );
 
+  const [demoData, setDemoData] = useState<DemoProfileResponse | null>(null);
+  const [demoStatus, setDemoStatus] = useState<"idle" | "loading" | "ready" | "error">(
+    "idle",
+  );
+  const [showOnboarding, setShowOnboarding] = useState(false);
+  const proLike = isPro || demoMode;
+
+  const completeOnboarding = () => {
+    if (typeof window !== "undefined") {
+      localStorage.setItem(ONBOARDING_COMPLETED_KEY, "1");
+    }
+    setShowOnboarding(false);
+  };
+
+  const activateDemo = () => {
+    setDemoMode(true);
+    completeOnboarding();
+  };
+
+  const exitDemo = () => {
+    setDemoMode(false);
+    setDemoData(null);
+    setDemoStatus("idle");
+  };
+
   const [insights, setInsights] = useState<CaddieInsights | null>(null);
   const [loadingInsights, setLoadingInsights] = useState(false);
   const [insightsError, setInsightsError] = useState<string | null>(null);
@@ -92,6 +128,29 @@ export function MyGolfIQPage() {
   const [playerProfile, setPlayerProfile] = useState<PlayerProfile | null>(null);
   const [playerProfileStatus, setPlayerProfileStatus] =
     useState<"idle" | "loading" | "ready" | "error" | "empty">("idle");
+
+  const planLabel = demoMode
+    ? "Demo"
+    : plan === "pro"
+      ? t("access.plan.pro")
+      : t("access.plan.free");
+  const profileToDisplay = demoMode ? demoData?.profile : playerProfile;
+  const profileStatus = demoMode
+    ? demoStatus === "loading"
+      ? "loading"
+      : demoData?.profile
+        ? "ready"
+        : "empty"
+    : playerProfileStatus;
+  const diagnosisToDisplay = demoMode ? demoData?.diagnosis ?? null : diagnosis;
+  const diagnosisViewStatus = demoMode
+    ? demoStatus === "loading"
+      ? "loading"
+      : demoData?.diagnosis
+        ? "ready"
+        : "empty"
+    : diagnosisStatus;
+  const analyticsDemo = demoMode ? demoData?.analytics ?? null : null;
 
   const qrStats = useMemo(() => computeQuickRoundStats(rounds), [rounds]);
   const rangeStats = useMemo(() => computeRangeSummary(ghosts), [ghosts]);
@@ -160,7 +219,7 @@ export function MyGolfIQPage() {
       base[cat] = { severity: "none" };
     });
 
-    (diagnosis?.findings ?? []).forEach((finding) => {
+    (diagnosisToDisplay?.findings ?? []).forEach((finding) => {
       const current = base[finding.category] ?? { severity: "none" as FindingSeverity };
       const currentRank = rank[current.severity];
       const nextRank = rank[(finding.severity as FindingSeverity) ?? "none"] ?? rank.none;
@@ -176,16 +235,48 @@ export function MyGolfIQPage() {
     });
 
     return base;
-  }, [diagnosis]);
+  }, [diagnosisToDisplay]);
 
   const userId = userSession?.userId ?? "";
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const completed = localStorage.getItem(ONBOARDING_COMPLETED_KEY);
+    if (!completed) {
+      setShowOnboarding(true);
+    }
+  }, []);
 
   useEffect(() => {
     markProfileSeen();
   }, []);
 
   useEffect(() => {
-    if (!memberId || !hasPlanFeature("CADDIE_INSIGHTS")) {
+    if (!demoMode) {
+      setDemoData(null);
+      setDemoStatus("idle");
+      return;
+    }
+
+    let cancelled = false;
+    setDemoStatus("loading");
+    fetchDemoProfile()
+      .then((data) => {
+        if (cancelled) return;
+        setDemoData(data);
+        setDemoStatus("ready");
+      })
+      .catch(() => {
+        if (!cancelled) setDemoStatus("error");
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [demoMode]);
+
+  useEffect(() => {
+    if (demoMode || !memberId || !hasPlanFeature("CADDIE_INSIGHTS")) {
       setInsights(null);
       setLoadingInsights(false);
       return;
@@ -205,9 +296,15 @@ export function MyGolfIQPage() {
       .finally(() => {
         setLoadingInsights(false);
       });
-  }, [hasPlanFeature, memberId]);
+  }, [demoMode, hasPlanFeature, memberId]);
 
   useEffect(() => {
+    if (demoMode) {
+      setSgSummary(null);
+      setSgSummaryStatus(demoStatus === "loading" ? "loading" : "empty");
+      return;
+    }
+
     if (!memberId) {
       setSgSummary(null);
       setSgSummaryStatus("empty");
@@ -237,9 +334,20 @@ export function MyGolfIQPage() {
     return () => {
       cancelled = true;
     };
-  }, [memberId]);
+  }, [demoMode, demoStatus, memberId]);
 
   useEffect(() => {
+    if (demoMode) {
+      setDiagnosis(demoData?.diagnosis ?? null);
+      setDiagnosisStatus(
+        demoStatus === "loading"
+          ? "loading"
+          : demoData?.diagnosis
+            ? "ready"
+            : "empty",
+      );
+      return;
+    }
     if (planLoading) {
       setDiagnosisStatus("loading");
       return;
@@ -265,9 +373,20 @@ export function MyGolfIQPage() {
     return () => {
       cancelled = true;
     };
-  }, [isPro, latestRunWithId?.runId, planLoading]);
+  }, [demoData?.diagnosis, demoMode, demoStatus, isPro, latestRunWithId?.runId, planLoading]);
 
   useEffect(() => {
+    if (demoMode) {
+      setPlayerProfile(null);
+      setPlayerProfileStatus(
+        demoStatus === "loading"
+          ? "loading"
+          : demoData?.profile
+            ? "ready"
+            : "idle",
+      );
+      return;
+    }
     if (planLoading) {
       setPlayerProfileStatus("loading");
       return;
@@ -294,7 +413,7 @@ export function MyGolfIQPage() {
     return () => {
       cancelled = true;
     };
-  }, [isPro, planLoading]);
+  }, [demoData?.profile, demoMode, demoStatus, isPro, planLoading]);
 
   useEffect(() => {
     if (!userId) return;
@@ -304,13 +423,42 @@ export function MyGolfIQPage() {
   }, [userId, rounds, rangeSessions]);
 
   return (
-    <div className="max-w-4xl mx-auto px-4 py-6 space-y-6">
+    <div
+      key={demoMode ? "demo" : "live"}
+      className="max-w-4xl mx-auto px-4 py-6 space-y-6"
+    >
       <header className="space-y-2">
-        <div className="flex items-center gap-3">
-          <h1 className="text-2xl font-semibold">{t("profile.title")}</h1>
-          <span className="inline-flex items-center px-2 py-[2px] rounded-full border border-slate-700 bg-slate-900/60 text-[10px] font-semibold uppercase tracking-wide text-slate-200">
-            {plan === "pro" ? t("access.plan.pro") : t("access.plan.free")}
-          </span>
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-center gap-3">
+            <h1 className="text-2xl font-semibold">{t("profile.title")}</h1>
+            <span className="inline-flex items-center px-2 py-[2px] rounded-full border border-slate-700 bg-slate-900/60 text-[10px] font-semibold uppercase tracking-wide text-slate-200">
+              {planLabel}
+            </span>
+            {demoMode && (
+              <span className="inline-flex items-center px-2 py-[2px] rounded-full border border-emerald-700 bg-emerald-900/40 text-[10px] font-semibold uppercase tracking-wide text-emerald-100">
+                Demo mode
+              </span>
+            )}
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {demoMode ? (
+              <button
+                type="button"
+                onClick={exitDemo}
+                className="inline-flex items-center rounded-md border border-slate-700 bg-slate-800 px-3 py-1 text-xs font-semibold text-slate-100 hover:border-slate-500"
+              >
+                Return to my data
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={activateDemo}
+                className="inline-flex items-center rounded-md border border-emerald-700 bg-emerald-900/40 px-3 py-1 text-xs font-semibold text-emerald-100 hover:border-emerald-500"
+              >
+                View demo profile
+              </button>
+            )}
+          </div>
         </div>
         <p className="text-sm text-slate-500">{t("profile.subtitle")}</p>
       </header>
@@ -318,16 +466,16 @@ export function MyGolfIQPage() {
       <section className="rounded-lg border border-slate-800 bg-slate-900/60 p-5 shadow-sm">
         <div className="flex items-center justify-between gap-4">
           <h2 className="text-lg font-semibold text-slate-50">AI player profile</h2>
-          {playerProfile?.model.referenceRunId && (
+          {profileToDisplay?.model.referenceRunId && (
             <p className="text-xs text-slate-400">
-              Based on run {playerProfile.model.referenceRunId}
+              Based on run {profileToDisplay.model.referenceRunId}
             </p>
           )}
         </div>
 
-        {planLoading || playerProfileStatus === "loading" ? (
+        {planLoading || profileStatus === "loading" ? (
           <p className="mt-3 text-xs text-slate-400">Loading your profile…</p>
-        ) : !isPro ? (
+        ) : !proLike && !demoMode ? (
           <div className="mt-3">
             <UpgradeGate feature="PLAYER_PROFILE">
               <p className="text-xs text-slate-400">
@@ -335,18 +483,24 @@ export function MyGolfIQPage() {
               </p>
             </UpgradeGate>
           </div>
-        ) : playerProfileStatus === "error" ? (
+        ) : demoStatus === "error" ? (
+          <p className="mt-3 text-xs text-amber-400">Could not load the demo profile. Try again in a moment.</p>
+        ) : profileStatus === "error" ? (
           <p className="mt-3 text-xs text-amber-400">Could not load your player profile. Try again after your next round.</p>
-        ) : playerProfileStatus === "ready" && playerProfile ? (
+        ) : profileStatus === "ready" && profileToDisplay ? (
           <div className="mt-4">
-            <PlayerProfilePanel profile={playerProfile} />
+            <PlayerProfilePanel profile={profileToDisplay} />
           </div>
         ) : (
           <p className="mt-3 text-xs text-slate-400">Complete a Pro round to generate your AI profile.</p>
         )}
       </section>
 
-      <PlayerAnalyticsSection />
+      <PlayerAnalyticsSection
+        demoMode={demoMode}
+        demoAnalytics={analyticsDemo}
+        loadingDemo={demoStatus === "loading"}
+      />
 
       <section className="rounded-lg border border-slate-800 bg-slate-900/60 p-5 shadow-sm">
         <div className="flex items-center justify-between gap-4">
@@ -600,21 +754,21 @@ export function MyGolfIQPage() {
             )}
           </div>
 
-          {(planLoading || diagnosisStatus === "loading") && (
+          {(planLoading || diagnosisViewStatus === "loading") && (
             <p className="text-xs text-slate-400">Loading coach diagnosis…</p>
           )}
 
-          {diagnosisStatus === "error" && (
+          {diagnosisViewStatus === "error" && (
             <p className="text-xs text-amber-400">Could not load coach diagnosis right now.</p>
           )}
 
-          {diagnosisStatus === "empty" && (
+          {diagnosisViewStatus === "empty" && (
             <p className="text-xs text-slate-400">
               Play a Quick Round with Pro access to generate a fresh diagnosis.
             </p>
           )}
 
-          {diagnosisStatus === "ready" && (
+          {diagnosisViewStatus === "ready" && (
             <div className="grid gap-3 sm:grid-cols-2">
               {COACH_CATEGORIES.map((cat) => {
                 const status = coachCategoryStatus[cat] ?? { severity: "none" as FindingSeverity };
@@ -643,7 +797,7 @@ export function MyGolfIQPage() {
         </section>
       </UpgradeGate>
 
-      {latestRunWithId?.runId ? (
+      {!demoMode && latestRunWithId?.runId ? (
         <div className="flex justify-end">
           <ShareWithCoachButton runId={latestRunWithId.runId} />
         </div>
@@ -773,6 +927,56 @@ export function MyGolfIQPage() {
           </section>
         </div>
       </UpgradeGate>
+
+      <DemoOnboarding
+        visible={showOnboarding}
+        onShowDemo={activateDemo}
+        onSkip={() => {
+          exitDemo();
+          completeOnboarding();
+        }}
+      />
+    </div>
+  );
+}
+
+type DemoOnboardingProps = {
+  visible: boolean;
+  onShowDemo: () => void;
+  onSkip: () => void;
+};
+
+function DemoOnboarding({ visible, onShowDemo, onSkip }: DemoOnboardingProps) {
+  if (!visible) return null;
+
+  return (
+    <div className="fixed inset-0 z-30 flex items-center justify-center bg-black/70 px-4">
+      <div className="w-full max-w-lg space-y-4 rounded-lg border border-slate-800 bg-slate-900/90 p-6 shadow-xl">
+        <div className="space-y-1">
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-emerald-300">Welcome</p>
+          <h2 className="text-2xl font-semibold text-slate-50">See GolfIQ in action</h2>
+          <p className="text-sm text-slate-300">
+            Explore a demo player to preview AI profile, analytics, and coaching insights — or jump straight to your own data.
+          </p>
+        </div>
+
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-end">
+          <button
+            type="button"
+            onClick={onSkip}
+            className="inline-flex justify-center rounded-md border border-slate-700 bg-slate-800 px-4 py-2 text-sm font-semibold text-slate-100 hover:border-slate-500"
+          >
+            Skip
+          </button>
+          <button
+            type="button"
+            onClick={onShowDemo}
+            className="inline-flex justify-center rounded-md border border-emerald-700 bg-emerald-900/60 px-4 py-2 text-sm font-semibold text-emerald-100 hover:border-emerald-500"
+          >
+            Start demo
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

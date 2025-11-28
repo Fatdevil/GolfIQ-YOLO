@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 
 import { useAccessFeatures, useAccessPlan } from "./UserAccessContext";
 import type { FeatureKey } from "./plan";
+import { useDemoMode } from "@/demo/DemoContext";
 
 type Props = {
   feature: FeatureKey;
@@ -12,6 +13,7 @@ type Props = {
 export const UpgradeGate: React.FC<Props> = ({ feature, children }) => {
   const { hasPlanFeature } = useAccessFeatures();
   const { plan, loading, refresh } = useAccessPlan();
+  const { demoMode } = useDemoMode();
   const { t } = useTranslation();
 
   const planLabel = plan?.toUpperCase?.() ?? plan;
@@ -20,7 +22,7 @@ export const UpgradeGate: React.FC<Props> = ({ feature, children }) => {
     return <div className="text-xs text-slate-400">{t("access.loading")}</div>;
   }
 
-  if (hasPlanFeature(feature)) {
+  if (demoMode || hasPlanFeature(feature)) {
     return <>{children}</>;
   }
 

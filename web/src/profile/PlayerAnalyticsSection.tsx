@@ -3,17 +3,35 @@ import { useEffect, useState } from "react";
 import { UpgradeGate } from "@/access/UpgradeGate";
 import { useAccessPlan } from "@/access/UserAccessContext";
 import { fetchPlayerAnalytics, type PlayerAnalytics } from "@/api/analytics";
+import { useDemoMode } from "@/demo/DemoContext";
 
 import { PlayerAnalyticsDashboard } from "./PlayerAnalyticsDashboard";
 
 type LoadState = "idle" | "loading" | "ready" | "error";
 
-export function PlayerAnalyticsSection() {
+type Props = {
+  demoMode?: boolean;
+  demoAnalytics?: PlayerAnalytics | null;
+  loadingDemo?: boolean;
+};
+
+export function PlayerAnalyticsSection({
+  demoMode = false,
+  demoAnalytics,
+  loadingDemo = false,
+}: Props) {
   const { isPro, loading } = useAccessPlan();
   const [analytics, setAnalytics] = useState<PlayerAnalytics | null>(null);
   const [state, setState] = useState<LoadState>("idle");
+  const effectiveDemo = demoMode || useDemoMode().demoMode;
 
   useEffect(() => {
+    if (effectiveDemo) {
+      setAnalytics(demoAnalytics ?? null);
+      setState(loadingDemo ? "loading" : demoAnalytics ? "ready" : "idle");
+      return;
+    }
+
     if (loading || !isPro) {
       setAnalytics(null);
       setState("idle");
@@ -36,11 +54,11 @@ export function PlayerAnalyticsSection() {
     return () => {
       cancelled = true;
     };
-  }, [isPro, loading]);
+  }, [demoAnalytics, effectiveDemo, isPro, loading, loadingDemo]);
 
   const content = (() => {
     if (loading) return <p className="text-xs text-slate-400">Checking access…</p>;
-    if (!isPro)
+    if (!isPro && !effectiveDemo)
       return (
         <UpgradeGate feature="PLAYER_ANALYTICS">
           <div className="text-sm text-slate-300 space-y-2">
