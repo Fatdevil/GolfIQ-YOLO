@@ -5,7 +5,7 @@ from statistics import mean, pstdev
 from typing import Dict, Iterable, List, Literal, Sequence
 
 from server.schemas.coach_diagnosis import CoachDiagnosis, CoachFinding
-from server.schemas.player_analytics import CategoryStatus, PlayerAnalytics
+from server.schemas.player_analytics import CategoryStatus
 from server.schemas.player_profile import (
     CoachCategory,
     DevelopmentStep,
@@ -235,7 +235,10 @@ def _plan_steps(
         steps.append(
             DevelopmentStep(
                 week=idx,
-                title=f"Week {idx} – {_CATEGORY_LABELS.get(weakness.category, weakness.category.title())}",
+                title=(
+                    f"Week {idx} – "
+                    f"{_CATEGORY_LABELS.get(weakness.category, weakness.category.title())}"
+                ),
                 description=weakness.description
                 or f"Focus drills on {weakness.category} to recover strokes.",
                 focusCategory=weakness.category,
@@ -250,7 +253,10 @@ def _plan_steps(
             DevelopmentStep(
                 week=week_cursor,
                 title="Week {0} – Kinematic sequence".format(week_cursor),
-                description="Balance hip–shoulder timing with slow-to-fast drills and video checkpoints.",
+                description=(
+                    "Balance hip–shoulder timing with slow-to-fast drills "
+                    "and video checkpoints."
+                ),
                 focusCategory="sequence",
                 suggestedMissions=_MISSION_SUGGESTIONS.get("sequence", []),
             )
@@ -262,7 +268,10 @@ def _plan_steps(
             DevelopmentStep(
                 week=week_cursor,
                 title=f"Week {week_cursor} – Strategy and consolidation",
-                description="Play a simulated round focusing on club selection and routines to stabilise gains.",
+                description=(
+                    "Play a simulated round focusing on club selection and routines "
+                    "to stabilise gains."
+                ),
                 focusCategory=fallback_category,
                 suggestedMissions=_MISSION_SUGGESTIONS.get(fallback_category, []),
             )
@@ -325,7 +334,10 @@ def build_player_profile(member_id: str) -> PlayerProfile:
                     category="sequence",
                     severity="focus",
                     title="Sequence timing can improve",
-                    description="Transition hints upper-body lead; add slow-motion reps to groove hips-first move.",
+                    description=(
+                        "Transition hints upper-body lead; add slow-motion reps "
+                        "to groove hips-first move."
+                    ),
                     evidence={"sequence_order": order},
                 )
             )
