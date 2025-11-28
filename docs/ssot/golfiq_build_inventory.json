@@ -1,0 +1,238 @@
+{
+  "meta": {
+    "generated_at": "2025-11-28T00:00:00Z",
+    "git_commit": "5540f71"
+  },
+  "backend": [
+    {
+      "name": "Health",
+      "method": "GET",
+      "path": "/health",
+      "file": "server/app.py",
+      "description": "Health probe for FastAPI app.",
+      "models": []
+    },
+    {
+      "name": "List runs",
+      "method": "GET",
+      "path": "/runs",
+      "file": "server/routes/runs.py",
+      "description": "List recent runs stored on filesystem.",
+      "models": ["RunRecord", "RunListItem"]
+    },
+    {
+      "name": "Telemetry ingest",
+      "method": "POST",
+      "path": "/telemetry",
+      "file": "server/routes/ws_telemetry.py",
+      "description": "Broadcast telemetry sample and optionally record it.",
+      "models": ["Telemetry"]
+    },
+    {
+      "name": "Telemetry batch",
+      "method": "POST",
+      "path": "/telemetry/batch",
+      "file": "server/routes/ws_telemetry.py",
+      "description": "Accept batch telemetry samples for processing.",
+      "models": ["TelemetrySample"]
+    },
+    {
+      "name": "WebSocket telemetry",
+      "method": "WS",
+      "path": "/ws/telemetry",
+      "file": "server/routes/ws_telemetry.py",
+      "description": "WebSocket for receiving broadcast telemetry messages.",
+      "models": ["Telemetry"]
+    },
+    {
+      "name": "Course bundle index",
+      "method": "GET",
+      "path": "/bundle/index",
+      "file": "server/routes/bundle_index.py",
+      "description": "List bundled courses available on server.",
+      "models": ["BundleIndexItem"]
+    },
+    {
+      "name": "Hero courses",
+      "method": "GET",
+      "path": "/api/courses/hero",
+      "file": "server/api/routers/courses.py",
+      "description": "Retrieve curated hero course summaries.",
+      "models": ["HeroCourseSummary"]
+    },
+    {
+      "name": "Create event",
+      "method": "POST",
+      "path": "/events",
+      "file": "server/routes/events.py",
+      "description": "Create a live/scoring event with join code and QR.",
+      "models": ["EventCreateResponse"]
+    },
+    {
+      "name": "Live viewer token",
+      "method": "POST",
+      "path": "/api/events/{event_id}/live/viewer-token",
+      "file": "server/api/routers/live_tokens.py",
+      "description": "Issue viewer token for a live event.",
+      "models": ["ViewerTokenOut"]
+    },
+    {
+      "name": "Watch HUD hole",
+      "method": "POST",
+      "path": "/api/watch/hud/hole",
+      "file": "server/api/routers/watch_hud.py",
+      "description": "Return full HUD snapshot for a given hole/member.",
+      "models": ["HoleHud"]
+    },
+    {
+      "name": "Caddie advise",
+      "method": "POST",
+      "path": "/api/caddie/advise",
+      "file": "server/api/routers/caddie.py",
+      "description": "Return club and plays-like recommendation for shot.",
+      "models": ["AdviseOut"]
+    },
+    {
+      "name": "Trip start",
+      "method": "POST",
+      "path": "/api/trip/rounds",
+      "file": "server/api/routers/trip.py",
+      "description": "Create a trip/round session for sharing.",
+      "models": ["TripCreateOut"]
+    },
+    {
+      "name": "Trip public scoreboard",
+      "method": "GET",
+      "path": "/api/trip/rounds/{token}",
+      "file": "server/api/routers/trip_public.py",
+      "description": "Fetch public view of trip scoreboard.",
+      "models": ["PublicTripRound"]
+    }
+  ],
+  "frontend_routes": [
+    {
+      "route": "/",
+      "component": "web/src/pages/home/HomeHubPage.tsx",
+      "description": "Home hub landing showing feeds and shortcuts.",
+      "calls_endpoints": ["GET /home", "GET /events"]
+    },
+    {
+      "route": "/runs",
+      "component": "web/src/pages/Runs.tsx",
+      "description": "List stored runs and link to details.",
+      "calls_endpoints": ["GET /runs"]
+    },
+    {
+      "route": "/runs/:id",
+      "component": "web/src/pages/RunDetail.tsx",
+      "description": "View run metrics, events, and media.",
+      "calls_endpoints": ["GET /runs/{id}"]
+    },
+    {
+      "route": "/events/:id/live",
+      "component": "web/src/pages/events/LiveViewerPage.tsx",
+      "description": "Live event viewer within session boundary.",
+      "calls_endpoints": ["GET /events/{id}/board", "POST /live/heartbeat"]
+    },
+    {
+      "route": "/device-dashboard",
+      "component": "web/src/pages/DeviceDashboard.tsx",
+      "description": "Dashboard for pairing devices and monitoring watch tips.",
+      "calls_endpoints": ["POST /api/watch/pair/code", "GET /api/watch/devices/stream"]
+    },
+    {
+      "route": "/range/practice",
+      "component": "web/src/pages/RangePracticePage.tsx",
+      "description": "Range practice capture and analysis UI.",
+      "calls_endpoints": ["POST /range/practice/analyze"]
+    },
+    {
+      "route": "/trip/:tripId",
+      "component": "web/src/pages/trip/TripScoreboardPage.tsx",
+      "description": "Scoreboard for trip participants.",
+      "calls_endpoints": ["GET /api/trip/rounds/{tripId}"]
+    }
+  ],
+  "watch_bridges": [
+    {
+      "platform": "watchOS",
+      "file": "watchos/SessionDelegate.swift",
+      "description": "Uses WCSession to receive HUD context and messages; forwards phone messages back to watch UI model."
+    },
+    {
+      "platform": "iOS",
+      "file": "ios/WatchConnectorIOS.swift",
+      "description": "React Native bridge exposing HUD/overlay send and watch message events via WCSession."
+    },
+    {
+      "platform": "Android",
+      "file": "android/app/src/main/java/com/golfiq/watch/WatchConnectorModule.kt",
+      "description": "React Native module using Google Wearable data/message APIs to send HUD payloads and control ShotSense." 
+    }
+  ],
+  "telemetry": [
+    {
+      "endpoint": "POST /telemetry",
+      "file": "server/routes/ws_telemetry.py",
+      "description": "Accepts single telemetry sample, broadcasts to WebSocket listeners, optionally records to disk.",
+      "storage": "Flight recorder directory defined by FLIGHT_RECORDER_DIR"
+    },
+    {
+      "endpoint": "POST /runs/upload",
+      "file": "server/routes/runs_upload.py",
+      "description": "Stores uploaded ZIP/HUD assets for runs; metadata saved under data/uploads or external storage.",
+      "storage": "Filesystem uploads directory with optional presigned S3"
+    },
+    {
+      "endpoint": "POST /api/caddie/telemetry",
+      "file": "server/routes/caddie_telemetry.py",
+      "description": "Accepts telemetry for caddie analytics pipeline.",
+      "storage": "Internal telemetry collector (implementation in router)"
+    }
+  ],
+  "ci": [
+    {
+      "workflow": ".github/workflows/ci.yml",
+      "description": "Main CI running lint/tests across services."
+    },
+    {
+      "workflow": ".github/workflows/web.yml",
+      "description": "Builds and tests the React web frontend."
+    },
+    {
+      "workflow": ".github/workflows/android-ci.yml",
+      "description": "Android continuous integration for watch bridge."
+    },
+    {
+      "workflow": ".github/workflows/ios-ci.yml",
+      "description": "iOS build/test pipeline for native components."
+    }
+  ],
+  "env_vars": [
+    {
+      "name": "API_KEY",
+      "used_in": "server/app.py",
+      "description": "Optional API key required for protected endpoints."
+    },
+    {
+      "name": "FLIGHT_RECORDER_PCT",
+      "used_in": "server/routes/ws_telemetry.py",
+      "description": "Percentage of telemetry messages to persist for debugging."
+    },
+    {
+      "name": "GOLFIQ_RUNS_DIR",
+      "used_in": "server/storage/runs.py",
+      "description": "Filesystem root for run metadata and assets."
+    },
+    {
+      "name": "VITE_API_BASE",
+      "used_in": "web/src/api.ts",
+      "description": "Base URL for backend API used by web client."
+    },
+    {
+      "name": "VITE_QA_MODE",
+      "used_in": "web/src/config.ts",
+      "description": "Enables QA replay features and routes in the web UI."
+    }
+  ]
+}
