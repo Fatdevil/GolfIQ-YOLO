@@ -97,14 +97,19 @@ def _demo_plan() -> PlayerDevelopmentPlan:
         DevelopmentStep(
             week=2,
             title="Week 2 – Sequence and tempo",
-            description="Slow-motion rehearsals to reinforce hips-first transition and smoother tempo.",
+            description=(
+                "Slow-motion rehearsals to reinforce hips-first transition and "
+                "smoother tempo."
+            ),
             focus_category="sequence",
             suggested_missions=["TEMPO_METRONOME", "SEQUENCE_VIDEO_CHECK"],
         ),
         DevelopmentStep(
             week=3,
             title="Week 3 – Tee box confidence",
-            description="Fairway finder setup with 3-wood, then reintroduce driver with alignment gates.",
+            description=(
+                "Fairway finder setup with 3-wood, then reintroduce driver with alignment gates."
+            ),
             focus_category="tee",
             suggested_missions=["ALIGNMENT_STICKS", "FAIRWAY_FINDER"],
         ),
@@ -180,7 +185,10 @@ def _demo_diagnosis(reference_run_id: str | None) -> CoachDiagnosis:
                 category="approach",
                 severity="critical",
                 title="Distance control drifts long",
-                message="25–40 m approach window shows long-right bias; pause at the top to improve low-point.",
+                message=(
+                    "25–40 m approach window shows long-right bias; pause at the top to improve "
+                    "low-point."
+                ),
                 suggested_missions=["WEDGE_CLOCK_DRILL"],
             ),
             CoachFinding(
@@ -188,7 +196,10 @@ def _demo_diagnosis(reference_run_id: str | None) -> CoachDiagnosis:
                 category="sequence",
                 severity="warning",
                 title="Upper-body led transition",
-                message="Sequence checkpoints show shoulders firing before hips. Add metronome rehearsals.",
+                message=(
+                    "Sequence checkpoints show shoulders firing before hips. Add metronome "
+                    "rehearsals."
+                ),
                 suggested_missions=["TEMPO_METRONOME"],
             ),
             CoachFinding(
@@ -196,7 +207,10 @@ def _demo_diagnosis(reference_run_id: str | None) -> CoachDiagnosis:
                 category="tee",
                 severity="warning",
                 title="Start lines leak right",
-                message="Path/right face gap leads to push-fades. Close stance slightly and rehearse alignment.",
+                message=(
+                    "Path/right face gap leads to push-fades. Close stance slightly and rehearse "
+                    "alignment."
+                ),
                 suggested_missions=["ALIGNMENT_STICKS"],
             ),
         ],
