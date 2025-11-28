@@ -8,14 +8,22 @@
     ],
     "services": [
       "server/watch/hud_service.py",
-      "server/storage/runs.py",
-      "server/caddie/*",
-      "server/courses/*"
+      "server/services/anchors_store.py",
+      "server/services/live_state.py",
+      "server/services/coach_*",
+      "server/services/telemetry.py"
     ],
-    "config": [
-      "server/config/*",
-      "server/security.py",
-      "server/auth.py"
+    "data": [
+      "server/storage/runs.py",
+      "server/routes/runs_upload.py",
+      "server/user/history_service.py",
+      "server/trip/store.py"
+    ],
+    "courses": [
+      "server/api/routers/courses.py",
+      "server/routes/course_bundle.py",
+      "server/bundles/hero_catalog.py",
+      "server/courses/hole_detect.py"
     ]
   },
   "web": {
@@ -37,6 +45,7 @@
       "server/api/routers/watch_hud.py",
       "server/api/routers/watch_pairing.py",
       "server/api/routers/watch_quickround.py",
+      "server/api/routers/watch_tips.py",
       "server/watch/hud_service.py"
     ],
     "clients": [
@@ -45,22 +54,39 @@
       "ios/"
     ]
   },
+  "trip": {
+    "routers": [
+      "server/api/routers/trip.py",
+      "server/api/routers/trip_public.py"
+    ],
+    "models": "server/trip/models.py"
+  },
   "cv_engine": {
     "modules": [
       "cv_engine/calibration",
       "cv_engine/impact",
-      "cv_engine/pipeline"
+      "cv_engine/pipeline",
+      "cv_engine/sequence"
     ]
   },
   "ci": {
     "workflows": [
       ".github/workflows/ci.yml",
+      ".github/workflows/cv-engine-coverage.yml",
       ".github/workflows/web.yml",
       ".github/workflows/android-ci.yml",
+      ".github/workflows/android-release.yml",
       ".github/workflows/ios-ci.yml",
-      ".github/workflows/cv-engine-coverage.yml",
-      ".github/workflows/static-analysis.yml",
-      ".github/workflows/release.yml"
+      ".github/workflows/ios-build.yml",
+      ".github/workflows/mobile-beta.yml",
+      ".github/workflows/golden-regression.yml",
+      ".github/workflows/bundle-validate.yml",
+      ".github/workflows/edge-bench.yml",
+      ".github/workflows/accuracy-gate.yml",
+      ".github/workflows/auto-merge-green.yml",
+      ".github/workflows/release.yml",
+      ".github/workflows/release-v1_2.yml",
+      ".github/workflows/tag-release.yml"
     ]
   }
 }
