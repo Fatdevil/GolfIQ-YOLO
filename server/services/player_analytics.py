@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from typing import Dict, Iterable, List
+from typing import Dict, List
 
 from server.schemas.coach_diagnosis import CoachDiagnosis
 from server.schemas.player_analytics import (
@@ -37,9 +37,8 @@ def _course_id_for_run(run: RunRecord) -> str | None:
 def _select_recent_runs(member_id: str, max_runs: int) -> List[RunRecord]:
     """Return the most recent runs for a member.
 
-    We prefer runs explicitly tagged with the member_id. If none are found we fall back
-    to the latest runs overall to ensure the endpoint still returns a populated
-    payload while upstream storage catches up.
+    Privacy guard: if no runs match the provided member_id, we return an empty list
+    instead of falling back to other members' runs.
     """
 
     recent_runs = sorted(
@@ -49,7 +48,7 @@ def _select_recent_runs(member_id: str, max_runs: int) -> List[RunRecord]:
 
     if matching:
         return matching[:max_runs]
-    return recent_runs[:max_runs]
+    return []
 
 
 def _trend(values: List[float]) -> str:

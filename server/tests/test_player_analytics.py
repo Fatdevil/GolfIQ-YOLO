@@ -93,6 +93,26 @@ def test_build_player_analytics_uses_recent_runs(
     assert result.mission_stats.completed == 0
 
 
+def test_build_player_analytics_returns_empty_for_unknown_member(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    runs = [_run("run-1", created=1000, member_id="member-1")]
+
+    monkeypatch.setattr(analytics, "list_runs", lambda limit=50: runs)
+    monkeypatch.setattr(analytics, "list_run_anchors", lambda run_id: [])
+
+    def fail_preview(*_: object, **__: object):
+        raise AssertionError("compute_sg_preview_for_run should not be called")
+
+    monkeypatch.setattr(analytics, "compute_sg_preview_for_run", fail_preview)
+
+    result = build_player_analytics("member-2", max_runs=5)
+
+    assert result.sg_trend == []
+    assert result.best_round_id is None
+    assert result.worst_round_id is None
+
+
 def test_player_analytics_endpoint_requires_pro(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -139,3 +159,31 @@ def test_player_analytics_endpoint_uses_member(monkeypatch: pytest.MonkeyPatch) 
     assert response.status_code == 200
     assert captured == ["member-77"]
     assert response.json()["memberId"] == "member-77"
+
+
+def test_player_analytics_endpoint_returns_empty_for_unknown_member(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("REQUIRE_API_KEY", "1")
+    monkeypatch.setenv("API_KEY", "primary")
+    monkeypatch.setenv("GOLFIQ_PRO_API_KEYS", "pro-key")
+
+    runs = [_run("run-1", created=1000, member_id="member-1")]
+
+    monkeypatch.setattr(analytics, "list_runs", lambda limit=50: runs)
+    monkeypatch.setattr(analytics, "list_run_anchors", lambda run_id: [])
+
+    def fail_preview(*_: object, **__: object):
+        raise AssertionError("compute_sg_preview_for_run should not be called")
+
+    monkeypatch.setattr(analytics, "compute_sg_preview_for_run", fail_preview)
+
+    client = TestClient(app)
+    response = client.get(
+        "/api/analytics/player",
+        headers={"x-api-key": "pro-key", "x-user-id": "member-2"},
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["sgTrend"] == []
