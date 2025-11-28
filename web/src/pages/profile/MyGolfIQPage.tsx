@@ -26,6 +26,7 @@ import { loadRangeSessions } from "@/features/range/sessions";
 import { markProfileSeen } from "@/onboarding/checklist";
 import { buildCoachRecommendations, type SgSummaryForRun } from "@/coach/coachLogic";
 import { CoachPlanCard } from "@/coach/CoachPlanCard";
+import { ShareWithCoachButton } from "@/coach/ShareWithCoachButton";
 
 export function MyGolfIQPage() {
   const { t } = useTranslation();
@@ -141,6 +142,14 @@ export function MyGolfIQPage() {
         (a, b) => new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime()
       )
       .slice(0, 5);
+  }, [rounds]);
+
+  const latestRunWithId = useMemo(() => {
+    return [...rounds]
+      .sort(
+        (a, b) => new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime()
+      )
+      .find((round) => Boolean(round.runId));
   }, [rounds]);
 
   const userId = userSession?.userId ?? "";
@@ -466,6 +475,12 @@ export function MyGolfIQPage() {
       <UpgradeGate feature="COACH_PLAN">
         <CoachPlanCard status={coachStatus} recommendations={coachRecommendations} />
       </UpgradeGate>
+
+      {latestRunWithId?.runId ? (
+        <div className="flex justify-end">
+          <ShareWithCoachButton runId={latestRunWithId.runId} />
+        </div>
+      ) : null}
 
       <UpgradeGate feature="CADDIE_INSIGHTS">
         <div className="space-y-4">
