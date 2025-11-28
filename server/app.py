@@ -26,6 +26,7 @@ from server.api.routers.demo import router as demo_router
 from server.api.routers.hole_detect import router as auto_hole_router
 from server.api.routers.live_tokens import router as live_tokens_router
 from server.api.routers.sg import router as sg_router
+from server.api.routers.session_timeline import router as session_timeline_router
 from server.api.routers.share import router as share_router
 from server.api.routers.profile import router as profile_router
 from server.api.routers.user_history import router as user_history_router
@@ -173,6 +174,7 @@ app.include_router(api_uploads.router)
 app.include_router(api_run_scores.router)
 app.include_router(live_tokens_router)
 app.include_router(sg_router)
+app.include_router(session_timeline_router)
 app.include_router(share_router)
 app.include_router(watch_tips_router)
 app.include_router(watch_pairing_router)

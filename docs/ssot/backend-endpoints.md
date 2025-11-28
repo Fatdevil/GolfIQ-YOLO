@@ -88,6 +88,7 @@ Tabellerna nedan listar centrala API:er baserat på routerdefinitionerna. Alla e
 | GET | /api/runs/{run_id}/sg | SG-data för run. | `server/api/routers/sg.py` |
 | POST | /api/sg/runs/{run_id}/anchors | Skapar SG-ankare. | `server/api/routers/sg.py` |
 | GET | /api/sg/runs/{run_id}/anchors | Listar SG-ankare. | `server/api/routers/sg.py` |
+| GET | /api/session/{run_id}/timeline | Session timeline v1 (swing peaks, SG-ankare, missions). | `server/api/routers/session_timeline.py` |
 
 ## Watch/HUD
 | Metod | Path | Beskrivning | Router/fil |

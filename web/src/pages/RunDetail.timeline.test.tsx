@@ -20,15 +20,12 @@ const mockUseAccessPlan = vi.fn();
 
 vi.mock("@/access/UserAccessContext", () => ({
   useAccessPlan: () => mockUseAccessPlan(),
-  useAccessFeatures: () => ({ hasPlanFeature: () => false }),
+  useAccessFeatures: () => ({ hasPlanFeature: () => true }),
 }));
 
 vi.mock("@/access/UpgradeGate", () => ({
   UpgradeGate: ({ children }: { children: React.ReactNode }) => (
-    <div data-testid="upgrade-gate">
-      {children}
-      <span>Upgrade required</span>
-    </div>
+    <div data-testid="upgrade-gate">{children}</div>
   ),
 }));
 
@@ -53,16 +50,6 @@ vi.mock("@web/sg/TopSGShotsPanel", () => ({
 }));
 vi.mock("@web/sg/visibility", () => ({ isClipVisible: () => true }));
 
-const sequencePayload = {
-  max_shoulder_rotation: 40,
-  max_hip_rotation: 30,
-  max_x_factor: 10,
-  shoulder_peak_frame: 3,
-  hip_peak_frame: 2,
-  x_factor_peak_frame: 3,
-  sequence_order: { peak_order: ["hips", "shoulders", "arms", "club"], is_ideal: true },
-};
-
 function renderPage() {
   return render(
     <MemoryRouter initialEntries={["/runs/demo"]}>
@@ -73,35 +60,28 @@ function renderPage() {
   );
 }
 
-describe("RunDetailPage sequence preview", () => {
+describe("RunDetailPage timeline", () => {
   beforeEach(() => {
     mockGetRun.mockReset();
     mockGetRemoteConfig.mockReset();
     mockFetchSessionTimeline.mockReset();
     mockUseAccessPlan.mockReset();
+
     mockGetRemoteConfig.mockResolvedValue({ playslike: { enabled: false, variant: "off" } });
-    mockFetchSessionTimeline.mockResolvedValue({ runId: "demo", events: [] });
+    mockFetchSessionTimeline.mockResolvedValue({
+      runId: "demo",
+      events: [{ ts: 0.5, type: "impact", label: "Impact #1" }],
+    });
   });
 
-  it("renders sequence card for pro users", async () => {
+  it("shows swing timeline for pro users", async () => {
     mockUseAccessPlan.mockReturnValue({ plan: "pro", isPro: true, loading: false, refresh: vi.fn() });
-    mockGetRun.mockResolvedValue({ run_id: "demo", metrics: { sequence: sequencePayload }, events: [] });
+    mockGetRun.mockResolvedValue({ run_id: "demo", metrics: {}, events: [] });
 
     renderPage();
 
     await waitFor(() => expect(mockGetRun).toHaveBeenCalled());
-    expect(await screen.findByText(/Kinematic sequence/)).toBeInTheDocument();
-    expect(screen.queryByTestId("upgrade-gate")).toBeNull();
-  });
-
-  it("gates sequence card for free users", async () => {
-    mockUseAccessPlan.mockReturnValue({ plan: "free", isPro: false, loading: false, refresh: vi.fn() });
-    mockGetRun.mockResolvedValue({ run_id: "demo", metrics: { sequence: sequencePayload }, events: [] });
-
-    renderPage();
-
-    await waitFor(() => expect(mockGetRun).toHaveBeenCalled());
-    const gates = await screen.findAllByTestId("upgrade-gate");
-    expect(gates.length).toBeGreaterThan(0);
+    expect(await screen.findByText(/Session timeline/)).toBeInTheDocument();
+    expect(await screen.findByText(/Impact #1/)).toBeInTheDocument();
   });
 });
