@@ -12,6 +12,7 @@ GolfIQ-YOLO levererar CV-baserad golfanalys, liveevent och watch/HUD-stöd via F
 - **Pro**: Coach share summary v1 – exporterar en sammanfogad rund-sammanfattning (SG preview, kinematik, caddie-trust och ev. range-mission) via /api/coach/round-summary och delningsknappar på Quick Round/My GolfIQ.【F:server/services/coach_summary.py†L17-L173】【F:web/src/coach/ShareWithCoachButton.tsx†L1-L50】
 - **Pro**: Coach v3 – regelbaserad diagnosmotor som kombinerar SG v2, kinematic sequence v1, caddie-insights v2 och range-missioner. Resultatet exponeras i coach share, dedikerat /api/coach/diagnosis och webbutkikkar på Quick Round/MyGolfIQ.【F:server/services/coach_diagnostics.py†L1-L214】【F:server/api/routers/coach.py†L1-L33】【F:web/src/coach/CoachDiagnosisCard.tsx†L1-L89】
 - **Pro**: Range Bingo v2 – missionsbaserad range-träning med Coach-länkade fokusområden och målkorridorer, gated via accessplanen.
+- **Pro**: Player Analytics v1 – /api/analytics/player samlar SG-trend, kategoristatus och missions-progress, visat på MyGolfIQ-sidan för Pro-användare.【F:server/services/player_analytics.py†L1-L115】【F:web/src/profile/PlayerAnalyticsSection.tsx†L1-L63】
 
 ## On-course
 - **Live events och leaderboards**: Användare kan skapa och följa liveevents, inklusive host-läge, viewer-läge och top-shots. Webbrutter `/events/:id/live`, `/events/:id/live-host` och `/events/:id/live-view` stöds av live-endpoints i `server/routes/live.py` och event-board i `server/routes/events.py`.【F:web/src/App.tsx†L64-L118】【F:server/app.py†L182-L186】

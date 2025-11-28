@@ -15,7 +15,8 @@ export type FeatureKey =
   | "RANGE_MISSIONS"
   | "RANGE_GHOSTMATCH"
   | "HUD_PREVIEW"
-  | "KINEMATIC_SEQUENCE";
+  | "KINEMATIC_SEQUENCE"
+  | "PLAYER_ANALYTICS";
 
 export type PlanFeatureMatrix = Record<PlanId, Record<FeatureKey, boolean>>;
 
@@ -32,6 +33,7 @@ export const PLAN_FEATURES: PlanFeatureMatrix = {
     RANGE_GHOSTMATCH: false,
     HUD_PREVIEW: false,
     KINEMATIC_SEQUENCE: false,
+    PLAYER_ANALYTICS: false,
   },
   PRO: {
     CADDIE_INSIGHTS: true,
@@ -43,6 +45,7 @@ export const PLAN_FEATURES: PlanFeatureMatrix = {
     RANGE_GHOSTMATCH: true,
     HUD_PREVIEW: true,
     KINEMATIC_SEQUENCE: true,
+    PLAYER_ANALYTICS: true,
   },
 };
 

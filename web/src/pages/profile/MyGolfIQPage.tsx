@@ -20,6 +20,7 @@ import { fetchMemberSgSummary, type MemberSgSummary } from "@/api/sgSummary";
 import { UpgradeGate } from "@/access/UpgradeGate";
 import { useAccessFeatures, useAccessPlan } from "@/access/UserAccessContext";
 import { useCaddieMemberId } from "@/profile/memberIdentity";
+import { PlayerAnalyticsSection } from "@/profile/PlayerAnalyticsSection";
 import { migrateLocalHistoryOnce } from "@/user/historyMigration";
 import { useUserSession } from "@/user/UserSessionContext";
 import { loadRangeSessions } from "@/features/range/sessions";
@@ -279,6 +280,8 @@ export function MyGolfIQPage() {
         </div>
         <p className="text-sm text-slate-500">{t("profile.subtitle")}</p>
       </header>
+
+      <PlayerAnalyticsSection />
 
       <section className="rounded-lg border border-slate-800 bg-slate-900/60 p-5 shadow-sm">
         <div className="flex items-center justify-between gap-4">

@@ -79,6 +79,7 @@ Tabellerna nedan listar centrala API:er baserat på routerdefinitionerna. Alla e
 | GET | /api/caddie/insights | Hämtar caddieinsikter (accept/ignore per klubb, recent vs lifetime trust). | `server/routes/caddie_insights.py` |
 | POST | /api/caddie/telemetry | Uppladdning av telemetri för caddie. | `server/routes/caddie_telemetry.py` |
 | GET | /api/coach/round-summary/{run_id} | Coach-delning v1: SG-preview, sekvens och caddie highlights för run (Pro). | `server/api/routers/coach.py` |
+| GET | /api/analytics/player | Pro-analytics: SG-trend, kategoristatus och missionsprogress per medlem. | `server/api/routers/analytics.py` |
 | GET | /api/sg/run/{run_id} | Stroke-gain preview för run. | `server/routes/sg_preview.py` |
 | GET | /api/sg/member/{member_id} | SG-sammanfattning per medlem. | `server/routes/sg_summary.py` |
 | GET | /api/runs/{run_id}/sg | SG-data för run. | `server/api/routers/sg.py` |
