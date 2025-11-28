@@ -29,6 +29,10 @@ describe("CoachPlanCard", () => {
     expect(screen.getByText(/Focus on Approach shots/i)).toBeInTheDocument();
     expect(screen.getByText(/Range:/i)).toBeInTheDocument();
     expect(screen.getByText(/On-course:/i)).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /profile.coach.cta.range/i })).toHaveAttribute(
+      "href",
+      "/range/practice?missionId=approach_band_80_130",
+    );
   });
 
   it("shows empty state when no data is available", () => {

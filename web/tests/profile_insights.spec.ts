@@ -73,25 +73,25 @@ describe("computeInsights", () => {
       }),
       makeRangeSession({
         id: "mission-1",
-        missionId: "wedge-ladder",
+        missionId: "wedge_ladder_60_100",
         missionGoodReps: 2,
         missionTargetReps: 10,
       }),
       makeRangeSession({
         id: "mission-2",
-        missionId: "wedge-ladder",
+        missionId: "wedge_ladder_60_100",
         missionGoodReps: 3,
         missionTargetReps: 12,
       }),
       makeRangeSession({
         id: "mission-3",
-        missionId: "stock-yardage",
+        missionId: "approach_band_80_130",
         missionGoodReps: 2,
         missionTargetReps: 10,
       }),
       makeRangeSession({
         id: "mission-4",
-        missionId: "stock-yardage",
+        missionId: "approach_band_80_130",
         missionGoodReps: 1,
         missionTargetReps: 8,
       }),
@@ -104,6 +104,6 @@ describe("computeInsights", () => {
     expect(result.strengths.map((s) => s.id)).toContain("range.good_hit_rate");
     expect(result.focuses.map((f) => f.id)).toContain("rounds.high_variance");
     expect(result.focuses.map((f) => f.id)).toContain("range.mission_completion_low");
-    expect(result.suggestedMission).toBe("wedge-ladder");
+    expect(result.suggestedMission).toBe("wedge_ladder_60_100");
   });
 });

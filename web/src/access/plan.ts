@@ -11,6 +11,7 @@ export type FeatureKey =
   | "SG_PREVIEW"
   | "COACH_PLAN"
   | "RANGE_BINGO"
+  | "RANGE_MISSIONS"
   | "RANGE_GHOSTMATCH"
   | "HUD_PREVIEW"
   | "KINEMATIC_SEQUENCE";
@@ -25,6 +26,7 @@ export const PLAN_FEATURES: PlanFeatureMatrix = {
     SG_PREVIEW: false,
     COACH_PLAN: false,
     RANGE_BINGO: true,
+    RANGE_MISSIONS: false,
     RANGE_GHOSTMATCH: false,
     HUD_PREVIEW: false,
     KINEMATIC_SEQUENCE: false,
@@ -34,6 +36,7 @@ export const PLAN_FEATURES: PlanFeatureMatrix = {
     SG_PREVIEW: true,
     COACH_PLAN: true,
     RANGE_BINGO: true,
+    RANGE_MISSIONS: true,
     RANGE_GHOSTMATCH: true,
     HUD_PREVIEW: true,
     KINEMATIC_SEQUENCE: true,

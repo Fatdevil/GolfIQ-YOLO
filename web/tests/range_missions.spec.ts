@@ -3,12 +3,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   RANGE_MISSIONS,
   computeMissionProgress,
-  grooveFillPercent,
   loadSelectedMissionId,
   saveSelectedMissionId,
   clearSelectedMissionId,
   getMissionById,
-  type Mission,
+  type RangeMission,
 } from "../src/features/range/missions";
 import type { RangeShot } from "../src/range/types";
 
@@ -25,50 +24,49 @@ describe("range missions math", () => {
     vi.unstubAllGlobals();
   });
 
-  it("counts fairway finder reps within tolerance", () => {
-    const mission = getMission("fairway-finder");
-    const shots = createShots([200, 210, 220, 250]);
+  it("counts hits inside driver mission band", () => {
+    const mission = getMission("driver_fairway_challenge");
+    const shots = createShots([205, 220, 180, 240]);
 
     const progress = computeMissionProgress(mission, shots);
 
-    expect(progress.goodReps).toBe(3);
-    expect(progress.totalShots).toBe(4);
+    expect(progress.hitsInBands).toBe(2);
+    expect(progress.attempts).toBe(4);
+    expect(progress.successRatio).toBeGreaterThan(0);
   });
 
-  it("uses session mean for stock yardage mission", () => {
-    const mission = getMission("stock-yardage");
-    const shots = createShots([150, 152, 148, 149, 151, 150, 147, 153]);
+  it("evaluates multiple target bands for wedge ladder", () => {
+    const mission = getMission("wedge_ladder_60_100");
+    const shots = createShots([60, 82, 130]);
 
     const progress = computeMissionProgress(mission, shots);
 
-    expect(progress.goodReps).toBeGreaterThan(0);
-    expect(progress.goodReps).toBe(progress.totalShots);
+    expect(progress.hitsInBands).toBe(2);
+    expect(progress.attempts).toBe(3);
+    expect(progress.success).toBe(true);
   });
 
-  it("clamps groove fill percent between 0 and 100", () => {
-    const mission = getMission("fairway-finder");
+  it("treats empty shotlists as zero progress", () => {
+    const mission = getMission("approach_band_80_130");
+    const progress = computeMissionProgress(mission, []);
 
-    expect(grooveFillPercent(mission, { missionId: mission.id, goodReps: 0, totalShots: 0 })).toBe(0);
-    expect(
-      grooveFillPercent(mission, { missionId: mission.id, goodReps: 5, totalShots: 5 })
-    ).toBe(50);
-    expect(
-      grooveFillPercent(mission, { missionId: mission.id, goodReps: 20, totalShots: 20 })
-    ).toBe(100);
+    expect(progress.hitsInBands).toBe(0);
+    expect(progress.successRatio).toBe(0);
+    expect(progress.success).toBe(false);
   });
 
   it("persists selected mission id", () => {
     expect(loadSelectedMissionId()).toBeNull();
 
-    saveSelectedMissionId("wedge-ladder");
-    expect(loadSelectedMissionId()).toBe("wedge-ladder");
+    saveSelectedMissionId("wedge_ladder_60_100");
+    expect(loadSelectedMissionId()).toBe("wedge_ladder_60_100");
 
     clearSelectedMissionId();
     expect(loadSelectedMissionId()).toBeNull();
   });
 });
 
-function getMission(id: (typeof RANGE_MISSIONS)[number]["id"]): Mission {
+function getMission(id: (typeof RANGE_MISSIONS)[number]["id"]): RangeMission {
   const mission = getMissionById(id);
   if (!mission) {
     throw new Error(`Mission ${id} not found`);

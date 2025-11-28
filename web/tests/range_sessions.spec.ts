@@ -141,7 +141,7 @@ describe("getCoachTag", () => {
     expect(
       getCoachTag({
         ...baseSession,
-        missionId: "wedge-ladder",
+        missionId: "wedge_ladder_60_100",
         missionGoodReps: 10,
         missionTargetReps: 10,
       })
@@ -152,7 +152,7 @@ describe("getCoachTag", () => {
     expect(
       getCoachTag({
         ...baseSession,
-        missionId: "wedge-ladder",
+        missionId: "wedge_ladder_60_100",
         missionGoodReps: 5,
         missionTargetReps: 10,
       })

@@ -3,6 +3,9 @@ import { useLocation } from "react-router-dom";
 import { useUnits } from "@/preferences/UnitsContext";
 import type { DistanceUnit } from "@/preferences/units";
 import { formatDistance } from "@/utils/distance";
+import { getMissionById, type MissionId } from "@/range/missions";
+import { useAccessPlan } from "@/access/UserAccessContext";
+import { UpgradeGate } from "@/access/UpgradeGate";
 
 type RangeSummary = {
   mode?: string;
@@ -183,8 +186,67 @@ function drawScoreCard(canvas: HTMLCanvasElement, summary: RangeSummary, clubs: 
 export default function RangeScorePage(): JSX.Element {
   const location = useLocation();
   const { unit } = useUnits();
+  const { isPro, loading: accessLoading } = useAccessPlan();
   const params = useMemo(() => new URLSearchParams(location.search), [location.search]);
   const summary = useMemo(() => decodeSummaryToken(params.get("s")), [params]);
+  const missionId = params.get("missionId") as MissionId | null;
+  const missionHits = params.get("missionHits");
+  const missionAttempts = params.get("missionAttempts");
+
+  const mission = useMemo(() => (missionId ? getMissionById(missionId) ?? null : null), [missionId]);
+  const missionProgress = useMemo(() => {
+    if (!mission) return null;
+    const hits = missionHits ? Number(missionHits) : null;
+    const attempts = missionAttempts ? Number(missionAttempts) : null;
+    if (!Number.isFinite(hits) || !Number.isFinite(attempts) || attempts == null) return null;
+    const ratio = attempts > 0 ? Number(hits) / Number(attempts) : 0;
+    return {
+      missionId: mission.id,
+      hits: Number(hits),
+      attempts: Number(attempts),
+      successRatio: ratio,
+      success: attempts > 0 && ratio >= (mission.successThreshold ?? 0.5),
+    };
+  }, [mission, missionHits, missionAttempts]);
+
+  const missionCard = mission ? (
+    <div className="rounded-lg border border-slate-800 bg-slate-900/60 p-4 text-sm text-slate-100">
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <div className="text-base font-semibold text-slate-50">{mission.label}</div>
+          <p className="text-xs text-slate-400">{mission.description}</p>
+        </div>
+      </div>
+      {missionProgress ? (
+        <div className="mt-3 space-y-1 text-xs text-slate-200">
+          <div>
+            Hits in mission targets: {missionProgress.hits} / {missionProgress.attempts} (
+            {Math.round(missionProgress.successRatio * 100)}%)
+          </div>
+          <div className="font-semibold text-emerald-300">
+            {missionProgress.success
+              ? "Mission completed! ✅"
+              : `Mission not completed — aim for ${Math.round((mission.successThreshold ?? 0.5) * 100)}%`}
+          </div>
+        </div>
+      ) : (
+        <p className="mt-3 text-xs text-slate-400">No mission data detected.</p>
+      )}
+    </div>
+  ) : null;
+
+  const gatedMissionCard = accessLoading
+    ? null
+    : isPro
+      ? missionCard
+      : missionCard && (
+          <UpgradeGate feature="RANGE_MISSIONS">
+            <div className="space-y-2 text-xs text-slate-200">
+              <p>{mission?.description}</p>
+              <p>Upgrade to Pro to see mission tracking.</p>
+            </div>
+          </UpgradeGate>
+        );
 
   const clubs = useMemo(() => summarizeClubs(summary?.perClub), [summary]);
   const carries = useMemo(() => formatCarryList(summary?.targets, unit), [summary, unit]);
@@ -215,6 +277,7 @@ export default function RangeScorePage(): JSX.Element {
           <h1 className="text-2xl font-semibold text-slate-100">Range scoreboard</h1>
           <p className="text-sm text-slate-400">No summary payload detected.</p>
         </header>
+        {gatedMissionCard}
         <p className="rounded border border-slate-800 bg-slate-900/60 p-6 text-sm text-slate-300">
           Provide a base64 payload via <code className="font-mono">?s=</code> to render a shared Range Games card.
         </p>
@@ -239,6 +302,8 @@ export default function RangeScorePage(): JSX.Element {
           Download PNG
         </button>
       </header>
+
+      {gatedMissionCard}
 
       <div className="rounded-2xl border border-slate-800 bg-slate-900/70 p-8 shadow-lg shadow-black/30">
         <div className="grid gap-8 md:grid-cols-[1.1fr_0.9fr]">
