@@ -35,13 +35,21 @@ describe("ShareWithCoachButton", () => {
     useAccessPlan.mockReturnValue({ isPro: true, loading: false });
     createCoachShare.mockResolvedValue({ url: "/s/demo", sid: "demo" });
     notify.mockReset();
-    (navigator as Navigator & { clipboard?: { writeText?: ReturnType<typeof vi.fn> } }).clipboard = {
-      writeText: vi.fn().mockResolvedValue(undefined),
-    };
+    const writeTextMock = vi.fn().mockResolvedValue(undefined);
+
+    if (navigator.clipboard) {
+      vi.spyOn(navigator.clipboard, "writeText").mockImplementation(writeTextMock);
+    } else {
+      Object.defineProperty(navigator, "clipboard", {
+        value: { writeText: writeTextMock },
+        configurable: true,
+      });
+    }
   });
 
   afterEach(() => {
     cleanup();
+    vi.restoreAllMocks();
     vi.clearAllMocks();
   });
 
