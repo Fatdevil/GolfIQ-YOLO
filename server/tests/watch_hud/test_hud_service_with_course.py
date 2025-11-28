@@ -104,9 +104,11 @@ def test_build_hole_hud_with_bundle_and_caddie(
         wind_mps=4.5,
         wind_dir_deg=320.0,
         temp_c=19.0,
+        plan="pro",
     )
 
     assert hud.hole == 2  # auto-hole adjustment applied
+    assert hud.plan == "pro"
     assert hud.courseId == sample_bundle.id
     assert hud.eventId == "evt-1"
     assert hud.toGreen_m is not None and hud.toGreen_m > 0

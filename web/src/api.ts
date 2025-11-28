@@ -108,6 +108,7 @@ export type HudTip = {
 };
 
 export type HoleHud = {
+  plan?: "free" | "pro";
   hole: number;
   courseId?: string | null;
   par?: number | null;

@@ -9,6 +9,7 @@
 
 ## Databyggnad
 - `build_hole_hud` kombinerar coursebundles, gnss, wind/elevation, run-kontekst (event, tournament_safe), strokes-gain och senaste tips för att generera `HoleHud` och `HudTip`. Avstånd till green/front/back räknas via bundle-geometri och haversine.【F:server/watch/hud_service.py†L1-L112】【F:server/watch/hud_service.py†L180-L217】
+- `HoleHud.plan` speglar `/api/access/plan`-logiken (free/pro). Pro behåller plays-like, caddie-confidence och tips; Free svar markerar `caddie_silent_reason="plan_gated"` och returnerar enbart basavstånd/tysta fält för bakåtkompatibilitet.【F:server/watch/hud_service.py†L100-L172】
 - Caddie-råd (`advise`) används för plays-like och klubbsuggestion; default bag används om inget bag-data finns. Auto-detect av hål baseras på bundlegeometri och GNSS-konfidens med gräns `AUTO_DETECT_MIN_CONFIDENCE`.【F:server/watch/hud_service.py†L37-L80】【F:server/watch/hud_service.py†L112-L179】
 
 ## Felhantering & offline
