@@ -77,6 +77,7 @@ describe("MyGolfIQPage player profile gating", () => {
   beforeEach(() => {
     (accessState as any).plan = "free";
     (accessState as any).isPro = false;
+    localStorage.setItem("golfiq-onboarding-completed", "1");
   });
 
   it("shows upgrade gate for free users", async () => {
