@@ -26,7 +26,7 @@ def runs_module(monkeypatch, tmp_path):
 
 
 def _make_preview(run_id, sg_by_cat, holes=None):
-    from server.services.sg_preview import HoleSgPreview, RoundSgPreview
+    from server.services.sg_preview import RoundSgPreview
 
     return RoundSgPreview(
         runId=run_id,

@@ -131,7 +131,9 @@ def _tee_inconsistency(ctx: DiagnosisContext) -> CoachFinding | None:
         category="tee",
         severity=severity,
         title="Tee game is costing you strokes",
-        message="Several tee shots lost strokes — tighten dispersion and club selection off the tee.",
+        message=(
+            "Several tee shots lost strokes — tighten dispersion and club selection off the tee."
+        ),
         evidence={"sg_tee": round(sg_tee, 2), "worst_holes": worst_holes},
         suggested_missions=["driver_fairway_challenge"],
         suggested_focus=["tee_consistency"],
@@ -151,7 +153,10 @@ def _approach_control(ctx: DiagnosisContext) -> CoachFinding | None:
         category="approach",
         severity=severity,
         title="Approach distance control is off",
-        message="Approach shots are giving up strokes — focus on consistent carry windows from 80–130 m.",
+        message=(
+            "Approach shots are giving up strokes — focus on consistent carry windows from"
+            " 80–130 m."
+        ),
         evidence={"sg_approach": round(sg_app, 2), "worst_holes": worst_holes},
         suggested_missions=["approach_band_80_130", "mid_iron_dispersion_130_160"],
         suggested_focus=["approach_distance_control"],
@@ -175,7 +180,10 @@ def _short_game_leak(ctx: DiagnosisContext) -> CoachFinding | None:
         category="short",
         severity=severity,
         title="Short game is the biggest leak",
-        message="Around-the-green shots are dropping strokes. Prioritise landing spot control and simple bump-and-runs.",
+        message=(
+            "Around-the-green shots are dropping strokes. Prioritise landing spot control and"
+            " simple bump-and-runs."
+        ),
         evidence={"sg_short": round(sg_short, 2), "worst_holes": worst_holes},
         suggested_missions=["wedge_ladder_60_100"],
         suggested_focus=["short_game_contact"],
@@ -202,7 +210,10 @@ def _putting_variance(ctx: DiagnosisContext) -> CoachFinding | None:
         category="putt",
         severity=severity,
         title="Putting consistency is low",
-        message="Putting shows large swings per hole. Focus on speed control and start line on second putts.",
+        message=(
+            "Putting shows large swings per hole. Focus on speed control and start line on"
+            " second putts."
+        ),
         evidence={"sg_putt": round(sg_putt, 2), "stdev": round(spread, 2)},
         suggested_focus=["putting_speed_control"],
     )
@@ -235,7 +246,10 @@ def _sequence_upper_body_lead(ctx: DiagnosisContext) -> CoachFinding | None:
         category="sequence",
         severity=severity,
         title="Upper body is leading the downswing",
-        message="Shoulders/arms are peaking before the hips. Sequence hips first to unlock speed and consistency.",
+        message=(
+            "Shoulders/arms are peaking before the hips. Sequence hips first to unlock"
+            " speed and consistency."
+        ),
         evidence={
             "sequence_order": seq.sequence_order,
             "hip_rotation": round(hip_rotation, 2),
@@ -264,7 +278,10 @@ def _sequence_low_x_factor(ctx: DiagnosisContext) -> CoachFinding | None:
         category="sequence",
         severity=severity,
         title="Limited hip–shoulder separation",
-        message="Low X-factor combined with tee/approach leaks suggests passive hips. Work on creating more separation in transition.",
+        message=(
+            "Low X-factor combined with tee/approach leaks suggests passive hips. Work on"
+            " creating more separation in transition."
+        ),
         evidence={
             "max_x_factor": round(seq.max_x_factor, 2),
             "sg_tee": round(sg_tee, 2),
@@ -293,7 +310,10 @@ def _caddie_trust_mismatch(ctx: DiagnosisContext) -> CoachFinding | None:
         category="strategy",
         severity=severity,
         title="Caddie advice often ignored",
-        message=f"{club.club_id} tips are often dismissed. Revisit target strategy or bag setup for this club.",
+        message=(
+            f"{club.club_id} tips are often dismissed. Revisit target strategy or bag"
+            " setup for this club."
+        ),
         evidence={
             "club_id": club.club_id,
             "trust_score": round(club.trust_score, 2),
