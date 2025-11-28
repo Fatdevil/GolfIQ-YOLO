@@ -10,6 +10,7 @@ export type FeatureKey =
   | "CADDIE_INSIGHTS"
   | "SG_PREVIEW"
   | "COACH_PLAN"
+  | "COACH_SHARE"
   | "RANGE_BINGO"
   | "RANGE_MISSIONS"
   | "RANGE_GHOSTMATCH"
@@ -25,6 +26,7 @@ export const PLAN_FEATURES: PlanFeatureMatrix = {
     CADDIE_INSIGHTS: false,
     SG_PREVIEW: false,
     COACH_PLAN: false,
+    COACH_SHARE: false,
     RANGE_BINGO: true,
     RANGE_MISSIONS: false,
     RANGE_GHOSTMATCH: false,
@@ -35,6 +37,7 @@ export const PLAN_FEATURES: PlanFeatureMatrix = {
     CADDIE_INSIGHTS: true,
     SG_PREVIEW: true,
     COACH_PLAN: true,
+    COACH_SHARE: true,
     RANGE_BINGO: true,
     RANGE_MISSIONS: true,
     RANGE_GHOSTMATCH: true,

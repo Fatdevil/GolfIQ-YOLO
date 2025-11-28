@@ -10,6 +10,7 @@ import { fetchSgPreview, type RoundSgPreview } from "@/api/sgPreview";
 import { UpgradeGate } from "@/access/UpgradeGate";
 import { QuickRoundCoachSection } from "./QuickRoundCoachSection";
 import { SgPreviewCard } from "./SgPreviewCard";
+import { ShareWithCoachButton } from "@/coach/ShareWithCoachButton";
 
 import {
   loadRound,
@@ -512,6 +513,12 @@ export default function QuickRoundPlayPage() {
               >
                 {t("quickRound.share.button")}
               </button>
+              {round.runId ? (
+                <ShareWithCoachButton
+                  runId={round.runId}
+                  className="w-full justify-center sm:w-auto"
+                />
+              ) : null}
               {summaryCopied ? (
                 <p className="text-xs text-emerald-300 sm:text-right">
                   {t("quickRound.share.copied")}
