@@ -68,8 +68,9 @@ Tabellerna nedan listar centrala API:er baserat på routerdefinitionerna. Alla e
 |-------|------|-------------|------------|
 | GET | /api/access/plan | Returnerar användarens plan (`free`/`pro`) samt ev. `trial` och `expires_at`. | `server/api/routers/access.py` |
 | POST | /api/share/anchor | Skapar delningsankare. | `server/api/routers/share.py` |
-| GET | /s/{sid} | Hämtar delningspayload. | `server/api/routers/share.py` |
+| GET | /s/{sid} | Hämtar delningspayload/redirect. | `server/api/routers/share.py` |
 | GET | /s/{sid}/o | Öppnar delning (redirect/översikt). | `server/api/routers/share.py` |
+| GET | /api/share/{sid} | Returnerar delningspayload för tokeniserad länk. | `server/api/routers/share.py` |
 | POST | /api/runs/{run_id}/score | Sparar scoring för run. | `server/api/routers/run_scores.py` |
 
 ## Caddie, SG & range
@@ -78,7 +79,8 @@ Tabellerna nedan listar centrala API:er baserat på routerdefinitionerna. Alla e
 | POST | /api/caddie/advise | Returnerar klubbrekommendation. | `server/api/routers/caddie.py` |
 | GET | /api/caddie/insights | Hämtar caddieinsikter (accept/ignore per klubb, recent vs lifetime trust). | `server/routes/caddie_insights.py` |
 | POST | /api/caddie/telemetry | Uppladdning av telemetri för caddie. | `server/routes/caddie_telemetry.py` |
-| GET | /api/coach/round-summary/{run_id} | Coach-delning v1: SG-preview, sekvens och caddie highlights för run (Pro). | `server/api/routers/coach.py` |
+| GET | /api/coach/round-summary/{run_id} | Coach-sammanfattning: SG-preview, sekvens och caddie highlights för run (Pro). | `server/api/routers/coach.py` |
+| POST | /api/coach/share/{run_id} | Skapar delningslänk för coach-rapport (Pro). | `server/api/routers/coach.py` |
 | GET | /api/analytics/player | Pro-analytics: SG-trend, kategoristatus och missionsprogress per medlem. | `server/api/routers/analytics.py` |
 | GET | /api/sg/run/{run_id} | Stroke-gain preview för run. | `server/routes/sg_preview.py` |
 | GET | /api/sg/member/{member_id} | SG-sammanfattning per medlem. | `server/routes/sg_summary.py` |

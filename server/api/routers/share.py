@@ -116,9 +116,24 @@ def shortlink_og(sid: str, request: Request):
     return HTMLResponse(content=html, media_type="text/html")
 
 
+@router.get("/api/share/{sid}")
+def get_share_payload(sid: str):
+    shortlink = get(sid)
+    if not shortlink:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "not found")
+    if shortlink.clip_id and not is_clip_public(shortlink.clip_id):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "not found")
+    if shortlink.payload is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "not found")
+
+    emit("share.anchor.payload", {"sid": sid})
+    return shortlink.payload
+
+
 __all__ = [
     "router",
     "post_share_anchor",
     "resolve_shortlink",
     "shortlink_og",
+    "get_share_payload",
 ]

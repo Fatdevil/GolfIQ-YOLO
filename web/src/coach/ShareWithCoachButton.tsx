@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
-import { fetchCoachRoundSummary } from "@/api/coachSummary";
+import { createCoachShare } from "@/api/coachShare";
 import { UpgradeGate } from "@/access/UpgradeGate";
 import { useAccessPlan } from "@/access/UserAccessContext";
 import { useNotifications } from "@/notifications/NotificationContext";
@@ -29,11 +29,13 @@ export function ShareWithCoachButton({ runId, className }: Props) {
         if (busy) return;
         setBusy(true);
         try {
-          const summary = await fetchCoachRoundSummary(runId);
+          const { url } = await createCoachShare(runId);
+          const origin = typeof window !== "undefined" && window.location?.origin ? window.location.origin : "http://localhost";
+          const link = url.startsWith("http") ? url : new URL(url, origin).toString();
           if (!navigator?.clipboard?.writeText) {
             throw new Error("clipboard_unavailable");
           }
-          await navigator.clipboard.writeText(JSON.stringify(summary, null, 2));
+          await navigator.clipboard.writeText(link);
           notify("success", t("coach.share.copied"));
         } catch (error) {
           notify("error", t("coach.share.error"));
