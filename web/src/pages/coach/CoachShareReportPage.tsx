@@ -155,6 +155,7 @@ export function CoachShareReportPage() {
 
   const sgByCategory = useMemo(() => summary?.sg_by_category ?? [], [summary]);
   const sgPerHole = useMemo(() => summary?.sg_per_hole ?? [], [summary]);
+  const playerModel = summary?.player_model;
 
   if (state === "loading" || state === "idle") {
     return <p className="text-slate-200">Loading coach report…</p>;
@@ -186,6 +187,24 @@ export function CoachShareReportPage() {
       <Section title="Strokes-gained overview">
         <SgTable sgByCategory={sgByCategory} />
       </Section>
+
+      {playerModel && (
+        <Section title="Player profile snapshot">
+          <div className="space-y-1 text-sm text-slate-200">
+            <p className="font-medium">{playerModel.playerType}</p>
+            {playerModel.strengths?.length ? (
+              <p>
+                Strengths: {playerModel.strengths.slice(0, 2).map((s) => s.title).join(", ")}
+              </p>
+            ) : null}
+            {playerModel.weaknesses?.length ? (
+              <p>
+                Weaknesses: {playerModel.weaknesses.slice(0, 2).map((w) => w.title).join(", ")}
+              </p>
+            ) : null}
+          </div>
+        </Section>
+      )}
 
       <Section title="Hole-by-hole">
         <SgHolesTable sgPerHole={sgPerHole} />

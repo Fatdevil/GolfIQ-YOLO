@@ -26,6 +26,7 @@ from server.api.routers.hole_detect import router as auto_hole_router
 from server.api.routers.live_tokens import router as live_tokens_router
 from server.api.routers.sg import router as sg_router
 from server.api.routers.share import router as share_router
+from server.api.routers.profile import router as profile_router
 from server.api.routers.user_history import router as user_history_router
 from server.api.routers.watch_pairing import router as watch_pairing_router
 from server.api.routers.watch_tips import router as watch_tips_router
@@ -141,6 +142,7 @@ api_dep = _api_key_dependency()
 app.include_router(coach_router)
 app.include_router(coach_feedback_router)
 app.include_router(analytics_router)
+app.include_router(profile_router)
 app.include_router(legacy_calibrate.router)
 app.include_router(calibrate_router)
 app.include_router(coach_profile_router)

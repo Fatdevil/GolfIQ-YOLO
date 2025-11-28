@@ -20,6 +20,7 @@ from server.services.caddie_insights import (
     ClubInsight,
     load_and_compute_caddie_insights,
 )
+from server.services.player_profile import build_player_profile
 from server.services.sg_preview import SgCategory, compute_sg_preview_for_run
 from server.storage.runs import RunRecord, load_run
 
@@ -257,6 +258,14 @@ def build_coach_summary_for_run(
     except Exception:
         diagnosis = None
 
+    player_model = None
+    if member_id:
+        try:
+            profile = build_player_profile(member_id)
+            player_model = profile.model
+        except Exception:
+            player_model = None
+
     return CoachRoundSummary(
         run_id=run.run_id,
         member_id=member_id,
@@ -271,6 +280,7 @@ def build_coach_summary_for_run(
         caddie=caddie_highlight,
         mission=mission_summary,
         diagnosis=diagnosis,
+        player_model=player_model,
     )
 
 

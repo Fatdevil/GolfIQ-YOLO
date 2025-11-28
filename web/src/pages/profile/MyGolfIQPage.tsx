@@ -16,11 +16,13 @@ import {
   type CaddieInsights,
   type ClubInsight,
 } from "@/api/caddieInsights";
+import { fetchPlayerProfile, type PlayerProfile } from "@/api/profile";
 import { fetchMemberSgSummary, type MemberSgSummary } from "@/api/sgSummary";
 import { UpgradeGate } from "@/access/UpgradeGate";
 import { useAccessFeatures, useAccessPlan } from "@/access/UserAccessContext";
 import { useCaddieMemberId } from "@/profile/memberIdentity";
 import { PlayerAnalyticsSection } from "@/profile/PlayerAnalyticsSection";
+import { PlayerProfilePanel } from "@/profile/PlayerProfilePanel";
 import { migrateLocalHistoryOnce } from "@/user/historyMigration";
 import { useUserSession } from "@/user/UserSessionContext";
 import { loadRangeSessions } from "@/features/range/sessions";
@@ -87,6 +89,9 @@ export function MyGolfIQPage() {
   const [diagnosis, setDiagnosis] = useState<CoachDiagnosis | null>(null);
   const [diagnosisStatus, setDiagnosisStatus] =
     useState<"idle" | "loading" | "ready" | "empty" | "error">("idle");
+  const [playerProfile, setPlayerProfile] = useState<PlayerProfile | null>(null);
+  const [playerProfileStatus, setPlayerProfileStatus] =
+    useState<"idle" | "loading" | "ready" | "error" | "empty">("idle");
 
   const qrStats = useMemo(() => computeQuickRoundStats(rounds), [rounds]);
   const rangeStats = useMemo(() => computeRangeSummary(ghosts), [ghosts]);
@@ -263,6 +268,35 @@ export function MyGolfIQPage() {
   }, [isPro, latestRunWithId?.runId, planLoading]);
 
   useEffect(() => {
+    if (planLoading) {
+      setPlayerProfileStatus("loading");
+      return;
+    }
+    if (!isPro) {
+      setPlayerProfile(null);
+      setPlayerProfileStatus("empty");
+      return;
+    }
+
+    let cancelled = false;
+    setPlayerProfileStatus("loading");
+
+    fetchPlayerProfile()
+      .then((data) => {
+        if (cancelled) return;
+        setPlayerProfile(data);
+        setPlayerProfileStatus("ready");
+      })
+      .catch(() => {
+        if (!cancelled) setPlayerProfileStatus("error");
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isPro, planLoading]);
+
+  useEffect(() => {
     if (!userId) return;
     migrateLocalHistoryOnce(userId, rounds, rangeSessions).catch(() => {
       // Soft-fail; this should not block the profile page.
@@ -280,6 +314,37 @@ export function MyGolfIQPage() {
         </div>
         <p className="text-sm text-slate-500">{t("profile.subtitle")}</p>
       </header>
+
+      <section className="rounded-lg border border-slate-800 bg-slate-900/60 p-5 shadow-sm">
+        <div className="flex items-center justify-between gap-4">
+          <h2 className="text-lg font-semibold text-slate-50">AI player profile</h2>
+          {playerProfile?.model.referenceRunId && (
+            <p className="text-xs text-slate-400">
+              Based on run {playerProfile.model.referenceRunId}
+            </p>
+          )}
+        </div>
+
+        {planLoading || playerProfileStatus === "loading" ? (
+          <p className="mt-3 text-xs text-slate-400">Loading your profile…</p>
+        ) : !isPro ? (
+          <div className="mt-3">
+            <UpgradeGate feature="PLAYER_PROFILE">
+              <p className="text-xs text-slate-400">
+                Upgrade to Pro to generate your AI player profile.
+              </p>
+            </UpgradeGate>
+          </div>
+        ) : playerProfileStatus === "error" ? (
+          <p className="mt-3 text-xs text-amber-400">Could not load your player profile. Try again after your next round.</p>
+        ) : playerProfileStatus === "ready" && playerProfile ? (
+          <div className="mt-4">
+            <PlayerProfilePanel profile={playerProfile} />
+          </div>
+        ) : (
+          <p className="mt-3 text-xs text-slate-400">Complete a Pro round to generate your AI profile.</p>
+        )}
+      </section>
 
       <PlayerAnalyticsSection />
 
