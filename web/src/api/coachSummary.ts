@@ -1,6 +1,7 @@
 import axios from "axios";
 
 import { API, withAuth } from "@/api";
+import type { PlayerModel } from "@/api/profile";
 
 export type CoachCategory = "tee" | "approach" | "short" | "putt" | "sequence" | "strategy";
 
@@ -67,6 +68,7 @@ export type CoachRoundSummary = {
   caddie?: CoachCaddieHighlight | null;
   mission?: CoachMissionSummary | null;
   diagnosis?: CoachDiagnosis | null;
+  player_model?: PlayerModel | null;
 };
 
 export async function fetchCoachRoundSummary(

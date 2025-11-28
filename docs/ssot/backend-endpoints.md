@@ -82,6 +82,7 @@ Tabellerna nedan listar centrala API:er baserat på routerdefinitionerna. Alla e
 | GET | /api/coach/round-summary/{run_id} | Coach-sammanfattning: SG-preview, sekvens och caddie highlights för run (Pro). | `server/api/routers/coach.py` |
 | POST | /api/coach/share/{run_id} | Skapar delningslänk för coach-rapport (Pro). | `server/api/routers/coach.py` |
 | GET | /api/analytics/player | Pro-analytics: SG-trend, kategoristatus och missionsprogress per medlem. | `server/api/routers/analytics.py` |
+| GET | /api/profile/player | AI-player profile v2: modell + 4-veckorsplan (Pro). | `server/api/routers/profile.py` |
 | GET | /api/sg/run/{run_id} | Stroke-gain preview för run. | `server/routes/sg_preview.py` |
 | GET | /api/sg/member/{member_id} | SG-sammanfattning per medlem. | `server/routes/sg_summary.py` |
 | GET | /api/runs/{run_id}/sg | SG-data för run. | `server/api/routers/sg.py` |

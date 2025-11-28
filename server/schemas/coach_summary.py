@@ -5,6 +5,7 @@ from typing import Literal, List, Optional
 from pydantic import BaseModel, Field
 
 from server.schemas.coach_diagnosis import CoachDiagnosis
+from server.schemas.player_profile import PlayerModel
 
 
 class CoachSgCategory(BaseModel):
@@ -56,3 +57,4 @@ class CoachRoundSummary(BaseModel):
     caddie: Optional[CoachCaddieHighlight] = None
     mission: Optional[CoachMissionSummary] = None
     diagnosis: Optional[CoachDiagnosis] = None
+    player_model: Optional[PlayerModel] = None
