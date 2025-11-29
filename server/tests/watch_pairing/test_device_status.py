@@ -36,9 +36,7 @@ def test_status_reflects_primary_device_last_seen(timewarp) -> None:
     watch_devices.record_ack(device.device_id, "tip-123")
 
     with TestClient(app) as client:
-        response = client.get(
-            "/api/watch/devices/status", params={"memberId": "mem-1"}
-        )
+        response = client.get("/api/watch/devices/status", params={"memberId": "mem-1"})
 
     assert response.status_code == 200
     payload = response.json()
