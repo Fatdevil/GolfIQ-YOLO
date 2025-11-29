@@ -22,7 +22,9 @@ class TourCompareResult(TypedDict):
     range_max: float
 
 
-_REFERENCE_PATH = Path(__file__).resolve().parents[2] / "docs" / "ssot" / "tour_swing_reference.json"
+_REFERENCE_PATH = (
+    Path(__file__).resolve().parents[2] / "docs" / "ssot" / "tour_swing_reference.json"
+)
 _LOG = logging.getLogger(__name__)
 
 
@@ -74,7 +76,9 @@ def get_reference_bands(metric: str, club: Optional[str] = None) -> List[TourBan
     bands = [b for b in _reference_bands() if b.get("metric") == metric_key]
     if club:
         club_norm = club.lower()
-        specific = [b for b in bands if b.get("club") and b["club"].lower() == club_norm]
+        specific = [
+            b for b in bands if b.get("club") and b["club"].lower() == club_norm
+        ]
         if specific:
             return specific
     return bands

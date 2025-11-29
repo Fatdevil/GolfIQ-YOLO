@@ -38,7 +38,9 @@ def _coerce_float(value: object) -> float | None:
         return None
 
 
-def _add_metric(out: Dict[str, MetricValue], key: str, value: object, units: str) -> None:
+def _add_metric(
+    out: Dict[str, MetricValue], key: str, value: object, units: str
+) -> None:
     numeric = _coerce_float(value)
     if numeric is None:
         return
@@ -50,7 +52,9 @@ def _collect_metrics(run: RunRecord) -> dict[str, MetricValue]:
 
     seq = run.metrics.get("sequence") if isinstance(run.metrics, dict) else None
     if isinstance(seq, dict):
-        _add_metric(metrics, "max_shoulder_rotation", seq.get("max_shoulder_rotation"), "deg")
+        _add_metric(
+            metrics, "max_shoulder_rotation", seq.get("max_shoulder_rotation"), "deg"
+        )
         _add_metric(metrics, "max_hip_rotation", seq.get("max_hip_rotation"), "deg")
         _add_metric(metrics, "max_x_factor", seq.get("max_x_factor"), "deg")
 
@@ -58,7 +62,9 @@ def _collect_metrics(run: RunRecord) -> dict[str, MetricValue]:
     if isinstance(faceon, dict):
         _add_metric(metrics, "sway_px", faceon.get("sway_px"), "px")
         _add_metric(metrics, "sway_cm", faceon.get("sway_cm"), "cm")
-        _add_metric(metrics, "shoulder_tilt_deg", faceon.get("shoulder_tilt_deg"), "deg")
+        _add_metric(
+            metrics, "shoulder_tilt_deg", faceon.get("shoulder_tilt_deg"), "deg"
+        )
         _add_metric(metrics, "shaft_lean_deg", faceon.get("shaft_lean_deg"), "deg")
 
     top_level = run.metrics if isinstance(run.metrics, dict) else {}
@@ -69,7 +75,9 @@ def _collect_metrics(run: RunRecord) -> dict[str, MetricValue]:
     return metrics
 
 
-def _collect_tour_compare(metrics: Dict[str, MetricValue], club: Optional[str]) -> Dict[str, TourCompare]:
+def _collect_tour_compare(
+    metrics: Dict[str, MetricValue], club: Optional[str]
+) -> Dict[str, TourCompare]:
     results: Dict[str, TourCompare] = {}
     for name, metric in metrics.items():
         comparison = compare_to_bands(name, metric.value, club)
@@ -83,7 +91,9 @@ def _collect_tour_compare(metrics: Dict[str, MetricValue], club: Optional[str]) 
 def swing_metrics(run_id: str) -> SwingMetricsResponse:
     run = load_run(run_id)
     if not run:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="run not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="run not found"
+        )
 
     metrics = _collect_metrics(run)
     club = run.params.get("club") if isinstance(run.params, dict) else None

@@ -24,9 +24,7 @@ def test_analyze_frames_persists_faceon_metrics(monkeypatch):
     frames = [np.zeros((64, 64, 3), dtype=np.uint8) for _ in range(3)]
     calib = CalibrationParams.from_reference(1.0, 100.0, 30.0)
 
-    result = analyze_module.analyze_frames(
-        frames, calib, mock=True, smoothing_window=1
-    )
+    result = analyze_module.analyze_frames(frames, calib, mock=True, smoothing_window=1)
 
     assert result["metrics"].get("faceon") == {
         "sway_px": 5.0,

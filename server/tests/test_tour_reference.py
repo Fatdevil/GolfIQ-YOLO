@@ -42,9 +42,7 @@ def test_get_reference_bands_and_compare(monkeypatch, tmp_path):
     assert comparison["status"] == "below"
     assert comparison["band_group"] == "tour_male"
 
-    in_range = tour_reference.compare_to_bands(
-        "max_shoulder_rotation", 90, club="7i"
-    )
+    in_range = tour_reference.compare_to_bands("max_shoulder_rotation", 90, club="7i")
     assert in_range is not None
     assert in_range["status"] == "in_range"
 
