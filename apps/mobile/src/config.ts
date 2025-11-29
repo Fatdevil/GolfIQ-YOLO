@@ -8,3 +8,15 @@ export function resolveApiBase(): string {
     ? envBase.trim().replace(/\/$/, '')
     : 'http://localhost:8000';
 }
+
+export function resolveApiKey(): string | null {
+  const key =
+    process.env.MOBILE_API_KEY ??
+    process.env.EXPO_PUBLIC_API_KEY ??
+    process.env.API_KEY ??
+    process.env.VITE_API_KEY;
+  if (typeof key === 'string' && key.trim().length > 0) {
+    return key.trim();
+  }
+  return null;
+}

@@ -17,7 +17,8 @@
       "@react-navigation/native-stack": ["./src/runtime/react-navigation-native-stack"],
       "expo-barcode-scanner": ["./src/runtime/expo-barcode-scanner"],
       "@app/*": ["./src/*"],
-      "@shared/*": ["../../shared/*"]
+      "@shared/*": ["../../shared/*"],
+      "expo-av": ["./src/runtime/expo-av"]
     }
   },
   "include": ["src", "__tests__", "vitest.config.ts", "vitest.setup.ts"],

@@ -7,6 +7,10 @@ export type ClipCommentaryParams = {
 };
 
 export type RootStackParamList = {
+  PlayerHome: undefined;
+  PlayRoundSetup: undefined;
+  RangePractice: undefined;
+  Trips: undefined;
   EventJoin: { code?: string } | undefined;
   EventLive: {
     id: string;

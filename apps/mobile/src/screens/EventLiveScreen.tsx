@@ -85,7 +85,7 @@ export default function EventLiveScreen({ route }: Props): JSX.Element {
   const [commentaryError, setCommentaryError] = useState<string | null>(null);
   const [requesting, setRequesting] = useState(false);
   const [voicePlaying, setVoicePlaying] = useState(false);
-  const soundRef = useRef<Audio.Sound | null>(null);
+  const soundRef = useRef<InstanceType<typeof Audio.Sound> | null>(null);
 
   const { players, loading, error: boardError, updatedAt } = useLiveBoard(eventId);
   const sanitized = useMemo(() => sanitizePlayers(players), [players]);

@@ -6,6 +6,10 @@ export const linking: LinkingOptions<any> = {
   prefixes,
   config: {
     screens: {
+      PlayerHome: 'home',
+      PlayRoundSetup: 'play',
+      RangePractice: 'range',
+      Trips: 'trips',
       EventJoin: 'join/:code?',
       EventLive: 'events/:id/live',
       EventScan: 'scan',
