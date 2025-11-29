@@ -222,7 +222,11 @@ def _normalize(events: List[_EventCandidate]) -> List[TimelineEvent]:
 
 
 def build_session_timeline(run_id: str) -> SessionTimeline:
-    run = load_run(run_id)
+    try:
+        run = load_run(run_id)
+    except Exception as exc:  # pragma: no cover - defensive guard
+        raise RunNotFoundError(f"Unknown run_id: {run_id}") from exc
+
     if not run:
         raise RunNotFoundError(f"Unknown run_id: {run_id}")
 

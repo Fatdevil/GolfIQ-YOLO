@@ -17,7 +17,8 @@ export type FeatureKey =
   | "HUD_PREVIEW"
   | "KINEMATIC_SEQUENCE"
   | "PLAYER_ANALYTICS"
-  | "PLAYER_PROFILE";
+  | "PLAYER_PROFILE"
+  | "SESSION_TIMELINE";
 
 export type PlanFeatureMatrix = Record<PlanId, Record<FeatureKey, boolean>>;
 
@@ -36,6 +37,7 @@ export const PLAN_FEATURES: PlanFeatureMatrix = {
     KINEMATIC_SEQUENCE: false,
     PLAYER_ANALYTICS: false,
     PLAYER_PROFILE: false,
+    SESSION_TIMELINE: false,
   },
   PRO: {
     CADDIE_INSIGHTS: true,
@@ -49,6 +51,7 @@ export const PLAN_FEATURES: PlanFeatureMatrix = {
     KINEMATIC_SEQUENCE: true,
     PLAYER_ANALYTICS: true,
     PLAYER_PROFILE: true,
+    SESSION_TIMELINE: true,
   },
 };
 

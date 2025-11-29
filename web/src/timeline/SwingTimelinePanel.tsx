@@ -70,7 +70,13 @@ export default function SwingTimelinePanel({ runId }: SwingTimelinePanelProps) {
   }
 
   if (!isPro) {
-    return <UpgradeGate feature="session-timeline" />;
+    return (
+      <UpgradeGate feature="SESSION_TIMELINE">
+        <div className="rounded-md border border-slate-800 bg-slate-900/60 px-4 py-3 text-sm text-slate-200">
+          Session timeline is available for Pro members.
+        </div>
+      </UpgradeGate>
+    );
   }
 
   if (loading) {
