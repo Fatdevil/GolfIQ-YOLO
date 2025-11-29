@@ -26,3 +26,8 @@ Reference bands for key swing metrics live in [`tour_swing_reference.json`](./to
 
 ## SwingMetrics API
 Backend consumers can fetch a consolidated view at `GET /api/swing/{run_id}/metrics`. The endpoint returns available swing metrics (sequence, face-on, and ball/club) alongside comparisons against the tour reference bands.
+
+## Web UI: Swing Diagnostics Panel v1
+- The web Run Detail page now surfaces swing metrics via **Swing Diagnostics & tour comparison**.
+- It consumes `GET /api/swing/{run_id}/metrics` and highlights shoulder/hip rotation, X-factor, launch, side angle, and face-on sway when available.
+- Each metric shows a “below / within / above tour range” cue using the bands in `tour_swing_reference.json`, plus simple coaching copy to keep it friendly for golfers and coaches.

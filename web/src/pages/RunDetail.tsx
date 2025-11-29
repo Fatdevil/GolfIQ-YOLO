@@ -21,6 +21,7 @@ import { UpgradeGate } from "@/access/UpgradeGate";
 import SwingTimelinePanel from "@/timeline/SwingTimelinePanel";
 import SequencePreviewCard from "@/sequence/SequencePreviewCard";
 import type { KinematicSequence, SequenceOrder } from "@/types/sequence";
+import SwingDiagnosticsPanel from "@/swing/SwingDiagnosticsPanel";
 
 interface RunDetailData {
   run_id?: string;
@@ -635,6 +636,8 @@ export default function RunDetailPage() {
           )}
         </div>
       )}
+
+      {!loading && resolvedRunId ? <SwingDiagnosticsPanel runId={resolvedRunId} /> : null}
 
       {!loading && resolvedRunId ? (
         <div className="space-y-2">

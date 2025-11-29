@@ -29,6 +29,7 @@ GolfIQ-YOLO är ett plattformspaket för golfanalys med FastAPI-backend, React-w
 - Routing: React Router i `web/src/App.tsx` med rutter för analys (`/analyze`, `/mock`, `/calibration`), runhistorik (`/runs/:id`), events (live/host/admin/top-shots), range practice (`/range/practice`), bag och profil, Quick Round (`/play`), samt trip-scoreboards.【F:web/src/App.tsx†L52-L140】
 - API-anrop: Webben använder `VITE_API_BASE` och `VITE_API_KEY` för backend, med endpoints dokumenterade i README och motsvarande `server/routes`/`server/api/routers`.
 - UI-stöd: Player overlay, event session boundary och CDN-preconnect för media laddas globalt i App-komponenten.【F:web/src/App.tsx†L34-L144】
+- Run Detail visar nu en **Swing diagnostics & tour comparison**-panel som hämtar `GET /api/swing/{run_id}/metrics` och jämför nyckelvärden mot `tour_swing_reference.json`-banden för att guida golfare och coacher.【F:web/src/swing/SwingDiagnosticsPanel.tsx†L1-L206】
 
 ## Watch- & mobilbrygga / HUD
 - HUD byggs via `build_hole_hud` i `server/watch/hud_service.py`, som slår upp course bundles, caddie-råd och telemetri för att producera HoleHud/Tick-respons.【F:server/watch/hud_service.py†L1-L112】【F:server/watch/hud_service.py†L180-L217】

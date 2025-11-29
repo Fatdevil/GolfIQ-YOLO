@@ -413,6 +413,32 @@ export const fetchSessionTimeline = async (
   return res.data;
 };
 
+export interface MetricValue {
+  value: number;
+  units: string;
+}
+
+export type TourStatus = "below" | "in_range" | "above";
+
+export interface TourCompare {
+  bandGroup: string;
+  status: TourStatus;
+  rangeMin: number;
+  rangeMax: number;
+}
+
+export interface SwingMetricsResponse {
+  runId: string;
+  club?: string | null;
+  metrics: Record<string, MetricValue>;
+  tour_compare: Record<string, TourCompare>;
+}
+
+export async function fetchSwingMetrics(runId: string): Promise<SwingMetricsResponse> {
+  const res = await apiClient.get<SwingMetricsResponse>(`/api/swing/${runId}/metrics`);
+  return res.data;
+}
+
 export const fetchBenchSummary = () =>
   axios.get(`${API}/bench/summary`, { headers: withAuth() }).then((r) => r.data);
 
