@@ -103,6 +103,7 @@ GolfIQ-YOLO combines a FastAPI backend with React web tooling and native watch/p
 | POST | /api/watch/devices/register | server/api/routers/watch_pairing.py | Register watch device. | RegisterOut |
 | POST | /api/watch/devices/bind | server/api/routers/watch_pairing.py | Bind device to member via code. | TokenOut |
 | POST | /api/watch/devices/token | server/api/routers/watch_pairing.py | Refresh device token. | TokenOut |
+| GET | /api/watch/devices/status | server/api/routers/watch_pairing.py | Read-only pairing status for member. | DeviceStatusOut |
 | GET | /api/watch/devices/stream | server/api/routers/watch_pairing.py | SSE stream of device notifications. | – |
 | POST | /api/watch/devices/ack | server/api/routers/watch_pairing.py | Ack device notifications. | – |
 | POST | /api/watch/quickround/sync | server/api/routers/watch_quickround.py | Sync quick round HUD to paired device. | QuickRoundSyncOut |
@@ -193,6 +194,7 @@ GolfIQ-YOLO combines a FastAPI backend with React web tooling and native watch/p
 - **GolfIQ Play (mobile)** (`apps/mobile/src/screens/HomeScreen.tsx` and `apps/mobile/src/screens/play`): Start Round flow with hero course selection, tee + 9/18 pickers, local `currentRun` persistence, and a basic in-round hole overview powered by `/api/courses` endpoints.
 - **GolfIQ Play mobile: strokeplay v1**: In-round scorecard (strokes/putts/FIR/GIR), finish-round confirmation, backend run + score submission, and a cached last-round summary surfaced on Home with Round Story deep-linking.
 - **GolfIQ Play: Mobile Round Story v1**: Post-round screen with score + SG summary, Session Timeline highlights (`/api/session/{run_id}/timeline`), and coach strengths/focus from `/api/coach/round-summary/{run_id}`; full analytics are Pro-only with an upgrade prompt for Free users.
+- **GolfIQ Play: Watch HUD & QuickRound v1**: Player Home surfaces watch connection status and pairing codes; in-round hole changes push `/api/watch/quickround/sync` payloads (Pro-gated) based on local course bundle hole metadata.
 
 ## Telemetry, Storage & Metrics
 - **Telemetry ingestion** – `server/routes/ws_telemetry.py` exposes WebSocket `/ws/telemetry` for broadcast and HTTP `/telemetry`/`/telemetry/batch` for posting samples. Payload validated via `Telemetry`/`TelemetrySample` schema; messages broadcast to connected clients and optionally persisted by flight recorder.

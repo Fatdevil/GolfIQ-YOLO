@@ -18,6 +18,7 @@ import {
   type PlayerAnalytics,
   type PlayerProfile,
 } from '@app/api/player';
+import WatchStatusCard from '@app/components/WatchStatusCard';
 import type { RootStackParamList } from '@app/navigation/types';
 import { loadCurrentRun, type CurrentRun } from '@app/run/currentRun';
 import { loadLastRoundSummary, type LastRoundSummary } from '@app/run/lastRound';
@@ -25,9 +26,11 @@ import { loadLastRoundSummary, type LastRoundSummary } from '@app/run/lastRound'
 type Props = NativeStackScreenProps<RootStackParamList, 'PlayerHome'>;
 
 export type PlayerHomeState = {
+  memberId: string;
   name: string;
   planLabel: string;
   isPro: boolean;
+  plan: AccessPlan;
   lastRoundSummary?: LastRoundSummary | null;
 };
 
@@ -89,9 +92,11 @@ function buildHomeState(
   lastRound?: LastRoundSummary | null,
 ): PlayerHomeState {
   return {
+    memberId: profile.memberId,
     name: deriveName(profile),
     planLabel: derivePlanLabel(plan),
     isPro: plan.plan === 'pro',
+    plan,
     lastRoundSummary: lastRound ?? deriveAnalyticsSummary(analytics),
   };
 }
@@ -199,6 +204,8 @@ export default function HomeScreen({ navigation }: Props): JSX.Element {
           </View>
         </TouchableOpacity>
       </View>
+
+      <WatchStatusCard memberId={data.memberId} plan={data.plan} />
 
       {currentRun && (
         <TouchableOpacity onPress={() => navigation.navigate('PlayInRound')} testID="resume-round">
