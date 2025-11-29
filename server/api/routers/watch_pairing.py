@@ -6,6 +6,7 @@ import asyncio
 import json
 import time
 from collections import defaultdict, deque
+from datetime import datetime, timezone
 from functools import partial
 from queue import Empty
 from threading import Lock
@@ -23,6 +24,7 @@ from server.services.watch_devices import (
     mint_join_code,
     record_ack,
     register_device,
+    get_primary_device_for_member,
     verify_device_token,
 )
 from server.services.watch_tip_bus import subscribe, unsubscribe
@@ -60,6 +62,7 @@ _DEVICE_BIND_LIMITER = RateLimiter(limit=20, window_seconds=60.0)
 _DEVICE_TOKEN_LIMITER = RateLimiter(limit=40, window_seconds=60.0)
 _DEVICE_STREAM_LIMITER = RateLimiter(limit=15, window_seconds=60.0)
 _DEVICE_ACK_LIMITER = RateLimiter(limit=120, window_seconds=60.0)
+_DEVICE_STATUS_LIMITER = RateLimiter(limit=40, window_seconds=60.0)
 
 
 def _client_key(request: Request) -> str:
@@ -252,3 +255,25 @@ def post_ack(
 
     emit("watch.tip.ack", {"deviceId": device.device_id, "tipId": body.tipId})
     return JSONResponse({"status": "ok"})
+
+
+class DeviceStatusOut(BaseModel):
+    paired: bool
+    lastSeenAt: str | None = None
+
+
+@router.get(
+    "/api/watch/devices/status",
+    dependencies=[Depends(require_api_key)],
+    response_model=DeviceStatusOut,
+)
+def get_device_status(request: Request, memberId: str) -> DeviceStatusOut:  # noqa: N803
+    """Return pairing status for the member's primary watch device."""
+
+    _enforce(_DEVICE_STATUS_LIMITER, request, "status")
+    device = get_primary_device_for_member(memberId)
+    if not device:
+        return DeviceStatusOut(paired=False, lastSeenAt=None)
+
+    last_seen = datetime.fromtimestamp(device.last_seen_ts, tz=timezone.utc).isoformat()
+    return DeviceStatusOut(paired=True, lastSeenAt=last_seen)

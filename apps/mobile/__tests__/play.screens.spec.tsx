@@ -3,6 +3,8 @@ import React from 'react';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 
 import { fetchCourseBundle, fetchHeroCourses } from '@app/api/courses';
+import { fetchAccessPlan, fetchPlayerProfile } from '@app/api/player';
+import { createRunForCurrentRound } from '@app/api/runs';
 import CourseSelectScreen from '@app/screens/play/CourseSelectScreen';
 import TeeSelectScreen from '@app/screens/play/TeeSelectScreen';
 import InRoundScreen from '@app/screens/play/InRoundScreen';
@@ -14,10 +16,20 @@ import {
   countScoredHoles,
 } from '@app/run/currentRun';
 import { getItem, setItem } from '@app/storage/asyncStorage';
+import { syncHoleHud } from '@app/watch/HudSyncService';
 
 vi.mock('@app/api/courses', () => ({
   fetchHeroCourses: vi.fn(),
   fetchCourseBundle: vi.fn(),
+}));
+
+vi.mock('@app/api/player', () => ({
+  fetchAccessPlan: vi.fn(),
+  fetchPlayerProfile: vi.fn(),
+}));
+
+vi.mock('@app/api/runs', () => ({
+  createRunForCurrentRound: vi.fn(),
 }));
 
 vi.mock('@app/run/currentRun', () => ({
@@ -34,6 +46,10 @@ vi.mock('@app/storage/asyncStorage', () => ({
   getItem: vi.fn(),
   setItem: vi.fn(),
   removeItem: vi.fn(),
+}));
+
+vi.mock('@app/watch/HudSyncService', () => ({
+  syncHoleHud: vi.fn(),
 }));
 
 type Navigation = {
@@ -155,6 +171,15 @@ describe('InRoundScreen', () => {
   beforeEach(() => {
     vi.resetAllMocks();
     vi.mocked(countScoredHoles).mockImplementation((scorecard) => Object.keys(scorecard ?? {}).length);
+    vi.mocked(fetchAccessPlan).mockResolvedValue({ plan: 'pro' });
+    vi.mocked(fetchPlayerProfile).mockResolvedValue({
+      memberId: 'mem-1',
+      name: 'Test',
+      model: { playerType: 'balanced', style: null, strengths: [], weaknesses: [] },
+      plan: { focusCategories: [], steps: [] },
+    });
+    vi.mocked(createRunForCurrentRound).mockResolvedValue({ runId: 'run-created' });
+    vi.mocked(syncHoleHud).mockResolvedValue();
   });
 
   it('loads current run and advances holes', async () => {
@@ -197,10 +222,17 @@ describe('InRoundScreen', () => {
 
     expect(await screen.findByTestId('hole-progress')).toHaveTextContent('Hole 1 of 3');
 
+    await waitFor(() => {
+      expect(syncHoleHud).toHaveBeenCalled();
+    });
+
     fireEvent.click(screen.getByTestId('next-hole'));
 
     await waitFor(() => {
       expect(saveCurrentRun).toHaveBeenCalledWith(expect.objectContaining({ currentHole: 2 }));
+      expect(syncHoleHud).toHaveBeenLastCalledWith(
+        expect.objectContaining({ currentHole: 2, courseId: 'c1', runId: 'run-created' }),
+      );
     });
     expect(screen.getByTestId('hole-progress')).toHaveTextContent('Hole 2 of 3');
 

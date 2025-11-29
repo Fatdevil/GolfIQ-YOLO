@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Modal, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
+import { fetchAccessPlan, fetchPlayerProfile, type AccessPlan } from '@app/api/player';
 import { fetchCourseBundle, type CourseBundle } from '@app/api/courses';
 import type { RootStackParamList } from '@app/navigation/types';
 import {
@@ -13,6 +14,8 @@ import {
   updateHoleScore,
   type CurrentRun,
 } from '@app/run/currentRun';
+import { createRunForCurrentRound } from '@app/api/runs';
+import { syncHoleHud, type HudSyncContext } from '@app/watch/HudSyncService';
 
 function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value));
@@ -28,6 +31,9 @@ export default function InRoundScreen({ navigation, route }: Props): JSX.Element
   const [finishing, setFinishing] = useState(false);
   const [finishError, setFinishError] = useState<string | null>(null);
   const [confirmVisible, setConfirmVisible] = useState(false);
+  const [plan, setPlan] = useState<AccessPlan | null>(null);
+  const [memberId, setMemberId] = useState<string | null>(null);
+  const [hudStatus, setHudStatus] = useState<string | null>(null);
 
   const hydrate = useCallback(async () => {
     setLoading(true);
@@ -57,12 +63,51 @@ export default function InRoundScreen({ navigation, route }: Props): JSX.Element
     });
   }, [hydrate]);
 
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const [access, profile] = await Promise.all([fetchAccessPlan(), fetchPlayerProfile()]);
+        if (cancelled) return;
+        setPlan(access);
+        setMemberId(profile.memberId);
+      } catch {
+        if (!cancelled) {
+          setPlan((prev) => prev ?? { plan: 'free' });
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const hole = useMemo(() => {
     if (!bundle || !run) return null;
     const safeHole = clamp(run.currentHole, 1, run.holes);
     const found = bundle.holes.find((h) => h.number === safeHole);
     return found ?? null;
   }, [bundle, run]);
+
+  useEffect(() => {
+    if (!run || run.runId) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const created = await createRunForCurrentRound(run);
+        if (cancelled) return;
+        const updated = { ...run, runId: created.runId } as CurrentRun;
+        setRun(updated);
+        await saveCurrentRun(updated);
+      } catch {
+        // Ignore failures; finishing flow will retry
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [run]);
 
   const handleAdvance = useCallback(
     async (delta: number) => {
@@ -98,6 +143,33 @@ export default function InRoundScreen({ navigation, route }: Props): JSX.Element
     },
     [run],
   );
+
+  useEffect(() => {
+    if (!run || !bundle || !memberId) return;
+    if (plan?.plan !== 'pro') return;
+    if (!run.runId) return;
+
+    const currentHole = clamp(run.currentHole, 1, run.holes);
+    const holeMeta = bundle.holes.find((h) => h.number === currentHole);
+    const ctx: HudSyncContext = {
+      memberId,
+      runId: run.runId,
+      courseId: run.courseId,
+      courseName: run.courseName,
+      teeName: run.teeName,
+      holes: run.holes,
+      currentHole,
+      par: holeMeta?.par ?? null,
+      strokeIndex: holeMeta?.index ?? null,
+      lengthMeters: holeMeta?.lengthMeters ?? null,
+    };
+
+    syncHoleHud(ctx)
+      .then(() => setHudStatus(`HUD updated for hole ${currentHole}`))
+      .catch(() => {
+        setHudStatus(null);
+      });
+  }, [bundle, memberId, plan?.plan, run?.currentHole, run?.runId, run?.courseId, run?.courseName, run?.teeName, run?.holes]);
 
   const handleFinish = useCallback(async () => {
     if (!run || !bundle) return;
@@ -145,6 +217,7 @@ export default function InRoundScreen({ navigation, route }: Props): JSX.Element
   const teeLabel = tee?.lengthMeters ? `${tee.name} – ${tee.lengthMeters} m` : tee?.name ?? run.teeName;
   const holeScore = run ? getHoleScore(run, run.currentHole) : null;
   const scoredHoles = run ? countScoredHoles(run.scorecard) : 0;
+  const isPro = plan?.plan === 'pro';
 
   return (
     <ScrollView contentContainerStyle={styles.content}>
@@ -154,14 +227,25 @@ export default function InRoundScreen({ navigation, route }: Props): JSX.Element
       </View>
 
       <View style={styles.section}>
-        <Text style={styles.sectionTitle} testID="hole-progress">
-          Hole {run.currentHole} of {run.holes}
-        </Text>
+        <View style={styles.sectionHeaderRow}>
+          <Text style={styles.sectionTitle} testID="hole-progress">
+            Hole {run.currentHole} of {run.holes}
+          </Text>
+          <View
+            style={[styles.watchPill, isPro ? styles.watchPillActive : styles.watchPillLocked]}
+            testID="watch-hud-pill"
+          >
+            <Text style={[styles.watchPillText, !isPro && styles.watchPillTextLocked]}>
+              {isPro ? 'Watch HUD' : 'Watch HUD (Pro)'}
+            </Text>
+          </View>
+        </View>
         <View style={styles.holeCard}>
           <Text style={styles.holeLabel}>Par {hole?.par ?? '–'}</Text>
           <Text style={styles.holeMeta}>Index {hole?.index ?? '–'}</Text>
           <Text style={styles.holeMeta}>Length {hole?.lengthMeters ? `${hole.lengthMeters} m` : '– m'}</Text>
         </View>
+        {isPro && hudStatus && <Text style={styles.hudStatus}>{hudStatus}</Text>}
         <View style={styles.row}>
           <TouchableOpacity
             onPress={() => handleAdvance(-1).catch(() => {})}
@@ -321,6 +405,12 @@ const styles = StyleSheet.create({
   section: {
     gap: 10,
   },
+  sectionHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+  },
   sectionTitle: {
     fontWeight: '700',
     fontSize: 16,
@@ -337,6 +427,28 @@ const styles = StyleSheet.create({
   },
   holeMeta: {
     color: '#6b7280',
+  },
+  watchPill: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 999,
+  },
+  watchPillActive: {
+    backgroundColor: '#dcfce7',
+  },
+  watchPillLocked: {
+    backgroundColor: '#fee2e2',
+  },
+  watchPillText: {
+    fontWeight: '700',
+    color: '#0f172a',
+  },
+  watchPillTextLocked: {
+    color: '#b91c1c',
+  },
+  hudStatus: {
+    color: '#0f172a',
+    fontWeight: '600',
   },
   row: {
     flexDirection: 'row',

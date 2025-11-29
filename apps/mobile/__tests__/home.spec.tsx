@@ -6,11 +6,17 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import HomeScreen from '@app/screens/HomeScreen';
 import type { RootStackParamList } from '@app/navigation/types';
 import * as playerApi from '@app/api/player';
+import * as watchApi from '@app/api/watch';
 
 vi.mock('@app/api/player', () => ({
   fetchPlayerProfile: vi.fn(),
   fetchAccessPlan: vi.fn(),
   fetchPlayerAnalytics: vi.fn(),
+}));
+
+vi.mock('@app/api/watch', () => ({
+  fetchWatchStatus: vi.fn(),
+  requestWatchPairCode: vi.fn(),
 }));
 
 type Props = NativeStackScreenProps<RootStackParamList, 'PlayerHome'>;
@@ -68,12 +74,21 @@ function createRoute(): Route {
 describe('HomeScreen', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(watchApi.fetchWatchStatus).mockResolvedValue({ paired: false, lastSeenAt: null });
+    vi.mocked(watchApi.requestWatchPairCode).mockResolvedValue({
+      code: '123456',
+      expiresAt: new Date(Date.now() + 60_000).toISOString(),
+    });
   });
 
   it('renders greeting, plan badge, and CTAs', async () => {
     vi.mocked(playerApi.fetchPlayerProfile).mockResolvedValue(mockProfile);
     vi.mocked(playerApi.fetchAccessPlan).mockResolvedValue({ plan: 'pro', trial: false });
     vi.mocked(playerApi.fetchPlayerAnalytics).mockResolvedValue(mockAnalytics);
+    vi.mocked(watchApi.fetchWatchStatus).mockResolvedValue({
+      paired: true,
+      lastSeenAt: new Date().toISOString(),
+    });
     const navigation = createNavigation();
 
     render(<HomeScreen navigation={navigation} route={createRoute()} />);
@@ -84,6 +99,7 @@ describe('HomeScreen', () => {
     expect(screen.getByTestId('range-cta')).toBeInTheDocument();
     expect(screen.getByTestId('trips-cta')).toBeInTheDocument();
     expect(screen.getByTestId('last-round-summary')).toBeInTheDocument();
+    expect(screen.getByTestId('watch-status-label').textContent).toContain('Connected');
   });
 
   it('shows error state and retries', async () => {
