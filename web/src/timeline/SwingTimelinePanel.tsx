@@ -31,7 +31,8 @@ function labelForEvent(event: SessionTimelineEvent): string {
 }
 
 export default function SwingTimelinePanel({ runId }: SwingTimelinePanelProps) {
-  const { isPro, loading: planLoading } = useAccessPlan();
+  const accessPlan = useAccessPlan();
+  const { isPro, loading: planLoading } = accessPlan ?? { isPro: false, loading: false };
   const [data, setData] = useState<SessionTimelineResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);

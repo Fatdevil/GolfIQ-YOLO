@@ -1,31 +1,67 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
 export type AsyncStorageLike = {
-  getItem: (key: string) => string | null | Promise<string | null>;
-  setItem: (key: string, value: string) => void | Promise<void>;
-  removeItem: (key: string) => void | Promise<void>;
+  getItem: (key: string) => Promise<string | null>;
+  setItem: (key: string, value: string) => Promise<void>;
+  removeItem: (key: string) => Promise<void>;
 };
 
 const memory = new Map<string, string>();
 
-function resolveStorage(): AsyncStorageLike | null {
-  const globalAny = globalThis as unknown as { localStorage?: Storage };
-  if (globalAny.localStorage) {
-    return globalAny.localStorage;
-  }
+function createNativeStorage(): AsyncStorageLike {
   return {
-    getItem: (key: string) => memory.get(key) ?? null,
-    setItem: (key: string, value: string) => {
+    async getItem(key: string) {
+      try {
+        const value = await AsyncStorage.getItem(key);
+        if (value != null) return value;
+      } catch {
+        // fall back to memory
+      }
+      return memory.get(key) ?? null;
+    },
+    async setItem(key: string, value: string) {
+      memory.set(key, value);
+      try {
+        await AsyncStorage.setItem(key, value);
+      } catch {
+        // ignore persistent failures but keep memory copy
+      }
+    },
+    async removeItem(key: string) {
+      memory.delete(key);
+      try {
+        await AsyncStorage.removeItem(key);
+      } catch {
+        // ignore
+      }
+    },
+  };
+}
+
+function createMemoryStorage(): AsyncStorageLike {
+  return {
+    async getItem(key: string) {
+      return memory.get(key) ?? null;
+    },
+    async setItem(key: string, value: string) {
       memory.set(key, value);
     },
-    removeItem: (key: string) => {
+    async removeItem(key: string) {
       memory.delete(key);
     },
-  } satisfies AsyncStorageLike;
+  };
+}
+
+function resolveStorage(): AsyncStorageLike {
+  if (typeof AsyncStorage !== 'undefined') {
+    return createNativeStorage();
+  }
+  return createMemoryStorage();
 }
 
 const storage = resolveStorage();
 
 export async function getItem(key: string): Promise<string | null> {
-  if (!storage) return null;
   try {
     const value = await storage.getItem(key);
     return value ?? null;
@@ -35,7 +71,6 @@ export async function getItem(key: string): Promise<string | null> {
 }
 
 export async function setItem(key: string, value: string): Promise<void> {
-  if (!storage) return;
   try {
     await storage.setItem(key, value);
   } catch {
@@ -44,7 +79,6 @@ export async function setItem(key: string, value: string): Promise<void> {
 }
 
 export async function removeItem(key: string): Promise<void> {
-  if (!storage) return;
   try {
     await storage.removeItem(key);
   } catch {
