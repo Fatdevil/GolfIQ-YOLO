@@ -19,6 +19,7 @@ import {
   type PlayerProfile,
 } from '@app/api/player';
 import type { RootStackParamList } from '@app/navigation/types';
+import { loadCurrentRun, type CurrentRun } from '@app/run/currentRun';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'PlayerHome'>;
 
@@ -98,16 +99,22 @@ function buildHomeState(
 }
 
 export default function HomeScreen({ navigation }: Props): JSX.Element {
-  const [{ loading, error, data }, setState] = useState<{
+  const [state, setState] = useState<{
     loading: boolean;
     error: string | null;
     data: PlayerHomeState | null;
-  }>({ loading: true, error: null, data: null });
+    currentRun: CurrentRun | null;
+  }>({ loading: true, error: null, data: null, currentRun: null });
+  const { loading, error, data, currentRun } = state;
 
   const load = useCallback(async () => {
     setState((prev) => ({ ...prev, loading: true, error: null }));
     try {
-      const [profile, accessPlan] = await Promise.all([fetchPlayerProfile(), fetchAccessPlan()]);
+      const [profile, accessPlan, existingRun] = await Promise.all([
+        fetchPlayerProfile(),
+        fetchAccessPlan(),
+        loadCurrentRun(),
+      ]);
       let analytics: PlayerAnalytics | null = null;
       if (accessPlan.plan === 'pro') {
         try {
@@ -119,10 +126,15 @@ export default function HomeScreen({ navigation }: Props): JSX.Element {
           }
         }
       }
-      setState({ loading: false, error: null, data: buildHomeState(profile, accessPlan, analytics) });
+      setState({
+        loading: false,
+        error: null,
+        data: buildHomeState(profile, accessPlan, analytics),
+        currentRun: existingRun,
+      });
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to load home';
-      setState({ loading: false, error: message, data: null });
+      setState({ loading: false, error: message, data: null, currentRun: null });
     }
   }, []);
 
@@ -174,7 +186,7 @@ export default function HomeScreen({ navigation }: Props): JSX.Element {
         <Text style={styles.cardSubtitle}>Start a new round with GPS, scoring, and caddie tools.</Text>
         <TouchableOpacity
           accessibilityLabel="Play round"
-          onPress={() => navigation.navigate('PlayRoundSetup')}
+          onPress={() => navigation.navigate('PlayCourseSelect')}
           testID="play-round-cta"
         >
           <View style={styles.primaryButton}>
@@ -182,6 +194,17 @@ export default function HomeScreen({ navigation }: Props): JSX.Element {
           </View>
         </TouchableOpacity>
       </View>
+
+      {currentRun && (
+        <TouchableOpacity onPress={() => navigation.navigate('PlayInRound')} testID="resume-round">
+          <View style={styles.card}>
+            <Text style={styles.cardTitle}>Ongoing round</Text>
+            <Text style={styles.cardSubtitle}>
+              {currentRun.courseName} · {currentRun.teeName} · Hole {currentRun.currentHole} of {currentRun.holes}
+            </Text>
+          </View>
+        </TouchableOpacity>
+      )}
 
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Explore</Text>

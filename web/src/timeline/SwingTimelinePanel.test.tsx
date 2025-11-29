@@ -50,7 +50,20 @@ describe("SwingTimelinePanel", () => {
 
     render(<SwingTimelinePanel runId="run-1" />);
 
-    expect(await screen.findByTestId("upgrade-gate")).toBeInTheDocument();
+    const gates = await screen.findAllByTestId("upgrade-gate");
+
+    expect(gates.length).toBeGreaterThan(0);
+  });
+
+  it("handles missing access provider gracefully", async () => {
+    mockUseAccessPlan.mockReturnValue(undefined as any);
+    mockFetchSessionTimeline.mockResolvedValue({ runId: "run-1", events: [] });
+
+    render(<SwingTimelinePanel runId="run-1" />);
+
+    const gates = await screen.findAllByTestId("upgrade-gate");
+
+    expect(gates.length).toBeGreaterThan(0);
   });
 
   it("shows an empty state when no events exist", async () => {

@@ -7,7 +7,9 @@ export const linking: LinkingOptions<any> = {
   config: {
     screens: {
       PlayerHome: 'home',
-      PlayRoundSetup: 'play',
+      PlayCourseSelect: 'play',
+      PlayTeeSelect: 'play/tee',
+      PlayInRound: 'play/round',
       RangePractice: 'range',
       Trips: 'trips',
       EventJoin: 'join/:code?',

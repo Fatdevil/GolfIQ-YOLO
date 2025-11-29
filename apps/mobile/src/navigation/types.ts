@@ -8,6 +8,15 @@ export type ClipCommentaryParams = {
 
 export type RootStackParamList = {
   PlayerHome: undefined;
+  PlayCourseSelect: undefined;
+  PlayTeeSelect: { courseId: string; courseName: string; tees?: { id: string; name: string; lengthMeters?: number }[] };
+  PlayInRound: {
+    courseId?: string;
+    courseName?: string;
+    teeId?: string;
+    teeName?: string;
+    bundle?: import('@app/api/courses').CourseBundle;
+  } | undefined;
   PlayRoundSetup: undefined;
   RangePractice: undefined;
   Trips: undefined;

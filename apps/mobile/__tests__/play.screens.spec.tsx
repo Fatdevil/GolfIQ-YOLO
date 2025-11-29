@@ -1,0 +1,185 @@
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import React from 'react';
+import { describe, expect, it, vi, beforeEach } from 'vitest';
+
+import { fetchCourseBundle, fetchHeroCourses } from '@app/api/courses';
+import CourseSelectScreen from '@app/screens/play/CourseSelectScreen';
+import TeeSelectScreen from '@app/screens/play/TeeSelectScreen';
+import InRoundScreen from '@app/screens/play/InRoundScreen';
+import { saveCurrentRun, loadCurrentRun, clearCurrentRun } from '@app/run/currentRun';
+import { getItem, setItem } from '@app/storage/asyncStorage';
+
+vi.mock('@app/api/courses', () => ({
+  fetchHeroCourses: vi.fn(),
+  fetchCourseBundle: vi.fn(),
+}));
+
+vi.mock('@app/run/currentRun', () => ({
+  saveCurrentRun: vi.fn(),
+  loadCurrentRun: vi.fn(),
+  clearCurrentRun: vi.fn(),
+}));
+
+vi.mock('@app/storage/asyncStorage', () => ({
+  getItem: vi.fn(),
+  setItem: vi.fn(),
+  removeItem: vi.fn(),
+}));
+
+type Navigation = {
+  navigate: ReturnType<typeof vi.fn>;
+  setParams: ReturnType<typeof vi.fn>;
+  goBack: ReturnType<typeof vi.fn>;
+};
+
+type Route<Name extends string, Params> = {
+  key: string;
+  name: Name;
+  params: Params;
+};
+
+function createNavigation(): Navigation {
+  return {
+    navigate: vi.fn(),
+    setParams: vi.fn(),
+    goBack: vi.fn(),
+  } as unknown as Navigation;
+}
+
+function createRoute<Name extends string, Params>(name: Name, params: Params): Route<Name, Params> {
+  return { key: name, name, params } as Route<Name, Params>;
+}
+
+describe('CourseSelectScreen', () => {
+  beforeEach(() => {
+    vi.resetAllMocks();
+  });
+
+  it('renders hero courses and filters by search', async () => {
+    vi.mocked(fetchHeroCourses).mockResolvedValue([
+      { id: 'c1', name: 'Pebble Beach', country: 'USA', tees: [] },
+      { id: 'c2', name: 'St Andrews', country: 'UK', tees: [] },
+    ]);
+    vi.mocked(getItem).mockResolvedValue(null);
+    const navigation = createNavigation();
+
+    render(
+      <CourseSelectScreen navigation={navigation as any} route={createRoute('PlayCourseSelect', undefined)} />,
+    );
+
+    expect(await screen.findByText('Pebble Beach')).toBeInTheDocument();
+
+    fireEvent.change(screen.getByTestId('course-search'), { target: { value: 'st a' } });
+
+    expect(await screen.findByText('St Andrews')).toBeInTheDocument();
+    expect(screen.queryByText('Pebble Beach')).toBeNull();
+  });
+
+  it('navigates to tee select on course tap', async () => {
+    vi.mocked(fetchHeroCourses).mockResolvedValue([{ id: 'c1', name: 'Pebble Beach', tees: [] }]);
+    vi.mocked(getItem).mockResolvedValue(null);
+    const navigation = createNavigation();
+
+    render(
+      <CourseSelectScreen navigation={navigation as any} route={createRoute('PlayCourseSelect', undefined)} />,
+    );
+
+    fireEvent.click(await screen.findByTestId('course-c1'));
+
+    await waitFor(() => {
+      expect(navigation.navigate).toHaveBeenCalledWith('PlayTeeSelect', {
+        courseId: 'c1',
+        courseName: 'Pebble Beach',
+        tees: [],
+      });
+    });
+    expect(setItem).toHaveBeenCalled();
+  });
+});
+
+describe('TeeSelectScreen', () => {
+  beforeEach(() => {
+    vi.resetAllMocks();
+  });
+
+  it('starts a round with selected tee', async () => {
+    vi.mocked(fetchCourseBundle).mockResolvedValue({
+      id: 'c1',
+      name: 'Pebble',
+      tees: [
+        { id: 't1', name: 'Blue', lengthMeters: 6000 },
+        { id: 't2', name: 'White', lengthMeters: 5800 },
+      ],
+      holes: [
+        { number: 1, par: 4, lengthMeters: 400 },
+      ],
+    });
+    const navigation = createNavigation();
+
+    render(
+      <TeeSelectScreen
+        navigation={navigation as any}
+        route={createRoute('PlayTeeSelect', { courseId: 'c1', courseName: 'Pebble' })}
+      />,
+    );
+
+    expect(await screen.findByText('Select your tee box')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByTestId('start-round'));
+
+    await waitFor(() => {
+      expect(saveCurrentRun).toHaveBeenCalled();
+      expect(navigation.navigate).toHaveBeenCalledWith('PlayInRound', expect.objectContaining({
+        courseId: 'c1',
+        courseName: 'Pebble',
+        teeId: 't1',
+        teeName: 'Blue',
+      }));
+    });
+  });
+});
+
+describe('InRoundScreen', () => {
+  beforeEach(() => {
+    vi.resetAllMocks();
+  });
+
+  it('loads current run and advances holes', async () => {
+    vi.mocked(loadCurrentRun).mockResolvedValue({
+      courseId: 'c1',
+      courseName: 'Pebble',
+      teeId: 't1',
+      teeName: 'Blue',
+      holes: 3,
+      startedAt: '2024-01-01T00:00:00.000Z',
+      mode: 'strokeplay',
+      currentHole: 1,
+    });
+    vi.mocked(fetchCourseBundle).mockResolvedValue({
+      id: 'c1',
+      name: 'Pebble',
+      tees: [{ id: 't1', name: 'Blue', lengthMeters: 6000 }],
+      holes: [
+        { number: 1, par: 4, lengthMeters: 400 },
+        { number: 2, par: 3, lengthMeters: 150 },
+      ],
+    });
+    const navigation = createNavigation();
+
+    render(<InRoundScreen navigation={navigation as any} route={createRoute('PlayInRound', {})} />);
+
+    expect(await screen.findByTestId('hole-progress')).toHaveTextContent('Hole 1 of 3');
+
+    fireEvent.click(screen.getByTestId('next-hole'));
+
+    await waitFor(() => {
+      expect(saveCurrentRun).toHaveBeenCalledWith(expect.objectContaining({ currentHole: 2 }));
+    });
+    expect(screen.getByTestId('hole-progress')).toHaveTextContent('Hole 2 of 3');
+
+    fireEvent.click(screen.getByTestId('end-round'));
+    await waitFor(() => {
+      expect(clearCurrentRun).toHaveBeenCalled();
+    });
+  });
+});
