@@ -9,10 +9,12 @@ import EventJoinScreen from '@app/screens/EventJoinScreen';
 import EventLiveScreen from '@app/screens/EventLiveScreen';
 import EventScanScreen from '@app/screens/EventScanScreen';
 import HomeScreen from '@app/screens/HomeScreen';
-import PlayRoundSetupScreen from '@app/screens/PlayRoundSetupScreen';
 import RangePracticeScreen from '@app/screens/RangePracticeScreen';
 import TripsScreen from '@app/screens/TripsScreen';
 import { extractJoinCode } from '@app/utils/deepLink';
+import CourseSelectScreen from '@app/screens/play/CourseSelectScreen';
+import TeeSelectScreen from '@app/screens/play/TeeSelectScreen';
+import InRoundScreen from '@app/screens/play/InRoundScreen';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
@@ -45,10 +47,12 @@ export default function App(): JSX.Element {
       <Stack.Navigator initialRouteName="PlayerHome">
         <Stack.Screen name="PlayerHome" component={HomeScreen} options={{ title: 'Home' }} />
         <Stack.Screen
-          name="PlayRoundSetup"
-          component={PlayRoundSetupScreen}
-          options={{ title: 'Play round' }}
+          name="PlayCourseSelect"
+          component={CourseSelectScreen}
+          options={{ title: 'Choose course' }}
         />
+        <Stack.Screen name="PlayTeeSelect" component={TeeSelectScreen} options={{ title: 'Select tee' }} />
+        <Stack.Screen name="PlayInRound" component={InRoundScreen} options={{ title: 'In round' }} />
         <Stack.Screen
           name="RangePractice"
           component={RangePracticeScreen}

@@ -2,6 +2,7 @@
 golfiq-v0.9-*.zip
 web/node_modules/
 web/dist/
+node_modules/
 .codex/sessions/
 .codex/log/
 .codex/sessions/

@@ -11,8 +11,14 @@ The client reads `MOBILE_API_BASE`/`MOBILE_API_KEY` (or Expo equivalents) to bui
 
 ## UI highlights
 - Greeting with the player name and a small badge for the current plan (Free/Pro/Trial).
-- Primary CTA: **Play round** (navigates to the round setup placeholder).
+- Primary CTA: **Play round** (navigates to the course + tee selection flow).
 - Secondary actions: Range practice, Trips & buddies.
 - Last round summary: shows the latest analytics snapshot when available or a friendly empty state.
+
+## Start Round & Current Run (mobile)
+- The Play round CTA now launches course and tee selection powered by `/api/courses/hero` and `/api/courses/{id}/bundle`.
+- Starting a round saves a local `currentRun` model (course, tee, hole count, mode, timestamps) to AsyncStorage under `golfiq.currentRun.v1`.
+- The Home screen reads the saved `currentRun` on load and surfaces an **Ongoing round** card that resumes directly into the in-round shell.
+- The in-round screen shows hole number, par, index, and length from the course bundle and persists hole progress locally between app launches.
 
 Pro-only analytics are tolerated; the home shell still renders even if analytics are unavailable for Free users.
