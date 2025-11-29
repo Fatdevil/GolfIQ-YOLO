@@ -15,6 +15,7 @@ import { extractJoinCode } from '@app/utils/deepLink';
 import CourseSelectScreen from '@app/screens/play/CourseSelectScreen';
 import TeeSelectScreen from '@app/screens/play/TeeSelectScreen';
 import InRoundScreen from '@app/screens/play/InRoundScreen';
+import RoundSavedScreen from '@app/screens/RoundSavedScreen';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
@@ -53,6 +54,7 @@ export default function App(): JSX.Element {
         />
         <Stack.Screen name="PlayTeeSelect" component={TeeSelectScreen} options={{ title: 'Select tee' }} />
         <Stack.Screen name="PlayInRound" component={InRoundScreen} options={{ title: 'In round' }} />
+        <Stack.Screen name="RoundSaved" component={RoundSavedScreen} options={{ title: 'Round saved' }} />
         <Stack.Screen
           name="RangePractice"
           component={RangePracticeScreen}

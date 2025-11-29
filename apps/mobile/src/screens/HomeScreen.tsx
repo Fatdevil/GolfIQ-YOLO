@@ -20,14 +20,9 @@ import {
 } from '@app/api/player';
 import type { RootStackParamList } from '@app/navigation/types';
 import { loadCurrentRun, type CurrentRun } from '@app/run/currentRun';
+import { loadLastRoundSummary, type LastRoundSummary } from '@app/run/lastRound';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'PlayerHome'>;
-
-type LastRoundSummary = {
-  courseName: string;
-  scoreRelativeToPar: string;
-  dateLabel: string;
-};
 
 export type PlayerHomeState = {
   name: string;
@@ -73,15 +68,17 @@ function deriveName(profile: PlayerProfile): string {
   return (profile.name ?? '').trim() || profile.memberId || 'Player';
 }
 
-function deriveLastRoundSummary(analytics?: PlayerAnalytics | null): LastRoundSummary | null {
+function deriveAnalyticsSummary(analytics?: PlayerAnalytics | null): LastRoundSummary | null {
   const lastPoint = analytics?.sgTrend?.[analytics.sgTrend.length - 1];
   if (!lastPoint) return null;
-  const score = `${lastPoint.sgTotal >= 0 ? '+' : ''}${lastPoint.sgTotal.toFixed(1)} SG`;
-  const dateLabel = formatRelativeDate(lastPoint.date);
   return {
     courseName: lastPoint.runId ? `Round ${lastPoint.runId}` : 'Latest round',
-    scoreRelativeToPar: score,
-    dateLabel,
+    runId: lastPoint.runId ?? 'unknown',
+    teeName: '',
+    holes: 0,
+    totalStrokes: 0,
+    relativeToPar: `${lastPoint.sgTotal >= 0 ? '+' : ''}${lastPoint.sgTotal.toFixed(1)} SG`,
+    finishedAt: lastPoint.date ?? new Date().toISOString(),
   };
 }
 
@@ -89,12 +86,13 @@ function buildHomeState(
   profile: PlayerProfile,
   plan: AccessPlan,
   analytics?: PlayerAnalytics | null,
+  lastRound?: LastRoundSummary | null,
 ): PlayerHomeState {
   return {
     name: deriveName(profile),
     planLabel: derivePlanLabel(plan),
     isPro: plan.plan === 'pro',
-    lastRoundSummary: deriveLastRoundSummary(analytics),
+    lastRoundSummary: lastRound ?? deriveAnalyticsSummary(analytics),
   };
 }
 
@@ -110,10 +108,11 @@ export default function HomeScreen({ navigation }: Props): JSX.Element {
   const load = useCallback(async () => {
     setState((prev) => ({ ...prev, loading: true, error: null }));
     try {
-      const [profile, accessPlan, existingRun] = await Promise.all([
+      const [profile, accessPlan, existingRun, lastRoundSummary] = await Promise.all([
         fetchPlayerProfile(),
         fetchAccessPlan(),
         loadCurrentRun(),
+        loadLastRoundSummary(),
       ]);
       let analytics: PlayerAnalytics | null = null;
       if (accessPlan.plan === 'pro') {
@@ -129,7 +128,7 @@ export default function HomeScreen({ navigation }: Props): JSX.Element {
       setState({
         loading: false,
         error: null,
-        data: buildHomeState(profile, accessPlan, analytics),
+        data: buildHomeState(profile, accessPlan, analytics, lastRoundSummary),
         currentRun: existingRun,
       });
     } catch (err) {
@@ -144,7 +143,13 @@ export default function HomeScreen({ navigation }: Props): JSX.Element {
     });
   }, [load]);
 
-  const lastRoundSummary = useMemo(() => data?.lastRoundSummary ?? null, [data?.lastRoundSummary]);
+  const lastRoundSummary = useMemo(() => {
+    if (!data?.lastRoundSummary) return null;
+    const dateLabel = formatRelativeDate(data.lastRoundSummary.finishedAt);
+    const scoreLabel =
+      data.lastRoundSummary.relativeToPar ?? `${data.lastRoundSummary.totalStrokes} strokes`;
+    return { ...data.lastRoundSummary, dateLabel, scoreLabel };
+  }, [data?.lastRoundSummary]);
 
   if (loading) {
     return (
@@ -238,8 +243,20 @@ export default function HomeScreen({ navigation }: Props): JSX.Element {
         {lastRoundSummary ? (
           <View style={styles.summary} testID="last-round-summary">
             <Text style={styles.summaryTitle}>{lastRoundSummary.courseName}</Text>
-            <Text style={styles.summaryScore}>{lastRoundSummary.scoreRelativeToPar}</Text>
+            <Text style={styles.summaryScore}>{lastRoundSummary.scoreLabel}</Text>
             <Text style={styles.summaryDate}>{lastRoundSummary.dateLabel}</Text>
+            <TouchableOpacity
+              onPress={() =>
+                navigation.navigate('RoundSaved', {
+                  summary: data.lastRoundSummary!,
+                })
+              }
+              testID="view-last-round"
+            >
+              <View style={styles.linkButton}>
+                <Text style={styles.linkText}>View details</Text>
+              </View>
+            </TouchableOpacity>
           </View>
         ) : (
           <Text style={styles.emptySummary} testID="empty-last-round">
@@ -360,6 +377,14 @@ const styles = StyleSheet.create({
   summaryDate: {
     color: '#6b7280',
     fontSize: 12,
+  },
+  linkButton: {
+    marginTop: 8,
+    paddingVertical: 8,
+  },
+  linkText: {
+    color: '#1d4ed8',
+    fontWeight: '700',
   },
   emptySummary: {
     color: '#6b7280',

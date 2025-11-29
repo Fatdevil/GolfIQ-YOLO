@@ -20,6 +20,7 @@ export type RootStackParamList = {
   PlayRoundSetup: undefined;
   RangePractice: undefined;
   Trips: undefined;
+  RoundSaved: { summary: import('@app/run/lastRound').LastRoundSummary };
   EventJoin: { code?: string } | undefined;
   EventLive: {
     id: string;
