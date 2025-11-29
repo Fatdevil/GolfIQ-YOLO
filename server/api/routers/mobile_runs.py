@@ -6,7 +6,9 @@ from pydantic import BaseModel, Field
 from server.security import require_api_key
 from server.storage.runs import save_run
 
-router = APIRouter(prefix="/api/mobile", tags=["mobile"], dependencies=[Depends(require_api_key)])
+router = APIRouter(
+    prefix="/api/mobile", tags=["mobile"], dependencies=[Depends(require_api_key)]
+)
 
 
 class MobileRunCreate(BaseModel):
