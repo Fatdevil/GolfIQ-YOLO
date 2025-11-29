@@ -1,0 +1,21 @@
+{
+  "version": 1,
+  "metrics": [
+    {"name": "max_shoulder_rotation", "category": "sequence", "units": "deg", "description": "Peak upper body rotation (face-on neutral at address)."},
+    {"name": "max_hip_rotation", "category": "sequence", "units": "deg", "description": "Peak pelvis rotation measured relative to address."},
+    {"name": "max_x_factor", "category": "sequence", "units": "deg", "description": "Separation between shoulders and hips."},
+    {"name": "sequence_order", "category": "sequence", "units": "segments", "description": "Order of pelvis/torso/arms/club peaks."},
+    {"name": "is_ideal", "category": "sequence", "units": "bool", "description": "Heuristic flag for tour-like sequence."},
+
+    {"name": "launch_deg", "category": "ball", "units": "deg", "description": "Initial launch angle from ball tracking."},
+    {"name": "sideAngleDeg", "category": "ball", "units": "deg", "description": "Side angle / start direction."},
+    {"name": "carry_m", "category": "ball", "units": "m", "description": "Estimated carry distance."},
+    {"name": "ball_speed_mps", "category": "ball", "units": "m/s", "description": "Ball speed (metric)."},
+    {"name": "club_speed_mps", "category": "club", "units": "m/s", "description": "Club head speed (metric)."},
+
+    {"name": "sway_px", "category": "faceon", "units": "px", "description": "Lateral sway measured in pixels from frame center.", "persisted": true},
+    {"name": "sway_cm", "category": "faceon", "units": "cm", "description": "Lateral sway converted to centimeters when calibration is available.", "persisted": true},
+    {"name": "shoulder_tilt_deg", "category": "faceon", "units": "deg", "description": "Shoulder tilt placeholder until pose is available.", "persisted": true},
+    {"name": "shaft_lean_deg", "category": "faceon", "units": "deg", "description": "Shaft lean placeholder until club pose is available.", "persisted": true}
+  ]
+}

@@ -17,6 +17,7 @@ from cv_engine.pose.adapter import PoseAdapter
 from cv_engine.sequence import analyze_kinematic_sequence
 from cv_engine.tracking.factory import get_tracker
 from observability.otel import span
+from server.metrics.faceon import compute_faceon_metrics
 from server.telemetry import record_pose_metrics, record_stage_latency
 from .inference.yolo8 import YoloV8Detector
 from .impact.detector import ImpactDetector
@@ -83,6 +84,7 @@ def analyze_frames(
     side_angle: float | None = None
     vert_launch: float | None = None
     carry_est: float | None = None
+    faceon_metrics: Dict[str, Any] | None = None
 
     span_attributes = {
         "cv.frames_total": len(frames_list),
@@ -104,6 +106,26 @@ def analyze_frames(
         record_stage_latency("detect", detection_ms)
         if detection_span is not None:
             detection_span.set_attribute("cv.detections_total", detection_total)
+
+        if frames_list and boxes_per_frame:
+            try:
+                frame_h, frame_w = frames_list[0].shape[:2]
+                detections_payload = [
+                    {
+                        "bbox": [box.x1, box.y1, box.x2, box.y2],
+                        "cls": box.label,
+                        "score": box.score,
+                    }
+                    for box in boxes_per_frame[0]
+                ]
+                faceon_metrics = compute_faceon_metrics(
+                    detections_payload,
+                    frame_w=frame_w,
+                    frame_h=frame_h,
+                    mm_per_px=(calib.m_per_px * 1000.0 if calib.m_per_px else None),
+                )
+            except Exception:
+                faceon_metrics = None
 
         tracking_start = perf_counter()
         active_ids: Dict[str, int] = {"ball": -1, "club": -1}
@@ -261,6 +283,8 @@ def analyze_frames(
                 )
             if sequence_metrics is not None:
                 metrics["sequence"] = sequence_metrics
+            if faceon_metrics is not None:
+                metrics["faceon"] = faceon_metrics
         persist_ms = (perf_counter() - postproc_start) * 1000.0
         timings["persist_ms"] = persist_ms
         record_stage_latency("persist", persist_ms)

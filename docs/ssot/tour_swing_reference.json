@@ -1,0 +1,22 @@
+{
+  "meta": {
+    "generated_at": "2025-11-29T00:00:00Z",
+    "version": 1,
+    "notes": "Heuristic v1 bands for tour/advanced comparison."
+  },
+  "references": [
+    {"metric": "max_shoulder_rotation", "club": "driver", "group": "tour_male", "range_min": 85, "range_max": 110},
+    {"metric": "max_shoulder_rotation", "club": "7i", "group": "tour_male", "range_min": 75, "range_max": 100},
+    {"metric": "max_shoulder_rotation", "club": "driver", "group": "amateur_15_25", "range_min": 70, "range_max": 100},
+
+    {"metric": "max_hip_rotation", "club": "driver", "group": "tour_male", "range_min": 45, "range_max": 65},
+    {"metric": "max_hip_rotation", "club": "7i", "group": "tour_male", "range_min": 35, "range_max": 55},
+
+    {"metric": "max_x_factor", "club": "driver", "group": "tour_male", "range_min": 35, "range_max": 55},
+    {"metric": "max_x_factor", "club": "7i", "group": "tour_male", "range_min": 30, "range_max": 50},
+    {"metric": "max_x_factor", "club": "driver", "group": "amateur_15_25", "range_min": 25, "range_max": 45},
+
+    {"metric": "launch_deg", "club": "driver", "group": "tour_male", "range_min": 10, "range_max": 15},
+    {"metric": "launch_deg", "club": "7i", "group": "tour_male", "range_min": 14, "range_max": 19}
+  ]
+}
