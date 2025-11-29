@@ -10,6 +10,7 @@ export const linking: LinkingOptions<any> = {
       PlayCourseSelect: 'play',
       PlayTeeSelect: 'play/tee',
       PlayInRound: 'play/round',
+      RoundStory: 'round/:runId',
       RangePractice: 'range',
       Trips: 'trips',
       EventJoin: 'join/:code?',

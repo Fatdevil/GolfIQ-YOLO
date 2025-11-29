@@ -107,7 +107,13 @@ export default function InRoundScreen({ navigation, route }: Props): JSX.Element
     const result = await finishCurrentRound(run, bundle);
     setFinishing(false);
     if (result.success) {
-      navigation.navigate('RoundSaved', { summary: result.summary });
+      (navigation as any).reset({
+        index: 1,
+        routes: [
+          { name: 'PlayerHome' },
+          { name: 'RoundStory', params: { runId: result.runId, summary: result.summary } },
+        ],
+      });
     } else {
       setFinishError(result.error);
     }

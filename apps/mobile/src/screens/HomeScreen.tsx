@@ -247,7 +247,8 @@ export default function HomeScreen({ navigation }: Props): JSX.Element {
             <Text style={styles.summaryDate}>{lastRoundSummary.dateLabel}</Text>
             <TouchableOpacity
               onPress={() =>
-                navigation.navigate('RoundSaved', {
+                navigation.navigate('RoundStory', {
+                  runId: data.lastRoundSummary!.runId,
                   summary: data.lastRoundSummary!,
                 })
               }
