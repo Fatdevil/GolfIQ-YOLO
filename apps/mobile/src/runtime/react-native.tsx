@@ -103,6 +103,13 @@ export const ActivityIndicator: React.FC<ActivityIndicatorProps> = ({ testID }) 
   <div data-testid={testID}>Loading…</div>
 );
 
+type ModalProps = CommonProps & { visible: boolean; transparent?: boolean; animationType?: string };
+
+export const Modal: React.FC<ModalProps> = ({ visible, children, testID }) => {
+  if (!visible) return null;
+  return <div data-testid={testID}>{children}</div>;
+};
+
 export const StyleSheet = {
   create<T extends Record<string, Record<string, unknown>>>(styles: T): T {
     return styles;

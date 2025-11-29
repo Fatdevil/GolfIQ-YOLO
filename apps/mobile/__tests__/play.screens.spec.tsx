@@ -6,7 +6,13 @@ import { fetchCourseBundle, fetchHeroCourses } from '@app/api/courses';
 import CourseSelectScreen from '@app/screens/play/CourseSelectScreen';
 import TeeSelectScreen from '@app/screens/play/TeeSelectScreen';
 import InRoundScreen from '@app/screens/play/InRoundScreen';
-import { saveCurrentRun, loadCurrentRun, clearCurrentRun } from '@app/run/currentRun';
+import {
+  saveCurrentRun,
+  loadCurrentRun,
+  clearCurrentRun,
+  finishCurrentRound,
+  countScoredHoles,
+} from '@app/run/currentRun';
 import { getItem, setItem } from '@app/storage/asyncStorage';
 
 vi.mock('@app/api/courses', () => ({
@@ -18,6 +24,10 @@ vi.mock('@app/run/currentRun', () => ({
   saveCurrentRun: vi.fn(),
   loadCurrentRun: vi.fn(),
   clearCurrentRun: vi.fn(),
+  updateHoleScore: vi.fn(),
+  getHoleScore: vi.fn((run, hole) => ({ strokes: 1, putts: 0, ...run.scorecard?.[hole] })),
+  countScoredHoles: vi.fn((scorecard) => Object.keys(scorecard ?? {}).length),
+  finishCurrentRound: vi.fn(),
 }));
 
 vi.mock('@app/storage/asyncStorage', () => ({
@@ -142,19 +152,22 @@ describe('TeeSelectScreen', () => {
 describe('InRoundScreen', () => {
   beforeEach(() => {
     vi.resetAllMocks();
+    vi.mocked(countScoredHoles).mockImplementation((scorecard) => Object.keys(scorecard ?? {}).length);
   });
 
   it('loads current run and advances holes', async () => {
-    vi.mocked(loadCurrentRun).mockResolvedValue({
+    const run = {
       courseId: 'c1',
       courseName: 'Pebble',
       teeId: 't1',
       teeName: 'Blue',
       holes: 3,
       startedAt: '2024-01-01T00:00:00.000Z',
-      mode: 'strokeplay',
+      mode: 'strokeplay' as const,
       currentHole: 1,
-    });
+      scorecard: { 1: { strokes: 4, putts: 2, gir: false, fir: false } },
+    };
+    vi.mocked(loadCurrentRun).mockResolvedValue(run);
     vi.mocked(fetchCourseBundle).mockResolvedValue({
       id: 'c1',
       name: 'Pebble',
@@ -164,6 +177,18 @@ describe('InRoundScreen', () => {
         { number: 2, par: 3, lengthMeters: 150 },
       ],
     });
+    vi.mocked(finishCurrentRound).mockResolvedValue({
+      success: true,
+      runId: 'run-1',
+      summary: {
+        runId: 'run-1',
+        courseName: 'Pebble',
+        teeName: 'Blue',
+        holes: 3,
+        totalStrokes: 2,
+        finishedAt: '2024-01-01T00:00:00.000Z',
+      },
+    } as any);
     const navigation = createNavigation();
 
     render(<InRoundScreen navigation={navigation as any} route={createRoute('PlayInRound', {})} />);
@@ -177,9 +202,13 @@ describe('InRoundScreen', () => {
     });
     expect(screen.getByTestId('hole-progress')).toHaveTextContent('Hole 2 of 3');
 
-    fireEvent.click(screen.getByTestId('end-round'));
+    expect(screen.getByTestId('holes-scored')).toHaveTextContent('Holes scored: 1 / 3');
+
+    fireEvent.click(screen.getByTestId('finish-round'));
+    fireEvent.click(screen.getByText('Finish & save'));
     await waitFor(() => {
-      expect(clearCurrentRun).toHaveBeenCalled();
+      expect(finishCurrentRound).toHaveBeenCalled();
+      expect(navigation.navigate).toHaveBeenCalledWith('RoundSaved', expect.anything());
     });
   });
 });

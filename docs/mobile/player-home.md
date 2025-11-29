@@ -22,3 +22,9 @@ The client reads `MOBILE_API_BASE`/`MOBILE_API_KEY` (or Expo equivalents) to bui
 - The in-round screen shows hole number, par, index, and length from the course bundle and persists hole progress locally between app launches.
 
 Pro-only analytics are tolerated; the home shell still renders even if analytics are unavailable for Free users.
+
+## Scoring & finish round (strokeplay v1)
+- Each hole now supports quick scoring: strokes (min 1), putts (min 0), and optional FIR/GIR toggles. Scores are stored on the local `scorecard` inside `currentRun` so navigating between holes or reloading the app keeps values intact.
+- A progress pill shows "Holes scored" to reassure players that entries are saved.
+- Finish round prompts for confirmation, then posts the run to `/api/mobile/runs` (creating a `runId`) and uploads the scorecard via `/api/runs/{runId}/score`.
+- On success we clear `currentRun` and cache a lightweight `lastRoundSummary` in AsyncStorage (`golfiq.lastRound.v1`). Home reads this and shows a "Last round" card with course/tee, score vs par (when pars are known), and a link to the temporary Round Saved screen.

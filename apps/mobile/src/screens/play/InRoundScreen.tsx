@@ -1,10 +1,18 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Modal, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { fetchCourseBundle, type CourseBundle } from '@app/api/courses';
 import type { RootStackParamList } from '@app/navigation/types';
-import { clearCurrentRun, loadCurrentRun, saveCurrentRun, type CurrentRun } from '@app/run/currentRun';
+import {
+  countScoredHoles,
+  finishCurrentRound,
+  getHoleScore,
+  loadCurrentRun,
+  saveCurrentRun,
+  updateHoleScore,
+  type CurrentRun,
+} from '@app/run/currentRun';
 
 function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value));
@@ -17,6 +25,9 @@ export default function InRoundScreen({ navigation, route }: Props): JSX.Element
   const [bundle, setBundle] = useState<CourseBundle | null>(route.params?.bundle ?? null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [finishing, setFinishing] = useState(false);
+  const [finishError, setFinishError] = useState<string | null>(null);
+  const [confirmVisible, setConfirmVisible] = useState(false);
 
   const hydrate = useCallback(async () => {
     setLoading(true);
@@ -64,10 +75,43 @@ export default function InRoundScreen({ navigation, route }: Props): JSX.Element
     [run],
   );
 
-  const handleEnd = useCallback(async () => {
-    await clearCurrentRun();
-    navigation.navigate('PlayerHome');
-  }, [navigation]);
+  const handleScoreChange = useCallback(
+    async (field: 'strokes' | 'putts', delta: number) => {
+      if (!run) return;
+      const score = getHoleScore(run, run.currentHole);
+      const nextValue = field === 'strokes' ? score.strokes + delta : score.putts + delta;
+      const updated = await updateHoleScore(run, run.currentHole, {
+        ...score,
+        [field]: field === 'strokes' ? Math.max(1, nextValue) : Math.max(0, nextValue),
+      });
+      setRun(updated);
+    },
+    [run],
+  );
+
+  const handleToggle = useCallback(
+    async (field: 'gir' | 'fir') => {
+      if (!run) return;
+      const score = getHoleScore(run, run.currentHole);
+      const updated = await updateHoleScore(run, run.currentHole, { ...score, [field]: !score[field] });
+      setRun(updated);
+    },
+    [run],
+  );
+
+  const handleFinish = useCallback(async () => {
+    if (!run || !bundle) return;
+    setFinishing(true);
+    setFinishError(null);
+    setConfirmVisible(false);
+    const result = await finishCurrentRound(run, bundle);
+    setFinishing(false);
+    if (result.success) {
+      navigation.navigate('RoundSaved', { summary: result.summary });
+    } else {
+      setFinishError(result.error);
+    }
+  }, [bundle, navigation, run]);
 
   if (loading) {
     return (
@@ -93,6 +137,8 @@ export default function InRoundScreen({ navigation, route }: Props): JSX.Element
 
   const tee = bundle?.tees.find((t) => t.id === run.teeId);
   const teeLabel = tee?.lengthMeters ? `${tee.name} – ${tee.lengthMeters} m` : tee?.name ?? run.teeName;
+  const holeScore = run ? getHoleScore(run, run.currentHole) : null;
+  const scoredHoles = run ? countScoredHoles(run.scorecard) : 0;
 
   return (
     <ScrollView contentContainerStyle={styles.content}>
@@ -132,16 +178,121 @@ export default function InRoundScreen({ navigation, route }: Props): JSX.Element
         </View>
       </View>
 
-      <View style={styles.footerCard}>
-        <Text style={styles.footerTitle}>Scoring & caddie</Text>
-        <Text style={styles.footerText}>Scoring & caddie will appear here in upcoming versions.</Text>
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>Score this hole</Text>
+        <View style={styles.scoreRow}>
+          <View style={styles.counterCard}>
+            <Text style={styles.counterLabel}>Strokes</Text>
+            <View style={styles.counterControls}>
+              <TouchableOpacity
+                onPress={() => handleScoreChange('strokes', -1).catch(() => {})}
+                disabled={(holeScore?.strokes ?? 1) <= 1}
+                testID="strokes-decrement"
+              >
+                <View
+                  style={[
+                    styles.circleButton,
+                    (holeScore?.strokes ?? 1) <= 1 && styles.buttonDisabled,
+                  ]}
+                >
+                  <Text style={styles.circleButtonText}>-</Text>
+                </View>
+              </TouchableOpacity>
+              <Text style={styles.counterValue} testID="strokes-value">
+                {holeScore?.strokes ?? 1}
+              </Text>
+              <TouchableOpacity onPress={() => handleScoreChange('strokes', 1).catch(() => {})} testID="strokes-increment">
+                <View style={styles.circleButton}>
+                  <Text style={styles.circleButtonText}>+</Text>
+                </View>
+              </TouchableOpacity>
+            </View>
+          </View>
+
+          <View style={styles.counterCard}>
+            <Text style={styles.counterLabel}>Putts</Text>
+            <View style={styles.counterControls}>
+              <TouchableOpacity
+                onPress={() => handleScoreChange('putts', -1).catch(() => {})}
+                disabled={(holeScore?.putts ?? 0) <= 0}
+                testID="putts-decrement"
+              >
+                <View
+                  style={[
+                    styles.circleButton,
+                    (holeScore?.putts ?? 0) <= 0 && styles.buttonDisabled,
+                  ]}
+                >
+                  <Text style={styles.circleButtonText}>-</Text>
+                </View>
+              </TouchableOpacity>
+              <Text style={styles.counterValue} testID="putts-value">
+                {holeScore?.putts ?? 0}
+              </Text>
+              <TouchableOpacity onPress={() => handleScoreChange('putts', 1).catch(() => {})} testID="putts-increment">
+                <View style={styles.circleButton}>
+                  <Text style={styles.circleButtonText}>+</Text>
+                </View>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+
+        <View style={styles.toggleRow}>
+          <TouchableOpacity
+            onPress={() => handleToggle('fir').catch(() => {})}
+            style={[styles.toggleButton, holeScore?.fir ? styles.toggleButtonActive : null]}
+            testID="fir-toggle"
+          >
+            <Text style={[styles.toggleText, holeScore?.fir ? styles.toggleTextActive : null]}>Hit fairway</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            onPress={() => handleToggle('gir').catch(() => {})}
+            style={[styles.toggleButton, holeScore?.gir ? styles.toggleButtonActive : null]}
+            testID="gir-toggle"
+          >
+            <Text style={[styles.toggleText, holeScore?.gir ? styles.toggleTextActive : null]}>Green in regulation</Text>
+          </TouchableOpacity>
+        </View>
+        <Text style={styles.progressText} testID="holes-scored">
+          Holes scored: {scoredHoles} / {run.holes}
+        </Text>
       </View>
 
-      <TouchableOpacity onPress={() => handleEnd().catch(() => {})} testID="end-round">
-        <View style={styles.destructiveButton}>
-          <Text style={styles.destructiveText}>End round</Text>
+      {finishError && <Text style={styles.errorText}>{finishError}</Text>}
+
+      <TouchableOpacity
+        onPress={() => setConfirmVisible(true)}
+        disabled={!scoredHoles || finishing}
+        testID="finish-round"
+      >
+        <View style={[styles.primaryButton, (!scoredHoles || finishing) && styles.buttonDisabled]}>
+          <Text style={styles.primaryButtonText}>{finishing ? 'Saving…' : 'Finish round'}</Text>
         </View>
       </TouchableOpacity>
+
+      <Modal visible={confirmVisible} transparent animationType="fade">
+        <View style={styles.modalBackdrop}>
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>Finish round?</Text>
+            <Text style={styles.modalText}>
+              You’ll no longer be able to edit scores on this device for this round.
+            </Text>
+            <View style={styles.row}>
+              <TouchableOpacity onPress={() => setConfirmVisible(false)}>
+                <View style={styles.secondaryButton}>
+                  <Text style={styles.secondaryButtonText}>Cancel</Text>
+                </View>
+              </TouchableOpacity>
+              <TouchableOpacity onPress={() => handleFinish().catch(() => {})}>
+                <View style={styles.primaryButton}>
+                  <Text style={styles.primaryButtonText}>Finish & save</Text>
+                </View>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </ScrollView>
   );
 }
@@ -210,31 +361,72 @@ const styles = StyleSheet.create({
   buttonDisabled: {
     opacity: 0.5,
   },
-  footerCard: {
-    padding: 14,
+  scoreRow: {
+    flexDirection: 'row',
+    gap: 12,
+    flexWrap: 'wrap',
+  },
+  counterCard: {
+    flex: 1,
+    minWidth: 150,
+    backgroundColor: '#f8fafc',
+    padding: 12,
     borderRadius: 10,
-    backgroundColor: '#fff7ed',
-    borderWidth: 1,
-    borderColor: '#fed7aa',
-    gap: 4,
+    gap: 8,
   },
-  footerTitle: {
+  counterLabel: {
     fontWeight: '700',
-    color: '#c2410c',
+    color: '#0f172a',
   },
-  footerText: {
-    color: '#9a3412',
-  },
-  destructiveButton: {
-    paddingVertical: 12,
+  counterControls: {
+    flexDirection: 'row',
     alignItems: 'center',
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#dc2626',
+    gap: 10,
   },
-  destructiveText: {
-    color: '#dc2626',
-    fontWeight: '700',
+  circleButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#0f172a',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  circleButtonText: {
+    color: '#fff',
+    fontWeight: '800',
+    fontSize: 18,
+  },
+  counterValue: {
+    fontSize: 22,
+    fontWeight: '800',
+    color: '#0f172a',
+  },
+  toggleRow: {
+    flexDirection: 'row',
+    gap: 10,
+    flexWrap: 'wrap',
+  },
+  toggleButton: {
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: '#cbd5e1',
+  },
+  toggleButtonActive: {
+    backgroundColor: '#ecfdf3',
+    borderColor: '#22c55e',
+  },
+  toggleText: {
+    color: '#0f172a',
+    fontWeight: '600',
+  },
+  toggleTextActive: {
+    color: '#15803d',
+  },
+  progressText: {
+    color: '#475569',
+    marginTop: 6,
   },
   center: {
     flex: 1,
@@ -247,5 +439,25 @@ const styles = StyleSheet.create({
     color: '#b91c1c',
     fontWeight: '700',
     textAlign: 'center',
+  },
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 24,
+  },
+  modalCard: {
+    backgroundColor: '#fff',
+    padding: 16,
+    borderRadius: 12,
+    gap: 10,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: '800',
+  },
+  modalText: {
+    color: '#475569',
   },
 });

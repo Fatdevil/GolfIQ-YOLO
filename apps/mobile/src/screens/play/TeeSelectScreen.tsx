@@ -73,6 +73,7 @@ export default function TeeSelectScreen({ navigation, route }: Props): JSX.Eleme
       mode,
       startedAt: new Date().toISOString(),
       currentHole: 1,
+      scorecard: {},
     } as const;
 
     await saveCurrentRun(run);

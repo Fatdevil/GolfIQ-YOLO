@@ -1,7 +1,23 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { CURRENT_RUN_KEY, clearCurrentRun, loadCurrentRun, saveCurrentRun, type CurrentRun } from '@app/run/currentRun';
+import {
+  CURRENT_RUN_KEY,
+  clearCurrentRun,
+  finishCurrentRound,
+  getHoleScore,
+  loadCurrentRun,
+  saveCurrentRun,
+  updateHoleScore,
+  type CurrentRun,
+} from '@app/run/currentRun';
+import { LAST_ROUND_KEY } from '@app/run/lastRound';
+import { createRunForCurrentRound, submitScorecard } from '@app/api/runs';
+
+vi.mock('@app/api/runs', () => ({
+  createRunForCurrentRound: vi.fn(),
+  submitScorecard: vi.fn(),
+}));
 
 vi.mock('@react-native-async-storage/async-storage', () => {
   const getItem = vi.fn(async (_key: string) => null);
@@ -27,6 +43,7 @@ describe('currentRun persistence', () => {
     startedAt: '2024-01-01T00:00:00.000Z',
     mode: 'strokeplay',
     currentHole: 1,
+    scorecard: {},
   };
 
   const storage = vi.mocked(AsyncStorage);
@@ -66,5 +83,42 @@ describe('currentRun persistence', () => {
     await clearCurrentRun();
 
     expect(storage.removeItem).toHaveBeenCalledWith(CURRENT_RUN_KEY);
+  });
+
+  it('updates hole score and persists', async () => {
+    const updated = await updateHoleScore(sampleRun, 1, { strokes: 4, putts: 1 });
+
+    expect(updated.scorecard[1]).toEqual({ strokes: 4, putts: 1, gir: false, fir: false });
+    expect(storage.setItem).toHaveBeenCalledWith(CURRENT_RUN_KEY, JSON.stringify(updated));
+    expect(getHoleScore(updated, 1).strokes).toBe(4);
+  });
+
+  it('finishes round by creating run, submitting score, and caching summary', async () => {
+    const runWithScore: CurrentRun = {
+      ...sampleRun,
+      scorecard: {
+        1: { strokes: 4, putts: 2 },
+      },
+    };
+    const bundle = {
+      holes: [{ number: 1, par: 4 }],
+      id: 'c1',
+      name: 'Pebble',
+      tees: [],
+    } as any;
+
+    vi.mocked(createRunForCurrentRound).mockResolvedValue({ runId: 'run-1' });
+    vi.mocked(submitScorecard).mockResolvedValue();
+
+    const result = await finishCurrentRound(runWithScore, bundle);
+
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.summary.runId).toBe('run-1');
+    }
+    expect(createRunForCurrentRound).toHaveBeenCalled();
+    expect(submitScorecard).toHaveBeenCalledWith('run-1', runWithScore);
+    expect(storage.removeItem).toHaveBeenCalledWith(CURRENT_RUN_KEY);
+    expect(storage.setItem).toHaveBeenCalledWith(LAST_ROUND_KEY, expect.any(String));
   });
 });
