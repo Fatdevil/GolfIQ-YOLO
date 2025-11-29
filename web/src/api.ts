@@ -381,6 +381,38 @@ export const fetchSharedRun = (id: string) =>
 export const deleteRun = (id: string) =>
   axios.delete(`${API}/runs/${id}`, { headers: withAuth() }).then((r) => r.data);
 
+export type SessionTimelineEventType =
+  | "swing_start"
+  | "impact"
+  | "peak_hips"
+  | "peak_shoulders"
+  | "tempo_marker"
+  | "hole_transition"
+  | "coach_cue"
+  | "mission_event";
+
+export type SessionTimelineEvent = {
+  ts: number;
+  type: SessionTimelineEventType;
+  label?: string | null;
+  data?: Record<string, unknown> | null;
+};
+
+export type SessionTimelineResponse = {
+  runId: string;
+  events: SessionTimelineEvent[];
+};
+
+export const fetchSessionTimeline = async (
+  runId: string,
+): Promise<SessionTimelineResponse> => {
+  const res = await axios.get<SessionTimelineResponse>(
+    `${API}/api/session/${runId}/timeline`,
+    { headers: withAuth() },
+  );
+  return res.data;
+};
+
 export const fetchBenchSummary = () =>
   axios.get(`${API}/bench/summary`, { headers: withAuth() }).then((r) => r.data);
 

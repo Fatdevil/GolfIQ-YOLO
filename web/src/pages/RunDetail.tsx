@@ -18,6 +18,7 @@ import { TopSGShotsPanel } from "@web/sg/TopSGShotsPanel";
 import { isClipVisible as moderationAllowsClip } from "@web/sg/visibility";
 import { useAccessPlan } from "@/access/UserAccessContext";
 import { UpgradeGate } from "@/access/UpgradeGate";
+import SwingTimelinePanel from "@/timeline/SwingTimelinePanel";
 import SequencePreviewCard from "@/sequence/SequencePreviewCard";
 import type { KinematicSequence, SequenceOrder } from "@/types/sequence";
 
@@ -634,6 +635,13 @@ export default function RunDetailPage() {
           )}
         </div>
       )}
+
+      {!loading && resolvedRunId ? (
+        <div className="space-y-2">
+          <h3 className="text-sm font-semibold text-slate-100">Session timeline</h3>
+          <SwingTimelinePanel runId={resolvedRunId} />
+        </div>
+      ) : null}
 
       {!loading && visualTracerEnabled && backView && (
         <div className="space-y-4 rounded-xl border border-slate-800 bg-slate-900/60 p-4 shadow-lg">
