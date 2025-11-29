@@ -27,4 +27,9 @@ Pro-only analytics are tolerated; the home shell still renders even if analytics
 - Each hole now supports quick scoring: strokes (min 1), putts (min 0), and optional FIR/GIR toggles. Scores are stored on the local `scorecard` inside `currentRun` so navigating between holes or reloading the app keeps values intact.
 - A progress pill shows "Holes scored" to reassure players that entries are saved.
 - Finish round prompts for confirmation, then posts the run to `/api/mobile/runs` (creating a `runId`) and uploads the scorecard via `/api/runs/{runId}/score`.
-- On success we clear `currentRun` and cache a lightweight `lastRoundSummary` in AsyncStorage (`golfiq.lastRound.v1`). Home reads this and shows a "Last round" card with course/tee, score vs par (when pars are known), and a link to the temporary Round Saved screen.
+- On success we clear `currentRun` and cache a lightweight `lastRoundSummary` in AsyncStorage (`golfiq.lastRound.v1`). Home reads this and shows a "Last round" card with course/tee, score vs par (when pars are known), and a link to the Round Story view.
+
+## Round Story v1 (mobile)
+- After finishing a round, the app now routes to **Round Story**, showing the score, strokes gained summary, timeline highlights from `/api/session/{run_id}/timeline`, and AI coach strengths/focus when available from `/api/coach/round-summary/{run_id}`.
+- The Home screen "Last round" card deep-links to the same Round Story for the cached `runId`.
+- Advanced analytics (full SG breakdown, highlights, and coach insights) are **Pro-only** using the access plan; Free players see a simplified preview with an Upgrade CTA.

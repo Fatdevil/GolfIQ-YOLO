@@ -40,6 +40,7 @@ type Navigation = {
   navigate: ReturnType<typeof vi.fn>;
   setParams: ReturnType<typeof vi.fn>;
   goBack: ReturnType<typeof vi.fn>;
+  reset: ReturnType<typeof vi.fn>;
 };
 
 type Route<Name extends string, Params> = {
@@ -53,6 +54,7 @@ function createNavigation(): Navigation {
     navigate: vi.fn(),
     setParams: vi.fn(),
     goBack: vi.fn(),
+    reset: vi.fn(),
   } as unknown as Navigation;
 }
 
@@ -208,7 +210,13 @@ describe('InRoundScreen', () => {
     fireEvent.click(screen.getByText('Finish & save'));
     await waitFor(() => {
       expect(finishCurrentRound).toHaveBeenCalled();
-      expect(navigation.navigate).toHaveBeenCalledWith('RoundSaved', expect.anything());
+      expect(navigation.reset).toHaveBeenCalledWith({
+        index: 1,
+        routes: [
+          { name: 'PlayerHome' },
+          { name: 'RoundStory', params: expect.objectContaining({ runId: 'run-1' }) },
+        ],
+      });
     });
   });
 });
