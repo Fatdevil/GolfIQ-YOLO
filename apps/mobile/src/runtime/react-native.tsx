@@ -4,7 +4,11 @@ type CommonProps = {
   children?: React.ReactNode;
   testID?: string;
   accessibilityLabel?: string;
-  style?: Record<string, unknown> | Record<string, unknown>[];
+  style?:
+    | Record<string, unknown>
+    | Array<Record<string, unknown> | false | null>
+    | false
+    | null;
 };
 
 type TextProps = CommonProps & {
@@ -92,6 +96,7 @@ export const TextInput: React.FC<TextInputProps> = ({
 
 type ActivityIndicatorProps = CommonProps & {
   size?: 'small' | 'large';
+  color?: string;
 };
 
 export const ActivityIndicator: React.FC<ActivityIndicatorProps> = ({ testID }) => (
