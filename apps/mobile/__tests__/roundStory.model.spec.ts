@@ -11,9 +11,9 @@ describe('round story model', () => {
     ]);
 
     expect(highlights).toEqual([
-      'Hips peak at 0.10s',
-      'Tempo recorded: 0.90s',
-      'Impact #1 (0.40s)',
+      'Smooth hip speed through the swing',
+      'Tempo check: 0.90s',
+      'Impact #1',
     ]);
   });
 
