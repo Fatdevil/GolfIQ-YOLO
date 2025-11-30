@@ -41,6 +41,7 @@ export default function InRoundScreen({ navigation, route }: Props): JSX.Element
     try {
       const storedRun = await loadCurrentRun();
       if (!storedRun) {
+        setError('Ingen pågående runda hittades.');
         navigation.navigate('PlayerHome');
         return;
       }

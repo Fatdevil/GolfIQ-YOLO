@@ -2,7 +2,7 @@ import { describe, expect, it, vi, beforeEach } from 'vitest';
 
 import { apiFetch } from '@app/api/client';
 import { createRunForCurrentRound, submitScorecard } from '@app/api/runs';
-import type { CurrentRun } from '@app/run/currentRun';
+import { CURRENT_RUN_VERSION, type CurrentRun } from '@app/run/currentRun';
 
 vi.mock('@app/api/client', () => ({
   apiFetch: vi.fn(),
@@ -10,6 +10,7 @@ vi.mock('@app/api/client', () => ({
 
 describe('runs api', () => {
   const run: CurrentRun = {
+    schemaVersion: CURRENT_RUN_VERSION,
     courseId: 'c1',
     courseName: 'Pebble',
     teeId: 't1',

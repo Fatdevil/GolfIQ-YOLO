@@ -4,7 +4,7 @@ import { ActivityIndicator, ScrollView, StyleSheet, Text, TouchableOpacity, View
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { fetchCourseBundle, type CourseBundle } from '@app/api/courses';
 import type { RootStackParamList } from '@app/navigation/types';
-import { saveCurrentRun, type RoundMode } from '@app/run/currentRun';
+import { CURRENT_RUN_VERSION, saveCurrentRun, type RoundMode, type CurrentRun } from '@app/run/currentRun';
 
 const HOLE_OPTIONS = [9, 18];
 
@@ -64,7 +64,8 @@ export default function TeeSelectScreen({ navigation, route }: Props): JSX.Eleme
 
   const handleStart = useCallback(async () => {
     if (!state.bundle || !selectedTee) return;
-    const run = {
+    const run: CurrentRun = {
+      schemaVersion: CURRENT_RUN_VERSION,
       courseId: state.bundle.id,
       courseName: state.bundle.name ?? courseName,
       teeId: selectedTee.id,

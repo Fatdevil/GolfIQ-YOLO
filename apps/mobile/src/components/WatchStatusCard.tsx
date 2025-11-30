@@ -211,6 +211,10 @@ const styles = StyleSheet.create({
   subtitle: {
     color: '#475569',
   },
+  errorText: {
+    color: '#b91c1c',
+    fontWeight: '600',
+  },
   proPill: {
     paddingHorizontal: 10,
     paddingVertical: 4,

@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
   CURRENT_RUN_KEY,
+  CURRENT_RUN_VERSION,
   clearCurrentRun,
   finishCurrentRound,
   getHoleScore,
@@ -35,6 +36,7 @@ vi.mock('@react-native-async-storage/async-storage', () => {
 
 describe('currentRun persistence', () => {
   const sampleRun: CurrentRun = {
+    schemaVersion: CURRENT_RUN_VERSION,
     courseId: 'c1',
     courseName: 'Pebble',
     teeId: 't1',
@@ -58,7 +60,10 @@ describe('currentRun persistence', () => {
   it('saves run to storage', async () => {
     await saveCurrentRun(sampleRun);
 
-    expect(storage.setItem).toHaveBeenCalledWith(CURRENT_RUN_KEY, JSON.stringify(sampleRun));
+    expect(storage.setItem).toHaveBeenCalledWith(
+      CURRENT_RUN_KEY,
+      JSON.stringify({ ...sampleRun, schemaVersion: CURRENT_RUN_VERSION }),
+    );
   });
 
   it('loads run from storage', async () => {
@@ -77,6 +82,31 @@ describe('currentRun persistence', () => {
 
     expect(loaded).toBeNull();
     expect(storage.removeItem).toHaveBeenCalledWith(CURRENT_RUN_KEY);
+  });
+
+  it('returns null and clears mismatched shape', async () => {
+    storage.getItem.mockResolvedValue(
+      JSON.stringify({ ...sampleRun, schemaVersion: 99, courseId: undefined }),
+    );
+
+    const loaded = await loadCurrentRun();
+
+    expect(loaded).toBeNull();
+    expect(storage.removeItem).toHaveBeenCalledWith(CURRENT_RUN_KEY);
+  });
+
+  it('migrates legacy data without schemaVersion', async () => {
+    const legacy = { ...sampleRun } as any;
+    delete legacy.schemaVersion;
+    storage.getItem.mockResolvedValue(JSON.stringify(legacy));
+
+    const loaded = await loadCurrentRun();
+
+    expect(loaded).not.toBeNull();
+    expect(loaded?.schemaVersion).toBe(CURRENT_RUN_VERSION);
+    expect(storage.setItem).toHaveBeenCalledWith(CURRENT_RUN_KEY, expect.any(String));
+    const payload = storage.setItem.mock.calls[0]?.[1];
+    expect(JSON.parse(payload ?? '{}')).toEqual({ ...sampleRun, schemaVersion: CURRENT_RUN_VERSION });
   });
 
   it('clears run from storage', async () => {

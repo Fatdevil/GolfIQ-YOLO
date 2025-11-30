@@ -1,11 +1,11 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi, type SpyInstance } from 'vitest';
 
 import { syncHoleHud, type HudSyncContext } from '@app/watch/HudSyncService';
 
 const originalEnv = { ...process.env };
 
 describe('HudSyncService', () => {
-  let warnSpy: ReturnType<typeof vi.spyOn>;
+  let warnSpy: SpyInstance;
 
   beforeEach(() => {
     vi.stubGlobal('fetch', vi.fn());
