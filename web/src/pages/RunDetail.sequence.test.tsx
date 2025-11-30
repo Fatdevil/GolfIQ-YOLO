@@ -8,11 +8,13 @@ import RunDetailPage from "./RunDetail";
 const mockGetRun = vi.fn();
 const mockGetRemoteConfig = vi.fn();
 const mockFetchSessionTimeline = vi.fn();
+const mockFetchSwingMetrics = vi.fn();
 
 vi.mock("../api", () => ({
   getRun: (...args: unknown[]) => mockGetRun(...args),
   getRemoteConfig: (...args: unknown[]) => mockGetRemoteConfig(...args),
   fetchSessionTimeline: (...args: unknown[]) => mockFetchSessionTimeline(...args),
+  fetchSwingMetrics: (...args: unknown[]) => mockFetchSwingMetrics(...args),
   postTelemetryEvent: vi.fn(),
 }));
 
@@ -78,9 +80,11 @@ describe("RunDetailPage sequence preview", () => {
     mockGetRun.mockReset();
     mockGetRemoteConfig.mockReset();
     mockFetchSessionTimeline.mockReset();
+    mockFetchSwingMetrics.mockReset();
     mockUseAccessPlan.mockReset();
     mockGetRemoteConfig.mockResolvedValue({ playslike: { enabled: false, variant: "off" } });
     mockFetchSessionTimeline.mockResolvedValue({ runId: "demo", events: [] });
+    mockFetchSwingMetrics.mockResolvedValue({ runId: "demo", metrics: {}, tourCompare: {} });
   });
 
   it("renders sequence card for pro users", async () => {

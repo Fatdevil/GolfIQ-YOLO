@@ -413,6 +413,71 @@ export const fetchSessionTimeline = async (
   return res.data;
 };
 
+export interface MetricValue {
+  value: number;
+  units: string;
+}
+
+export type TourStatus = "below" | "in_range" | "above";
+
+export interface TourCompare {
+  bandGroup: string;
+  status: TourStatus;
+  rangeMin: number;
+  rangeMax: number;
+}
+
+export interface RawTourCompare {
+  band_group: string;
+  status: TourStatus;
+  range_min: number;
+  range_max: number;
+}
+
+export interface SwingMetricsResponse {
+  runId: string;
+  club?: string | null;
+  metrics: Record<string, MetricValue>;
+  tour_compare: Record<string, RawTourCompare>;
+}
+
+export interface NormalisedSwingMetricsResponse {
+  runId: string;
+  club?: string | null;
+  metrics: Record<string, MetricValue>;
+  tourCompare: Record<string, TourCompare>;
+}
+
+export function normaliseTourCompare(
+  raw: Record<string, RawTourCompare>,
+): Record<string, TourCompare> {
+  const result: Record<string, TourCompare> = {};
+  Object.entries(raw ?? {}).forEach(([metricName, item]) => {
+    if (!item) return;
+    result[metricName] = {
+      bandGroup: item.band_group,
+      status: item.status,
+      rangeMin: item.range_min,
+      rangeMax: item.range_max,
+    };
+  });
+  return result;
+}
+
+export async function fetchSwingMetrics(
+  runId: string,
+): Promise<NormalisedSwingMetricsResponse> {
+  const res = await apiClient.get<SwingMetricsResponse>(`/api/swing/${runId}/metrics`);
+  const data = res.data;
+
+  return {
+    runId: data.runId,
+    club: data.club ?? null,
+    metrics: data.metrics,
+    tourCompare: normaliseTourCompare(data.tour_compare ?? {}),
+  };
+}
+
 export const fetchBenchSummary = () =>
   axios.get(`${API}/bench/summary`, { headers: withAuth() }).then((r) => r.data);
 
