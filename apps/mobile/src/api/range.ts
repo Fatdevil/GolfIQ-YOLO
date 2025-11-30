@@ -8,6 +8,28 @@ export interface RangeAnalyzeRequest {
   framesToken?: string | null;
 }
 
+interface RangeAnalyzeOutRaw {
+  id?: string;
+  ball_speed_mps?: number | null;
+  club_speed_mps?: number | null;
+  carry_m?: number | null;
+  launch_deg?: number | null;
+  side_deg?: number | null;
+  quality?: {
+    score: number;
+    level: 'bad' | 'warning' | 'good';
+    reasons: string[];
+  } | null;
+  summary?: string | null;
+  cues?: string[];
+  // Allow already-normalized keys to avoid breaking mocks
+  ballSpeedMps?: number | null;
+  clubSpeedMps?: number | null;
+  carryM?: number | null;
+  launchDeg?: number | null;
+  sideDeg?: number | null;
+}
+
 export interface RangeAnalyzeOut {
   id?: string;
   ballSpeedMps?: number | null;
@@ -24,10 +46,26 @@ export interface RangeAnalyzeOut {
   cues?: string[];
 }
 
+export function normalizeRangeAnalyzeResponse(raw: RangeAnalyzeOutRaw): RangeAnalyzeOut {
+  return {
+    id: raw.id,
+    ballSpeedMps: raw.ball_speed_mps ?? raw.ballSpeedMps ?? null,
+    clubSpeedMps: raw.club_speed_mps ?? raw.clubSpeedMps ?? null,
+    carryM: raw.carry_m ?? raw.carryM ?? null,
+    launchDeg: raw.launch_deg ?? raw.launchDeg ?? null,
+    sideDeg: raw.side_deg ?? raw.sideDeg ?? null,
+    quality: raw.quality ?? null,
+    summary: raw.summary ?? null,
+    cues: raw.cues,
+  };
+}
+
 export async function analyzeRangeShot(request: RangeAnalyzeRequest): Promise<RangeAnalyzeOut> {
-  return apiFetch<RangeAnalyzeOut>('/api/range/practice/analyze', {
+  const raw = await apiFetch<RangeAnalyzeOutRaw>('/api/range/practice/analyze', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(request),
   });
+
+  return normalizeRangeAnalyzeResponse(raw);
 }
