@@ -7,6 +7,7 @@ import HomeScreen from '@app/screens/HomeScreen';
 import type { RootStackParamList } from '@app/navigation/types';
 import * as playerApi from '@app/api/player';
 import * as watchApi from '@app/api/watch';
+import * as currentRun from '@app/run/currentRun';
 
 vi.mock('@app/api/player', () => ({
   fetchPlayerProfile: vi.fn(),
@@ -17,6 +18,11 @@ vi.mock('@app/api/player', () => ({
 vi.mock('@app/api/watch', () => ({
   fetchWatchStatus: vi.fn(),
   requestWatchPairCode: vi.fn(),
+}));
+
+vi.mock('@app/run/currentRun', () => ({
+  loadCurrentRun: vi.fn(),
+  clearCurrentRun: vi.fn(),
 }));
 
 type Props = NativeStackScreenProps<RootStackParamList, 'PlayerHome'>;
@@ -79,6 +85,8 @@ describe('HomeScreen', () => {
       code: '123456',
       expiresAt: new Date(Date.now() + 60_000).toISOString(),
     });
+    vi.mocked(currentRun.loadCurrentRun).mockResolvedValue(null);
+    vi.mocked(currentRun.clearCurrentRun).mockResolvedValue();
   });
 
   it('renders greeting, plan badge, and CTAs', async () => {
@@ -99,7 +107,9 @@ describe('HomeScreen', () => {
     expect(screen.getByTestId('range-cta')).toBeInTheDocument();
     expect(screen.getByTestId('trips-cta')).toBeInTheDocument();
     expect(screen.getByTestId('last-round-summary')).toBeInTheDocument();
-    expect(screen.getByTestId('watch-status-label').textContent).toContain('Connected');
+    await waitFor(() => {
+      expect(screen.getByTestId('watch-status-label').textContent).toContain('Connected');
+    });
   });
 
   it('shows error state and retries', async () => {
@@ -129,5 +139,57 @@ describe('HomeScreen', () => {
     expect(await screen.findByTestId('home-greeting')).toBeInTheDocument();
     expect(screen.getByTestId('empty-last-round')).toHaveTextContent('No rounds logged yet');
     expect(playerApi.fetchPlayerAnalytics).not.toHaveBeenCalled();
+  });
+
+  it('renders resume card when a current run exists', async () => {
+    const run: currentRun.CurrentRun = {
+      schemaVersion: 1,
+      courseId: 'c1',
+      courseName: 'Pebble',
+      teeId: 't1',
+      teeName: 'Blue',
+      holes: 18,
+      startedAt: '2024-01-01T00:00:00.000Z',
+      mode: 'strokeplay',
+      currentHole: 5,
+      scorecard: {},
+    };
+    vi.mocked(currentRun.loadCurrentRun).mockResolvedValue(run);
+    vi.mocked(playerApi.fetchPlayerProfile).mockResolvedValue(mockProfile);
+    vi.mocked(playerApi.fetchAccessPlan).mockResolvedValue({ plan: 'free' });
+
+    render(<HomeScreen navigation={createNavigation()} route={createRoute()} />);
+
+    expect(await screen.findByTestId('resume-round-card')).toBeInTheDocument();
+    expect(screen.getByText(/Pågående runda/)).toBeInTheDocument();
+    expect(screen.getByText(/Hål 5 av 18/)).toBeInTheDocument();
+  });
+
+  it('allows discarding a current run from the home screen', async () => {
+    const run: currentRun.CurrentRun = {
+      schemaVersion: 1,
+      courseId: 'c1',
+      courseName: 'Pebble',
+      teeId: 't1',
+      teeName: 'Blue',
+      holes: 18,
+      startedAt: '2024-01-01T00:00:00.000Z',
+      mode: 'strokeplay',
+      currentHole: 5,
+      scorecard: {},
+    };
+    vi.mocked(currentRun.loadCurrentRun).mockResolvedValue(run);
+    vi.mocked(playerApi.fetchPlayerProfile).mockResolvedValue(mockProfile);
+    vi.mocked(playerApi.fetchAccessPlan).mockResolvedValue({ plan: 'free' });
+
+    render(<HomeScreen navigation={createNavigation()} route={createRoute()} />);
+
+    fireEvent.click(await screen.findByTestId('discard-round'));
+    fireEvent.click(await screen.findByTestId('confirm-discard'));
+
+    await waitFor(() => {
+      expect(currentRun.clearCurrentRun).toHaveBeenCalled();
+      expect(screen.queryByTestId('resume-round-card')).not.toBeInTheDocument();
+    });
   });
 });

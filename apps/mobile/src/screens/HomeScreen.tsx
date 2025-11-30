@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
+  Modal,
   ScrollView,
   StyleSheet,
   Text,
@@ -20,7 +21,7 @@ import {
 } from '@app/api/player';
 import WatchStatusCard from '@app/components/WatchStatusCard';
 import type { RootStackParamList } from '@app/navigation/types';
-import { loadCurrentRun, type CurrentRun } from '@app/run/currentRun';
+import { clearCurrentRun, loadCurrentRun, type CurrentRun } from '@app/run/currentRun';
 import { loadLastRoundSummary, type LastRoundSummary } from '@app/run/lastRound';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'PlayerHome'>;
@@ -109,6 +110,8 @@ export default function HomeScreen({ navigation }: Props): JSX.Element {
     currentRun: CurrentRun | null;
   }>({ loading: true, error: null, data: null, currentRun: null });
   const { loading, error, data, currentRun } = state;
+  const [discardVisible, setDiscardVisible] = useState(false);
+  const [discarding, setDiscarding] = useState(false);
 
   const load = useCallback(async () => {
     setState((prev) => ({ ...prev, loading: true, error: null }));
@@ -141,6 +144,18 @@ export default function HomeScreen({ navigation }: Props): JSX.Element {
       setState({ loading: false, error: message, data: null, currentRun: null });
     }
   }, []);
+
+  const handleDiscard = useCallback(async () => {
+    if (!currentRun) return;
+    setDiscarding(true);
+    try {
+      await clearCurrentRun();
+      setState((prev) => ({ ...prev, currentRun: null }));
+    } finally {
+      setDiscarding(false);
+      setDiscardVisible(false);
+    }
+  }, [currentRun]);
 
   useEffect(() => {
     load().catch(() => {
@@ -191,6 +206,35 @@ export default function HomeScreen({ navigation }: Props): JSX.Element {
         </View>
       </View>
 
+      {currentRun && (
+        <View style={styles.card} testID="resume-round-card">
+          <Text style={styles.cardTitle}>Pågående runda</Text>
+          <Text style={styles.cardSubtitle}>
+            {currentRun.courseName} · {currentRun.teeName} · Hål {currentRun.currentHole} av {currentRun.holes}
+          </Text>
+          <View style={styles.row}>
+            <TouchableOpacity
+              accessibilityLabel="Återuppta runda"
+              onPress={() => navigation.navigate('PlayInRound')}
+              testID="resume-round"
+            >
+              <View style={styles.primaryButton}>
+                <Text style={styles.primaryButtonText}>Återuppta runda</Text>
+              </View>
+            </TouchableOpacity>
+            <TouchableOpacity
+              accessibilityLabel="Avsluta utan att spara"
+              onPress={() => setDiscardVisible(true)}
+              testID="discard-round"
+            >
+              <View style={styles.secondaryButton}>
+                <Text style={styles.secondaryButtonText}>Avsluta utan att spara</Text>
+              </View>
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
+
       <View style={styles.card}>
         <Text style={styles.cardTitle}>Ready to play?</Text>
         <Text style={styles.cardSubtitle}>Start a new round with GPS, scoring, and caddie tools.</Text>
@@ -206,17 +250,6 @@ export default function HomeScreen({ navigation }: Props): JSX.Element {
       </View>
 
       <WatchStatusCard memberId={data.memberId} plan={data.plan} />
-
-      {currentRun && (
-        <TouchableOpacity onPress={() => navigation.navigate('PlayInRound')} testID="resume-round">
-          <View style={styles.card}>
-            <Text style={styles.cardTitle}>Ongoing round</Text>
-            <Text style={styles.cardSubtitle}>
-              {currentRun.courseName} · {currentRun.teeName} · Hole {currentRun.currentHole} of {currentRun.holes}
-            </Text>
-          </View>
-        </TouchableOpacity>
-      )}
 
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Explore</Text>
@@ -272,6 +305,35 @@ export default function HomeScreen({ navigation }: Props): JSX.Element {
           </Text>
         )}
       </View>
+
+      <Modal
+        transparent
+        animationType="fade"
+        visible={discardVisible}
+      >
+        <View style={styles.modalBackdrop}>
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>Avsluta runda?</Text>
+            <Text style={styles.modalSubtitle}>
+              Vill du verkligen avsluta denna runda? Den kommer inte att räknas in i din statistik.
+            </Text>
+            <View style={styles.row}>
+              <TouchableOpacity onPress={() => setDiscardVisible(false)} testID="cancel-discard">
+                <View style={styles.secondaryButton}>
+                  <Text style={styles.secondaryButtonText}>Behåll runda</Text>
+                </View>
+              </TouchableOpacity>
+              <TouchableOpacity onPress={() => handleDiscard().catch(() => {})} testID="confirm-discard">
+                <View style={styles.dangerButton}>
+                  <Text style={styles.dangerButtonText}>
+                    {discarding ? 'Avbryter…' : 'Avsluta utan att spara'}
+                  </Text>
+                </View>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </ScrollView>
   );
 }
@@ -422,5 +484,38 @@ const styles = StyleSheet.create({
     color: '#b91c1c',
     fontWeight: '700',
     textAlign: 'center',
+  },
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.4)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 24,
+  },
+  modalCard: {
+    backgroundColor: '#fff',
+    padding: 20,
+    borderRadius: 12,
+    gap: 12,
+    width: '100%',
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#0f172a',
+  },
+  modalSubtitle: {
+    color: '#374151',
+    fontSize: 14,
+  },
+  dangerButton: {
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    borderRadius: 10,
+    backgroundColor: '#ef4444',
+  },
+  dangerButtonText: {
+    fontWeight: '700',
+    color: '#fff',
   },
 });

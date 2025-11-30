@@ -33,6 +33,7 @@ vi.mock('@app/api/runs', () => ({
 }));
 
 vi.mock('@app/run/currentRun', () => ({
+  CURRENT_RUN_VERSION: 1,
   saveCurrentRun: vi.fn(),
   loadCurrentRun: vi.fn(),
   clearCurrentRun: vi.fn(),
@@ -152,6 +153,7 @@ describe('TeeSelectScreen', () => {
     );
 
     expect(await screen.findByText('Select your tee box')).toBeInTheDocument();
+    fireEvent.click(screen.getByTestId('tee-t1'));
 
     fireEvent.click(screen.getByTestId('start-round'));
 
@@ -184,6 +186,7 @@ describe('InRoundScreen', () => {
 
   it('loads current run and advances holes', async () => {
     const run = {
+      schemaVersion: 1,
       courseId: 'c1',
       courseName: 'Pebble',
       teeId: 't1',
