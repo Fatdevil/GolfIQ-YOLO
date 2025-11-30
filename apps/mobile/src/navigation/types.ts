@@ -26,6 +26,7 @@ export type RootStackParamList = {
     cameraAngle: import('@app/range/rangeSession').RangeCameraAngle;
   };
   RangeQuickPracticeSession: { session: import('@app/range/rangeSession').RangeSession };
+  RangeQuickPracticeSummary: { summary: import('@app/range/rangeSession').RangeSessionSummary };
   Trips: undefined;
   RoundStory: { runId: string; summary?: import('@app/run/lastRound').LastRoundSummary };
   RoundSaved: { summary: import('@app/run/lastRound').LastRoundSummary };

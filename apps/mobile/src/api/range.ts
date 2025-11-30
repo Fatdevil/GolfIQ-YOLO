@@ -8,14 +8,24 @@ export interface RangeAnalyzeRequest {
   framesToken?: string | null;
 }
 
-export interface RangeAnalyzeResponse {
-  id: string;
-  summary?: string;
+export interface RangeAnalyzeOut {
+  id?: string;
+  ballSpeedMps?: number | null;
+  clubSpeedMps?: number | null;
+  carryM?: number | null;
+  launchDeg?: number | null;
+  sideDeg?: number | null;
+  quality?: {
+    score: number;
+    level: 'bad' | 'warning' | 'good';
+    reasons: string[];
+  } | null;
+  summary?: string | null;
   cues?: string[];
 }
 
-export async function analyzeRangeShot(request: RangeAnalyzeRequest): Promise<RangeAnalyzeResponse> {
-  return apiFetch<RangeAnalyzeResponse>('/api/range/practice/analyze', {
+export async function analyzeRangeShot(request: RangeAnalyzeRequest): Promise<RangeAnalyzeOut> {
+  return apiFetch<RangeAnalyzeOut>('/api/range/practice/analyze', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(request),

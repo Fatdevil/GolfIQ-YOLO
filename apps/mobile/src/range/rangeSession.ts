@@ -2,18 +2,19 @@ export type RangeMode = 'quick';
 
 export type RangeCameraAngle = 'down_the_line' | 'face_on';
 
-export type RangeShotAnalysis = {
-  summary?: string;
-  cues?: string[];
-};
-
 export interface RangeShot {
   id: string;
-  createdAt: string;
+  timestamp: string;
   club: string | null;
-  cameraAngle: RangeCameraAngle;
   targetDistanceM?: number | null;
-  analysis?: RangeShotAnalysis | null;
+  cameraAngle?: RangeCameraAngle;
+
+  carryM?: number | null;
+  sideDeg?: number | null;
+  launchDeg?: number | null;
+  ballSpeedMps?: number | null;
+  clubSpeedMps?: number | null;
+  qualityLevel?: 'bad' | 'warning' | 'good' | null;
 }
 
 export interface RangeSession {
@@ -25,4 +26,15 @@ export interface RangeSession {
   targetDistanceM?: number | null;
   cameraAngle: RangeCameraAngle;
   shots: RangeShot[];
+}
+
+export interface RangeSessionSummary {
+  id: string;
+  startedAt: string;
+  finishedAt: string;
+  club: string | null;
+  targetDistanceM?: number | null;
+  shotCount: number;
+  avgCarryM?: number | null;
+  tendency?: 'left' | 'right' | 'straight' | null;
 }

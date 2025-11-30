@@ -175,3 +175,17 @@ export const Vibration = {
     // no-op for web runtime
   },
 };
+
+type AlertButton = { text?: string; onPress?: () => void; style?: 'default' | 'cancel' | 'destructive' };
+
+export const Alert = {
+  alert(_title: string, message?: string, buttons?: AlertButton[]) {
+    if (typeof window !== 'undefined' && typeof window.alert === 'function') {
+      window.alert(message ? `${_title}\n\n${message}` : _title);
+    }
+
+    // For web/runtime tests, default to no-op to avoid auto-confirming destructive actions.
+    // Callers can still handle button presses manually in unit tests if needed.
+    if (!buttons || buttons.length === 0) return;
+  },
+};
