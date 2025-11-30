@@ -12,6 +12,8 @@ export const linking: LinkingOptions<any> = {
       PlayInRound: 'play/round',
       RoundStory: 'round/:runId',
       RangePractice: 'range',
+      RangeQuickPracticeStart: 'range/quick/start',
+      RangeCameraSetup: 'range/quick/setup',
       Trips: 'trips',
       EventJoin: 'join/:code?',
       EventLive: 'events/:id/live',
