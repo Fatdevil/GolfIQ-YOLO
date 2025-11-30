@@ -19,6 +19,7 @@ function createNavigation(): Props['navigation'] {
     navigate: vi.fn(),
     setParams: vi.fn(),
     goBack: vi.fn(),
+    replace: vi.fn(),
   } as unknown as Props['navigation'];
 }
 
@@ -63,5 +64,26 @@ describe('RangeQuickPracticeSessionScreen', () => {
     await waitFor(() => {
       expect(screen.getByText(/Great swing/)).toBeInTheDocument();
     });
+
+    expect(navigation.replace).not.toHaveBeenCalled();
+  });
+
+  it('redirects to quick practice start when session param is missing', async () => {
+    const navigation = createNavigation();
+
+    render(
+      <RangeQuickPracticeSessionScreen
+        navigation={navigation}
+        route={{ key: 'RangeQuickPracticeSession', name: 'RangeQuickPracticeSession' } as Props['route']}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(navigation.replace).toHaveBeenCalledWith('RangeQuickPracticeStart');
+    });
+
+    expect(
+      screen.getByText('No active range session. Returning to Quick Practice start…'),
+    ).toBeInTheDocument();
   });
 });

@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -20,15 +20,30 @@ function createShot(session: RangeSession, summary?: string | null): RangeShot {
 }
 
 export default function RangeQuickPracticeSessionScreen({ navigation, route }: Props): JSX.Element {
-  const { session } = route.params!;
-  const [shots, setShots] = useState<RangeShot[]>(session.shots);
+  const session = route?.params?.session;
+  const [shots, setShots] = useState<RangeShot[]>(session?.shots ?? []);
   const [saving, setSaving] = useState(false);
-  const angleLabel = useMemo(
-    () => (session.cameraAngle === 'down_the_line' ? 'DTL' : 'Face-on'),
-    [session.cameraAngle],
-  );
+  const angleLabel = useMemo(() => {
+    if (session?.cameraAngle === 'down_the_line') return 'DTL';
+    if (session?.cameraAngle === 'face_on') return 'Face-on';
+    return 'Unknown';
+  }, [session?.cameraAngle]);
+  useEffect(() => {
+    if (!session) {
+      navigation.replace('RangeQuickPracticeStart');
+    }
+  }, [navigation, session]);
+
+  if (!session) {
+    return (
+      <View style={styles.fallbackContainer}>
+        <Text style={styles.fallbackText}>No active range session. Returning to Quick Practice start…</Text>
+      </View>
+    );
+  }
 
   const handleLogShot = async () => {
+    if (!session) return;
     setSaving(true);
     try {
       const analysis = await analyzeRangeShot({
@@ -156,6 +171,16 @@ const styles = StyleSheet.create({
   },
   shotTitle: {
     fontWeight: '700',
+  },
+  fallbackContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 24,
+  },
+  fallbackText: {
+    textAlign: 'center',
+    color: '#111827',
   },
   secondaryButton: {
     marginTop: 12,

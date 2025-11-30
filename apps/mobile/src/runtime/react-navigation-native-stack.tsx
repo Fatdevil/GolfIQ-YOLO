@@ -18,6 +18,7 @@ export type NativeStackScreenProps<
     navigate: NavigationFn<List[keyof List]>;
     setParams: (params: Partial<List[Name]>) => void;
     goBack: () => void;
+    replace: NavigationFn<List[keyof List]>;
   };
   route: Route<Name & string, List[Name]>;
 };
@@ -45,6 +46,7 @@ export function createNativeStackNavigator<List extends ParamList>() {
           navigate: () => {},
           setParams: () => {},
           goBack: () => {},
+          replace: () => {},
         },
         route: {
           key: 'mock',
