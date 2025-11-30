@@ -62,7 +62,7 @@ function renderPage() {
   );
 }
 
-describe("RunDetailPage timeline", () => {
+describe("RunDetailPage swing diagnostics", () => {
   beforeEach(() => {
     mockGetRun.mockReset();
     mockGetRemoteConfig.mockReset();
@@ -71,21 +71,22 @@ describe("RunDetailPage timeline", () => {
     mockUseAccessPlan.mockReset();
 
     mockGetRemoteConfig.mockResolvedValue({ playslike: { enabled: false, variant: "off" } });
-    mockFetchSessionTimeline.mockResolvedValue({
+    mockFetchSessionTimeline.mockResolvedValue({ runId: "demo", events: [] });
+    mockFetchSwingMetrics.mockResolvedValue({
       runId: "demo",
-      events: [{ ts: 0.5, type: "impact", label: "Impact #1" }],
+      metrics: { max_shoulder_rotation: { value: 75, units: "°" } },
+      tourCompare: {},
     });
-    mockFetchSwingMetrics.mockResolvedValue({ runId: "demo", metrics: {}, tourCompare: {} });
   });
 
-  it("shows swing timeline for pro users", async () => {
+  it("shows diagnostics panel with metrics", async () => {
     mockUseAccessPlan.mockReturnValue({ plan: "pro", isPro: true, loading: false, refresh: vi.fn() });
     mockGetRun.mockResolvedValue({ run_id: "demo", metrics: {}, events: [] });
 
     renderPage();
 
     await waitFor(() => expect(mockGetRun).toHaveBeenCalled());
-    expect(await screen.findByText(/Session timeline/)).toBeInTheDocument();
-    expect(await screen.findByText(/Impact #1/)).toBeInTheDocument();
+    expect(await screen.findByText(/Swing diagnostics/)).toBeInTheDocument();
+    expect(await screen.findByText(/Shoulder rotation/)).toBeInTheDocument();
   });
 });
