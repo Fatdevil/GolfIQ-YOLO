@@ -1,40 +1,47 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { analyzeRangeShot } from '@app/api/range';
 import type { RootStackParamList } from '@app/navigation/types';
-import type { RangeSession, RangeShot } from '@app/range/rangeSession';
+import LastShotCard, { classifyDirection } from '@app/range/LastShotCard';
+import type { RangeSession, RangeSessionSummary, RangeShot } from '@app/range/rangeSession';
+import { saveLastRangeSessionSummary } from '@app/range/rangeSummaryStorage';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'RangeQuickPracticeSession'>;
 
-function createShot(session: RangeSession, summary?: string | null): RangeShot {
+function createShot(session: RangeSession, analysis: Awaited<ReturnType<typeof analyzeRangeShot>>): RangeShot {
   return {
     id: typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : `${Date.now()}`,
-    createdAt: new Date().toISOString(),
+    timestamp: new Date().toISOString(),
     club: session.club,
     cameraAngle: session.cameraAngle,
     targetDistanceM: session.targetDistanceM,
-    analysis: summary ? { summary } : null,
+    carryM: analysis.carryM ?? null,
+    sideDeg: analysis.sideDeg ?? null,
+    launchDeg: analysis.launchDeg ?? null,
+    ballSpeedMps: analysis.ballSpeedMps ?? null,
+    clubSpeedMps: analysis.clubSpeedMps ?? null,
+    qualityLevel: analysis.quality?.level ?? null,
   };
 }
 
 export default function RangeQuickPracticeSessionScreen({ navigation, route }: Props): JSX.Element {
   const session = route?.params?.session;
-  const [shots, setShots] = useState<RangeShot[]>(session?.shots ?? []);
-  const [saving, setSaving] = useState(false);
+  const [sessionState, setSessionState] = useState<RangeSession | null>(session ?? null);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
   const angleLabel = useMemo(() => {
-    if (session?.cameraAngle === 'down_the_line') return 'DTL';
-    if (session?.cameraAngle === 'face_on') return 'Face-on';
+    if (sessionState?.cameraAngle === 'down_the_line') return 'DTL';
+    if (sessionState?.cameraAngle === 'face_on') return 'Face-on';
     return 'Unknown';
-  }, [session?.cameraAngle]);
+  }, [sessionState?.cameraAngle]);
   useEffect(() => {
-    if (!session) {
+    if (!sessionState) {
       navigation.replace('RangeQuickPracticeStart');
     }
-  }, [navigation, session]);
+  }, [navigation, sessionState]);
 
-  if (!session) {
+  if (!sessionState) {
     return (
       <View style={styles.fallbackContainer}>
         <Text style={styles.fallbackText}>No active range session. Returning to Quick Practice start…</Text>
@@ -43,22 +50,70 @@ export default function RangeQuickPracticeSessionScreen({ navigation, route }: P
   }
 
   const handleLogShot = async () => {
-    if (!session) return;
-    setSaving(true);
+    if (!sessionState) return;
+    if (isAnalyzing) return;
+    setIsAnalyzing(true);
     try {
       const analysis = await analyzeRangeShot({
-        club: session.club,
-        targetDistanceM: session.targetDistanceM,
-        cameraAngle: session.cameraAngle,
+        club: sessionState.club,
+        targetDistanceM: sessionState.targetDistanceM,
+        cameraAngle: sessionState.cameraAngle,
         framesToken: null,
       });
-      setShots((prev) => [...prev, createShot(session, analysis.summary ?? 'Shot logged')]);
+      setSessionState((prev) => (prev ? { ...prev, shots: [...prev.shots, createShot(prev, analysis)] } : prev));
     } catch {
-      setShots((prev) => [...prev, createShot(session, 'Shot logged')]);
+      Alert.alert('Shot not analyzed', "Couldn’t analyse that shot. Please try again.");
     } finally {
-      setSaving(false);
+      setIsAnalyzing(false);
     }
   };
+
+  const buildSummary = (currentSession: RangeSession): RangeSessionSummary => {
+    const shotCount = currentSession.shots.length;
+    const carries = currentSession.shots
+      .map((s) => s.carryM)
+      .filter((v): v is number => typeof v === 'number');
+    const avgCarryM = carries.length ? carries.reduce((a, b) => a + b, 0) / carries.length : null;
+
+    const sides = currentSession.shots
+      .map((s) => s.sideDeg)
+      .filter((v): v is number => typeof v === 'number');
+    const avgSideDeg = sides.length ? sides.reduce((a, b) => a + b, 0) / sides.length : null;
+
+    return {
+      id: currentSession.id,
+      startedAt: currentSession.startedAt,
+      finishedAt: new Date().toISOString(),
+      club: currentSession.club,
+      targetDistanceM: currentSession.targetDistanceM ?? null,
+      shotCount,
+      avgCarryM,
+      tendency: classifyDirection(avgSideDeg),
+    };
+  };
+
+  const handleEndSession = () => {
+    if (!sessionState) return;
+    if (sessionState.shots.length === 0) {
+      Alert.alert('End session?', "You haven’t logged any shots yet. End session anyway?", [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'End',
+          style: 'destructive',
+          onPress: () => navigation.navigate('RangePractice'),
+        },
+      ]);
+      return;
+    }
+
+    const summary = buildSummary(sessionState);
+    Promise.resolve(saveLastRangeSessionSummary(summary)).catch(() => {
+      // non-blocking persistence
+    });
+    navigation.navigate('RangeQuickPracticeSummary', { summary });
+  };
+
+  const lastShot = sessionState.shots[sessionState.shots.length - 1] ?? null;
 
   return (
     <ScrollView contentContainerStyle={styles.container}>
@@ -69,15 +124,15 @@ export default function RangeQuickPracticeSessionScreen({ navigation, route }: P
         </Text>
       </View>
       <Text style={styles.subtitle}>
-        {session.cameraAngle === 'down_the_line'
+        {sessionState.cameraAngle === 'down_the_line'
           ? 'Fokus: svingplan och startlinje.'
           : 'Fokus: balans och längdkontroll.'}
       </Text>
 
       <View style={styles.meta}>
-        {session.club && <Text style={styles.metaItem}>Klubba: {session.club}</Text>}
-        {typeof session.targetDistanceM === 'number' && (
-          <Text style={styles.metaItem}>Mål: {session.targetDistanceM} m</Text>
+        {sessionState.club && <Text style={styles.metaItem}>Klubba: {sessionState.club}</Text>}
+        {typeof sessionState.targetDistanceM === 'number' && (
+          <Text style={styles.metaItem}>Mål: {sessionState.targetDistanceM} m</Text>
         )}
       </View>
 
@@ -85,24 +140,29 @@ export default function RangeQuickPracticeSessionScreen({ navigation, route }: P
         accessibilityLabel="Log shot"
         onPress={handleLogShot}
         style={styles.primaryButton}
-        disabled={saving}
+        disabled={isAnalyzing}
         testID="log-shot"
       >
-        <Text style={styles.primaryButtonText}>{saving ? 'Analyserar…' : 'Logga slag'}</Text>
+        <Text style={styles.primaryButtonText}>{isAnalyzing ? 'Analyserar…' : 'Logga slag'}</Text>
       </TouchableOpacity>
+
+      <LastShotCard shot={lastShot} targetDistanceM={sessionState.targetDistanceM} />
 
       <View style={styles.shotList}>
         <Text style={styles.sectionTitle}>Dina slag</Text>
-        {shots.length === 0 && <Text style={styles.emptyText}>Inga slag loggade ännu.</Text>}
-        {shots.map((shot) => (
+        {sessionState.shots.length === 0 && <Text style={styles.emptyText}>Inga slag loggade ännu.</Text>}
+        {sessionState.shots.map((shot) => (
           <View key={shot.id} style={styles.shotItem}>
             <Text style={styles.shotTitle}>Shot {shot.id.slice(0, 6)}</Text>
-            {shot.analysis?.summary && <Text>{shot.analysis.summary}</Text>}
+            <Text style={styles.shotMeta}>
+              {shot.carryM != null ? `${Math.round(shot.carryM)} m carry` : 'No carry data'} ·{' '}
+              {shot.sideDeg != null ? `${Math.round(shot.sideDeg)}° side` : 'No side data'}
+            </Text>
           </View>
         ))}
       </View>
 
-      <TouchableOpacity onPress={() => navigation.goBack()} style={styles.secondaryButton} testID="end-session">
+      <TouchableOpacity onPress={handleEndSession} style={styles.secondaryButton} testID="end-session">
         <Text style={styles.secondaryButtonText}>Avsluta</Text>
       </TouchableOpacity>
     </ScrollView>
@@ -171,6 +231,9 @@ const styles = StyleSheet.create({
   },
   shotTitle: {
     fontWeight: '700',
+  },
+  shotMeta: {
+    color: '#4B5563',
   },
   fallbackContainer: {
     flex: 1,
