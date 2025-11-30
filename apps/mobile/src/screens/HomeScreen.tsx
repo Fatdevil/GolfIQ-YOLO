@@ -23,6 +23,9 @@ import WatchStatusCard from '@app/components/WatchStatusCard';
 import type { RootStackParamList } from '@app/navigation/types';
 import { clearCurrentRun, loadCurrentRun, type CurrentRun } from '@app/run/currentRun';
 import { loadLastRoundSummary, type LastRoundSummary } from '@app/run/lastRound';
+import { t } from '@app/i18n';
+import { loadLastRangeSessionSummary } from '@app/range/rangeSummaryStorage';
+import type { RangeSessionSummary } from '@app/range/rangeSession';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'PlayerHome'>;
 
@@ -112,6 +115,7 @@ export default function HomeScreen({ navigation }: Props): JSX.Element {
   const { loading, error, data, currentRun } = state;
   const [discardVisible, setDiscardVisible] = useState(false);
   const [discarding, setDiscarding] = useState(false);
+  const [lastRangeSession, setLastRangeSession] = useState<RangeSessionSummary | null>();
 
   const load = useCallback(async () => {
     setState((prev) => ({ ...prev, loading: true, error: null }));
@@ -163,6 +167,26 @@ export default function HomeScreen({ navigation }: Props): JSX.Element {
     });
   }, [load]);
 
+  useEffect(() => {
+    let cancelled = false;
+
+    loadLastRangeSessionSummary()
+      .then((summary) => {
+        if (!cancelled) {
+          setLastRangeSession(summary);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setLastRangeSession(null);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const lastRoundSummary = useMemo(() => {
     if (!data?.lastRoundSummary) return null;
     const dateLabel = formatRelativeDate(data.lastRoundSummary.finishedAt);
@@ -170,6 +194,26 @@ export default function HomeScreen({ navigation }: Props): JSX.Element {
       data.lastRoundSummary.relativeToPar ?? `${data.lastRoundSummary.totalStrokes} strokes`;
     return { ...data.lastRoundSummary, dateLabel, scoreLabel };
   }, [data?.lastRoundSummary]);
+
+  const lastRangeLabel = useMemo(() => {
+    if (!lastRangeSession) return null;
+    const club = lastRangeSession.club?.trim() || null;
+    const shots = Number.isFinite(lastRangeSession.shotCount) ? lastRangeSession.shotCount : null;
+
+    if (club && shots !== null) {
+      return t('home.range.lastSession.label', { club, shots });
+    }
+    if (!club && shots !== null) {
+      return t('home.range.lastSession.label_no_club', { shots });
+    }
+    if (club) {
+      return t('home.range.lastSession.label_club_only', { club });
+    }
+
+    return t('home.range.lastSession.label_club_only', {
+      club: t('home.range.lastSession.anyClub'),
+    });
+  }, [lastRangeSession]);
 
   if (loading) {
     return (
@@ -247,6 +291,24 @@ export default function HomeScreen({ navigation }: Props): JSX.Element {
             <Text style={styles.primaryButtonText}>Play round</Text>
           </View>
         </TouchableOpacity>
+      </View>
+
+      <View style={styles.card} testID="range-home-card">
+        <Text style={styles.cardTitle}>{t('home.range.title')}</Text>
+        <Text style={styles.cardSubtitle}>{t('home.range.subtitle')}</Text>
+        <Text style={styles.cardDetail} testID="range-last-session-label">
+          {lastRangeLabel ?? t('home.range.lastSession.none')}
+        </Text>
+        <TouchableOpacity
+          accessibilityLabel={t('home.range.cta')}
+          onPress={() => navigation.navigate('RangePractice')}
+          testID="range-home-cta"
+        >
+          <View style={styles.primaryButton}>
+            <Text style={styles.primaryButtonText}>{t('home.range.cta')}</Text>
+          </View>
+        </TouchableOpacity>
+        <Text style={styles.cardFootnote}>{t('home.range.missionsTeaser')}</Text>
       </View>
 
       <WatchStatusCard memberId={data.memberId} plan={data.plan} />
@@ -376,6 +438,14 @@ const styles = StyleSheet.create({
   cardSubtitle: {
     color: '#e5e7eb',
     fontSize: 14,
+  },
+  cardDetail: {
+    color: '#cbd5e1',
+    fontSize: 13,
+  },
+  cardFootnote: {
+    color: '#cbd5e1',
+    fontSize: 12,
   },
   primaryButton: {
     marginTop: 8,

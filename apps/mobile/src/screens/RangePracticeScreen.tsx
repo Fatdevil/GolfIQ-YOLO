@@ -9,14 +9,12 @@ type Props = NativeStackScreenProps<RootStackParamList, 'RangePractice'>;
 export default function RangePracticeScreen({ navigation }: Props): JSX.Element {
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>Range practice</Text>
+      <Text style={styles.title}>Range & Training</Text>
       <Text style={styles.subtitle}>Värm upp, följ din träning och lås upp fler insikter.</Text>
 
       <View style={styles.card}>
         <Text style={styles.cardTitle}>Quick practice</Text>
-        <Text style={styles.cardSubtitle}>
-          Hoppa direkt till inspelning på rangen med kamera-guide och enkel shot tracking.
-        </Text>
+        <Text style={styles.cardSubtitle}>Hit a bucket with feedback and shot tracking.</Text>
         <TouchableOpacity
           accessibilityLabel="Start quick practice"
           onPress={() => navigation.navigate('RangeQuickPracticeStart')}
@@ -26,6 +24,11 @@ export default function RangePracticeScreen({ navigation }: Props): JSX.Element 
             <Text style={styles.primaryButtonText}>Starta</Text>
           </View>
         </TouchableOpacity>
+      </View>
+
+      <View style={styles.placeholderCard}>
+        <Text style={styles.cardTitle}>Missions</Text>
+        <Text style={styles.cardSubtitle}>Planned missions and gapping tools coming soon.</Text>
       </View>
     </View>
   );
@@ -58,6 +61,16 @@ const styles = StyleSheet.create({
   cardSubtitle: {
     fontSize: 14,
     color: '#4B5563',
+  },
+  placeholderCard: {
+    marginTop: 12,
+    padding: 16,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderStyle: 'dashed',
+    borderColor: '#D1D5DB',
+    backgroundColor: '#FFFFFF',
+    gap: 8,
   },
   primaryButton: {
     marginTop: 8,
