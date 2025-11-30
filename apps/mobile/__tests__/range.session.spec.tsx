@@ -4,6 +4,7 @@ import React from 'react';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 
 import * as rangeApi from '@app/api/range';
+import * as rangeHistory from '@app/range/rangeHistoryStorage';
 import * as summaryStorage from '@app/range/rangeSummaryStorage';
 import RangeQuickPracticeSessionScreen from '@app/screens/RangeQuickPracticeSessionScreen';
 import type { RootStackParamList } from '@app/navigation/types';
@@ -15,6 +16,10 @@ vi.mock('@app/api/range', () => ({
 
 vi.mock('@app/range/rangeSummaryStorage', () => ({
   saveLastRangeSessionSummary: vi.fn(),
+}));
+
+vi.mock('@app/range/rangeHistoryStorage', () => ({
+  appendRangeHistoryEntry: vi.fn(),
 }));
 
 type Props = NativeStackScreenProps<RootStackParamList, 'RangeQuickPracticeSession'>;
@@ -115,6 +120,7 @@ describe('RangeQuickPracticeSessionScreen', () => {
 
     await waitFor(() => {
       expect(summaryStorage.saveLastRangeSessionSummary).toHaveBeenCalled();
+      expect(rangeHistory.appendRangeHistoryEntry).toHaveBeenCalled();
       expect(navigation.navigate).toHaveBeenCalledWith('RangeQuickPracticeSummary', expect.any(Object));
     });
   });

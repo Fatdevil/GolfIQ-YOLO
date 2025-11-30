@@ -41,6 +41,23 @@ export const ScrollView: React.FC<ScrollViewProps> = ({ children, testID }) => (
   <div data-testid={testID}>{children}</div>
 );
 
+type FlatListProps<Item> = CommonProps & {
+  data: Item[];
+  renderItem: (params: { item: Item; index: number }) => React.ReactElement | null;
+  keyExtractor?: (item: Item, index: number) => string;
+  contentContainerStyle?: Record<string, unknown>;
+};
+
+export function FlatList<Item>({ data, renderItem, keyExtractor, testID }: FlatListProps<Item>): JSX.Element {
+  return (
+    <div data-testid={testID}>
+      {data.map((item, index) => (
+        <div key={keyExtractor ? keyExtractor(item, index) : index}>{renderItem({ item, index })}</div>
+      ))}
+    </div>
+  );
+}
+
 type TouchableOpacityProps = CommonProps & {
   onPress?: () => void;
   disabled?: boolean;

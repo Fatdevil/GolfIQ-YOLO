@@ -92,6 +92,14 @@ export default function RangeQuickPracticeSummaryScreen({ navigation, route }: P
       >
         <Text style={styles.secondaryButtonText}>Back to Range</Text>
       </TouchableOpacity>
+
+      <TouchableOpacity
+        onPress={() => navigation.navigate('RangeHistory')}
+        style={styles.tertiaryButton}
+        testID="summary-range-history"
+      >
+        <Text style={styles.tertiaryButtonText}>{t('range.history.view_history')}</Text>
+      </TouchableOpacity>
     </View>
   );
 }
@@ -173,6 +181,14 @@ const styles = StyleSheet.create({
   },
   secondaryButtonText: {
     color: '#111827',
+    fontWeight: '600',
+  },
+  tertiaryButton: {
+    paddingVertical: 10,
+    alignItems: 'center',
+  },
+  tertiaryButtonText: {
+    color: '#2563EB',
     fontWeight: '600',
   },
 });

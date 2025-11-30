@@ -15,6 +15,21 @@ export const en = {
     },
   },
   range: {
+    history: {
+      title: 'Range history',
+      loading: 'Loading range history…',
+      empty_title: 'No range history yet',
+      empty_subtitle: 'Finish a Quick Practice session to see your progress here.',
+      item_focus_direction: 'Focus: direction',
+      item_focus_contact: 'Focus: contact',
+      item_focus_distance: 'Focus: distance',
+      item_shots: '{{count}} shots',
+      view_history: 'View range history',
+    },
+    hub: {
+      history_cta_title: 'Range history',
+      history_cta_subtitle: 'See your recent practice sessions',
+    },
     story: {
       solid_distance_work_on_direction: 'Solid distance – now tighten your direction',
       good_direction_work_on_distance: 'Great direction – now build more distance',

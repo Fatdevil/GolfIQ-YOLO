@@ -12,3 +12,9 @@ Quick Practice is our lightweight range flow: pick a club (optional), choose you
 ## Range Story v1
 
 Quick Practice now adds a lightweight Range Story to the summary. We build a short headline plus strengths and next-focus bullets from the saved `RangeSessionSummary` (shot count, average carry vs target, and tendency). The card stays local to the device and updates each time a session ends.
+
+## Range History v1
+
+- Each finished Quick Practice session is appended to a local history list (up to 30 entries) alongside the existing "last session" cache.
+- Players can open the new **Range history** screen from the Range hub (and from the Quick Practice summary) to see recent sessions with date, club, shot count, and a short focus tag from the Range Story model.
+- History is fully local: corrupt data is ignored and never crashes the app.
