@@ -8,6 +8,7 @@ import LastShotCard, { classifyDirection } from '@app/range/LastShotCard';
 import type { RangeSession, RangeSessionSummary, RangeShot } from '@app/range/rangeSession';
 import { appendRangeHistoryEntry } from '@app/range/rangeHistoryStorage';
 import { saveLastRangeSessionSummary } from '@app/range/rangeSummaryStorage';
+import { loadCurrentTrainingGoal } from '@app/range/rangeTrainingGoalStorage';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'RangeQuickPracticeSession'>;
 
@@ -69,7 +70,7 @@ export default function RangeQuickPracticeSessionScreen({ navigation, route }: P
     }
   };
 
-  const buildSummary = (currentSession: RangeSession): RangeSessionSummary => {
+  const buildSummary = (currentSession: RangeSession, trainingGoalText?: string): RangeSessionSummary => {
     const shotCount = currentSession.shots.length;
     const carries = currentSession.shots
       .map((s) => s.carryM)
@@ -87,13 +88,14 @@ export default function RangeQuickPracticeSessionScreen({ navigation, route }: P
       finishedAt: new Date().toISOString(),
       club: currentSession.club,
       targetDistanceM: currentSession.targetDistanceM ?? null,
+      trainingGoalText,
       shotCount,
       avgCarryM,
       tendency: classifyDirection(avgSideDeg),
     };
   };
 
-  const handleEndSession = () => {
+  const handleEndSession = async () => {
     if (!sessionState) return;
     if (sessionState.shots.length === 0) {
       Alert.alert('End session?', "You haven’t logged any shots yet. End session anyway?", [
@@ -107,7 +109,8 @@ export default function RangeQuickPracticeSessionScreen({ navigation, route }: P
       return;
     }
 
-    const summary = buildSummary(sessionState);
+    const goal = await loadCurrentTrainingGoal();
+    const summary = buildSummary(sessionState, goal?.text ?? undefined);
     Promise.allSettled([
       Promise.resolve(saveLastRangeSessionSummary(summary)),
       Promise.resolve(appendRangeHistoryEntry(summary)),

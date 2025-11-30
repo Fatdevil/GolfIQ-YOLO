@@ -55,6 +55,13 @@ export default function RangeQuickPracticeSummaryScreen({ navigation, route }: P
         {summary.targetDistanceM ? ` • Target ${Math.round(summary.targetDistanceM)} m` : ''}
       </Text>
 
+      {summary.trainingGoalText ? (
+        <View style={styles.goalCard}>
+          <Text style={styles.sectionTitle}>{t('range.trainingGoal.summary_label')}</Text>
+          <Text style={styles.helper}>{summary.trainingGoalText}</Text>
+        </View>
+      ) : null}
+
       <View style={styles.card}>
         <View style={styles.row}>
           <Text style={styles.label}>Shots</Text>
@@ -190,5 +197,14 @@ const styles = StyleSheet.create({
   tertiaryButtonText: {
     color: '#2563EB',
     fontWeight: '600',
+  },
+  goalCard: {
+    marginTop: 8,
+    padding: 14,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    backgroundColor: '#FFFFFF',
+    gap: 6,
   },
 });

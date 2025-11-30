@@ -26,6 +26,9 @@ function FocusLabel({ entry }: { entry: RangeHistoryEntry }): JSX.Element {
 function HistoryItem({ entry }: { entry: RangeHistoryEntry }): JSX.Element {
   const clubLabel = entry.summary.club?.trim() || t('home.range.lastSession.anyClub');
   const dateLabel = formatDate(entry.savedAt || entry.summary.finishedAt);
+  const goalLabel = entry.summary.trainingGoalText
+    ? t('range.trainingGoal.history_item_label', { text: entry.summary.trainingGoalText })
+    : null;
   return (
     <View style={styles.item} testID="range-history-item">
       <View style={styles.itemHeader}>
@@ -34,6 +37,7 @@ function HistoryItem({ entry }: { entry: RangeHistoryEntry }): JSX.Element {
       </View>
       <Text style={styles.itemClub}>{clubLabel}</Text>
       <FocusLabel entry={entry} />
+      {goalLabel ? <Text style={styles.goal}>{goalLabel}</Text> : null}
     </View>
   );
 }
@@ -143,5 +147,8 @@ const styles = StyleSheet.create({
   focus: {
     color: '#2563EB',
     fontWeight: '600',
+  },
+  goal: {
+    color: '#374151',
   },
 });

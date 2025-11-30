@@ -34,6 +34,7 @@ export interface RangeSessionSummary {
   finishedAt: string;
   club: string | null;
   targetDistanceM?: number | null;
+  trainingGoalText?: string;
   shotCount: number;
   avgCarryM?: number | null;
   tendency?: 'left' | 'right' | 'straight' | null;

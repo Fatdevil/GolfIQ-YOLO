@@ -1,9 +1,10 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
-
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { RootStackParamList } from '@app/navigation/types';
 import type { RangeCameraAngle } from '@app/range/rangeSession';
+import { loadCurrentTrainingGoal } from '@app/range/rangeTrainingGoalStorage';
+import { t } from '@app/i18n';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'RangeQuickPracticeStart'>;
 
@@ -16,6 +17,26 @@ export default function RangeQuickPracticeStartScreen({ navigation }: Props): JS
   const [club, setClub] = useState('');
   const [targetDistance, setTargetDistance] = useState('');
   const [selectedAngle, setSelectedAngle] = useState<RangeCameraAngle>('down_the_line');
+  const [trainingGoal, setTrainingGoal] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    const loadGoal = async () => {
+      const goal = await loadCurrentTrainingGoal();
+      if (!cancelled) {
+        setTrainingGoal(goal?.text ?? null);
+      }
+    };
+
+    const unsubscribe = typeof (navigation as any).addListener === 'function'
+      ? (navigation as any).addListener('focus', loadGoal)
+      : () => {};
+    loadGoal();
+    return () => {
+      cancelled = true;
+      unsubscribe();
+    };
+  }, [navigation]);
 
   const selectedLabel = useMemo(
     () => (selectedAngle === 'down_the_line' ? 'Down-the-line' : 'Face-on'),
@@ -39,6 +60,19 @@ export default function RangeQuickPracticeStartScreen({ navigation }: Props): JS
       <Text style={styles.subtitle}>
         Välj kamera-vinkel och mål så guidar vi dig genom uppställningen innan inspelningen startar.
       </Text>
+      {trainingGoal ? (
+        <Text style={styles.goalInline} numberOfLines={2}>
+          {t('range.trainingGoal.current_inline', { text: trainingGoal })}
+        </Text>
+      ) : (
+        <TouchableOpacity
+          onPress={() => navigation.navigate('RangeTrainingGoal')}
+          style={styles.goalLinkContainer}
+          testID="set-training-goal-link"
+        >
+          <Text style={styles.goalLink}>{t('range.trainingGoal.set_button')}</Text>
+        </TouchableOpacity>
+      )}
 
       <View style={styles.selectorHeader}>
         <Text style={styles.selectorLabel}>Kameravinkel</Text>
@@ -114,6 +148,16 @@ const styles = StyleSheet.create({
   subtitle: {
     fontSize: 14,
     color: '#4B5563',
+  },
+  goalInline: {
+    color: '#111827',
+  },
+  goalLinkContainer: {
+    alignSelf: 'flex-start',
+  },
+  goalLink: {
+    color: '#2563EB',
+    fontWeight: '600',
   },
   selectorHeader: {
     flexDirection: 'row',

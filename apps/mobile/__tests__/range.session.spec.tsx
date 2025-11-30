@@ -9,6 +9,7 @@ import * as summaryStorage from '@app/range/rangeSummaryStorage';
 import RangeQuickPracticeSessionScreen from '@app/screens/RangeQuickPracticeSessionScreen';
 import type { RootStackParamList } from '@app/navigation/types';
 import type { RangeSession } from '@app/range/rangeSession';
+import * as trainingGoalStorage from '@app/range/rangeTrainingGoalStorage';
 
 vi.mock('@app/api/range', () => ({
   analyzeRangeShot: vi.fn(),
@@ -20,6 +21,10 @@ vi.mock('@app/range/rangeSummaryStorage', () => ({
 
 vi.mock('@app/range/rangeHistoryStorage', () => ({
   appendRangeHistoryEntry: vi.fn(),
+}));
+
+vi.mock('@app/range/rangeTrainingGoalStorage', () => ({
+  loadCurrentTrainingGoal: vi.fn(),
 }));
 
 type Props = NativeStackScreenProps<RootStackParamList, 'RangeQuickPracticeSession'>;
@@ -44,6 +49,7 @@ function createRoute(session: RangeSession): Props['route'] {
 describe('RangeQuickPracticeSessionScreen', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(trainingGoalStorage.loadCurrentTrainingGoal).mockResolvedValue(null);
   });
 
   it('shows angle label and logs shot with camera angle', async () => {
@@ -85,7 +91,7 @@ describe('RangeQuickPracticeSessionScreen', () => {
     expect(navigation.replace).not.toHaveBeenCalled();
   });
 
-  it('saves summary and navigates on finish', async () => {
+  it('saves summary with training goal and navigates on finish', async () => {
     const navigation = createNavigation();
     const session: RangeSession = {
       id: 'session-1',
@@ -114,14 +120,27 @@ describe('RangeQuickPracticeSessionScreen', () => {
       ],
     };
 
+    vi.mocked(trainingGoalStorage.loadCurrentTrainingGoal).mockResolvedValue({
+      id: 'goal-1',
+      text: 'Shape fades',
+      createdAt: '2024-01-01T00:00:00.000Z',
+    });
+
     render(<RangeQuickPracticeSessionScreen navigation={navigation} route={createRoute(session)} />);
 
     fireEvent.click(screen.getByTestId('end-session'));
 
     await waitFor(() => {
-      expect(summaryStorage.saveLastRangeSessionSummary).toHaveBeenCalled();
-      expect(rangeHistory.appendRangeHistoryEntry).toHaveBeenCalled();
-      expect(navigation.navigate).toHaveBeenCalledWith('RangeQuickPracticeSummary', expect.any(Object));
+      expect(summaryStorage.saveLastRangeSessionSummary).toHaveBeenCalledWith(
+        expect.objectContaining({ trainingGoalText: 'Shape fades' }),
+      );
+      expect(rangeHistory.appendRangeHistoryEntry).toHaveBeenCalledWith(
+        expect.objectContaining({ trainingGoalText: 'Shape fades' }),
+      );
+      expect(navigation.navigate).toHaveBeenCalledWith(
+        'RangeQuickPracticeSummary',
+        expect.objectContaining({ summary: expect.objectContaining({ trainingGoalText: 'Shape fades' }) }),
+      );
     });
   });
 
