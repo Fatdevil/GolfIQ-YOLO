@@ -84,7 +84,7 @@ describe("RunDetailPage sequence preview", () => {
     mockUseAccessPlan.mockReset();
     mockGetRemoteConfig.mockResolvedValue({ playslike: { enabled: false, variant: "off" } });
     mockFetchSessionTimeline.mockResolvedValue({ runId: "demo", events: [] });
-    mockFetchSwingMetrics.mockResolvedValue({ runId: "demo", metrics: {}, tour_compare: {} });
+    mockFetchSwingMetrics.mockResolvedValue({ runId: "demo", metrics: {}, tourCompare: {} });
   });
 
   it("renders sequence card for pro users", async () => {

@@ -75,7 +75,7 @@ describe("RunDetailPage timeline", () => {
       runId: "demo",
       events: [{ ts: 0.5, type: "impact", label: "Impact #1" }],
     });
-    mockFetchSwingMetrics.mockResolvedValue({ runId: "demo", metrics: {}, tour_compare: {} });
+    mockFetchSwingMetrics.mockResolvedValue({ runId: "demo", metrics: {}, tourCompare: {} });
   });
 
   it("shows swing timeline for pro users", async () => {

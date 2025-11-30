@@ -3,7 +3,7 @@ import React from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import SwingDiagnosticsPanel from "./SwingDiagnosticsPanel";
-import type { SwingMetricsResponse } from "@/api";
+import type { NormalisedSwingMetricsResponse } from "@/api";
 
 const mockFetchSwingMetrics = vi.fn();
 
@@ -26,7 +26,7 @@ describe("SwingDiagnosticsPanel", () => {
         launch_deg: { value: 14.2, units: "°" },
         sideAngleDeg: { value: -2.1, units: "°" },
       },
-      tour_compare: {
+      tourCompare: {
         max_shoulder_rotation: { bandGroup: "driver", status: "below", rangeMin: 80, rangeMax: 100 },
         max_x_factor: { bandGroup: "driver", status: "in_range", rangeMin: 30, rangeMax: 50 },
         launch_deg: { bandGroup: "driver", status: "above", rangeMin: 10, rangeMax: 13 },
@@ -53,8 +53,8 @@ describe("SwingDiagnosticsPanel", () => {
   });
 
   it("shows loading state before data arrives", async () => {
-    let resolveFn!: (value: SwingMetricsResponse) => void;
-    const pending = new Promise<SwingMetricsResponse>((resolve) => {
+    let resolveFn!: (value: NormalisedSwingMetricsResponse) => void;
+    const pending = new Promise<NormalisedSwingMetricsResponse>((resolve) => {
       resolveFn = resolve;
     });
     mockFetchSwingMetrics.mockReturnValue(pending);
@@ -64,12 +64,12 @@ describe("SwingDiagnosticsPanel", () => {
     expect(screen.getAllByText(/Swing diagnostics/).length).toBeGreaterThan(0);
     expect(container.querySelectorAll(".animate-pulse").length).toBeGreaterThan(0);
 
-    resolveFn({ runId: "run-loading", metrics: {}, tour_compare: {} });
+    resolveFn({ runId: "run-loading", metrics: {}, tourCompare: {} });
     await waitFor(() => expect(mockFetchSwingMetrics).toHaveBeenCalled());
   });
 
   it("renders an empty message when no metrics exist", async () => {
-    mockFetchSwingMetrics.mockResolvedValue({ runId: "run-empty", metrics: {}, tour_compare: {} });
+    mockFetchSwingMetrics.mockResolvedValue({ runId: "run-empty", metrics: {}, tourCompare: {} });
 
     render(<SwingDiagnosticsPanel runId="run-empty" />);
 
@@ -78,7 +78,7 @@ describe("SwingDiagnosticsPanel", () => {
 
   it("shows error state and allows retry", async () => {
     mockFetchSwingMetrics.mockRejectedValueOnce(new Error("API offline"));
-    mockFetchSwingMetrics.mockResolvedValueOnce({ runId: "run-1", metrics: {}, tour_compare: {} });
+    mockFetchSwingMetrics.mockResolvedValueOnce({ runId: "run-1", metrics: {}, tourCompare: {} });
 
     render(<SwingDiagnosticsPanel runId="run-1" />);
 

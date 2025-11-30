@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import {
   fetchSwingMetrics,
   type MetricValue,
-  type SwingMetricsResponse,
+  type NormalisedSwingMetricsResponse,
   type TourCompare,
   type TourStatus,
 } from "@/api";
@@ -96,10 +96,10 @@ function formatMetricValue(metric: MetricValue | undefined): string {
   return metric.value.toFixed(digits);
 }
 
-function resolveMetrics(response: SwingMetricsResponse | null): ResolvedMetric[] {
+function resolveMetrics(response: NormalisedSwingMetricsResponse | null): ResolvedMetric[] {
   if (!response) return [];
   const metrics = response.metrics ?? {};
-  const compare = response.tour_compare ?? {};
+  const compare = response.tourCompare ?? {};
 
   const resolved: ResolvedMetric[] = [];
 
@@ -119,7 +119,7 @@ function resolveMetrics(response: SwingMetricsResponse | null): ResolvedMetric[]
 }
 
 export default function SwingDiagnosticsPanel({ runId }: SwingDiagnosticsPanelProps) {
-  const [data, setData] = useState<SwingMetricsResponse | null>(null);
+  const [data, setData] = useState<NormalisedSwingMetricsResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -215,8 +215,11 @@ export default function SwingDiagnosticsPanel({ runId }: SwingDiagnosticsPanelPr
         <div className="grid gap-3 sm:grid-cols-2">
           {resolvedMetrics.map((item) => {
             const statusMeta = item.compare ? STATUS_COPY[item.compare.status] : null;
-            const rangeText = item.compare
-              ? `Tour range ${item.compare.rangeMin.toFixed(1)}–${item.compare.rangeMax.toFixed(1)}`
+            const rangeMin = item.compare?.rangeMin;
+            const rangeMax = item.compare?.rangeMax;
+            const hasRange = typeof rangeMin === "number" && typeof rangeMax === "number";
+            const rangeText = hasRange
+              ? `Tour range ${rangeMin.toFixed(1)}–${rangeMax.toFixed(1)}`
               : "No tour reference yet";
             return (
               <div

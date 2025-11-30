@@ -75,7 +75,7 @@ describe("RunDetailPage swing diagnostics", () => {
     mockFetchSwingMetrics.mockResolvedValue({
       runId: "demo",
       metrics: { max_shoulder_rotation: { value: 75, units: "°" } },
-      tour_compare: {},
+      tourCompare: {},
     });
   });
 
