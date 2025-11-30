@@ -51,6 +51,22 @@ export const en = {
         distance: 'After a warm-up, gradually add speed while keeping balance.',
       },
     },
+    trainingGoal: {
+      screen_title: 'Training goal',
+      screen_description:
+        'Write a short focus for your current practice period. It will be shown on range screens and saved with your sessions.',
+      placeholder: 'Example: Hit a gentle fade with all full shots',
+      save_button: 'Save goal',
+      clear_button: 'Clear goal',
+      no_goal_title: 'No training goal set',
+      no_goal_subtitle: 'Set a focus for your practice sessions.',
+      set_button: 'Set training goal',
+      current_title: 'Current training goal',
+      change_button: 'Change goal',
+      summary_label: 'Training goal for this session',
+      history_item_label: 'Goal: {{text}}',
+      current_inline: 'Current goal: {{text}}',
+    },
   },
 } as const;
 

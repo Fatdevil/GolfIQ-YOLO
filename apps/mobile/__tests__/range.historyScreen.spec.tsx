@@ -37,6 +37,7 @@ describe('RangeHistoryScreen', () => {
           shotCount: 6,
           avgCarryM: 148,
           tendency: 'left',
+          trainingGoalText: 'Hit smooth draws',
         },
       },
       {
@@ -65,6 +66,7 @@ describe('RangeHistoryScreen', () => {
     expect(screen.getByText('7i')).toBeInTheDocument();
     expect(screen.getByText('6 shots')).toBeInTheDocument();
     expect(screen.getByText('Focus: direction')).toBeInTheDocument();
+    expect(screen.getByText('Goal: Hit smooth draws')).toBeInTheDocument();
 
     expect(screen.getByText('Apr 1')).toBeInTheDocument();
     expect(screen.getByText('Any club')).toBeInTheDocument();

@@ -5,6 +5,11 @@ import { describe, expect, it, vi } from 'vitest';
 
 import RangeQuickPracticeStartScreen from '@app/screens/RangeQuickPracticeStartScreen';
 import type { RootStackParamList } from '@app/navigation/types';
+import * as trainingGoalStorage from '@app/range/rangeTrainingGoalStorage';
+
+vi.mock('@app/range/rangeTrainingGoalStorage', () => ({
+  loadCurrentTrainingGoal: vi.fn(),
+}));
 
 type Props = NativeStackScreenProps<RootStackParamList, 'RangeQuickPracticeStart'>;
 
@@ -26,6 +31,7 @@ function createRoute(): Props['route'] {
 describe('RangeQuickPracticeStartScreen', () => {
   it('defaults to down-the-line and allows switching angle', () => {
     const navigation = createNavigation();
+    vi.mocked(trainingGoalStorage.loadCurrentTrainingGoal).mockResolvedValue(null);
     render(<RangeQuickPracticeStartScreen navigation={navigation} route={createRoute()} />);
 
     expect(screen.getByTestId('selected-angle-label')).toHaveTextContent('Down-the-line');
@@ -36,6 +42,7 @@ describe('RangeQuickPracticeStartScreen', () => {
 
   it('navigates to camera setup with selected params', () => {
     const navigation = createNavigation();
+    vi.mocked(trainingGoalStorage.loadCurrentTrainingGoal).mockResolvedValue(null);
     render(<RangeQuickPracticeStartScreen navigation={navigation} route={createRoute()} />);
 
     fireEvent.change(screen.getByTestId('club-input'), { target: { value: '7i' } });
@@ -49,5 +56,18 @@ describe('RangeQuickPracticeStartScreen', () => {
       targetDistanceM: 145,
       cameraAngle: 'face_on',
     });
+  });
+
+  it('shows current training goal inline when available', async () => {
+    const navigation = createNavigation();
+    vi.mocked(trainingGoalStorage.loadCurrentTrainingGoal).mockResolvedValue({
+      id: 'goal-1',
+      text: 'Work on start line',
+      createdAt: '2024-01-01T00:00:00.000Z',
+    });
+
+    render(<RangeQuickPracticeStartScreen navigation={navigation} route={createRoute()} />);
+
+    await screen.findByText('Current goal: Work on start line');
   });
 });

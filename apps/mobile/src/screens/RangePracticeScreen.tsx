@@ -1,15 +1,59 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { RootStackParamList } from '@app/navigation/types';
 import { t } from '@app/i18n';
+import { loadCurrentTrainingGoal } from '@app/range/rangeTrainingGoalStorage';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'RangePractice'>;
 
 export default function RangePracticeScreen({ navigation }: Props): JSX.Element {
+  const [trainingGoal, setTrainingGoal] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    const loadGoal = async () => {
+      const goal = await loadCurrentTrainingGoal();
+      if (!cancelled) {
+        setTrainingGoal(goal?.text ?? null);
+      }
+    };
+
+    const unsubscribe = typeof (navigation as any).addListener === 'function'
+      ? (navigation as any).addListener('focus', loadGoal)
+      : () => {};
+    loadGoal();
+    return () => {
+      cancelled = true;
+      unsubscribe();
+    };
+  }, [navigation]);
+
   return (
     <View style={styles.container}>
+      <TouchableOpacity
+        onPress={() => navigation.navigate('RangeTrainingGoal')}
+        style={styles.trainingGoalCard}
+        testID="training-goal-card"
+      >
+        {trainingGoal ? (
+          <>
+            <Text style={styles.cardOverline}>{t('range.trainingGoal.current_title')}</Text>
+            <Text style={styles.trainingGoalText} numberOfLines={2}>
+              {trainingGoal}
+            </Text>
+            <Text style={styles.trainingGoalLink}>{t('range.trainingGoal.change_button')}</Text>
+          </>
+        ) : (
+          <>
+            <Text style={styles.trainingGoalTitle}>{t('range.trainingGoal.no_goal_title')}</Text>
+            <Text style={styles.trainingGoalSubtitle}>{t('range.trainingGoal.no_goal_subtitle')}</Text>
+            <Text style={styles.trainingGoalLink}>{t('range.trainingGoal.set_button')}</Text>
+          </>
+        )}
+      </TouchableOpacity>
+
       <Text style={styles.title}>Range & Training</Text>
       <Text style={styles.subtitle}>Värm upp, följ din träning och lås upp fler insikter.</Text>
 
@@ -49,6 +93,36 @@ const styles = StyleSheet.create({
   container: {
     padding: 20,
     gap: 8,
+  },
+  trainingGoalCard: {
+    padding: 14,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    backgroundColor: '#F9FAFB',
+    gap: 6,
+  },
+  cardOverline: {
+    textTransform: 'uppercase',
+    color: '#6B7280',
+    fontWeight: '700',
+    fontSize: 12,
+  },
+  trainingGoalTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#111827',
+  },
+  trainingGoalSubtitle: {
+    color: '#4B5563',
+  },
+  trainingGoalText: {
+    color: '#111827',
+    fontSize: 16,
+  },
+  trainingGoalLink: {
+    color: '#2563EB',
+    fontWeight: '600',
   },
   title: {
     fontSize: 24,
