@@ -3,6 +3,9 @@ import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { RootStackParamList } from '@app/navigation/types';
+import { t } from '@app/i18n';
+import { RangeSessionStoryCard } from '@app/range/RangeSessionStoryCard';
+import { buildRangeSessionStory } from '@app/range/rangeSessionStory';
 
 const directionCopy: Record<'left' | 'right' | 'straight', string> = {
   left: 'Left',
@@ -19,6 +22,11 @@ export default function RangeQuickPracticeSummaryScreen({ navigation, route }: P
     if (!summary?.tendency) return '—';
     return directionCopy[summary.tendency];
   }, [summary?.tendency]);
+
+  const story = useMemo(() => {
+    if (!summary) return null;
+    return buildRangeSessionStory(summary);
+  }, [summary]);
 
   const targetLabel = useMemo(() => {
     if (!summary?.targetDistanceM) return null;
@@ -65,6 +73,15 @@ export default function RangeQuickPracticeSummaryScreen({ navigation, route }: P
         </View>
       </View>
 
+      {story ? (
+        <RangeSessionStoryCard story={story} />
+      ) : (
+        <View style={styles.fallbackCard}>
+          <Text style={styles.sectionTitle}>{t('range.story.fallback_title')}</Text>
+          <Text style={styles.helper}>{t('range.story.fallback_body')}</Text>
+        </View>
+      )}
+
       <TouchableOpacity onPress={() => navigation.navigate('PlayerHome')} style={styles.primaryButton} testID="summary-back-home">
         <Text style={styles.primaryButtonText}>Back to Home</Text>
       </TouchableOpacity>
@@ -91,6 +108,11 @@ const styles = StyleSheet.create({
   },
   subtitle: {
     color: '#4B5563',
+  },
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#111827',
   },
   card: {
     marginTop: 8,
@@ -121,6 +143,15 @@ const styles = StyleSheet.create({
   },
   helper: {
     color: '#6B7280',
+  },
+  fallbackCard: {
+    marginTop: 4,
+    padding: 16,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    backgroundColor: '#F9FAFB',
+    gap: 6,
   },
   primaryButton: {
     marginTop: 12,

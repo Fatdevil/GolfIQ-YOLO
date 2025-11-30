@@ -8,3 +8,7 @@ Quick Practice is our lightweight range flow: pick a club (optional), choose you
 - The card previews the latest range session using the cached `golfiq.range.lastSession.v1` summary (club + shot count when available).
 - When no history exists, it shows a friendly empty state encouraging players to start a Quick Practice.
 - A tiny teaser reminds users that planned missions are coming soon.
+
+## Range Story v1
+
+Quick Practice now adds a lightweight Range Story to the summary. We build a short headline plus strengths and next-focus bullets from the saved `RangeSessionSummary` (shot count, average carry vs target, and tendency). The card stays local to the device and updates each time a session ends.
