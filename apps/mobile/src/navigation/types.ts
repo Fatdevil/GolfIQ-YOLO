@@ -27,6 +27,7 @@ export type RootStackParamList = {
   };
   RangeQuickPracticeSession: { session: import('@app/range/rangeSession').RangeSession };
   RangeQuickPracticeSummary: { summary: import('@app/range/rangeSession').RangeSessionSummary };
+  RangeHistory: undefined;
   Trips: undefined;
   RoundStory: { runId: string; summary?: import('@app/run/lastRound').LastRoundSummary };
   RoundSaved: { summary: import('@app/run/lastRound').LastRoundSummary };

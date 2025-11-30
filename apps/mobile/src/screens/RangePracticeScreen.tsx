@@ -3,6 +3,7 @@ import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { RootStackParamList } from '@app/navigation/types';
+import { t } from '@app/i18n';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'RangePractice'>;
 
@@ -22,6 +23,16 @@ export default function RangePracticeScreen({ navigation }: Props): JSX.Element 
         >
           <View style={styles.primaryButton}>
             <Text style={styles.primaryButtonText}>Starta</Text>
+          </View>
+        </TouchableOpacity>
+      </View>
+
+      <View style={styles.card}>
+        <Text style={styles.cardTitle}>{t('range.hub.history_cta_title')}</Text>
+        <Text style={styles.cardSubtitle}>{t('range.hub.history_cta_subtitle')}</Text>
+        <TouchableOpacity onPress={() => navigation.navigate('RangeHistory')} testID="range-history-cta">
+          <View style={styles.secondaryButton}>
+            <Text style={styles.secondaryButtonText}>{t('range.hub.history_cta_title')}</Text>
           </View>
         </TouchableOpacity>
       </View>
@@ -82,6 +93,19 @@ const styles = StyleSheet.create({
   },
   primaryButtonText: {
     color: '#FFFFFF',
+    fontWeight: '600',
+  },
+  secondaryButton: {
+    marginTop: 8,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    alignItems: 'center',
+  },
+  secondaryButtonText: {
+    color: '#111827',
     fontWeight: '600',
   },
 });
