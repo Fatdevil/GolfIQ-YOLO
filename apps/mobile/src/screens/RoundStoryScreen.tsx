@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -8,7 +8,22 @@ import type { RootStackParamList } from '@app/navigation/types';
 import { buildHighlights, buildRoundStoryViewModel } from '@app/roundStory/model';
 import { loadLastRoundSummary, type LastRoundSummary } from '@app/run/lastRound';
 
-type Props = NativeStackScreenProps<RootStackParamList, 'RoundStory'>;
+const PRO_TEASER = 'Unlock full analysis (SG and swing insights) with GolfIQ Pro.';
+
+const friendlyCategoryLabel = (name: string): string => {
+  switch (name.toLowerCase()) {
+    case 'off tee':
+      return 'Tee performance';
+    case 'approach':
+      return 'Approach shots';
+    case 'short game':
+      return 'Short game';
+    case 'putting':
+      return 'Putting';
+    default:
+      return name;
+  }
+};
 
 function formatDate(value?: string | null): string | null {
   if (!value) return null;
@@ -17,13 +32,26 @@ function formatDate(value?: string | null): string | null {
   return parsed.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 }
 
+function formatSg(value?: number | null): string {
+  if (typeof value !== 'number') return '—';
+  return `${value >= 0 ? '+' : ''}${value.toFixed(1)}`;
+}
+
 function bestCategorySummary(sg?: { categories: { name: string; strokesGained: number }[] } | null): string | null {
   if (!sg?.categories?.length) return null;
   const sorted = [...sg.categories].sort((a, b) => b.strokesGained - a.strokesGained);
   const best = sorted[0];
   if (!best) return null;
-  return `${best.name}: ${best.strokesGained >= 0 ? '+' : ''}${best.strokesGained.toFixed(1)} SG`;
+  return `${friendlyCategoryLabel(best.name)}: ${formatSg(best.strokesGained)}`;
 }
+
+function worstCategoryLabel(sg?: { categories: { name: string; strokesGained: number }[] } | null): string | null {
+  if (!sg?.categories?.length) return null;
+  const sorted = [...sg.categories].sort((a, b) => a.strokesGained - b.strokesGained);
+  return sorted[0] ? friendlyCategoryLabel(sorted[0].name) : null;
+}
+
+type Props = NativeStackScreenProps<RootStackParamList, 'RoundStory'>;
 
 export default function RoundStoryScreen({ route, navigation }: Props): JSX.Element {
   const params = route.params ?? { runId: '', summary: undefined };
@@ -34,9 +62,11 @@ export default function RoundStoryScreen({ route, navigation }: Props): JSX.Elem
   const [highlights, setHighlights] = useState<string[]>([]);
   const [coach, setCoach] = useState<Awaited<ReturnType<typeof fetchCoachRoundSummary>>>(null);
   const [loadingPlan, setLoadingPlan] = useState(true);
+  const [loadingSg, setLoadingSg] = useState(false);
   const [loadingAnalytics, setLoadingAnalytics] = useState(false);
   const [analyticsError, setAnalyticsError] = useState<string | null>(null);
   const [sgError, setSgError] = useState<string | null>(null);
+  const [reloadToken, setReloadToken] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -80,6 +110,7 @@ export default function RoundStoryScreen({ route, navigation }: Props): JSX.Elem
     (async () => {
       try {
         setSgError(null);
+        setLoadingSg(true);
         const sgSummary = await fetchRoundSg(runId);
         if (!cancelled) {
           setSg(sgSummary);
@@ -88,13 +119,18 @@ export default function RoundStoryScreen({ route, navigation }: Props): JSX.Elem
         if (!cancelled) {
           const message = err instanceof Error ? err.message : 'Unable to load strokes gained';
           setSgError(message);
+          setSg(null);
+        }
+      } finally {
+        if (!cancelled) {
+          setLoadingSg(false);
         }
       }
     })();
     return () => {
       cancelled = true;
     };
-  }, [runId]);
+  }, [runId, reloadToken]);
 
   useEffect(() => {
     if (!plan || plan.plan !== 'pro') return;
@@ -111,6 +147,8 @@ export default function RoundStoryScreen({ route, navigation }: Props): JSX.Elem
         if (cancelled) return;
         const message = err instanceof Error ? err.message : 'Unable to load analytics';
         setAnalyticsError(message);
+        setHighlights([]);
+        setCoach(null);
       })
       .finally(() => {
         if (!cancelled) {
@@ -121,7 +159,7 @@ export default function RoundStoryScreen({ route, navigation }: Props): JSX.Elem
     return () => {
       cancelled = true;
     };
-  }, [plan, runId]);
+  }, [plan, runId, reloadToken]);
 
   const viewModel = useMemo(
     () =>
@@ -137,115 +175,194 @@ export default function RoundStoryScreen({ route, navigation }: Props): JSX.Elem
   );
 
   const dateLabel = formatDate(summary?.finishedAt) ?? 'Recent round';
-  const scoreLabel = summary?.relativeToPar ?? `${summary?.totalStrokes ?? 0} strokes`;
+  const scoreLabel = summary?.relativeToPar
+    ? `${summary.totalStrokes} (${summary.relativeToPar})`
+    : `${summary?.totalStrokes ?? 0} strokes`;
   const isPro = plan?.plan === 'pro';
-  const planLabel = loadingPlan ? 'Loading…' : isPro ? 'Pro' : 'Pro preview';
   const bestCategory = bestCategorySummary(sg);
+  const worstCategory = worstCategoryLabel(sg);
+  const practiceFocus = coach?.focus?.[0] ?? worstCategory ?? null;
+  const practiceCtaLabel = practiceFocus
+    ? `Practice ${practiceFocus} on range`
+    : 'Range practice';
+  const isGuest = Boolean((summary as LastRoundSummary & { isGuest?: boolean })?.isGuest);
+  const showAnalysisError = Boolean((sgError && !sg) || (analyticsError && isPro));
+  const isLoadingAnything = loadingPlan || loadingSg || (isPro && loadingAnalytics);
+
+  const keyStatsChips = useMemo(() => {
+    if (!isPro || !sg) return [];
+    const baseChips = [
+      { label: 'Total SG', value: formatSg(sg.total) },
+      ...sg.categories.map((cat) => ({
+        label: friendlyCategoryLabel(cat.name),
+        value: formatSg(cat.strokesGained),
+      })),
+    ];
+    return baseChips.slice(0, 4);
+  }, [isPro, sg]);
+
+  const quickCoachNote = useMemo(() => {
+    if (isPro) return null;
+    if (bestCategory) return `Best area this round: ${bestCategory}.`;
+    return 'Keep the ball in play and trust your routine next round.';
+  }, [bestCategory, isPro]);
+
+  const onRetry = useCallback(() => {
+    setReloadToken((value) => value + 1);
+  }, []);
 
   return (
     <ScrollView contentContainerStyle={styles.container}>
-      <View style={styles.header} testID="round-story-header">
+      <View style={styles.headerCard} testID="round-story-header">
+        <Text style={styles.sectionEyebrow}>Round overview</Text>
         <Text style={styles.title}>{viewModel.courseName}</Text>
-        <Text style={styles.subtitle}>{viewModel.teeName}</Text>
-        <Text style={styles.meta}>
-          {viewModel.holes} holes · {dateLabel}
+        <Text style={styles.subtitle}>
+          {viewModel.teeName} · {viewModel.holes || '—'} holes · {dateLabel}
         </Text>
-        <Text style={styles.score}>{scoreLabel}</Text>
-        <Text style={styles.meta}>Run ID: {runId}</Text>
+        {isGuest && <Text style={styles.guestPill}>Guest round – does not affect your stats.</Text>}
+        <View style={styles.scoreRow}>
+          <View>
+            <Text style={styles.scoreLabel}>Score</Text>
+            <Text style={styles.scoreValue}>{scoreLabel}</Text>
+          </View>
+          <View style={styles.pill}>
+            <Text style={styles.pillText}>{loadingPlan ? 'Loading plan…' : isPro ? 'Pro' : 'Free'}</Text>
+          </View>
+        </View>
       </View>
 
-      {sgError && <Text style={styles.errorText}>{sgError}</Text>}
-
-      <View style={styles.section} testID="sg-summary">
-        <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>Strokes gained</Text>
-          <Text style={styles.planPill}>{planLabel}</Text>
+      {showAnalysisError && (
+        <View style={[styles.card, styles.errorCard]}>
+          <Text style={styles.errorTitle}>We couldn’t load the detailed analysis right now.</Text>
+          <Text style={styles.errorText}>Please check your connection and try again.</Text>
+          <TouchableOpacity onPress={onRetry} accessibilityLabel="Retry loading round story">
+            <View style={styles.primaryButton}>
+              <Text style={styles.primaryButtonText}>Retry</Text>
+            </View>
+          </TouchableOpacity>
         </View>
+      )}
 
-        {sg && isPro && (
-          <View style={styles.card}>
-            <Text style={styles.statLabel}>Total</Text>
-            <Text style={styles.statValue}>{sg.total >= 0 ? '+' : ''}{sg.total.toFixed(1)}</Text>
-            <View style={styles.sgRow}>
-              {sg.categories.map((cat) => (
-                <View key={cat.name} style={styles.sgItem}>
-                  <Text style={styles.sgLabel}>{cat.name}</Text>
-                  <Text style={styles.sgValue}>{cat.strokesGained >= 0 ? '+' : ''}{cat.strokesGained.toFixed(1)}</Text>
+      <View style={styles.section} testID="key-stats">
+        <View style={styles.sectionHeader}>
+          <Text style={styles.sectionTitle}>Key stats</Text>
+          {isLoadingAnything && <ActivityIndicator size="small" />}
+        </View>
+        <View style={styles.card}>
+          <View style={styles.rowBetween}>
+            <Text style={styles.statLabel}>Score vs par</Text>
+            <Text style={styles.statValue}>{scoreLabel}</Text>
+          </View>
+          {loadingSg && (
+            <View style={styles.inlineRow}>
+              <ActivityIndicator size="small" />
+              <Text style={styles.meta}>Loading round analysis…</Text>
+            </View>
+          )}
+          {isPro && keyStatsChips.length > 0 && !loadingSg && (
+            <View style={styles.chipGrid}>
+              {keyStatsChips.map((chip) => (
+                <View key={chip.label} style={styles.chip}>
+                  <Text style={styles.chipLabel}>{chip.label}</Text>
+                  <Text style={styles.chipValue}>{chip.value}</Text>
                 </View>
               ))}
             </View>
-          </View>
-        )}
+          )}
+          {!isPro && !loadingSg && (
+            <View style={styles.callout}>
+              <Text style={styles.calloutText}>{quickCoachNote}</Text>
+              {bestCategory && <Text style={styles.meta}>Most solid: {bestCategory}</Text>}
+            </View>
+          )}
+          {!loadingSg && !sg && !sgError && (
+            <Text style={styles.meta}>No strokes gained data available for this round.</Text>
+          )}
+        </View>
+      </View>
 
-        {!isPro && (
-          <View style={[styles.card, styles.lockedCard]} testID="sg-preview-locked">
-            <Text style={styles.lockedTitle}>Upgrade to unlock full Round Story</Text>
-            <Text style={styles.meta}>
-              See strokes gained per category, timeline highlights, and AI coach insights for every round.
-            </Text>
-            {bestCategory && <Text style={styles.previewText}>Best this round: {bestCategory}</Text>}
-            <TouchableOpacity accessibilityLabel="Upgrade to Pro" testID="upgrade-cta">
-              <View style={styles.primaryButton}>
-                <Text style={styles.primaryButtonText}>Upgrade to Pro</Text>
-              </View>
-            </TouchableOpacity>
+      <View style={styles.section} testID="timeline-highlights">
+        <View style={styles.sectionHeader}>
+          <Text style={styles.sectionTitle}>Highlights</Text>
+          {isPro && loadingAnalytics && <ActivityIndicator size="small" />}
+        </View>
+        {isPro ? (
+          <View style={styles.card}>
+            {analyticsError && <Text style={styles.meta}>We could not load highlights right now.</Text>}
+            {!loadingAnalytics && !highlights.length && !analyticsError && (
+              <Text style={styles.meta}>No shot-by-shot highlights available for this round.</Text>
+            )}
+            {highlights.map((line, idx) => (
+              <Text key={idx} style={styles.listItem}>
+                • {line}
+              </Text>
+            ))}
+          </View>
+        ) : (
+          <View style={[styles.card, styles.previewCard]}>
+            <Text style={styles.previewTitle}>Detailed stats are part of GolfIQ Pro.</Text>
+            <Text style={styles.meta}>{PRO_TEASER}</Text>
           </View>
         )}
       </View>
 
-      {isPro && (
-        <View style={styles.section} testID="timeline-highlights">
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Timeline highlights</Text>
-            {loadingAnalytics && <ActivityIndicator size="small" />}
-          </View>
-          {analyticsError && <Text style={styles.errorText}>{analyticsError}</Text>}
-          {highlights.length ? (
-            <View style={styles.card}>
-              {highlights.map((line, idx) => (
-                <Text key={idx} style={styles.listItem}>
+      <View style={styles.section} testID="coach-insights">
+        <View style={styles.sectionHeader}>
+          <Text style={styles.sectionTitle}>Coach insights</Text>
+          {isPro && loadingAnalytics && <ActivityIndicator size="small" />}
+        </View>
+        <View style={styles.card}>
+          {isPro ? (
+            <>
+              {!loadingAnalytics && !viewModel.strengths.length && !viewModel.focus.length && (
+                <Text style={styles.meta}>
+                  We couldn’t load detailed coach insights this time, but here are your stats.
+                </Text>
+              )}
+              <Text style={styles.blockTitle}>Strengths</Text>
+              {(viewModel.strengths.length ? viewModel.strengths : ['Solid ball striking overall.']).map(
+                (line, idx) => (
+                  <Text key={`s-${idx}`} style={styles.listItem}>
+                    • {line}
+                  </Text>
+                ),
+              )}
+              <Text style={styles.blockTitle}>Focus for next rounds</Text>
+              {(viewModel.focus.length ? viewModel.focus : ['Sharpen wedge distance control.']).map((line, idx) => (
+                <Text key={`f-${idx}`} style={styles.listItem}>
                   • {line}
                 </Text>
               ))}
-            </View>
+            </>
           ) : (
-            !loadingAnalytics && <Text style={styles.emptyText}>No timeline highlights yet.</Text>
+            <>
+              <Text style={styles.blockTitle}>Quick note</Text>
+              <Text style={styles.listItem}>{quickCoachNote}</Text>
+            </>
           )}
         </View>
-      )}
+      </View>
 
-      {isPro && (
-        <View style={styles.section} testID="coach-insights">
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Coach insights</Text>
-            {loadingAnalytics && <ActivityIndicator size="small" />}
-          </View>
-          {analyticsError && <Text style={styles.errorText}>{analyticsError}</Text>}
-          <View style={styles.card}>
-            <Text style={styles.statLabel}>Strengths</Text>
-            {(viewModel.strengths.length ? viewModel.strengths : ['Dialed in ball striking.']).map((line, idx) => (
-              <Text key={`s-${idx}`} style={styles.listItem}>
-                • {line}
-              </Text>
-            ))}
-            <Text style={[styles.statLabel, { marginTop: 12 }]}>Focus</Text>
-            {(viewModel.focus.length ? viewModel.focus : ['Sharpen wedge distance control.']).map((line, idx) => (
-              <Text key={`f-${idx}`} style={styles.listItem}>
-                • {line}
-              </Text>
-            ))}
-          </View>
+      <View style={styles.section}>
+        <View style={styles.sectionHeader}>
+          <Text style={styles.sectionTitle}>Next steps</Text>
         </View>
-      )}
-
-      <View style={styles.actions}>
-        <TouchableOpacity onPress={() => navigation.navigate('PlayerHome')} testID="round-story-home">
-          <View style={styles.primaryButton}>
-            <Text style={styles.primaryButtonText}>Back to Home</Text>
-          </View>
-        </TouchableOpacity>
-        <View style={[styles.secondaryButton, styles.disabledButton]}>
-          <Text style={[styles.secondaryButtonText, styles.disabledText]}>Share Round (soon)</Text>
+        <View style={styles.card}>
+          <TouchableOpacity onPress={() => navigation.navigate('RangePractice')} testID="next-step-range">
+            <View style={styles.primaryButton}>
+              <Text style={styles.primaryButtonText}>{practiceCtaLabel}</Text>
+            </View>
+          </TouchableOpacity>
+          <TouchableOpacity onPress={() => navigation.navigate('PlayCourseSelect')} testID="next-step-round">
+            <View style={styles.secondaryButton}>
+              <Text style={styles.secondaryButtonText}>Play another round</Text>
+            </View>
+          </TouchableOpacity>
+          <TouchableOpacity onPress={() => navigation.navigate('PlayerHome')} testID="round-story-home">
+            <View style={styles.linkButton}>
+              <Text style={styles.linkButtonText}>Back to Home</Text>
+            </View>
+          </TouchableOpacity>
         </View>
       </View>
     </ScrollView>
@@ -258,14 +375,19 @@ const styles = StyleSheet.create({
     gap: 16,
     backgroundColor: '#f8fafc',
   },
-  header: {
+  headerCard: {
     backgroundColor: '#0f172a',
     padding: 16,
-    borderRadius: 12,
-    gap: 6,
+    borderRadius: 14,
+    gap: 8,
+  },
+  sectionEyebrow: {
+    color: '#cbd5e1',
+    fontWeight: '700',
+    fontSize: 12,
   },
   title: {
-    fontSize: 22,
+    fontSize: 24,
     fontWeight: '800',
     color: '#fff',
   },
@@ -273,12 +395,39 @@ const styles = StyleSheet.create({
     color: '#e5e7eb',
     fontWeight: '600',
   },
-  meta: {
-    color: '#cbd5e1',
+  guestPill: {
+    paddingVertical: 4,
+    paddingHorizontal: 10,
+    backgroundColor: '#1e293b',
+    color: '#e2e8f0',
+    borderRadius: 999,
+    alignSelf: 'flex-start',
+    fontWeight: '700',
+    fontSize: 12,
   },
-  score: {
+  scoreRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: 4,
+  },
+  pill: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    backgroundColor: '#1e293b',
+    borderRadius: 999,
+  },
+  pillText: {
+    color: '#cbd5e1',
+    fontWeight: '700',
+  },
+  scoreLabel: {
+    color: '#cbd5e1',
+    fontWeight: '700',
+  },
+  scoreValue: {
     color: '#4ade80',
-    fontSize: 18,
+    fontSize: 24,
     fontWeight: '800',
   },
   section: {
@@ -291,74 +440,95 @@ const styles = StyleSheet.create({
   },
   sectionTitle: {
     fontSize: 18,
-    fontWeight: '700',
+    fontWeight: '800',
     color: '#0f172a',
-  },
-  planPill: {
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    backgroundColor: '#eef2ff',
-    color: '#4338ca',
-    borderRadius: 999,
-    fontWeight: '700',
   },
   card: {
     backgroundColor: '#fff',
-    padding: 14,
-    borderRadius: 10,
-    gap: 6,
+    padding: 16,
+    borderRadius: 12,
+    gap: 10,
     borderWidth: 1,
     borderColor: '#e2e8f0',
   },
-  lockedCard: {
-    backgroundColor: '#f8fafc',
-    borderStyle: 'dashed',
+  errorCard: {
+    backgroundColor: '#fef2f2',
+    borderColor: '#fecaca',
   },
-  lockedTitle: {
-    fontWeight: '700',
-    color: '#0f172a',
-    fontSize: 16,
+  errorTitle: {
+    color: '#b91c1c',
+    fontWeight: '800',
+  },
+  errorText: {
+    color: '#7f1d1d',
   },
   statLabel: {
     color: '#334155',
     fontWeight: '700',
   },
   statValue: {
-    fontSize: 28,
+    fontSize: 20,
     fontWeight: '800',
     color: '#111827',
   },
-  sgRow: {
+  rowBetween: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  inlineRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  chipGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 12,
   },
-  sgItem: {
+  chip: {
     padding: 10,
-    backgroundColor: '#f1f5f9',
-    borderRadius: 8,
-    minWidth: 120,
+    backgroundColor: '#f8fafc',
+    borderRadius: 10,
+    minWidth: 130,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
   },
-  sgLabel: {
+  chipLabel: {
     fontWeight: '700',
     color: '#0f172a',
   },
-  sgValue: {
+  chipValue: {
     color: '#0f172a',
+  },
+  callout: {
+    backgroundColor: '#f8fafc',
+    padding: 10,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    gap: 4,
+  },
+  calloutText: {
+    color: '#0f172a',
+    fontWeight: '700',
+  },
+  meta: {
+    color: '#64748b',
   },
   listItem: {
     color: '#0f172a',
   },
-  emptyText: {
-    color: '#94a3b8',
+  previewCard: {
+    backgroundColor: '#f8fafc',
   },
-  previewText: {
+  previewTitle: {
+    fontWeight: '800',
     color: '#0f172a',
-    fontWeight: '700',
   },
-  actions: {
-    gap: 10,
-    marginTop: 10,
+  blockTitle: {
+    fontWeight: '800',
+    color: '#0f172a',
   },
   primaryButton: {
     backgroundColor: '#111827',
@@ -376,20 +546,18 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     borderWidth: 1,
     borderColor: '#cbd5e1',
+    backgroundColor: '#f8fafc',
   },
   secondaryButtonText: {
     color: '#0f172a',
     fontWeight: '700',
   },
-  disabledButton: {
-    backgroundColor: '#e2e8f0',
+  linkButton: {
+    paddingVertical: 10,
+    alignItems: 'center',
   },
-  disabledText: {
-    color: '#94a3b8',
-  },
-  errorText: {
-    color: '#b91c1c',
+  linkButtonText: {
+    color: '#0f172a',
     fontWeight: '700',
   },
 });
-

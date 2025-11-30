@@ -15,6 +15,8 @@ export interface RoundStoryViewModel {
   focus: string[];
 }
 
+const MAX_HIGHLIGHTS = 5;
+
 function formatSeconds(ts: number): string {
   return `${ts.toFixed(2)}s`;
 }
@@ -22,15 +24,15 @@ function formatSeconds(ts: number): string {
 function describeEvent(event: SessionTimelineEvent): string {
   switch (event.type) {
     case 'peak_hips':
-      return `Hips peak at ${formatSeconds(event.ts)}`;
+      return 'Smooth hip speed through the swing';
     case 'peak_shoulders':
-      return `Shoulders peak at ${formatSeconds(event.ts)}`;
+      return 'Solid shoulder rotation';
     case 'impact':
-      return event.label ? `${event.label} (${formatSeconds(event.ts)})` : `Impact at ${formatSeconds(event.ts)}`;
+      return event.label ? `${event.label}` : 'Clean contact recorded';
     case 'tempo_marker': {
       const total = Number(event.data?.total_s);
       if (!Number.isNaN(total)) {
-        return `Tempo recorded: ${total.toFixed(2)}s`;
+        return `Tempo check: ${total.toFixed(2)}s`;
       }
       return `Tempo marker at ${formatSeconds(event.ts)}`;
     }
@@ -38,25 +40,28 @@ function describeEvent(event: SessionTimelineEvent): string {
       const from = event.data?.from_hole;
       const to = event.data?.to_hole;
       if (typeof from === 'number' && typeof to === 'number') {
-        return `Hole ${from} → Hole ${to}`;
+        return `Hole ${from} → ${to}`;
       }
-      return event.label ?? 'Hole transition';
+      return event.label ?? 'Next hole on deck';
     }
     case 'coach_cue':
-      return event.label ? `Coach cue: ${event.label}` : 'Coach cue shown';
+      return event.label ? `Coach cue: ${event.label}` : 'Coach cue noted';
     case 'mission_event':
-      return event.label ?? 'Mission event';
+      return event.label ?? 'Mission update';
     case 'swing_start':
     default:
       return event.label ?? `${event.type.replace('_', ' ')} at ${formatSeconds(event.ts)}`;
   }
 }
 
-export function buildHighlights(events: SessionTimelineEvent[], maxItems = 6): string[] {
+export function buildHighlights(events: SessionTimelineEvent[], maxItems = MAX_HIGHLIGHTS): string[] {
   const highlights: string[] = [];
   for (const event of events) {
     if (highlights.length >= maxItems) break;
-    highlights.push(describeEvent(event));
+    const description = describeEvent(event);
+    if (description) {
+      highlights.push(description);
+    }
   }
   return highlights;
 }
@@ -70,8 +75,8 @@ export function buildRoundStoryViewModel(params: {
   isPro: boolean;
 }): RoundStoryViewModel {
   const baseSummary = params.summary;
-  const strengths = params.isPro ? params.coach?.strengths ?? [] : [];
-  const focus = params.isPro ? params.coach?.focus ?? [] : [];
+  const strengths = params.isPro ? (params.coach?.strengths ?? []).slice(0, 2) : [];
+  const focus = params.isPro ? (params.coach?.focus ?? []).slice(0, 2) : [];
 
   return {
     runId: params.runId,

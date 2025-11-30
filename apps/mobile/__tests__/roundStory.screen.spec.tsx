@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import React from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -26,12 +26,14 @@ const summary = {
 
 const navigation = { navigate: vi.fn() } as any;
 
+const PRO_TEASER = 'Unlock full analysis (SG and swing insights) with GolfIQ Pro.';
+
 describe('RoundStoryScreen', () => {
   beforeEach(() => {
     vi.resetAllMocks();
   });
 
-  it('shows analytics for pro users', async () => {
+  it('shows structured analytics for pro users', async () => {
     const { fetchAccessPlan } = await import('@app/api/player');
     const { fetchRoundSg, fetchSessionTimeline, fetchCoachRoundSummary } = await import('@app/api/roundStory');
 
@@ -46,19 +48,25 @@ describe('RoundStoryScreen', () => {
       ],
     });
     vi.mocked(fetchSessionTimeline).mockResolvedValue({ runId: 'run-1', events: [{ ts: 0.2, type: 'peak_hips' }] });
-    vi.mocked(fetchCoachRoundSummary).mockResolvedValue({ strengths: ['Driving'], focus: ['Putting drills'] });
+    vi.mocked(fetchCoachRoundSummary).mockResolvedValue({ strengths: ['Driving solid'], focus: ['Putting drills'] });
 
-    render(<RoundStoryScreen navigation={navigation} route={{ key: 'RoundStory', name: 'RoundStory', params: { runId: 'run-1', summary } }} />);
+    render(
+      <RoundStoryScreen
+        navigation={navigation}
+        route={{ key: 'RoundStory', name: 'RoundStory', params: { runId: 'run-1', summary } }}
+      />,
+    );
 
-    expect(await screen.findByText('Strokes gained')).toBeInTheDocument();
-    expect(screen.getByTestId('sg-summary')).toHaveTextContent('+0.5');
-    await waitFor(() => expect(screen.getByTestId('timeline-highlights')).toBeInTheDocument());
-    expect(await screen.findByText(/Hips peak/)).toBeInTheDocument();
-    expect(screen.getByTestId('coach-insights')).toHaveTextContent('Driving');
-    expect(screen.getByTestId('coach-insights')).toHaveTextContent('Putting drills');
+    expect(await screen.findByText('Round overview')).toBeInTheDocument();
+    expect(await screen.findByTestId('key-stats')).toHaveTextContent('+0.5');
+    await waitFor(() => expect(screen.getByTestId('timeline-highlights')).toHaveTextContent('Highlights'));
+    expect(await screen.findByText(/Smooth hip speed through the swing/)).toBeInTheDocument();
+    expect(screen.getByTestId('coach-insights')).toHaveTextContent('Strengths');
+    expect(screen.getByTestId('coach-insights')).toHaveTextContent('Driving solid');
+    expect(screen.queryByText(PRO_TEASER)).toBeNull();
   });
 
-  it('shows pro preview for free users', async () => {
+  it('shows guided preview for free users with one teaser', async () => {
     const { fetchAccessPlan } = await import('@app/api/player');
     const { fetchRoundSg } = await import('@app/api/roundStory');
 
@@ -73,11 +81,67 @@ describe('RoundStoryScreen', () => {
       ],
     });
 
-    render(<RoundStoryScreen navigation={navigation} route={{ key: 'RoundStory', name: 'RoundStory', params: { runId: 'run-1', summary } }} />);
+    render(
+      <RoundStoryScreen
+        navigation={navigation}
+        route={{ key: 'RoundStory', name: 'RoundStory', params: { runId: 'run-1', summary } }}
+      />,
+    );
 
-    expect(await screen.findByTestId('sg-preview-locked')).toBeInTheDocument();
-    expect(screen.queryByTestId('timeline-highlights')).toBeNull();
-    expect(screen.queryByTestId('coach-insights')).toBeNull();
+    expect(await screen.findByText('Key stats')).toBeInTheDocument();
+    expect(screen.getByTestId('timeline-highlights')).toHaveTextContent(PRO_TEASER);
+    expect(screen.getByTestId('coach-insights')).toHaveTextContent('Quick note');
+    expect(screen.queryAllByText(PRO_TEASER)).toHaveLength(1);
+  });
+
+  it('handles partial analytics data safely', async () => {
+    const { fetchAccessPlan } = await import('@app/api/player');
+    const { fetchRoundSg, fetchSessionTimeline, fetchCoachRoundSummary } = await import('@app/api/roundStory');
+
+    vi.mocked(fetchAccessPlan).mockResolvedValue({ plan: 'pro' } as any);
+    vi.mocked(fetchRoundSg).mockResolvedValue({
+      total: 1,
+      categories: [
+        { name: 'Off tee', strokesGained: 0.5 },
+        { name: 'Approach', strokesGained: 0.3 },
+        { name: 'Short game', strokesGained: 0.2 },
+        { name: 'Putting', strokesGained: 0 },
+      ],
+    });
+    vi.mocked(fetchSessionTimeline).mockResolvedValue({ runId: 'run-1', events: [] });
+    vi.mocked(fetchCoachRoundSummary).mockResolvedValue(null);
+
+    render(
+      <RoundStoryScreen
+        navigation={navigation}
+        route={{ key: 'RoundStory', name: 'RoundStory', params: { runId: 'run-1', summary } }}
+      />,
+    );
+
+    expect(await screen.findByText('+1.0')).toBeInTheDocument();
+    expect(await screen.findByText('No shot-by-shot highlights available for this round.')).toBeInTheDocument();
+    expect(screen.getByTestId('coach-insights')).toHaveTextContent('We couldn’t load detailed coach insights');
+  });
+
+  it('shows retry on analysis errors', async () => {
+    const { fetchAccessPlan } = await import('@app/api/player');
+    const { fetchRoundSg, fetchSessionTimeline, fetchCoachRoundSummary } = await import('@app/api/roundStory');
+
+    vi.mocked(fetchAccessPlan).mockResolvedValue({ plan: 'pro' } as any);
+    vi.mocked(fetchRoundSg).mockRejectedValue(new Error('network fail'));
+    vi.mocked(fetchSessionTimeline).mockRejectedValue(new Error('network fail'));
+    vi.mocked(fetchCoachRoundSummary).mockRejectedValue(new Error('network fail'));
+
+    render(
+      <RoundStoryScreen
+        navigation={navigation}
+        route={{ key: 'RoundStory', name: 'RoundStory', params: { runId: 'run-1', summary } }}
+      />,
+    );
+
+    expect(await screen.findByText(/We couldn’t load the detailed analysis/)).toBeInTheDocument();
+    fireEvent.click(screen.getByText('Retry'));
+    expect(fetchRoundSg).toHaveBeenCalledTimes(2);
   });
 });
 
