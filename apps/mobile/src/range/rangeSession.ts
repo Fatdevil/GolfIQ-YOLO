@@ -36,6 +36,7 @@ export interface RangeSessionSummary {
   targetDistanceM?: number | null;
   trainingGoalText?: string;
   shotCount: number;
+  contactPct?: number | null;
   avgCarryM?: number | null;
   tendency?: 'left' | 'right' | 'straight' | null;
 }
