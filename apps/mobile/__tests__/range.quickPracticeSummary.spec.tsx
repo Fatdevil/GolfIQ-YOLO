@@ -1,7 +1,7 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import React from 'react';
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import RangeQuickPracticeSummaryScreen from '@app/screens/RangeQuickPracticeSummaryScreen';
 import type { RootStackParamList } from '@app/navigation/types';
@@ -38,6 +38,10 @@ describe('RangeQuickPracticeSummaryScreen', () => {
       goBack: vi.fn(),
     } as unknown as Props['navigation'];
   }
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
 
   it('navigates to session detail when requested', async () => {
     const navigation = createNavigation();
@@ -81,6 +85,40 @@ describe('RangeQuickPracticeSummaryScreen', () => {
       expect(navigation.navigate).toHaveBeenCalledWith('RangeSessionDetail', {
         summary: expect.objectContaining({ sessionRating: 4, reflectionNotes: 'Felt solid today' }),
       });
+    });
+  });
+
+  it('persists history once per summary even when navigating multiple times', async () => {
+    const navigation = createNavigation();
+    render(
+      <RangeQuickPracticeSummaryScreen
+        navigation={navigation}
+        route={{ key: 'RangeQuickPracticeSummary', name: 'RangeQuickPracticeSummary', params: { summary } }}
+      />,
+    );
+
+    fireEvent.click(screen.getByTestId('reflection-rating-5'));
+    fireEvent.change(screen.getByTestId('reflection-notes'), { target: { value: 'Great focus on tempo' } });
+
+    fireEvent.click(screen.getByTestId('summary-view-details'));
+
+    await waitFor(() => {
+      expect(historyStorage.appendRangeHistoryEntry).toHaveBeenCalledTimes(1);
+      expect(summaryStorage.saveLastRangeSessionSummary).toHaveBeenCalledTimes(1);
+      expect(historyStorage.appendRangeHistoryEntry).toHaveBeenCalledWith(
+        expect.objectContaining({ sessionRating: 5, reflectionNotes: 'Great focus on tempo' }),
+      );
+      expect(navigation.navigate).toHaveBeenCalledWith('RangeSessionDetail', {
+        summary: expect.objectContaining({ sessionRating: 5, reflectionNotes: 'Great focus on tempo' }),
+      });
+    });
+
+    fireEvent.click(screen.getByTestId('summary-back-home'));
+
+    await waitFor(() => {
+      expect(historyStorage.appendRangeHistoryEntry).toHaveBeenCalledTimes(1);
+      expect(summaryStorage.saveLastRangeSessionSummary).toHaveBeenCalledTimes(1);
+      expect(navigation.navigate).toHaveBeenCalledWith('PlayerHome');
     });
   });
 });

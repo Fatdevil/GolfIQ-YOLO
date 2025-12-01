@@ -6,10 +6,8 @@ import { analyzeRangeShot } from '@app/api/range';
 import type { RootStackParamList } from '@app/navigation/types';
 import LastShotCard, { classifyDirection } from '@app/range/LastShotCard';
 import type { RangeSession, RangeSessionSummary, RangeShot } from '@app/range/rangeSession';
-import { appendRangeHistoryEntry } from '@app/range/rangeHistoryStorage';
 import { getMissionById } from '@app/range/rangeMissions';
 import { loadRangeMissionState } from '@app/range/rangeMissionsStorage';
-import { saveLastRangeSessionSummary } from '@app/range/rangeSummaryStorage';
 import { loadCurrentTrainingGoal } from '@app/range/rangeTrainingGoalStorage';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'RangeQuickPracticeSession'>;
@@ -123,12 +121,6 @@ export default function RangeQuickPracticeSessionScreen({ navigation, route }: P
     const missionMeta = missionId ? { id: missionId, titleKey: mission?.titleKey } : undefined;
 
     const summary = buildSummary(sessionState, goal?.text ?? undefined, missionMeta);
-    Promise.allSettled([
-      Promise.resolve(saveLastRangeSessionSummary(summary)),
-      Promise.resolve(appendRangeHistoryEntry(summary)),
-    ]).catch(() => {
-      // non-blocking persistence
-    });
     navigation.navigate('RangeQuickPracticeSummary', { summary });
   };
 

@@ -102,7 +102,7 @@ describe('RangeQuickPracticeSessionScreen', () => {
     expect(navigation.replace).not.toHaveBeenCalled();
   });
 
-  it('saves summary with training goal and navigates on finish', async () => {
+  it('builds summary with training goal and navigates on finish without persisting', async () => {
     const navigation = createNavigation();
     const session: RangeSession = {
       id: 'session-1',
@@ -142,16 +142,12 @@ describe('RangeQuickPracticeSessionScreen', () => {
     fireEvent.click(screen.getByTestId('end-session'));
 
     await waitFor(() => {
-      expect(summaryStorage.saveLastRangeSessionSummary).toHaveBeenCalledWith(
-        expect.objectContaining({ trainingGoalText: 'Shape fades' }),
-      );
-      expect(rangeHistory.appendRangeHistoryEntry).toHaveBeenCalledWith(
-        expect.objectContaining({ trainingGoalText: 'Shape fades' }),
-      );
       expect(navigation.navigate).toHaveBeenCalledWith(
         'RangeQuickPracticeSummary',
         expect.objectContaining({ summary: expect.objectContaining({ trainingGoalText: 'Shape fades' }) }),
       );
+      expect(summaryStorage.saveLastRangeSessionSummary).not.toHaveBeenCalled();
+      expect(rangeHistory.appendRangeHistoryEntry).not.toHaveBeenCalled();
     });
   });
 
@@ -187,8 +183,11 @@ describe('RangeQuickPracticeSessionScreen', () => {
     fireEvent.click(screen.getByTestId('end-session'));
 
     await waitFor(() => {
-      expect(summaryStorage.saveLastRangeSessionSummary).toHaveBeenCalledWith(
-        expect.objectContaining({ missionId: 'mission-1', missionTitleKey: 'range.missionsCatalog.solid_contact_wedges_title' }),
+      expect(summaryStorage.saveLastRangeSessionSummary).not.toHaveBeenCalled();
+      expect(rangeHistory.appendRangeHistoryEntry).not.toHaveBeenCalled();
+      expect(navigation.navigate).toHaveBeenCalledWith(
+        'RangeQuickPracticeSummary',
+        expect.objectContaining({ summary: expect.objectContaining({ missionId: 'mission-1' }) }),
       );
     });
   });
@@ -229,8 +228,10 @@ describe('RangeQuickPracticeSessionScreen', () => {
     fireEvent.click(screen.getByTestId('end-session'));
 
     await waitFor(() => {
-      expect(rangeHistory.appendRangeHistoryEntry).toHaveBeenCalledWith(
-        expect.objectContaining({ missionId: 'mission-2', missionTitleKey: 'range.missionsCatalog.driver_shape_title' }),
+      expect(rangeHistory.appendRangeHistoryEntry).not.toHaveBeenCalled();
+      expect(navigation.navigate).toHaveBeenCalledWith(
+        'RangeQuickPracticeSummary',
+        expect.objectContaining({ summary: expect.objectContaining({ missionId: 'mission-2' }) }),
       );
     });
   });

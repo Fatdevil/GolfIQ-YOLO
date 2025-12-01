@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useMemo, useRef, useState } from 'react';
 import { StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -24,6 +24,7 @@ export default function RangeQuickPracticeSummaryScreen({ navigation, route }: P
   const summary = route.params?.summary;
   const [sessionRating, setSessionRating] = useState<number | undefined>(summary?.sessionRating);
   const [reflectionNotes, setReflectionNotes] = useState(summary?.reflectionNotes ?? '');
+  const hasPersistedRef = useRef(false);
 
   const tendencyLabel = useMemo(() => {
     if (!summary?.tendency) return '—';
@@ -47,6 +48,8 @@ export default function RangeQuickPracticeSummaryScreen({ navigation, route }: P
 
   const persistSummary = useCallback(async () => {
     if (!summaryWithReflection) return;
+    if (hasPersistedRef.current) return;
+    hasPersistedRef.current = true;
     await Promise.allSettled([
       Promise.resolve(saveLastRangeSessionSummary(summaryWithReflection)),
       Promise.resolve(appendRangeHistoryEntry(summaryWithReflection)),
