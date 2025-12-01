@@ -67,4 +67,33 @@ export async function appendRangeHistoryEntry(summary: RangeSessionSummary): Pro
   await setItem(HISTORY_KEY, JSON.stringify(next));
 }
 
+export async function markSessionsSharedToCoach(sessionIds: string[]): Promise<void> {
+  if (sessionIds.length === 0) return;
+
+  const raw = await getItem(HISTORY_KEY);
+  if (!raw) return;
+
+  const existing = parseHistory(raw);
+  let changed = false;
+
+  const next = existing.map((entry) => {
+    if (sessionIds.includes(entry.summary.id)) {
+      if (entry.summary.sharedToCoach) return entry;
+      changed = true;
+      return {
+        ...entry,
+        summary: {
+          ...entry.summary,
+          sharedToCoach: true,
+        },
+      } satisfies RangeHistoryEntry;
+    }
+    return entry;
+  });
+
+  if (changed) {
+    await setItem(HISTORY_KEY, JSON.stringify(next));
+  }
+}
+
 export { MAX_HISTORY_ENTRIES };

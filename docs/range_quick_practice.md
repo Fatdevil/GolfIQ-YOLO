@@ -37,6 +37,12 @@ Quick Practice now adds a lightweight Range Story to the summary. We build a sho
 - The screen summarises how many recorded check-ins you have, the approximate volume of recorded shots, your most-logged clubs, and simple quality hints when there is enough recent data.
 - Quality trends stay hidden when the recent sample is too small, encouraging golfers to record a few more sessions first.
 
+## Coach Summary v1
+
+- From Range progress, golfers can tap **Share coach summary** to open the OS share sheet with a compact, text-only report.
+- The report stitches together the current training goal, pinned mission, overall recorded practice stats, and the latest recorded sessions with their story headline, rating, and reflection notes.
+- Sessions included in a shared report are tagged as **Sent to coach** in range history and detail views for easy reference.
+
 ## Range Missions v1
 
 - A new **Range missions** screen in the Range hub lists a handful of curated drills with difficulty, suggested clubs, and shot targets.

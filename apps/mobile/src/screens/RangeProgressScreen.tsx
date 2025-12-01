@@ -1,9 +1,12 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ScrollView, Share, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
 import { t } from '@app/i18n';
 import { computeRangeProgressStats } from '@app/range/rangeProgressStats';
-import { loadRangeHistory } from '@app/range/rangeHistoryStorage';
+import { loadRangeHistory, markSessionsSharedToCoach } from '@app/range/rangeHistoryStorage';
+import { formatCoachSummaryText, pickRecentCoachSummarySessions } from '@app/range/rangeCoachSummary';
+import { loadCurrentTrainingGoal } from '@app/range/rangeTrainingGoalStorage';
+import { loadRangeMissionState } from '@app/range/rangeMissionsStorage';
 
 function formatDate(value?: string): string | null {
   if (!value) return null;
@@ -15,18 +18,30 @@ function formatDate(value?: string): string | null {
 export default function RangeProgressScreen(): JSX.Element {
   const [isLoading, setIsLoading] = useState(true);
   const [history, setHistory] = useState<Awaited<ReturnType<typeof loadRangeHistory>>>([]);
+  const [trainingGoal, setTrainingGoal] = useState<Awaited<ReturnType<typeof loadCurrentTrainingGoal>>>(null);
+  const [missionState, setMissionState] = useState<Awaited<ReturnType<typeof loadRangeMissionState>>>(
+    () => ({ completedMissionIds: [] }),
+  );
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
-        const entries = await loadRangeHistory();
+        const [entries, goal, missions] = await Promise.all([
+          loadRangeHistory(),
+          loadCurrentTrainingGoal(),
+          loadRangeMissionState(),
+        ]);
         if (!cancelled) {
           setHistory(entries);
+          setTrainingGoal(goal);
+          setMissionState(missions);
         }
       } catch {
         if (!cancelled) {
           setHistory([]);
+          setTrainingGoal(null);
+          setMissionState({ completedMissionIds: [] });
         }
       } finally {
         if (!cancelled) {
@@ -56,6 +71,28 @@ export default function RangeProgressScreen(): JSX.Element {
 
   const hasQualityData = stats.recentContactPct != null || stats.recentLeftRightBias !== undefined;
 
+  const handleShare = async (): Promise<void> => {
+    try {
+      const ctx = { history, trainingGoal, missionState };
+      const text = formatCoachSummaryText(ctx, t);
+      await Share.share({ message: text });
+
+      const recentIds = pickRecentCoachSummarySessions(history).map((entry) => entry.summary.id);
+      if (recentIds.length > 0) {
+        await markSessionsSharedToCoach(recentIds);
+        setHistory((prev) =>
+          prev.map((entry) =>
+            recentIds.includes(entry.summary.id)
+              ? { ...entry, summary: { ...entry.summary, sharedToCoach: true } }
+              : entry,
+          ),
+        );
+      }
+    } catch (error) {
+      console.warn('[range] Failed to share coach summary', error);
+    }
+  };
+
   if (isLoading) {
     return (
       <View style={styles.container}>
@@ -77,6 +114,15 @@ export default function RangeProgressScreen(): JSX.Element {
   return (
     <ScrollView contentContainerStyle={styles.container}>
       <Text style={styles.title}>{t('range.progress.screen_title')}</Text>
+
+      <TouchableOpacity
+        style={styles.primaryButton}
+        onPress={handleShare}
+        disabled={history.length === 0}
+        testID="share-coach-summary"
+      >
+        <Text style={styles.primaryButtonText}>{t('range.coachSummary.share_button')}</Text>
+      </TouchableOpacity>
 
       <View style={styles.card}>
         <Text style={styles.cardTitle}>{t('range.progress.overview_title')}</Text>
@@ -182,5 +228,17 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+  },
+  primaryButton: {
+    marginTop: 4,
+    backgroundColor: '#2563EB',
+    paddingVertical: 12,
+    borderRadius: 12,
+    alignItems: 'center',
+    opacity: 1,
+  },
+  primaryButtonText: {
+    color: '#FFFFFF',
+    fontWeight: '700',
   },
 });

@@ -56,6 +56,7 @@ describe('RangeHistoryScreen', () => {
           trainingGoalText: 'Hit smooth draws',
           sessionRating: 4,
           reflectionNotes: 'Need more tempo work',
+          sharedToCoach: true,
         },
       },
       {
@@ -88,6 +89,7 @@ describe('RangeHistoryScreen', () => {
     expect(screen.getByText('Focus: direction')).toBeInTheDocument();
     expect(screen.getByText('Goal: Hit smooth draws')).toBeInTheDocument();
     expect(screen.getByText('Has reflection')).toBeInTheDocument();
+    expect(screen.getByText('Sent to coach')).toBeInTheDocument();
 
     expect(screen.getByText('Apr 1')).toBeInTheDocument();
     expect(screen.getByText('Any club')).toBeInTheDocument();

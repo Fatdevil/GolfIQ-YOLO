@@ -74,6 +74,17 @@ describe('RangeSessionDetailScreen', () => {
     expect(screen.queryByText('Reflection from this session')).not.toBeInTheDocument();
   });
 
+  it('shows coach summary indicator when shared', () => {
+    render(
+      <RangeSessionDetailScreen
+        navigation={navigation}
+        route={{ ...route, params: { summary: { ...summary, sharedToCoach: true } } }}
+      />,
+    );
+
+    expect(screen.getByText('Included in a coach summary')).toBeInTheDocument();
+  });
+
   it('shares the summary text', async () => {
     render(<RangeSessionDetailScreen navigation={navigation} route={route} />);
 

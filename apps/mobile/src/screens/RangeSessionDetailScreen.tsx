@@ -72,6 +72,9 @@ export default function RangeSessionDetailScreen({ route }: Props): JSX.Element 
     <ScrollView contentContainerStyle={styles.container}>
       <Text style={styles.title}>{t('range.sessionDetail.title')}</Text>
       <Text style={styles.subtitle}>{subtitle}</Text>
+      {summary.sharedToCoach ? (
+        <Text style={styles.sharedHelper}>{t('range.coachSummary.detail_label')}</Text>
+      ) : null}
 
       {missionTitle ? (
         <View style={styles.goalCard}>
@@ -194,5 +197,9 @@ const styles = StyleSheet.create({
   primaryButtonText: {
     color: '#FFFFFF',
     fontWeight: '700',
+  },
+  sharedHelper: {
+    color: '#2563EB',
+    fontWeight: '600',
   },
 });
