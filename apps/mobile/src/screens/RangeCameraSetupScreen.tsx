@@ -46,7 +46,7 @@ const angleCopy: Record<RangeCameraAngle, string> = {
 export default function RangeCameraSetupScreen({ navigation, route }: Props): JSX.Element {
   const params: NonNullable<Props['route']['params']> =
     route.params ?? ({ club: null, targetDistanceM: null, cameraAngle: 'down_the_line' } as const);
-  const { club, targetDistanceM, cameraAngle } = params;
+  const { club, targetDistanceM, cameraAngle, missionId } = params;
   const angleStatus = useAngleCheck(cameraAngle);
 
   const angleLabel = useMemo(
@@ -79,7 +79,7 @@ export default function RangeCameraSetupScreen({ navigation, route }: Props): JS
 
   const handleContinue = () => {
     const session = createSession(params);
-    navigation.navigate('RangeQuickPracticeSession', { session });
+    navigation.navigate('RangeQuickPracticeSession', { session, missionId });
   };
 
   return (

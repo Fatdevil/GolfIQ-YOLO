@@ -8,6 +8,7 @@ import { buildRangeSessionStory } from '@app/range/rangeSessionStory';
 import type { RangeHistoryEntry } from '@app/range/rangeHistoryStorage';
 import { loadRangeHistory } from '@app/range/rangeHistoryStorage';
 import type { RootStackParamList } from '@app/navigation/types';
+import { getMissionById } from '@app/range/rangeMissions';
 
 function formatDate(value: string): string {
   const parsed = new Date(value);
@@ -32,6 +33,13 @@ function HistoryItem({ entry, onPress }: { entry: RangeHistoryEntry; onPress?: (
   const goalLabel = entry.summary.trainingGoalText
     ? t('range.trainingGoal.history_item_label', { text: entry.summary.trainingGoalText })
     : null;
+  const missionTitleKey =
+    entry.summary.missionTitleKey || getMissionById(entry.summary.missionId ?? '')?.titleKey;
+  const missionTitle = missionTitleKey
+    ? t(missionTitleKey as any)
+    : entry.summary.missionId
+      ? entry.summary.missionId
+      : null;
   return (
     <TouchableOpacity style={styles.item} testID="range-history-item" onPress={onPress}>
       <View style={styles.itemHeader}>
@@ -41,6 +49,7 @@ function HistoryItem({ entry, onPress }: { entry: RangeHistoryEntry; onPress?: (
       <Text style={styles.itemClub}>{clubLabel}</Text>
       <FocusLabel entry={entry} />
       {goalLabel ? <Text style={styles.goal}>{goalLabel}</Text> : null}
+      {missionTitle ? <Text style={styles.mission}>{t('range.missions.history_label', { title: missionTitle })}</Text> : null}
     </TouchableOpacity>
   );
 }
@@ -160,5 +169,8 @@ const styles = StyleSheet.create({
   },
   goal: {
     color: '#374151',
+  },
+  mission: {
+    color: '#2563EB',
   },
 });

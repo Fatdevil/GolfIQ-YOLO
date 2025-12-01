@@ -7,6 +7,7 @@ import type { RootStackParamList } from '@app/navigation/types';
 import { RangeSessionStoryCard } from '@app/range/RangeSessionStoryCard';
 import { formatRangeSessionShareText } from '@app/range/rangeSessionShare';
 import { buildRangeSessionStory } from '@app/range/rangeSessionStory';
+import { getMissionById } from '@app/range/rangeMissions';
 
 const directionCopy: Record<'left' | 'right' | 'straight', string> = {
   left: t('range.sessionDetail.tendency_left'),
@@ -51,6 +52,11 @@ export default function RangeSessionDetailScreen({ route }: Props): JSX.Element 
 
   const tendencyLabel = summary.tendency ? directionCopy[summary.tendency] : '—';
 
+  const missionTitleKey = summary.missionTitleKey || getMissionById(summary.missionId ?? '')?.titleKey;
+  const missionDescriptionKey = summary.missionId ? getMissionById(summary.missionId)?.descriptionKey : undefined;
+  const missionTitle = missionTitleKey ? t(missionTitleKey as any) : summary.missionId ?? null;
+  const missionDescription = missionDescriptionKey ? t(missionDescriptionKey as any) : null;
+
   const handleShare = async (): Promise<void> => {
     try {
       const text = formatRangeSessionShareText(summary, t);
@@ -64,6 +70,14 @@ export default function RangeSessionDetailScreen({ route }: Props): JSX.Element 
     <ScrollView contentContainerStyle={styles.container}>
       <Text style={styles.title}>{t('range.sessionDetail.title')}</Text>
       <Text style={styles.subtitle}>{subtitle}</Text>
+
+      {missionTitle ? (
+        <View style={styles.goalCard}>
+          <Text style={styles.sectionTitle}>{t('range.missions.session_label')}</Text>
+          <Text style={styles.helper}>{missionTitle}</Text>
+          {missionDescription ? <Text style={styles.helper}>{missionDescription}</Text> : null}
+        </View>
+      ) : null}
 
       {summary.trainingGoalText ? (
         <View style={styles.goalCard}>

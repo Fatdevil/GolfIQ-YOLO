@@ -36,3 +36,9 @@ Quick Practice now adds a lightweight Range Story to the summary. We build a sho
 - Recorded Quick Practice sessions now power a **Range progress** screen from the Range hub.
 - The screen summarises how many recorded check-ins you have, the approximate volume of recorded shots, your most-logged clubs, and simple quality hints when there is enough recent data.
 - Quality trends stay hidden when the recent sample is too small, encouraging golfers to record a few more sessions first.
+
+## Range Missions v1
+
+- A new **Range missions** screen in the Range hub lists a handful of curated drills with difficulty, suggested clubs, and shot targets.
+- Missions are stored locally; players can mark them completed and pin one as the current focus.
+- Starting Quick Practice from a mission carries the tag into the session summary and history so past sessions show which drill was in mind.

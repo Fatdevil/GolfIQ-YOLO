@@ -6,6 +6,7 @@ import type { RootStackParamList } from '@app/navigation/types';
 import { t } from '@app/i18n';
 import { RangeSessionStoryCard } from '@app/range/RangeSessionStoryCard';
 import { buildRangeSessionStory } from '@app/range/rangeSessionStory';
+import { getMissionById } from '@app/range/rangeMissions';
 
 const directionCopy: Record<'left' | 'right' | 'straight', string> = {
   left: 'Left',
@@ -35,6 +36,9 @@ export default function RangeQuickPracticeSummaryScreen({ navigation, route }: P
     return `Target: ${Math.round(summary.targetDistanceM)} m${deltaText}`;
   }, [summary?.avgCarryM, summary?.targetDistanceM]);
 
+  const missionTitleKey = summary?.missionTitleKey || getMissionById(summary?.missionId ?? '')?.titleKey;
+  const missionTitle = missionTitleKey ? t(missionTitleKey as any) : summary?.missionId ?? null;
+
   if (!summary) {
     return (
       <View style={styles.container}>
@@ -54,6 +58,13 @@ export default function RangeQuickPracticeSummaryScreen({ navigation, route }: P
         {summary.club ? `Club: ${summary.club}` : 'No club selected'}
         {summary.targetDistanceM ? ` • Target ${Math.round(summary.targetDistanceM)} m` : ''}
       </Text>
+
+      {missionTitle ? (
+        <View style={styles.goalCard}>
+          <Text style={styles.sectionTitle}>{t('range.missions.session_label')}</Text>
+          <Text style={styles.helper}>{missionTitle}</Text>
+        </View>
+      ) : null}
 
       {summary.trainingGoalText ? (
         <View style={styles.goalCard}>

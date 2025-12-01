@@ -7,6 +7,8 @@ import type { RootStackParamList } from '@app/navigation/types';
 import LastShotCard, { classifyDirection } from '@app/range/LastShotCard';
 import type { RangeSession, RangeSessionSummary, RangeShot } from '@app/range/rangeSession';
 import { appendRangeHistoryEntry } from '@app/range/rangeHistoryStorage';
+import { getMissionById } from '@app/range/rangeMissions';
+import { loadRangeMissionState } from '@app/range/rangeMissionsStorage';
 import { saveLastRangeSessionSummary } from '@app/range/rangeSummaryStorage';
 import { loadCurrentTrainingGoal } from '@app/range/rangeTrainingGoalStorage';
 
@@ -70,7 +72,11 @@ export default function RangeQuickPracticeSessionScreen({ navigation, route }: P
     }
   };
 
-  const buildSummary = (currentSession: RangeSession, trainingGoalText?: string): RangeSessionSummary => {
+  const buildSummary = (
+    currentSession: RangeSession,
+    trainingGoalText?: string,
+    mission?: { id: string; titleKey?: string },
+  ): RangeSessionSummary => {
     const shotCount = currentSession.shots.length;
     const carries = currentSession.shots
       .map((s) => s.carryM)
@@ -89,6 +95,8 @@ export default function RangeQuickPracticeSessionScreen({ navigation, route }: P
       club: currentSession.club,
       targetDistanceM: currentSession.targetDistanceM ?? null,
       trainingGoalText,
+      missionId: mission?.id,
+      missionTitleKey: mission?.titleKey,
       shotCount,
       avgCarryM,
       tendency: classifyDirection(avgSideDeg),
@@ -109,8 +117,12 @@ export default function RangeQuickPracticeSessionScreen({ navigation, route }: P
       return;
     }
 
-    const goal = await loadCurrentTrainingGoal();
-    const summary = buildSummary(sessionState, goal?.text ?? undefined);
+    const [goal, missionState] = await Promise.all([loadCurrentTrainingGoal(), loadRangeMissionState()]);
+    const missionId = route?.params?.missionId ?? missionState.pinnedMissionId;
+    const mission = missionId ? getMissionById(missionId) : undefined;
+    const missionMeta = missionId ? { id: missionId, titleKey: mission?.titleKey } : undefined;
+
+    const summary = buildSummary(sessionState, goal?.text ?? undefined, missionMeta);
     Promise.allSettled([
       Promise.resolve(saveLastRangeSessionSummary(summary)),
       Promise.resolve(appendRangeHistoryEntry(summary)),

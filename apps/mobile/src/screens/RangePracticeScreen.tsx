@@ -91,9 +91,14 @@ export default function RangePracticeScreen({ navigation }: Props): JSX.Element 
         </TouchableOpacity>
       </View>
 
-      <View style={styles.placeholderCard}>
-        <Text style={styles.cardTitle}>Missions</Text>
-        <Text style={styles.cardSubtitle}>Planned missions and gapping tools coming soon.</Text>
+      <View style={styles.card}>
+        <Text style={styles.cardTitle}>{t('range.missions.card_title')}</Text>
+        <Text style={styles.cardSubtitle}>{t('range.missions.card_subtitle')}</Text>
+        <TouchableOpacity onPress={() => navigation.navigate('RangeMissions')} testID="range-missions-cta">
+          <View style={styles.secondaryButton}>
+            <Text style={styles.secondaryButtonText}>{t('range.missions.card_cta')}</Text>
+          </View>
+        </TouchableOpacity>
       </View>
     </View>
   );
@@ -156,16 +161,6 @@ const styles = StyleSheet.create({
   cardSubtitle: {
     fontSize: 14,
     color: '#4B5563',
-  },
-  placeholderCard: {
-    marginTop: 12,
-    padding: 16,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderStyle: 'dashed',
-    borderColor: '#D1D5DB',
-    backgroundColor: '#FFFFFF',
-    gap: 8,
   },
   primaryButton: {
     marginTop: 8,
