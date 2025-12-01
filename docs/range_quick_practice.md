@@ -42,3 +42,9 @@ Quick Practice now adds a lightweight Range Story to the summary. We build a sho
 - A new **Range missions** screen in the Range hub lists a handful of curated drills with difficulty, suggested clubs, and shot targets.
 - Missions are stored locally; players can mark them completed and pin one as the current focus.
 - Starting Quick Practice from a mission carries the tag into the session summary and history so past sessions show which drill was in mind.
+
+## Range Reflection v1
+
+- Each Quick Practice summary now includes an optional **Reflection** block for a 1–5 session rating and short notes.
+- Reflection is stored locally on the `RangeSessionSummary`, propagating to the last-session cache and range history entries.
+- The Range Session detail screen shows the rating/notes when present, and history rows highlight sessions that include a reflection.

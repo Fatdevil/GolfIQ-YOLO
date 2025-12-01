@@ -1,5 +1,5 @@
-import React, { useMemo } from 'react';
-import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import React, { useCallback, useMemo, useRef, useState } from 'react';
+import { StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { RootStackParamList } from '@app/navigation/types';
@@ -7,6 +7,8 @@ import { t } from '@app/i18n';
 import { RangeSessionStoryCard } from '@app/range/RangeSessionStoryCard';
 import { buildRangeSessionStory } from '@app/range/rangeSessionStory';
 import { getMissionById } from '@app/range/rangeMissions';
+import { saveLastRangeSessionSummary } from '@app/range/rangeSummaryStorage';
+import { appendRangeHistoryEntry } from '@app/range/rangeHistoryStorage';
 
 const directionCopy: Record<'left' | 'right' | 'straight', string> = {
   left: 'Left',
@@ -14,10 +16,15 @@ const directionCopy: Record<'left' | 'right' | 'straight', string> = {
   straight: 'Straight',
 };
 
+const MAX_REFLECTION_LENGTH = 280;
+
 type Props = NativeStackScreenProps<RootStackParamList, 'RangeQuickPracticeSummary'>;
 
 export default function RangeQuickPracticeSummaryScreen({ navigation, route }: Props): JSX.Element {
   const summary = route.params?.summary;
+  const [sessionRating, setSessionRating] = useState<number | undefined>(summary?.sessionRating);
+  const [reflectionNotes, setReflectionNotes] = useState(summary?.reflectionNotes ?? '');
+  const hasPersistedRef = useRef(false);
 
   const tendencyLabel = useMemo(() => {
     if (!summary?.tendency) return '—';
@@ -28,6 +35,43 @@ export default function RangeQuickPracticeSummaryScreen({ navigation, route }: P
     if (!summary) return null;
     return buildRangeSessionStory(summary);
   }, [summary]);
+
+  const summaryWithReflection = useMemo(() => {
+    if (!summary) return null;
+    const trimmedNotes = reflectionNotes.trim();
+    return {
+      ...summary,
+      sessionRating,
+      reflectionNotes: trimmedNotes.length ? trimmedNotes : undefined,
+    };
+  }, [reflectionNotes, sessionRating, summary]);
+
+  const persistSummary = useCallback(async () => {
+    if (!summaryWithReflection) return;
+    if (hasPersistedRef.current) return;
+    hasPersistedRef.current = true;
+    await Promise.allSettled([
+      Promise.resolve(saveLastRangeSessionSummary(summaryWithReflection)),
+      Promise.resolve(appendRangeHistoryEntry(summaryWithReflection)),
+    ]);
+  }, [summaryWithReflection]);
+
+  const handleNavigateWithSave = useCallback(
+    async (action: (updatedSummary: NonNullable<typeof summaryWithReflection>) => void) => {
+      if (!summaryWithReflection) return;
+      await persistSummary();
+      action(summaryWithReflection);
+    },
+    [persistSummary, summaryWithReflection],
+  );
+
+  const handleRatingPress = useCallback((value: number) => {
+    setSessionRating((current) => (current === value ? undefined : value));
+  }, []);
+
+  const onChangeNotes = useCallback((value: string) => {
+    setReflectionNotes(value.slice(0, MAX_REFLECTION_LENGTH));
+  }, []);
 
   const targetLabel = useMemo(() => {
     if (!summary?.targetDistanceM) return null;
@@ -100,19 +144,66 @@ export default function RangeQuickPracticeSummaryScreen({ navigation, route }: P
         </View>
       )}
 
+      <View style={styles.reflectionCard}>
+        <Text style={styles.sectionTitle}>{t('range.reflection.title')}</Text>
+        <Text style={styles.helper}>{t('range.reflection.subtitle')}</Text>
+
+        <View style={styles.reflectionSection}>
+          <Text style={styles.label}>{t('range.reflection.title')}</Text>
+          <View style={styles.ratingRow}>
+            {[1, 2, 3, 4, 5].map((value) => {
+              const isActive = sessionRating === value;
+              return (
+                <TouchableOpacity
+                  key={value}
+                  accessibilityLabel={t('range.reflection.rating_label', { rating: value })}
+                  onPress={() => handleRatingPress(value)}
+                  style={[styles.ratingButton, isActive && styles.ratingButtonActive]}
+                  testID={`reflection-rating-${value}`}
+                >
+                  <Text style={[styles.ratingText, isActive && styles.ratingTextActive]}>{value}</Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        </View>
+
+        <View style={styles.reflectionSection}>
+          <Text style={styles.label}>{t('range.reflection.section_title')}</Text>
+          <TextInput
+            value={reflectionNotes}
+            onChangeText={onChangeNotes}
+            placeholder={t('range.reflection.placeholder')}
+            multiline
+            style={styles.textArea}
+            maxLength={MAX_REFLECTION_LENGTH}
+            testID="reflection-notes"
+          />
+          <Text style={styles.helper}>{`${reflectionNotes.length}/${MAX_REFLECTION_LENGTH}`}</Text>
+        </View>
+      </View>
+
       <TouchableOpacity
-        onPress={() => navigation.navigate('RangeSessionDetail', { summary })}
+        onPress={() =>
+          handleNavigateWithSave((updatedSummary) =>
+            navigation.navigate('RangeSessionDetail', { summary: updatedSummary }),
+          )
+        }
         style={styles.detailButton}
         testID="summary-view-details"
       >
         <Text style={styles.detailButtonText}>{t('range.sessionDetail.view_button')}</Text>
       </TouchableOpacity>
 
-      <TouchableOpacity onPress={() => navigation.navigate('PlayerHome')} style={styles.primaryButton} testID="summary-back-home">
+      <TouchableOpacity
+        onPress={() => handleNavigateWithSave(() => navigation.navigate('PlayerHome'))}
+        style={styles.primaryButton}
+        testID="summary-back-home"
+      >
         <Text style={styles.primaryButtonText}>Back to Home</Text>
       </TouchableOpacity>
       <TouchableOpacity
-        onPress={() => navigation.navigate('RangePractice')}
+        onPress={() => handleNavigateWithSave(() => navigation.navigate('RangePractice'))}
         style={styles.secondaryButton}
         testID="summary-back-range"
       >
@@ -120,7 +211,7 @@ export default function RangeQuickPracticeSummaryScreen({ navigation, route }: P
       </TouchableOpacity>
 
       <TouchableOpacity
-        onPress={() => navigation.navigate('RangeHistory')}
+        onPress={() => handleNavigateWithSave(() => navigation.navigate('RangeHistory'))}
         style={styles.tertiaryButton}
         testID="summary-range-history"
       >
@@ -178,6 +269,10 @@ const styles = StyleSheet.create({
   helper: {
     color: '#6B7280',
   },
+  helperBold: {
+    color: '#111827',
+    fontWeight: '600',
+  },
   fallbackCard: {
     marginTop: 4,
     padding: 16,
@@ -234,5 +329,49 @@ const styles = StyleSheet.create({
     borderColor: '#E5E7EB',
     backgroundColor: '#FFFFFF',
     gap: 6,
+  },
+  reflectionCard: {
+    padding: 16,
+    borderRadius: 14,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    gap: 12,
+  },
+  reflectionSection: {
+    gap: 8,
+  },
+  ratingRow: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  ratingButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#D1D5DB',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#F9FAFB',
+  },
+  ratingButtonActive: {
+    backgroundColor: '#10B981',
+    borderColor: '#10B981',
+  },
+  ratingText: {
+    fontWeight: '700',
+    color: '#111827',
+  },
+  ratingTextActive: {
+    color: '#FFFFFF',
+  },
+  textArea: {
+    minHeight: 80,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    padding: 12,
+    textAlignVertical: 'top',
   },
 });

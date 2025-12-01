@@ -53,13 +53,17 @@ export async function appendRangeHistoryEntry(summary: RangeSessionSummary): Pro
   const raw = await getItem(HISTORY_KEY);
   const existing = raw ? parseHistory(raw) : [];
 
-  const entry: RangeHistoryEntry = {
-    id: typeof summary.id === 'string' ? summary.id : `${Date.now()}`,
-    savedAt: new Date().toISOString(),
-    summary,
-  };
+  const existingIndex = existing.findIndex((entry) => entry.summary.id === summary.id);
+  const entry: RangeHistoryEntry = existingIndex >= 0
+    ? { ...existing[existingIndex], summary }
+    : {
+        id: typeof summary.id === 'string' ? summary.id : `${Date.now()}`,
+        savedAt: new Date().toISOString(),
+        summary,
+      };
 
-  const next = [entry, ...existing].slice(0, MAX_HISTORY_ENTRIES);
+  const filteredExisting = existingIndex >= 0 ? existing.filter((_, index) => index !== existingIndex) : existing;
+  const next = [entry, ...filteredExisting].slice(0, MAX_HISTORY_ENTRIES);
   await setItem(HISTORY_KEY, JSON.stringify(next));
 }
 

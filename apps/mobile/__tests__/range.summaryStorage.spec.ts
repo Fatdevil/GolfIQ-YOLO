@@ -41,6 +41,17 @@ describe('rangeSummaryStorage', () => {
     expect(loaded).toBeNull();
   });
 
+  it('persists optional reflection fields', async () => {
+    const withReflection = { ...summary, sessionRating: 5, reflectionNotes: 'Felt great' };
+
+    await saveLastRangeSessionSummary(withReflection);
+    vi.mocked(storage.getItem).mockResolvedValueOnce(JSON.stringify(withReflection));
+
+    const loaded = await loadLastRangeSessionSummary();
+    expect(loaded?.sessionRating).toBe(5);
+    expect(loaded?.reflectionNotes).toBe('Felt great');
+  });
+
   it('clears summary', async () => {
     await clearLastRangeSessionSummary();
     expect(storage.removeItem).toHaveBeenCalled();
