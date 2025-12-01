@@ -3,7 +3,9 @@ import { describe, expect, it } from 'vitest';
 import { computeRangeProgressStats } from '@app/range/rangeProgressStats';
 import type { RangeHistoryEntry } from '@app/range/rangeHistoryStorage';
 
-type EntryOverrides = Partial<RangeHistoryEntry> & { summary?: Partial<RangeHistoryEntry['summary']> };
+type EntryOverrides = Partial<Omit<RangeHistoryEntry, 'summary'>> & {
+  summary?: Partial<RangeHistoryEntry['summary']>;
+};
 
 function createEntry(overrides: EntryOverrides = {}): RangeHistoryEntry {
   const now = new Date();

@@ -5,11 +5,13 @@ import { Linking } from 'react-native';
 
 import linking from '@app/linking';
 import type { RootStackParamList } from '@app/navigation/types';
+import { t } from '@app/i18n';
 import EventJoinScreen from '@app/screens/EventJoinScreen';
 import EventLiveScreen from '@app/screens/EventLiveScreen';
 import EventScanScreen from '@app/screens/EventScanScreen';
 import HomeScreen from '@app/screens/HomeScreen';
 import RangePracticeScreen from '@app/screens/RangePracticeScreen';
+import RangeProgressScreen from '@app/screens/RangeProgressScreen';
 import RangeQuickPracticeSessionScreen from '@app/screens/RangeQuickPracticeSessionScreen';
 import RangeQuickPracticeStartScreen from '@app/screens/RangeQuickPracticeStartScreen';
 import RangeCameraSetupScreen from '@app/screens/RangeCameraSetupScreen';
@@ -95,6 +97,11 @@ export default function App(): JSX.Element {
           options={{ title: 'Quick practice summary' }}
         />
         <Stack.Screen name="RangeHistory" component={RangeHistoryScreen} options={{ title: 'Range history' }} />
+        <Stack.Screen
+          name="RangeProgress"
+          component={RangeProgressScreen}
+          options={{ title: t('range.progress.screen_title') }}
+        />
         <Stack.Screen
           name="RangeSessionDetail"
           component={RangeSessionDetailScreen}
