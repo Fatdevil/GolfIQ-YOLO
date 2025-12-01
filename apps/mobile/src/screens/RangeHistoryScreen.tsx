@@ -52,6 +52,7 @@ function HistoryItem({ entry, onPress }: { entry: RangeHistoryEntry; onPress?: (
       {goalLabel ? <Text style={styles.goal}>{goalLabel}</Text> : null}
       {missionTitle ? <Text style={styles.mission}>{t('range.missions.history_label', { title: missionTitle })}</Text> : null}
       {hasReflection ? <Text style={styles.reflection}>{t('range.reflection.history_label')}</Text> : null}
+      {entry.summary.sharedToCoach ? <Text style={styles.shared}>{t('range.coachSummary.history_label')}</Text> : null}
     </TouchableOpacity>
   );
 }
@@ -177,6 +178,10 @@ const styles = StyleSheet.create({
   },
   reflection: {
     color: '#047857',
+    fontWeight: '600',
+  },
+  shared: {
+    color: '#2563EB',
     fontWeight: '600',
   },
 });

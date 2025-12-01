@@ -39,6 +39,7 @@ export interface RangeSessionSummary {
   missionTitleKey?: string;
   sessionRating?: number;
   reflectionNotes?: string;
+  sharedToCoach?: boolean;
   shotCount: number;
   contactPct?: number | null;
   avgCarryM?: number | null;
