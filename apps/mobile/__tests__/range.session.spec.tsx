@@ -10,6 +10,8 @@ import RangeQuickPracticeSessionScreen from '@app/screens/RangeQuickPracticeSess
 import type { RootStackParamList } from '@app/navigation/types';
 import type { RangeSession } from '@app/range/rangeSession';
 import * as trainingGoalStorage from '@app/range/rangeTrainingGoalStorage';
+import * as missionStorage from '@app/range/rangeMissionsStorage';
+import * as missions from '@app/range/rangeMissions';
 
 vi.mock('@app/api/range', () => ({
   analyzeRangeShot: vi.fn(),
@@ -27,6 +29,14 @@ vi.mock('@app/range/rangeTrainingGoalStorage', () => ({
   loadCurrentTrainingGoal: vi.fn(),
 }));
 
+vi.mock('@app/range/rangeMissionsStorage', () => ({
+  loadRangeMissionState: vi.fn(),
+}));
+
+vi.mock('@app/range/rangeMissions', () => ({
+  getMissionById: vi.fn(),
+}));
+
 type Props = NativeStackScreenProps<RootStackParamList, 'RangeQuickPracticeSession'>;
 
 function createNavigation(): Props['navigation'] {
@@ -38,11 +48,11 @@ function createNavigation(): Props['navigation'] {
   } as unknown as Props['navigation'];
 }
 
-function createRoute(session: RangeSession): Props['route'] {
+function createRoute(session: RangeSession, missionId?: string): Props['route'] {
   return {
     key: 'RangeQuickPracticeSession',
     name: 'RangeQuickPracticeSession',
-    params: { session },
+    params: { session, missionId },
   } as Props['route'];
 }
 
@@ -50,6 +60,7 @@ describe('RangeQuickPracticeSessionScreen', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(trainingGoalStorage.loadCurrentTrainingGoal).mockResolvedValue(null);
+    vi.mocked(missionStorage.loadRangeMissionState).mockResolvedValue({ completedMissionIds: [] });
   });
 
   it('shows angle label and logs shot with camera angle', async () => {
@@ -140,6 +151,86 @@ describe('RangeQuickPracticeSessionScreen', () => {
       expect(navigation.navigate).toHaveBeenCalledWith(
         'RangeQuickPracticeSummary',
         expect.objectContaining({ summary: expect.objectContaining({ trainingGoalText: 'Shape fades' }) }),
+      );
+    });
+  });
+
+  it('tags summary with mission from navigation params', async () => {
+    const navigation = createNavigation();
+    const session: RangeSession = {
+      id: 'session-1',
+      mode: 'quick',
+      startedAt: '2024-01-01T00:00:00.000Z',
+      club: '7i',
+      targetDistanceM: 150,
+      cameraAngle: 'face_on',
+      shots: [
+        {
+          id: 'shot-1',
+          timestamp: '2024-01-01T00:05:00.000Z',
+          club: '7i',
+          targetDistanceM: 150,
+          carryM: 140,
+          sideDeg: 2,
+        },
+      ],
+    };
+
+    vi.mocked(missions.getMissionById).mockReturnValue({
+      id: 'mission-1',
+      titleKey: 'range.missionsCatalog.solid_contact_wedges_title',
+      descriptionKey: 'range.missionsCatalog.solid_contact_wedges_body',
+    } as any);
+
+    render(<RangeQuickPracticeSessionScreen navigation={navigation} route={createRoute(session, 'mission-1')} />);
+
+    fireEvent.click(screen.getByTestId('end-session'));
+
+    await waitFor(() => {
+      expect(summaryStorage.saveLastRangeSessionSummary).toHaveBeenCalledWith(
+        expect.objectContaining({ missionId: 'mission-1', missionTitleKey: 'range.missionsCatalog.solid_contact_wedges_title' }),
+      );
+    });
+  });
+
+  it('falls back to pinned mission when none provided', async () => {
+    const navigation = createNavigation();
+    const session: RangeSession = {
+      id: 'session-2',
+      mode: 'quick',
+      startedAt: '2024-01-01T00:00:00.000Z',
+      club: null,
+      targetDistanceM: null,
+      cameraAngle: 'down_the_line',
+      shots: [
+        {
+          id: 'shot-1',
+          timestamp: '2024-01-01T00:05:00.000Z',
+          club: null,
+          targetDistanceM: null,
+          carryM: 120,
+          sideDeg: -2,
+        },
+      ],
+    };
+
+    vi.mocked(missionStorage.loadRangeMissionState).mockResolvedValue({
+      completedMissionIds: [],
+      pinnedMissionId: 'mission-2',
+    });
+    vi.mocked(missions.getMissionById).mockReturnValue({
+      id: 'mission-2',
+      titleKey: 'range.missionsCatalog.driver_shape_title',
+      descriptionKey: 'range.missionsCatalog.driver_shape_body',
+    } as any);
+
+    render(<RangeQuickPracticeSessionScreen navigation={navigation} route={createRoute(session)} />);
+
+    fireEvent.click(screen.getByTestId('end-session'));
+
+    await waitFor(() => {
+      expect(rangeHistory.appendRangeHistoryEntry).toHaveBeenCalledWith(
+        expect.objectContaining({ missionId: 'mission-2', missionTitleKey: 'range.missionsCatalog.driver_shape_title' }),
       );
     });
   });

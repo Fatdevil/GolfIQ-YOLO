@@ -35,6 +35,8 @@ export interface RangeSessionSummary {
   club: string | null;
   targetDistanceM?: number | null;
   trainingGoalText?: string;
+  missionId?: string;
+  missionTitleKey?: string;
   shotCount: number;
   contactPct?: number | null;
   avgCarryM?: number | null;

@@ -68,4 +68,15 @@ describe('RangePracticeScreen', () => {
 
     expect(navigation.navigate).toHaveBeenCalledWith('RangeProgress');
   });
+
+  it('navigates to missions when CTA pressed', () => {
+    const navigation = createNavigation();
+    vi.mocked(trainingGoalStorage.loadCurrentTrainingGoal).mockResolvedValue(null);
+
+    render(<RangePracticeScreen navigation={navigation} route={{ key: 'RangePractice', name: 'RangePractice' } as Props['route']} />);
+
+    fireEvent.click(screen.getByTestId('range-missions-cta'));
+
+    expect(navigation.navigate).toHaveBeenCalledWith('RangeMissions');
+  });
 });

@@ -19,13 +19,18 @@ export type RootStackParamList = {
   } | undefined;
   PlayRoundSetup: undefined;
   RangePractice: undefined;
-  RangeQuickPracticeStart: undefined;
+  RangeMissions: undefined;
+  RangeQuickPracticeStart: { missionId?: string } | undefined;
   RangeCameraSetup: {
     club: string | null;
     targetDistanceM?: number | null;
     cameraAngle: import('@app/range/rangeSession').RangeCameraAngle;
+    missionId?: string;
   };
-  RangeQuickPracticeSession: { session: import('@app/range/rangeSession').RangeSession };
+  RangeQuickPracticeSession: {
+    session: import('@app/range/rangeSession').RangeSession;
+    missionId?: string;
+  };
   RangeQuickPracticeSummary: { summary: import('@app/range/rangeSession').RangeSessionSummary };
   RangeHistory: undefined;
   RangeProgress: undefined;

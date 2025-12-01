@@ -21,10 +21,11 @@ function createNavigation(): Props['navigation'] {
   } as unknown as Props['navigation'];
 }
 
-function createRoute(): Props['route'] {
+function createRoute(params?: Props['route']['params']): Props['route'] {
   return {
     key: 'RangeQuickPracticeStart',
     name: 'RangeQuickPracticeStart',
+    params,
   } as Props['route'];
 }
 
@@ -55,6 +56,7 @@ describe('RangeQuickPracticeStartScreen', () => {
       club: '7i',
       targetDistanceM: 145,
       cameraAngle: 'face_on',
+      missionId: undefined,
     });
   });
 
@@ -69,5 +71,25 @@ describe('RangeQuickPracticeStartScreen', () => {
     render(<RangeQuickPracticeStartScreen navigation={navigation} route={createRoute()} />);
 
     await screen.findByText('Current goal: Work on start line');
+  });
+
+  it('surfaces mission details when provided', () => {
+    const navigation = createNavigation();
+    vi.mocked(trainingGoalStorage.loadCurrentTrainingGoal).mockResolvedValue(null);
+
+    render(
+      <RangeQuickPracticeStartScreen
+        navigation={navigation}
+        route={createRoute({ missionId: 'solid_contact_wedges' })}
+      />,
+    );
+
+    expect(screen.getByTestId('mission-banner')).toHaveTextContent('Solid contact with wedges');
+    fireEvent.click(screen.getByTestId('start-quick-practice'));
+
+    expect(navigation.navigate).toHaveBeenCalledWith(
+      'RangeCameraSetup',
+      expect.objectContaining({ missionId: 'solid_contact_wedges' }),
+    );
   });
 });

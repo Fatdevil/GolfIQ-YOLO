@@ -4,6 +4,7 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { RootStackParamList } from '@app/navigation/types';
 import type { RangeCameraAngle } from '@app/range/rangeSession';
 import { loadCurrentTrainingGoal } from '@app/range/rangeTrainingGoalStorage';
+import { getMissionById } from '@app/range/rangeMissions';
 import { t } from '@app/i18n';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'RangeQuickPracticeStart'>;
@@ -13,7 +14,9 @@ const angleDescriptions: Record<RangeCameraAngle, string> = {
   face_on: 'Kamera vid sidan, vinkelrätt mot mållinjen.',
 };
 
-export default function RangeQuickPracticeStartScreen({ navigation }: Props): JSX.Element {
+export default function RangeQuickPracticeStartScreen({ navigation, route }: Props): JSX.Element {
+  const missionId = route.params?.missionId;
+  const mission = missionId ? getMissionById(missionId) : undefined;
   const [club, setClub] = useState('');
   const [targetDistance, setTargetDistance] = useState('');
   const [selectedAngle, setSelectedAngle] = useState<RangeCameraAngle>('down_the_line');
@@ -51,6 +54,7 @@ export default function RangeQuickPracticeStartScreen({ navigation }: Props): JS
       club: trimmedClub ? trimmedClub : null,
       targetDistanceM: hasDistance ? parsedDistance : null,
       cameraAngle: selectedAngle,
+      missionId,
     });
   };
 
@@ -73,6 +77,14 @@ export default function RangeQuickPracticeStartScreen({ navigation }: Props): JS
           <Text style={styles.goalLink}>{t('range.trainingGoal.set_button')}</Text>
         </TouchableOpacity>
       )}
+
+      {mission ? (
+        <View style={styles.missionCard} testID="mission-banner">
+          <Text style={styles.sectionLabel}>{t('range.missions.session_label')}</Text>
+          <Text style={styles.missionTitle}>{t(mission.titleKey)}</Text>
+          <Text style={styles.helper}>{t(mission.descriptionKey)}</Text>
+        </View>
+      ) : null}
 
       <View style={styles.selectorHeader}>
         <Text style={styles.selectorLabel}>Kameravinkel</Text>
@@ -152,6 +164,22 @@ const styles = StyleSheet.create({
   goalInline: {
     color: '#111827',
   },
+  missionCard: {
+    padding: 14,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    backgroundColor: '#F3F4F6',
+    gap: 4,
+  },
+  missionTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#111827',
+  },
+  helper: {
+    color: '#4B5563',
+  },
   goalLinkContainer: {
     alignSelf: 'flex-start',
   },
@@ -198,6 +226,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 8,
+    fontSize: 12,
+  },
+  sectionLabel: {
+    color: '#6B7280',
+    fontWeight: '700',
+    textTransform: 'uppercase',
     fontSize: 12,
   },
   form: {
