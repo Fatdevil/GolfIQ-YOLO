@@ -57,6 +57,8 @@ export default function RangeSessionDetailScreen({ route }: Props): JSX.Element 
   const missionTitle = missionTitleKey ? t(missionTitleKey as any) : summary.missionId ?? null;
   const missionDescription = missionDescriptionKey ? t(missionDescriptionKey as any) : null;
 
+  const hasReflection = Boolean(summary.sessionRating || summary.reflectionNotes);
+
   const handleShare = async (): Promise<void> => {
     try {
       const text = formatRangeSessionShareText(summary, t);
@@ -83,6 +85,16 @@ export default function RangeSessionDetailScreen({ route }: Props): JSX.Element 
         <View style={styles.goalCard}>
           <Text style={styles.sectionTitle}>{t('range.trainingGoal.summary_label')}</Text>
           <Text style={styles.helper}>{summary.trainingGoalText}</Text>
+        </View>
+      ) : null}
+
+      {hasReflection ? (
+        <View style={styles.goalCard}>
+          <Text style={styles.sectionTitle}>{t('range.reflection.section_title')}</Text>
+          {summary.sessionRating ? (
+            <Text style={styles.helper}>{t('range.reflection.rating_label', { rating: summary.sessionRating })}</Text>
+          ) : null}
+          {summary.reflectionNotes ? <Text style={styles.helper}>{summary.reflectionNotes}</Text> : null}
         </View>
       ) : null}
 

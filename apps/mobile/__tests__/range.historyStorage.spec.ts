@@ -45,6 +45,27 @@ describe('rangeHistoryStorage', () => {
     expect((saved[0] as { id: string }).id).toBe(baseSummary.id);
   });
 
+  it('updates existing entry when summary id matches', async () => {
+    const existing = [
+      {
+        id: 'session-1',
+        savedAt: '2024-01-01T00:00:00.000Z',
+        summary: { ...baseSummary, shotCount: 3 },
+      },
+    ];
+    vi.mocked(storage.getItem).mockResolvedValueOnce(JSON.stringify(existing));
+
+    await appendRangeHistoryEntry({ ...baseSummary, sessionRating: 5, reflectionNotes: 'Great tempo' });
+
+    expect(storage.setItem).toHaveBeenCalled();
+    const [, savedRaw] = vi.mocked(storage.setItem).mock.calls[0];
+    const saved = JSON.parse(savedRaw!) as { savedAt: string; summary: RangeSessionSummary }[];
+    expect(saved[0].savedAt).toBe('2024-01-01T00:00:00.000Z');
+    expect(saved[0].summary.sessionRating).toBe(5);
+    expect(saved[0].summary.reflectionNotes).toBe('Great tempo');
+    expect(saved).toHaveLength(1);
+  });
+
   it('handles corrupted history without throwing', async () => {
     vi.mocked(storage.getItem).mockResolvedValueOnce('not-json');
 

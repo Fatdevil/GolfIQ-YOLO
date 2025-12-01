@@ -116,6 +116,14 @@ export const en = {
       history_item_label: 'Goal: {{text}}',
       current_inline: 'Current goal: {{text}}',
     },
+    reflection: {
+      title: 'Reflection',
+      subtitle: 'Rate this recorded session and add a note for yourself or your coach.',
+      placeholder: 'Example: Started finding a gentle fade with 7-iron, need more focus on tempo.',
+      section_title: 'Reflection from this session',
+      rating_label: 'Session rating: {{rating}}/5',
+      history_label: 'Has reflection',
+    },
     missions: {
       screen_title: 'Range missions',
       card_title: 'Missions',

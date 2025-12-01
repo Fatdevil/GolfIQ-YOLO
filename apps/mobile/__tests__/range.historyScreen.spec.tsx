@@ -54,6 +54,8 @@ describe('RangeHistoryScreen', () => {
           avgCarryM: 148,
           tendency: 'left',
           trainingGoalText: 'Hit smooth draws',
+          sessionRating: 4,
+          reflectionNotes: 'Need more tempo work',
         },
       },
       {
@@ -85,11 +87,13 @@ describe('RangeHistoryScreen', () => {
     expect(screen.getByText('6 shots')).toBeInTheDocument();
     expect(screen.getByText('Focus: direction')).toBeInTheDocument();
     expect(screen.getByText('Goal: Hit smooth draws')).toBeInTheDocument();
+    expect(screen.getByText('Has reflection')).toBeInTheDocument();
 
     expect(screen.getByText('Apr 1')).toBeInTheDocument();
     expect(screen.getByText('Any club')).toBeInTheDocument();
     expect(screen.getByText('2 shots')).toBeInTheDocument();
     expect(screen.getByText('Focus: contact')).toBeInTheDocument();
+    expect(screen.getAllByText('Has reflection')).toHaveLength(1);
 
     fireEvent.click(screen.getAllByTestId('range-history-item')[0]);
 

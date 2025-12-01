@@ -93,6 +93,8 @@ type TextInputProps = CommonProps & {
   keyboardType?: string;
   autoCorrect?: boolean;
   autoCapitalize?: 'none' | 'characters';
+  multiline?: boolean;
+  maxLength?: number;
 };
 
 export const TextInput: React.FC<TextInputProps> = ({
@@ -101,12 +103,14 @@ export const TextInput: React.FC<TextInputProps> = ({
   onChangeText,
   accessibilityLabel,
   testID,
+  maxLength,
 }) => (
   <input
     data-testid={testID}
     aria-label={accessibilityLabel ?? placeholder ?? undefined}
     value={value ?? ''}
     placeholder={placeholder ?? undefined}
+    maxLength={maxLength}
     onChange={(event) => onChangeText?.(event.currentTarget.value)}
   />
 );

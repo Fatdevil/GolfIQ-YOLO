@@ -55,6 +55,25 @@ describe('RangeSessionDetailScreen', () => {
     expect(screen.getByText('Solid distance – now tighten your direction')).toBeInTheDocument();
   });
 
+  it('shows reflection when provided', () => {
+    render(
+      <RangeSessionDetailScreen
+        navigation={navigation}
+        route={{ ...route, params: { summary: { ...summary, sessionRating: 4, reflectionNotes: 'Felt solid' } } }}
+      />,
+    );
+
+    expect(screen.getByText('Reflection from this session')).toBeInTheDocument();
+    expect(screen.getByText('Session rating: 4/5')).toBeInTheDocument();
+    expect(screen.getByText('Felt solid')).toBeInTheDocument();
+  });
+
+  it('hides reflection section when empty', () => {
+    render(<RangeSessionDetailScreen navigation={navigation} route={route} />);
+
+    expect(screen.queryByText('Reflection from this session')).not.toBeInTheDocument();
+  });
+
   it('shares the summary text', async () => {
     render(<RangeSessionDetailScreen navigation={navigation} route={route} />);
 

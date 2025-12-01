@@ -40,6 +40,7 @@ function HistoryItem({ entry, onPress }: { entry: RangeHistoryEntry; onPress?: (
     : entry.summary.missionId
       ? entry.summary.missionId
       : null;
+  const hasReflection = Boolean(entry.summary.sessionRating || entry.summary.reflectionNotes);
   return (
     <TouchableOpacity style={styles.item} testID="range-history-item" onPress={onPress}>
       <View style={styles.itemHeader}>
@@ -50,6 +51,7 @@ function HistoryItem({ entry, onPress }: { entry: RangeHistoryEntry; onPress?: (
       <FocusLabel entry={entry} />
       {goalLabel ? <Text style={styles.goal}>{goalLabel}</Text> : null}
       {missionTitle ? <Text style={styles.mission}>{t('range.missions.history_label', { title: missionTitle })}</Text> : null}
+      {hasReflection ? <Text style={styles.reflection}>{t('range.reflection.history_label')}</Text> : null}
     </TouchableOpacity>
   );
 }
@@ -172,5 +174,9 @@ const styles = StyleSheet.create({
   },
   mission: {
     color: '#2563EB',
+  },
+  reflection: {
+    color: '#047857',
+    fontWeight: '600',
   },
 });
