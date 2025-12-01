@@ -15,6 +15,7 @@ import RangeQuickPracticeStartScreen from '@app/screens/RangeQuickPracticeStartS
 import RangeCameraSetupScreen from '@app/screens/RangeCameraSetupScreen';
 import RangeQuickPracticeSummaryScreen from '@app/screens/RangeQuickPracticeSummaryScreen';
 import RangeHistoryScreen from '@app/screens/RangeHistoryScreen';
+import RangeSessionDetailScreen from '@app/screens/RangeSessionDetailScreen';
 import RangeTrainingGoalScreen from '@app/screens/RangeTrainingGoalScreen';
 import TripsScreen from '@app/screens/TripsScreen';
 import { extractJoinCode } from '@app/utils/deepLink';
@@ -94,6 +95,11 @@ export default function App(): JSX.Element {
           options={{ title: 'Quick practice summary' }}
         />
         <Stack.Screen name="RangeHistory" component={RangeHistoryScreen} options={{ title: 'Range history' }} />
+        <Stack.Screen
+          name="RangeSessionDetail"
+          component={RangeSessionDetailScreen}
+          options={{ title: 'Range session' }}
+        />
         <Stack.Screen name="Trips" component={TripsScreen} options={{ title: 'Trips' }} />
         <Stack.Screen name="EventJoin">
           {(props) => <EventJoinScreen {...props} initialCode={initialCode} />}

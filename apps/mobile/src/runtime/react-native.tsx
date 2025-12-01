@@ -193,6 +193,14 @@ export const Vibration = {
   },
 };
 
+type ShareContent = { message: string };
+
+export const Share = {
+  async share(content: ShareContent): Promise<{ action: string }> {
+    return { action: content.message ? 'sharedAction' : 'dismissedAction' };
+  },
+};
+
 type AlertButton = { text?: string; onPress?: () => void; style?: 'default' | 'cancel' | 'destructive' };
 
 export const Alert = {
