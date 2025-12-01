@@ -57,4 +57,15 @@ describe('RangePracticeScreen', () => {
     expect(await screen.findByText('Hit controlled fades')).toBeInTheDocument();
     expect(screen.getByText('Change goal')).toBeInTheDocument();
   });
+
+  it('navigates to range progress when CTA pressed', () => {
+    const navigation = createNavigation();
+    vi.mocked(trainingGoalStorage.loadCurrentTrainingGoal).mockResolvedValue(null);
+
+    render(<RangePracticeScreen navigation={navigation} route={{ key: 'RangePractice', name: 'RangePractice' } as Props['route']} />);
+
+    fireEvent.click(screen.getByTestId('range-progress-cta'));
+
+    expect(navigation.navigate).toHaveBeenCalledWith('RangeProgress');
+  });
 });

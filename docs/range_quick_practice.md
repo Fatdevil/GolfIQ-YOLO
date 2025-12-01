@@ -30,3 +30,9 @@ Quick Practice now adds a lightweight Range Story to the summary. We build a sho
 - Tapping any history row (or the new "View full session details" link on the Quick Practice summary) opens a **Range session** detail screen.
 - The detail view shows the session header (date, club, shot count), the saved training goal when present, key stats like average carry/target/tendency, and the Range Story card for the session.
 - A "Share summary" action invokes the OS share sheet with a concise text recap for sending to a coach or friend.
+
+## Range Progress Overview v1 (recorded check-ins)
+
+- Recorded Quick Practice sessions now power a **Range progress** screen from the Range hub.
+- The screen summarises how many recorded check-ins you have, the approximate volume of recorded shots, your most-logged clubs, and simple quality hints when there is enough recent data.
+- Quality trends stay hidden when the recent sample is too small, encouraging golfers to record a few more sessions first.

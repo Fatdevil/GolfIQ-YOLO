@@ -81,6 +81,16 @@ export default function RangePracticeScreen({ navigation }: Props): JSX.Element 
         </TouchableOpacity>
       </View>
 
+      <View style={styles.card}>
+        <Text style={styles.cardTitle}>{t('range.progress.card_title')}</Text>
+        <Text style={styles.cardSubtitle}>{t('range.progress.card_subtitle')}</Text>
+        <TouchableOpacity onPress={() => navigation.navigate('RangeProgress')} testID="range-progress-cta">
+          <View style={styles.secondaryButton}>
+            <Text style={styles.secondaryButtonText}>{t('range.progress.card_title')}</Text>
+          </View>
+        </TouchableOpacity>
+      </View>
+
       <View style={styles.placeholderCard}>
         <Text style={styles.cardTitle}>Missions</Text>
         <Text style={styles.cardSubtitle}>Planned missions and gapping tools coming soon.</Text>
