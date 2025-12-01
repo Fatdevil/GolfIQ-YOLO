@@ -89,6 +89,14 @@ export default function RangeQuickPracticeSummaryScreen({ navigation, route }: P
         </View>
       )}
 
+      <TouchableOpacity
+        onPress={() => navigation.navigate('RangeSessionDetail', { summary })}
+        style={styles.detailButton}
+        testID="summary-view-details"
+      >
+        <Text style={styles.detailButtonText}>{t('range.sessionDetail.view_button')}</Text>
+      </TouchableOpacity>
+
       <TouchableOpacity onPress={() => navigation.navigate('PlayerHome')} style={styles.primaryButton} testID="summary-back-home">
         <Text style={styles.primaryButtonText}>Back to Home</Text>
       </TouchableOpacity>
@@ -197,6 +205,15 @@ const styles = StyleSheet.create({
   tertiaryButtonText: {
     color: '#2563EB',
     fontWeight: '600',
+  },
+  detailButton: {
+    paddingVertical: 10,
+    alignItems: 'center',
+  },
+  detailButtonText: {
+    color: '#2563EB',
+    fontWeight: '600',
+    textDecorationLine: 'underline',
   },
   goalCard: {
     marginTop: 8,

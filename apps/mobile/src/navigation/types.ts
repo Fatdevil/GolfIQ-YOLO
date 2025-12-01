@@ -28,6 +28,10 @@ export type RootStackParamList = {
   RangeQuickPracticeSession: { session: import('@app/range/rangeSession').RangeSession };
   RangeQuickPracticeSummary: { summary: import('@app/range/rangeSession').RangeSessionSummary };
   RangeHistory: undefined;
+  RangeSessionDetail: {
+    summary: import('@app/range/rangeSession').RangeSessionSummary;
+    savedAt?: string;
+  };
   RangeTrainingGoal: undefined;
   Trips: undefined;
   RoundStory: { runId: string; summary?: import('@app/run/lastRound').LastRoundSummary };

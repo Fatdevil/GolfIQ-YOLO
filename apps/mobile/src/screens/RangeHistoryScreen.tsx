@@ -1,10 +1,13 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { FlatList, StyleSheet, Text, View } from 'react-native';
+import { FlatList, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+
+import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 
 import { t } from '@app/i18n';
 import { buildRangeSessionStory } from '@app/range/rangeSessionStory';
 import type { RangeHistoryEntry } from '@app/range/rangeHistoryStorage';
 import { loadRangeHistory } from '@app/range/rangeHistoryStorage';
+import type { RootStackParamList } from '@app/navigation/types';
 
 function formatDate(value: string): string {
   const parsed = new Date(value);
@@ -23,14 +26,14 @@ function FocusLabel({ entry }: { entry: RangeHistoryEntry }): JSX.Element {
   return <Text style={styles.focus}>{t(key)}</Text>;
 }
 
-function HistoryItem({ entry }: { entry: RangeHistoryEntry }): JSX.Element {
+function HistoryItem({ entry, onPress }: { entry: RangeHistoryEntry; onPress?: () => void }): JSX.Element {
   const clubLabel = entry.summary.club?.trim() || t('home.range.lastSession.anyClub');
   const dateLabel = formatDate(entry.savedAt || entry.summary.finishedAt);
   const goalLabel = entry.summary.trainingGoalText
     ? t('range.trainingGoal.history_item_label', { text: entry.summary.trainingGoalText })
     : null;
   return (
-    <View style={styles.item} testID="range-history-item">
+    <TouchableOpacity style={styles.item} testID="range-history-item" onPress={onPress}>
       <View style={styles.itemHeader}>
         <Text style={styles.itemDate}>{dateLabel}</Text>
         <Text style={styles.itemShots}>{t('range.history.item_shots', { count: entry.summary.shotCount })}</Text>
@@ -38,11 +41,13 @@ function HistoryItem({ entry }: { entry: RangeHistoryEntry }): JSX.Element {
       <Text style={styles.itemClub}>{clubLabel}</Text>
       <FocusLabel entry={entry} />
       {goalLabel ? <Text style={styles.goal}>{goalLabel}</Text> : null}
-    </View>
+    </TouchableOpacity>
   );
 }
 
-export default function RangeHistoryScreen(): JSX.Element {
+type Props = NativeStackScreenProps<RootStackParamList, 'RangeHistory'>;
+
+export default function RangeHistoryScreen({ navigation }: Props): JSX.Element {
   const [isLoading, setIsLoading] = useState(true);
   const [history, setHistory] = useState<RangeHistoryEntry[]>([]);
 
@@ -93,7 +98,12 @@ export default function RangeHistoryScreen(): JSX.Element {
         data={history}
         keyExtractor={(item) => item.id}
         contentContainerStyle={styles.list}
-        renderItem={({ item }) => <HistoryItem entry={item} />}
+        renderItem={({ item }) => (
+          <HistoryItem
+            entry={item}
+            onPress={() => navigation.navigate('RangeSessionDetail', { summary: item.summary, savedAt: item.savedAt })}
+          />
+        )}
       />
     </View>
   );

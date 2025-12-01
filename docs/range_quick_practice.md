@@ -24,3 +24,9 @@ Quick Practice now adds a lightweight Range Story to the summary. We build a sho
 - Each finished Quick Practice session is appended to a local history list (up to 30 entries) alongside the existing "last session" cache.
 - Players can open the new **Range history** screen from the Range hub (and from the Quick Practice summary) to see recent sessions with date, club, shot count, and a short focus tag from the Range Story model.
 - History is fully local: corrupt data is ignored and never crashes the app.
+
+## Range Session Detail v1
+
+- Tapping any history row (or the new "View full session details" link on the Quick Practice summary) opens a **Range session** detail screen.
+- The detail view shows the session header (date, club, shot count), the saved training goal when present, key stats like average carry/target/tendency, and the Range Story card for the session.
+- A "Share summary" action invokes the OS share sheet with a concise text recap for sending to a coach or friend.
