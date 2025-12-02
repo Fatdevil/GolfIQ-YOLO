@@ -85,6 +85,32 @@ export const TouchableOpacity: React.FC<TouchableOpacityProps> = ({
   </button>
 );
 
+type PressableProps = TouchableOpacityProps & { accessibilityRole?: string };
+
+export const Pressable: React.FC<PressableProps> = ({
+  children,
+  onPress,
+  disabled,
+  accessibilityLabel,
+  accessibilityRole,
+  testID,
+}) => (
+  <button
+    type="button"
+    data-testid={testID}
+    aria-label={accessibilityLabel ?? undefined}
+    aria-disabled={disabled}
+    role={accessibilityRole}
+    onClick={() => {
+      if (!disabled) {
+        onPress?.();
+      }
+    }}
+  >
+    {children}
+  </button>
+);
+
 type TextInputProps = CommonProps & {
   value?: string;
   placeholder?: string;
@@ -95,6 +121,7 @@ type TextInputProps = CommonProps & {
   autoCapitalize?: 'none' | 'characters';
   multiline?: boolean;
   maxLength?: number;
+  inputMode?: 'none' | 'text' | 'tel' | 'url' | 'email' | 'numeric' | 'decimal' | 'search';
 };
 
 export const TextInput: React.FC<TextInputProps> = ({
@@ -104,6 +131,7 @@ export const TextInput: React.FC<TextInputProps> = ({
   accessibilityLabel,
   testID,
   maxLength,
+  inputMode,
 }) => (
   <input
     data-testid={testID}
@@ -111,7 +139,22 @@ export const TextInput: React.FC<TextInputProps> = ({
     value={value ?? ''}
     placeholder={placeholder ?? undefined}
     maxLength={maxLength}
+    inputMode={inputMode}
     onChange={(event) => onChangeText?.(event.currentTarget.value)}
+  />
+);
+
+type SwitchProps = CommonProps & {
+  value?: boolean;
+  onValueChange?: (value: boolean) => void;
+};
+
+export const Switch: React.FC<SwitchProps> = ({ value = false, onValueChange, testID }) => (
+  <input
+    data-testid={testID}
+    type="checkbox"
+    checked={value}
+    onChange={(event) => onValueChange?.(event.currentTarget.checked)}
   />
 );
 

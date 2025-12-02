@@ -177,11 +177,26 @@ export const en = {
   clubDistances: {
     title: 'On-course club distances',
     subtitle: 'Based on GPS from your rounds (not range or sim data).',
+    helper:
+      "On-course (auto) distances are calculated from your logged shots with GPS, wind and elevation. If you set a manual standard distance and choose manual, the Caddie will use that instead.",
     loading: 'Loading on-course distances…',
     empty_title: 'No on-course data yet',
     empty_body: 'Play a few rounds and log clubs for your shots to see true distances here.',
     samples: 'from {{count}} on-course shots',
     dispersion: '±{{value}} m',
+    auto_label: 'On-course (auto)',
+    manual_label: 'Manual standard distance',
+    manual_current: 'Manual: {{value}} m',
+    manual_empty: 'No manual distance set',
+    manual_placeholder: 'Enter distance in meters',
+    manual_error: 'Enter a valid distance in meters',
+    save_manual_button: 'Save manual distance',
+    saving: 'Saving…',
+    toggle_label_manual: 'Caddie uses manual',
+    toggle_label_auto: 'Caddie uses auto',
+    source_manual: 'Using manual distance',
+    source_auto: 'Using auto distance',
+    save_error: 'Unable to save manual distance.',
   },
 } as const;
 

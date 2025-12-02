@@ -8,8 +8,12 @@ export interface PlaysLikeInput {
 export interface ClubCandidate {
   club: string;
   baselineCarryM: number;
+  manualCarryM?: number | null;
+  source: 'auto' | 'manual';
   samples?: number;
 }
+
+type ClubCandidateWithCarry = ClubCandidate & { effectiveCarry: number };
 
 const HEADWIND_COEFFICIENT = 0.8;
 const ELEVATION_COEFFICIENT = 0.9;
@@ -24,7 +28,7 @@ export function computePlaysLikeDistance(input: PlaysLikeInput): number {
   );
 }
 
-function filterBySamples(clubs: ClubCandidate[]): ClubCandidate[] {
+function filterBySamples<T extends ClubCandidate>(clubs: T[]): T[] {
   const withSamples = clubs.filter((club) => (club.samples ?? 0) >= 3);
   return withSamples.length > 0 ? withSamples : clubs;
 }
@@ -35,14 +39,22 @@ export function suggestClubForTarget(
 ): ClubCandidate | null {
   if (!clubs.length) return null;
 
+  const withEffectiveCarry: ClubCandidateWithCarry[] = clubs.map((club) => ({
+    ...club,
+    effectiveCarry:
+      club.source === 'manual' && club.manualCarryM != null
+        ? club.manualCarryM
+        : club.baselineCarryM,
+  }));
+
   const validClubs = filterBySamples(
-    clubs.filter((club) => Number.isFinite(club.baselineCarryM) && club.baselineCarryM > 0),
-  ).sort((a, b) => a.baselineCarryM - b.baselineCarryM);
+    withEffectiveCarry.filter((club) => Number.isFinite(club.effectiveCarry) && club.effectiveCarry > 0),
+  ).sort((a, b) => a.effectiveCarry - b.effectiveCarry);
 
   if (!validClubs.length) return null;
 
   const playsLike = computePlaysLikeDistance(input);
-  const atOrAbove = validClubs.filter((club) => club.baselineCarryM >= playsLike);
+  const atOrAbove = validClubs.filter((club) => club.effectiveCarry >= playsLike);
   if (atOrAbove.length > 0) {
     return atOrAbove[0];
   }
