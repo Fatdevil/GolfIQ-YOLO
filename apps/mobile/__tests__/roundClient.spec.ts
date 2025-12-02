@@ -35,11 +35,22 @@ describe('roundClient', () => {
       createdAt: '2024-01-01T00:00:00Z',
       startLat: 0,
       startLon: 0,
+      tempoBackswingMs: 920,
+      tempoDownswingMs: 310,
+      tempoRatio: 2.97,
     };
     mockFetch.mockResolvedValueOnce(mockResponse(shot));
     mockFetch.mockResolvedValueOnce(mockResponse([shot]));
 
-    const created = await appendShot('r1', { holeNumber: 1, club: '7i', startLat: 0, startLon: 0 });
+    const created = await appendShot('r1', {
+      holeNumber: 1,
+      club: '7i',
+      startLat: 0,
+      startLon: 0,
+      tempoBackswingMs: 920,
+      tempoDownswingMs: 310,
+      tempoRatio: 2.97,
+    });
     expect(created).toEqual(shot);
 
     const listed = await listRoundShots('r1');

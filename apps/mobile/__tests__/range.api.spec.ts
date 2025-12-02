@@ -25,6 +25,9 @@ describe('analyzeRangeShot', () => {
       summary: null,
       cues: undefined,
       id: undefined,
+      tempoBackswingMs: null,
+      tempoDownswingMs: null,
+      tempoRatio: null,
     });
   });
 });

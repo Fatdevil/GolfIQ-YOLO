@@ -13,6 +13,12 @@ import { loadCurrentTrainingGoal } from '@app/range/rangeTrainingGoalStorage';
 type Props = NativeStackScreenProps<RootStackParamList, 'RangeQuickPracticeSession'>;
 
 function createShot(session: RangeSession, analysis: Awaited<ReturnType<typeof analyzeRangeShot>>): RangeShot {
+  const tempoRatio =
+    analysis.tempoRatio != null
+      ? analysis.tempoRatio
+      : analysis.tempoBackswingMs && analysis.tempoDownswingMs
+        ? analysis.tempoBackswingMs / analysis.tempoDownswingMs
+        : null;
   return {
     id: typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : `${Date.now()}`,
     timestamp: new Date().toISOString(),
@@ -25,6 +31,9 @@ function createShot(session: RangeSession, analysis: Awaited<ReturnType<typeof a
     ballSpeedMps: analysis.ballSpeedMps ?? null,
     clubSpeedMps: analysis.clubSpeedMps ?? null,
     qualityLevel: analysis.quality?.level ?? null,
+    tempoBackswingMs: analysis.tempoBackswingMs ?? null,
+    tempoDownswingMs: analysis.tempoDownswingMs ?? null,
+    tempoRatio: tempoRatio ?? null,
   };
 }
 
@@ -86,6 +95,28 @@ export default function RangeQuickPracticeSessionScreen({ navigation, route }: P
       .filter((v): v is number => typeof v === 'number');
     const avgSideDeg = sides.length ? sides.reduce((a, b) => a + b, 0) / sides.length : null;
 
+    const tempoShots = currentSession.shots.filter(
+      (shot) =>
+        shot.tempoBackswingMs != null ||
+        shot.tempoDownswingMs != null ||
+        shot.tempoRatio != null,
+    );
+    const tempoBackswingValues = tempoShots
+      .map((shot) => (typeof shot.tempoBackswingMs === 'number' ? shot.tempoBackswingMs : null))
+      .filter((value): value is number => value != null && !Number.isNaN(value));
+    const tempoDownswingValues = tempoShots
+      .map((shot) => (typeof shot.tempoDownswingMs === 'number' ? shot.tempoDownswingMs : null))
+      .filter((value): value is number => value != null && !Number.isNaN(value));
+    const tempoRatioValues = tempoShots
+      .map((shot) => (typeof shot.tempoRatio === 'number' ? shot.tempoRatio : null))
+      .filter((value): value is number => value != null && !Number.isNaN(value));
+
+    const average = (values: number[]): number | null => {
+      if (!values.length) return null;
+      const total = values.reduce((a, b) => a + b, 0);
+      return total / values.length;
+    };
+
     return {
       id: currentSession.id,
       startedAt: currentSession.startedAt,
@@ -98,6 +129,10 @@ export default function RangeQuickPracticeSessionScreen({ navigation, route }: P
       shotCount,
       avgCarryM,
       tendency: classifyDirection(avgSideDeg),
+      avgTempoBackswingMs: average(tempoBackswingValues),
+      avgTempoDownswingMs: average(tempoDownswingValues),
+      avgTempoRatio: average(tempoRatioValues),
+      tempoSampleCount: tempoShots.length > 0 ? tempoShots.length : null,
     };
   };
 

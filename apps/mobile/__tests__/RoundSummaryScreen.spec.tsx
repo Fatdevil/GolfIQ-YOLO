@@ -28,6 +28,7 @@ mockList.mockResolvedValue([
     startLat: 0,
     startLon: 0,
     note: 'Nice swing',
+    tempoRatio: 3,
   },
 ]);
 
@@ -41,5 +42,6 @@ describe('RoundSummaryScreen', () => {
     expect(getByText('Hole 1')).toBeTruthy();
     expect(getByText('Hole 2')).toBeTruthy();
     expect(getByText(/Nice swing/)).toBeTruthy();
+    expect(getByText(/Tempo: 3.0 : 1/)).toBeTruthy();
   });
 });

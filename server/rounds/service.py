@@ -64,6 +64,7 @@ class RoundService:
             raise RoundNotFound(round_id)
         if record.player_id != player_id:
             raise RoundOwnershipError(round_id)
+
         record.ended_at = datetime.now(timezone.utc)
         self._write_round(record)
         return record.to_round()
@@ -84,12 +85,27 @@ class RoundService:
         wind_direction_deg: float | None,
         elevation_delta_m: float | None,
         note: str | None,
+        tempo_backswing_ms: int | None,
+        tempo_downswing_ms: int | None,
+        tempo_ratio: float | None,
     ) -> Shot:
         record = self._load_round(round_id)
         if record is None:
             raise RoundNotFound(round_id)
         if record.player_id != player_id:
             raise RoundOwnershipError(round_id)
+
+        ratio = tempo_ratio
+        if (
+            ratio is None
+            and tempo_backswing_ms is not None
+            and tempo_downswing_ms is not None
+        ):
+            try:
+                if tempo_downswing_ms > 0:
+                    ratio = float(tempo_backswing_ms) / float(tempo_downswing_ms)
+            except ZeroDivisionError:
+                ratio = None
 
         shot = ShotRecord(
             id=str(uuid.uuid4()),
@@ -106,6 +122,9 @@ class RoundService:
             wind_direction_deg=wind_direction_deg,
             elevation_delta_m=elevation_delta_m,
             note=note,
+            tempo_backswing_ms=tempo_backswing_ms,
+            tempo_downswing_ms=tempo_downswing_ms,
+            tempo_ratio=ratio,
         )
         self._append_shot_record(shot)
         return shot.to_shot()

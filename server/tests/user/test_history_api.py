@@ -65,6 +65,10 @@ def test_range_session_history_round_trip(monkeypatch):
             "started_at": "2024-02-01T00:00:00Z",
             "ended_at": "2024-02-01T00:10:00Z",
             "shot_count": 25,
+            "avg_tempo_backswing_ms": 900,
+            "avg_tempo_downswing_ms": 310,
+            "avg_tempo_ratio": 2.9,
+            "tempo_sample_count": 12,
         }
     ]
     with TestClient(app) as client:
@@ -86,3 +90,7 @@ def test_range_session_history_round_trip(monkeypatch):
         items = listed.json()
         assert items
         assert any(item["id"] == "rs-1" for item in items)
+        assert items[0]["avgTempoBackswingMs"] == 900
+        assert items[0]["avgTempoDownswingMs"] == 310
+        assert items[0]["avgTempoRatio"] == 2.9
+        assert items[0]["tempoSampleCount"] == 12

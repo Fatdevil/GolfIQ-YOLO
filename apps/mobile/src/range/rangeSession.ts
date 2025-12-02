@@ -15,6 +15,9 @@ export interface RangeShot {
   ballSpeedMps?: number | null;
   clubSpeedMps?: number | null;
   qualityLevel?: 'bad' | 'warning' | 'good' | null;
+  tempoBackswingMs?: number | null;
+  tempoDownswingMs?: number | null;
+  tempoRatio?: number | null;
 }
 
 export interface RangeSession {
@@ -44,4 +47,8 @@ export interface RangeSessionSummary {
   contactPct?: number | null;
   avgCarryM?: number | null;
   tendency?: 'left' | 'right' | 'straight' | null;
+  avgTempoBackswingMs?: number | null;
+  avgTempoDownswingMs?: number | null;
+  avgTempoRatio?: number | null;
+  tempoSampleCount?: number | null;
 }

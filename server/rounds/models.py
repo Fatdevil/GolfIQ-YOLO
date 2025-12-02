@@ -49,6 +49,13 @@ class Shot(BaseModel):
         default=None, serialization_alias="elevationDeltaM"
     )
     note: str | None = None
+    tempo_backswing_ms: int | None = Field(
+        default=None, serialization_alias="tempoBackswingMs"
+    )
+    tempo_downswing_ms: int | None = Field(
+        default=None, serialization_alias="tempoDownswingMs"
+    )
+    tempo_ratio: float | None = Field(default=None, serialization_alias="tempoRatio")
 
     model_config = ConfigDict(populate_by_name=True)
 
@@ -114,6 +121,9 @@ class ShotRecord:
     wind_direction_deg: float | None
     elevation_delta_m: float | None
     note: str | None
+    tempo_backswing_ms: int | None = None
+    tempo_downswing_ms: int | None = None
+    tempo_ratio: float | None = None
 
     def to_shot(self) -> Shot:
         return Shot(
@@ -131,6 +141,9 @@ class ShotRecord:
             wind_direction_deg=self.wind_direction_deg,
             elevation_delta_m=self.elevation_delta_m,
             note=self.note,
+            tempo_backswing_ms=self.tempo_backswing_ms,
+            tempo_downswing_ms=self.tempo_downswing_ms,
+            tempo_ratio=self.tempo_ratio,
         )
 
     def to_dict(self) -> dict:
@@ -149,6 +162,9 @@ class ShotRecord:
             "wind_direction_deg": self.wind_direction_deg,
             "elevation_delta_m": self.elevation_delta_m,
             "note": self.note,
+            "tempo_backswing_ms": self.tempo_backswing_ms,
+            "tempo_downswing_ms": self.tempo_downswing_ms,
+            "tempo_ratio": self.tempo_ratio,
         }
 
     @staticmethod
@@ -168,6 +184,9 @@ class ShotRecord:
             wind_direction_deg=_optional_float(data.get("wind_direction_deg")),
             elevation_delta_m=_optional_float(data.get("elevation_delta_m")),
             note=data.get("note"),
+            tempo_backswing_ms=_optional_int(data.get("tempo_backswing_ms")),
+            tempo_downswing_ms=_optional_int(data.get("tempo_downswing_ms")),
+            tempo_ratio=_optional_float(data.get("tempo_ratio")),
         )
 
 
@@ -183,6 +202,15 @@ def _optional_float(value: Optional[float]) -> float | None:
         return None
     try:
         return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _optional_int(value: Optional[int]) -> int | None:
+    if value is None:
+        return None
+    try:
+        return int(value)
     except (TypeError, ValueError):
         return None
 

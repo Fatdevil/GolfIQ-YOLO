@@ -69,6 +69,8 @@ def test_append_and_list_shots(round_client) -> None:
             "endLat": 10.001,
             "endLon": 20.001,
             "note": "Fairway",
+            "tempoBackswingMs": 900,
+            "tempoDownswingMs": 300,
         },
         headers=_headers(),
     )
@@ -76,12 +78,66 @@ def test_append_and_list_shots(round_client) -> None:
     shot = shot_resp.json()
     assert shot["roundId"] == round_id
     assert shot["club"] == "7i"
+    assert shot["tempoBackswingMs"] == 900
+    assert shot["tempoDownswingMs"] == 300
+    assert shot["tempoRatio"] == pytest.approx(900 / 300)
 
     list_resp = client.get(f"/api/rounds/{round_id}/shots", headers=_headers())
     assert list_resp.status_code == 200
     shots = list_resp.json()
     assert len(shots) == 1
     assert shots[0]["note"] == "Fairway"
+    assert shots[0]["tempoBackswingMs"] == 900
+    assert shots[0]["tempoDownswingMs"] == 300
+
+
+def test_append_shot_respects_provided_ratio(round_client) -> None:
+    client, _, _ = round_client
+    start = client.post("/api/rounds/start", json={}, headers=_headers()).json()
+    round_id = start["id"]
+
+    provided_ratio = 2.4
+    shot_resp = client.post(
+        f"/api/rounds/{round_id}/shots",
+        json={
+            "holeNumber": 1,
+            "club": "5i",
+            "startLat": 10.0,
+            "startLon": 20.0,
+            "tempoBackswingMs": 960,
+            "tempoDownswingMs": 400,
+            "tempoRatio": provided_ratio,
+        },
+        headers=_headers(),
+    )
+    assert shot_resp.status_code == 200
+    shot = shot_resp.json()
+    assert shot["tempoBackswingMs"] == 960
+    assert shot["tempoDownswingMs"] == 400
+    assert shot["tempoRatio"] == provided_ratio
+
+
+def test_append_shot_handles_zero_downswing(round_client) -> None:
+    client, _, _ = round_client
+    start = client.post("/api/rounds/start", json={}, headers=_headers()).json()
+    round_id = start["id"]
+
+    shot_resp = client.post(
+        f"/api/rounds/{round_id}/shots",
+        json={
+            "holeNumber": 1,
+            "club": "5i",
+            "startLat": 10.0,
+            "startLon": 20.0,
+            "tempoBackswingMs": 960,
+            "tempoDownswingMs": 0,
+        },
+        headers=_headers(),
+    )
+    assert shot_resp.status_code == 200
+    shot = shot_resp.json()
+    assert shot["tempoDownswingMs"] == 0
+    assert shot["tempoRatio"] is None
 
 
 def test_shot_ingests_into_club_distance(round_client) -> None:
@@ -344,6 +400,41 @@ def test_read_shot_records_skips_missing_files(tmp_path) -> None:
     records = list(service._read_shot_records(round_id))
     assert len(records) == 1
     assert records[0].id == shot.id
+
+
+def test_read_shot_records_handles_missing_tempo_fields(tmp_path) -> None:
+    service = RoundService(base_dir=tmp_path)
+    round_id = "round-old-format"
+    shot_id = str(uuid4())
+
+    legacy_shot = {
+        "id": shot_id,
+        "round_id": round_id,
+        "player_id": "player-1",
+        "hole_number": 1,
+        "club": "7i",
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "start_lat": 1.0,
+        "start_lon": 2.0,
+        "end_lat": None,
+        "end_lon": None,
+        "wind_speed_mps": None,
+        "wind_direction_deg": None,
+        "elevation_delta_m": None,
+        "note": None,
+    }
+
+    round_dir = service._round_dir("player-1", round_id)
+    round_dir.mkdir(parents=True, exist_ok=True)
+    (round_dir / "shots.jsonl").write_text(json.dumps(legacy_shot) + "\n")
+
+    records = list(service._read_shot_records(round_id))
+
+    assert len(records) == 1
+    assert records[0].id == shot_id
+    assert records[0].tempo_backswing_ms is None
+    assert records[0].tempo_downswing_ms is None
+    assert records[0].tempo_ratio is None
 
 
 def test_load_round_returns_none_for_corrupt_payload(tmp_path) -> None:
