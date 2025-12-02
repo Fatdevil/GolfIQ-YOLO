@@ -39,6 +39,7 @@ from server.api.routers.watch_hud import router as watch_hud_router
 from server.api.routers.watch_quickround import router as watch_quickround_router
 from server.api.routers.trip_public import router as trip_public_router
 from server.api.routers.trip import router as trip_router
+from server.api.routers.rounds import router as rounds_router
 from server.metrics import MetricsMiddleware, metrics_app
 from server.retention.sweeper import sweep_retention_once, sweep_upload_retention
 
@@ -189,6 +190,7 @@ app.include_router(watch_quickround_router)
 app.include_router(trip_public_router)
 app.include_router(trip_router)
 app.include_router(user_history_router)
+app.include_router(rounds_router)
 if os.getenv("APP_ENV", "").lower() not in {"production", "prod"}:
     from server.dev.seed_s16 import router as seed_s16_router
 
