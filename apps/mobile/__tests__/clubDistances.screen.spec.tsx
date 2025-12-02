@@ -1,9 +1,10 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import React from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import ClubDistancesScreen from '@app/screens/ClubDistancesScreen';
 import * as client from '@app/api/clubDistanceClient';
+import * as caddieApi from '@app/api/caddieApi';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { RootStackParamList } from '@app/navigation/types';
 
@@ -11,6 +12,9 @@ vi.mock('@app/api/clubDistanceClient', () => ({
   fetchClubDistances: vi.fn(),
   setClubDistanceOverride: vi.fn(),
   clearClubDistanceOverride: vi.fn(),
+}));
+vi.mock('@app/api/caddieApi', () => ({
+  fetchShotShapeProfile: vi.fn(),
 }));
 
 describe('ClubDistancesScreen', () => {
@@ -28,6 +32,17 @@ describe('ClubDistancesScreen', () => {
     vi.mocked(client.fetchClubDistances).mockReset();
     vi.mocked(client.setClubDistanceOverride).mockReset();
     vi.mocked(client.clearClubDistanceOverride).mockReset();
+    vi.mocked(caddieApi.fetchShotShapeProfile).mockReset();
+    vi.mocked(caddieApi.fetchShotShapeProfile).mockResolvedValue({
+      club: '7i',
+      intent: 'straight',
+      coreCarryMeanM: 150,
+      coreCarryStdM: 5,
+      coreSideMeanM: 0,
+      coreSideStdM: 3,
+      tailLeftProb: 0,
+      tailRightProb: 0,
+    });
   });
 
   it('renders empty state when no clubs', async () => {
@@ -75,13 +90,14 @@ describe('ClubDistancesScreen', () => {
       expect(screen.getAllByTestId('club-distance-row')).toHaveLength(2);
     });
 
-    expect(screen.getByText('7i')).toBeInTheDocument();
+    const rows = screen.getAllByTestId('club-distance-row');
+    expect(within(rows[0]).getByText('7i')).toBeInTheDocument();
     expect(screen.getAllByText('On-course (auto)')).toHaveLength(2);
-    expect(screen.getByText('150 m')).toBeInTheDocument();
-    expect(screen.getByText('from 12 on-course shots')).toBeInTheDocument();
+    expect(within(rows[0]).getByText('150 m')).toBeInTheDocument();
+    expect(within(rows[0]).getByText('from 12 on-course shots')).toBeInTheDocument();
     expect(screen.getByText('±6 m')).toBeInTheDocument();
-    expect(screen.getByText('PW')).toBeInTheDocument();
-    expect(screen.getByText('Manual: 90 m')).toBeInTheDocument();
+    expect(within(rows[1]).getByText('PW')).toBeInTheDocument();
+    expect(within(rows[1]).getByText('Manual: 90 m')).toBeInTheDocument();
   });
 
   it('saves manual distance and switches source', async () => {
@@ -109,7 +125,7 @@ describe('ClubDistancesScreen', () => {
     render(<ClubDistancesScreen navigation={createNavigation()} route={createRoute()} />);
 
     const input = await screen.findByTestId('manual-input-7i');
-    fireEvent.change(input, { target: { value: '155' } });
+    fireEvent.change(input, { target: { value: '155' }, currentTarget: { value: '155' } });
     fireEvent.click(screen.getByTestId('save-manual-7i'));
 
     await waitFor(() => {

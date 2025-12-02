@@ -174,6 +174,23 @@ export const en = {
       distance_control_wedges_body: 'Hit 15–20 wedge shots between 50–90 m working on consistent carry gapping.',
     },
   },
+  caddie: {
+    risk: {
+      title: 'Caddie shot-shape awareness',
+      club_label: 'Preview for club',
+      intent_label: 'Your intended shot shape',
+      loading: 'Loading risk window…',
+      core_window:
+        'Core window (~80%) with your {{intent}}: {{carryMin}}–{{carryMax}} carry, {{sideMin}}–{{sideMax}} sideways.',
+      tail_left: 'Rare big miss left: ~{{percent}}% of shots.',
+      tail_right: 'Rare big miss right: ~{{percent}}% of shots.',
+    },
+    intent_label: {
+      fade: 'fade',
+      draw: 'draw',
+      straight: 'straight',
+    },
+  },
   clubDistances: {
     title: 'On-course club distances',
     subtitle: 'Based on GPS from your rounds (not range or sim data).',

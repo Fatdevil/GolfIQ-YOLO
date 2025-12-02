@@ -8,7 +8,12 @@ from typing import Dict, Iterable, Literal
 from server.bundles.geometry import haversine_m
 
 from .constants import ELEVATION_COEFFICIENT, HEADWIND_COEFFICIENT
-from .models import ClubDistanceStats, OnCourseShot, PlayerClubDistanceProfile
+from .models import (
+    ClubDistanceStats,
+    ClubLateralStats,
+    OnCourseShot,
+    PlayerClubDistanceProfile,
+)
 
 
 def _bearing_deg(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
@@ -32,6 +37,39 @@ def _headwind_component(
         return 0.0
     relative_rad = math.radians((wind_direction_deg - shot_bearing_deg) % 360)
     return wind_speed_mps * math.cos(relative_rad)
+
+
+def _side_offset_from_target(
+    start_lat: float,
+    start_lon: float,
+    target_lat: float,
+    target_lon: float,
+    end_lat: float,
+    end_lon: float,
+) -> float:
+    """Approximate sideways offset from target line in meters.
+
+    Positive values represent misses to the right of the intended target line.
+    """
+
+    earth_radius_m = 6_371_000
+    mean_lat_rad = math.radians((start_lat + target_lat) / 2)
+
+    dx_target = (
+        math.radians(target_lon - start_lon) * math.cos(mean_lat_rad) * earth_radius_m
+    )
+    dy_target = math.radians(target_lat - start_lat) * earth_radius_m
+
+    dx_end = math.radians(end_lon - start_lon) * math.cos(mean_lat_rad) * earth_radius_m
+    dy_end = math.radians(end_lat - start_lat) * earth_radius_m
+
+    denom = math.hypot(dx_target, dy_target)
+    if denom == 0:
+        return 0.0
+
+    cross = dx_target * dy_end - dy_target * dx_end
+    # Cross-track distance is signed; invert so positive is right of target line
+    return -(cross / denom)
 
 
 class RunningStats:
@@ -65,14 +103,41 @@ class RunningStats:
         return math.sqrt(self.variance)
 
 
+class LateralRecord:
+    def __init__(self) -> None:
+        self.stats = RunningStats()
+        self.outlier_left_count = 0
+        self.outlier_right_count = 0
+
+    def update(self, side_m: float, timestamp: datetime | None = None) -> None:
+        current_std = self.stats.stddev or 0.0
+        threshold = max(20.0, 2.5 * current_std)
+        if side_m < -threshold:
+            self.outlier_left_count += 1
+        elif side_m > threshold:
+            self.outlier_right_count += 1
+
+        self.stats.update(side_m, timestamp)
+
+
 class ClubDistanceRecord:
     def __init__(self) -> None:
         self.stats = RunningStats()
         self.manual_carry_m: float | None = None
         self.source: Literal["auto", "manual"] = "auto"
+        self.lateral = LateralRecord()
 
     def to_stats(self, club: str) -> ClubDistanceStats:
         last_updated = self.stats.last_updated or datetime.now(UTC)
+        lateral_stats: ClubLateralStats | None = None
+        if self.lateral.stats.count > 0:
+            lateral_stats = ClubLateralStats(
+                mean_side_m=self.lateral.stats.mean,
+                std_side_m=self.lateral.stats.stddev or 0.0,
+                outlier_left_count=self.lateral.outlier_left_count,
+                outlier_right_count=self.lateral.outlier_right_count,
+                total_shots=self.lateral.stats.count,
+            )
         return ClubDistanceStats(
             club=club,
             samples=self.stats.count,
@@ -81,6 +146,7 @@ class ClubDistanceRecord:
             last_updated=last_updated,
             manual_carry_m=self.manual_carry_m,
             source=self.source,
+            lateral=lateral_stats,
         )
 
 
@@ -110,6 +176,23 @@ class ClubDistanceAggregator:
         )
         return baseline
 
+    @staticmethod
+    def _side_offset_m(shot: OnCourseShot) -> float:
+        if shot.side_m is not None:
+            return shot.side_m
+
+        if shot.target_lat is not None and shot.target_lon is not None:
+            return _side_offset_from_target(
+                shot.start_lat,
+                shot.start_lon,
+                shot.target_lat,
+                shot.target_lon,
+                shot.end_lat,
+                shot.end_lon,
+            )
+
+        return 0.0
+
     def ingest_shots(self, shots: Iterable[OnCourseShot]) -> None:
         for shot in shots:
             self.update_from_shot(shot)
@@ -118,6 +201,8 @@ class ClubDistanceAggregator:
         baseline_carry = self._normalize_shot(shot)
         record = self._stats[shot.player_id][shot.club]
         record.stats.update(baseline_carry, shot.recorded_at)
+        side_offset_m = self._side_offset_m(shot)
+        record.lateral.update(side_offset_m, shot.recorded_at)
 
         return record.to_stats(shot.club)
 
@@ -146,6 +231,13 @@ class ClubDistanceAggregator:
         record.manual_carry_m = None
         record.source = "auto"
         record.stats.last_updated = now
+        return record.to_stats(club)
+
+    def get_stats_for_club(self, player_id: str, club: str) -> ClubDistanceStats:
+        record = self._stats.get(player_id, {}).get(club)
+        if record is None:
+            record = self._stats[player_id][club]
+            record.stats.last_updated = datetime.now(UTC)
         return record.to_stats(club)
 
     def get_profile(self, player_id: str) -> PlayerClubDistanceProfile:
