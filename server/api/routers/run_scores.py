@@ -6,8 +6,12 @@ import time
 from threading import Lock
 from typing import Any, Dict
 
+from datetime import datetime, timezone
+
 from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ValidationError
+
+from server.club_distance import OnCourseShot, get_club_distance_service
 
 from server.security import require_api_key
 
@@ -49,7 +53,25 @@ def submit_score_event(run_id: str, body: ScoreEventBody) -> Dict[str, str]:
             "payload": body.payload,
             "recordedAt": time.time(),
         }
+
+        _maybe_ingest_club_distance(body)
         return {"status": "ok", "dedupe": dedupe_key}
+
+
+def _maybe_ingest_club_distance(body: ScoreEventBody) -> None:
+    if body.kind != "shot":
+        return
+
+    payload = dict(body.payload)
+    if "recordedAt" not in payload and body.ts:
+        payload["recordedAt"] = datetime.fromtimestamp(body.ts, tz=timezone.utc)
+
+    try:
+        shot = OnCourseShot.model_validate(payload)
+    except ValidationError:
+        return
+
+    get_club_distance_service().ingest_shot(shot)
 
 
 def _reset_state() -> None:

@@ -27,6 +27,7 @@ import TeeSelectScreen from '@app/screens/play/TeeSelectScreen';
 import InRoundScreen from '@app/screens/play/InRoundScreen';
 import RoundSavedScreen from '@app/screens/RoundSavedScreen';
 import RoundStoryScreen from '@app/screens/RoundStoryScreen';
+import ClubDistancesScreen from '@app/screens/ClubDistancesScreen';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
@@ -112,6 +113,11 @@ export default function App(): JSX.Element {
           name="RangeSessionDetail"
           component={RangeSessionDetailScreen}
           options={{ title: 'Range session' }}
+        />
+        <Stack.Screen
+          name="ClubDistances"
+          component={ClubDistancesScreen}
+          options={{ title: t('clubDistances.title') }}
         />
         <Stack.Screen name="Trips" component={TripsScreen} options={{ title: 'Trips' }} />
         <Stack.Screen name="EventJoin">
