@@ -1,0 +1,6 @@
+from __future__ import annotations
+
+HEADWIND_COEFFICIENT = 0.8
+ELEVATION_COEFFICIENT = 0.9
+
+__all__ = ["HEADWIND_COEFFICIENT", "ELEVATION_COEFFICIENT"]

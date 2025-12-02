@@ -39,6 +39,7 @@ export type RootStackParamList = {
     savedAt?: string;
   };
   RangeTrainingGoal: undefined;
+  ClubDistances: undefined;
   Trips: undefined;
   RoundStory: { runId: string; summary?: import('@app/run/lastRound').LastRoundSummary };
   RoundSaved: { summary: import('@app/run/lastRound').LastRoundSummary };

@@ -174,6 +174,15 @@ export const en = {
       distance_control_wedges_body: 'Hit 15–20 wedge shots between 50–90 m working on consistent carry gapping.',
     },
   },
+  clubDistances: {
+    title: 'On-course club distances',
+    subtitle: 'Based on GPS from your rounds (not range or sim data).',
+    loading: 'Loading on-course distances…',
+    empty_title: 'No on-course data yet',
+    empty_body: 'Play a few rounds and log clubs for your shots to see true distances here.',
+    samples: 'from {{count}} on-course shots',
+    dispersion: '±{{value}} m',
+  },
 } as const;
 
 export type TranslationKeys = typeof en;

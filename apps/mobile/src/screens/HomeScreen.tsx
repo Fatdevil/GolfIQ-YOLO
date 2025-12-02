@@ -335,6 +335,17 @@ export default function HomeScreen({ navigation }: Props): JSX.Element {
             </View>
           </TouchableOpacity>
         </View>
+        <View style={styles.row}>
+          <TouchableOpacity
+            onPress={() => navigation.navigate('ClubDistances')}
+            accessibilityLabel={t('clubDistances.title')}
+            testID="club-distances-cta"
+          >
+            <View style={styles.secondaryButton}>
+              <Text style={styles.secondaryButtonText}>{t('clubDistances.title')}</Text>
+            </View>
+          </TouchableOpacity>
+        </View>
       </View>
 
       <View style={styles.section}>

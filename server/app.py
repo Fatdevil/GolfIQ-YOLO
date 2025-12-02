@@ -23,6 +23,7 @@ from server.api.routers.courses import router as courses_router
 from server.api.routers.coach import router as coach_router
 from server.api.routers.coach_feedback import router as coach_feedback_router
 from server.api.routers.analytics import router as analytics_router
+from server.api.routers.club_distance import router as club_distance_router
 from server.api.routers.demo import router as demo_router
 from server.api.routers.hole_detect import router as auto_hole_router
 from server.api.routers.live_tokens import router as live_tokens_router
@@ -146,6 +147,7 @@ api_dep = _api_key_dependency()
 app.include_router(coach_router)
 app.include_router(coach_feedback_router)
 app.include_router(analytics_router)
+app.include_router(club_distance_router)
 app.include_router(demo_router)
 app.include_router(profile_router)
 app.include_router(legacy_calibrate.router)
