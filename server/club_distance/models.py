@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Dict, Optional
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field
 
 
 class ClubDistanceStats(BaseModel):
@@ -24,16 +24,40 @@ class PlayerClubDistanceProfile(BaseModel):
 
 
 class OnCourseShot(BaseModel):
-    player_id: str
+    player_id: str = Field(validation_alias=AliasChoices("player_id", "playerId"))
     club: str
-    start_lat: float
-    start_lon: float
-    end_lat: float
-    end_lon: float
-    wind_speed_mps: float = 0.0
-    wind_direction_deg: float | None = None
-    elevation_delta_m: float = 0.0
-    recorded_at: Optional[datetime] = None
+    start_lat: float = Field(validation_alias=AliasChoices("start_lat", "startLat"))
+    start_lon: float = Field(validation_alias=AliasChoices("start_lon", "startLon"))
+    end_lat: float = Field(validation_alias=AliasChoices("end_lat", "endLat"))
+    end_lon: float = Field(validation_alias=AliasChoices("end_lon", "endLon"))
+    wind_speed_mps: float = Field(
+        default=0.0,
+        validation_alias=AliasChoices(
+            "wind_speed_mps", "windSpeed_mps", "windSpeedMps"
+        ),
+    )
+    wind_direction_deg: float | None = Field(
+        default=None,
+        validation_alias=AliasChoices(
+            "wind_direction_deg",
+            "windDir_deg",
+            "windDirDeg",
+            "windDirection_deg",
+            "windDirectionDeg",
+        ),
+    )
+    elevation_delta_m: float = Field(
+        default=0.0,
+        validation_alias=AliasChoices(
+            "elevation_delta_m", "elevationDelta_m", "elevationDeltaM"
+        ),
+    )
+    recorded_at: Optional[datetime] = Field(
+        default=None,
+        validation_alias=AliasChoices(
+            "recorded_at", "recordedAt", "timestamp", "timestampMs"
+        ),
+    )
 
     model_config = ConfigDict(populate_by_name=True)
 

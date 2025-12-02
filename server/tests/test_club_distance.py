@@ -7,6 +7,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from server.app import app
+from server.api.routers.run_scores import _reset_state
 from server.club_distance import (
     ClubDistanceAggregator,
     ClubDistanceService,
@@ -102,18 +103,24 @@ def test_compute_plays_like_distance_applies_conditions() -> None:
     assert tailwind < plays_like
 
 
-def test_club_distance_endpoint_returns_profile(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_club_distance_endpoint_returns_profile(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     aggregator = ClubDistanceAggregator()
     service = ClubDistanceService(aggregator)
 
-    shot = _build_shot(player_id="player-123", wind_speed_mps=3.0, wind_direction_deg=90.0)
+    shot = _build_shot(
+        player_id="player-123", wind_speed_mps=3.0, wind_direction_deg=90.0
+    )
     service.ingest_shot(shot)
 
     app.dependency_overrides[get_club_distance_service] = lambda: service
 
     try:
         with TestClient(app) as client:
-            response = client.get("/api/player/club-distances", headers={"x-api-key": "player-123"})
+            response = client.get(
+                "/api/player/club-distances", headers={"x-api-key": "player-123"}
+            )
 
         assert response.status_code == 200
         data = response.json()
@@ -123,3 +130,43 @@ def test_club_distance_endpoint_returns_profile(monkeypatch: pytest.MonkeyPatch)
         assert data[0]["baselineCarryM"] > 0
     finally:
         app.dependency_overrides.pop(get_club_distance_service, None)
+
+
+def test_run_scores_ingests_on_course_shot() -> None:
+    get_club_distance_service.cache_clear()
+    _reset_state()
+
+    with TestClient(app) as client:
+        player_id = "player-on-course"
+        run_id = "run-1"
+
+        response = client.post(
+            f"/api/runs/{run_id}/score",
+            json={
+                "dedupeKey": "shot-1",
+                "ts": 1_700_000_000.0,
+                "kind": "shot",
+                "payload": {
+                    "playerId": player_id,
+                    "club": "7i",
+                    "startLat": 0.0,
+                    "startLon": 0.0,
+                    "endLat": 0.0,
+                    "endLon": 0.001,
+                    "windSpeed_mps": 2.0,
+                    "windDirectionDeg": 90.0,
+                    "elevationDelta_m": 1.0,
+                },
+            },
+        )
+
+        assert response.status_code == 200
+
+        profile = client.get(
+            "/api/player/club-distances", headers={"x-api-key": player_id}
+        )
+
+        assert profile.status_code == 200
+        data = profile.json()
+        assert isinstance(data, list) and data
+        assert data[0]["samples"] == 1

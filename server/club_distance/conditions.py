@@ -17,8 +17,14 @@ def compute_plays_like_distance(
     while tailwinds and downhill lies reduce it.
     """
 
-    headwind_component = wind_speed_mps * math.cos(math.radians(wind_direction_deg % 360))
-    return target_distance_m + headwind_component * HEADWIND_COEFFICIENT + elevation_delta_m * ELEVATION_COEFFICIENT
+    headwind_component = wind_speed_mps * math.cos(
+        math.radians(wind_direction_deg % 360)
+    )
+    return (
+        target_distance_m
+        + headwind_component * HEADWIND_COEFFICIENT
+        + elevation_delta_m * ELEVATION_COEFFICIENT
+    )
 
 
 __all__ = ["compute_plays_like_distance"]

@@ -4,7 +4,11 @@ from fastapi import APIRouter, Depends
 
 from server.api.security import require_api_key
 from server.api.user_header import UserIdHeader
-from server.club_distance import ClubDistanceService, ClubDistanceStats, get_club_distance_service
+from server.club_distance import (
+    ClubDistanceService,
+    ClubDistanceStats,
+    get_club_distance_service,
+)
 
 router = APIRouter(prefix="/api/player", tags=["club-distance"])
 

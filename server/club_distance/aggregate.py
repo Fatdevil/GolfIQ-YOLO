@@ -48,7 +48,9 @@ class RunningStats:
         delta2 = value - self.mean
         self.m2 += delta * delta2
         ts = timestamp or datetime.now(UTC)
-        self.last_updated = ts if self.last_updated is None else max(self.last_updated, ts)
+        self.last_updated = (
+            ts if self.last_updated is None else max(self.last_updated, ts)
+        )
 
     @property
     def variance(self) -> float:
@@ -71,12 +73,22 @@ class ClubDistanceAggregator:
 
     @staticmethod
     def _normalize_shot(shot: OnCourseShot) -> float:
-        raw_carry = haversine_m(shot.start_lat, shot.start_lon, shot.end_lat, shot.end_lon)
-        bearing = _bearing_deg(shot.start_lat, shot.start_lon, shot.end_lat, shot.end_lon)
-        headwind = _headwind_component(shot.wind_speed_mps, shot.wind_direction_deg, bearing)
+        raw_carry = haversine_m(
+            shot.start_lat, shot.start_lon, shot.end_lat, shot.end_lon
+        )
+        bearing = _bearing_deg(
+            shot.start_lat, shot.start_lon, shot.end_lat, shot.end_lon
+        )
+        headwind = _headwind_component(
+            shot.wind_speed_mps, shot.wind_direction_deg, bearing
+        )
         elevation_delta = shot.elevation_delta_m
 
-        baseline = raw_carry - headwind * HEADWIND_COEFFICIENT - elevation_delta * ELEVATION_COEFFICIENT
+        baseline = (
+            raw_carry
+            - headwind * HEADWIND_COEFFICIENT
+            - elevation_delta * ELEVATION_COEFFICIENT
+        )
         return baseline
 
     def ingest_shots(self, shots: Iterable[OnCourseShot]) -> None:
