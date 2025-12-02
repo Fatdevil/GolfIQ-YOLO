@@ -112,6 +112,18 @@ describe('HomeScreen', () => {
     });
   });
 
+  it('navigates to caddie setup from the CTA', async () => {
+    vi.mocked(playerApi.fetchPlayerProfile).mockResolvedValue(mockProfile);
+    vi.mocked(playerApi.fetchAccessPlan).mockResolvedValue({ plan: 'free' });
+    const navigation = createNavigation();
+
+    render(<HomeScreen navigation={navigation} route={createRoute()} />);
+
+    fireEvent.click(await screen.findByTestId('caddie-setup-cta'));
+
+    expect(navigation.navigate).toHaveBeenCalledWith('CaddieSetup');
+  });
+
   it('shows error state and retries', async () => {
     vi.mocked(playerApi.fetchPlayerProfile).mockRejectedValueOnce(new Error('profile down'));
     vi.mocked(playerApi.fetchPlayerProfile).mockResolvedValueOnce(mockProfile);

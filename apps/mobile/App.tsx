@@ -22,6 +22,7 @@ import RangeTrainingGoalScreen from '@app/screens/RangeTrainingGoalScreen';
 import RangeMissionsScreen from '@app/screens/RangeMissionsScreen';
 import TripsScreen from '@app/screens/TripsScreen';
 import CaddieApproachScreen from '@app/screens/CaddieApproachScreen';
+import CaddieSetupScreen from '@app/screens/CaddieSetupScreen';
 import { extractJoinCode } from '@app/utils/deepLink';
 import CourseSelectScreen from '@app/screens/play/CourseSelectScreen';
 import TeeSelectScreen from '@app/screens/play/TeeSelectScreen';
@@ -124,6 +125,11 @@ export default function App(): JSX.Element {
           name="CaddieApproach"
           component={CaddieApproachScreen}
           options={{ title: t('caddie.decision.screen_title') }}
+        />
+        <Stack.Screen
+          name="CaddieSetup"
+          component={CaddieSetupScreen}
+          options={{ title: t('caddie.setup.title') }}
         />
         <Stack.Screen name="Trips" component={TripsScreen} options={{ title: 'Trips' }} />
         <Stack.Screen name="EventJoin">

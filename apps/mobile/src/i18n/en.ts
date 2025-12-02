@@ -203,6 +203,35 @@ export const en = {
       helper: 'Approach shot helper',
       loading: 'Loading caddie data…',
       fallback: 'Not enough data yet for a recommendation.',
+      profile_badge: 'Profile: {{profile}}',
+      profile_label: {
+        safe: 'Safe',
+        normal: 'Normal',
+        aggressive: 'Aggressive',
+      },
+      profile_safe_hint: 'Caddie keeps extra buffer to avoid big trouble.',
+      profile_aggressive_hint: 'Caddie accepts smaller margins to play closer to the flag.',
+    },
+    setup: {
+      title: 'Caddie setup',
+      subtitle: 'Tell GolfIQ how you like to shape shots and manage risk.',
+      stock_shape_title: 'Stock shot shape',
+      stock_shape_body:
+        'This is the shot shape you normally play when you are not trying anything fancy. Fade tends to finish a bit shorter/right, draw a bit longer/left.',
+      risk_title: 'Risk profile',
+      risk_body: 'Choose how much margin you want around flags and hazards. Safe keeps more buffer, aggressive plays closer.',
+      save_button: 'Save settings',
+      save_error: 'Unable to save settings right now.',
+      stock_shape_option: {
+        fade: 'Fade',
+        straight: 'Straight',
+        draw: 'Draw',
+      },
+      risk_option: {
+        safe: 'Safe',
+        normal: 'Normal',
+        aggressive: 'Aggressive',
+      },
     },
     intent_label: {
       fade: 'fade',

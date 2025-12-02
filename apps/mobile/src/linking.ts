@@ -15,6 +15,7 @@ export const linking: LinkingOptions<any> = {
       RangeMissions: 'range/missions',
       RangeQuickPracticeStart: 'range/quick/start',
       RangeCameraSetup: 'range/quick/setup',
+      CaddieSetup: 'caddie/setup',
       Trips: 'trips',
       EventJoin: 'join/:code?',
       EventLive: 'events/:id/live',

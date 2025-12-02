@@ -355,6 +355,18 @@ export default function HomeScreen({ navigation }: Props): JSX.Element {
             </View>
           </TouchableOpacity>
         </View>
+        <View style={styles.row}>
+          <TouchableOpacity
+            onPress={() => navigation.navigate('CaddieSetup')}
+            accessibilityLabel={t('caddie.setup.title')}
+            testID="caddie-setup-cta"
+          >
+            <View style={styles.secondaryButton}>
+              <Text style={styles.secondaryButtonText}>{t('caddie.setup.title')}</Text>
+              <Text style={styles.secondaryButtonSubtext}>{t('caddie.setup.subtitle')}</Text>
+            </View>
+          </TouchableOpacity>
+        </View>
       </View>
 
       <View style={styles.section}>
@@ -504,6 +516,10 @@ const styles = StyleSheet.create({
   secondaryButtonText: {
     fontWeight: '600',
     color: '#111827',
+  },
+  secondaryButtonSubtext: {
+    color: '#4b5563',
+    fontSize: 12,
   },
   sectionHeader: {
     flexDirection: 'row',

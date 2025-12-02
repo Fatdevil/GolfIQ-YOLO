@@ -7,6 +7,7 @@ import * as distanceClient from '@app/api/clubDistanceClient';
 import * as caddieApi from '@app/api/caddieApi';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { RootStackParamList } from '@app/navigation/types';
+import * as settingsStorage from '@app/caddie/caddieSettingsStorage';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'CaddieApproach'>;
 
@@ -15,6 +16,10 @@ vi.mock('@app/api/clubDistanceClient', () => ({
 }));
 vi.mock('@app/api/caddieApi', () => ({
   fetchShotShapeProfile: vi.fn(),
+}));
+vi.mock('@app/caddie/caddieSettingsStorage', () => ({
+  loadCaddieSettings: vi.fn(),
+  DEFAULT_SETTINGS: { stockShape: 'straight', riskProfile: 'normal' },
 }));
 
 describe('CaddieApproachScreen', () => {
@@ -29,6 +34,10 @@ describe('CaddieApproachScreen', () => {
   beforeEach(() => {
     vi.mocked(distanceClient.fetchClubDistances).mockReset();
     vi.mocked(caddieApi.fetchShotShapeProfile).mockReset();
+    vi.mocked(settingsStorage.loadCaddieSettings).mockResolvedValue({
+      stockShape: 'straight',
+      riskProfile: 'normal',
+    });
   });
 
   it('renders recommendation card when data is available', async () => {

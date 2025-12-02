@@ -1,18 +1,25 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 
 import { fetchShotShapeProfile, type ShotShapeIntent, type ShotShapeProfile } from '@app/api/caddieApi';
 import { fetchClubDistances } from '@app/api/clubDistanceClient';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import {
-  buildCaddieDecision,
-  chooseClubForConditions,
+  buildCaddieDecisionFromContext,
+  chooseClubForTargetDistance,
   mapDistanceStatsToCandidate,
+  riskProfileToBufferM,
   type CaddieClubCandidate,
   type CaddieConditions,
   type CaddieDecisionOutput,
 } from '@app/caddie/CaddieDecisionEngine';
 import CaddieRecommendationCard from '@app/caddie/CaddieRecommendationCard';
+import {
+  DEFAULT_SETTINGS,
+  loadCaddieSettings,
+  type CaddieSettings,
+} from '@app/caddie/caddieSettingsStorage';
+import { computePlaysLikeDistance } from '@app/caddie/caddieDistanceEngine';
 import { t } from '@app/i18n';
 import type { RootStackParamList } from '@app/navigation/types';
 
@@ -20,20 +27,54 @@ const INTENTS: ShotShapeIntent[] = ['straight', 'fade', 'draw'];
 
 type Props = NativeStackScreenProps<RootStackParamList, 'CaddieApproach'>;
 
-export default function CaddieApproachScreen({}: Props): JSX.Element {
+export default function CaddieApproachScreen({ navigation }: Props): JSX.Element {
+  const [settings, setSettings] = useState<CaddieSettings>(DEFAULT_SETTINGS);
   const [conditions, setConditions] = useState<CaddieConditions>({
     targetDistanceM: 150,
     windSpeedMps: 2,
     windDirectionDeg: 0,
     elevationDeltaM: 0,
   });
-  const [intent, setIntent] = useState<ShotShapeIntent>('straight');
+  const [intent, setIntent] = useState<ShotShapeIntent>(DEFAULT_SETTINGS.stockShape);
   const [candidates, setCandidates] = useState<CaddieClubCandidate[]>([]);
   const [loadingDistances, setLoadingDistances] = useState(true);
   const [profileLoading, setProfileLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [profile, setProfile] = useState<ShotShapeProfile | null>(null);
   const [selectedClub, setSelectedClub] = useState<string | null>(null);
+  const intentTouchedRef = useRef(false);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadSettings = async () => {
+      try {
+        const loaded = await loadCaddieSettings();
+        if (cancelled) return;
+        setSettings(loaded);
+        if (!intentTouchedRef.current) {
+          setIntent(loaded.stockShape);
+        }
+      } catch (err) {
+        console.warn('[caddie] Failed to load caddie settings', err);
+      }
+    };
+
+    loadSettings().catch(() => {
+      /* handled above */
+    });
+
+    const unsubscribe = (navigation as any)?.addListener?.('focus', () => {
+      loadSettings().catch(() => {
+        /* handled above */
+      });
+    });
+
+    return () => {
+      cancelled = true;
+      if (unsubscribe) unsubscribe();
+    };
+  }, [navigation]);
 
   useEffect(() => {
     let cancelled = false;
@@ -60,8 +101,15 @@ export default function CaddieApproachScreen({}: Props): JSX.Element {
 
   const candidate = useMemo(() => {
     if (!candidates.length) return null;
-    return chooseClubForConditions(conditions, candidates);
-  }, [candidates, conditions]);
+    const playsLike = computePlaysLikeDistance({
+      targetDistanceM: conditions.targetDistanceM,
+      windSpeedMps: conditions.windSpeedMps,
+      windDirectionDeg: conditions.windDirectionDeg,
+      elevationDeltaM: conditions.elevationDeltaM,
+    });
+    const buffer = riskProfileToBufferM(settings.riskProfile);
+    return chooseClubForTargetDistance(playsLike, buffer, candidates);
+  }, [candidates, conditions, settings.riskProfile]);
 
   useEffect(() => {
     setSelectedClub(candidate?.club ?? null);
@@ -90,12 +138,23 @@ export default function CaddieApproachScreen({}: Props): JSX.Element {
 
   const decision: CaddieDecisionOutput | null = useMemo(() => {
     if (!selectedClub || !profile) return null;
-    return buildCaddieDecision(conditions, intent, candidates, profile);
-  }, [candidates, conditions, intent, profile, selectedClub]);
+    return buildCaddieDecisionFromContext({
+      conditions,
+      explicitIntent: intent,
+      settings,
+      clubs: candidates,
+      shotShapeProfile: profile,
+    });
+  }, [candidates, conditions, intent, profile, selectedClub, settings]);
 
   const handleNumberChange = (field: keyof CaddieConditions, value: string) => {
     const numeric = Number(value);
     setConditions((prev) => ({ ...prev, [field]: Number.isFinite(numeric) ? numeric : prev[field] }));
+  };
+
+  const handleIntentSelect = (option: ShotShapeIntent) => {
+    intentTouchedRef.current = true;
+    setIntent(option);
   };
 
   if (loadingDistances) {
@@ -115,10 +174,26 @@ export default function CaddieApproachScreen({}: Props): JSX.Element {
     );
   }
 
+  const profileLabel = t('caddie.decision.profile_badge', {
+    profile: t(`caddie.decision.profile_label.${settings.riskProfile}`),
+  });
+
   return (
     <ScrollView contentContainerStyle={styles.container}>
-      <Text style={styles.title}>{t('caddie.decision.screen_title')}</Text>
-      <Text style={styles.helper}>{t('caddie.decision.helper')}</Text>
+      <View style={styles.headerRow}>
+        <View style={styles.headerCopy}>
+          <Text style={styles.title}>{t('caddie.decision.screen_title')}</Text>
+          <Text style={styles.helper}>{t('caddie.decision.helper')}</Text>
+        </View>
+        <TouchableOpacity
+          onPress={() => navigation.navigate('CaddieSetup')}
+          style={styles.settingsButton}
+          testID="caddie-open-setup"
+        >
+          <Text style={styles.settingsButtonText}>{t('caddie.setup.title')}</Text>
+        </TouchableOpacity>
+      </View>
+      <Text style={styles.helper}>{profileLabel}</Text>
 
       <View style={styles.inputs}>
         <View style={styles.inputRow}>
@@ -168,7 +243,7 @@ export default function CaddieApproachScreen({}: Props): JSX.Element {
         {INTENTS.map((option) => (
           <TouchableOpacity
             key={option}
-            onPress={() => setIntent(option)}
+            onPress={() => handleIntentSelect(option)}
             style={[styles.intentChip, intent === option && styles.intentChipActive]}
             testID={`intent-${option}`}
           >
@@ -180,7 +255,7 @@ export default function CaddieApproachScreen({}: Props): JSX.Element {
       {profileLoading && <Text style={styles.loading}>{t('caddie.decision.loading')}</Text>}
 
       {decision ? (
-        <CaddieRecommendationCard decision={decision} />
+        <CaddieRecommendationCard decision={decision} settings={settings} />
       ) : (
         <Text style={styles.fallback} testID="caddie-approach-fallback">
           {t('caddie.decision.fallback')}
@@ -200,6 +275,16 @@ const styles = StyleSheet.create({
   container: {
     padding: 16,
     gap: 12,
+  },
+  headerRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: 12,
+  },
+  headerCopy: {
+    flex: 1,
+    gap: 4,
   },
   center: {
     flex: 1,
@@ -223,6 +308,18 @@ const styles = StyleSheet.create({
   helper: {
     color: '#c2c2d0',
     fontSize: 14,
+  },
+  settingsButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#2d2d36',
+    backgroundColor: '#0a0a0e',
+  },
+  settingsButtonText: {
+    color: 'white',
+    fontWeight: '600',
   },
   inputs: {
     gap: 8,
