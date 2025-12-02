@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import uuid
 from datetime import datetime, timezone
 from functools import lru_cache
@@ -17,6 +18,21 @@ class RoundNotFound(Exception):
 
 class RoundOwnershipError(Exception):
     pass
+
+
+SAFE_PLAYER_ID_RE = re.compile(r"^[A-Za-z0-9_-]+$")
+
+
+def _sanitize_player_id(player_id: str) -> str:
+    """
+    Restrict player ids to filesystem-safe characters to prevent path traversal.
+
+    Only allow ASCII letters, digits, underscores, and dashes. Reject anything else.
+    """
+
+    if not SAFE_PLAYER_ID_RE.match(player_id):
+        raise ValueError(f"Invalid player_id for filesystem usage: {player_id!r}")
+    return player_id
 
 
 class RoundService:
@@ -130,7 +146,8 @@ class RoundService:
 
     # Internal helpers
     def _player_dir(self, player_id: str) -> Path:
-        return self._base_dir / player_id
+        safe_id = _sanitize_player_id(player_id)
+        return self._base_dir / safe_id
 
     def _round_dir(self, player_id: str, round_id: str) -> Path:
         return self._player_dir(player_id) / round_id

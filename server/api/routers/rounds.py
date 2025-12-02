@@ -91,12 +91,15 @@ def start_round(
     service: RoundService = Depends(get_round_service),
 ) -> Round:
     player_id = _derive_player_id(api_key, user_id)
-    return service.start_round(
-        player_id=player_id,
-        course_id=payload.course_id,
-        tee_name=payload.tee_name,
-        holes=payload.holes or 18,
-    )
+    try:
+        return service.start_round(
+            player_id=player_id,
+            course_id=payload.course_id,
+            tee_name=payload.tee_name,
+            holes=payload.holes or 18,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
 
 
 @router.post("/{round_id}/end", response_model=Round)
@@ -117,6 +120,8 @@ def end_round(
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN, detail="round not owned by player"
         )
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
 
 
 @router.post("/{round_id}/shots", response_model=Shot)
@@ -152,6 +157,8 @@ def append_shot(
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN, detail="round not owned by player"
         )
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
 
     club_distance.ingest_shot_from_round(shot)
     return shot
@@ -175,6 +182,8 @@ def list_round_shots(
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN, detail="round not owned by player"
         )
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
 
 
 @router.get("", response_model=list[Round])
@@ -185,7 +194,10 @@ def list_rounds(
     service: RoundService = Depends(get_round_service),
 ) -> list[Round]:
     player_id = _derive_player_id(api_key, user_id)
-    return service.list_rounds(player_id=player_id, limit=limit)
+    try:
+        return service.list_rounds(player_id=player_id, limit=limit)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
 
 
 __all__ = ["router"]

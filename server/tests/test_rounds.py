@@ -11,7 +11,7 @@ from server.club_distance import (
     ClubDistanceService,
     get_club_distance_service,
 )
-from server.rounds.service import RoundService, get_round_service
+from server.rounds.service import _sanitize_player_id, RoundService, get_round_service
 
 
 @pytest.fixture
@@ -103,3 +103,26 @@ def test_shot_ingests_into_club_distance(round_client) -> None:
     stats = club_service.get_stats_for_club("player-1", "PW")
     assert stats.samples == 1
     assert stats.last_updated <= datetime.now(timezone.utc)
+
+
+def test_player_id_sanitization_valid(tmp_path) -> None:
+    service = RoundService(base_dir=tmp_path)
+    path = service._player_dir("user_123-abc")
+    assert path.name == "user_123-abc"
+    assert path.parent == tmp_path
+
+
+def test_player_id_sanitization_rejects_traversal(tmp_path) -> None:
+    with pytest.raises(ValueError):
+        _sanitize_player_id("../evil")
+
+    service = RoundService(base_dir=tmp_path)
+    with pytest.raises(ValueError):
+        service.start_round(
+            player_id="../../tmp/evil", course_id=None, tee_name=None, holes=18
+        )
+
+    # Router should surface 400 when traversal is attempted
+    client = TestClient(app)
+    response = client.post("/api/rounds/start", json={}, headers=_headers("../evil"))
+    assert response.status_code == 400

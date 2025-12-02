@@ -1,6 +1,6 @@
 import React from 'react';
 import { fireEvent, render, waitFor } from '@testing-library/react';
-import { describe, expect, it, vi, type Mock } from 'vitest';
+import { beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
 
 import RoundShotScreen from '@app/screens/RoundShotScreen';
 import { appendShot, endRound } from '@app/api/roundClient';
@@ -25,19 +25,22 @@ const sampleState: ActiveRoundState = {
   currentHole: 1,
 };
 
-mockLoad.mockResolvedValue(sampleState);
-mockAppendShot.mockResolvedValue({
-  id: 's1',
-  roundId: 'r1',
-  holeNumber: 1,
-  club: '7i',
-  createdAt: new Date().toISOString(),
-  startLat: 0,
-  startLon: 0,
+beforeEach(() => {
+  vi.clearAllMocks();
+  mockLoad.mockResolvedValue(sampleState);
+  mockAppendShot.mockResolvedValue({
+    id: 's1',
+    roundId: 'r1',
+    holeNumber: 1,
+    club: '7i',
+    createdAt: new Date().toISOString(),
+    startLat: 0,
+    startLon: 0,
+  });
+  mockEndRound.mockResolvedValue({ ...sampleState.round, endedAt: 'later' });
+  mockSave.mockResolvedValue(undefined);
+  mockClear.mockResolvedValue(undefined);
 });
-mockEndRound.mockResolvedValue({ ...sampleState.round, endedAt: 'later' });
-mockSave.mockResolvedValue(undefined);
-mockClear.mockResolvedValue(undefined);
 
 (global as any).navigator = {
   geolocation: {
@@ -77,5 +80,26 @@ describe('RoundShotScreen', () => {
     await waitFor(() => expect(mockEndRound).toHaveBeenCalled());
     expect(mockClear).toHaveBeenCalled();
     expect(navigation.navigate).toHaveBeenCalledWith('RoundSummary', { roundId: 'r1' });
+  });
+
+  it('advances to the next hole and persists state', async () => {
+    const { getByText } = render(<RoundShotScreen navigation={{} as any} route={undefined as any} />);
+
+    await waitFor(() => expect(mockLoad).toHaveBeenCalled());
+    fireEvent.click(getByText('Next hole'));
+
+    await waitFor(() => expect(mockSave).toHaveBeenCalledWith({
+      ...sampleState,
+      currentHole: 2,
+    }));
+  });
+
+  it('renders fallback when no active round exists', async () => {
+    mockLoad.mockResolvedValueOnce(null);
+    const { findByText } = render(
+      <RoundShotScreen navigation={{ navigate: vi.fn() } as any} route={undefined as any} />,
+    );
+
+    expect(await findByText('No active round. Start a new one to log shots.')).toBeTruthy();
   });
 });
