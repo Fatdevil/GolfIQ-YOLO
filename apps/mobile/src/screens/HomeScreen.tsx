@@ -345,6 +345,15 @@ export default function HomeScreen({ navigation }: Props): JSX.Element {
               <Text style={styles.secondaryButtonText}>{t('clubDistances.title')}</Text>
             </View>
           </TouchableOpacity>
+          <TouchableOpacity
+            onPress={() => navigation.navigate('CaddieApproach')}
+            accessibilityLabel={t('caddie.decision.screen_title')}
+            testID="caddie-approach-cta"
+          >
+            <View style={styles.secondaryButton}>
+              <Text style={styles.secondaryButtonText}>{t('caddie.decision.screen_title')}</Text>
+            </View>
+          </TouchableOpacity>
         </View>
       </View>
 
