@@ -2,6 +2,7 @@ import React, { useMemo } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
 import type { RangeShot } from '@app/range/rangeSession';
+import { t } from '@app/i18n';
 
 export function classifyDirection(sideDeg?: number | null): 'left' | 'straight' | 'right' | null {
   if (sideDeg == null || Number.isNaN(sideDeg)) return null;
@@ -24,6 +25,19 @@ export default function LastShotCard({ shot, targetDistanceM }: LastShotCardProp
     if (shot.qualityLevel === 'warning') return 'OK, but some issues';
     return 'Tracking/strike issue';
   }, [shot?.qualityLevel]);
+
+  const tempoLabel = useMemo(() => {
+    if (!shot?.tempoRatio) return null;
+    const ratioText = shot.tempoRatio.toFixed(1);
+    if (shot.tempoBackswingMs != null && shot.tempoDownswingMs != null) {
+      return t('range.tempo.last_shot_detail', {
+        ratio: ratioText,
+        backswing: Math.round(shot.tempoBackswingMs),
+        downswing: Math.round(shot.tempoDownswingMs),
+      });
+    }
+    return t('range.tempo.last_shot', { ratio: ratioText });
+  }, [shot?.tempoBackswingMs, shot?.tempoDownswingMs, shot?.tempoRatio]);
 
   if (!shot) {
     return (
@@ -62,6 +76,14 @@ export default function LastShotCard({ shot, targetDistanceM }: LastShotCardProp
           <Text style={styles.metricValue}>{shot.launchDeg != null ? `${shot.launchDeg.toFixed(1)}°` : '–'}</Text>
         </View>
       </View>
+
+      {tempoLabel ? (
+        <Text style={styles.tempoLabel} testID="last-shot-tempo">
+          {tempoLabel}
+        </Text>
+      ) : (
+        <Text style={styles.helperText}>{t('range.tempo.no_data')}</Text>
+      )}
 
       {qualityLabel ? (
         <View style={[styles.badge, styles.qualityBadge]} testID="quality-badge">
@@ -133,5 +155,12 @@ const styles = StyleSheet.create({
   },
   qualityBadge: {
     alignSelf: 'flex-start',
+  },
+  tempoLabel: {
+    color: '#0F172A',
+    fontWeight: '600',
+  },
+  helperText: {
+    color: '#6B7280',
   },
 });

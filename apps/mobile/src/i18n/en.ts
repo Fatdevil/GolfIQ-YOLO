@@ -146,6 +146,13 @@ export const en = {
       rating_label: 'Session rating: {{rating}}/5',
       history_label: 'Has reflection',
     },
+    tempo: {
+      title: 'Tempo',
+      last_shot: 'Tempo: {{ratio}} : 1',
+      last_shot_detail: 'Backswing: {{backswing}} ms, downswing: {{downswing}} ms (ratio {{ratio}} : 1)',
+      session_avg: 'Average tempo: {{ratio}} : 1 from {{count}} swings',
+      no_data: 'No tempo data yet – connect your watch to log swing tempo.',
+    },
     missions: {
       screen_title: 'Range missions',
       card_title: 'Missions',
@@ -172,6 +179,11 @@ export const en = {
       driver_shape_body: 'Record 10–15 drives and focus on repeating your preferred shot shape.',
       distance_control_wedges_title: 'Distance control 50–90 m',
       distance_control_wedges_body: 'Hit 15–20 wedge shots between 50–90 m working on consistent carry gapping.',
+    },
+  },
+  round: {
+    summary: {
+      tempo: 'Tempo: {{ratio}} : 1',
     },
   },
   caddie: {

@@ -24,6 +24,10 @@ export interface Shot {
   windDirectionDeg?: number | null;
   elevationDeltaM?: number | null;
   note?: string | null;
+
+  tempoBackswingMs?: number | null;
+  tempoDownswingMs?: number | null;
+  tempoRatio?: number | null;
 }
 
 export async function startRound(req: {
@@ -55,6 +59,9 @@ export async function appendShot(
     windDirectionDeg?: number;
     elevationDeltaM?: number;
     note?: string;
+    tempoBackswingMs?: number;
+    tempoDownswingMs?: number;
+    tempoRatio?: number;
   },
 ): Promise<Shot> {
   return apiFetch<Shot>(`/api/rounds/${roundId}/shots`, {

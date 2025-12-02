@@ -79,6 +79,21 @@ class AppendShotRequest(BaseModel):
         validation_alias=AliasChoices("elevation_delta_m", "elevationDeltaM"),
     )
     note: str | None = None
+    tempo_backswing_ms: int | None = Field(
+        default=None,
+        serialization_alias="tempoBackswingMs",
+        validation_alias=AliasChoices("tempo_backswing_ms", "tempoBackswingMs"),
+    )
+    tempo_downswing_ms: int | None = Field(
+        default=None,
+        serialization_alias="tempoDownswingMs",
+        validation_alias=AliasChoices("tempo_downswing_ms", "tempoDownswingMs"),
+    )
+    tempo_ratio: float | None = Field(
+        default=None,
+        serialization_alias="tempoRatio",
+        validation_alias=AliasChoices("tempo_ratio", "tempoRatio"),
+    )
 
     model_config = ConfigDict(populate_by_name=True)
 
@@ -148,6 +163,9 @@ def append_shot(
             wind_direction_deg=payload.wind_direction_deg,
             elevation_delta_m=payload.elevation_delta_m,
             note=payload.note,
+            tempo_backswing_ms=payload.tempo_backswing_ms,
+            tempo_downswing_ms=payload.tempo_downswing_ms,
+            tempo_ratio=payload.tempo_ratio,
         )
     except RoundNotFound:
         raise HTTPException(

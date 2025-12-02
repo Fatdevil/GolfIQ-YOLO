@@ -4,6 +4,7 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 
 import { listRoundShots, type Shot } from '@app/api/roundClient';
 import type { RootStackParamList } from '@app/navigation/types';
+import { t } from '@app/i18n';
 
 export default function RoundSummaryScreen({ route }: NativeStackScreenProps<RootStackParamList, 'RoundSummary'>): JSX.Element {
   const { roundId } = route.params ?? { roundId: '' };
@@ -53,9 +54,14 @@ export default function RoundSummaryScreen({ route }: NativeStackScreenProps<Roo
           <View key={hole} style={styles.holeBlock}>
             <Text style={styles.holeTitle}>Hole {hole}</Text>
             {holeShots.map((shot) => (
-              <Text key={shot.id} style={styles.shotRow}>
-                {shot.club} · {new Date(shot.createdAt).toLocaleTimeString()} {shot.note ? `· ${shot.note}` : ''}
-              </Text>
+              <View key={shot.id} style={styles.shotRow}>
+                <Text style={styles.shotLine}>
+                  {shot.club} · {new Date(shot.createdAt).toLocaleTimeString()} {shot.note ? `· ${shot.note}` : ''}
+                </Text>
+                {shot.tempoRatio != null ? (
+                  <Text style={styles.tempoText}>{t('round.summary.tempo', { ratio: shot.tempoRatio.toFixed(1) })}</Text>
+                ) : null}
+              </View>
             ))}
           </View>
         ))
@@ -94,6 +100,13 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   shotRow: {
-    paddingVertical: 2,
+    paddingVertical: 4,
+    gap: 2,
+  },
+  shotLine: {
+    color: '#111827',
+  },
+  tempoText: {
+    color: '#6b7280',
   },
 });

@@ -22,6 +22,12 @@ interface RangeAnalyzeOutRaw {
   } | null;
   summary?: string | null;
   cues?: string[];
+  tempo_backswing_ms?: number | null;
+  tempo_downswing_ms?: number | null;
+  tempo_ratio?: number | null;
+  tempoBackswingMs?: number | null;
+  tempoDownswingMs?: number | null;
+  tempoRatio?: number | null;
   // Allow already-normalized keys to avoid breaking mocks
   ballSpeedMps?: number | null;
   clubSpeedMps?: number | null;
@@ -44,6 +50,9 @@ export interface RangeAnalyzeOut {
   } | null;
   summary?: string | null;
   cues?: string[];
+  tempoBackswingMs?: number | null;
+  tempoDownswingMs?: number | null;
+  tempoRatio?: number | null;
 }
 
 export function normalizeRangeAnalyzeResponse(raw: RangeAnalyzeOutRaw): RangeAnalyzeOut {
@@ -57,6 +66,9 @@ export function normalizeRangeAnalyzeResponse(raw: RangeAnalyzeOutRaw): RangeAna
     quality: raw.quality ?? null,
     summary: raw.summary ?? null,
     cues: raw.cues,
+    tempoBackswingMs: raw.tempo_backswing_ms ?? raw.tempoBackswingMs ?? null,
+    tempoDownswingMs: raw.tempo_downswing_ms ?? raw.tempoDownswingMs ?? null,
+    tempoRatio: raw.tempo_ratio ?? raw.tempoRatio ?? null,
   };
 }
 

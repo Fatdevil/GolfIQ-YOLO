@@ -69,6 +69,8 @@ def test_append_and_list_shots(round_client) -> None:
             "endLat": 10.001,
             "endLon": 20.001,
             "note": "Fairway",
+            "tempoBackswingMs": 900,
+            "tempoDownswingMs": 300,
         },
         headers=_headers(),
     )
@@ -76,12 +78,17 @@ def test_append_and_list_shots(round_client) -> None:
     shot = shot_resp.json()
     assert shot["roundId"] == round_id
     assert shot["club"] == "7i"
+    assert shot["tempoBackswingMs"] == 900
+    assert shot["tempoDownswingMs"] == 300
+    assert shot["tempoRatio"] == pytest.approx(900 / 300)
 
     list_resp = client.get(f"/api/rounds/{round_id}/shots", headers=_headers())
     assert list_resp.status_code == 200
     shots = list_resp.json()
     assert len(shots) == 1
     assert shots[0]["note"] == "Fairway"
+    assert shots[0]["tempoBackswingMs"] == 900
+    assert shots[0]["tempoDownswingMs"] == 300
 
 
 def test_shot_ingests_into_club_distance(round_client) -> None:

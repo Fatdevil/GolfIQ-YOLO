@@ -135,6 +135,21 @@ export default function RangeQuickPracticeSummaryScreen({ navigation, route }: P
         </View>
       </View>
 
+      <View style={styles.card}>
+        <Text style={styles.sectionTitle}>{t('range.tempo.title')}</Text>
+        {summary.avgTempoRatio != null && summary.tempoSampleCount ? (
+          <Text style={styles.helper}>{t('range.tempo.session_avg', { ratio: summary.avgTempoRatio.toFixed(1), count: summary.tempoSampleCount })}</Text>
+        ) : (
+          <Text style={styles.helper}>{t('range.tempo.no_data')}</Text>
+        )}
+        {summary.avgTempoBackswingMs != null || summary.avgTempoDownswingMs != null ? (
+          <Text style={styles.helper}>
+            {summary.avgTempoBackswingMs != null ? `${Math.round(summary.avgTempoBackswingMs)} ms backswing` : '—'} ·{' '}
+            {summary.avgTempoDownswingMs != null ? `${Math.round(summary.avgTempoDownswingMs)} ms downswing` : '—'}
+          </Text>
+        ) : null}
+      </View>
+
       {story ? (
         <RangeSessionStoryCard story={story} />
       ) : (
