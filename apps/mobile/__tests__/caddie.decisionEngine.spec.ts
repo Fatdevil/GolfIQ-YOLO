@@ -1,12 +1,14 @@
 import { describe, expect, it } from 'vitest';
 
 import {
-  buildCaddieDecision,
-  chooseClubForConditions,
+  buildCaddieDecisionFromContext,
+  chooseClubForTargetDistance,
   getEffectiveCarryM,
   mapDistanceStatsToCandidate,
+  riskProfileToBufferM,
   type CaddieClubCandidate,
 } from '@app/caddie/CaddieDecisionEngine';
+import { DEFAULT_SETTINGS } from '@app/caddie/caddieSettingsStorage';
 import { computePlaysLikeDistance } from '@app/caddie/caddieDistanceEngine';
 
 const sampleProfile = {
@@ -26,6 +28,13 @@ const baseConditions = {
   windDirectionDeg: 0,
   elevationDeltaM: 0,
 };
+
+describe('riskProfileToBufferM', () => {
+  it('returns larger buffers for safer profiles', () => {
+    expect(riskProfileToBufferM('safe')).toBeGreaterThan(riskProfileToBufferM('normal'));
+    expect(riskProfileToBufferM('normal')).toBeGreaterThan(riskProfileToBufferM('aggressive'));
+  });
+});
 
 describe('getEffectiveCarryM', () => {
   it('prefers manual carry when source is manual', () => {
@@ -53,9 +62,9 @@ describe('getEffectiveCarryM', () => {
   });
 });
 
-describe('chooseClubForConditions', () => {
+describe('chooseClubForTargetDistance', () => {
   it('selects the smallest club covering plays-like distance', () => {
-    const club = chooseClubForConditions(baseConditions, [
+    const club = chooseClubForTargetDistance(150, 0, [
       { club: '9i', baselineCarryM: 138, samples: 10, source: 'auto' },
       { club: '8i', baselineCarryM: 152, samples: 8, source: 'auto' },
       { club: '7i', baselineCarryM: 160, samples: 6, source: 'auto' },
@@ -65,7 +74,7 @@ describe('chooseClubForConditions', () => {
   });
 
   it('breaks ties by samples then club name', () => {
-    const club = chooseClubForConditions(baseConditions, [
+    const club = chooseClubForTargetDistance(150, 0, [
       { club: '8i', baselineCarryM: 155, samples: 3, source: 'auto' },
       { club: '7i', baselineCarryM: 155, samples: 6, source: 'auto' },
       { club: '6i', baselineCarryM: 170, samples: 2, source: 'auto' },
@@ -75,33 +84,71 @@ describe('chooseClubForConditions', () => {
   });
 
   it('falls back to longest club when none cover plays-like distance', () => {
-    const club = chooseClubForConditions(
-      { ...baseConditions, targetDistanceM: 200 },
-      [
-        { club: '9i', baselineCarryM: 138, samples: 10, source: 'auto' },
-        { club: '8i', baselineCarryM: 148, samples: 8, source: 'auto' },
-      ],
-    );
+    const club = chooseClubForTargetDistance(200, 0, [
+      { club: '9i', baselineCarryM: 138, samples: 10, source: 'auto' },
+      { club: '8i', baselineCarryM: 148, samples: 8, source: 'auto' },
+    ]);
 
     expect(club?.club).toBe('8i');
   });
 });
 
-describe('buildCaddieDecision', () => {
+describe('buildCaddieDecisionFromContext', () => {
   it('assembles decision with plays-like distance and risk', () => {
-    const result = buildCaddieDecision(
-      baseConditions,
-      'straight',
-      [
+    const result = buildCaddieDecisionFromContext({
+      conditions: baseConditions,
+      explicitIntent: 'straight',
+      settings: DEFAULT_SETTINGS,
+      clubs: [
         { club: '8i', baselineCarryM: 148, samples: 8, source: 'auto' },
         { club: '7i', baselineCarryM: 160, samples: 10, source: 'auto' },
       ],
-      sampleProfile,
-    );
+      shotShapeProfile: sampleProfile,
+    });
 
     expect(result?.club).toBe('7i');
     expect(result?.playsLikeDistanceM).toBeCloseTo(computePlaysLikeDistance(baseConditions));
     expect(result?.risk.coreZone.carryMaxM).toBeGreaterThan(result!.risk.coreZone.carryMinM);
+  });
+
+  it('uses stock shape when explicit intent is missing', () => {
+    const result = buildCaddieDecisionFromContext({
+      conditions: baseConditions,
+      settings: { stockShape: 'draw', riskProfile: 'normal' },
+      clubs: [
+        { club: '8i', baselineCarryM: 148, samples: 8, source: 'auto' },
+        { club: '7i', baselineCarryM: 160, samples: 10, source: 'auto' },
+      ],
+      shotShapeProfile: { ...sampleProfile, intent: 'draw' },
+    });
+
+    expect(result?.intent).toBe('draw');
+  });
+
+  it('applies risk profile buffers when choosing clubs', () => {
+    const clubs = [
+      { club: '9i', baselineCarryM: 155, samples: 5, source: 'auto' as const },
+      { club: '8i', baselineCarryM: 165, samples: 5, source: 'auto' as const },
+    ];
+
+    const aggressive = buildCaddieDecisionFromContext({
+      conditions: baseConditions,
+      explicitIntent: 'straight',
+      settings: { stockShape: 'straight', riskProfile: 'aggressive' },
+      clubs,
+      shotShapeProfile: sampleProfile,
+    });
+
+    const safe = buildCaddieDecisionFromContext({
+      conditions: baseConditions,
+      explicitIntent: 'straight',
+      settings: { stockShape: 'straight', riskProfile: 'safe' },
+      clubs,
+      shotShapeProfile: sampleProfile,
+    });
+
+    expect(aggressive?.club).toBe('9i');
+    expect(safe?.club).toBe('8i');
   });
 });
 

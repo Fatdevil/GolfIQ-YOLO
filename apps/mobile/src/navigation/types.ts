@@ -40,6 +40,7 @@ export type RootStackParamList = {
   };
   RangeTrainingGoal: undefined;
   CaddieApproach: undefined;
+  CaddieSetup: undefined;
   ClubDistances: undefined;
   Trips: undefined;
   RoundStory: { runId: string; summary?: import('@app/run/lastRound').LastRoundSummary };

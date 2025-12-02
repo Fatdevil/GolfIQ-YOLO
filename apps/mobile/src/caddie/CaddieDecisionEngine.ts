@@ -1,7 +1,11 @@
 import { type ShotShapeIntent, type ShotShapeProfile } from '@app/api/caddieApi';
 import type { ClubDistanceStats } from '@app/api/clubDistanceClient';
-import { computePlaysLikeDistance, computeRiskZonesFromProfile } from '@app/caddie/caddieDistanceEngine';
-import type { ShotShapeRiskSummary } from '@app/caddie/caddieDistanceEngine';
+import {
+  computePlaysLikeDistance,
+  computeRiskZonesFromProfile,
+  type ShotShapeRiskSummary,
+} from '@app/caddie/caddieDistanceEngine';
+import type { CaddieSettings, RiskProfile } from '@app/caddie/caddieSettingsStorage';
 
 export interface CaddieConditions {
   targetDistanceM: number;
@@ -18,10 +22,11 @@ export interface CaddieClubCandidate {
   samples: number;
 }
 
-export interface CaddieDecisionInput {
+export interface CaddieDecisionContext {
   conditions: CaddieConditions;
-  intent: ShotShapeIntent;
-  clubStats: CaddieClubCandidate[];
+  explicitIntent?: ShotShapeIntent;
+  settings: CaddieSettings;
+  clubs: CaddieClubCandidate[];
   shotShapeProfile: ShotShapeProfile;
 }
 
@@ -51,29 +56,36 @@ export function getEffectiveCarryM(stats: CaddieClubCandidate): number {
   return stats.baselineCarryM;
 }
 
-export function chooseClubForConditions(
-  conditions: CaddieConditions,
+export function riskProfileToBufferM(riskProfile: RiskProfile): number {
+  switch (riskProfile) {
+    case 'safe':
+      return 7;
+    case 'aggressive':
+      return 0;
+    case 'normal':
+    default:
+      return 3;
+  }
+}
+
+export function chooseClubForTargetDistance(
+  targetDistanceM: number,
+  safetyBufferM: number,
   clubStats: CaddieClubCandidate[],
 ): CaddieClubCandidate | null {
   if (!clubStats.length) return null;
 
-  const playsLike = computePlaysLikeDistance({
-    targetDistanceM: conditions.targetDistanceM,
-    windSpeedMps: conditions.windSpeedMps,
-    windDirectionDeg: conditions.windDirectionDeg,
-    elevationDeltaM: conditions.elevationDeltaM,
-  });
-
+  const effectiveTarget = targetDistanceM + safetyBufferM;
   const withCarry = clubStats
     .map((club) => ({ ...club, effectiveCarryM: getEffectiveCarryM(club) }))
     .filter((club) => Number.isFinite(club.effectiveCarryM) && club.effectiveCarryM > 0);
 
   if (!withCarry.length) return null;
 
-  const nearPlaysLike = withCarry.filter((club) => club.effectiveCarryM >= playsLike - 10);
-  const shortList = nearPlaysLike.length ? nearPlaysLike : withCarry;
+  const nearTarget = withCarry.filter((club) => club.effectiveCarryM >= effectiveTarget - 10);
+  const shortList = nearTarget.length ? nearTarget : withCarry;
 
-  const covering = shortList.filter((club) => club.effectiveCarryM >= playsLike);
+  const covering = shortList.filter((club) => club.effectiveCarryM >= effectiveTarget);
   if (covering.length) {
     return [...covering].sort(compareCandidates)[0];
   }
@@ -82,23 +94,25 @@ export function chooseClubForConditions(
   return fallback ?? null;
 }
 
-export function buildCaddieDecision(
-  conditions: CaddieConditions,
-  intent: ShotShapeIntent,
-  clubs: CaddieClubCandidate[],
-  shotShapeProfile: ShotShapeProfile,
+export function buildCaddieDecisionFromContext(
+  ctx: CaddieDecisionContext,
 ): CaddieDecisionOutput | null {
-  const selected = chooseClubForConditions(conditions, clubs);
-  if (!selected) return null;
+  const intent = ctx.explicitIntent ?? ctx.settings.stockShape ?? 'straight';
+  const riskProfile = ctx.settings.riskProfile ?? 'normal';
+  const safetyBufferM = riskProfileToBufferM(riskProfile);
 
   const playsLikeDistanceM = computePlaysLikeDistance({
-    targetDistanceM: conditions.targetDistanceM,
-    windSpeedMps: conditions.windSpeedMps,
-    windDirectionDeg: conditions.windDirectionDeg,
-    elevationDeltaM: conditions.elevationDeltaM,
+    targetDistanceM: ctx.conditions.targetDistanceM,
+    windSpeedMps: ctx.conditions.windSpeedMps,
+    windDirectionDeg: ctx.conditions.windDirectionDeg,
+    elevationDeltaM: ctx.conditions.elevationDeltaM,
   });
+
+  const selected = chooseClubForTargetDistance(playsLikeDistanceM, safetyBufferM, ctx.clubs);
+  if (!selected) return null;
+
   const effectiveCarryM = getEffectiveCarryM(selected);
-  const risk = computeRiskZonesFromProfile(shotShapeProfile);
+  const risk = computeRiskZonesFromProfile(ctx.shotShapeProfile);
 
   return {
     club: selected.club,
