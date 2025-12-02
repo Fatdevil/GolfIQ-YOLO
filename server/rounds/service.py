@@ -65,12 +65,6 @@ class RoundService:
         if record.player_id != player_id:
             raise RoundOwnershipError(round_id)
 
-        ratio = tempo_ratio
-        if ratio is None and tempo_backswing_ms is not None and tempo_downswing_ms:
-            try:
-                ratio = tempo_backswing_ms / float(tempo_downswing_ms)
-            except ZeroDivisionError:
-                ratio = None
         record.ended_at = datetime.now(timezone.utc)
         self._write_round(record)
         return record.to_round()
@@ -100,6 +94,18 @@ class RoundService:
             raise RoundNotFound(round_id)
         if record.player_id != player_id:
             raise RoundOwnershipError(round_id)
+
+        ratio = tempo_ratio
+        if (
+            ratio is None
+            and tempo_backswing_ms is not None
+            and tempo_downswing_ms is not None
+        ):
+            try:
+                if tempo_downswing_ms > 0:
+                    ratio = float(tempo_backswing_ms) / float(tempo_downswing_ms)
+            except ZeroDivisionError:
+                ratio = None
 
         shot = ShotRecord(
             id=str(uuid.uuid4()),

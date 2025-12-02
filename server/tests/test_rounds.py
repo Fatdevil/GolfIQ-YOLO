@@ -91,6 +91,55 @@ def test_append_and_list_shots(round_client) -> None:
     assert shots[0]["tempoDownswingMs"] == 300
 
 
+def test_append_shot_respects_provided_ratio(round_client) -> None:
+    client, _, _ = round_client
+    start = client.post("/api/rounds/start", json={}, headers=_headers()).json()
+    round_id = start["id"]
+
+    provided_ratio = 2.4
+    shot_resp = client.post(
+        f"/api/rounds/{round_id}/shots",
+        json={
+            "holeNumber": 1,
+            "club": "5i",
+            "startLat": 10.0,
+            "startLon": 20.0,
+            "tempoBackswingMs": 960,
+            "tempoDownswingMs": 400,
+            "tempoRatio": provided_ratio,
+        },
+        headers=_headers(),
+    )
+    assert shot_resp.status_code == 200
+    shot = shot_resp.json()
+    assert shot["tempoBackswingMs"] == 960
+    assert shot["tempoDownswingMs"] == 400
+    assert shot["tempoRatio"] == provided_ratio
+
+
+def test_append_shot_handles_zero_downswing(round_client) -> None:
+    client, _, _ = round_client
+    start = client.post("/api/rounds/start", json={}, headers=_headers()).json()
+    round_id = start["id"]
+
+    shot_resp = client.post(
+        f"/api/rounds/{round_id}/shots",
+        json={
+            "holeNumber": 1,
+            "club": "5i",
+            "startLat": 10.0,
+            "startLon": 20.0,
+            "tempoBackswingMs": 960,
+            "tempoDownswingMs": 0,
+        },
+        headers=_headers(),
+    )
+    assert shot_resp.status_code == 200
+    shot = shot_resp.json()
+    assert shot["tempoDownswingMs"] == 0
+    assert shot["tempoRatio"] is None
+
+
 def test_shot_ingests_into_club_distance(round_client) -> None:
     client, club_service, _ = round_client
     start = client.post("/api/rounds/start", json={}, headers=_headers()).json()
