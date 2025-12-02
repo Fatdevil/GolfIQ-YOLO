@@ -7,6 +7,16 @@ from typing import Literal
 from pydantic import AliasChoices, BaseModel, ConfigDict, Field
 
 
+class ClubLateralStats(BaseModel):
+    mean_side_m: float = Field(alias="meanSideM")
+    std_side_m: float = Field(alias="stdSideM")
+    outlier_left_count: int = Field(alias="outlierLeftCount")
+    outlier_right_count: int = Field(alias="outlierRightCount")
+    total_shots: int = Field(alias="totalShots")
+
+    model_config = ConfigDict(populate_by_name=True)
+
+
 class ClubDistanceStats(BaseModel):
     club: str
     samples: int
@@ -16,6 +26,8 @@ class ClubDistanceStats(BaseModel):
 
     manual_carry_m: float | None = Field(default=None, alias="manualCarryM")
     source: Literal["auto", "manual"] = "auto"
+
+    lateral: ClubLateralStats | None = None
 
     model_config = ConfigDict(populate_by_name=True)
 
@@ -56,6 +68,18 @@ class OnCourseShot(BaseModel):
             "elevation_delta_m", "elevationDelta_m", "elevationDeltaM"
         ),
     )
+    target_lat: float | None = Field(
+        default=None,
+        validation_alias=AliasChoices("target_lat", "targetLat"),
+    )
+    target_lon: float | None = Field(
+        default=None,
+        validation_alias=AliasChoices("target_lon", "targetLon"),
+    )
+    side_m: float | None = Field(
+        default=None,
+        validation_alias=AliasChoices("side_m", "sideM"),
+    )
     recorded_at: Optional[datetime] = Field(
         default=None,
         validation_alias=AliasChoices(
@@ -66,4 +90,9 @@ class OnCourseShot(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
 
-__all__ = ["ClubDistanceStats", "PlayerClubDistanceProfile", "OnCourseShot"]
+__all__ = [
+    "ClubDistanceStats",
+    "ClubLateralStats",
+    "PlayerClubDistanceProfile",
+    "OnCourseShot",
+]

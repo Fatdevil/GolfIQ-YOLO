@@ -1,3 +1,5 @@
+import type { ShotShapeProfile } from '@app/api/caddieApi';
+
 export interface PlaysLikeInput {
   targetDistanceM: number;
   windSpeedMps: number;
@@ -11,6 +13,20 @@ export interface ClubCandidate {
   manualCarryM?: number | null;
   source: 'auto' | 'manual';
   samples?: number;
+}
+
+export interface RiskZone {
+  carryMinM: number;
+  carryMaxM: number;
+  sideMinM: number;
+  sideMaxM: number;
+}
+
+export interface ShotShapeRiskSummary {
+  coreZone: RiskZone;
+  fullZone: RiskZone;
+  tailLeftProb: number;
+  tailRightProb: number;
 }
 
 type ClubCandidateWithCarry = ClubCandidate & { effectiveCarry: number };
@@ -59,4 +75,33 @@ export function suggestClubForTarget(
     return atOrAbove[0];
   }
   return validClubs[validClubs.length - 1];
+}
+
+const CORE_INTERVAL = 1.28;
+const FULL_INTERVAL = 1.96;
+
+export function computeRiskZonesFromProfile(profile: ShotShapeProfile): ShotShapeRiskSummary {
+  const carryStd = Math.max(profile.coreCarryStdM, 0);
+  const sideStd = Math.max(profile.coreSideStdM, 0);
+
+  const coreZone: RiskZone = {
+    carryMinM: profile.coreCarryMeanM - CORE_INTERVAL * carryStd,
+    carryMaxM: profile.coreCarryMeanM + CORE_INTERVAL * carryStd,
+    sideMinM: profile.coreSideMeanM - CORE_INTERVAL * sideStd,
+    sideMaxM: profile.coreSideMeanM + CORE_INTERVAL * sideStd,
+  };
+
+  const fullZone: RiskZone = {
+    carryMinM: profile.coreCarryMeanM - FULL_INTERVAL * carryStd,
+    carryMaxM: profile.coreCarryMeanM + FULL_INTERVAL * carryStd,
+    sideMinM: profile.coreSideMeanM - FULL_INTERVAL * sideStd,
+    sideMaxM: profile.coreSideMeanM + FULL_INTERVAL * sideStd,
+  };
+
+  return {
+    coreZone,
+    fullZone,
+    tailLeftProb: profile.tailLeftProb,
+    tailRightProb: profile.tailRightProb,
+  };
 }

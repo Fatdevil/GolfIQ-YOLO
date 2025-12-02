@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import statistics
 from datetime import datetime, timedelta, timezone
+from typing import cast
 
 import pytest
 from fastapi.testclient import TestClient
@@ -12,6 +13,8 @@ from server.club_distance import (
     ClubDistanceAggregator,
     ClubDistanceService,
     OnCourseShot,
+    ShotShapeIntent,
+    build_shot_shape_profile,
     compute_plays_like_distance,
     get_club_distance_service,
 )
@@ -28,6 +31,9 @@ def _build_shot(
     wind_speed_mps: float = 0.0,
     wind_direction_deg: float | None = None,
     elevation_delta_m: float = 0.0,
+    target_lat: float | None = None,
+    target_lon: float | None = None,
+    side_m: float | None = None,
     recorded_at: datetime | None = None,
 ) -> OnCourseShot:
     return OnCourseShot(
@@ -40,6 +46,9 @@ def _build_shot(
         wind_speed_mps=wind_speed_mps,
         wind_direction_deg=wind_direction_deg,
         elevation_delta_m=elevation_delta_m,
+        target_lat=target_lat,
+        target_lon=target_lon,
+        side_m=side_m,
         recorded_at=recorded_at,
     )
 
@@ -76,6 +85,27 @@ def test_aggregator_computes_running_mean_and_stddev() -> None:
     assert stats.source == "auto"
 
 
+def test_aggregator_tracks_lateral_dispersion_and_outliers() -> None:
+    aggregator = ClubDistanceAggregator()
+
+    side_offsets = [0.0, 5.0, -6.0, 35.0, -50.0]
+    shots = [
+        _build_shot(side_m=side, recorded_at=datetime(2024, 1, 1, tzinfo=timezone.utc))
+        for side in side_offsets
+    ]
+
+    aggregator.ingest_shots(shots)
+    stats = aggregator.get_profile("p1").clubs["7i"]
+
+    assert stats.samples == len(side_offsets)
+    assert stats.lateral is not None
+    assert stats.lateral.mean_side_m == pytest.approx(statistics.fmean(side_offsets))
+    assert stats.lateral.std_side_m == pytest.approx(statistics.stdev(side_offsets))
+    assert stats.lateral.outlier_right_count == 1
+    assert stats.lateral.outlier_left_count == 1
+    assert stats.lateral.total_shots == len(side_offsets)
+
+
 def test_aggregator_handles_missing_player() -> None:
     aggregator = ClubDistanceAggregator()
 
@@ -103,6 +133,29 @@ def test_compute_plays_like_distance_applies_conditions() -> None:
         elevation_delta_m=-5.0,
     )
     assert tailwind < plays_like
+
+
+def test_build_shot_shape_profile_uses_lateral_stats() -> None:
+    aggregator = ClubDistanceAggregator()
+    service = ClubDistanceService(aggregator)
+
+    shots = [
+        _build_shot(side_m=2.0),
+        _build_shot(side_m=-1.0),
+        _build_shot(side_m=25.0),
+    ]
+    service.ingest_shots(shots)
+
+    stats = service.get_profile("p1").clubs["7i"]
+    profile = build_shot_shape_profile(stats, cast(ShotShapeIntent, "fade"))
+
+    assert profile.club == "7i"
+    assert profile.intent == "fade"
+    assert profile.core_carry_mean_m == pytest.approx(stats.baseline_carry_m)
+    assert profile.core_carry_std_m == pytest.approx(stats.carry_std_m or 0.0)
+    assert profile.core_side_mean_m == pytest.approx(stats.lateral.mean_side_m)
+    assert profile.core_side_std_m >= 0.5
+    assert profile.tail_right_prob > 0
 
 
 def test_club_distance_endpoint_returns_profile(
@@ -250,6 +303,32 @@ def test_clear_manual_override_without_auto_samples_resets_baseline(
         assert data["source"] == "auto"
         assert data["samples"] == 0
         assert data["baselineCarryM"] == 0.0
+    finally:
+        app.dependency_overrides.pop(get_club_distance_service, None)
+
+
+def test_caddie_shot_shape_endpoint(monkeypatch: pytest.MonkeyPatch) -> None:
+    aggregator = ClubDistanceAggregator()
+    service = ClubDistanceService(aggregator)
+
+    shot = _build_shot(player_id="player-shape", side_m=30.0)
+    service.ingest_shot(shot)
+
+    app.dependency_overrides[get_club_distance_service] = lambda: service
+
+    try:
+        with TestClient(app) as client:
+            response = client.get(
+                "/api/caddie/shot-shape-profile",
+                params={"club": "7i", "intent": "draw"},
+                headers={"x-api-key": "player-shape"},
+            )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["club"] == "7i"
+        assert data["intent"] == "draw"
+        assert data["tailRightProb"] > 0
     finally:
         app.dependency_overrides.pop(get_club_distance_service, None)
 

@@ -18,6 +18,7 @@ import {
   setClubDistanceOverride,
   type ClubDistanceStats,
 } from '@app/api/clubDistanceClient';
+import CaddieRiskHintsCard from '@app/components/CaddieRiskHintsCard';
 import { t } from '@app/i18n';
 import type { RootStackParamList } from '@app/navigation/types';
 
@@ -247,6 +248,7 @@ export default function ClubDistancesScreen({}: Props): JSX.Element {
       <Text style={styles.title}>{t('clubDistances.title')}</Text>
       <Text style={styles.subtitle}>{t('clubDistances.subtitle')}</Text>
       <Text style={styles.helper}>{t('clubDistances.helper')}</Text>
+      <CaddieRiskHintsCard clubs={state.clubs.map((club) => club.club)} />
       {state.actionError ? <Text style={styles.errorBanner}>{state.actionError}</Text> : null}
       <FlatList
         data={state.clubs}

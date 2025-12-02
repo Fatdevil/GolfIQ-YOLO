@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
 
-import { computePlaysLikeDistance, suggestClubForTarget } from '@app/caddie/caddieDistanceEngine';
+import {
+  computePlaysLikeDistance,
+  computeRiskZonesFromProfile,
+  suggestClubForTarget,
+} from '@app/caddie/caddieDistanceEngine';
 
 describe('computePlaysLikeDistance', () => {
   it('adjusts distance for headwind and elevation', () => {
@@ -74,5 +78,46 @@ describe('suggestClubForTarget', () => {
     );
 
     expect(club?.club).toBe('8i');
+  });
+});
+
+describe('computeRiskZonesFromProfile', () => {
+  it('computes symmetric bounds for core and full zones', () => {
+    const summary = computeRiskZonesFromProfile({
+      club: '7i',
+      intent: 'straight',
+      coreCarryMeanM: 150,
+      coreCarryStdM: 5,
+      coreSideMeanM: -3,
+      coreSideStdM: 4,
+      tailLeftProb: 0.05,
+      tailRightProb: 0.02,
+    });
+
+    expect(summary.coreZone.carryMinM).toBeCloseTo(150 - 1.28 * 5, 5);
+    expect(summary.coreZone.sideMaxM).toBeCloseTo(-3 + 1.28 * 4, 5);
+    expect(summary.fullZone.carryMaxM).toBeCloseTo(150 + 1.96 * 5, 5);
+    expect(summary.tailLeftProb).toBe(0.05);
+  });
+
+  it('handles zero dispersion defensively', () => {
+    const summary = computeRiskZonesFromProfile({
+      club: 'PW',
+      intent: 'fade',
+      coreCarryMeanM: 100,
+      coreCarryStdM: 0,
+      coreSideMeanM: 0,
+      coreSideStdM: 0,
+      tailLeftProb: 0,
+      tailRightProb: 0,
+    });
+
+    expect(summary.coreZone).toEqual({
+      carryMinM: 100,
+      carryMaxM: 100,
+      sideMinM: 0,
+      sideMaxM: 0,
+    });
+    expect(summary.tailRightProb).toBe(0);
   });
 });

@@ -20,6 +20,9 @@ class ClubDistanceService:
     def get_profile(self, player_id: str) -> PlayerClubDistanceProfile:
         return self._aggregator.get_profile(player_id)
 
+    def get_stats_for_club(self, player_id: str, club: str) -> ClubDistanceStats:
+        return self._aggregator.get_stats_for_club(player_id, club)
+
     def set_manual_override(
         self, player_id: str, club: str, manual_carry_m: float, source: str = "manual"
     ) -> ClubDistanceStats:
