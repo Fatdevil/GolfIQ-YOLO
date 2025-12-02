@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import json
 from datetime import datetime, timezone
+from uuid import uuid4
 
 import pytest
 from fastapi.testclient import TestClient
@@ -11,6 +13,7 @@ from server.club_distance import (
     ClubDistanceService,
     get_club_distance_service,
 )
+from server.rounds.models import ShotRecord, _optional_float, _parse_dt
 from server.rounds.service import _sanitize_player_id, RoundService, get_round_service
 
 
@@ -21,7 +24,7 @@ def round_client(tmp_path):
     app.dependency_overrides[get_round_service] = lambda: service
     app.dependency_overrides[get_club_distance_service] = lambda: club_service
     client = TestClient(app)
-    yield client, club_service
+    yield client, club_service, service
     app.dependency_overrides.pop(get_round_service, None)
     app.dependency_overrides.pop(get_club_distance_service, None)
 
@@ -31,7 +34,7 @@ def _headers(player: str = "player-1") -> dict[str, str]:
 
 
 def test_start_and_end_round(round_client) -> None:
-    client, _ = round_client
+    client, _, _ = round_client
 
     start = client.post(
         "/api/rounds/start",
@@ -52,7 +55,7 @@ def test_start_and_end_round(round_client) -> None:
 
 
 def test_append_and_list_shots(round_client) -> None:
-    client, _ = round_client
+    client, _, _ = round_client
     start = client.post("/api/rounds/start", json={}, headers=_headers()).json()
     round_id = start["id"]
 
@@ -82,7 +85,7 @@ def test_append_and_list_shots(round_client) -> None:
 
 
 def test_shot_ingests_into_club_distance(round_client) -> None:
-    client, club_service = round_client
+    client, club_service, _ = round_client
     start = client.post("/api/rounds/start", json={}, headers=_headers()).json()
     round_id = start["id"]
 
@@ -126,3 +129,234 @@ def test_player_id_sanitization_rejects_traversal(tmp_path) -> None:
     client = TestClient(app)
     response = client.post("/api/rounds/start", json={}, headers=_headers("../evil"))
     assert response.status_code == 400
+
+
+def test_end_round_missing_and_forbidden(round_client) -> None:
+    client, _, _ = round_client
+
+    missing = client.post("/api/rounds/does-not-exist/end", headers=_headers())
+    assert missing.status_code == 404
+
+    start = client.post("/api/rounds/start", json={}, headers=_headers()).json()
+    round_id = start["id"]
+
+    forbidden = client.post(
+        f"/api/rounds/{round_id}/end", headers=_headers("someone-else")
+    )
+    assert forbidden.status_code == 403
+
+
+def test_append_shot_missing_and_forbidden(round_client) -> None:
+    client, _, _ = round_client
+    base_payload = {
+        "holeNumber": 1,
+        "club": "8i",
+        "startLat": 1.0,
+        "startLon": 2.0,
+    }
+
+    missing = client.post(
+        "/api/rounds/does-not-exist/shots", json=base_payload, headers=_headers()
+    )
+    assert missing.status_code == 404
+
+    start = client.post("/api/rounds/start", json={}, headers=_headers()).json()
+    round_id = start["id"]
+
+    forbidden = client.post(
+        f"/api/rounds/{round_id}/shots",
+        json=base_payload,
+        headers=_headers("stranger"),
+    )
+    assert forbidden.status_code == 403
+
+
+def test_list_shots_missing_and_forbidden(round_client) -> None:
+    client, _, _ = round_client
+    missing = client.get("/api/rounds/nope/shots", headers=_headers())
+    assert missing.status_code == 404
+
+    start = client.post("/api/rounds/start", json={}, headers=_headers()).json()
+    round_id = start["id"]
+
+    forbidden = client.get(
+        f"/api/rounds/{round_id}/shots", headers=_headers("different")
+    )
+    assert forbidden.status_code == 403
+
+
+def test_round_endpoints_reject_invalid_player_headers() -> None:
+    client = TestClient(app)
+    bad_headers = _headers("../bad")
+
+    start_resp = client.post("/api/rounds/start", json={}, headers=bad_headers)
+    assert start_resp.status_code == 400
+
+    append_resp = client.post(
+        "/api/rounds/bad/shots",
+        json={"holeNumber": 1, "club": "7i", "startLat": 0.0, "startLon": 0.0},
+        headers=bad_headers,
+    )
+    assert append_resp.status_code == 404
+
+    end_resp = client.post("/api/rounds/bad/end", json={}, headers=bad_headers)
+    assert end_resp.status_code == 404
+
+    list_shots = client.get("/api/rounds/bad/shots", headers=bad_headers)
+    assert list_shots.status_code == 404
+
+    list_rounds = client.get("/api/rounds", headers=bad_headers)
+    assert list_rounds.status_code == 400
+
+
+def test_round_router_surfaces_value_errors() -> None:
+    class ErrorService:
+        def end_round(self, **_: object):
+            raise ValueError("bad player")
+
+        def append_shot(self, **_: object):
+            raise ValueError("bad player")
+
+        def list_shots(self, **_: object):
+            raise ValueError("bad player")
+
+        def list_rounds(self, **_: object):
+            raise ValueError("bad player")
+
+    class DummyClub:
+        def ingest_shot_from_round(self, _: object) -> None:
+            return None
+
+    app.dependency_overrides[get_round_service] = lambda: ErrorService()
+    app.dependency_overrides[get_club_distance_service] = lambda: DummyClub()
+    client = TestClient(app)
+
+    try:
+        end_resp = client.post("/api/rounds/bad/end", headers=_headers())
+        assert end_resp.status_code == 400
+
+        append_resp = client.post(
+            "/api/rounds/bad/shots",
+            json={"holeNumber": 1, "club": "7i", "startLat": 0.0, "startLon": 0.0},
+            headers=_headers(),
+        )
+        assert append_resp.status_code == 400
+
+        list_resp = client.get("/api/rounds/bad/shots", headers=_headers())
+        assert list_resp.status_code == 400
+
+        rounds_resp = client.get("/api/rounds", headers=_headers())
+        assert rounds_resp.status_code == 400
+    finally:
+        app.dependency_overrides.pop(get_round_service, None)
+        app.dependency_overrides.pop(get_club_distance_service, None)
+
+
+def test_list_rounds_empty_and_skips_invalid_metadata(round_client, tmp_path) -> None:
+    client, _, service = round_client
+
+    empty = client.get("/api/rounds", headers=_headers())
+    assert empty.status_code == 200
+    assert empty.json() == []
+
+    bad_round_dir = service._round_dir("player-1", "bad-round")
+    bad_round_dir.mkdir(parents=True)
+    (bad_round_dir / "round.json").write_text("{ not json }")
+
+    response = client.get("/api/rounds", headers=_headers())
+    assert response.status_code == 200
+    assert response.json() == []
+
+
+def test_list_rounds_limit_and_skips_missing_meta(tmp_path) -> None:
+    service = RoundService(base_dir=tmp_path)
+
+    missing_meta_dir = service._round_dir("player-1", "no-meta")
+    missing_meta_dir.mkdir(parents=True)
+
+    first = service.start_round(
+        player_id="player-1", course_id=None, tee_name=None, holes=18
+    )
+    second = service.start_round(
+        player_id="player-1", course_id=None, tee_name=None, holes=18
+    )
+
+    rounds = service.list_rounds(player_id="player-1", limit=1)
+    assert len(rounds) == 1
+    assert rounds[0].id in {first.id, second.id}
+
+
+def test_read_shot_records_skips_invalid_lines(tmp_path) -> None:
+    service = RoundService(base_dir=tmp_path)
+    round_id = "round-1"
+    valid_shot = ShotRecord(
+        id=str(uuid4()),
+        round_id=round_id,
+        player_id="player-1",
+        hole_number=1,
+        club="9i",
+        created_at=datetime.now(timezone.utc),
+        start_lat=10.0,
+        start_lon=20.0,
+        end_lat=None,
+        end_lon=None,
+        wind_speed_mps=None,
+        wind_direction_deg=None,
+        elevation_delta_m=None,
+        note=None,
+    )
+    round_dir = service._round_dir("player-1", round_id)
+    round_dir.mkdir(parents=True)
+    shots_path = round_dir / "shots.jsonl"
+    shots_path.write_text(json.dumps(valid_shot.to_dict()) + "\ninvalid json\n   \n")
+
+    records = list(service._read_shot_records(round_id))
+    assert len(records) == 1
+    assert records[0].id == valid_shot.id
+
+
+def test_read_shot_records_skips_missing_files(tmp_path) -> None:
+    service = RoundService(base_dir=tmp_path)
+    empty_round_dir = service._round_dir("player-2", "empty-round")
+    empty_round_dir.mkdir(parents=True, exist_ok=True)
+
+    round_id = "round-with-shots"
+    populated_dir = service._round_dir("player-1", round_id)
+    populated_dir.mkdir(parents=True, exist_ok=True)
+    shot = ShotRecord(
+        id=str(uuid4()),
+        round_id=round_id,
+        player_id="player-1",
+        hole_number=1,
+        club="D",
+        created_at=datetime.now(timezone.utc),
+        start_lat=1.0,
+        start_lon=1.0,
+        end_lat=None,
+        end_lon=None,
+        wind_speed_mps=None,
+        wind_direction_deg=None,
+        elevation_delta_m=None,
+        note=None,
+    )
+    (populated_dir / "shots.jsonl").write_text(json.dumps(shot.to_dict()) + "\n")
+
+    records = list(service._read_shot_records(round_id))
+    assert len(records) == 1
+    assert records[0].id == shot.id
+
+
+def test_load_round_returns_none_for_corrupt_payload(tmp_path) -> None:
+    service = RoundService(base_dir=tmp_path)
+    round_dir = service._round_dir("player-1", "corrupt")
+    round_dir.mkdir(parents=True)
+    (round_dir / "round.json").write_text("{not-json")
+
+    assert service._load_round("corrupt") is None
+
+
+def test_parse_dt_and_optional_float_helpers() -> None:
+    naive = _parse_dt("2024-01-02T03:04:05")
+    assert naive.tzinfo == timezone.utc
+
+    assert _optional_float("not-a-number") is None
