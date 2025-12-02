@@ -291,6 +291,15 @@ export default function HomeScreen({ navigation }: Props): JSX.Element {
             <Text style={styles.primaryButtonText}>Play round</Text>
           </View>
         </TouchableOpacity>
+        <TouchableOpacity
+          accessibilityLabel="Start on-course logging"
+          onPress={() => navigation.navigate('RoundStart')}
+          testID="round-engine-start"
+        >
+          <View style={[styles.secondaryButton, { marginTop: 8 }]}>
+            <Text style={styles.secondaryButtonText}>Log shots on course</Text>
+          </View>
+        </TouchableOpacity>
       </View>
 
       <View style={styles.card} testID="range-home-card">

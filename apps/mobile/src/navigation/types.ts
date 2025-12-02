@@ -45,6 +45,9 @@ export type RootStackParamList = {
   Trips: undefined;
   RoundStory: { runId: string; summary?: import('@app/run/lastRound').LastRoundSummary };
   RoundSaved: { summary: import('@app/run/lastRound').LastRoundSummary };
+  RoundStart: undefined;
+  RoundShot: { roundId?: string } | undefined;
+  RoundSummary: { roundId: string };
   EventJoin: { code?: string } | undefined;
   EventLive: {
     id: string;

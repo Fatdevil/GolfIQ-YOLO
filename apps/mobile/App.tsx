@@ -30,6 +30,9 @@ import InRoundScreen from '@app/screens/play/InRoundScreen';
 import RoundSavedScreen from '@app/screens/RoundSavedScreen';
 import RoundStoryScreen from '@app/screens/RoundStoryScreen';
 import ClubDistancesScreen from '@app/screens/ClubDistancesScreen';
+import RoundStartScreen from '@app/screens/RoundStartScreen';
+import RoundShotScreen from '@app/screens/RoundShotScreen';
+import RoundSummaryScreen from '@app/screens/RoundSummaryScreen';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
@@ -70,6 +73,9 @@ export default function App(): JSX.Element {
         <Stack.Screen name="PlayInRound" component={InRoundScreen} options={{ title: 'In round' }} />
         <Stack.Screen name="RoundStory" component={RoundStoryScreen} options={{ title: 'Round story' }} />
         <Stack.Screen name="RoundSaved" component={RoundSavedScreen} options={{ title: 'Round saved' }} />
+        <Stack.Screen name="RoundStart" component={RoundStartScreen} options={{ title: 'Start round' }} />
+        <Stack.Screen name="RoundShot" component={RoundShotScreen} options={{ title: 'Log shots' }} />
+        <Stack.Screen name="RoundSummary" component={RoundSummaryScreen} options={{ title: 'Round summary' }} />
         <Stack.Screen
           name="RangePractice"
           component={RangePracticeScreen}

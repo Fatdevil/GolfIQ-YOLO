@@ -46,6 +46,8 @@ type FlatListProps<Item> = CommonProps & {
   renderItem: (params: { item: Item; index: number }) => React.ReactElement | null;
   keyExtractor?: (item: Item, index: number) => string;
   contentContainerStyle?: Record<string, unknown>;
+  horizontal?: boolean;
+  showsHorizontalScrollIndicator?: boolean;
 };
 
 export function FlatList<Item>({ data, renderItem, keyExtractor, testID }: FlatListProps<Item>): JSX.Element {

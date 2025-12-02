@@ -1,0 +1,191 @@
+from __future__ import annotations
+
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field
+
+from server.api.security import require_api_key
+from server.api.user_header import UserIdHeader
+from server.club_distance import ClubDistanceService, get_club_distance_service
+from server.rounds.models import Round, Shot
+from server.rounds.service import (
+    RoundNotFound,
+    RoundOwnershipError,
+    RoundService,
+    get_round_service,
+)
+
+router = APIRouter(
+    prefix="/api/rounds", tags=["rounds"], dependencies=[Depends(require_api_key)]
+)
+
+
+def _derive_player_id(api_key: str | None, user_id: str | None) -> str:
+    return user_id or api_key or "anonymous"
+
+
+class StartRoundRequest(BaseModel):
+    course_id: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices("course_id", "courseId"),
+        serialization_alias="courseId",
+    )
+    tee_name: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices("tee_name", "teeName"),
+        serialization_alias="teeName",
+    )
+    holes: int = 18
+
+    model_config = ConfigDict(populate_by_name=True)
+
+
+class AppendShotRequest(BaseModel):
+    hole_number: int = Field(
+        serialization_alias="holeNumber",
+        validation_alias=AliasChoices("hole_number", "holeNumber"),
+    )
+    club: str
+    start_lat: float = Field(
+        serialization_alias="startLat",
+        validation_alias=AliasChoices("start_lat", "startLat"),
+    )
+    start_lon: float = Field(
+        serialization_alias="startLon",
+        validation_alias=AliasChoices("start_lon", "startLon"),
+    )
+    end_lat: float | None = Field(
+        default=None,
+        serialization_alias="endLat",
+        validation_alias=AliasChoices("end_lat", "endLat"),
+    )
+    end_lon: float | None = Field(
+        default=None,
+        serialization_alias="endLon",
+        validation_alias=AliasChoices("end_lon", "endLon"),
+    )
+    wind_speed_mps: float | None = Field(
+        default=None,
+        serialization_alias="windSpeedMps",
+        validation_alias=AliasChoices("wind_speed_mps", "windSpeedMps"),
+    )
+    wind_direction_deg: float | None = Field(
+        default=None,
+        serialization_alias="windDirectionDeg",
+        validation_alias=AliasChoices("wind_direction_deg", "windDirectionDeg"),
+    )
+    elevation_delta_m: float | None = Field(
+        default=None,
+        serialization_alias="elevationDeltaM",
+        validation_alias=AliasChoices("elevation_delta_m", "elevationDeltaM"),
+    )
+    note: str | None = None
+
+    model_config = ConfigDict(populate_by_name=True)
+
+
+@router.post("/start", response_model=Round)
+def start_round(
+    payload: StartRoundRequest,
+    api_key: str | None = Depends(require_api_key),
+    user_id: UserIdHeader = None,
+    service: RoundService = Depends(get_round_service),
+) -> Round:
+    player_id = _derive_player_id(api_key, user_id)
+    return service.start_round(
+        player_id=player_id,
+        course_id=payload.course_id,
+        tee_name=payload.tee_name,
+        holes=payload.holes or 18,
+    )
+
+
+@router.post("/{round_id}/end", response_model=Round)
+def end_round(
+    round_id: str,
+    api_key: str | None = Depends(require_api_key),
+    user_id: UserIdHeader = None,
+    service: RoundService = Depends(get_round_service),
+) -> Round:
+    player_id = _derive_player_id(api_key, user_id)
+    try:
+        return service.end_round(player_id=player_id, round_id=round_id)
+    except RoundNotFound:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="round not found"
+        )
+    except RoundOwnershipError:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="round not owned by player"
+        )
+
+
+@router.post("/{round_id}/shots", response_model=Shot)
+def append_shot(
+    round_id: str,
+    payload: AppendShotRequest,
+    api_key: str | None = Depends(require_api_key),
+    user_id: UserIdHeader = None,
+    service: RoundService = Depends(get_round_service),
+    club_distance: ClubDistanceService = Depends(get_club_distance_service),
+) -> Shot:
+    player_id = _derive_player_id(api_key, user_id)
+    try:
+        shot = service.append_shot(
+            player_id=player_id,
+            round_id=round_id,
+            hole_number=payload.hole_number,
+            club=payload.club,
+            start_lat=payload.start_lat,
+            start_lon=payload.start_lon,
+            end_lat=payload.end_lat,
+            end_lon=payload.end_lon,
+            wind_speed_mps=payload.wind_speed_mps,
+            wind_direction_deg=payload.wind_direction_deg,
+            elevation_delta_m=payload.elevation_delta_m,
+            note=payload.note,
+        )
+    except RoundNotFound:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="round not found"
+        )
+    except RoundOwnershipError:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="round not owned by player"
+        )
+
+    club_distance.ingest_shot_from_round(shot)
+    return shot
+
+
+@router.get("/{round_id}/shots", response_model=list[Shot])
+def list_round_shots(
+    round_id: str,
+    api_key: str | None = Depends(require_api_key),
+    user_id: UserIdHeader = None,
+    service: RoundService = Depends(get_round_service),
+) -> list[Shot]:
+    player_id = _derive_player_id(api_key, user_id)
+    try:
+        return service.list_shots(player_id=player_id, round_id=round_id)
+    except RoundNotFound:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="round not found"
+        )
+    except RoundOwnershipError:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="round not owned by player"
+        )
+
+
+@router.get("", response_model=list[Round])
+def list_rounds(
+    limit: int = Query(20, ge=1, le=200),
+    api_key: str | None = Depends(require_api_key),
+    user_id: UserIdHeader = None,
+    service: RoundService = Depends(get_round_service),
+) -> list[Round]:
+    player_id = _derive_player_id(api_key, user_id)
+    return service.list_rounds(player_id=player_id, limit=limit)
+
+
+__all__ = ["router"]
