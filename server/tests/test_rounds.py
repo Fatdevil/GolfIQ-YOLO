@@ -402,6 +402,41 @@ def test_read_shot_records_skips_missing_files(tmp_path) -> None:
     assert records[0].id == shot.id
 
 
+def test_read_shot_records_handles_missing_tempo_fields(tmp_path) -> None:
+    service = RoundService(base_dir=tmp_path)
+    round_id = "round-old-format"
+    shot_id = str(uuid4())
+
+    legacy_shot = {
+        "id": shot_id,
+        "round_id": round_id,
+        "player_id": "player-1",
+        "hole_number": 1,
+        "club": "7i",
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "start_lat": 1.0,
+        "start_lon": 2.0,
+        "end_lat": None,
+        "end_lon": None,
+        "wind_speed_mps": None,
+        "wind_direction_deg": None,
+        "elevation_delta_m": None,
+        "note": None,
+    }
+
+    round_dir = service._round_dir("player-1", round_id)
+    round_dir.mkdir(parents=True, exist_ok=True)
+    (round_dir / "shots.jsonl").write_text(json.dumps(legacy_shot) + "\n")
+
+    records = list(service._read_shot_records(round_id))
+
+    assert len(records) == 1
+    assert records[0].id == shot_id
+    assert records[0].tempo_backswing_ms is None
+    assert records[0].tempo_downswing_ms is None
+    assert records[0].tempo_ratio is None
+
+
 def test_load_round_returns_none_for_corrupt_payload(tmp_path) -> None:
     service = RoundService(base_dir=tmp_path)
     round_dir = service._round_dir("player-1", "corrupt")

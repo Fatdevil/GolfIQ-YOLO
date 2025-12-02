@@ -121,9 +121,9 @@ class ShotRecord:
     wind_direction_deg: float | None
     elevation_delta_m: float | None
     note: str | None
-    tempo_backswing_ms: int | None
-    tempo_downswing_ms: int | None
-    tempo_ratio: float | None
+    tempo_backswing_ms: int | None = None
+    tempo_downswing_ms: int | None = None
+    tempo_ratio: float | None = None
 
     def to_shot(self) -> Shot:
         return Shot(
