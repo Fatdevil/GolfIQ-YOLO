@@ -38,9 +38,7 @@ def get_club_distances(
     return list(profile.clubs.values())
 
 
-@router.put(
-    "/club-distances/{club}/override", response_model=ClubDistanceStats
-)
+@router.put("/club-distances/{club}/override", response_model=ClubDistanceStats)
 def set_club_distance_override(
     club: str,
     override: ClubDistanceOverrideRequest,
@@ -54,9 +52,7 @@ def set_club_distance_override(
     )
 
 
-@router.delete(
-    "/club-distances/{club}/override", response_model=ClubDistanceStats
-)
+@router.delete("/club-distances/{club}/override", response_model=ClubDistanceStats)
 def clear_club_distance_override(
     club: str,
     api_key: str | None = Depends(require_api_key),

@@ -23,7 +23,9 @@ class ClubDistanceService:
     def set_manual_override(
         self, player_id: str, club: str, manual_carry_m: float, source: str = "manual"
     ) -> ClubDistanceStats:
-        return self._aggregator.set_manual_override(player_id, club, manual_carry_m, source)
+        return self._aggregator.set_manual_override(
+            player_id, club, manual_carry_m, source
+        )
 
     def clear_manual_override(self, player_id: str, club: str) -> ClubDistanceStats:
         return self._aggregator.clear_manual_override(player_id, club)

@@ -168,6 +168,12 @@ def test_clear_manual_override_resets_to_auto(monkeypatch: pytest.MonkeyPatch) -
     aggregator = ClubDistanceAggregator()
     service = ClubDistanceService(aggregator)
 
+    shot = _build_shot(
+        player_id="player-reset", wind_speed_mps=2.0, wind_direction_deg=90.0
+    )
+    service.ingest_shot(shot)
+    before_manual = service.get_profile("player-reset").clubs["7i"].baseline_carry_m
+
     service.set_manual_override("player-reset", "7i", 150.0)
 
     app.dependency_overrides[get_club_distance_service] = lambda: service
@@ -183,6 +189,8 @@ def test_clear_manual_override_resets_to_auto(monkeypatch: pytest.MonkeyPatch) -
         data = response.json()
         assert data["manualCarryM"] is None
         assert data["source"] == "auto"
+        assert data["baselineCarryM"] == pytest.approx(before_manual)
+        assert data["samples"] == 1
     finally:
         app.dependency_overrides.pop(get_club_distance_service, None)
 
@@ -210,6 +218,38 @@ def test_override_creates_minimal_record_when_missing_auto_stats(
         assert data["baselineCarryM"] == 105.0
         assert data["manualCarryM"] == 105.0
         assert data["source"] == "manual"
+    finally:
+        app.dependency_overrides.pop(get_club_distance_service, None)
+
+
+def test_clear_manual_override_without_auto_samples_resets_baseline(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    aggregator = ClubDistanceAggregator()
+    service = ClubDistanceService(aggregator)
+
+    app.dependency_overrides[get_club_distance_service] = lambda: service
+
+    try:
+        with TestClient(app) as client:
+            response = client.put(
+                "/api/player/club-distances/9i/override",
+                headers={"x-api-key": "player-reset-empty"},
+                json={"manualCarryM": 120.0},
+            )
+            assert response.status_code == 200
+
+            cleared = client.delete(
+                "/api/player/club-distances/9i/override",
+                headers={"x-api-key": "player-reset-empty"},
+            )
+
+        assert cleared.status_code == 200
+        data = cleared.json()
+        assert data["manualCarryM"] is None
+        assert data["source"] == "auto"
+        assert data["samples"] == 0
+        assert data["baselineCarryM"] == 0.0
     finally:
         app.dependency_overrides.pop(get_club_distance_service, None)
 

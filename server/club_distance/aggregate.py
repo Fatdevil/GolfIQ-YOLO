@@ -122,7 +122,11 @@ class ClubDistanceAggregator:
         return record.to_stats(shot.club)
 
     def set_manual_override(
-        self, player_id: str, club: str, manual_carry_m: float, source: Literal["auto", "manual"]
+        self,
+        player_id: str,
+        club: str,
+        manual_carry_m: float,
+        source: Literal["auto", "manual"],
     ) -> ClubDistanceStats:
         record = self._stats[player_id][club]
         now = datetime.now(UTC)
@@ -136,6 +140,9 @@ class ClubDistanceAggregator:
     def clear_manual_override(self, player_id: str, club: str) -> ClubDistanceStats:
         record = self._stats[player_id][club]
         now = datetime.now(UTC)
+        if record.stats.count == 0:
+            record.stats.mean = 0.0
+            record.stats.m2 = 0.0
         record.manual_carry_m = None
         record.source = "auto"
         record.stats.last_updated = now
