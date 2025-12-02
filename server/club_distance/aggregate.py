@@ -3,7 +3,7 @@ from __future__ import annotations
 import math
 from collections import defaultdict
 from datetime import UTC, datetime
-from typing import Dict, Iterable
+from typing import Dict, Iterable, Literal
 
 from server.bundles.geometry import haversine_m
 
@@ -65,10 +65,29 @@ class RunningStats:
         return math.sqrt(self.variance)
 
 
+class ClubDistanceRecord:
+    def __init__(self) -> None:
+        self.stats = RunningStats()
+        self.manual_carry_m: float | None = None
+        self.source: Literal["auto", "manual"] = "auto"
+
+    def to_stats(self, club: str) -> ClubDistanceStats:
+        last_updated = self.stats.last_updated or datetime.now(UTC)
+        return ClubDistanceStats(
+            club=club,
+            samples=self.stats.count,
+            baseline_carry_m=self.stats.mean,
+            carry_std_m=self.stats.stddev,
+            last_updated=last_updated,
+            manual_carry_m=self.manual_carry_m,
+            source=self.source,
+        )
+
+
 class ClubDistanceAggregator:
     def __init__(self) -> None:
-        self._stats: dict[str, dict[str, RunningStats]] = defaultdict(
-            lambda: defaultdict(RunningStats)
+        self._stats: dict[str, dict[str, ClubDistanceRecord]] = defaultdict(
+            lambda: defaultdict(ClubDistanceRecord)
         )
 
     @staticmethod
@@ -97,27 +116,35 @@ class ClubDistanceAggregator:
 
     def update_from_shot(self, shot: OnCourseShot) -> ClubDistanceStats:
         baseline_carry = self._normalize_shot(shot)
-        stats = self._stats[shot.player_id][shot.club]
-        stats.update(baseline_carry, shot.recorded_at)
+        record = self._stats[shot.player_id][shot.club]
+        record.stats.update(baseline_carry, shot.recorded_at)
 
-        return ClubDistanceStats(
-            club=shot.club,
-            samples=stats.count,
-            baseline_carry_m=stats.mean,
-            carry_std_m=stats.stddev,
-            last_updated=stats.last_updated or datetime.now(UTC),
-        )
+        return record.to_stats(shot.club)
+
+    def set_manual_override(
+        self, player_id: str, club: str, manual_carry_m: float, source: Literal["auto", "manual"]
+    ) -> ClubDistanceStats:
+        record = self._stats[player_id][club]
+        now = datetime.now(UTC)
+        if record.stats.count == 0:
+            record.stats.mean = manual_carry_m
+        record.stats.last_updated = now
+        record.manual_carry_m = manual_carry_m
+        record.source = source
+        return record.to_stats(club)
+
+    def clear_manual_override(self, player_id: str, club: str) -> ClubDistanceStats:
+        record = self._stats[player_id][club]
+        now = datetime.now(UTC)
+        record.manual_carry_m = None
+        record.source = "auto"
+        record.stats.last_updated = now
+        return record.to_stats(club)
 
     def get_profile(self, player_id: str) -> PlayerClubDistanceProfile:
         clubs: Dict[str, ClubDistanceStats] = {}
-        for club, stats in self._stats.get(player_id, {}).items():
-            clubs[club] = ClubDistanceStats(
-                club=club,
-                samples=stats.count,
-                baseline_carry_m=stats.mean,
-                carry_std_m=stats.stddev,
-                last_updated=stats.last_updated or datetime.now(UTC),
-            )
+        for club, record in self._stats.get(player_id, {}).items():
+            clubs[club] = record.to_stats(club)
         return PlayerClubDistanceProfile(player_id=player_id, clubs=clubs)
 
 

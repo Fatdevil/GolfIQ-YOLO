@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime
 from typing import Dict, Optional
+from typing import Literal
 
 from pydantic import AliasChoices, BaseModel, ConfigDict, Field
 
@@ -12,6 +13,9 @@ class ClubDistanceStats(BaseModel):
     baseline_carry_m: float = Field(alias="baselineCarryM")
     carry_std_m: float | None = Field(default=None, alias="carryStdM")
     last_updated: datetime = Field(alias="lastUpdated")
+
+    manual_carry_m: float | None = Field(default=None, alias="manualCarryM")
+    source: Literal["auto", "manual"] = "auto"
 
     model_config = ConfigDict(populate_by_name=True)
 
