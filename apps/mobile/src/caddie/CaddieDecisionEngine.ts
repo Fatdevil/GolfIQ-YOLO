@@ -1,8 +1,9 @@
 import { type ShotShapeIntent, type ShotShapeProfile } from '@app/api/caddieApi';
 import type { ClubDistanceStats } from '@app/api/clubDistanceClient';
 import {
-  computePlaysLikeDistance,
+  computePlaysLikeDetails,
   computeRiskZonesFromProfile,
+  type PlaysLikeDetails,
   type ShotShapeRiskSummary,
 } from '@app/caddie/caddieDistanceEngine';
 import type { CaddieSettings, RiskProfile } from '@app/caddie/caddieSettingsStorage';
@@ -35,6 +36,7 @@ export interface CaddieDecisionOutput {
   intent: ShotShapeIntent;
   effectiveCarryM: number;
   playsLikeDistanceM: number;
+  playsLikeBreakdown: { slopeAdjustM: number; windAdjustM: number };
   source: 'auto' | 'manual';
   samples: number;
   risk: ShotShapeRiskSummary;
@@ -101,14 +103,14 @@ export function buildCaddieDecisionFromContext(
   const riskProfile = ctx.settings.riskProfile ?? 'normal';
   const safetyBufferM = riskProfileToBufferM(riskProfile);
 
-  const playsLikeDistanceM = computePlaysLikeDistance({
+  const playsLike: PlaysLikeDetails = computePlaysLikeDetails({
     targetDistanceM: ctx.conditions.targetDistanceM,
     windSpeedMps: ctx.conditions.windSpeedMps,
     windDirectionDeg: ctx.conditions.windDirectionDeg,
     elevationDeltaM: ctx.conditions.elevationDeltaM,
   });
 
-  const selected = chooseClubForTargetDistance(playsLikeDistanceM, safetyBufferM, ctx.clubs);
+  const selected = chooseClubForTargetDistance(playsLike.effectiveDistanceM, safetyBufferM, ctx.clubs);
   if (!selected) return null;
 
   const effectiveCarryM = getEffectiveCarryM(selected);
@@ -118,10 +120,43 @@ export function buildCaddieDecisionFromContext(
     club: selected.club,
     intent,
     effectiveCarryM,
-    playsLikeDistanceM,
+    playsLikeDistanceM: playsLike.effectiveDistanceM,
+    playsLikeBreakdown: {
+      slopeAdjustM: playsLike.slopeAdjustM,
+      windAdjustM: playsLike.windAdjustM,
+    },
     source: selected.source,
     samples: selected.samples,
     risk,
+  };
+}
+
+export function getPlaysLikeRecommendation(
+  holeData: { distanceM: number; elevationDeltaM: number },
+  currentConditions: { windSpeedMps?: number; windDirectionDeg?: number },
+  playerProfile: CaddieClubCandidate[],
+  safetyBufferM = 0,
+) {
+  const playsLike = computePlaysLikeDetails({
+    targetDistanceM: holeData.distanceM,
+    windSpeedMps: currentConditions.windSpeedMps ?? 0,
+    windDirectionDeg: currentConditions.windDirectionDeg ?? 0,
+    elevationDeltaM: holeData.elevationDeltaM,
+  });
+
+  const recommended = chooseClubForTargetDistance(
+    playsLike.effectiveDistanceM,
+    safetyBufferM,
+    playerProfile,
+  );
+
+  return {
+    effectiveDistance: playsLike.effectiveDistanceM,
+    recommendedClub: recommended?.club ?? null,
+    breakdown: {
+      slopeAdjust: playsLike.slopeAdjustM,
+      windAdjust: playsLike.windAdjustM,
+    },
   };
 }
 

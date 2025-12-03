@@ -10,6 +10,7 @@ describe('buildCaddieHudPayload', () => {
       intent: 'fade',
       effectiveCarryM: 154,
       playsLikeDistanceM: 152,
+      playsLikeBreakdown: { slopeAdjustM: -2, windAdjustM: 1 },
       source: 'auto',
       samples: 8,
       risk: {
@@ -43,6 +44,8 @@ describe('buildCaddieHudPayload', () => {
       par: 4,
       rawDistanceM: 148,
       playsLikeDistanceM: 152,
+      slopeAdjustM: -2,
+      windAdjustM: 1,
       club: '7i',
       intent: 'fade',
       riskProfile: 'aggressive',

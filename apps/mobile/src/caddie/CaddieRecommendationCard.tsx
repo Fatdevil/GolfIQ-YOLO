@@ -23,8 +23,12 @@ export function CaddieRecommendationCard({ decision, settings }: CaddieRecommend
     club: decision.club,
     intentLabel: intentLabel(decision.intent),
   });
-  const playsLike = t('caddie.decision.plays_like', {
+  const slope = Math.round(decision.playsLikeBreakdown.slopeAdjustM);
+  const wind = Math.round(decision.playsLikeBreakdown.windAdjustM);
+  const playsLike = t('caddie.decision.plays_like_breakdown', {
     distance: Math.round(decision.playsLikeDistanceM),
+    slope: `${slope >= 0 ? '+' : ''}${slope}`,
+    wind: `${wind >= 0 ? '+' : ''}${wind}`,
   });
   const sourceLabel =
     decision.source === 'manual' ? t('caddie.decision.source_manual') : t('caddie.decision.source_auto');

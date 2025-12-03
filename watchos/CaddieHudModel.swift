@@ -7,6 +7,8 @@ struct CaddieHudPayload: Equatable {
     var par: Int?
     var rawDistanceM: Double
     var playsLikeDistanceM: Double
+    var slopeAdjustM: Double?
+    var windAdjustM: Double?
     var club: String
     var intent: String
     var riskProfile: String
@@ -31,6 +33,8 @@ struct CaddieHudPayload: Equatable {
         self.par = dictionary["par"] as? Int
         self.rawDistanceM = rawDistanceM
         self.playsLikeDistanceM = playsLikeDistanceM
+        self.slopeAdjustM = Self.double(from: dictionary["slopeAdjustM"])
+        self.windAdjustM = Self.double(from: dictionary["windAdjustM"])
         self.club = club
         self.intent = intent
         self.riskProfile = riskProfile
@@ -89,12 +93,20 @@ final class CaddieHudModel: ObservableObject {
 
     var primaryDistanceText: String? {
         guard let distance = payload?.playsLikeDistanceM else { return nil }
-        return "\(Int(distance.rounded())) m"
+        return "\(Int(distance.rounded())) m (Plays-like)"
     }
 
     var secondaryDistanceText: String? {
         guard let payload else { return nil }
-        return "Raw: \(Int(payload.rawDistanceM.rounded())) m · Plays like: \(Int(payload.playsLikeDistanceM.rounded())) m"
+        var parts: [String] = []
+        parts.append("Raw: \(Int(payload.rawDistanceM.rounded())) m")
+        if let slope = payload.slopeAdjustM, let wind = payload.windAdjustM {
+            parts.append("Δ slope \(signedMeters(from: slope)), wind \(signedMeters(from: wind))")
+        } else {
+            parts.append("Plays like: \(Int(payload.playsLikeDistanceM.rounded())) m")
+        }
+
+        return parts.joined(separator: " · ")
     }
 
     var clubLine: String? {
@@ -128,5 +140,10 @@ final class CaddieHudModel: ObservableObject {
 
     private func percentage(from value: Double) -> Int {
         Int((value * 100).rounded())
+    }
+
+    private func signedMeters(from value: Double) -> String {
+        let rounded = Int(value.rounded())
+        return rounded >= 0 ? "+\(rounded) m" : "\(rounded) m"
     }
 }

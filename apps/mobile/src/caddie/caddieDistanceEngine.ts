@@ -1,10 +1,17 @@
 import type { ShotShapeProfile } from '@app/api/caddieApi';
+import { computeEffectiveDistance } from './playsLike';
 
 export interface PlaysLikeInput {
   targetDistanceM: number;
   windSpeedMps: number;
   windDirectionDeg: number;
   elevationDeltaM: number;
+}
+
+export interface PlaysLikeDetails {
+  effectiveDistanceM: number;
+  slopeAdjustM: number;
+  windAdjustM: number;
 }
 
 export interface ClubCandidate {
@@ -31,17 +38,23 @@ export interface ShotShapeRiskSummary {
 
 type ClubCandidateWithCarry = ClubCandidate & { effectiveCarry: number };
 
-const HEADWIND_COEFFICIENT = 0.8;
-const ELEVATION_COEFFICIENT = 0.9;
+export function computePlaysLikeDetails(input: PlaysLikeInput): PlaysLikeDetails {
+  const { effectiveDistance, breakdown } = computeEffectiveDistance(
+    input.targetDistanceM,
+    input.elevationDeltaM,
+    input.windSpeedMps,
+    input.windDirectionDeg,
+  );
+
+  return {
+    effectiveDistanceM: effectiveDistance,
+    slopeAdjustM: breakdown.slopeAdjust,
+    windAdjustM: breakdown.windAdjust,
+  };
+}
 
 export function computePlaysLikeDistance(input: PlaysLikeInput): number {
-  const headwindComponent =
-    input.windSpeedMps * Math.cos(((input.windDirectionDeg % 360) * Math.PI) / 180);
-  return (
-    input.targetDistanceM +
-    headwindComponent * HEADWIND_COEFFICIENT +
-    input.elevationDeltaM * ELEVATION_COEFFICIENT
-  );
+  return computePlaysLikeDetails(input).effectiveDistanceM;
 }
 
 function filterBySamples<T extends ClubCandidate>(clubs: T[]): T[] {

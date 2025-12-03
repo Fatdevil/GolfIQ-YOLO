@@ -265,6 +265,7 @@ function sanitizeShot(input: unknown): Shot | null {
   const club = typeof record.club === 'string' && record.club.trim() ? record.club.trim() : 'UNK';
   const base = Number(record.base_m);
   const playsLike = Number(record.playsLike_m ?? base);
+  const playsLikeMetaRaw = record.playsLikeMeta;
   const tStart = Number(record.tStart);
   const tEndRaw = record.tEnd;
   const carryRaw = record.carry_m;
@@ -285,6 +286,21 @@ function sanitizeShot(input: unknown): Shot | null {
     playsLike_m: Number.isFinite(playsLike) ? playsLike : 0,
     pin: { lat: pinLat, lon: pinLon },
   };
+  if (playsLikeMetaRaw && typeof playsLikeMetaRaw === 'object') {
+    const metaRecord = playsLikeMetaRaw as Record<string, unknown>;
+    shot.playsLikeMeta = {
+      raw_m: Number.isFinite(Number(metaRecord.raw_m)) ? Number(metaRecord.raw_m) : undefined,
+      slope_m: Number.isFinite(Number(metaRecord.slope_m)) ? Number(metaRecord.slope_m) : undefined,
+      wind_m: Number.isFinite(Number(metaRecord.wind_m)) ? Number(metaRecord.wind_m) : undefined,
+      effective_m: Number.isFinite(Number(metaRecord.effective_m))
+        ? Number(metaRecord.effective_m)
+        : undefined,
+      recommendedClub:
+        typeof metaRecord.recommendedClub === 'string' && metaRecord.recommendedClub.trim()
+          ? metaRecord.recommendedClub.trim()
+          : undefined,
+    };
+  }
   if (Number.isFinite(Number(tEndRaw))) {
     shot.tEnd = Number(tEndRaw);
   }

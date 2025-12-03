@@ -8,6 +8,8 @@ export interface CaddieHudPayload {
 
   rawDistanceM: number;
   playsLikeDistanceM: number;
+  slopeAdjustM?: number | null;
+  windAdjustM?: number | null;
 
   club: string;
   intent: ShotShapeIntent;

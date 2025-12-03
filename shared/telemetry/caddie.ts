@@ -10,6 +10,9 @@ export type CaddiePlaysLikeEvent = {
   elevDiff_m: number;
   temp_C: number;
   headwind_mps: number;
+  slope_m?: number;
+  wind_m?: number;
+  recommendedClub?: string;
 };
 
 export type CaddieStrategyEvent = {
