@@ -236,6 +236,8 @@ export const useMemoValue = <T,>(factory: () => T, deps: React.DependencyList): 
 
 export const Platform = { OS: 'web' } as const;
 
+export const NativeModules: Record<string, unknown> = {};
+
 export const Vibration = {
   vibrate(_pattern?: number | number[]): void {
     // no-op for web runtime

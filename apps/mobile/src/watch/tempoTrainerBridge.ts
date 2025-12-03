@@ -19,11 +19,7 @@ export interface TempoTrainerResultMessage {
 
 type ResultListener = (message: TempoTrainerResultMessage) => void;
 
-let outboundHandler: ((message: TempoTrainerActivationMessage | TempoTrainerDeactivateMessage) => void) | null = (
-  message,
-) => {
-  console.debug('[tempoTrainer] outbound', message);
-};
+let outboundHandler: ((message: TempoTrainerActivationMessage | TempoTrainerDeactivateMessage) => void) | null = null;
 const listeners: ResultListener[] = [];
 
 export function registerTempoTrainerSender(
@@ -33,15 +29,23 @@ export function registerTempoTrainerSender(
 }
 
 export function isTempoTrainerAvailable(): boolean {
-  return typeof outboundHandler === 'function';
+  return outboundHandler !== null;
+}
+
+function send(message: TempoTrainerActivationMessage | TempoTrainerDeactivateMessage): void {
+  if (!outboundHandler) {
+    console.debug('TempoTrainer: outbound handler not registered', message);
+    return;
+  }
+  outboundHandler(message);
 }
 
 export function sendTempoTrainerActivation(target: TempoTarget): void {
-  outboundHandler?.({ type: 'tempoTrainer.activate', ...target });
+  send({ type: 'tempoTrainer.activate', ...target });
 }
 
 export function sendTempoTrainerDeactivation(): void {
-  outboundHandler?.({ type: 'tempoTrainer.deactivate' });
+  send({ type: 'tempoTrainer.deactivate' });
 }
 
 export function subscribeToTempoTrainerResults(listener: ResultListener): () => void {

@@ -291,6 +291,24 @@ describe('RangeQuickPracticeSessionScreen', () => {
     });
   });
 
+  it('hides tempo trainer toggle when watch is unavailable', () => {
+    vi.mocked(tempoBridge.isTempoTrainerAvailable).mockReturnValue(false);
+    const navigation = createNavigation();
+    const session: RangeSession = {
+      id: 'session-4',
+      mode: 'quick',
+      startedAt: new Date().toISOString(),
+      club: '7i',
+      targetDistanceM: 150,
+      cameraAngle: 'down_the_line',
+      shots: [],
+    };
+
+    render(<RangeQuickPracticeSessionScreen navigation={navigation} route={createRoute(session)} />);
+
+    expect(screen.queryByTestId('tempo-trainer-toggle')).not.toBeInTheDocument();
+  });
+
   it('uses trainer tempo result for last shot feedback', async () => {
     const navigation = createNavigation();
     const session: RangeSession = {
