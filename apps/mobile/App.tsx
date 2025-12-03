@@ -25,6 +25,7 @@ import CaddieApproachScreen from '@app/screens/CaddieApproachScreen';
 import CaddieSetupScreen from '@app/screens/CaddieSetupScreen';
 import RoundHistoryScreen from '@app/screens/RoundHistoryScreen';
 import PlayerStatsScreen from '@app/screens/PlayerStatsScreen';
+import CategoryStatsScreen from '@app/screens/CategoryStatsScreen';
 import { registerWatchTempoTrainerBridge } from '@app/watch/watchConnectivity';
 import { extractJoinCode } from '@app/utils/deepLink';
 import CourseSelectScreen from '@app/screens/play/CourseSelectScreen';
@@ -92,6 +93,11 @@ export default function App(): JSX.Element {
           name="PlayerStats"
           component={PlayerStatsScreen}
           options={{ title: t('stats.player.title') }}
+        />
+        <Stack.Screen
+          name="CategoryStats"
+          component={CategoryStatsScreen}
+          options={{ title: t('stats.player.categories.detail_title') }}
         />
         <Stack.Screen
           name="RangePractice"

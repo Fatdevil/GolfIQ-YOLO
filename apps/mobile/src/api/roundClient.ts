@@ -56,6 +56,11 @@ export interface RoundSummary {
   backStrokes?: number | null;
   totalPutts?: number | null;
   totalPenalties?: number | null;
+  teeShots?: number | null;
+  approachShots?: number | null;
+  shortGameShots?: number | null;
+  puttingShots?: number | null;
+  penalties?: number | null;
   fairwaysHit?: number | null;
   fairwaysTotal?: number | null;
   girCount?: number | null;
