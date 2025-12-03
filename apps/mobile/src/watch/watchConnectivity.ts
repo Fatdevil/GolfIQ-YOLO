@@ -1,5 +1,6 @@
 import { NativeModules } from 'react-native';
 
+import { registerCaddieHudSender } from './caddieHudBridge';
 import { registerTempoTrainerSender } from './tempoTrainerBridge';
 
 type WatchTransport = {
@@ -16,6 +17,9 @@ export function registerWatchTempoTrainerBridge(): void {
   if (transport?.sendMessage) {
     registerTempoTrainerSender((message) => {
       transport.sendMessage?.({ type: 'tempoTrainer', payload: message });
+    });
+    registerCaddieHudSender((msg) => {
+      transport.sendMessage?.({ type: 'caddieHud', payload: msg });
     });
   }
 }

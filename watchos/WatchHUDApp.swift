@@ -4,6 +4,7 @@ import SwiftUI
 struct WatchHUDApp: App {
     @StateObject private var model: WatchHUDModel
     @StateObject private var tempoTrainerModel: TempoTrainerModel
+    @StateObject private var caddieHudModel: CaddieHudModel
     private let sessionDelegate: SessionDelegate
 
     init() {
@@ -11,14 +12,17 @@ struct WatchHUDApp: App {
         _model = StateObject(wrappedValue: model)
         let tempoModel = TempoTrainerModel()
         _tempoTrainerModel = StateObject(wrappedValue: tempoModel)
-        sessionDelegate = SessionDelegate(model: model, tempoModel: tempoModel)
+        let caddieModel = CaddieHudModel()
+        _caddieHudModel = StateObject(wrappedValue: caddieModel)
+        sessionDelegate = SessionDelegate(model: model, tempoModel: tempoModel, caddieHudModel: caddieModel)
     }
 
     var body: some Scene {
         WindowGroup {
-            HUDMainView()
+            MainMenuView()
                 .environmentObject(model)
                 .environmentObject(tempoTrainerModel)
+                .environmentObject(caddieHudModel)
         }
     }
 }
