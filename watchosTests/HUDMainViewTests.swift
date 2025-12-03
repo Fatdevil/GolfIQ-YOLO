@@ -8,7 +8,9 @@ final class HUDMainViewTests: XCTestCase {
         XCTAssertNotNil(model.hud)
         XCTAssertEqual(model.holeNumber, 7)
 
-        let view = HUDMainView().environmentObject(model)
+        let view = HUDMainView()
+            .environmentObject(model)
+            .environmentObject(TempoTrainerModel())
         XCTAssertNotNil(view.body)
     }
 }

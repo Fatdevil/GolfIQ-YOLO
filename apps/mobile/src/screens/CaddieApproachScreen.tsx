@@ -22,6 +22,8 @@ import {
 import { computePlaysLikeDistance } from '@app/caddie/caddieDistanceEngine';
 import { t } from '@app/i18n';
 import type { RootStackParamList } from '@app/navigation/types';
+import { buildCaddieHudPayload } from '@app/caddie/caddieHudMapper';
+import { isCaddieHudAvailable, sendCaddieHudClear, sendCaddieHudUpdate } from '@app/watch/caddieHudBridge';
 
 const INTENTS: ShotShapeIntent[] = ['straight', 'fade', 'draw'];
 
@@ -146,6 +148,27 @@ export default function CaddieApproachScreen({ navigation }: Props): JSX.Element
       shotShapeProfile: profile,
     });
   }, [candidates, conditions, intent, profile, selectedClub, settings]);
+
+  useEffect(() => {
+    if (!isCaddieHudAvailable()) return;
+    if (!decision) {
+      sendCaddieHudClear();
+      return;
+    }
+
+    const hudPayload = buildCaddieHudPayload(decision, settings, {
+      rawDistanceM: conditions.targetDistanceM,
+    });
+    sendCaddieHudUpdate(hudPayload);
+  }, [conditions.targetDistanceM, decision, settings]);
+
+  useEffect(() => {
+    return () => {
+      if (isCaddieHudAvailable()) {
+        sendCaddieHudClear();
+      }
+    };
+  }, []);
 
   const handleNumberChange = (field: keyof CaddieConditions, value: string) => {
     const numeric = Number(value);

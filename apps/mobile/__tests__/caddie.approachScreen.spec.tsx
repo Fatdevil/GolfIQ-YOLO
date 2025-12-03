@@ -8,6 +8,7 @@ import * as caddieApi from '@app/api/caddieApi';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { RootStackParamList } from '@app/navigation/types';
 import * as settingsStorage from '@app/caddie/caddieSettingsStorage';
+import * as caddieHudBridge from '@app/watch/caddieHudBridge';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'CaddieApproach'>;
 
@@ -20,6 +21,11 @@ vi.mock('@app/api/caddieApi', () => ({
 vi.mock('@app/caddie/caddieSettingsStorage', () => ({
   loadCaddieSettings: vi.fn(),
   DEFAULT_SETTINGS: { stockShape: 'straight', riskProfile: 'normal' },
+}));
+vi.mock('@app/watch/caddieHudBridge', () => ({
+  isCaddieHudAvailable: vi.fn(() => false),
+  sendCaddieHudUpdate: vi.fn(),
+  sendCaddieHudClear: vi.fn(),
 }));
 
 describe('CaddieApproachScreen', () => {
@@ -38,6 +44,9 @@ describe('CaddieApproachScreen', () => {
       stockShape: 'straight',
       riskProfile: 'normal',
     });
+    vi.mocked(caddieHudBridge.isCaddieHudAvailable).mockReturnValue(false);
+    vi.mocked(caddieHudBridge.sendCaddieHudUpdate).mockReset();
+    vi.mocked(caddieHudBridge.sendCaddieHudClear).mockReset();
   });
 
   it('renders recommendation card when data is available', async () => {
@@ -79,5 +88,80 @@ describe('CaddieApproachScreen', () => {
     expect(await screen.findByTestId('caddie-recommendation-card')).toBeInTheDocument();
     expect(screen.getByText('7i · straight shot')).toBeInTheDocument();
     expect(screen.getByText(/Plays like/)).toBeInTheDocument();
+  });
+
+  it('sends HUD updates when available', async () => {
+    vi.mocked(caddieHudBridge.isCaddieHudAvailable).mockReturnValue(true);
+    vi.mocked(distanceClient.fetchClubDistances).mockResolvedValue([
+      {
+        club: '8i',
+        baselineCarryM: 148,
+        samples: 6,
+        source: 'auto',
+        carryStdM: 4,
+        lastUpdated: '2024-01-01T00:00:00Z',
+      },
+      {
+        club: '7i',
+        baselineCarryM: 160,
+        samples: 10,
+        source: 'auto',
+        carryStdM: 5,
+        lastUpdated: '2024-01-01T00:00:00Z',
+      },
+    ]);
+    vi.mocked(caddieApi.fetchShotShapeProfile).mockResolvedValue({
+      club: '7i',
+      intent: 'straight',
+      coreCarryMeanM: 160,
+      coreCarryStdM: 6,
+      coreSideMeanM: 0,
+      coreSideStdM: 5,
+      tailLeftProb: 0.03,
+      tailRightProb: 0.01,
+    });
+
+    render(<CaddieApproachScreen navigation={createNavigation()} route={createRoute()} />);
+
+    await waitFor(() => expect(caddieHudBridge.sendCaddieHudUpdate).toHaveBeenCalled());
+    const payload = vi.mocked(caddieHudBridge.sendCaddieHudUpdate).mock.calls[0][0];
+    expect(payload).toMatchObject({
+      club: '7i',
+      intent: 'straight',
+      riskProfile: 'normal',
+      rawDistanceM: 150,
+      playsLikeDistanceM: expect.any(Number),
+    });
+  });
+
+  it('does not send HUD updates when unavailable', async () => {
+    vi.mocked(caddieHudBridge.isCaddieHudAvailable).mockReturnValue(false);
+    vi.mocked(distanceClient.fetchClubDistances).mockResolvedValue([
+      {
+        club: '7i',
+        baselineCarryM: 160,
+        samples: 10,
+        source: 'auto',
+        carryStdM: 5,
+        lastUpdated: '2024-01-01T00:00:00Z',
+      },
+    ]);
+    vi.mocked(caddieApi.fetchShotShapeProfile).mockResolvedValue({
+      club: '7i',
+      intent: 'straight',
+      coreCarryMeanM: 160,
+      coreCarryStdM: 6,
+      coreSideMeanM: 0,
+      coreSideStdM: 5,
+      tailLeftProb: 0.03,
+      tailRightProb: 0.01,
+    });
+
+    render(<CaddieApproachScreen navigation={createNavigation()} route={createRoute()} />);
+
+    await waitFor(() => {
+      expect(caddieApi.fetchShotShapeProfile).toHaveBeenCalled();
+    });
+    expect(caddieHudBridge.sendCaddieHudUpdate).not.toHaveBeenCalled();
   });
 });

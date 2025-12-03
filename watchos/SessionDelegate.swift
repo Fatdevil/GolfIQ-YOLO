@@ -5,10 +5,12 @@ final class SessionDelegate: NSObject, WCSessionDelegate {
     private let model: WatchHUDModel
     private let tempoModel: TempoTrainerModel
     private let session: WCSession?
+    private let caddieHudModel: CaddieHudModel
 
-    init(model: WatchHUDModel, tempoModel: TempoTrainerModel) {
+    init(model: WatchHUDModel, tempoModel: TempoTrainerModel, caddieHudModel: CaddieHudModel) {
         self.model = model
         self.tempoModel = tempoModel
+        self.caddieHudModel = caddieHudModel
         if WCSession.isSupported() {
             self.session = WCSession.default
         } else {
@@ -70,6 +72,10 @@ final class SessionDelegate: NSObject, WCSessionDelegate {
                 model.applyAdvicePayload(advice)
             } else {
                 model.applyAdvicePayload(message)
+            }
+        } else if type == "caddieHud" {
+            if let payload = message["payload"] as? [String: Any] {
+                caddieHudModel.handle(envelope: payload)
             }
         } else if type.hasPrefix("tempoTrainer") {
             tempoModel.handleIncoming(message)
