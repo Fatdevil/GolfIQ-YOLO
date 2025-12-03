@@ -175,6 +175,14 @@ export const en = {
         },
       },
     },
+    tempoTrainer: {
+      title: 'Tempo Trainer',
+      description: 'Use your watch to cue backswing/downswing rhythm and measure tempo.',
+      target_label: 'Target {{ratio}} : 1 • ~{{backswing}} ms / {{downswing}} ms',
+      target_short: 'Target {{ratio}} : 1',
+      in_band: 'Inside band',
+      out_band: 'Outside band',
+    },
     missions: {
       screen_title: 'Range missions',
       card_title: 'Missions',

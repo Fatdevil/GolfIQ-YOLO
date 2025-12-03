@@ -2,6 +2,7 @@ import React, { useMemo } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
 import type { RangeShot } from '@app/range/rangeSession';
+import type { TempoTarget } from '@app/range/tempoTrainerEngine';
 import { t } from '@app/i18n';
 
 export function classifyDirection(sideDeg?: number | null): 'left' | 'straight' | 'right' | null {
@@ -14,9 +15,15 @@ export function classifyDirection(sideDeg?: number | null): 'left' | 'straight' 
 interface LastShotCardProps {
   shot: RangeShot | null;
   targetDistanceM?: number | null;
+  tempoTarget?: TempoTarget | null;
 }
 
-export default function LastShotCard({ shot, targetDistanceM }: LastShotCardProps): JSX.Element {
+function withinBand(ratio: number | null, target?: TempoTarget | null): boolean | null {
+  if (ratio == null || !target) return null;
+  return Math.abs(ratio - target.targetRatio) <= target.tolerance;
+}
+
+export default function LastShotCard({ shot, targetDistanceM, tempoTarget }: LastShotCardProps): JSX.Element {
   const direction = classifyDirection(shot?.sideDeg);
 
   const qualityLabel = useMemo(() => {
@@ -38,6 +45,15 @@ export default function LastShotCard({ shot, targetDistanceM }: LastShotCardProp
     }
     return t('range.tempo.last_shot', { ratio: ratioText });
   }, [shot?.tempoBackswingMs, shot?.tempoDownswingMs, shot?.tempoRatio]);
+
+  const tempoBandLabel = useMemo(() => {
+    if (!shot?.tempoRatio || !tempoTarget) return null;
+    const inBand = shot.tempoWithinBand ?? withinBand(shot.tempoRatio, tempoTarget);
+    if (inBand == null) return null;
+    const badgeText = inBand ? t('range.tempoTrainer.in_band') : t('range.tempoTrainer.out_band');
+    const targetText = t('range.tempoTrainer.target_short', { ratio: tempoTarget.targetRatio.toFixed(1) });
+    return `${badgeText} · ${targetText}`;
+  }, [shot?.tempoRatio, shot?.tempoWithinBand, tempoTarget]);
 
   if (!shot) {
     return (
@@ -84,6 +100,12 @@ export default function LastShotCard({ shot, targetDistanceM }: LastShotCardProp
       ) : (
         <Text style={styles.helperText}>{t('range.tempo.no_data')}</Text>
       )}
+
+      {tempoBandLabel ? (
+        <View style={[styles.badge, styles.bandBadge]} testID="tempo-band">
+          <Text style={styles.badgeText}>{tempoBandLabel}</Text>
+        </View>
+      ) : null}
 
       {qualityLabel ? (
         <View style={[styles.badge, styles.qualityBadge]} testID="quality-badge">
@@ -155,6 +177,11 @@ const styles = StyleSheet.create({
   },
   qualityBadge: {
     alignSelf: 'flex-start',
+  },
+  bandBadge: {
+    alignSelf: 'flex-start',
+    backgroundColor: '#ECFEFF',
+    borderColor: '#06B6D4',
   },
   tempoLabel: {
     color: '#0F172A',

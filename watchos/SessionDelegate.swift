@@ -3,10 +3,12 @@ import WatchConnectivity
 
 final class SessionDelegate: NSObject, WCSessionDelegate {
     private let model: WatchHUDModel
+    private let tempoModel: TempoTrainerModel
     private let session: WCSession?
 
-    init(model: WatchHUDModel) {
+    init(model: WatchHUDModel, tempoModel: TempoTrainerModel) {
         self.model = model
+        self.tempoModel = tempoModel
         if WCSession.isSupported() {
             self.session = WCSession.default
         } else {
@@ -14,6 +16,9 @@ final class SessionDelegate: NSObject, WCSessionDelegate {
         }
         super.init()
         model.registerMessageSender { [weak self] payload in
+            self?.sendMessageToPhone(payload)
+        }
+        tempoModel.registerMessageSender { [weak self] payload in
             self?.sendMessageToPhone(payload)
         }
         configureSession()
@@ -66,6 +71,8 @@ final class SessionDelegate: NSObject, WCSessionDelegate {
             } else {
                 model.applyAdvicePayload(message)
             }
+        } else if type.hasPrefix("tempoTrainer") {
+            tempoModel.handleIncoming(message)
         }
     }
 

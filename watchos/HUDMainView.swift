@@ -2,6 +2,7 @@ import SwiftUI
 
 struct HUDMainView: View {
     @EnvironmentObject var hudModel: WatchHUDModel
+    @EnvironmentObject var tempoTrainerModel: TempoTrainerModel
 
     var body: some View {
         Group {
@@ -11,6 +12,7 @@ struct HUDMainView: View {
                     distances
                     playsLike
                     adviceSection
+                    tempoTrainer
                     Spacer(minLength: 0)
                 }
             } else {
@@ -121,6 +123,14 @@ struct HUDMainView: View {
         }
     }
 
+    private var tempoTrainer: some View {
+        Group {
+            if tempoTrainerModel.target != nil {
+                TempoTrainerView(model: tempoTrainerModel)
+            }
+        }
+    }
+
     private func formattedDistance(_ value: Double?) -> String {
         guard let value else { return "–" }
         return String(Int(round(value)))
@@ -176,4 +186,5 @@ private extension WatchHUDModel.HUD.CaddieHint {
 #Preview {
     HUDMainView()
         .environmentObject(WatchHUDModel.previewModel())
+        .environmentObject(TempoTrainerModel())
 }

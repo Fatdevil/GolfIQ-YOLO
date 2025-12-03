@@ -18,6 +18,7 @@ export interface RangeShot {
   tempoBackswingMs?: number | null;
   tempoDownswingMs?: number | null;
   tempoRatio?: number | null;
+  tempoWithinBand?: boolean | null;
 }
 
 export interface RangeSession {
@@ -51,6 +52,7 @@ export interface RangeSessionSummary {
   avgTempoDownswingMs?: number | null;
   avgTempoRatio?: number | null;
   tempoSampleCount?: number | null;
+  tempoSwingsWithinBand?: number | null;
   minTempoRatio?: number | null;
   maxTempoRatio?: number | null;
 }
