@@ -336,6 +336,7 @@ export const en = {
         putting: 'Putting',
         penalties: 'Penalties',
         note: 'Percentages are based on all counted strokes.',
+        unavailable: 'Category stats are temporarily unavailable – basic stats are still shown.',
         empty: 'No rounds logged yet – play and log a few rounds to see category stats.',
         view_breakdown: 'See category breakdown',
       },

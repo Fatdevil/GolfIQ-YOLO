@@ -17,7 +17,7 @@ describe('PlayerStatsScreen', () => {
     vi.clearAllMocks();
   });
 
-  it('renders stats from summaries', async () => {
+  it('renders stats from summaries and categories when both requests succeed', async () => {
     mockListSummaries.mockResolvedValue([
       {
         roundId: 'r1',
@@ -50,17 +50,46 @@ describe('PlayerStatsScreen', () => {
     });
 
     const navigation = { navigate: vi.fn() } as any;
-    const { getByText, getByTestId } = render(
+    const { getByText, getByTestId, getAllByText } = render(
       <PlayerStatsScreen navigation={navigation} route={undefined as any} />,
     );
 
-    await waitFor(() => expect(mockFetchCategoryStats).toHaveBeenCalled());
-    expect(getByText(/Avg score/)).toBeTruthy();
+    await waitFor(() => expect(getByText(/Avg score/)).toBeTruthy());
     expect(getByText(/Rounds played/)).toBeTruthy();
+    await waitFor(() => expect(mockFetchCategoryStats).toHaveBeenCalled());
+    expect(getByText(/Shot categories/)).toBeTruthy();
+    expect(getAllByText(/shots\/round/).length).toBeGreaterThan(0);
     expect(getByTestId('player-stats-view-categories')).toBeTruthy();
 
     fireEvent.click(getByTestId('player-stats-view-rounds'));
     expect(navigation.navigate).toHaveBeenCalledWith('RoundHistory');
+  });
+
+  it('shows base stats even if category stats fail', async () => {
+    mockListSummaries.mockResolvedValue([
+      {
+        roundId: 'r1',
+        totalStrokes: 72,
+        totalPar: 70,
+        totalToPar: 2,
+        totalPutts: 31,
+        fairwaysHit: 8,
+        fairwaysTotal: 14,
+        girCount: 9,
+        holesPlayed: 18,
+      },
+    ]);
+    mockFetchCategoryStats.mockRejectedValue(new Error('500'));
+
+    const navigation = { navigate: vi.fn() } as any;
+    const { getByText, queryByText } = render(
+      <PlayerStatsScreen navigation={navigation} route={undefined as any} />,
+    );
+
+    await waitFor(() => expect(getByText(/Avg score/)).toBeTruthy());
+
+    expect(queryByText(/No stats yet/)).toBeNull();
+    expect(getByText(/Category stats are temporarily unavailable/)).toBeTruthy();
   });
 
   it('shows empty state when there are no rounds', async () => {

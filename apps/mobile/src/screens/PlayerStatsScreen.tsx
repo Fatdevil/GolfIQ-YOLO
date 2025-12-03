@@ -30,26 +30,44 @@ function formatAverageScore(avgScore?: number | null, avgToPar?: number | null):
 }
 
 export default function PlayerStatsScreen({ navigation }: Props): JSX.Element {
-  const [loading, setLoading] = useState(true);
   const [summaries, setSummaries] = useState<RoundSummary[]>([]);
   const [categoryStats, setCategoryStats] = useState<PlayerCategoryStats | null>(null);
+  const [summariesLoading, setSummariesLoading] = useState(true);
+  const [categoryLoading, setCategoryLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [categoryError, setCategoryError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
-    setLoading(true);
-    Promise.all([listRoundSummaries(50), fetchPlayerCategoryStats()])
-      .then(([roundData, categoryData]) => {
+
+    setSummariesLoading(true);
+    listRoundSummaries(50)
+      .then((roundData) => {
         if (cancelled) return;
         setSummaries(roundData);
-        setCategoryStats(categoryData);
         setError(null);
       })
       .catch(() => {
         if (!cancelled) setError(t('stats.player.load_error'));
       })
       .finally(() => {
-        if (!cancelled) setLoading(false);
+        if (!cancelled) setSummariesLoading(false);
+      });
+
+    setCategoryLoading(true);
+    fetchPlayerCategoryStats()
+      .then((categoryData) => {
+        if (cancelled) return;
+        setCategoryStats(categoryData);
+        setCategoryError(null);
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setCategoryError(t('stats.player.categories.unavailable'));
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setCategoryLoading(false);
       });
 
     return () => {
@@ -60,7 +78,7 @@ export default function PlayerStatsScreen({ navigation }: Props): JSX.Element {
   const stats = useMemo(() => computePlayerStats(summaries), [summaries]);
   const hasRounds = stats.roundsPlayed > 0;
 
-  if (loading) {
+  if (summariesLoading) {
     return (
       <View style={styles.center}>
         <ActivityIndicator />
@@ -104,12 +122,14 @@ export default function PlayerStatsScreen({ navigation }: Props): JSX.Element {
         </View>
       )}
 
-      {categoryStats ? (
-        <View style={styles.card}>
-          <Text style={styles.cardTitle}>{t('stats.player.categories.title')}</Text>
-          <Text style={styles.muted}>{t('stats.player.categories.subtitle')}</Text>
+      <View style={styles.card}>
+        <Text style={styles.cardTitle}>{t('stats.player.categories.title')}</Text>
+        <Text style={styles.muted}>{t('stats.player.categories.subtitle')}</Text>
 
-          {categoryStats.roundsCount === 0 ? (
+        {categoryLoading ? (
+          <ActivityIndicator />
+        ) : categoryStats ? (
+          categoryStats.roundsCount === 0 ? (
             <Text style={styles.muted}>{t('stats.player.categories.empty')}</Text>
           ) : (
             <>
@@ -135,18 +155,21 @@ export default function PlayerStatsScreen({ navigation }: Props): JSX.Element {
               />
               <Text style={styles.muted}>{t('stats.player.categories.note')}</Text>
             </>
-          )}
+          )
+        ) : (
+          <Text style={styles.muted}>{categoryError ?? t('stats.player.categories.unavailable')}</Text>
+        )}
 
-          <TouchableOpacity
-            style={[styles.primaryButton, styles.secondaryButton]}
-            onPress={() => navigation.navigate('CategoryStats')}
-            accessibilityLabel={t('stats.player.categories.view_breakdown')}
-            testID="player-stats-view-categories"
-          >
-            <Text style={styles.primaryButtonText}>{t('stats.player.categories.view_breakdown')}</Text>
-          </TouchableOpacity>
-        </View>
-      ) : null}
+        <TouchableOpacity
+          style={[styles.primaryButton, styles.secondaryButton]}
+          onPress={() => navigation.navigate('CategoryStats')}
+          accessibilityLabel={t('stats.player.categories.view_breakdown')}
+          testID="player-stats-view-categories"
+          disabled={categoryLoading}
+        >
+          <Text style={styles.primaryButtonText}>{t('stats.player.categories.view_breakdown')}</Text>
+        </TouchableOpacity>
+      </View>
 
       <TouchableOpacity
         style={[styles.primaryButton, { marginTop: 12 }]}
