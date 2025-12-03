@@ -153,6 +153,30 @@ describe('HomeScreen', () => {
     expect(playerApi.fetchPlayerAnalytics).not.toHaveBeenCalled();
   });
 
+  it('navigates to round history from the CTA', async () => {
+    vi.mocked(playerApi.fetchPlayerProfile).mockResolvedValue(mockProfile);
+    vi.mocked(playerApi.fetchAccessPlan).mockResolvedValue({ plan: 'free' });
+    const navigation = createNavigation();
+
+    render(<HomeScreen navigation={navigation} route={createRoute()} />);
+
+    fireEvent.click(await screen.findByTestId('round-history-cta'));
+
+    expect(navigation.navigate).toHaveBeenCalledWith('RoundHistory');
+  });
+
+  it('navigates to player stats from the CTA', async () => {
+    vi.mocked(playerApi.fetchPlayerProfile).mockResolvedValue(mockProfile);
+    vi.mocked(playerApi.fetchAccessPlan).mockResolvedValue({ plan: 'free' });
+    const navigation = createNavigation();
+
+    render(<HomeScreen navigation={navigation} route={createRoute()} />);
+
+    fireEvent.click(await screen.findByTestId('player-stats-cta'));
+
+    expect(navigation.navigate).toHaveBeenCalledWith('PlayerStats');
+  });
+
   it('renders resume card when a current run exists', async () => {
     const run: currentRun.CurrentRun = {
       schemaVersion: 1,

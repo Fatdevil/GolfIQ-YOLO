@@ -23,6 +23,8 @@ import RangeMissionsScreen from '@app/screens/RangeMissionsScreen';
 import TripsScreen from '@app/screens/TripsScreen';
 import CaddieApproachScreen from '@app/screens/CaddieApproachScreen';
 import CaddieSetupScreen from '@app/screens/CaddieSetupScreen';
+import RoundHistoryScreen from '@app/screens/RoundHistoryScreen';
+import PlayerStatsScreen from '@app/screens/PlayerStatsScreen';
 import { registerWatchTempoTrainerBridge } from '@app/watch/watchConnectivity';
 import { extractJoinCode } from '@app/utils/deepLink';
 import CourseSelectScreen from '@app/screens/play/CourseSelectScreen';
@@ -81,6 +83,16 @@ export default function App(): JSX.Element {
         <Stack.Screen name="RoundShot" component={RoundShotScreen} options={{ title: 'Log shots' }} />
         <Stack.Screen name="RoundSummary" component={RoundSummaryScreen} options={{ title: 'Round summary' }} />
         <Stack.Screen name="RoundScorecard" component={RoundScorecardScreen} options={{ title: 'Scorecard' }} />
+        <Stack.Screen
+          name="RoundHistory"
+          component={RoundHistoryScreen}
+          options={{ title: t('round.history.title') }}
+        />
+        <Stack.Screen
+          name="PlayerStats"
+          component={PlayerStatsScreen}
+          options={{ title: t('stats.player.title') }}
+        />
         <Stack.Screen
           name="RangePractice"
           component={RangePracticeScreen}
