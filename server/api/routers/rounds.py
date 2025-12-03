@@ -6,7 +6,13 @@ from pydantic import AliasChoices, BaseModel, ConfigDict, Field
 from server.api.security import require_api_key
 from server.api.user_header import UserIdHeader
 from server.club_distance import ClubDistanceService, get_club_distance_service
-from server.rounds.models import Round, Shot
+from server.rounds.models import (
+    Round,
+    RoundScores,
+    RoundSummary,
+    Shot,
+    compute_round_summary,
+)
 from server.rounds.service import (
     RoundNotFound,
     RoundOwnershipError,
@@ -96,6 +102,25 @@ class AppendShotRequest(BaseModel):
     )
 
     model_config = ConfigDict(populate_by_name=True)
+
+
+class UpdateHoleScoreRequest(BaseModel):
+    par: int | None = None
+    strokes: int | None = None
+    putts: int | None = None
+    penalties: int | None = None
+    fairway_hit: bool | None = Field(
+        default=None,
+        serialization_alias="fairwayHit",
+        validation_alias=AliasChoices("fairway_hit", "fairwayHit"),
+    )
+    gir: bool | None = None
+
+    model_config = ConfigDict(populate_by_name=True)
+
+
+class UpdateParsRequest(BaseModel):
+    pars: dict[int, int]
 
 
 @router.post("/start", response_model=Round)
@@ -192,6 +217,105 @@ def list_round_shots(
     player_id = _derive_player_id(api_key, user_id)
     try:
         return service.list_shots(player_id=player_id, round_id=round_id)
+    except RoundNotFound:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="round not found"
+        )
+    except RoundOwnershipError:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="round not owned by player"
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
+
+
+@router.get("/{round_id}/scores", response_model=RoundScores)
+def get_scorecard(
+    round_id: str,
+    api_key: str | None = Depends(require_api_key),
+    user_id: UserIdHeader = None,
+    service: RoundService = Depends(get_round_service),
+) -> RoundScores:
+    player_id = _derive_player_id(api_key, user_id)
+    try:
+        return service.get_scores(player_id=player_id, round_id=round_id)
+    except RoundNotFound:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="round not found"
+        )
+    except RoundOwnershipError:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="round not owned by player"
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
+
+
+@router.put("/{round_id}/scores/{hole_number}", response_model=RoundScores)
+def upsert_hole_score(
+    round_id: str,
+    hole_number: int,
+    payload: UpdateHoleScoreRequest,
+    api_key: str | None = Depends(require_api_key),
+    user_id: UserIdHeader = None,
+    service: RoundService = Depends(get_round_service),
+) -> RoundScores:
+    player_id = _derive_player_id(api_key, user_id)
+    try:
+        updates = payload.model_dump(exclude_unset=True)
+        return service.upsert_hole_score(
+            player_id=player_id,
+            round_id=round_id,
+            hole_number=hole_number,
+            updates=updates,
+        )
+    except RoundNotFound:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="round not found"
+        )
+    except RoundOwnershipError:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="round not owned by player"
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
+
+
+@router.put("/{round_id}/pars", response_model=RoundScores)
+def update_pars(
+    round_id: str,
+    payload: UpdateParsRequest,
+    api_key: str | None = Depends(require_api_key),
+    user_id: UserIdHeader = None,
+    service: RoundService = Depends(get_round_service),
+) -> RoundScores:
+    player_id = _derive_player_id(api_key, user_id)
+    try:
+        pars = {int(k): v for k, v in payload.pars.items()}
+        return service.update_pars(player_id=player_id, round_id=round_id, pars=pars)
+    except RoundNotFound:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="round not found"
+        )
+    except RoundOwnershipError:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="round not owned by player"
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
+
+
+@router.get("/{round_id}/summary", response_model=RoundSummary)
+def get_round_summary(
+    round_id: str,
+    api_key: str | None = Depends(require_api_key),
+    user_id: UserIdHeader = None,
+    service: RoundService = Depends(get_round_service),
+) -> RoundSummary:
+    player_id = _derive_player_id(api_key, user_id)
+    try:
+        scores = service.get_scores(player_id=player_id, round_id=round_id)
+        return compute_round_summary(scores)
     except RoundNotFound:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="round not found"

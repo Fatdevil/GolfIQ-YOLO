@@ -3,7 +3,7 @@ import { fireEvent, render, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
 
 import RoundShotScreen from '@app/screens/RoundShotScreen';
-import { appendShot, endRound } from '@app/api/roundClient';
+import { appendShot, endRound, getRoundScores, updateHoleScore } from '@app/api/roundClient';
 import {
   clearActiveRoundState,
   loadActiveRoundState,
@@ -16,6 +16,8 @@ vi.mock('@app/round/roundState');
 
 const mockAppendShot = appendShot as unknown as Mock;
 const mockEndRound = endRound as unknown as Mock;
+const mockUpdateHoleScore = updateHoleScore as unknown as Mock;
+const mockGetScores = getRoundScores as unknown as Mock;
 const mockLoad = loadActiveRoundState as unknown as Mock;
 const mockSave = saveActiveRoundState as unknown as Mock;
 const mockClear = clearActiveRoundState as unknown as Mock;
@@ -38,6 +40,8 @@ beforeEach(() => {
     startLon: 0,
   });
   mockEndRound.mockResolvedValue({ ...sampleState.round, endedAt: 'later' });
+  mockUpdateHoleScore.mockResolvedValue({ roundId: 'r1', holes: {} });
+  mockGetScores.mockResolvedValue({ roundId: 'r1', holes: {} });
   mockSave.mockResolvedValue(undefined);
   mockClear.mockResolvedValue(undefined);
 });
@@ -55,7 +59,7 @@ describe('RoundShotScreen', () => {
       <RoundShotScreen navigation={navigation} route={undefined as any} />,
     );
 
-    await waitFor(() => expect(mockLoad).toHaveBeenCalled());
+    await waitFor(() => expect(mockGetScores).toHaveBeenCalled());
 
     fireEvent.change(getByPlaceholderText('Optional note'), { target: { value: 'Great swing' } });
     fireEvent.click(getByTestId('log-shot'));
@@ -74,7 +78,7 @@ describe('RoundShotScreen', () => {
     const navigation = { navigate: vi.fn() } as any;
     const { getByText } = render(<RoundShotScreen navigation={navigation} route={undefined as any} />);
 
-    await waitFor(() => expect(mockLoad).toHaveBeenCalled());
+    await waitFor(() => expect(mockGetScores).toHaveBeenCalled());
     fireEvent.click(getByText('End round'));
 
     await waitFor(() => expect(mockEndRound).toHaveBeenCalled());
@@ -85,13 +89,25 @@ describe('RoundShotScreen', () => {
   it('advances to the next hole and persists state', async () => {
     const { getByText } = render(<RoundShotScreen navigation={{} as any} route={undefined as any} />);
 
-    await waitFor(() => expect(mockLoad).toHaveBeenCalled());
+    await waitFor(() => expect(mockGetScores).toHaveBeenCalled());
     fireEvent.click(getByText('Next hole'));
 
     await waitFor(() => expect(mockSave).toHaveBeenCalledWith({
       ...sampleState,
       currentHole: 2,
     }));
+  });
+
+  it('saves scoring changes', async () => {
+    const { getByLabelText, getByTestId } = render(
+      <RoundShotScreen navigation={{} as any} route={undefined as any} />,
+    );
+
+    await waitFor(() => expect(mockGetScores).toHaveBeenCalled());
+    fireEvent.click(getByLabelText('Increase strokes'));
+    fireEvent.click(getByTestId('save-score'));
+
+    await waitFor(() => expect(mockUpdateHoleScore).toHaveBeenCalledWith('r1', 1, expect.any(Object)));
   });
 
   it('renders fallback when no active round exists', async () => {

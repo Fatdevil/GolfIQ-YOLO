@@ -1,4 +1,12 @@
-import { appendShot, endRound, listRoundShots, startRound } from '@app/api/roundClient';
+import {
+  appendShot,
+  endRound,
+  getRoundScores,
+  getRoundSummary,
+  listRoundShots,
+  startRound,
+  updateHoleScore,
+} from '@app/api/roundClient';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mockFetch = vi.fn();
@@ -64,5 +72,45 @@ describe('roundClient', () => {
     await endRound('r1');
 
     expect(mockFetch).toHaveBeenCalledWith('http://localhost:8000/api/rounds/r1/end', expect.objectContaining({ method: 'POST' }));
+  });
+
+  it('fetches and updates scores', async () => {
+    mockFetch.mockResolvedValueOnce(
+      mockResponse({
+        roundId: 'r1',
+        holes: { '1': { holeNumber: 1, par: 4, strokes: 5 } },
+      }),
+    );
+
+    const scores = await getRoundScores('r1');
+    expect(scores.holes[1].strokes).toBe(5);
+    expect(mockFetch).toHaveBeenCalledWith('http://localhost:8000/api/rounds/r1/scores', expect.anything());
+
+    mockFetch.mockResolvedValueOnce(
+      mockResponse({ roundId: 'r1', holes: { '1': { holeNumber: 1, par: 4, strokes: 4, putts: 2 } } }),
+    );
+
+    const updated = await updateHoleScore('r1', 1, { strokes: 4, putts: 2 });
+    expect(updated.holes[1].putts).toBe(2);
+    expect(mockFetch).toHaveBeenCalledWith(
+      'http://localhost:8000/api/rounds/r1/scores/1',
+      expect.objectContaining({ method: 'PUT' }),
+    );
+  });
+
+  it('fetches round summary', async () => {
+    mockFetch.mockResolvedValue(
+      mockResponse({
+        roundId: 'r1',
+        totalStrokes: 72,
+        totalPar: 70,
+        totalToPar: 2,
+        holesPlayed: 18,
+      }),
+    );
+
+    const summary = await getRoundSummary('r1');
+    expect(summary.totalToPar).toBe(2);
+    expect(mockFetch).toHaveBeenCalledWith('http://localhost:8000/api/rounds/r1/summary', expect.anything());
   });
 });

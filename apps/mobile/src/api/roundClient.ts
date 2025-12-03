@@ -30,6 +30,38 @@ export interface Shot {
   tempoRatio?: number | null;
 }
 
+export interface HoleScore {
+  holeNumber: number;
+  par?: number | null;
+  strokes?: number | null;
+  putts?: number | null;
+  penalties?: number | null;
+  fairwayHit?: boolean | null;
+  gir?: boolean | null;
+}
+
+export interface RoundScores {
+  roundId: string;
+  playerId?: string;
+  holes: Record<number, HoleScore>;
+}
+
+export interface RoundSummary {
+  roundId: string;
+  playerId?: string;
+  totalStrokes?: number | null;
+  totalPar?: number | null;
+  totalToPar?: number | null;
+  frontStrokes?: number | null;
+  backStrokes?: number | null;
+  totalPutts?: number | null;
+  totalPenalties?: number | null;
+  fairwaysHit?: number | null;
+  fairwaysTotal?: number | null;
+  girCount?: number | null;
+  holesPlayed: number;
+}
+
 export async function startRound(req: {
   courseId?: string;
   teeName?: string;
@@ -73,4 +105,36 @@ export async function appendShot(
 
 export async function listRoundShots(roundId: string): Promise<Shot[]> {
   return apiFetch<Shot[]>(`/api/rounds/${roundId}/shots`);
+}
+
+export async function getRoundScores(roundId: string): Promise<RoundScores> {
+  const response = await apiFetch<RoundScores>(`/api/rounds/${roundId}/scores`);
+  return {
+    ...response,
+    holes: Object.fromEntries(
+      Object.entries(response.holes ?? {}).map(([key, value]) => [Number(key), value]),
+    ),
+  };
+}
+
+export async function updateHoleScore(
+  roundId: string,
+  holeNumber: number,
+  payload: Partial<HoleScore>,
+): Promise<RoundScores> {
+  const response = await apiFetch<RoundScores>(`/api/rounds/${roundId}/scores/${holeNumber}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  return {
+    ...response,
+    holes: Object.fromEntries(
+      Object.entries(response.holes ?? {}).map(([key, value]) => [Number(key), value]),
+    ),
+  };
+}
+
+export async function getRoundSummary(roundId: string): Promise<RoundSummary> {
+  return apiFetch<RoundSummary>(`/api/rounds/${roundId}/summary`);
 }
