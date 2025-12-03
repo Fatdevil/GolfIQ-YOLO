@@ -7,6 +7,8 @@ import { t } from '@app/i18n';
 import { RangeSessionStoryCard } from '@app/range/RangeSessionStoryCard';
 import { buildRangeSessionStory } from '@app/range/rangeSessionStory';
 import { getMissionById } from '@app/range/rangeMissions';
+import { buildTempoStory } from '@app/range/tempoStory';
+import { evaluateTempoMissionProgress } from '@app/range/tempoMissionEvaluator';
 import { saveLastRangeSessionSummary } from '@app/range/rangeSummaryStorage';
 import { appendRangeHistoryEntry } from '@app/range/rangeHistoryStorage';
 
@@ -34,6 +36,16 @@ export default function RangeQuickPracticeSummaryScreen({ navigation, route }: P
   const story = useMemo(() => {
     if (!summary) return null;
     return buildRangeSessionStory(summary);
+  }, [summary]);
+
+  const tempoStory = useMemo(() => {
+    if (!summary) return null;
+    return buildTempoStory({
+      avgTempoRatio: summary.avgTempoRatio,
+      tempoSampleCount: summary.tempoSampleCount,
+      minTempoRatio: summary.minTempoRatio,
+      maxTempoRatio: summary.maxTempoRatio,
+    });
   }, [summary]);
 
   const summaryWithReflection = useMemo(() => {
@@ -80,8 +92,36 @@ export default function RangeQuickPracticeSummaryScreen({ navigation, route }: P
     return `Target: ${Math.round(summary.targetDistanceM)} m${deltaText}`;
   }, [summary?.avgCarryM, summary?.targetDistanceM]);
 
-  const missionTitleKey = summary?.missionTitleKey || getMissionById(summary?.missionId ?? '')?.titleKey;
+  const mission = summary?.missionId ? getMissionById(summary.missionId) : undefined;
+  const missionTitleKey = summary?.missionTitleKey || mission?.titleKey;
   const missionTitle = missionTitleKey ? t(missionTitleKey as any) : summary?.missionId ?? null;
+
+  const tempoMissionProgress = useMemo(() => {
+    if (!summary || !mission) return null;
+    return evaluateTempoMissionProgress(mission, summary);
+  }, [mission, summary]);
+
+  const tempoMissionCopy = useMemo(() => {
+    if (!summary || !mission || !tempoMissionProgress?.isTempoMission) return null;
+
+    const required = mission.tempoRequiredSamples ?? 0;
+    const samples = tempoMissionProgress.totalTempoSamples ?? 0;
+    const avgText = summary.avgTempoRatio != null ? summary.avgTempoRatio.toFixed(1) : null;
+    const lowerText = tempoMissionProgress.lowerBound != null ? tempoMissionProgress.lowerBound.toFixed(1) : null;
+    const upperText = tempoMissionProgress.upperBound != null ? tempoMissionProgress.upperBound.toFixed(1) : null;
+
+    if (!tempoMissionProgress.eligible) {
+      return t('range.missions.tempo.not_enough_data', { samples, required });
+    }
+
+    if (!avgText || !lowerText || !upperText) return null;
+
+    if (tempoMissionProgress.completed) {
+      return t('range.missions.tempo.completed', { avg: avgText, lower: lowerText, upper: upperText });
+    }
+
+    return t('range.missions.tempo.outside_band', { avg: avgText, lower: lowerText, upper: upperText });
+  }, [mission, summary, tempoMissionProgress]);
 
   if (!summary) {
     return (
@@ -107,6 +147,7 @@ export default function RangeQuickPracticeSummaryScreen({ navigation, route }: P
         <View style={styles.goalCard}>
           <Text style={styles.sectionTitle}>{t('range.missions.session_label')}</Text>
           <Text style={styles.helper}>{missionTitle}</Text>
+          {tempoMissionCopy ? <Text style={styles.helper}>{tempoMissionCopy}</Text> : null}
         </View>
       ) : null}
 
@@ -147,6 +188,12 @@ export default function RangeQuickPracticeSummaryScreen({ navigation, route }: P
             {summary.avgTempoBackswingMs != null ? `${Math.round(summary.avgTempoBackswingMs)} ms backswing` : '—'} ·{' '}
             {summary.avgTempoDownswingMs != null ? `${Math.round(summary.avgTempoDownswingMs)} ms downswing` : '—'}
           </Text>
+        ) : null}
+        {tempoStory ? (
+          <View style={styles.helperGroup} testID="tempo-story">
+            <Text style={styles.helperBold}>{t(tempoStory.titleKey as any, tempoStory.params)}</Text>
+            <Text style={styles.helper}>{t(tempoStory.bodyKey as any, tempoStory.params)}</Text>
+          </View>
         ) : null}
       </View>
 
@@ -287,6 +334,9 @@ const styles = StyleSheet.create({
   helperBold: {
     color: '#111827',
     fontWeight: '600',
+  },
+  helperGroup: {
+    gap: 4,
   },
   fallbackCard: {
     marginTop: 4,

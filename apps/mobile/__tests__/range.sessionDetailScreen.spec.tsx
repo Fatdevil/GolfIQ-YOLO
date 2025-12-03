@@ -20,6 +20,10 @@ describe('RangeSessionDetailScreen', () => {
     shotCount: 12,
     avgCarryM: 150,
     tendency: 'left',
+    avgTempoRatio: 3.1,
+    tempoSampleCount: 12,
+    minTempoRatio: 2.9,
+    maxTempoRatio: 3.2,
   };
 
   const route: Props['route'] = {
@@ -53,6 +57,13 @@ describe('RangeSessionDetailScreen', () => {
     expect(screen.queryByText('Range session summary')).not.toBeInTheDocument();
     expect(screen.getByTestId('range-session-story')).toBeInTheDocument();
     expect(screen.getByText('Solid distance – now tighten your direction')).toBeInTheDocument();
+  });
+
+  it('shows tempo coaching story when tempo data is available', () => {
+    render(<RangeSessionDetailScreen navigation={navigation} route={route} />);
+
+    expect(screen.getByTestId('tempo-story')).toBeInTheDocument();
+    expect(screen.getByText('Stable tempo')).toBeInTheDocument();
   });
 
   it('shows reflection when provided', () => {

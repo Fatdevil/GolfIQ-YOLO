@@ -18,6 +18,11 @@ function DifficultyBadge({ mission }: { mission: RangeMission }): JSX.Element | 
   return <Text style={styles.badge}>{label}</Text>;
 }
 
+function MissionKindBadge({ mission }: { mission: RangeMission }): JSX.Element | null {
+  if (mission.kind !== 'tempo') return null;
+  return <Text style={[styles.badge, styles.tempoBadge]}>{t('range.tempo.title')}</Text>;
+}
+
 type Props = NativeStackScreenProps<RootStackParamList, 'RangeMissions'>;
 
 export default function RangeMissionsScreen({ navigation }: Props): JSX.Element {
@@ -63,7 +68,10 @@ export default function RangeMissionsScreen({ navigation }: Props): JSX.Element 
           <View style={styles.cardHeader}>
             <View style={styles.titleRow}>
               <Text style={styles.cardTitle}>{t(mission.titleKey)}</Text>
-              <DifficultyBadge mission={mission} />
+              <View style={styles.badgeRow}>
+                <MissionKindBadge mission={mission} />
+                <DifficultyBadge mission={mission} />
+              </View>
             </View>
             <Text style={styles.cardSubtitle}>{t(mission.descriptionKey)}</Text>
           </View>
@@ -192,6 +200,14 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     fontWeight: '700',
     fontSize: 12,
+  },
+  tempoBadge: {
+    backgroundColor: '#ECFDF3',
+    color: '#065F46',
+  },
+  badgeRow: {
+    flexDirection: 'row',
+    gap: 6,
   },
   cardTitle: {
     fontSize: 18,
