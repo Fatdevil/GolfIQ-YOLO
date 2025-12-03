@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Optional
+from typing import Dict, Optional
 
 from pydantic import AliasChoices, BaseModel, ConfigDict, Field
 
@@ -58,6 +58,126 @@ class Shot(BaseModel):
     tempo_ratio: float | None = Field(default=None, serialization_alias="tempoRatio")
 
     model_config = ConfigDict(populate_by_name=True)
+
+
+class HoleScore(BaseModel):
+    hole_number: int = Field(serialization_alias="holeNumber")
+    par: Optional[int] = None
+    strokes: Optional[int] = None
+    putts: Optional[int] = None
+    penalties: Optional[int] = None
+    fairway_hit: Optional[bool] = Field(
+        default=None,
+        serialization_alias="fairwayHit",
+        validation_alias=AliasChoices("fairway_hit", "fairwayHit"),
+    )
+    gir: Optional[bool] = None
+
+    model_config = ConfigDict(populate_by_name=True)
+
+
+class RoundScores(BaseModel):
+    round_id: str = Field(serialization_alias="roundId")
+    player_id: str = Field(serialization_alias="playerId")
+    holes: Dict[int, HoleScore] = Field(default_factory=dict)
+
+    model_config = ConfigDict(populate_by_name=True)
+
+
+class RoundSummary(BaseModel):
+    round_id: str = Field(serialization_alias="roundId")
+    player_id: str = Field(serialization_alias="playerId")
+
+    total_strokes: Optional[int] = Field(
+        default=None, serialization_alias="totalStrokes"
+    )
+    total_par: Optional[int] = Field(default=None, serialization_alias="totalPar")
+    total_to_par: Optional[int] = Field(default=None, serialization_alias="totalToPar")
+
+    front_strokes: Optional[int] = Field(
+        default=None, serialization_alias="frontStrokes"
+    )
+    back_strokes: Optional[int] = Field(default=None, serialization_alias="backStrokes")
+
+    total_putts: Optional[int] = Field(default=None, serialization_alias="totalPutts")
+    total_penalties: Optional[int] = Field(
+        default=None, serialization_alias="totalPenalties"
+    )
+
+    fairways_hit: Optional[int] = Field(default=None, serialization_alias="fairwaysHit")
+    fairways_total: Optional[int] = Field(
+        default=None, serialization_alias="fairwaysTotal"
+    )
+    gir_count: Optional[int] = Field(default=None, serialization_alias="girCount")
+
+    holes_played: int = Field(serialization_alias="holesPlayed")
+
+    model_config = ConfigDict(populate_by_name=True)
+
+
+def _safe_sum(values: list[int | None]) -> int | None:
+    filtered = [v for v in values if v is not None]
+    if not filtered:
+        return None
+    return sum(filtered)
+
+
+def compute_round_summary(scores: RoundScores) -> RoundSummary:
+    strokes = []
+    pars = []
+    putts = []
+    penalties = []
+    front_strokes: list[int | None] = []
+    back_strokes: list[int | None] = []
+    fairways_hit = 0
+    fairways_total = 0
+    gir_count = 0
+
+    for hole in scores.holes.values():
+        strokes.append(hole.strokes)
+        pars.append(hole.par)
+        putts.append(hole.putts)
+        penalties.append(hole.penalties)
+
+        if hole.hole_number <= 9:
+            front_strokes.append(hole.strokes)
+        else:
+            back_strokes.append(hole.strokes)
+
+        if hole.par in {4, 5}:
+            fairways_total += 1
+            if hole.fairway_hit is True:
+                fairways_hit += 1
+
+        if hole.gir:
+            gir_count += 1
+
+    total_strokes = _safe_sum(strokes)
+    total_par = _safe_sum(pars)
+    total_putts = _safe_sum(putts)
+    total_penalties = _safe_sum(penalties)
+    front_total = _safe_sum(front_strokes)
+    back_total = _safe_sum(back_strokes)
+
+    total_to_par = None
+    if total_strokes is not None and total_par is not None:
+        total_to_par = total_strokes - total_par
+
+    return RoundSummary(
+        round_id=scores.round_id,
+        player_id=scores.player_id,
+        total_strokes=total_strokes,
+        total_par=total_par,
+        total_to_par=total_to_par,
+        front_strokes=front_total,
+        back_strokes=back_total,
+        total_putts=total_putts,
+        total_penalties=total_penalties,
+        fairways_hit=fairways_hit if fairways_total > 0 else None,
+        fairways_total=fairways_total if fairways_total > 0 else None,
+        gir_count=gir_count if scores.holes else None,
+        holes_played=len(scores.holes),
+    )
 
 
 @dataclass
@@ -217,4 +337,14 @@ def _optional_int(value: Optional[int]) -> int | None:
 
 ROUNDS_DIR = Path("data/rounds")
 
-__all__ = ["Round", "Shot", "RoundRecord", "ShotRecord", "ROUNDS_DIR"]
+__all__ = [
+    "Round",
+    "Shot",
+    "RoundRecord",
+    "ShotRecord",
+    "HoleScore",
+    "RoundScores",
+    "RoundSummary",
+    "compute_round_summary",
+    "ROUNDS_DIR",
+]

@@ -34,6 +34,7 @@ import ClubDistancesScreen from '@app/screens/ClubDistancesScreen';
 import RoundStartScreen from '@app/screens/RoundStartScreen';
 import RoundShotScreen from '@app/screens/RoundShotScreen';
 import RoundSummaryScreen from '@app/screens/RoundSummaryScreen';
+import RoundScorecardScreen from '@app/screens/RoundScorecardScreen';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
@@ -79,6 +80,7 @@ export default function App(): JSX.Element {
         <Stack.Screen name="RoundStart" component={RoundStartScreen} options={{ title: 'Start round' }} />
         <Stack.Screen name="RoundShot" component={RoundShotScreen} options={{ title: 'Log shots' }} />
         <Stack.Screen name="RoundSummary" component={RoundSummaryScreen} options={{ title: 'Round summary' }} />
+        <Stack.Screen name="RoundScorecard" component={RoundScorecardScreen} options={{ title: 'Scorecard' }} />
         <Stack.Screen
           name="RangePractice"
           component={RangePracticeScreen}

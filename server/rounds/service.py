@@ -9,7 +9,15 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Iterable, List
 
-from .models import ROUNDS_DIR, Round, RoundRecord, Shot, ShotRecord
+from .models import (
+    ROUNDS_DIR,
+    HoleScore,
+    Round,
+    RoundRecord,
+    RoundScores,
+    Shot,
+    ShotRecord,
+)
 
 
 class RoundNotFound(Exception):
@@ -209,6 +217,99 @@ class RoundService:
                         yield ShotRecord.from_dict(json.loads(line))
                     except Exception:
                         continue
+
+    # Scoring
+    def get_scores(self, *, player_id: str, round_id: str) -> RoundScores:
+        record = self._load_round(round_id)
+        if record is None:
+            raise RoundNotFound(round_id)
+        if record.player_id != player_id:
+            raise RoundOwnershipError(round_id)
+
+        return self._read_scores(record)
+
+    def upsert_hole_score(
+        self, *, player_id: str, round_id: str, hole_number: int, updates: dict
+    ) -> RoundScores:
+        if hole_number < 1 or hole_number > 27:
+            raise ValueError("hole_number must be between 1 and 27")
+
+        record = self._load_round(round_id)
+        if record is None:
+            raise RoundNotFound(round_id)
+        if record.player_id != player_id:
+            raise RoundOwnershipError(round_id)
+
+        scores = self._read_scores(record)
+        existing = scores.holes.get(hole_number)
+        merged_data = existing.model_dump(exclude_none=False) if existing else {}
+        merged_data.update(updates)
+        merged_data["hole_number"] = hole_number
+        scores.holes[hole_number] = HoleScore(**merged_data)
+        self._write_scores(scores)
+        return scores
+
+    def update_pars(
+        self, *, player_id: str, round_id: str, pars: dict[int, int]
+    ) -> RoundScores:
+        record = self._load_round(round_id)
+        if record is None:
+            raise RoundNotFound(round_id)
+        if record.player_id != player_id:
+            raise RoundOwnershipError(round_id)
+
+        scores = self._read_scores(record)
+        for hole_number, par in pars.items():
+            existing = scores.holes.get(hole_number)
+            merged = existing.model_dump(exclude_none=False) if existing else {}
+            merged.update({"par": par, "hole_number": hole_number})
+            scores.holes[hole_number] = HoleScore(**merged)
+        self._write_scores(scores)
+        return scores
+
+    def _scores_path(self, record: RoundRecord) -> Path:
+        return self._round_dir(record.player_id, record.id) / "scores.json"
+
+    def _read_scores(self, record: RoundRecord) -> RoundScores:
+        path = self._scores_path(record)
+        holes: dict[int, HoleScore] = {}
+        if path.exists():
+            try:
+                data = json.loads(path.read_text())
+                for hole_key, hole_payload in data.get("holes", {}).items():
+                    try:
+                        hole_number = int(hole_key)
+                    except (TypeError, ValueError):
+                        continue
+                    payload = dict(hole_payload or {})
+                    payload.setdefault("hole_number", hole_number)
+                    try:
+                        holes[hole_number] = HoleScore(**payload)
+                    except Exception:
+                        continue
+            except Exception:
+                holes = {}
+
+        return RoundScores(
+            round_id=record.id,
+            player_id=record.player_id,
+            holes=holes,
+        )
+
+    def _write_scores(self, scores: RoundScores) -> None:
+        round_dir = self._round_dir(scores.player_id, scores.round_id)
+        round_dir.mkdir(parents=True, exist_ok=True)
+        holes_payload = {
+            str(hole): hole_score.model_dump(by_alias=True, exclude_none=True)
+            for hole, hole_score in scores.holes.items()
+        }
+        payload = {
+            "round_id": scores.round_id,
+            "player_id": scores.player_id,
+            "holes": holes_payload,
+        }
+        path = round_dir / "scores.json"
+        path.write_text(json.dumps(payload, indent=2, sort_keys=True))
 
 
 @lru_cache(maxsize=1)

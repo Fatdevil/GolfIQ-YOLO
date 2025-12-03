@@ -48,6 +48,7 @@ export type RootStackParamList = {
   RoundStart: undefined;
   RoundShot: { roundId?: string } | undefined;
   RoundSummary: { roundId: string };
+  RoundScorecard: { roundId: string };
   EventJoin: { code?: string } | undefined;
   EventLive: {
     id: string;
