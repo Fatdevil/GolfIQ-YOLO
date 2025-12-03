@@ -8,6 +8,7 @@ from server.api.user_header import UserIdHeader
 from server.club_distance import ClubDistanceService, get_club_distance_service
 from server.rounds.models import (
     Round,
+    RoundInfo,
     RoundScores,
     RoundSummary,
     Shot,
@@ -328,13 +329,27 @@ def get_round_summary(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
 
 
-@router.get("", response_model=list[Round])
+@router.get("/summaries", response_model=list[RoundSummary])
+def list_round_summaries(
+    limit: int = Query(20, ge=1, le=200),
+    api_key: str | None = Depends(require_api_key),
+    user_id: UserIdHeader = None,
+    service: RoundService = Depends(get_round_service),
+) -> list[RoundSummary]:
+    player_id = _derive_player_id(api_key, user_id)
+    try:
+        return service.get_round_summaries(player_id=player_id, limit=limit)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
+
+
+@router.get("", response_model=list[RoundInfo])
 def list_rounds(
     limit: int = Query(20, ge=1, le=200),
     api_key: str | None = Depends(require_api_key),
     user_id: UserIdHeader = None,
     service: RoundService = Depends(get_round_service),
-) -> list[Round]:
+) -> list[RoundInfo]:
     player_id = _derive_player_id(api_key, user_id)
     try:
         return service.list_rounds(player_id=player_id, limit=limit)

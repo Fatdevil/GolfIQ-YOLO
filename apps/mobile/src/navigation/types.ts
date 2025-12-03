@@ -47,6 +47,8 @@ export type RootStackParamList = {
   RoundSaved: { summary: import('@app/run/lastRound').LastRoundSummary };
   RoundStart: undefined;
   RoundShot: { roundId?: string } | undefined;
+  RoundHistory: undefined;
+  PlayerStats: undefined;
   RoundSummary: { roundId: string };
   RoundScorecard: { roundId: string };
   EventJoin: { code?: string } | undefined;

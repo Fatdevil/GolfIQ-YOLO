@@ -224,6 +224,19 @@ export const en = {
     summary: {
       tempo: 'Tempo: {{ratio}} : 1',
     },
+    history: {
+      title: 'Round history',
+      loading: 'Loading round history…',
+      empty_title: 'No rounds logged yet.',
+      empty_body: 'Play and save a round to see it here.',
+      empty_cta: 'Start your first round',
+      view_round: 'View round',
+      no_score: 'No score yet',
+      no_stats: 'No stats yet',
+      even_par: 'E',
+      unnamed_course: 'Unnamed course',
+      stats_line: 'Putts: {{putts}} · FIR: {{fir}} · GIR: {{gir}}',
+    },
   },
   caddie: {
     risk: {
@@ -293,6 +306,21 @@ export const en = {
       fade: 'stock fade',
       draw: 'stock draw',
       straight: 'straight shot',
+    },
+  },
+  stats: {
+    player: {
+      title: 'My stats',
+      subtitle: 'Lifetime overview from your rounds',
+      loading: 'Loading player stats…',
+      rounds: 'Rounds played',
+      avg_score: 'Avg score',
+      avg_putts: 'Avg putts',
+      fir: 'Fairways hit',
+      gir: 'GIR',
+      empty_title: 'No stats yet',
+      empty_body: 'Play and log a few rounds to see your stats here.',
+      view_rounds: 'View rounds',
     },
   },
   clubDistances: {

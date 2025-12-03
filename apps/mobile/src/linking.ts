@@ -11,6 +11,8 @@ export const linking: LinkingOptions<any> = {
       PlayTeeSelect: 'play/tee',
       PlayInRound: 'play/round',
       RoundStory: 'round/:runId',
+      RoundHistory: 'rounds',
+      PlayerStats: 'stats/player',
       RangePractice: 'range',
       RangeMissions: 'range/missions',
       RangeQuickPracticeStart: 'range/quick/start',

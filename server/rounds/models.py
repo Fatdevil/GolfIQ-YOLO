@@ -28,6 +28,31 @@ class Round(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
 
+class RoundInfo(BaseModel):
+    id: str
+    player_id: str = Field(serialization_alias="playerId")
+    course_id: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices("course_id", "courseId"),
+        serialization_alias="courseId",
+    )
+    course_name: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices("course_name", "courseName"),
+        serialization_alias="courseName",
+    )
+    tee_name: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices("tee_name", "teeName"),
+        serialization_alias="teeName",
+    )
+    holes: int = 18
+    started_at: datetime = Field(serialization_alias="startedAt")
+    ended_at: datetime | None = Field(default=None, serialization_alias="endedAt")
+
+    model_config = ConfigDict(populate_by_name=True)
+
+
 class Shot(BaseModel):
     id: str
     round_id: str = Field(serialization_alias="roundId")
@@ -339,6 +364,7 @@ ROUNDS_DIR = Path("data/rounds")
 
 __all__ = [
     "Round",
+    "RoundInfo",
     "Shot",
     "RoundRecord",
     "ShotRecord",

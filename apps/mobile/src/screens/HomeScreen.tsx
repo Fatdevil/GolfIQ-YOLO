@@ -320,6 +320,31 @@ export default function HomeScreen({ navigation }: Props): JSX.Element {
         <Text style={styles.cardFootnote}>{t('home.range.missionsTeaser')}</Text>
       </View>
 
+      <View style={styles.card} testID="rounds-stats-card">
+        <Text style={styles.cardTitle}>{t('round.history.title')}</Text>
+        <Text style={styles.cardSubtitle}>{t('stats.player.subtitle')}</Text>
+        <View style={styles.row}>
+          <TouchableOpacity
+            onPress={() => navigation.navigate('RoundHistory')}
+            accessibilityLabel={t('round.history.view_round')}
+            testID="round-history-cta"
+          >
+            <View style={styles.secondaryButton}>
+              <Text style={styles.secondaryButtonText}>{t('round.history.title')}</Text>
+            </View>
+          </TouchableOpacity>
+          <TouchableOpacity
+            onPress={() => navigation.navigate('PlayerStats')}
+            accessibilityLabel={t('stats.player.title')}
+            testID="player-stats-cta"
+          >
+            <View style={styles.secondaryButton}>
+              <Text style={styles.secondaryButtonText}>{t('stats.player.title')}</Text>
+            </View>
+          </TouchableOpacity>
+        </View>
+      </View>
+
       <WatchStatusCard memberId={data.memberId} plan={data.plan} />
 
       <View style={styles.section}>

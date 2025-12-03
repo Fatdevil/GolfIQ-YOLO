@@ -62,6 +62,17 @@ export interface RoundSummary {
   holesPlayed: number;
 }
 
+export interface RoundInfo {
+  id: string;
+  playerId?: string;
+  courseId?: string | null;
+  courseName?: string | null;
+  teeName?: string | null;
+  holes: number;
+  startedAt: string;
+  endedAt?: string | null;
+}
+
 export async function startRound(req: {
   courseId?: string;
   teeName?: string;
@@ -137,4 +148,14 @@ export async function updateHoleScore(
 
 export async function getRoundSummary(roundId: string): Promise<RoundSummary> {
   return apiFetch<RoundSummary>(`/api/rounds/${roundId}/summary`);
+}
+
+export async function listRounds(limit?: number): Promise<RoundInfo[]> {
+  const query = limit ? `?limit=${limit}` : '';
+  return apiFetch<RoundInfo[]>(`/api/rounds${query}`);
+}
+
+export async function listRoundSummaries(limit?: number): Promise<RoundSummary[]> {
+  const query = limit ? `?limit=${limit}` : '';
+  return apiFetch<RoundSummary[]>(`/api/rounds/summaries${query}`);
 }

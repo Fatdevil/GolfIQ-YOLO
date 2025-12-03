@@ -13,10 +13,13 @@ from .models import (
     ROUNDS_DIR,
     HoleScore,
     Round,
+    RoundInfo,
     RoundRecord,
     RoundScores,
+    RoundSummary,
     Shot,
     ShotRecord,
+    compute_round_summary,
 )
 
 
@@ -147,13 +150,41 @@ class RoundService:
         return [s.to_shot() for s in self._read_shot_records(round_id)]
 
     # Queries
-    def list_rounds(self, *, player_id: str, limit: int = 20) -> List[Round]:
+    def list_rounds(self, *, player_id: str, limit: int = 50) -> List[RoundInfo]:
+        records = self._list_round_records(player_id=player_id, limit=limit)
+        return [
+            RoundInfo(
+                id=record.id,
+                player_id=record.player_id,
+                course_id=record.course_id,
+                course_name=None,
+                tee_name=record.tee_name,
+                holes=record.holes,
+                started_at=record.started_at,
+                ended_at=record.ended_at,
+            )
+            for record in records
+        ]
+
+    def get_round_summaries(
+        self, *, player_id: str, limit: int = 50
+    ) -> list[RoundSummary]:
+        summaries: list[RoundSummary] = []
+        for record in self._list_round_records(player_id=player_id, limit=limit):
+            try:
+                scores = self._read_scores(record)
+                summaries.append(compute_round_summary(scores))
+            except Exception:
+                continue
+        return summaries
+
+    def _list_round_records(self, *, player_id: str, limit: int) -> list[RoundRecord]:
         player_dir = self._player_dir(player_id)
         if not player_dir.exists():
             return []
 
         round_records: list[RoundRecord] = []
-        for round_path in sorted(player_dir.iterdir(), reverse=True):
+        for round_path in player_dir.iterdir():
             meta_path = round_path / "round.json"
             if not meta_path.exists():
                 continue
@@ -163,13 +194,14 @@ class RoundService:
                 round_records.append(record)
             except Exception:
                 continue
-            if len(round_records) >= max(1, limit):
-                break
 
-        return [
-            r.to_round()
-            for r in sorted(round_records, key=lambda r: r.started_at, reverse=True)
-        ]
+        round_records.sort(
+            key=lambda r: (
+                r.ended_at or r.started_at or datetime.min.replace(tzinfo=timezone.utc)
+            ),
+            reverse=True,
+        )
+        return round_records[: max(1, limit)]
 
     # Internal helpers
     def _player_dir(self, player_id: str) -> Path:

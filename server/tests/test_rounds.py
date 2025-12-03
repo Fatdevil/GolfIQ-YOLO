@@ -13,7 +13,13 @@ from server.club_distance import (
     ClubDistanceService,
     get_club_distance_service,
 )
-from server.rounds.models import ShotRecord, _optional_float, _parse_dt
+from server.rounds.models import (
+    HoleScore,
+    RoundScores,
+    ShotRecord,
+    _optional_float,
+    _parse_dt,
+)
 from server.rounds.service import _sanitize_player_id, RoundService, get_round_service
 
 
@@ -340,6 +346,95 @@ def test_list_rounds_limit_and_skips_missing_meta(tmp_path) -> None:
     rounds = service.list_rounds(player_id="player-1", limit=1)
     assert len(rounds) == 1
     assert rounds[0].id in {first.id, second.id}
+
+
+def test_list_rounds_returns_recent_rounds_for_player(round_client) -> None:
+    client, _, service = round_client
+
+    older = service.start_round(
+        player_id="player-1", course_id=None, tee_name="Blue", holes=18
+    )
+    newer = service.start_round(
+        player_id="player-1", course_id="course-2", tee_name="White", holes=9
+    )
+    service.start_round(player_id="other", course_id=None, tee_name=None, holes=18)
+
+    older_record = service._load_round(older.id)
+    newer_record = service._load_round(newer.id)
+    assert older_record and newer_record
+    older_record.started_at = datetime(2024, 1, 1, tzinfo=timezone.utc)
+    newer_record.started_at = datetime(2024, 2, 1, tzinfo=timezone.utc)
+    newer_record.ended_at = datetime(2024, 2, 2, tzinfo=timezone.utc)
+    service._write_round(older_record)
+    service._write_round(newer_record)
+
+    response = client.get("/api/rounds?limit=2", headers=_headers())
+    assert response.status_code == 200
+    payload = response.json()
+    assert [item["id"] for item in payload] == [newer.id, older.id]
+    assert all(item["playerId"] == "player-1" for item in payload)
+
+
+def test_round_summaries_endpoint_aggregates_summaries(round_client) -> None:
+    client, _, service = round_client
+
+    first = service.start_round(
+        player_id="player-1", course_id="c1", tee_name="Blue", holes=18
+    )
+    second = service.start_round(
+        player_id="player-1", course_id="c2", tee_name="White", holes=18
+    )
+
+    first_record = service._load_round(first.id)
+    second_record = service._load_round(second.id)
+    assert first_record and second_record
+    first_record.started_at = datetime(2024, 2, 1, tzinfo=timezone.utc)
+    second_record.started_at = datetime(2024, 3, 1, tzinfo=timezone.utc)
+    service._write_round(first_record)
+    service._write_round(second_record)
+
+    first_scores = RoundScores(
+        round_id=first.id,
+        player_id="player-1",
+        holes={
+            1: HoleScore(hole_number=1, par=4, strokes=5, putts=2, fairway_hit=True),
+            2: HoleScore(hole_number=2, par=3, strokes=3, putts=1, gir=True),
+        },
+    )
+    service._write_scores(first_scores)
+
+    second_scores = RoundScores(
+        round_id=second.id,
+        player_id="player-1",
+        holes={
+            1: HoleScore(
+                hole_number=1, par=5, strokes=6, putts=3, fairway_hit=False, gir=False
+            ),
+            2: HoleScore(
+                hole_number=2, par=4, strokes=4, putts=2, fairway_hit=True, gir=True
+            ),
+        },
+    )
+    service._write_scores(second_scores)
+
+    response = client.get("/api/rounds/summaries?limit=5", headers=_headers())
+    assert response.status_code == 200
+    summaries = response.json()
+    assert len(summaries) == 2
+    assert summaries[0]["roundId"] == second.id
+    assert summaries[0]["totalStrokes"] == 10
+    assert summaries[0]["totalPar"] == 9
+    assert summaries[0]["totalToPar"] == 1
+    assert summaries[0]["totalPutts"] == 5
+    assert summaries[0]["fairwaysHit"] == 1
+    assert summaries[0]["fairwaysTotal"] == 2
+
+    assert summaries[1]["roundId"] == first.id
+    assert summaries[1]["totalStrokes"] == 8
+    assert summaries[1]["totalPar"] == 7
+    assert summaries[1]["totalToPar"] == 1
+    assert summaries[1]["totalPutts"] == 3
+    assert summaries[1]["girCount"] == 1
 
 
 def test_read_shot_records_skips_invalid_lines(tmp_path) -> None:
