@@ -13,6 +13,7 @@ export const linking: LinkingOptions<any> = {
       RoundStory: 'round/:runId',
       RoundHistory: 'rounds',
       PlayerStats: 'stats/player',
+      CategoryStats: 'stats/player/categories',
       RangePractice: 'range',
       RangeMissions: 'range/missions',
       RangeQuickPracticeStart: 'range/quick/start',

@@ -109,6 +109,20 @@ class RoundScores(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
 
+class RoundCategoryStats(BaseModel):
+    round_id: str = Field(serialization_alias="roundId")
+    player_id: str = Field(serialization_alias="playerId")
+
+    tee_shots: int = Field(default=0, serialization_alias="teeShots")
+    approach_shots: int = Field(default=0, serialization_alias="approachShots")
+    short_game_shots: int = Field(default=0, serialization_alias="shortGameShots")
+    putts: int = Field(default=0, serialization_alias="putts")
+
+    penalties: int = Field(default=0, serialization_alias="penalties")
+
+    model_config = ConfigDict(populate_by_name=True)
+
+
 class RoundSummary(BaseModel):
     round_id: str = Field(serialization_alias="roundId")
     player_id: str = Field(serialization_alias="playerId")
@@ -129,6 +143,12 @@ class RoundSummary(BaseModel):
         default=None, serialization_alias="totalPenalties"
     )
 
+    tee_shots: int = Field(default=0, serialization_alias="teeShots")
+    approach_shots: int = Field(default=0, serialization_alias="approachShots")
+    short_game_shots: int = Field(default=0, serialization_alias="shortGameShots")
+    putting_shots: int = Field(default=0, serialization_alias="puttingShots")
+    penalties: int = 0
+
     fairways_hit: Optional[int] = Field(default=None, serialization_alias="fairwaysHit")
     fairways_total: Optional[int] = Field(
         default=None, serialization_alias="fairwaysTotal"
@@ -145,6 +165,38 @@ def _safe_sum(values: list[int | None]) -> int | None:
     if not filtered:
         return None
     return sum(filtered)
+
+
+def compute_round_category_stats(scores: RoundScores) -> RoundCategoryStats:
+    stats = RoundCategoryStats(round_id=scores.round_id, player_id=scores.player_id)
+
+    for hole in scores.holes.values():
+        if hole.strokes is None:
+            continue
+
+        putts = hole.putts or 0
+        penalties = hole.penalties or 0
+
+        stats.putts += putts
+        stats.penalties += penalties
+
+        if hole.strokes <= 0:
+            continue
+
+        stats.tee_shots += 1
+        non_putt_strokes = max(hole.strokes - putts, 0)
+        non_putt_after_tee = max(non_putt_strokes - 1, 0)
+
+        if hole.gir:
+            stats.approach_shots += non_putt_after_tee
+        else:
+            if non_putt_after_tee <= 1:
+                stats.approach_shots += non_putt_after_tee
+            else:
+                stats.approach_shots += 1
+                stats.short_game_shots += non_putt_after_tee - 1
+
+    return stats
 
 
 def compute_round_summary(scores: RoundScores) -> RoundSummary:
@@ -188,6 +240,8 @@ def compute_round_summary(scores: RoundScores) -> RoundSummary:
     if total_strokes is not None and total_par is not None:
         total_to_par = total_strokes - total_par
 
+    category_stats = compute_round_category_stats(scores)
+
     return RoundSummary(
         round_id=scores.round_id,
         player_id=scores.player_id,
@@ -202,6 +256,11 @@ def compute_round_summary(scores: RoundScores) -> RoundSummary:
         fairways_total=fairways_total if fairways_total > 0 else None,
         gir_count=gir_count if scores.holes else None,
         holes_played=len(scores.holes),
+        tee_shots=category_stats.tee_shots,
+        approach_shots=category_stats.approach_shots,
+        short_game_shots=category_stats.short_game_shots,
+        putting_shots=category_stats.putts,
+        penalties=category_stats.penalties,
     )
 
 
@@ -371,6 +430,8 @@ __all__ = [
     "HoleScore",
     "RoundScores",
     "RoundSummary",
+    "RoundCategoryStats",
+    "compute_round_category_stats",
     "compute_round_summary",
     "ROUNDS_DIR",
 ]
