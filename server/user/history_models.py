@@ -44,6 +44,16 @@ class RangeSessionSnapshot(BaseModel):
         validation_alias=AliasChoices("tempo_sample_count", "tempoSampleCount"),
         serialization_alias="tempoSampleCount",
     )
+    min_tempo_ratio: Optional[float] = Field(
+        default=None,
+        validation_alias=AliasChoices("min_tempo_ratio", "minTempoRatio"),
+        serialization_alias="minTempoRatio",
+    )
+    max_tempo_ratio: Optional[float] = Field(
+        default=None,
+        validation_alias=AliasChoices("max_tempo_ratio", "maxTempoRatio"),
+        serialization_alias="maxTempoRatio",
+    )
 
 
 class UserHistory(BaseModel):

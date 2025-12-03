@@ -121,4 +121,26 @@ describe('RangeQuickPracticeSummaryScreen', () => {
       expect(navigation.navigate).toHaveBeenCalledWith('PlayerHome');
     });
   });
+
+  it('shows tempo mission progress when eligible', async () => {
+    const navigation = createNavigation();
+    const tempoSummary = {
+      ...summary,
+      missionId: 'tempo_band_3_0',
+      avgTempoRatio: 3.0,
+      tempoSampleCount: 20,
+      minTempoRatio: 2.8,
+      maxTempoRatio: 3.2,
+    } as typeof summary;
+
+    render(
+      <RangeQuickPracticeSummaryScreen
+        navigation={navigation}
+        route={{ key: 'RangeQuickPracticeSummary', name: 'RangeQuickPracticeSummary', params: { summary: tempoSummary } }}
+      />,
+    );
+
+    expect(await screen.findByText(/Tempo mission completed/)).toBeInTheDocument();
+    expect(screen.getByTestId('tempo-story')).toBeInTheDocument();
+  });
 });

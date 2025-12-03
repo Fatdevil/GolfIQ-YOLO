@@ -152,6 +152,28 @@ export const en = {
       last_shot_detail: 'Backswing: {{backswing}} ms, downswing: {{downswing}} ms (ratio {{ratio}} : 1)',
       session_avg: 'Average tempo: {{ratio}} : 1 from {{count}} swings',
       no_data: 'No tempo data yet – connect your watch to log swing tempo.',
+      story: {
+        stable_good: {
+          title: 'Stable tempo',
+          body: 'Tempo stays around {{avg}} : 1 across this session – great foundation.',
+        },
+        unstable: {
+          title: 'Inconsistent tempo',
+          body: 'Tempo varies a lot ({{min}}–{{max}} : 1). Consider a tempo-focused drill next time.',
+        },
+        stable_extreme_fast: {
+          title: 'Very quick tempo',
+          body: 'Backswing is much faster than downswing (avg {{avg}} : 1). Try a calmer backswing.',
+        },
+        stable_extreme_slow: {
+          title: 'Very slow tempo',
+          body: 'Backswing is much slower than downswing (avg {{avg}} : 1). Experiment with a quicker rhythm.',
+        },
+        insufficient_data: {
+          title: 'Need more tempo data',
+          body: 'Log at least a few swings with tempo to unlock coaching tips.',
+        },
+      },
     },
     missions: {
       screen_title: 'Range missions',
@@ -169,6 +191,11 @@ export const en = {
       start_with_mission: 'Start Quick Practice with this mission',
       history_label: 'Mission: {{title}}',
       card_cta: 'Browse missions',
+      tempo: {
+        not_enough_data: 'Tempo mission: {{samples}} tempo swings logged – need {{required}} to evaluate.',
+        outside_band: 'Tempo mission: average tempo {{avg}} : 1 – outside target band {{lower}}–{{upper}}.',
+        completed: 'Tempo mission completed – average tempo {{avg}} : 1 inside {{lower}}–{{upper}}.',
+      },
     },
     missionsCatalog: {
       solid_contact_wedges_title: 'Solid contact with wedges',
@@ -179,6 +206,10 @@ export const en = {
       driver_shape_body: 'Record 10–15 drives and focus on repeating your preferred shot shape.',
       distance_control_wedges_title: 'Distance control 50–90 m',
       distance_control_wedges_body: 'Hit 15–20 wedge shots between 50–90 m working on consistent carry gapping.',
+      tempo_find_baseline_title: 'Find your tempo',
+      tempo_find_baseline_body: 'Hit 20 swings and try to keep your tempo ratio within ±0.4 of your average.',
+      tempo_band_3_0_title: 'Tempo 3.0 : 1 band',
+      tempo_band_3_0_body: 'Hit 20 swings where your tempo ratio stays between 2.8 and 3.2.',
     },
   },
   round: {

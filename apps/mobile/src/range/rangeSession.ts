@@ -51,4 +51,6 @@ export interface RangeSessionSummary {
   avgTempoDownswingMs?: number | null;
   avgTempoRatio?: number | null;
   tempoSampleCount?: number | null;
+  minTempoRatio?: number | null;
+  maxTempoRatio?: number | null;
 }

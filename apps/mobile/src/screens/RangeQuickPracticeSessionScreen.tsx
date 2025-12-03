@@ -133,6 +133,8 @@ export default function RangeQuickPracticeSessionScreen({ navigation, route }: P
       avgTempoDownswingMs: average(tempoDownswingValues),
       avgTempoRatio: average(tempoRatioValues),
       tempoSampleCount: tempoShots.length > 0 ? tempoShots.length : null,
+      minTempoRatio: tempoRatioValues.length ? Math.min(...tempoRatioValues) : null,
+      maxTempoRatio: tempoRatioValues.length ? Math.max(...tempoRatioValues) : null,
     };
   };
 
