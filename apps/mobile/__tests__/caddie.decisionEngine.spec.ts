@@ -150,6 +150,22 @@ describe('buildCaddieDecisionFromContext', () => {
     expect(aggressive?.club).toBe('9i');
     expect(safe?.club).toBe('8i');
   });
+
+  it('falls back gracefully when wind data is missing', () => {
+    const result = buildCaddieDecisionFromContext({
+      conditions: { ...baseConditions, windSpeedMps: Number.NaN, windDirectionDeg: Number.NaN },
+      explicitIntent: 'straight',
+      settings: DEFAULT_SETTINGS,
+      clubs: [
+        { club: '9i', baselineCarryM: 150, samples: 5, source: 'auto' as const },
+        { club: '8i', baselineCarryM: 160, samples: 5, source: 'auto' as const },
+      ],
+      shotShapeProfile: sampleProfile,
+    });
+
+    expect(result?.playsLikeDistanceM).toBeCloseTo(baseConditions.targetDistanceM);
+    expect(result?.club).toBe('8i');
+  });
 });
 
 describe('mapDistanceStatsToCandidate', () => {

@@ -20,6 +20,8 @@ export function buildCaddieHudPayload(
     par: context?.par ?? null,
     rawDistanceM: context?.rawDistanceM ?? decision.playsLikeDistanceM,
     playsLikeDistanceM: decision.playsLikeDistanceM,
+    slopeAdjustM: decision.playsLikeBreakdown.slopeAdjustM,
+    windAdjustM: decision.playsLikeBreakdown.windAdjustM,
     club: decision.club,
     intent: decision.intent,
     riskProfile: settings.riskProfile,

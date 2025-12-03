@@ -251,7 +251,8 @@ export const en = {
     },
     decision: {
       header: '{{club}} · {{intentLabel}}',
-      plays_like: 'Plays like: {{distance}} m',
+      plays_like_breakdown: 'Plays-like: {{distance}} m ({{slope}} m slope, {{wind}} m wind)',
+      wind_elevation_correction: 'Wind/Elevation correction',
       source_auto: 'Using: On-course (auto)',
       source_manual: 'Using: Manual distance',
       core_window: 'Core window (~80%): {{carryMin}}–{{carryMax}} m carry, {{sideMin}}–{{sideMax}} m sideways.',

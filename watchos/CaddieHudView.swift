@@ -34,6 +34,10 @@ struct CaddieHudView: View {
 
     private var content: some View {
         VStack(alignment: .leading, spacing: 8) {
+            if let clubLine = model.clubLine {
+                Text("Club: \(clubLine)")
+                    .font(.footnote)
+            }
             if let primary = model.primaryDistanceText {
                 Text(primary)
                     .font(.title3)
@@ -45,10 +49,6 @@ struct CaddieHudView: View {
                     .font(.caption2)
                     .foregroundStyle(.secondary)
                     .lineLimit(2)
-            }
-            if let clubLine = model.clubLine {
-                Text("Club: \(clubLine)")
-                    .font(.footnote)
             }
             if let risk = model.riskProfileLabel {
                 Text(risk)

@@ -7,6 +7,13 @@ export interface Shot {
   club: string;
   base_m: number;
   playsLike_m: number;
+  playsLikeMeta?: {
+    raw_m?: number;
+    slope_m?: number;
+    wind_m?: number;
+    effective_m?: number;
+    recommendedClub?: string;
+  };
   carry_m?: number;
   pin: { lat: number; lon: number };
   land?: { lat: number; lon: number };

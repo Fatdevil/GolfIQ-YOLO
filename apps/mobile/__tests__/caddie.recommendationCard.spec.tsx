@@ -12,6 +12,7 @@ describe('CaddieRecommendationCard', () => {
     intent: 'fade',
     effectiveCarryM: 155,
     playsLikeDistanceM: 150,
+    playsLikeBreakdown: { slopeAdjustM: -2, windAdjustM: 4 },
     source: 'auto',
     samples: 3,
     risk: {
@@ -31,7 +32,7 @@ describe('CaddieRecommendationCard', () => {
 
     expect(screen.getByTestId('caddie-recommendation-card')).toBeInTheDocument();
     expect(screen.getByText(/7i/)).toBeInTheDocument();
-    expect(screen.getByText(/Plays like/)).toBeInTheDocument();
+    expect(screen.getByText(/Plays-like/)).toBeInTheDocument();
     expect(screen.getByText(/Core window/)).toBeInTheDocument();
     expect(screen.getByTestId('caddie-tail-left')).toHaveTextContent('6%');
     expect(screen.getByTestId('caddie-tail-right')).toBeInTheDocument();
