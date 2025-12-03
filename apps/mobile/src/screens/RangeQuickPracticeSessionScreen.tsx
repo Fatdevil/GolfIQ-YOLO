@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Alert, ScrollView, StyleSheet, Switch, Text, TouchableOpacity, View } from 'react-native';
 
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { analyzeRangeShot } from '@app/api/range';
@@ -8,17 +8,47 @@ import LastShotCard, { classifyDirection } from '@app/range/LastShotCard';
 import type { RangeSession, RangeSessionSummary, RangeShot } from '@app/range/rangeSession';
 import { getMissionById } from '@app/range/rangeMissions';
 import { loadRangeMissionState } from '@app/range/rangeMissionsStorage';
+import { computeTempoTargetFromHistory, type TempoTarget } from '@app/range/tempoTrainerEngine';
 import { loadCurrentTrainingGoal } from '@app/range/rangeTrainingGoalStorage';
+import { loadRangeHistory } from '@app/range/rangeHistoryStorage';
+import { t } from '@app/i18n';
+import {
+  isTempoTrainerAvailable,
+  sendTempoTrainerActivation,
+  sendTempoTrainerDeactivation,
+  subscribeToTempoTrainerResults,
+  type TempoTrainerResultMessage,
+} from '@app/watch/tempoTrainerBridge';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'RangeQuickPracticeSession'>;
 
-function createShot(session: RangeSession, analysis: Awaited<ReturnType<typeof analyzeRangeShot>>): RangeShot {
+const TEMPO_CONFIG = {
+  defaultRatio: 3,
+  defaultTolerance: 0.3,
+  defaultBackswingMs: 900,
+  defaultDownswingMs: 300,
+  minSamplesForPersonal: 15,
+};
+
+function deriveWithinBand(ratio: number | null, target?: TempoTarget | null): boolean | null {
+  if (ratio == null || !target) return null;
+  return Math.abs(ratio - target.targetRatio) <= target.tolerance;
+}
+
+function createShot(
+  session: RangeSession,
+  analysis: Awaited<ReturnType<typeof analyzeRangeShot>>,
+  trainerResult?: TempoTrainerResultMessage | null,
+  target?: TempoTarget | null,
+): RangeShot {
   const tempoRatio =
-    analysis.tempoRatio != null
-      ? analysis.tempoRatio
-      : analysis.tempoBackswingMs && analysis.tempoDownswingMs
-        ? analysis.tempoBackswingMs / analysis.tempoDownswingMs
-        : null;
+    trainerResult?.ratio != null
+      ? trainerResult.ratio
+      : analysis.tempoRatio != null
+        ? analysis.tempoRatio
+        : analysis.tempoBackswingMs && analysis.tempoDownswingMs
+          ? analysis.tempoBackswingMs / analysis.tempoDownswingMs
+          : null;
   return {
     id: typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : `${Date.now()}`,
     timestamp: new Date().toISOString(),
@@ -31,9 +61,10 @@ function createShot(session: RangeSession, analysis: Awaited<ReturnType<typeof a
     ballSpeedMps: analysis.ballSpeedMps ?? null,
     clubSpeedMps: analysis.clubSpeedMps ?? null,
     qualityLevel: analysis.quality?.level ?? null,
-    tempoBackswingMs: analysis.tempoBackswingMs ?? null,
-    tempoDownswingMs: analysis.tempoDownswingMs ?? null,
+    tempoBackswingMs: trainerResult?.backswingMs ?? analysis.tempoBackswingMs ?? null,
+    tempoDownswingMs: trainerResult?.downswingMs ?? analysis.tempoDownswingMs ?? null,
     tempoRatio: tempoRatio ?? null,
+    tempoWithinBand: trainerResult?.withinBand ?? deriveWithinBand(tempoRatio ?? null, target),
   };
 }
 
@@ -41,6 +72,9 @@ export default function RangeQuickPracticeSessionScreen({ navigation, route }: P
   const session = route?.params?.session;
   const [sessionState, setSessionState] = useState<RangeSession | null>(session ?? null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [tempoTarget, setTempoTarget] = useState<TempoTarget | null>(null);
+  const [isTempoTrainerEnabled, setIsTempoTrainerEnabled] = useState(false);
+  const [pendingTrainerResult, setPendingTrainerResult] = useState<TempoTrainerResultMessage | null>(null);
   const angleLabel = useMemo(() => {
     if (sessionState?.cameraAngle === 'down_the_line') return 'DTL';
     if (sessionState?.cameraAngle === 'face_on') return 'Face-on';
@@ -51,6 +85,31 @@ export default function RangeQuickPracticeSessionScreen({ navigation, route }: P
       navigation.replace('RangeQuickPracticeStart');
     }
   }, [navigation, sessionState]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const loadTarget = async () => {
+      const history = await loadRangeHistory();
+      if (cancelled) return;
+      const target = computeTempoTargetFromHistory(
+        history.map((entry) => entry.summary),
+        TEMPO_CONFIG,
+      );
+      setTempoTarget(target);
+    };
+    loadTarget().catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!isTempoTrainerEnabled) return undefined;
+    const unsubscribe = subscribeToTempoTrainerResults((message) => {
+      setPendingTrainerResult(message);
+    });
+    return unsubscribe;
+  }, [isTempoTrainerEnabled]);
 
   if (!sessionState) {
     return (
@@ -71,11 +130,28 @@ export default function RangeQuickPracticeSessionScreen({ navigation, route }: P
         cameraAngle: sessionState.cameraAngle,
         framesToken: null,
       });
-      setSessionState((prev) => (prev ? { ...prev, shots: [...prev.shots, createShot(prev, analysis)] } : prev));
+      setSessionState((prev) => {
+        if (!prev) return prev;
+        const shot = createShot(prev, analysis, pendingTrainerResult, tempoTarget);
+        setPendingTrainerResult(null);
+        return { ...prev, shots: [...prev.shots, shot] };
+      });
     } catch {
       Alert.alert('Shot not analyzed', "Couldn’t analyse that shot. Please try again.");
     } finally {
       setIsAnalyzing(false);
+    }
+  };
+
+  const handleToggleTrainer = (value: boolean) => {
+    setIsTempoTrainerEnabled(value);
+    if (value) {
+      if (tempoTarget) {
+        sendTempoTrainerActivation(tempoTarget);
+      }
+    } else {
+      sendTempoTrainerDeactivation();
+      setPendingTrainerResult(null);
     }
   };
 
@@ -110,6 +186,7 @@ export default function RangeQuickPracticeSessionScreen({ navigation, route }: P
     const tempoRatioValues = tempoShots
       .map((shot) => (typeof shot.tempoRatio === 'number' ? shot.tempoRatio : null))
       .filter((value): value is number => value != null && !Number.isNaN(value));
+    const tempoWithinBandCount = currentSession.shots.filter((shot) => shot.tempoWithinBand).length;
 
     const average = (values: number[]): number | null => {
       if (!values.length) return null;
@@ -133,6 +210,7 @@ export default function RangeQuickPracticeSessionScreen({ navigation, route }: P
       avgTempoDownswingMs: average(tempoDownswingValues),
       avgTempoRatio: average(tempoRatioValues),
       tempoSampleCount: tempoShots.length > 0 ? tempoShots.length : null,
+      tempoSwingsWithinBand: tempoWithinBandCount > 0 ? tempoWithinBandCount : null,
       minTempoRatio: tempoRatioValues.length ? Math.min(...tempoRatioValues) : null,
       maxTempoRatio: tempoRatioValues.length ? Math.max(...tempoRatioValues) : null,
     };
@@ -162,6 +240,7 @@ export default function RangeQuickPracticeSessionScreen({ navigation, route }: P
   };
 
   const lastShot = sessionState.shots[sessionState.shots.length - 1] ?? null;
+  const watchAvailable = isTempoTrainerAvailable();
 
   return (
     <ScrollView contentContainerStyle={styles.container}>
@@ -194,7 +273,34 @@ export default function RangeQuickPracticeSessionScreen({ navigation, route }: P
         <Text style={styles.primaryButtonText}>{isAnalyzing ? 'Analyserar…' : 'Logga slag'}</Text>
       </TouchableOpacity>
 
-      <LastShotCard shot={lastShot} targetDistanceM={sessionState.targetDistanceM} />
+      {watchAvailable ? (
+        <View style={styles.trainerCard}>
+          <View style={styles.trainerHeader}>
+            <Text style={styles.sectionTitle}>{t('range.tempoTrainer.title')}</Text>
+            <Switch
+              value={isTempoTrainerEnabled}
+              onValueChange={handleToggleTrainer}
+              testID="tempo-trainer-toggle"
+            />
+          </View>
+          <Text style={styles.helperText}>{t('range.tempoTrainer.description')}</Text>
+          {isTempoTrainerEnabled && tempoTarget ? (
+            <Text style={styles.helperText} testID="tempo-trainer-target">
+              {t('range.tempoTrainer.target_label', {
+                ratio: tempoTarget.targetRatio.toFixed(1),
+                backswing: tempoTarget.targetBackswingMs,
+                downswing: tempoTarget.targetDownswingMs,
+              })}
+            </Text>
+          ) : null}
+        </View>
+      ) : null}
+
+      <LastShotCard
+        shot={lastShot}
+        targetDistanceM={sessionState.targetDistanceM}
+        tempoTarget={isTempoTrainerEnabled ? tempoTarget : undefined}
+      />
 
       <View style={styles.shotList}>
         <Text style={styles.sectionTitle}>Dina slag</Text>
@@ -258,6 +364,23 @@ const styles = StyleSheet.create({
   primaryButtonText: {
     color: '#FFFFFF',
     fontWeight: '700',
+  },
+  trainerCard: {
+    marginTop: 8,
+    padding: 14,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    backgroundColor: '#F8FAFC',
+    gap: 6,
+  },
+  trainerHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  helperText: {
+    color: '#4B5563',
   },
   shotList: {
     marginTop: 16,

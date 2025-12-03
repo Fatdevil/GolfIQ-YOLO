@@ -23,6 +23,7 @@ import RangeMissionsScreen from '@app/screens/RangeMissionsScreen';
 import TripsScreen from '@app/screens/TripsScreen';
 import CaddieApproachScreen from '@app/screens/CaddieApproachScreen';
 import CaddieSetupScreen from '@app/screens/CaddieSetupScreen';
+import { registerWatchTempoTrainerBridge } from '@app/watch/watchConnectivity';
 import { extractJoinCode } from '@app/utils/deepLink';
 import CourseSelectScreen from '@app/screens/play/CourseSelectScreen';
 import TeeSelectScreen from '@app/screens/play/TeeSelectScreen';
@@ -35,6 +36,8 @@ import RoundShotScreen from '@app/screens/RoundShotScreen';
 import RoundSummaryScreen from '@app/screens/RoundSummaryScreen';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
+
+registerWatchTempoTrainerBridge();
 
 export default function App(): JSX.Element {
   const [initialCode, setInitialCode] = useState<string | null>(null);
