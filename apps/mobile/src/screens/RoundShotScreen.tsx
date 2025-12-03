@@ -195,7 +195,8 @@ export default function RoundShotScreen({ navigation }: Props): JSX.Element {
   const handleEndRound = useCallback(async () => {
     if (!state) return;
     try {
-      await ensureScoreSaved();
+      const saved = await ensureScoreSaved();
+      if (!saved) return;
       await endRound(state.round.id);
       await clearActiveRoundState();
       navigation.navigate('RoundSummary', { roundId: state.round.id });

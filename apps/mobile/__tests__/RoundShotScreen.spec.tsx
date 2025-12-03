@@ -118,4 +118,38 @@ describe('RoundShotScreen', () => {
 
     expect(await findByText('No active round. Start a new one to log shots.')).toBeTruthy();
   });
+
+  it('does not end round when scoring save fails', async () => {
+    mockUpdateHoleScore.mockRejectedValueOnce(new Error('boom'));
+    const navigation = { navigate: vi.fn() } as any;
+    const { getByLabelText, getByText } = render(
+      <RoundShotScreen navigation={navigation} route={undefined as any} />,
+    );
+
+    await waitFor(() => expect(mockGetScores).toHaveBeenCalled());
+    fireEvent.click(getByLabelText('Increase strokes'));
+    fireEvent.click(getByText('End round'));
+
+    await waitFor(() => expect(mockUpdateHoleScore).toHaveBeenCalled());
+    expect(mockEndRound).not.toHaveBeenCalled();
+    expect(mockClear).not.toHaveBeenCalled();
+    expect(navigation.navigate).not.toHaveBeenCalled();
+    expect(getByText('Hole 1')).toBeTruthy();
+  });
+
+  it('stays on current hole when save fails on next hole', async () => {
+    mockUpdateHoleScore.mockRejectedValueOnce(new Error('network'));
+    const { getByLabelText, getByText, queryByText } = render(
+      <RoundShotScreen navigation={{} as any} route={undefined as any} />,
+    );
+
+    await waitFor(() => expect(mockGetScores).toHaveBeenCalled());
+    fireEvent.click(getByLabelText('Increase strokes'));
+    fireEvent.click(getByText('Next hole'));
+
+    await waitFor(() => expect(mockUpdateHoleScore).toHaveBeenCalled());
+    expect(mockSave).not.toHaveBeenCalled();
+    expect(queryByText('Hole 2')).toBeNull();
+    expect(getByText('Hole 1')).toBeTruthy();
+  });
 });
