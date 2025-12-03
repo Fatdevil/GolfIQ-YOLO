@@ -3,6 +3,8 @@ import {
   endRound,
   getRoundScores,
   getRoundSummary,
+  listRoundSummaries,
+  listRounds,
   listRoundShots,
   startRound,
   updateHoleScore,
@@ -112,5 +114,33 @@ describe('roundClient', () => {
     const summary = await getRoundSummary('r1');
     expect(summary.totalToPar).toBe(2);
     expect(mockFetch).toHaveBeenCalledWith('http://localhost:8000/api/rounds/r1/summary', expect.anything());
+  });
+
+  it('lists rounds with optional limit', async () => {
+    const payload = [
+      { id: 'r1', holes: 18, startedAt: '2024-01-01T00:00:00Z', courseName: 'Pebble' },
+    ];
+    mockFetch.mockResolvedValue(mockResponse(payload));
+
+    const rounds = await listRounds(10);
+    expect(rounds).toEqual(payload);
+    expect(mockFetch).toHaveBeenCalledWith('http://localhost:8000/api/rounds?limit=10', expect.anything());
+  });
+
+  it('lists round summaries with optional limit', async () => {
+    const payload = [
+      {
+        roundId: 'r1',
+        totalStrokes: 72,
+        totalPar: 70,
+        totalToPar: 2,
+        holesPlayed: 18,
+      },
+    ];
+    mockFetch.mockResolvedValue(mockResponse(payload));
+
+    const summaries = await listRoundSummaries();
+    expect(summaries).toEqual(payload);
+    expect(mockFetch).toHaveBeenCalledWith('http://localhost:8000/api/rounds/summaries', expect.anything());
   });
 });
