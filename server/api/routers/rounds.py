@@ -14,6 +14,7 @@ from server.rounds.models import (
     Shot,
     compute_round_summary,
 )
+from server.rounds.recap import RoundRecap, build_round_recap
 from server.rounds.service import (
     RoundNotFound,
     RoundOwnershipError,
@@ -153,6 +154,31 @@ def end_round(
     player_id = _derive_player_id(api_key, user_id)
     try:
         return service.end_round(player_id=player_id, round_id=round_id)
+    except RoundNotFound:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="round not found"
+        )
+    except RoundOwnershipError:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="round not owned by player"
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
+
+
+@router.get("/{round_id}/recap", response_model=RoundRecap)
+def get_round_recap(
+    round_id: str,
+    api_key: str | None = Depends(require_api_key),
+    user_id: UserIdHeader = None,
+    service: RoundService = Depends(get_round_service),
+) -> RoundRecap:
+    player_id = _derive_player_id(api_key, user_id)
+    try:
+        round_info = service.get_round_info(player_id=player_id, round_id=round_id)
+        scores = service.get_scores(player_id=player_id, round_id=round_id)
+        summary = compute_round_summary(scores)
+        return build_round_recap(round_info, summary)
     except RoundNotFound:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="round not found"

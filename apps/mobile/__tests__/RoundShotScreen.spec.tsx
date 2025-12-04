@@ -83,7 +83,7 @@ describe('RoundShotScreen', () => {
 
     await waitFor(() => expect(mockEndRound).toHaveBeenCalled());
     expect(mockClear).toHaveBeenCalled();
-    expect(navigation.navigate).toHaveBeenCalledWith('RoundSummary', { roundId: 'r1' });
+    expect(navigation.navigate).toHaveBeenCalledWith('RoundRecap', { roundId: 'r1' });
   });
 
   it('advances to the next hole and persists state', async () => {

@@ -166,6 +166,24 @@ class RoundService:
             for record in records
         ]
 
+    def get_round_info(self, *, player_id: str, round_id: str) -> RoundInfo:
+        record = self._load_round(round_id)
+        if record is None:
+            raise RoundNotFound(round_id)
+        if record.player_id != player_id:
+            raise RoundOwnershipError(round_id)
+
+        return RoundInfo(
+            id=record.id,
+            player_id=record.player_id,
+            course_id=record.course_id,
+            course_name=None,
+            tee_name=record.tee_name,
+            holes=record.holes,
+            started_at=record.started_at,
+            ended_at=record.ended_at,
+        )
+
     def get_round_summaries(
         self, *, player_id: str, limit: int = 50
     ) -> list[RoundSummary]:

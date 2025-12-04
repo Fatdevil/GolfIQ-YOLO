@@ -237,6 +237,23 @@ export const en = {
       unnamed_course: 'Unnamed course',
       stats_line: 'Putts: {{putts}} · FIR: {{fir}} · GIR: {{gir}}',
     },
+    recap: {
+      title: 'Round recap',
+      loading: 'Loading round recap…',
+      error: 'Unable to load round recap right now.',
+      holes: '{{holes}} holes played',
+      categories_title: 'Categories',
+      focus_title: 'Focus this week',
+      focus_empty: 'Log more holes to unlock focus hints.',
+      missing_category: 'Not enough data',
+      share_cta: 'Share round',
+      share_focus_fallback: 'Keep building a consistent routine.',
+      share_error_title: 'Share failed',
+      share_error_body: 'Unable to open the share sheet right now.',
+      share_template:
+        'Great round at {{course}}! Shot {{score}} ({{toPar}}). Driving {{driving}}, Approach {{approach}}, Short Game {{shortGame}}, Putting {{putting}}. Focus next time: {{focus}}. Tracked with GolfIQ.',
+      to_par_even: 'E',
+    },
   },
   caddie: {
     risk: {

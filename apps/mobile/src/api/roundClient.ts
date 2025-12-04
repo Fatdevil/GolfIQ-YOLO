@@ -67,6 +67,28 @@ export interface RoundSummary {
   holesPlayed: number;
 }
 
+export type RoundRecapCategory = {
+  label: string;
+  grade: string | null;
+  value: number | null;
+};
+
+export type RoundRecap = {
+  roundId: string;
+  courseName?: string | null;
+  date: string;
+  score: number | null;
+  toPar: string | null;
+  holesPlayed: number;
+  categories: {
+    driving?: RoundRecapCategory;
+    approach?: RoundRecapCategory;
+    short_game?: RoundRecapCategory;
+    putting?: RoundRecapCategory;
+  };
+  focusHints: string[];
+};
+
 export interface RoundInfo {
   id: string;
   playerId?: string;
@@ -153,6 +175,10 @@ export async function updateHoleScore(
 
 export async function getRoundSummary(roundId: string): Promise<RoundSummary> {
   return apiFetch<RoundSummary>(`/api/rounds/${roundId}/summary`);
+}
+
+export async function fetchRoundRecap(roundId: string): Promise<RoundRecap> {
+  return apiFetch<RoundRecap>(`/api/rounds/${roundId}/recap`);
 }
 
 export async function listRounds(limit?: number): Promise<RoundInfo[]> {

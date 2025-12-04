@@ -50,6 +50,7 @@ export type RootStackParamList = {
   RoundHistory: undefined;
   PlayerStats: undefined;
   CategoryStats: undefined;
+  RoundRecap: { roundId: string };
   RoundSummary: { roundId: string };
   RoundScorecard: { roundId: string };
   EventJoin: { code?: string } | undefined;

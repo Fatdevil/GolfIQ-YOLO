@@ -199,7 +199,7 @@ export default function RoundShotScreen({ navigation }: Props): JSX.Element {
       if (!saved) return;
       await endRound(state.round.id);
       await clearActiveRoundState();
-      navigation.navigate('RoundSummary', { roundId: state.round.id });
+      navigation.navigate('RoundRecap', { roundId: state.round.id });
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to end round';
       Alert.alert('End round failed', message);

@@ -106,7 +106,7 @@ export default function RoundHistoryScreen({ navigation }: Props): JSX.Element {
           <TouchableOpacity
             key={info.id}
             style={styles.card}
-            onPress={() => navigation.navigate('RoundSummary', { roundId: info.id })}
+            onPress={() => navigation.navigate('RoundRecap', { roundId: info.id })}
             accessibilityLabel={t('round.history.view_round')}
             testID="round-history-item"
           >
