@@ -7,6 +7,8 @@ export type ClipCommentaryParams = {
 };
 
 export type RootStackParamList = {
+  Onboarding: undefined;
+  DemoExperience: undefined;
   PlayerHome: undefined;
   HomeDashboard: undefined;
   PlayCourseSelect: undefined;
@@ -52,11 +54,11 @@ export type RootStackParamList = {
   RoundHistory: undefined;
   PlayerStats: undefined;
   CategoryStats: undefined;
-  RoundRecap: { roundId: string };
+  RoundRecap: { roundId: string; isDemo?: boolean };
   RoundSummary: { roundId: string };
   RoundScorecard: { roundId: string };
-  CoachReport: { roundId: string; courseName?: string; date?: string };
-  WeeklySummary: undefined;
+  CoachReport: { roundId: string; courseName?: string; date?: string; isDemo?: boolean };
+  WeeklySummary: { isDemo?: boolean } | undefined;
   PracticePlanner: undefined;
   EventJoin: { code?: string } | undefined;
   EventLive: {

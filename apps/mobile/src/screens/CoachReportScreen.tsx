@@ -5,6 +5,7 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { fetchCoachRoundSummary, ProRequiredError, type CoachRoundSummary } from '@app/api/coachClient';
 import { t } from '@app/i18n';
 import type { RootStackParamList } from '@app/navigation/types';
+import { fetchDemoCoachRound } from '@app/demo/demoService';
 
 const SG_CATEGORY_ORDER: Array<{ key: keyof NonNullable<CoachRoundSummary['strokesGained']>; label: string }> = [
   { key: 'driving', label: t('weeklySummary.categories.driving') },
@@ -28,7 +29,7 @@ function formatDate(raw?: string | null): string {
 }
 
 export default function CoachReportScreen({ route, navigation }: Props): JSX.Element {
-  const { roundId, courseName: courseNameParam, date: dateParam } = route.params ?? { roundId: '' };
+  const { roundId, courseName: courseNameParam, date: dateParam, isDemo } = route.params ?? { roundId: '' };
   const [summary, setSummary] = useState<CoachRoundSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -40,28 +41,49 @@ export default function CoachReportScreen({ route, navigation }: Props): JSX.Ele
     setError(null);
     setProRequired(false);
 
-    fetchCoachRoundSummary(roundId)
-      .then((res) => {
-        if (cancelled) return;
-        setSummary(res);
-        setError(null);
-      })
-      .catch((err) => {
-        if (cancelled) return;
-        if (err instanceof ProRequiredError) {
-          setProRequired(true);
-        } else {
+    const loadDemo = async () => {
+      const res = await fetchDemoCoachRound();
+      if (cancelled) return;
+      setSummary(res);
+      setError(null);
+      setProRequired(false);
+      setLoading(false);
+    };
+
+    const loadReal = () =>
+      fetchCoachRoundSummary(roundId)
+        .then((res) => {
+          if (cancelled) return;
+          setSummary(res);
+          setError(null);
+        })
+        .catch((err) => {
+          if (cancelled) return;
+          if (err instanceof ProRequiredError) {
+            setProRequired(true);
+          } else {
+            setError(t('coach_report_error'));
+          }
+        })
+        .finally(() => {
+          if (!cancelled) setLoading(false);
+        });
+
+    if (isDemo) {
+      loadDemo().catch(() => {
+        if (!cancelled) {
           setError(t('coach_report_error'));
+          setLoading(false);
         }
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
       });
+    } else {
+      loadReal();
+    }
 
     return () => {
       cancelled = true;
     };
-  }, [roundId]);
+  }, [isDemo, roundId]);
 
   const headerCourseName = summary?.courseName ?? courseNameParam ?? t('round.history.unnamed_course');
   const headerDate = formatDate(summary?.date ?? dateParam);

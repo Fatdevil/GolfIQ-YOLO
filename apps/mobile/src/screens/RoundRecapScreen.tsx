@@ -14,6 +14,7 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { createRoundShareLink } from '@app/api/shareClient';
 import { fetchRoundRecap, type RoundRecap } from '@app/api/roundClient';
 import { fetchRoundStrokesGained, type RoundStrokesGained } from '@app/api/strokesGainedClient';
+import { fetchDemoRoundRecap } from '@app/demo/demoService';
 import { t } from '@app/i18n';
 import type { RootStackParamList } from '@app/navigation/types';
 
@@ -40,7 +41,7 @@ function formatSgValue(value: number): string {
 }
 
 export default function RoundRecapScreen({ route, navigation }: Props): JSX.Element {
-  const { roundId } = route.params ?? { roundId: '' };
+  const { roundId, isDemo } = route.params ?? { roundId: '' };
   const [recap, setRecap] = useState<RoundRecap | null>(null);
   const [strokesGained, setStrokesGained] = useState<RoundStrokesGained | null>(null);
   const [loading, setLoading] = useState(true);
@@ -52,31 +53,53 @@ export default function RoundRecapScreen({ route, navigation }: Props): JSX.Elem
     let cancelled = false;
     setLoading(true);
     setError(null);
-    Promise.allSettled([fetchRoundRecap(roundId), fetchRoundStrokesGained(roundId)])
-      .then(([recapResult, sgResult]) => {
-        if (cancelled) return;
-        if (recapResult.status === 'fulfilled') {
-          setRecap(recapResult.value);
-        } else {
-          setError(t('round.recap.error'));
-        }
 
-        if (sgResult.status === 'fulfilled') {
-          setStrokesGained(sgResult.value);
-          setSgError(null);
-        } else {
-          setStrokesGained(null);
-          setSgError(t('strokesGained.unavailable'));
+    const loadDemo = async () => {
+      const result = await fetchDemoRoundRecap();
+      if (cancelled) return;
+      setRecap(result.recap);
+      setStrokesGained(result.strokesGained ?? null);
+      setSgError(result.strokesGained ? null : t('strokesGained.unavailable'));
+      setLoading(false);
+    };
+
+    const loadReal = () =>
+      Promise.allSettled([fetchRoundRecap(roundId), fetchRoundStrokesGained(roundId)])
+        .then(([recapResult, sgResult]) => {
+          if (cancelled) return;
+          if (recapResult.status === 'fulfilled') {
+            setRecap(recapResult.value);
+          } else {
+            setError(t('round.recap.error'));
+          }
+
+          if (sgResult.status === 'fulfilled') {
+            setStrokesGained(sgResult.value);
+            setSgError(null);
+          } else {
+            setStrokesGained(null);
+            setSgError(t('strokesGained.unavailable'));
+          }
+        })
+        .finally(() => {
+          if (!cancelled) setLoading(false);
+        });
+
+    if (isDemo) {
+      loadDemo().catch(() => {
+        if (!cancelled) {
+          setError(t('round.recap.error'));
+          setLoading(false);
         }
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
       });
+    } else {
+      loadReal();
+    }
 
     return () => {
       cancelled = true;
     };
-  }, [roundId]);
+  }, [isDemo, roundId]);
 
   const scoreLine = useMemo(() => {
     if (!recap) return '';
@@ -119,7 +142,7 @@ export default function RoundRecapScreen({ route, navigation }: Props): JSX.Elem
   }, [strokesGained]);
 
   const handleShare = useCallback(async () => {
-    if (!recap) return;
+    if (isDemo || !recap) return;
     const categories = recap.categories || {};
     const drivingGrade = categories.driving?.grade ?? '—';
     const approachGrade = categories.approach?.grade ?? '—';
@@ -163,7 +186,7 @@ export default function RoundRecapScreen({ route, navigation }: Props): JSX.Elem
     } finally {
       setShareLoading(false);
     }
-  }, [bestCategoryLabel, courseName, recap, roundId]);
+  }, [bestCategoryLabel, courseName, isDemo, recap, roundId]);
 
   if (loading) {
     return (
@@ -195,18 +218,20 @@ export default function RoundRecapScreen({ route, navigation }: Props): JSX.Elem
       <View style={styles.card}>
         <View style={styles.cardHeader}>
           <Text style={styles.cardTitle}>{t('round.recap.categories_title')}</Text>
-          <TouchableOpacity
-            style={styles.secondaryButton}
-            onPress={handleShare}
-            disabled={shareLoading}
-            testID="share-round"
-          >
-            {shareLoading ? (
-              <ActivityIndicator color="#00c853" />
-            ) : (
-              <Text style={styles.secondaryButtonText}>{t('round.recap.share_cta')}</Text>
-            )}
-          </TouchableOpacity>
+          {!isDemo ? (
+            <TouchableOpacity
+              style={styles.secondaryButton}
+              onPress={handleShare}
+              disabled={shareLoading}
+              testID="share-round"
+            >
+              {shareLoading ? (
+                <ActivityIndicator color="#00c853" />
+              ) : (
+                <Text style={styles.secondaryButtonText}>{t('round.recap.share_cta')}</Text>
+              )}
+            </TouchableOpacity>
+          ) : null}
         </View>
         <View style={styles.grid}>
           {CATEGORY_ORDER.map((key) => {
@@ -284,6 +309,7 @@ export default function RoundRecapScreen({ route, navigation }: Props): JSX.Elem
             roundId,
             courseName,
             date: recap?.date,
+            isDemo,
           })
         }
         testID="open-coach-report"

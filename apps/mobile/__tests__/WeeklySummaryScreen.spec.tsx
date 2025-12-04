@@ -54,7 +54,10 @@ describe('WeeklySummaryScreen', () => {
 
     const navigation = { navigate: vi.fn() } as any;
     const { getByTestId, getByText } = render(
-      <WeeklySummaryScreen navigation={navigation} route={undefined as any} />,
+      <WeeklySummaryScreen
+        navigation={navigation}
+        route={{ key: 'WeeklySummary', name: 'WeeklySummary', params: undefined } as any}
+      />,
     );
 
     await waitFor(() => expect(getByTestId('weekly-headline')).toBeTruthy());
@@ -86,7 +89,10 @@ describe('WeeklySummaryScreen', () => {
 
     const navigation = { navigate: vi.fn() } as any;
     const { findByText, queryByText } = render(
-      <WeeklySummaryScreen navigation={navigation} route={undefined as any} />,
+      <WeeklySummaryScreen
+        navigation={navigation}
+        route={{ key: 'WeeklySummary', name: 'WeeklySummary', params: undefined } as any}
+      />,
     );
 
     expect(await findByText(/Not enough data yet/)).toBeTruthy();
@@ -108,7 +114,10 @@ describe('WeeklySummaryScreen', () => {
     const shareSpy = vi.spyOn(Share, 'share').mockResolvedValue({} as any);
 
     const { getByTestId, getByText } = render(
-      <WeeklySummaryScreen navigation={{} as any} route={undefined as any} />,
+      <WeeklySummaryScreen
+        navigation={{} as any}
+        route={{ key: 'WeeklySummary', name: 'WeeklySummary', params: undefined } as any}
+      />,
     );
 
     await waitFor(() => expect(getByTestId('weekly-headline')).toBeTruthy());
@@ -132,7 +141,10 @@ describe('WeeklySummaryScreen', () => {
     const shareSpy = vi.spyOn(Share, 'share').mockResolvedValue({} as any);
 
     const { getByTestId } = render(
-      <WeeklySummaryScreen navigation={{} as any} route={undefined as any} />,
+      <WeeklySummaryScreen
+        navigation={{} as any}
+        route={{ key: 'WeeklySummary', name: 'WeeklySummary', params: undefined } as any}
+      />,
     );
 
     await waitFor(() => expect(getByTestId('weekly-headline')).toBeTruthy());
