@@ -12,6 +12,7 @@ import {
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 
 import { fetchRoundRecap, type RoundRecap } from '@app/api/roundClient';
+import { fetchRoundStrokesGained, type RoundStrokesGained } from '@app/api/strokesGainedClient';
 import { t } from '@app/i18n';
 import type { RootStackParamList } from '@app/navigation/types';
 
@@ -32,22 +33,39 @@ function formatCategoryValue(key: keyof RoundRecap['categories'], value: number 
   return `${value.toFixed(1)}`;
 }
 
+function formatSgValue(value: number): string {
+  if (Number.isNaN(value)) return '—';
+  return value > 0 ? `+${value.toFixed(1)}` : value.toFixed(1);
+}
+
 export default function RoundRecapScreen({ route }: Props): JSX.Element {
   const { roundId } = route.params ?? { roundId: '' };
   const [recap, setRecap] = useState<RoundRecap | null>(null);
+  const [strokesGained, setStrokesGained] = useState<RoundStrokesGained | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [sgError, setSgError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
     setError(null);
-    fetchRoundRecap(roundId)
-      .then((data) => {
-        if (!cancelled) setRecap(data);
-      })
-      .catch(() => {
-        if (!cancelled) setError(t('round.recap.error'));
+    Promise.allSettled([fetchRoundRecap(roundId), fetchRoundStrokesGained(roundId)])
+      .then(([recapResult, sgResult]) => {
+        if (cancelled) return;
+        if (recapResult.status === 'fulfilled') {
+          setRecap(recapResult.value);
+        } else {
+          setError(t('round.recap.error'));
+        }
+
+        if (sgResult.status === 'fulfilled') {
+          setStrokesGained(sgResult.value);
+          setSgError(null);
+        } else {
+          setStrokesGained(null);
+          setSgError(t('strokesGained.unavailable'));
+        }
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -72,6 +90,23 @@ export default function RoundRecapScreen({ route }: Props): JSX.Element {
     if (Number.isNaN(parsed.getTime())) return recap.date;
     return parsed.toLocaleDateString();
   }, [recap?.date]);
+
+  const strokesInsight = useMemo(() => {
+    if (!strokesGained) return null;
+    const categories = Object.values(strokesGained.categories ?? {});
+    if (categories.length === 0) return null;
+
+    const best = categories.reduce((acc, curr) => (curr.value > acc.value ? curr : acc), categories[0]);
+    const worst = categories.reduce((acc, curr) => (curr.value < acc.value ? curr : acc), categories[0]);
+
+    if (worst.value < -0.2) {
+      return t('strokesGained.roundLeak', { category: worst.label });
+    }
+    if (best.value > 0.8) {
+      return t('strokesGained.roundCarry', { category: best.label });
+    }
+    return t('strokesGained.roundEven');
+  }, [strokesGained]);
 
   const handleShare = useCallback(async () => {
     if (!recap) return;
@@ -152,6 +187,50 @@ export default function RoundRecapScreen({ route }: Props): JSX.Element {
       </View>
 
       <View style={styles.card}>
+        <Text style={styles.cardTitle}>{t('strokesGained.roundSectionTitle')}</Text>
+        {strokesGained ? (
+          <>
+            <View style={styles.sgHeaderRow}>
+              <Text style={styles.sgLabel}>{t('strokesGained.totalLabel')}</Text>
+              <Text
+                style={[
+                  styles.sgValue,
+                  (strokesGained.total ?? 0) >= 0 ? styles.sgPositive : styles.sgNegative,
+                ]}
+              >
+                {formatSgValue(strokesGained.total)}
+              </Text>
+            </View>
+            <View style={styles.grid}>
+              {CATEGORY_ORDER.map((key) => {
+                const category = strokesGained.categories?.[key];
+                return (
+                  <View key={`sg-${key}`} style={styles.tile} testID={`recap-sg-${key}`}>
+                    <Text style={styles.tileLabel}>
+                      {category?.label ?? t(`weeklySummary.categories.${key}`)}
+                    </Text>
+                    <Text style={styles.tileGrade}>{category?.grade ?? '—'}</Text>
+                    <Text
+                      style={[
+                        styles.tileValue,
+                        (category?.value ?? 0) >= 0 ? styles.sgPositive : styles.sgNegative,
+                      ]}
+                    >
+                      {formatSgValue(category?.value ?? 0)}
+                    </Text>
+                    <Text style={styles.muted}>{category?.comment ?? ''}</Text>
+                  </View>
+                );
+              })}
+            </View>
+            {strokesInsight ? <Text style={styles.muted}>{strokesInsight}</Text> : null}
+          </>
+        ) : (
+          <Text style={styles.muted}>{sgError ?? t('strokesGained.unavailable')}</Text>
+        )}
+      </View>
+
+      <View style={styles.card}>
         <Text style={styles.cardTitle}>{t('round.recap.focus_title')}</Text>
         {recap.focusHints.length === 0 ? (
           <Text style={styles.muted}>{t('round.recap.focus_empty')}</Text>
@@ -190,6 +269,11 @@ const styles = StyleSheet.create({
   tileLabel: { fontWeight: '600', color: '#111827' },
   tileGrade: { fontSize: 24, fontWeight: '700' },
   tileValue: { color: '#374151' },
+  sgHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  sgLabel: { color: '#111827', fontWeight: '600' },
+  sgValue: { fontSize: 20, fontWeight: '700' },
+  sgPositive: { color: '#047857' },
+  sgNegative: { color: '#b91c1c' },
   bullet: { color: '#111827' },
   secondaryButton: {
     paddingVertical: 8,

@@ -5,10 +5,13 @@ import { Share } from 'react-native';
 
 import RoundRecapScreen from '@app/screens/RoundRecapScreen';
 import { fetchRoundRecap } from '@app/api/roundClient';
+import { fetchRoundStrokesGained } from '@app/api/strokesGainedClient';
 
 vi.mock('@app/api/roundClient');
+vi.mock('@app/api/strokesGainedClient');
 
 const mockFetchRecap = fetchRoundRecap as unknown as Mock;
+const mockFetchRoundStrokesGained = fetchRoundStrokesGained as unknown as Mock;
 
 const sampleRecap = {
   roundId: 'r1',
@@ -29,6 +32,17 @@ const sampleRecap = {
   ],
 };
 
+const sampleStrokes = {
+  roundId: 'r1',
+  total: 0.7,
+  categories: {
+    driving: { label: 'Driving', grade: 'B', value: 0.8, comment: 'Fairways: 70%' },
+    approach: { label: 'Approach', grade: 'B', value: 0.2, comment: 'GIR 55%' },
+    short_game: { label: 'Short Game', grade: 'C', value: -0.1, comment: '1.0 per hole' },
+    putting: { label: 'Putting', grade: 'A', value: -0.2, comment: '1.7 putts' },
+  },
+};
+
 describe('RoundRecapScreen', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -36,6 +50,7 @@ describe('RoundRecapScreen', () => {
 
   it('renders recap data and focus hints', async () => {
     mockFetchRecap.mockResolvedValue(sampleRecap);
+    mockFetchRoundStrokesGained.mockResolvedValue(sampleStrokes);
 
     const { getByText, getByTestId } = render(
       <RoundRecapScreen navigation={{} as any} route={{ params: { roundId: 'r1' } } as any} />,
@@ -50,10 +65,13 @@ describe('RoundRecapScreen', () => {
     expect(within(drivingTile).getByText(/29%/)).toBeTruthy();
     expect(getByText(/Focus this week/)).toBeTruthy();
     expect(getByText(/driving accuracy/)).toBeTruthy();
+    expect(getByTestId('recap-sg-driving')).toBeTruthy();
+    expect(getByText('+0.8')).toBeTruthy();
   });
 
   it('shares summary text', async () => {
     mockFetchRecap.mockResolvedValue(sampleRecap);
+    mockFetchRoundStrokesGained.mockResolvedValue(sampleStrokes);
     const shareSpy = vi.spyOn(Share, 'share').mockResolvedValue({} as any);
 
     const { getByTestId } = render(
@@ -72,6 +90,7 @@ describe('RoundRecapScreen', () => {
 
   it('shows an error state', async () => {
     mockFetchRecap.mockRejectedValue(new Error('nope'));
+    mockFetchRoundStrokesGained.mockResolvedValue(sampleStrokes);
 
     const { getByText } = render(
       <RoundRecapScreen navigation={{} as any} route={{ params: { roundId: 'r1' } } as any} />,
@@ -79,5 +98,18 @@ describe('RoundRecapScreen', () => {
 
     await waitFor(() => expect(mockFetchRecap).toHaveBeenCalled());
     expect(getByText(/Unable to load/)).toBeTruthy();
+  });
+
+  it('continues when strokes gained fails', async () => {
+    mockFetchRecap.mockResolvedValue(sampleRecap);
+    mockFetchRoundStrokesGained.mockRejectedValue(new Error('no strokes'));
+
+    const { getByText, queryByTestId } = render(
+      <RoundRecapScreen navigation={{} as any} route={{ params: { roundId: 'r1' } } as any} />,
+    );
+
+    await waitFor(() => expect(mockFetchRecap).toHaveBeenCalled());
+    expect(queryByTestId('recap-sg-driving')).toBeNull();
+    expect(getByText('Strokes Gained unavailable right now.')).toBeTruthy();
   });
 });

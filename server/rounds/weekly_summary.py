@@ -13,6 +13,7 @@ from server.rounds.recap import (
     _compute_short_game_quality,
     _grade_from_quality,
 )
+from server.rounds.strokes_gained import compute_weekly_strokes_gained
 
 Trend = Literal["up", "down", "flat"]
 
@@ -223,6 +224,7 @@ def build_weekly_summary_response(
                 "holesPlayed": None,
             },
             "categories": {},
+            "strokesGained": None,
             "focusHints": [],
         }
 
@@ -238,6 +240,8 @@ def build_weekly_summary_response(
         short_game_per_hole=metrics.short_game_per_hole,
         putts_per_hole=metrics.putts_per_hole,
     )
+
+    strokes_gained = compute_weekly_strokes_gained(summaries)
 
     period_from = min(
         (info.ended_at or info.started_at or now).date() for info in round_infos
@@ -261,6 +265,7 @@ def build_weekly_summary_response(
             "holesPlayed": metrics.holes_played,
         },
         "categories": categories,
+        "strokesGained": strokes_gained,
         "focusHints": focus_hints,
     }
 

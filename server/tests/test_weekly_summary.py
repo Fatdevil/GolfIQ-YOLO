@@ -78,6 +78,8 @@ def test_weekly_summary_recent_rounds(weekly_client):
     assert data["coreStats"]["avgScore"] is not None
     assert data["categories"]["putting"]["grade"]
     assert len(data["focusHints"]) >= 1
+    assert data["strokesGained"]["total"] is not None
+    assert "driving" in data["strokesGained"]["categories"]
 
 
 def test_weekly_summary_falls_back_to_recent_rounds(weekly_client):

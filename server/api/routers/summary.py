@@ -78,6 +78,21 @@ class WeeklySummaryCoreStats(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
 
+class WeeklyStrokesGainedCategory(BaseModel):
+    value: float = 0.0
+    grade: str | None = None
+    label: str | None = None
+
+    model_config = ConfigDict(populate_by_name=True)
+
+
+class WeeklyStrokesGained(BaseModel):
+    total: float = 0.0
+    categories: dict[str, WeeklyStrokesGainedCategory]
+
+    model_config = ConfigDict(populate_by_name=True)
+
+
 class WeeklySummary(BaseModel):
     period: WeeklySummaryPeriod
     headline: WeeklySummaryHeadline
@@ -90,6 +105,11 @@ class WeeklySummary(BaseModel):
         default_factory=list,
         serialization_alias="focusHints",
         validation_alias=AliasChoices("focusHints", "focus_hints"),
+    )
+    strokes_gained: WeeklyStrokesGained | None = Field(
+        default=None,
+        serialization_alias="strokesGained",
+        validation_alias=AliasChoices("strokesGained", "strokes_gained"),
     )
 
     model_config = ConfigDict(populate_by_name=True)

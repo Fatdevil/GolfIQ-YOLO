@@ -3,7 +3,11 @@ import { ActivityIndicator, ScrollView, StyleSheet, Text, TouchableOpacity, View
 
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 
-import { fetchWeeklySummary, type WeeklySummaryCategory } from '@app/api/weeklySummary';
+import {
+  fetchWeeklySummary,
+  type WeeklyStrokesGained,
+  type WeeklySummaryCategory,
+} from '@app/api/weeklySummary';
 import { t } from '@app/i18n';
 import type { RootStackParamList } from '@app/navigation/types';
 
@@ -21,6 +25,15 @@ function buildCategoryMap(categories: Record<string, WeeklySummaryCategory>): {
   approach?: WeeklySummaryCategory;
   short_game?: WeeklySummaryCategory;
   putting?: WeeklySummaryCategory;
+} {
+  return categories ?? {};
+}
+
+function buildSgCategoryMap(categories: WeeklyStrokesGained['categories'] | undefined): {
+  driving?: WeeklyStrokesGained['categories'][keyof WeeklyStrokesGained['categories']];
+  approach?: WeeklyStrokesGained['categories'][keyof WeeklyStrokesGained['categories']];
+  short_game?: WeeklyStrokesGained['categories'][keyof WeeklyStrokesGained['categories']];
+  putting?: WeeklyStrokesGained['categories'][keyof WeeklyStrokesGained['categories']];
 } {
   return categories ?? {};
 }
@@ -56,6 +69,11 @@ function trendSymbol(trend?: WeeklySummaryCategory['trend']): string {
   return '→';
 }
 
+function formatSgValue(value: number | undefined): string {
+  if (value == null || Number.isNaN(value)) return '—';
+  return value > 0 ? `+${value.toFixed(1)}` : value.toFixed(1);
+}
+
 export default function WeeklySummaryScreen({ navigation }: Props): JSX.Element {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -86,6 +104,11 @@ export default function WeeklySummaryScreen({ navigation }: Props): JSX.Element 
   const categories = useMemo(
     () => buildCategoryMap(summary?.categories ?? {}),
     [summary?.categories],
+  );
+  const strokesGained = summary?.strokesGained ?? null;
+  const sgCategories = useMemo(
+    () => buildSgCategoryMap(strokesGained?.categories),
+    [strokesGained?.categories],
   );
 
   if (loading) {
@@ -179,6 +202,48 @@ export default function WeeklySummaryScreen({ navigation }: Props): JSX.Element 
                     );
                   })}
                 </View>
+              </View>
+
+              <View style={styles.card}>
+                <Text style={styles.cardTitle}>{t('strokesGained.weeklySectionTitle')}</Text>
+                {strokesGained ? (
+                  <>
+                    <View style={styles.statRow}>
+                      <Text style={styles.statLabel}>{t('strokesGained.totalLabel')}</Text>
+                      <Text
+                        style={[
+                          styles.statValue,
+                          (strokesGained.total ?? 0) >= 0 ? styles.sgPositive : styles.sgNegative,
+                        ]}
+                      >
+                        {formatSgValue(strokesGained.total)}
+                      </Text>
+                    </View>
+                    <View style={styles.categoryGrid}>
+                      {CATEGORY_ORDER.map(({ key, label }) => {
+                        const category = sgCategories[key];
+                        return (
+                          <View key={`sg-${key}`} style={styles.categoryTile} testID={`weekly-sg-${key}`}>
+                            <Text style={styles.categoryLabel}>{label}</Text>
+                            <Text
+                              style={[
+                                styles.categoryGrade,
+                                (category?.value ?? 0) >= 0 ? styles.sgPositive : styles.sgNegative,
+                              ]}
+                            >
+                              {formatSgValue(category?.value ?? 0)} {category?.grade ?? '—'}
+                            </Text>
+                            <Text style={styles.muted}>
+                              {category?.label ?? t('weeklySummary.noCategoryData')}
+                            </Text>
+                          </View>
+                        );
+                      })}
+                    </View>
+                  </>
+                ) : (
+                  <Text style={styles.muted}>{t('strokesGained.weeklyUnavailable')}</Text>
+                )}
               </View>
 
               <View style={styles.card}>
@@ -301,6 +366,12 @@ const styles = StyleSheet.create({
   trend: {
     color: '#7dd3fc',
     fontSize: 14,
+  },
+  sgPositive: {
+    color: '#22c55e',
+  },
+  sgNegative: {
+    color: '#f87171',
   },
   hint: {
     color: '#f5f5f7',
