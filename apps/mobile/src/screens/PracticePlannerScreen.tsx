@@ -77,6 +77,12 @@ export default function PracticePlannerScreen({ navigation }: Props): JSX.Elemen
       <View style={styles.header}>
         <Text style={styles.title}>{t('practice_planner_title')}</Text>
         <Text style={styles.subtitle}>{t('practice_planner_subtitle')}</Text>
+        <TouchableOpacity
+          onPress={() => navigation.navigate('MyBag')}
+          testID="planner-my-bag-link"
+        >
+          <Text style={styles.link}>{t('my_bag_entry_planner')}</Text>
+        </TouchableOpacity>
       </View>
 
       <View style={styles.section}>
