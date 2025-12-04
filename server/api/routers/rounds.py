@@ -13,9 +13,11 @@ from server.rounds.models import (
     RoundScores,
     RoundSummary,
     Shot,
+    compute_round_category_stats,
     compute_round_summary,
 )
 from server.rounds.recap import RoundRecap, build_round_recap
+from server.rounds.strokes_gained import compute_strokes_gained_for_round
 from server.rounds.service import (
     RoundNotFound,
     RoundOwnershipError,
@@ -132,6 +134,24 @@ class UpdateParsRequest(BaseModel):
     pars: dict[int, int]
 
 
+class RoundStrokesGainedCategory(BaseModel):
+    value: float
+    label: str
+    comment: str
+    grade: str
+
+
+class RoundStrokesGainedOut(BaseModel):
+    round_id: str = Field(
+        serialization_alias="roundId",
+        validation_alias=AliasChoices("roundId", "round_id"),
+    )
+    total: float
+    categories: dict[str, RoundStrokesGainedCategory]
+
+    model_config = ConfigDict(populate_by_name=True)
+
+
 @router.post("/start", response_model=Round)
 def start_round(
     payload: StartRoundRequest,
@@ -196,6 +216,32 @@ def get_round_recap(
         scores = service.get_scores(player_id=player_id, round_id=round_id)
         summary = compute_round_summary(scores)
         return build_round_recap(round_info, summary)
+    except RoundNotFound:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="round not found"
+        )
+    except RoundOwnershipError:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="round not owned by player"
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
+
+
+@router.get("/{round_id}/strokes-gained", response_model=RoundStrokesGainedOut)
+def get_round_strokes_gained(
+    round_id: str,
+    api_key: str | None = Depends(require_api_key),
+    user_id: UserIdHeader = None,
+    service: RoundService = Depends(get_round_service),
+) -> RoundStrokesGainedOut:
+    player_id = _derive_player_id(api_key, user_id)
+    try:
+        scores = service.get_scores(player_id=player_id, round_id=round_id)
+        summary = compute_round_summary(scores)
+        category_stats = compute_round_category_stats(scores)
+        result = compute_strokes_gained_for_round(summary, category_stats)
+        return RoundStrokesGainedOut.model_validate(result)
     except RoundNotFound:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="round not found"

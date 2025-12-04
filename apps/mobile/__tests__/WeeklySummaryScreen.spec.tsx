@@ -34,6 +34,15 @@ describe('WeeklySummaryScreen', () => {
         putting: { grade: 'A', trend: 'up', note: '1.6 putts per hole' },
       },
       focusHints: ['Keep working on approach play'],
+      strokesGained: {
+        total: 0.9,
+        categories: {
+          driving: { value: 0.2, grade: 'B', label: 'Driving' },
+          approach: { value: 0.3, grade: 'B', label: 'Approach' },
+          short_game: { value: 0.1, grade: 'C', label: 'Short Game' },
+          putting: { value: 0.3, grade: 'B', label: 'Putting' },
+        },
+      },
     });
 
     const navigation = { navigate: vi.fn() } as any;
@@ -46,6 +55,8 @@ describe('WeeklySummaryScreen', () => {
     expect(getByText('82.5')).toBeTruthy();
     expect(getByTestId('weekly-category-driving')).toBeTruthy();
     expect(getByText(/Keep working on approach play/)).toBeTruthy();
+    expect(getByTestId('weekly-sg-driving')).toBeTruthy();
+    expect(getByText('+0.2 B')).toBeTruthy();
 
     fireEvent.click(getByTestId('weekly-summary-history'));
     expect(navigation.navigate).toHaveBeenCalledWith('RoundHistory');
@@ -67,10 +78,11 @@ describe('WeeklySummaryScreen', () => {
     });
 
     const navigation = { navigate: vi.fn() } as any;
-    const { findByText } = render(
+    const { findByText, queryByText } = render(
       <WeeklySummaryScreen navigation={navigation} route={undefined as any} />,
     );
 
     expect(await findByText(/Not enough data yet/)).toBeTruthy();
+    expect(queryByText(/Strokes Gained/)).toBeNull();
   });
 });

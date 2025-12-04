@@ -6,6 +6,22 @@ export type WeeklySummaryCategory = {
   note: string | null;
 };
 
+export type WeeklyStrokesGainedCategory = {
+  value: number;
+  grade: string | null;
+  label?: string | null;
+};
+
+export type WeeklyStrokesGained = {
+  total: number;
+  categories: {
+    driving?: WeeklyStrokesGainedCategory;
+    approach?: WeeklyStrokesGainedCategory;
+    short_game?: WeeklyStrokesGainedCategory;
+    putting?: WeeklyStrokesGainedCategory;
+  };
+};
+
 export type WeeklySummary = {
   period: {
     from: string;
@@ -30,6 +46,7 @@ export type WeeklySummary = {
     putting?: WeeklySummaryCategory;
   };
   focusHints: string[];
+  strokesGained?: WeeklyStrokesGained | null;
 };
 
 export async function fetchWeeklySummary(): Promise<WeeklySummary> {

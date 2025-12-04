@@ -302,6 +302,17 @@ export const en = {
       to_par_even: 'E',
     },
   },
+  strokesGained: {
+    title: 'Strokes Gained v1',
+    roundSectionTitle: 'Strokes Gained (v1)',
+    weeklySectionTitle: 'Strokes Gained (v1)',
+    unavailable: 'Strokes Gained unavailable right now.',
+    weeklyUnavailable: 'Play a round to unlock strokes gained insights.',
+    totalLabel: 'Total',
+    roundLeak: 'Biggest leak this round: {{category}}',
+    roundCarry: '{{category}} led the way this round.',
+    roundEven: 'Balanced performance across categories.',
+  },
   caddie: {
     risk: {
       title: 'Caddie shot-shape awareness',
