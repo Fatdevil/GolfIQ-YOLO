@@ -12,6 +12,7 @@ export const linking: LinkingOptions<any> = {
       PlayTeeSelect: 'play/tee',
       PlayInRound: 'play/round',
       RoundStory: 'round/:runId',
+      CoachReport: 'coach/report/:roundId',
       RoundHistory: 'rounds',
       PlayerStats: 'stats/player',
       CategoryStats: 'stats/player/categories',
