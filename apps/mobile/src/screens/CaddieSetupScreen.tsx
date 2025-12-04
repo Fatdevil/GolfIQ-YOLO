@@ -109,6 +109,14 @@ export function CaddieSetupScreen({ navigation }: Props): JSX.Element {
         </Text>
       ) : null}
 
+      <TouchableOpacity
+        style={styles.secondaryButton}
+        onPress={() => navigation.navigate('MyBag')}
+        testID="caddie-setup-my-bag"
+      >
+        <Text style={styles.secondaryButtonText}>{t('my_bag_entry_settings')}</Text>
+      </TouchableOpacity>
+
       <TouchableOpacity style={styles.saveButton} onPress={handleSave} testID="caddie-setup-save">
         <Text style={styles.saveButtonText}>{t('caddie.setup.save_button')}</Text>
       </TouchableOpacity>
@@ -185,6 +193,17 @@ const styles = StyleSheet.create({
   error: {
     color: '#ef4444',
     fontSize: 14,
+  },
+  secondaryButton: {
+    borderRadius: 12,
+    paddingVertical: 12,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#0ea5e9',
+  },
+  secondaryButtonText: {
+    color: '#0ea5e9',
+    fontWeight: '700',
   },
   saveButton: {
     marginTop: 8,

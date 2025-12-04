@@ -4,15 +4,19 @@ import json
 from datetime import datetime, timezone
 from uuid import uuid4
 
+import math
+
 import pytest
 from fastapi.testclient import TestClient
 
 from server.app import app
+from server.bag.service import get_player_bag_service
 from server.club_distance import (
     ClubDistanceAggregator,
     ClubDistanceService,
     get_club_distance_service,
 )
+from server.rounds.club_distances import compute_baseline_carry
 from server.rounds.models import (
     HoleScore,
     RoundScores,
@@ -24,7 +28,9 @@ from server.rounds.service import _sanitize_player_id, RoundService, get_round_s
 
 
 @pytest.fixture
-def round_client(tmp_path):
+def round_client(tmp_path, monkeypatch):
+    monkeypatch.setenv("GOLFIQ_BAGS_DIR", str(tmp_path / "bags"))
+    get_player_bag_service.cache_clear()
     service = RoundService(base_dir=tmp_path)
     club_service = ClubDistanceService(ClubDistanceAggregator())
     app.dependency_overrides[get_round_service] = lambda: service
@@ -33,6 +39,7 @@ def round_client(tmp_path):
     yield client, club_service, service
     app.dependency_overrides.pop(get_round_service, None)
     app.dependency_overrides.pop(get_club_distance_service, None)
+    get_player_bag_service.cache_clear()
 
 
 def _headers(player: str = "player-1") -> dict[str, str]:
@@ -61,6 +68,45 @@ def test_start_and_end_round(round_client) -> None:
     ended = end.json()
     assert ended["endedAt"] is not None
     assert ended["status"] == "completed"
+
+
+def test_end_round_updates_bag_distances(round_client) -> None:
+    client, _, service = round_client
+
+    start = client.post("/api/rounds/start", json={}, headers=_headers()).json()
+    round_id = start["id"]
+
+    shot_resp = client.post(
+        f"/api/rounds/{round_id}/shots",
+        json={
+            "holeNumber": 1,
+            "club": "7i",
+            "startLat": 0.0,
+            "startLon": 0.0,
+            "endLat": 0.0,
+            "endLon": 0.0009,
+        },
+        headers=_headers(),
+    )
+    assert shot_resp.status_code == 200
+
+    end = client.post(f"/api/rounds/{round_id}/end", headers=_headers())
+    assert end.status_code == 200
+
+    bag = get_player_bag_service().get_bag("player-1")
+    shots = service.list_shots(player_id="player-1", round_id=round_id)
+    expected_carry = compute_baseline_carry(shots[0])
+    seven_iron = next(c for c in bag.clubs if c.club_id == "7i")
+
+    assert seven_iron.sample_count == 1
+    assert math.isclose(seven_iron.avg_carry_m or 0.0, expected_carry, rel_tol=0.01)
+
+    # Idempotent when ending the round multiple times
+    end_again = client.post(f"/api/rounds/{round_id}/end", headers=_headers())
+    assert end_again.status_code == 200
+    bag_again = get_player_bag_service().get_bag("player-1")
+    seven_again = next(c for c in bag_again.clubs if c.club_id == "7i")
+    assert seven_again.sample_count == 1
 
 
 def test_start_round_conflict_returns_active(round_client) -> None:

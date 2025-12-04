@@ -10,6 +10,7 @@ from server.access.models import PlanName
 from server.bundles.models import CourseBundle as HeroCourseBundle
 from server.bundles.storage import get_bundle as get_hero_bundle
 from server.caddie.advise import advise
+from server.caddie.player_bag import get_player_club_carries
 from server.caddie.schemas import AdviseIn, EnvIn, PlayerBag, ShotContext
 from server.courses.hole_detect import haversine_m, suggest_hole
 from server.courses.schemas import CourseBundle as LegacyCourseBundle
@@ -182,6 +183,7 @@ def resolve_hole_number(
 
 def _build_caddie_advice(
     *,
+    member_id: str,
     run_id: str,
     hole: int,
     distance_m: Optional[float],
@@ -208,7 +210,11 @@ def _build_caddie_advice(
         elev_delta_m=elev_delta_m if elev_delta_m is not None else 0.0,
     )
     shot = ShotContext(before_m=max(distance, 1.0))
-    bag = PlayerBag(carries_m=DEFAULT_BAG_CARRIES_M)
+    try:
+        carries = get_player_club_carries(member_id)
+    except Exception:
+        carries = DEFAULT_BAG_CARRIES_M
+    bag = PlayerBag(carries_m=carries)
 
     try:
         advice = advise(
@@ -289,6 +295,7 @@ def build_hole_hud(
             caddie_silent,
             caddie_silent_reason,
         ) = _build_caddie_advice(
+            member_id=member_id,
             run_id=run_id,
             hole=hole,
             distance_m=distance_for_caddie,

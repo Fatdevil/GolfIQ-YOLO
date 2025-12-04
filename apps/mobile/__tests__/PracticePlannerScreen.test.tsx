@@ -1,5 +1,5 @@
 import React from 'react';
-import { fireEvent, render, waitFor } from '@testing-library/react-native';
+import { fireEvent, render, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
 
 import PracticePlannerScreen from '@app/screens/PracticePlannerScreen';
@@ -85,7 +85,7 @@ describe('PracticePlannerScreen', () => {
     );
 
     await waitFor(() => getByTestId('plan-drill-drill-a'));
-    fireEvent.press(getByTestId('duration-30'));
+    fireEvent.click(getByTestId('duration-30'));
 
     await waitFor(() => {
       expect(mockFetchPlan).toHaveBeenCalledWith({ maxMinutes: 30 });
@@ -98,7 +98,7 @@ describe('PracticePlannerScreen', () => {
     );
 
     await waitFor(() => getByTestId('toggle-library'));
-    fireEvent.press(getByTestId('toggle-library'));
+    fireEvent.click(getByTestId('toggle-library'));
 
     await waitFor(() => getByTestId('library-drill-c'));
     expect(getByText('Up & Down')).toBeTruthy();

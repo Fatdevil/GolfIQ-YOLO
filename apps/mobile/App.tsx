@@ -34,6 +34,7 @@ import InRoundScreen from '@app/screens/play/InRoundScreen';
 import RoundSavedScreen from '@app/screens/RoundSavedScreen';
 import RoundStoryScreen from '@app/screens/RoundStoryScreen';
 import ClubDistancesScreen from '@app/screens/ClubDistancesScreen';
+import MyBagScreen from '@app/screens/MyBagScreen';
 import RoundStartScreen from '@app/screens/RoundStartScreen';
 import RoundShotScreen from '@app/screens/RoundShotScreen';
 import RoundRecapScreen from '@app/screens/RoundRecapScreen';
@@ -162,6 +163,11 @@ export default function App(): JSX.Element {
           name="RangeSessionDetail"
           component={RangeSessionDetailScreen}
           options={{ title: 'Range session' }}
+        />
+        <Stack.Screen
+          name="MyBag"
+          component={MyBagScreen}
+          options={{ title: t('my_bag_title') }}
         />
         <Stack.Screen
           name="ClubDistances"

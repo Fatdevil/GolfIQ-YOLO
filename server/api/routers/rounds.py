@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import logging
+
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.encoders import jsonable_encoder
 from pydantic import AliasChoices, BaseModel, ConfigDict, Field
@@ -7,6 +9,7 @@ from pydantic import AliasChoices, BaseModel, ConfigDict, Field
 from server.api.security import require_api_key
 from server.api.user_header import UserIdHeader
 from server.club_distance import ClubDistanceService, get_club_distance_service
+from server.rounds.club_distances import update_club_distances_from_round
 from server.rounds.models import (
     Round,
     RoundInfo,
@@ -28,6 +31,8 @@ from server.rounds.service import (
 router = APIRouter(
     prefix="/api/rounds", tags=["rounds"], dependencies=[Depends(require_api_key)]
 )
+
+logger = logging.getLogger(__name__)
 
 
 def _derive_player_id(api_key: str | None, user_id: str | None) -> str:
@@ -190,7 +195,7 @@ def end_round(
 ) -> Round:
     player_id = _derive_player_id(api_key, user_id)
     try:
-        return service.end_round(player_id=player_id, round_id=round_id)
+        round_out = service.end_round(player_id=player_id, round_id=round_id)
     except RoundNotFound:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="round not found"
@@ -201,6 +206,18 @@ def end_round(
         )
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
+
+    try:
+        update_club_distances_from_round(
+            round_id=round_id, player_id=player_id, round_service=service
+        )
+    except Exception:
+        logger.exception(
+            "failed to update club distances for completed round",
+            extra={"round_id": round_id, "player_id": player_id},
+        )
+
+    return round_out
 
 
 @router.get("/{round_id}/recap", response_model=RoundRecap)
