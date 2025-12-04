@@ -39,7 +39,7 @@ function formatSgValue(value: number): string {
   return value > 0 ? `+${value.toFixed(1)}` : value.toFixed(1);
 }
 
-export default function RoundRecapScreen({ route }: Props): JSX.Element {
+export default function RoundRecapScreen({ route, navigation }: Props): JSX.Element {
   const { roundId } = route.params ?? { roundId: '' };
   const [recap, setRecap] = useState<RoundRecap | null>(null);
   const [strokesGained, setStrokesGained] = useState<RoundStrokesGained | null>(null);
@@ -276,6 +276,20 @@ export default function RoundRecapScreen({ route }: Props): JSX.Element {
           ))
         )}
       </View>
+
+      <TouchableOpacity
+        style={styles.primaryCta}
+        onPress={() =>
+          navigation.navigate('CoachReport', {
+            roundId,
+            courseName,
+            date: recap?.date,
+          })
+        }
+        testID="open-coach-report"
+      >
+        <Text style={styles.primaryCtaText}>{t('coach_report_cta_from_recap')}</Text>
+      </TouchableOpacity>
     </ScrollView>
   );
 }
@@ -319,4 +333,11 @@ const styles = StyleSheet.create({
     borderColor: '#d1d5db',
   },
   secondaryButtonText: { color: '#111827', fontWeight: '700' },
+  primaryCta: {
+    backgroundColor: '#0f172a',
+    paddingVertical: 12,
+    borderRadius: 12,
+    alignItems: 'center',
+  },
+  primaryCtaText: { color: '#fff', fontWeight: '700' },
 });

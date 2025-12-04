@@ -41,6 +41,7 @@ import RoundShotScreen from '@app/screens/RoundShotScreen';
 import RoundRecapScreen from '@app/screens/RoundRecapScreen';
 import RoundSummaryScreen from '@app/screens/RoundSummaryScreen';
 import RoundScorecardScreen from '@app/screens/RoundScorecardScreen';
+import CoachReportScreen from '@app/screens/CoachReportScreen';
 import WeeklySummaryScreen from '@app/screens/WeeklySummaryScreen';
 import PracticePlannerScreen from '@app/screens/PracticePlannerScreen';
 
@@ -96,6 +97,11 @@ export default function App(): JSX.Element {
           name="RoundRecap"
           component={RoundRecapScreen}
           options={{ title: t('round.recap.title') }}
+        />
+        <Stack.Screen
+          name="CoachReport"
+          component={CoachReportScreen}
+          options={{ title: t('coach_report_title') }}
         />
         <Stack.Screen name="RoundSummary" component={RoundSummaryScreen} options={{ title: 'Round summary' }} />
         <Stack.Screen name="RoundScorecard" component={RoundScorecardScreen} options={{ title: 'Scorecard' }} />

@@ -289,6 +289,20 @@ export default function HomeDashboardScreen({ navigation }: Props): JSX.Element 
             <TouchableOpacity onPress={() => navigation.navigate('WeeklySummary')} testID="open-weekly">
               <Text style={styles.link}>{t('home_dashboard_weekly_cta')}</Text>
             </TouchableOpacity>
+            {latestRoundDisplay ? (
+              <TouchableOpacity
+                onPress={() =>
+                  navigation.navigate('CoachReport', {
+                    roundId: latestRoundDisplay.roundId,
+                    courseName: latestRoundDisplay.course,
+                    date: latestRoundDisplay.date ?? undefined,
+                  })
+                }
+                testID="open-coach-report-weekly"
+              >
+                <Text style={styles.link}>{t('coach_report_cta_from_recap')}</Text>
+              </TouchableOpacity>
+            ) : null}
             <TouchableOpacity
               onPress={handleShareWeekly}
               disabled={sharingWeekly}
