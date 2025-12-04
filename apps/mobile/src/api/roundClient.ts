@@ -3,8 +3,11 @@ import { apiFetch } from './client';
 export interface Round {
   id: string;
   courseId?: string | null;
+  courseName?: string | null;
   teeName?: string | null;
   holes: number;
+  startHole?: number;
+  status?: 'in_progress' | 'completed';
   startedAt: string;
   endedAt?: string | null;
 }
@@ -96,6 +99,9 @@ export interface RoundInfo {
   courseName?: string | null;
   teeName?: string | null;
   holes: number;
+  startHole?: number;
+  status?: 'in_progress' | 'completed';
+  lastHole?: number | null;
   startedAt: string;
   endedAt?: string | null;
 }
@@ -104,12 +110,17 @@ export async function startRound(req: {
   courseId?: string;
   teeName?: string;
   holes?: number;
+  startHole?: number;
 }): Promise<Round> {
   return apiFetch<Round>('/api/rounds/start', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(req),
   });
+}
+
+export async function getCurrentRound(): Promise<RoundInfo | null> {
+  return apiFetch<RoundInfo | null>('/api/rounds/current');
 }
 
 export async function endRound(roundId: string): Promise<Round> {

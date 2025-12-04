@@ -53,16 +53,27 @@ class RoundService:
 
     # Round lifecycle
     def start_round(
-        self, *, player_id: str, course_id: str | None, tee_name: str | None, holes: int
+        self,
+        *,
+        player_id: str,
+        course_id: str | None,
+        tee_name: str | None,
+        holes: int,
+        start_hole: int = 1,
     ) -> Round:
         round_id = str(uuid.uuid4())
         now = datetime.now(timezone.utc)
+        if start_hole < 1:
+            raise ValueError("start_hole must be at least 1")
+        if holes and start_hole > holes:
+            raise ValueError("start_hole cannot exceed hole count")
         record = RoundRecord(
             id=round_id,
             player_id=player_id,
             course_id=course_id,
             tee_name=tee_name,
             holes=holes or 18,
+            start_hole=start_hole or 1,
             started_at=now,
             ended_at=None,
         )
@@ -152,19 +163,7 @@ class RoundService:
     # Queries
     def list_rounds(self, *, player_id: str, limit: int = 50) -> List[RoundInfo]:
         records = self._list_round_records(player_id=player_id, limit=limit)
-        return [
-            RoundInfo(
-                id=record.id,
-                player_id=record.player_id,
-                course_id=record.course_id,
-                course_name=None,
-                tee_name=record.tee_name,
-                holes=record.holes,
-                started_at=record.started_at,
-                ended_at=record.ended_at,
-            )
-            for record in records
-        ]
+        return [self._build_round_info(record) for record in records]
 
     def get_round_info(self, *, player_id: str, round_id: str) -> RoundInfo:
         record = self._load_round(round_id)
@@ -173,16 +172,13 @@ class RoundService:
         if record.player_id != player_id:
             raise RoundOwnershipError(round_id)
 
-        return RoundInfo(
-            id=record.id,
-            player_id=record.player_id,
-            course_id=record.course_id,
-            course_name=None,
-            tee_name=record.tee_name,
-            holes=record.holes,
-            started_at=record.started_at,
-            ended_at=record.ended_at,
-        )
+        return self._build_round_info(record, include_progress=True)
+
+    def get_active_round(self, *, player_id: str) -> RoundInfo | None:
+        for record in self._list_round_records(player_id=player_id, limit=50):
+            if record.ended_at is None:
+                return self._build_round_info(record, include_progress=True)
+        return None
 
     def get_round_summaries(
         self, *, player_id: str, limit: int = 50
@@ -220,6 +216,32 @@ class RoundService:
             reverse=True,
         )
         return round_records[: max(1, limit)]
+
+    def _build_round_info(
+        self, record: RoundRecord, *, include_progress: bool = False
+    ) -> RoundInfo:
+        last_hole = None
+        if include_progress:
+            try:
+                scores = self._read_scores(record)
+                if scores.holes:
+                    last_hole = max(scores.holes.keys())
+            except Exception:
+                last_hole = None
+
+        return RoundInfo(
+            id=record.id,
+            player_id=record.player_id,
+            course_id=record.course_id,
+            course_name=None,
+            tee_name=record.tee_name,
+            holes=record.holes,
+            start_hole=record.start_hole,
+            status=record.status,
+            last_hole=last_hole,
+            started_at=record.started_at,
+            ended_at=record.ended_at,
+        )
 
     # Internal helpers
     def _player_dir(self, player_id: str) -> Path:

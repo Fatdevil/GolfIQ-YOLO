@@ -23,7 +23,7 @@ const mockSave = saveActiveRoundState as unknown as Mock;
 const mockClear = clearActiveRoundState as unknown as Mock;
 
 const sampleState: ActiveRoundState = {
-  round: { id: 'r1', holes: 18, startedAt: 'now' },
+  round: { id: 'r1', holes: 18, startedAt: 'now', startHole: 1, courseName: 'Test Course' },
   currentHole: 1,
 };
 
@@ -90,7 +90,7 @@ describe('RoundShotScreen', () => {
     const { getByText } = render(<RoundShotScreen navigation={{} as any} route={undefined as any} />);
 
     await waitFor(() => expect(mockGetScores).toHaveBeenCalled());
-    fireEvent.click(getByText('Next hole'));
+    fireEvent.click(getByText('Next'));
 
     await waitFor(() => expect(mockSave).toHaveBeenCalledWith({
       ...sampleState,
@@ -98,7 +98,7 @@ describe('RoundShotScreen', () => {
     }));
   });
 
-  it('saves scoring changes', async () => {
+  it('saves scoring changes and auto advances', async () => {
     const { getByLabelText, getByTestId } = render(
       <RoundShotScreen navigation={{} as any} route={undefined as any} />,
     );
@@ -108,6 +108,10 @@ describe('RoundShotScreen', () => {
     fireEvent.click(getByTestId('save-score'));
 
     await waitFor(() => expect(mockUpdateHoleScore).toHaveBeenCalledWith('r1', 1, expect.any(Object)));
+    await waitFor(() => expect(mockSave).toHaveBeenCalledWith({
+      ...sampleState,
+      currentHole: 2,
+    }));
   });
 
   it('renders fallback when no active round exists', async () => {
@@ -134,7 +138,7 @@ describe('RoundShotScreen', () => {
     expect(mockEndRound).not.toHaveBeenCalled();
     expect(mockClear).not.toHaveBeenCalled();
     expect(navigation.navigate).not.toHaveBeenCalled();
-    expect(getByText('Hole 1')).toBeTruthy();
+    expect(getByText(/Hole 1\/18/)).toBeTruthy();
   });
 
   it('stays on current hole when save fails on next hole', async () => {
@@ -145,11 +149,11 @@ describe('RoundShotScreen', () => {
 
     await waitFor(() => expect(mockGetScores).toHaveBeenCalled());
     fireEvent.click(getByLabelText('Increase strokes'));
-    fireEvent.click(getByText('Next hole'));
+    fireEvent.click(getByText('Next'));
 
     await waitFor(() => expect(mockUpdateHoleScore).toHaveBeenCalled());
     expect(mockSave).not.toHaveBeenCalled();
-    expect(queryByText('Hole 2')).toBeNull();
-    expect(getByText('Hole 1')).toBeTruthy();
+    expect(queryByText(/Hole 2\/18/)).toBeNull();
+    expect(getByText(/Hole 1\/18/)).toBeTruthy();
   });
 });

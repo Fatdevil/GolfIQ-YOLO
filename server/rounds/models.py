@@ -22,6 +22,12 @@ class Round(BaseModel):
         serialization_alias="teeName",
     )
     holes: int = 18
+    start_hole: int = Field(
+        default=1,
+        serialization_alias="startHole",
+        validation_alias=AliasChoices("start_hole", "startHole"),
+    )
+    status: str = "in_progress"
     started_at: datetime = Field(serialization_alias="startedAt")
     ended_at: datetime | None = Field(default=None, serialization_alias="endedAt")
 
@@ -47,6 +53,17 @@ class RoundInfo(BaseModel):
         serialization_alias="teeName",
     )
     holes: int = 18
+    start_hole: int = Field(
+        default=1,
+        serialization_alias="startHole",
+        validation_alias=AliasChoices("start_hole", "startHole"),
+    )
+    status: str = "in_progress"
+    last_hole: int | None = Field(
+        default=None,
+        serialization_alias="lastHole",
+        validation_alias=AliasChoices("last_hole", "lastHole"),
+    )
     started_at: datetime = Field(serialization_alias="startedAt")
     ended_at: datetime | None = Field(default=None, serialization_alias="endedAt")
 
@@ -271,6 +288,7 @@ class RoundRecord:
     course_id: str | None
     tee_name: str | None
     holes: int
+    start_hole: int
     started_at: datetime
     ended_at: datetime | None
 
@@ -281,9 +299,15 @@ class RoundRecord:
             course_id=self.course_id,
             tee_name=self.tee_name,
             holes=self.holes,
+            start_hole=self.start_hole,
+            status=self.status,
             started_at=self.started_at,
             ended_at=self.ended_at,
         )
+
+    @property
+    def status(self) -> str:
+        return "in_progress" if self.ended_at is None else "completed"
 
     def to_dict(self) -> dict:
         return {
@@ -292,6 +316,7 @@ class RoundRecord:
             "course_id": self.course_id,
             "tee_name": self.tee_name,
             "holes": self.holes,
+            "start_hole": self.start_hole,
             "started_at": self.started_at.isoformat(),
             "ended_at": self.ended_at.isoformat() if self.ended_at else None,
         }
@@ -304,6 +329,7 @@ class RoundRecord:
             course_id=data.get("course_id"),
             tee_name=data.get("tee_name"),
             holes=int(data.get("holes", 18)),
+            start_hole=int(data.get("start_hole", 1) or 1),
             started_at=_parse_dt(data["started_at"]),
             ended_at=_parse_dt(data.get("ended_at")) if data.get("ended_at") else None,
         )

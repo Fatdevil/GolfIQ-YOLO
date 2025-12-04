@@ -35,11 +35,19 @@ View.displayName = 'View';
 
 type ScrollViewProps = CommonProps & {
   contentContainerStyle?: Record<string, unknown>;
+  horizontal?: boolean;
+  showsHorizontalScrollIndicator?: boolean;
 };
 
-export const ScrollView: React.FC<ScrollViewProps> = ({ children, testID }) => (
-  <div data-testid={testID}>{children}</div>
+export const ScrollView = React.forwardRef<HTMLDivElement, ScrollViewProps>(
+  ({ children, testID }, ref) => (
+    <div data-testid={testID} ref={ref}>
+      {children}
+    </div>
+  ),
 );
+
+ScrollView.displayName = 'ScrollView';
 
 type FlatListProps<Item> = CommonProps & {
   data: Item[];
