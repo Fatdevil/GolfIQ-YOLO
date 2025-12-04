@@ -35,6 +35,7 @@ from server.api.routers.profile import router as profile_router
 from server.api.routers.user_history import router as user_history_router
 from server.api.routers.watch_pairing import router as watch_pairing_router
 from server.api.routers.watch_tips import router as watch_tips_router
+from server.api.routers.practice import router as practice_router
 from server.api.routers.watch_hud import router as watch_hud_router
 from server.api.routers.watch_quickround import router as watch_quickround_router
 from server.api.routers.trip_public import router as trip_public_router
@@ -164,6 +165,7 @@ app.include_router(access_router)
 app.include_router(caddie_api_router)
 app.include_router(courses_router)
 app.include_router(auto_hole_router)
+app.include_router(practice_router)
 app.include_router(bundle_router)
 app.include_router(bundle_index_router)
 app.include_router(feed_router)

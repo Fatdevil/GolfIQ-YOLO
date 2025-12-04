@@ -279,11 +279,11 @@ export default function WeeklySummaryScreen({ navigation }: Props): JSX.Element 
         </TouchableOpacity>
         <TouchableOpacity
           style={[styles.primaryButton, styles.secondaryButton]}
-          onPress={() => navigation.navigate('RangePractice')}
-          accessibilityLabel={t('weeklySummary.planPractice')}
+          onPress={() => navigation.navigate('PracticePlanner')}
+          accessibilityLabel={t('practice_planner_title')}
           testID="weekly-summary-practice"
         >
-          <Text style={styles.primaryButtonText}>{t('weeklySummary.planPractice')}</Text>
+          <Text style={styles.primaryButtonText}>{t('practice_planner_title')}</Text>
         </TouchableOpacity>
       </View>
     </ScrollView>

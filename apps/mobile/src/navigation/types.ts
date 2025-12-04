@@ -54,6 +54,7 @@ export type RootStackParamList = {
   RoundSummary: { roundId: string };
   RoundScorecard: { roundId: string };
   WeeklySummary: undefined;
+  PracticePlanner: undefined;
   EventJoin: { code?: string } | undefined;
   EventLive: {
     id: string;
