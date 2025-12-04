@@ -455,6 +455,11 @@ def get_latest_completed_round(
     user_id: UserIdHeader = None,
     service: RoundService = Depends(get_round_service),
 ) -> RoundSummaryWithRoundInfo | None:
+    if not api_key and not user_id:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="authentication required",
+        )
     player_id = _derive_player_id(api_key, user_id)
     try:
         return service.get_latest_completed_summary(player_id=player_id)
