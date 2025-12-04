@@ -60,6 +60,9 @@ def update_club_distances_from_round(
     rounds = round_service or get_round_service()
     bags = bag_service or get_player_bag_service()
 
+    if bags.has_processed_round(player_id, round_id):
+        return
+
     shots = rounds.list_shots(player_id=player_id, round_id=round_id)
     for shot in shots:
         if not shot.club:
@@ -73,6 +76,8 @@ def update_club_distances_from_round(
                 shot.created_at if isinstance(shot.created_at, datetime) else None
             ),
         )
+
+    bags.mark_round_processed(player_id, round_id)
 
 
 __all__ = ["compute_baseline_carry", "update_club_distances_from_round"]

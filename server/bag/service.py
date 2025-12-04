@@ -21,6 +21,27 @@ class PlayerBagService:
         safe = player_id.replace("/", "_")
         return self._base_dir / f"{safe}.json"
 
+    def _processed_rounds_path(self, player_id: str) -> Path:
+        safe = player_id.replace("/", "_")
+        return self._base_dir / "processed" / f"{safe}.json"
+
+    def _read_processed_rounds(self, player_id: str) -> set[str]:
+        path = self._processed_rounds_path(player_id)
+        if not path.exists():
+            return set()
+        try:
+            data = json.loads(path.read_text())
+            if isinstance(data, list):
+                return {str(rid) for rid in data}
+        except Exception:
+            return set()
+        return set()
+
+    def _write_processed_rounds(self, player_id: str, rounds: set[str]) -> None:
+        path = self._processed_rounds_path(player_id)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(sorted(rounds), indent=2))
+
     def _load_bag(self, player_id: str) -> PlayerBag | None:
         path = self._bag_path(player_id)
         if not path.exists():
@@ -106,6 +127,15 @@ class PlayerBagService:
 
         self._write_bag(bag)
         return self._refresh_bag(bag)
+
+    def has_processed_round(self, player_id: str, round_id: str) -> bool:
+        processed = self._read_processed_rounds(player_id)
+        return round_id in processed
+
+    def mark_round_processed(self, player_id: str, round_id: str) -> None:
+        processed = self._read_processed_rounds(player_id)
+        processed.add(round_id)
+        self._write_processed_rounds(player_id, processed)
 
     def record_distance(
         self,
