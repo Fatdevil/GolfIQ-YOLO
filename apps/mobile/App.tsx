@@ -40,6 +40,7 @@ import RoundRecapScreen from '@app/screens/RoundRecapScreen';
 import RoundSummaryScreen from '@app/screens/RoundSummaryScreen';
 import RoundScorecardScreen from '@app/screens/RoundScorecardScreen';
 import WeeklySummaryScreen from '@app/screens/WeeklySummaryScreen';
+import PracticePlannerScreen from '@app/screens/PracticePlannerScreen';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
@@ -95,6 +96,11 @@ export default function App(): JSX.Element {
           name="WeeklySummary"
           component={WeeklySummaryScreen}
           options={{ title: t('weeklySummary.title') }}
+        />
+        <Stack.Screen
+          name="PracticePlanner"
+          component={PracticePlannerScreen}
+          options={{ title: t('practice_planner_title') }}
         />
         <Stack.Screen
           name="RoundHistory"
