@@ -6,12 +6,17 @@ import { Share } from 'react-native';
 import RoundRecapScreen from '@app/screens/RoundRecapScreen';
 import { fetchRoundRecap } from '@app/api/roundClient';
 import { fetchRoundStrokesGained } from '@app/api/strokesGainedClient';
+import { createRoundShareLink } from '@app/api/shareClient';
 
 vi.mock('@app/api/roundClient');
 vi.mock('@app/api/strokesGainedClient');
+vi.mock('@app/api/shareClient', () => ({
+  createRoundShareLink: vi.fn(),
+}));
 
 const mockFetchRecap = fetchRoundRecap as unknown as Mock;
 const mockFetchRoundStrokesGained = fetchRoundStrokesGained as unknown as Mock;
+const mockCreateRoundShareLink = createRoundShareLink as unknown as Mock;
 
 const sampleRecap = {
   roundId: 'r1',
@@ -46,6 +51,7 @@ const sampleStrokes = {
 describe('RoundRecapScreen', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockCreateRoundShareLink.mockResolvedValue({ url: 'https://golfiq.app/s/abc123' });
   });
 
   it('renders recap data and focus hints', async () => {
@@ -85,7 +91,26 @@ describe('RoundRecapScreen', () => {
     const message = shareSpy.mock.calls[0][0].message;
     expect(message).toContain('Pebble Beach');
     expect(message).toContain('82');
-    expect(message).toContain('Driving C');
+    expect(message).toContain('https://golfiq.app/s/abc123');
+  });
+
+  it('falls back to offline share text on link failure', async () => {
+    mockFetchRecap.mockResolvedValue(sampleRecap);
+    mockFetchRoundStrokesGained.mockResolvedValue(sampleStrokes);
+    mockCreateRoundShareLink.mockRejectedValue(new Error('fail'));
+    const shareSpy = vi.spyOn(Share, 'share').mockResolvedValue({} as any);
+
+    const { getByTestId } = render(
+      <RoundRecapScreen navigation={{} as any} route={{ params: { roundId: 'r1' } } as any} />,
+    );
+
+    await waitFor(() => expect(mockFetchRecap).toHaveBeenCalled());
+    fireEvent.click(getByTestId('share-round'));
+
+    await waitFor(() => expect(shareSpy).toHaveBeenCalled());
+    const message = shareSpy.mock.calls[0][0].message;
+    expect(message).toContain('Great round at Pebble Beach');
+    expect(message).not.toContain('http');
   });
 
   it('shows an error state', async () => {

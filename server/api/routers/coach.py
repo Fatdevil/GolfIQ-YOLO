@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel
 
 from server.access.service import determine_plan
@@ -9,7 +9,7 @@ from server.security import require_api_key
 from server.services.coach_llm import generate
 from server.services.coach_summary import build_coach_summary_for_run
 from server.services.coach_diagnostics import build_diagnosis_for_run
-from server.services.shortlinks import create
+from server.services.shortlinks import build_shortlink_url, create
 
 router = APIRouter()
 
@@ -50,7 +50,9 @@ def get_coach_diagnosis(
 
 @router.post("/api/coach/share/{run_id}", response_model=CoachShareResponse)
 def create_coach_share(
-    run_id: str, api_key: str | None = Depends(require_pro_plan)
+    run_id: str,
+    request: Request,
+    api_key: str | None = Depends(require_pro_plan),
 ) -> CoachShareResponse:
     summary = build_coach_summary_for_run(run_id, _api_key=api_key)
     payload = {
@@ -67,4 +69,6 @@ def create_coach_share(
         payload=payload,
     )
 
-    return CoachShareResponse(url=f"/s/{shortlink.sid}", sid=shortlink.sid)
+    return CoachShareResponse(
+        url=build_shortlink_url(str(request.base_url), shortlink.sid), sid=shortlink.sid
+    )

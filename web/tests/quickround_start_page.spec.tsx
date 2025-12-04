@@ -60,7 +60,9 @@ describe("QuickRoundStartPage", () => {
       </MemoryRouter>
     );
 
-    await user.type(screen.getByLabelText(/Course name/i), "Testbanan");
+    const courseInput = screen.getByLabelText(/Course name/i);
+    await user.clear(courseInput);
+    await user.type(courseInput, "Testbanan");
     await user.click(screen.getByLabelText(/9 holes/i));
     await user.click(screen.getByRole("button", { name: /Start round/i }));
 

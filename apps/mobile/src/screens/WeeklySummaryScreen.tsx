@@ -1,5 +1,5 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { Alert, ActivityIndicator, ScrollView, Share, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 
@@ -8,6 +8,7 @@ import {
   type WeeklyStrokesGained,
   type WeeklySummaryCategory,
 } from '@app/api/weeklySummary';
+import { createWeeklyShareLink } from '@app/api/shareClient';
 import { t } from '@app/i18n';
 import type { RootStackParamList } from '@app/navigation/types';
 
@@ -78,6 +79,7 @@ export default function WeeklySummaryScreen({ navigation }: Props): JSX.Element 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [summary, setSummary] = useState<Awaited<ReturnType<typeof fetchWeeklySummary>> | null>(null);
+  const [shareLoading, setShareLoading] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -110,6 +112,47 @@ export default function WeeklySummaryScreen({ navigation }: Props): JSX.Element 
     () => buildSgCategoryMap(strokesGained?.categories),
     [strokesGained?.categories],
   );
+  const topCategoryLabel = useMemo(() => {
+    for (const { key, label } of CATEGORY_ORDER) {
+      const category = categories[key];
+      if (category?.grade || category?.note) return label;
+    }
+    return CATEGORY_ORDER[0]?.label ?? 'Overall';
+  }, [categories]);
+
+  const handleShare = useCallback(async () => {
+    if (!summary) return;
+    const rounds = summary.period.roundCount ?? 0;
+    const avgScore = formatNumber(summary.coreStats.avgScore);
+    const fallbackMessage = t('weeklySummary.shareFallback', {
+      rounds,
+      avgScore,
+      topCategory: topCategoryLabel,
+    });
+
+    setShareLoading(true);
+
+    try {
+      const link = await createWeeklyShareLink();
+      const message = t('weeklySummary.shareTemplate', {
+        rounds,
+        avgScore,
+        topCategory: topCategoryLabel,
+        url: link.url,
+      });
+      await Share.share({ message });
+    } catch (err) {
+      console.warn('[weekly] Failed to share weekly summary', err);
+      try {
+        await Share.share({ message: fallbackMessage });
+      } catch (shareErr) {
+        console.warn('[weekly] Failed to share weekly fallback', shareErr);
+        Alert.alert(t('weeklySummary.shareErrorTitle'), t('weeklySummary.shareErrorBody'));
+      }
+    } finally {
+      setShareLoading(false);
+    }
+  }, [summary, topCategoryLabel]);
 
   if (loading) {
     return (
@@ -268,6 +311,22 @@ export default function WeeklySummaryScreen({ navigation }: Props): JSX.Element 
         </>
       ) : null}
 
+      {summary ? (
+        <TouchableOpacity
+          style={[styles.primaryButton, shareLoading ? styles.disabledButton : null]}
+          onPress={handleShare}
+          disabled={shareLoading}
+          accessibilityLabel={t('weeklySummary.shareCta')}
+          testID="share-weekly"
+        >
+          {shareLoading ? (
+            <ActivityIndicator color="#0c0c0f" />
+          ) : (
+            <Text style={styles.primaryButtonText}>{t('weeklySummary.shareCta')}</Text>
+          )}
+        </TouchableOpacity>
+      ) : null}
+
       <View style={styles.ctaRow}>
         <TouchableOpacity
           style={styles.primaryButton}
@@ -395,6 +454,9 @@ const styles = StyleSheet.create({
   secondaryButton: {
     backgroundColor: '#2a2b35',
   },
+  disabledButton: {
+    opacity: 0.7,
+  },
   primaryButtonText: {
     color: '#0c0c0f',
     fontWeight: '700',
@@ -409,6 +471,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 12,
     marginTop: 4,
+    flexWrap: 'wrap',
   },
 });
 

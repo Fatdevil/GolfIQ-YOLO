@@ -1,7 +1,9 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
+  Alert,
   ScrollView,
+  Share,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -19,6 +21,7 @@ import {
 import { fetchPracticePlan, type PracticePlan } from '@app/api/practiceClient';
 import { fetchPlayerProfile, type PlayerProfile } from '@app/api/player';
 import { fetchWeeklySummary, type WeeklySummary } from '@app/api/weeklySummary';
+import { createWeeklyShareLink } from '@app/api/shareClient';
 import { t } from '@app/i18n';
 import type { RootStackParamList } from '@app/navigation/types';
 
@@ -73,6 +76,7 @@ export default function HomeDashboardScreen({ navigation }: Props): JSX.Element 
     practicePlan: null,
     bag: null,
   });
+  const [sharingWeekly, setSharingWeekly] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -147,6 +151,54 @@ export default function HomeDashboardScreen({ navigation }: Props): JSX.Element 
   }, [practicePlan]);
 
   const bagSummary = useMemo(() => summarizeBag(bag), [bag]);
+
+  const weeklyTopCategory = useMemo(() => {
+    const categories = weeklySummary?.categories ?? {};
+    const order: Array<keyof typeof categories> = ['driving', 'approach', 'short_game', 'putting'];
+    for (const key of order) {
+      const category = categories[key];
+      if (category?.grade || category?.note) {
+        return t(`weeklySummary.categories.${key}` as const);
+      }
+    }
+    return t('weeklySummary.categories.driving');
+  }, [weeklySummary?.categories]);
+
+  const handleShareWeekly = useCallback(async () => {
+    if (!weeklySummary) return;
+    const rounds = weeklySummary.period.roundCount ?? 0;
+    const avgScoreRaw = weeklySummary.coreStats.avgScore;
+    const avgScore =
+      avgScoreRaw == null ? '—' : avgScoreRaw.toFixed(Number.isInteger(avgScoreRaw) ? 0 : 1);
+    const fallbackMessage = t('weeklySummary.shareFallback', {
+      rounds,
+      avgScore,
+      topCategory: weeklyTopCategory,
+    });
+
+    setSharingWeekly(true);
+
+    try {
+      const link = await createWeeklyShareLink();
+      const message = t('weeklySummary.shareTemplate', {
+        rounds,
+        avgScore,
+        topCategory: weeklyTopCategory,
+        url: link.url,
+      });
+      await Share.share({ message });
+    } catch (err) {
+      console.warn('[home] Failed to share weekly summary', err);
+      try {
+        await Share.share({ message: fallbackMessage });
+      } catch (shareErr) {
+        console.warn('[home] Failed to share weekly fallback', shareErr);
+        Alert.alert(t('weeklySummary.shareErrorTitle'), t('weeklySummary.shareErrorBody'));
+      }
+    } finally {
+      setSharingWeekly(false);
+    }
+  }, [weeklySummary, weeklyTopCategory]);
 
   if (loading) {
     return (
@@ -236,6 +288,17 @@ export default function HomeDashboardScreen({ navigation }: Props): JSX.Element 
             </Text>
             <TouchableOpacity onPress={() => navigation.navigate('WeeklySummary')} testID="open-weekly">
               <Text style={styles.link}>{t('home_dashboard_weekly_cta')}</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={handleShareWeekly}
+              disabled={sharingWeekly}
+              testID="share-weekly-dashboard"
+            >
+              {sharingWeekly ? (
+                <ActivityIndicator />
+              ) : (
+                <Text style={styles.link}>{t('home_dashboard_weekly_share')}</Text>
+              )}
             </TouchableOpacity>
           </>
         ) : (

@@ -4,13 +4,13 @@ import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import QuickRoundStartPage from "./QuickRoundStartPage";
+import QuickRoundStartPage, { DEMO_COURSE_NAME } from "./QuickRoundStartPage";
 import { fetchHeroCourses } from "@/api";
 
 const defaultHeroCourses = [
   {
     id: "demo-links",
-    name: "Demo Links Hero",
+    name: DEMO_COURSE_NAME,
     country: "USA",
     city: "Palo Alto",
     tees: [
@@ -93,7 +93,7 @@ describe("QuickRoundStartPage hero courses", () => {
     await user.click(heroButton);
 
     const courseInput = screen.getByLabelText("quickRound.start.courseName") as HTMLInputElement;
-    expect(courseInput.value).toBe("Demo Links Hero");
+    expect(courseInput.value).toBe(DEMO_COURSE_NAME);
 
     const teeSelect = screen.getByLabelText("quickRound.start.heroTeeLabel") as HTMLSelectElement;
     expect(teeSelect.value).toBe("white");
