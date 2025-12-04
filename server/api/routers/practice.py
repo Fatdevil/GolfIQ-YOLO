@@ -100,9 +100,15 @@ async def get_practice_plan(
 ) -> PracticePlanOut:
     player_id = _derive_player_id(api_key, user_id)
     now = datetime.now(timezone.utc)
-    weekly_summary = await _load_weekly_summary(service=service, player_id=player_id, now=now)
+    weekly_summary = await _load_weekly_summary(
+        service=service, player_id=player_id, now=now
+    )
     summary_payload = weekly_summary.model_dump()
-    strokes_gained = weekly_summary.strokes_gained.model_dump() if weekly_summary.strokes_gained else None
+    strokes_gained = (
+        weekly_summary.strokes_gained.model_dump()
+        if weekly_summary.strokes_gained
+        else None
+    )
 
     plan = build_practice_plan(
         weekly_summary=summary_payload,

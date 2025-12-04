@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Literal, TypedDict
+from typing import TypedDict
 
 from server.rounds.recap import CATEGORY_LABELS
 
@@ -88,7 +88,9 @@ def _pick_drills_for_category(
     max_take: int,
 ) -> list[Drill]:
     candidates = [
-        d for d in DRILL_CATALOG if d["category"] == category and d["id"] not in used_ids
+        d
+        for d in DRILL_CATALOG
+        if d["category"] == category and d["id"] not in used_ids
     ]
     # Prefer shorter/easier drills first to fit time
     candidates.sort(key=lambda d: (d["difficulty"], d["duration_minutes"]))

@@ -54,7 +54,9 @@ def test_practice_plan_endpoint_uses_weekly(monkeypatch):
     async def fake_load_weekly_summary(*, service, player_id, now):
         return weekly
 
-    monkeypatch.setattr(practice_router, "_load_weekly_summary", fake_load_weekly_summary)
+    monkeypatch.setattr(
+        practice_router, "_load_weekly_summary", fake_load_weekly_summary
+    )
 
     response = client.get("/api/coach/practice/plan?max_minutes=45")
     assert response.status_code == 200

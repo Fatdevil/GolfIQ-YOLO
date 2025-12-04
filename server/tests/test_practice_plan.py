@@ -9,7 +9,7 @@ def test_practice_plan_prioritizes_putting():
             "short_game": {"grade": "C"},
             "putting": {"grade": "D"},
         },
-        "focus_hints": ["Cut 3-putts"]
+        "focus_hints": ["Cut 3-putts"],
     }
     strokes_gained = {
         "categories": {
@@ -30,4 +30,9 @@ def test_practice_plan_prioritizes_putting():
 def test_practice_plan_balanced_when_no_data():
     plan = build_practice_plan({}, None, max_minutes=45)
     assert len(plan["drills"]) > 0
-    assert set(plan["focus_categories"]) >= {"driving", "approach", "short_game", "putting"}
+    assert set(plan["focus_categories"]) >= {
+        "driving",
+        "approach",
+        "short_game",
+        "putting",
+    }
