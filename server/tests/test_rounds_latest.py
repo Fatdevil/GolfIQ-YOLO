@@ -17,7 +17,9 @@ def test_latest_round_returns_most_recent_completed(round_client, monkeypatch):
     # ensure deterministic timestamps
     monkeypatch.setenv("TZ", "UTC")
 
-    first = service.start_round(player_id="player-1", course_id="c1", tee_name="Blue", holes=18)
+    first = service.start_round(
+        player_id="player-1", course_id="c1", tee_name="Blue", holes=18
+    )
     service.upsert_hole_score(
         player_id="player-1",
         round_id=first.id,
@@ -26,7 +28,9 @@ def test_latest_round_returns_most_recent_completed(round_client, monkeypatch):
     )
     service.end_round(player_id="player-1", round_id=first.id)
 
-    second = service.start_round(player_id="player-1", course_id="c2", tee_name="White", holes=9)
+    second = service.start_round(
+        player_id="player-1", course_id="c2", tee_name="White", holes=9
+    )
     service.upsert_hole_score(
         player_id="player-1",
         round_id=second.id,
