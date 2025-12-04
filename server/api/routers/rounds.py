@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi.encoders import jsonable_encoder
 from pydantic import AliasChoices, BaseModel, ConfigDict, Field
 
 from server.api.security import require_api_key
@@ -43,6 +44,12 @@ class StartRoundRequest(BaseModel):
         serialization_alias="teeName",
     )
     holes: int = 18
+    start_hole: int = Field(
+        default=1,
+        validation_alias=AliasChoices("start_hole", "startHole"),
+        serialization_alias="startHole",
+        ge=1,
+    )
 
     model_config = ConfigDict(populate_by_name=True)
 
@@ -134,11 +141,21 @@ def start_round(
 ) -> Round:
     player_id = _derive_player_id(api_key, user_id)
     try:
+        active = service.get_active_round(player_id=player_id)
+        if active:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail={
+                    "message": "round already in progress",
+                    "activeRound": jsonable_encoder(active, by_alias=True),
+                },
+            )
         return service.start_round(
             player_id=player_id,
             course_id=payload.course_id,
             tee_name=payload.tee_name,
             holes=payload.holes or 18,
+            start_hole=payload.start_hole or 1,
         )
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
@@ -351,6 +368,19 @@ def get_round_summary(
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN, detail="round not owned by player"
         )
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
+
+
+@router.get("/current", response_model=RoundInfo | None)
+def get_current_round(
+    api_key: str | None = Depends(require_api_key),
+    user_id: UserIdHeader = None,
+    service: RoundService = Depends(get_round_service),
+) -> RoundInfo | None:
+    player_id = _derive_player_id(api_key, user_id)
+    try:
+        return service.get_active_round(player_id=player_id)
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
 

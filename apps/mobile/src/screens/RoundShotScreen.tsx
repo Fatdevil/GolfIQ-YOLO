@@ -3,6 +3,7 @@ import {
   ActivityIndicator,
   Alert,
   FlatList,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -61,6 +62,9 @@ export default function RoundShotScreen({ navigation }: Props): JSX.Element {
   const [scoreSaving, setScoreSaving] = useState(false);
   const [scoreDirty, setScoreDirty] = useState(false);
   const [scoresLoading, setScoresLoading] = useState(false);
+  const totalHoles = state?.round.holes ?? 18;
+  const startingHole = state?.round.startHole ?? 1;
+  const lastHoleNumber = useMemo(() => startingHole + totalHoles - 1, [startingHole, totalHoles]);
 
   useEffect(() => {
     loadActiveRoundState()
@@ -70,7 +74,7 @@ export default function RoundShotScreen({ navigation }: Props): JSX.Element {
       .finally(() => setLoading(false));
   }, []);
 
-  const currentHole = state?.currentHole ?? 1;
+  const currentHole = state?.currentHole ?? startingHole;
 
   useEffect(() => {
     if (!state?.round.id) return;
@@ -86,9 +90,24 @@ export default function RoundShotScreen({ navigation }: Props): JSX.Element {
     return scores[currentHole] ?? { holeNumber: currentHole };
   }, [scores, currentHole]);
 
+  const runningTotal = useMemo(() => {
+    return Object.values(scores).reduce((acc, hole) => {
+      if (typeof hole.strokes === 'number') {
+        return acc + hole.strokes;
+      }
+      return acc;
+    }, 0);
+  }, [scores]);
+
+  const holeNumbers = useMemo(
+    () => Array.from({ length: totalHoles }, (_, idx) => startingHole + idx),
+    [startingHole, totalHoles],
+  );
+
   const roundLabel = useMemo(() => {
     if (!state) return '';
-    const course = state.round.courseId ? ` · ${state.round.courseId}` : '';
+    const courseName = state.round.courseName ?? state.round.courseId;
+    const course = courseName ? ` · ${courseName}` : '';
     const tee = state.round.teeName ? ` (${state.round.teeName})` : '';
     return `Round ${state.round.id}${course}${tee}`;
   }, [state]);
@@ -107,8 +126,8 @@ export default function RoundShotScreen({ navigation }: Props): JSX.Element {
     [currentHole],
   );
 
-  const handleSaveScore = useCallback(async () => {
-    if (!state) return;
+  const persistScore = useCallback(async () => {
+    if (!state) return null;
     const payloadEntries = Object.entries(currentScore).filter(
       ([key, value]) => key !== 'holeNumber' && value !== undefined,
     );
@@ -121,6 +140,7 @@ export default function RoundShotScreen({ navigation }: Props): JSX.Element {
       );
       setScores(updated.holes ?? {});
       setScoreDirty(false);
+      return updated;
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to save score';
       Alert.alert('Save failed', message);
@@ -133,12 +153,12 @@ export default function RoundShotScreen({ navigation }: Props): JSX.Element {
   const ensureScoreSaved = useCallback(async () => {
     if (!scoreDirty) return true;
     try {
-      await handleSaveScore();
+      await persistScore();
       return true;
     } catch {
       return false;
     }
-  }, [handleSaveScore, scoreDirty]);
+  }, [persistScore, scoreDirty]);
 
   const adjustNumeric = useCallback(
     (field: 'par' | 'strokes' | 'putts' | 'penalties', delta: number, min = 0) => {
@@ -182,29 +202,73 @@ export default function RoundShotScreen({ navigation }: Props): JSX.Element {
     }
   }, [state, currentHole, club, note]);
 
-  const handleNextHole = useCallback(async () => {
-    if (!state) return;
-    const saved = await ensureScoreSaved();
-    if (!saved) return;
-    const nextHole = state.currentHole + 1;
-    const nextState = { ...state, currentHole: nextHole };
-    setState(nextState);
-    await saveActiveRoundState(nextState);
-  }, [ensureScoreSaved, state]);
-
-  const handleEndRound = useCallback(async () => {
-    if (!state) return;
-    try {
+  const goToHole = useCallback(
+    async (target: number) => {
+      if (!state) return;
+      if (target < startingHole || target > lastHoleNumber) return;
       const saved = await ensureScoreSaved();
       if (!saved) return;
-      await endRound(state.round.id);
-      await clearActiveRoundState();
-      navigation.navigate('RoundRecap', { roundId: state.round.id });
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'Failed to end round';
-      Alert.alert('End round failed', message);
-    }
-  }, [ensureScoreSaved, navigation, state]);
+      const nextState = { ...state, currentHole: target };
+      setState(nextState);
+      await saveActiveRoundState(nextState);
+    },
+    [ensureScoreSaved, lastHoleNumber, startingHole, state],
+  );
+
+  const handleNextHole = useCallback(async () => {
+    await goToHole(currentHole + 1);
+  }, [currentHole, goToHole]);
+
+  const handlePreviousHole = useCallback(async () => {
+    await goToHole(currentHole - 1);
+  }, [currentHole, goToHole]);
+
+  const handleEndRound = useCallback(
+    async (ensureSaved: boolean = true) => {
+      if (!state) return;
+      try {
+        if (ensureSaved) {
+          const saved = await ensureScoreSaved();
+          if (!saved) return;
+        }
+        await endRound(state.round.id);
+        await clearActiveRoundState();
+        navigation.navigate('RoundRecap', { roundId: state.round.id });
+      } catch (err) {
+        const message = err instanceof Error ? err.message : 'Failed to end round';
+        Alert.alert('End round failed', message);
+      }
+    },
+    [ensureScoreSaved, navigation, state],
+  );
+
+  const handleSaveScore = useCallback(
+    async (options?: { autoAdvance?: boolean }) => {
+      const updated = await persistScore();
+      if (!options?.autoAdvance || !state) return updated;
+      if (currentHole < lastHoleNumber) {
+        await goToHole(currentHole + 1);
+        return updated;
+      }
+
+      Alert.alert(
+        'Round complete',
+        'View Round Recap?',
+        [
+          { text: 'Stay', style: 'cancel' },
+          {
+            text: 'View recap',
+            onPress: () => {
+              void handleEndRound(false);
+            },
+          },
+        ],
+      );
+
+      return updated;
+    },
+    [currentHole, goToHole, handleEndRound, lastHoleNumber, persistScore, state],
+  );
 
   if (loading) {
     return (
@@ -225,8 +289,64 @@ export default function RoundShotScreen({ navigation }: Props): JSX.Element {
 
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>Hole {currentHole}</Text>
-      <Text style={styles.subtitle}>{roundLabel}</Text>
+      <View style={styles.headerCard}>
+        <View style={styles.headerRow}>
+          <View>
+            <Text style={styles.title}>{state.round.courseName ?? state.round.courseId ?? 'Course'}</Text>
+            <Text style={styles.subtitle}>{roundLabel}</Text>
+          </View>
+          <View style={styles.holeBadge}>
+            <Text style={styles.holeBadgeText}>
+              Hole {currentHole}/{totalHoles}
+            </Text>
+            <Text style={styles.holeBadgeSub}>Par {currentScore.par ?? '—'}</Text>
+          </View>
+        </View>
+        <View style={styles.headerRow}>
+          <Text style={styles.muted}>Running total: {runningTotal || 0}</Text>
+          <Text style={styles.muted}>Start: Hole {startingHole}</Text>
+        </View>
+      </View>
+
+      <View style={styles.holePickerRow}>
+        <TouchableOpacity
+          style={[styles.secondaryButton, currentHole <= startingHole && styles.disabledButton]}
+          disabled={currentHole <= startingHole}
+          onPress={handlePreviousHole}
+          accessibilityLabel="Previous hole"
+        >
+          <Text style={styles.secondaryButtonText}>Prev</Text>
+        </TouchableOpacity>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.holeSelector}
+        >
+          {holeNumbers.map((hole) => (
+            <TouchableOpacity
+              key={hole}
+              style={[styles.holeChip, hole === currentHole && styles.holeChipActive]}
+              onPress={() => goToHole(hole)}
+              accessibilityLabel={`Go to hole ${hole}`}
+            >
+              <Text style={[styles.holeChipText, hole === currentHole && styles.holeChipTextActive]}>
+                {hole}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+        <TouchableOpacity
+          style={[
+            styles.secondaryButton,
+            currentHole >= lastHoleNumber && styles.disabledButton,
+          ]}
+          disabled={currentHole >= lastHoleNumber}
+          onPress={handleNextHole}
+          accessibilityLabel="Next hole"
+        >
+          <Text style={styles.secondaryButtonText}>Next</Text>
+        </TouchableOpacity>
+      </View>
 
       <Text style={styles.label}>Club</Text>
       <FlatList
@@ -366,12 +486,12 @@ export default function RoundShotScreen({ navigation }: Props): JSX.Element {
 
         <TouchableOpacity
           style={[styles.secondaryButton, styles.saveScoreButton, scoreSaving && styles.disabledButton]}
-          onPress={handleSaveScore}
+          onPress={() => handleSaveScore({ autoAdvance: true })}
           disabled={scoreSaving}
-          accessibilityLabel="Save scoring"
+          accessibilityLabel="Save scoring and continue"
           testID="save-score"
         >
-          <Text style={styles.secondaryButtonText}>{scoreSaving ? 'Saving…' : 'Save scoring'}</Text>
+          <Text style={styles.secondaryButtonText}>{scoreSaving ? 'Saving…' : 'Save & next hole'}</Text>
           {scoreDirty && !scoreSaving ? (
             <Text style={styles.unsavedText}>Unsaved changes</Text>
           ) : null}
@@ -389,10 +509,15 @@ export default function RoundShotScreen({ navigation }: Props): JSX.Element {
       </TouchableOpacity>
 
       <View style={styles.row}>
-        <TouchableOpacity style={styles.secondaryButton} onPress={handleNextHole} accessibilityLabel="Next hole">
-          <Text style={styles.secondaryButtonText}>Next hole</Text>
+        <TouchableOpacity
+          style={[styles.secondaryButton, currentHole <= startingHole && styles.disabledButton]}
+          onPress={handlePreviousHole}
+          accessibilityLabel="Previous hole"
+          disabled={currentHole <= startingHole}
+        >
+          <Text style={styles.secondaryButtonText}>Previous hole</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.secondaryButton} onPress={handleEndRound} accessibilityLabel="End round">
+        <TouchableOpacity style={styles.secondaryButton} onPress={() => handleEndRound()} accessibilityLabel="End round">
           <Text style={styles.secondaryButtonText}>End round</Text>
         </TouchableOpacity>
       </View>
@@ -416,6 +541,7 @@ const styles = StyleSheet.create({
     flex: 1,
     padding: 16,
     backgroundColor: '#fff',
+    gap: 12,
   },
   center: {
     flex: 1,
@@ -433,6 +559,62 @@ const styles = StyleSheet.create({
   subtitle: {
     color: '#6b7280',
     marginBottom: 12,
+  },
+  headerCard: {
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    borderRadius: 12,
+    padding: 12,
+    gap: 8,
+  },
+  headerRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: 8,
+  },
+  holeBadge: {
+    backgroundColor: '#0f172a',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 12,
+  },
+  holeBadgeText: {
+    color: '#fff',
+    fontWeight: '700',
+  },
+  holeBadgeSub: {
+    color: '#cbd5e1',
+    fontSize: 12,
+  },
+  holePickerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  holeSelector: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 8,
+  },
+  holeChip: {
+    borderWidth: 1,
+    borderColor: '#d1d5db',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 999,
+  },
+  holeChipActive: {
+    backgroundColor: '#0ea5e9',
+    borderColor: '#0ea5e9',
+  },
+  holeChipText: {
+    fontWeight: '700',
+    color: '#111827',
+  },
+  holeChipTextActive: {
+    color: '#fff',
   },
   label: {
     fontWeight: '600',

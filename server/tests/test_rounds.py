@@ -51,6 +51,8 @@ def test_start_and_end_round(round_client) -> None:
     data = start.json()
     assert data["courseId"] == "course-123"
     assert data["holes"] == 9
+    assert data["startHole"] == 1
+    assert data["status"] == "in_progress"
     assert data["endedAt"] is None
 
     round_id = data["id"]
@@ -58,6 +60,46 @@ def test_start_and_end_round(round_client) -> None:
     assert end.status_code == 200
     ended = end.json()
     assert ended["endedAt"] is not None
+    assert ended["status"] == "completed"
+
+
+def test_start_round_conflict_returns_active(round_client) -> None:
+    client, _, service = round_client
+
+    active = service.start_round(
+        player_id="player-1", course_id="c1", tee_name="Blue", holes=18
+    )
+
+    response = client.post(
+        "/api/rounds/start",
+        json={"courseId": "c2"},
+        headers=_headers(),
+    )
+
+    assert response.status_code == 409
+    payload = response.json()
+    assert payload["detail"]["message"] == "round already in progress"
+    assert payload["detail"]["activeRound"]["id"] == active.id
+
+
+def test_get_current_round(round_client) -> None:
+    client, _, service = round_client
+
+    active = service.start_round(
+        player_id="player-1", course_id="c1", tee_name="Blue", holes=18
+    )
+
+    response = client.get("/api/rounds/current", headers=_headers())
+    assert response.status_code == 200
+    current = response.json()
+    assert current["id"] == active.id
+    assert current["status"] == "in_progress"
+
+    service.end_round(player_id="player-1", round_id=active.id)
+
+    empty = client.get("/api/rounds/current", headers=_headers())
+    assert empty.status_code == 200
+    assert empty.json() is None
 
 
 def test_append_and_list_shots(round_client) -> None:
