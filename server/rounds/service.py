@@ -17,6 +17,7 @@ from .models import (
     RoundRecord,
     RoundScores,
     RoundSummary,
+    RoundSummaryWithRoundInfo,
     Shot,
     ShotRecord,
     compute_round_summary,
@@ -191,6 +192,27 @@ class RoundService:
             except Exception:
                 continue
         return summaries
+
+    def get_latest_completed_summary(
+        self, *, player_id: str
+    ) -> RoundSummaryWithRoundInfo | None:
+        for record in self._list_round_records(player_id=player_id, limit=50):
+            if record.ended_at is None:
+                continue
+            try:
+                scores = self._read_scores(record)
+                summary = compute_round_summary(scores)
+                return RoundSummaryWithRoundInfo(
+                    **summary.model_dump(),
+                    course_id=record.course_id,
+                    tee_name=record.tee_name,
+                    holes=record.holes,
+                    started_at=record.started_at,
+                    ended_at=record.ended_at,
+                )
+            except Exception:
+                continue
+        return None
 
     def _list_round_records(self, *, player_id: str, limit: int) -> list[RoundRecord]:
         player_dir = self._player_dir(player_id)

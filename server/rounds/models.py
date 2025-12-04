@@ -177,6 +177,14 @@ class RoundSummary(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
 
+class RoundSummaryWithRoundInfo(RoundSummary):
+    course_id: str | None = Field(default=None, serialization_alias="courseId")
+    tee_name: str | None = Field(default=None, serialization_alias="teeName")
+    holes: int = Field(default=18)
+    started_at: datetime = Field(serialization_alias="startedAt")
+    ended_at: datetime | None = Field(default=None, serialization_alias="endedAt")
+
+
 def _safe_sum(values: list[int | None]) -> int | None:
     filtered = [v for v in values if v is not None]
     if not filtered:

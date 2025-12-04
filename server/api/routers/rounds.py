@@ -15,6 +15,7 @@ from server.rounds.models import (
     RoundInfo,
     RoundScores,
     RoundSummary,
+    RoundSummaryWithRoundInfo,
     Shot,
     compute_round_category_stats,
     compute_round_summary,
@@ -444,6 +445,24 @@ def get_current_round(
     player_id = _derive_player_id(api_key, user_id)
     try:
         return service.get_active_round(player_id=player_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
+
+
+@router.get("/latest", response_model=RoundSummaryWithRoundInfo | None)
+def get_latest_completed_round(
+    api_key: str | None = Depends(require_api_key),
+    user_id: UserIdHeader = None,
+    service: RoundService = Depends(get_round_service),
+) -> RoundSummaryWithRoundInfo | None:
+    if not api_key and not user_id:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="authentication required",
+        )
+    player_id = _derive_player_id(api_key, user_id)
+    try:
+        return service.get_latest_completed_summary(player_id=player_id)
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
 

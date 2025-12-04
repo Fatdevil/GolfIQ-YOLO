@@ -9,6 +9,7 @@ import { t } from '@app/i18n';
 import EventJoinScreen from '@app/screens/EventJoinScreen';
 import EventLiveScreen from '@app/screens/EventLiveScreen';
 import EventScanScreen from '@app/screens/EventScanScreen';
+import HomeDashboardScreen from '@app/screens/HomeDashboardScreen';
 import HomeScreen from '@app/screens/HomeScreen';
 import RangePracticeScreen from '@app/screens/RangePracticeScreen';
 import RangeProgressScreen from '@app/screens/RangeProgressScreen';
@@ -73,7 +74,12 @@ export default function App(): JSX.Element {
 
   return (
     <NavigationContainer linking={linking}>
-      <Stack.Navigator initialRouteName="PlayerHome">
+      <Stack.Navigator initialRouteName="HomeDashboard">
+        <Stack.Screen
+          name="HomeDashboard"
+          component={HomeDashboardScreen}
+          options={{ title: t('home_dashboard_title') }}
+        />
         <Stack.Screen name="PlayerHome" component={HomeScreen} options={{ title: 'Home' }} />
         <Stack.Screen
           name="PlayCourseSelect"

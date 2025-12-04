@@ -24,7 +24,7 @@ export default function RoundSavedScreen({ route, navigation }: Props): JSX.Elem
       <View style={styles.container}>
         <Text style={styles.title}>Round saved</Text>
         <Text style={styles.meta}>Summary unavailable.</Text>
-        <TouchableOpacity onPress={() => navigation.navigate('PlayerHome')} testID="round-saved-home">
+        <TouchableOpacity onPress={() => navigation.navigate('HomeDashboard')} testID="round-saved-home">
           <View style={styles.primaryButton}>
             <Text style={styles.primaryButtonText}>Back to home</Text>
           </View>
@@ -50,7 +50,7 @@ export default function RoundSavedScreen({ route, navigation }: Props): JSX.Elem
         </Text>
       </View>
 
-      <TouchableOpacity onPress={() => navigation.navigate('PlayerHome')} testID="round-saved-home">
+      <TouchableOpacity onPress={() => navigation.navigate('HomeDashboard')} testID="round-saved-home">
         <View style={styles.primaryButton}>
           <Text style={styles.primaryButtonText}>Back to home</Text>
         </View>

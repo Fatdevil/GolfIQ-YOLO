@@ -8,6 +8,7 @@ export type ClipCommentaryParams = {
 
 export type RootStackParamList = {
   PlayerHome: undefined;
+  HomeDashboard: undefined;
   PlayCourseSelect: undefined;
   PlayTeeSelect: { courseId: string; courseName: string; tees?: { id: string; name: string; lengthMeters?: number }[] };
   PlayInRound: {

@@ -258,7 +258,7 @@ export default function RangeQuickPracticeSummaryScreen({ navigation, route }: P
       </TouchableOpacity>
 
       <TouchableOpacity
-        onPress={() => handleNavigateWithSave(() => navigation.navigate('PlayerHome'))}
+        onPress={() => handleNavigateWithSave(() => navigation.navigate('HomeDashboard'))}
         style={styles.primaryButton}
         testID="summary-back-home"
       >
