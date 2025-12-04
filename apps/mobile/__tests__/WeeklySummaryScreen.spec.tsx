@@ -1,19 +1,26 @@
 import React from 'react';
 import { fireEvent, render, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
+import { Share } from 'react-native';
 
 import WeeklySummaryScreen from '@app/screens/WeeklySummaryScreen';
 import { fetchWeeklySummary } from '@app/api/weeklySummary';
+import { createWeeklyShareLink } from '@app/api/shareClient';
 
 vi.mock('@app/api/weeklySummary', () => ({
   fetchWeeklySummary: vi.fn(),
 }));
+vi.mock('@app/api/shareClient', () => ({
+  createWeeklyShareLink: vi.fn(),
+}));
 
 const mockFetchWeeklySummary = fetchWeeklySummary as unknown as Mock;
+const mockCreateWeeklyShareLink = createWeeklyShareLink as unknown as Mock;
 
 describe('WeeklySummaryScreen', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockCreateWeeklyShareLink.mockResolvedValue({ url: 'https://golfiq.app/s/week1' });
   });
 
   it('renders the weekly summary with categories and hints', async () => {
@@ -84,5 +91,54 @@ describe('WeeklySummaryScreen', () => {
 
     expect(await findByText(/Not enough data yet/)).toBeTruthy();
     expect(queryByText(/Strokes Gained/)).toBeNull();
+  });
+
+  it('shares weekly summary with a shortlink', async () => {
+    mockFetchWeeklySummary.mockResolvedValue({
+      period: { from: '2024-12-01', to: '2024-12-07', roundCount: 2 },
+      headline: { text: 'Solid week!', emoji: '🔥' },
+      coreStats: { avgScore: 80, bestScore: 78, worstScore: 85, avgToPar: '+6', holesPlayed: 36 },
+      categories: {
+        driving: { grade: 'A', trend: 'up', note: 'Fairways 70%' },
+      },
+      focusHints: [],
+    });
+
+    mockCreateWeeklyShareLink.mockResolvedValue({ url: 'https://golfiq.app/s/w-share' });
+    const shareSpy = vi.spyOn(Share, 'share').mockResolvedValue({} as any);
+
+    const { getByTestId, getByText } = render(
+      <WeeklySummaryScreen navigation={{} as any} route={undefined as any} />,
+    );
+
+    await waitFor(() => expect(getByTestId('weekly-headline')).toBeTruthy());
+    fireEvent.click(getByTestId('share-weekly'));
+
+    await waitFor(() => expect(shareSpy).toHaveBeenCalled());
+    expect(shareSpy.mock.calls[0][0].message).toContain('https://golfiq.app/s/w-share');
+    expect(getByText('Share this week')).toBeTruthy();
+  });
+
+  it('falls back gracefully when share link fails', async () => {
+    mockFetchWeeklySummary.mockResolvedValue({
+      period: { from: '2024-12-01', to: '2024-12-07', roundCount: 1 },
+      headline: { text: 'Solid week!', emoji: '🔥' },
+      coreStats: { avgScore: 80, bestScore: 78, worstScore: 85, avgToPar: '+6', holesPlayed: 18 },
+      categories: {},
+      focusHints: [],
+    });
+
+    mockCreateWeeklyShareLink.mockRejectedValue(new Error('nope'));
+    const shareSpy = vi.spyOn(Share, 'share').mockResolvedValue({} as any);
+
+    const { getByTestId } = render(
+      <WeeklySummaryScreen navigation={{} as any} route={undefined as any} />,
+    );
+
+    await waitFor(() => expect(getByTestId('weekly-headline')).toBeTruthy());
+    fireEvent.click(getByTestId('share-weekly'));
+
+    await waitFor(() => expect(shareSpy).toHaveBeenCalled());
+    expect(shareSpy.mock.calls[0][0].message).not.toContain('http');
   });
 });

@@ -1,8 +1,9 @@
-"""Share endpoints for clip anchors."""
+"""Share endpoints for clip anchors and recaps."""
 
 from __future__ import annotations
 
 import json
+from datetime import datetime, timezone
 from html import escape
 from urllib.parse import urljoin, urlparse
 
@@ -10,8 +11,20 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import HTMLResponse, RedirectResponse
 from pydantic import BaseModel
 
+from server.api.user_header import UserIdHeader
 from server.features import is_clip_public
 from server.security import require_api_key
+from server.rounds.models import compute_round_summary
+from server.rounds.service import (
+    RoundNotFound,
+    RoundOwnershipError,
+    RoundService,
+    get_round_service,
+)
+from server.rounds.weekly_summary import (
+    _select_completed_rounds,
+    build_weekly_summary_response,
+)
 from server.services.anchors_store import get_one
 from server.services.shortlinks import create, get
 from server.services.telemetry import emit
@@ -26,6 +39,11 @@ class AnchorShareIn(BaseModel):
     shot: int
 
 
+class ShareLinkResponse(BaseModel):
+    url: str
+    sid: str
+
+
 def _absolute(base: str, value: str | None) -> str | None:
     if not value:
         return None
@@ -35,6 +53,10 @@ def _absolute(base: str, value: str | None) -> str | None:
     if value.startswith("/"):
         return f"{base.rstrip('/')}{value}"
     return urljoin(f"{base.rstrip('/')}/", value)
+
+
+def _derive_player_id(api_key: str | None, user_id: str | None) -> str:
+    return user_id or api_key or "anonymous"
 
 
 @router.post("/api/share/anchor", dependencies=[Depends(require_api_key)])
@@ -64,6 +86,104 @@ def post_share_anchor(body: AnchorShareIn):
         "url": f"/s/{shortlink.sid}",
         "ogUrl": f"/s/{shortlink.sid}/o",
     }
+
+
+@router.post("/api/share/round/{round_id}", response_model=ShareLinkResponse)
+def create_round_share_link(
+    round_id: str,
+    api_key: str | None = Depends(require_api_key),
+    user_id: UserIdHeader = None,
+    service: RoundService = Depends(get_round_service),
+) -> ShareLinkResponse:
+    player_id = _derive_player_id(api_key, user_id)
+
+    try:
+        info = service.get_round_info(player_id=player_id, round_id=round_id)
+        scores = service.get_scores(player_id=player_id, round_id=round_id)
+    except RoundNotFound:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "round not found") from None
+    except RoundOwnershipError:
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN, "round not owned by user"
+        ) from None
+
+    summary = compute_round_summary(scores)
+    payload = {
+        "kind": "round_recap",
+        "round_id": round_id,
+        "player_id": player_id,
+        "summary": summary.model_dump(),
+    }
+
+    description = "Shared round recap"
+    if info.course_id:
+        description = f"Round recap for {info.course_id}"
+
+    shortlink = create(
+        url=lambda sid: f"/share/round/{sid}",
+        title="GolfIQ • Round recap",
+        description=description,
+        image=None,
+        payload=payload,
+    )
+
+    emit("share.round.create", {"sid": shortlink.sid, "roundId": round_id})
+    return ShareLinkResponse(url=f"/s/{shortlink.sid}", sid=shortlink.sid)
+
+
+@router.post("/api/share/weekly", response_model=ShareLinkResponse)
+def create_weekly_share_link(
+    api_key: str | None = Depends(require_api_key),
+    user_id: UserIdHeader = None,
+    service: RoundService = Depends(get_round_service),
+) -> ShareLinkResponse:
+    player_id = _derive_player_id(api_key, user_id)
+    now = datetime.now(timezone.utc)
+
+    round_infos = service.list_rounds(player_id=player_id, limit=50)
+    selected_infos = _select_completed_rounds(round_infos, now=now)
+
+    summaries = [
+        compute_round_summary(service.get_scores(player_id=player_id, round_id=info.id))
+        for info in selected_infos
+    ]
+
+    remaining_rounds = [
+        info for info in round_infos if info.id not in {r.id for r in selected_infos}
+    ]
+    comparison_infos = _select_completed_rounds(remaining_rounds, now=now)
+    comparison_summaries = [
+        compute_round_summary(service.get_scores(player_id=player_id, round_id=info.id))
+        for info in comparison_infos
+    ]
+
+    summary_payload = build_weekly_summary_response(
+        summaries=summaries,
+        comparison_summaries=comparison_summaries,
+        round_infos=selected_infos,
+        now=now,
+    )
+
+    shortlink = create(
+        url=lambda sid: f"/share/weekly/{sid}",
+        title="GolfIQ • Weekly summary",
+        description="Shared weekly performance",
+        image=None,
+        payload={
+            "kind": "weekly_summary",
+            "player_id": player_id,
+            "summary": summary_payload,
+        },
+    )
+
+    emit(
+        "share.weekly.create",
+        {
+            "sid": shortlink.sid,
+            "roundCount": summary_payload.get("period", {}).get("roundCount", 0),
+        },
+    )
+    return ShareLinkResponse(url=f"/s/{shortlink.sid}", sid=shortlink.sid)
 
 
 @router.get("/s/{sid}")
@@ -133,6 +253,8 @@ def get_share_payload(sid: str):
 __all__ = [
     "router",
     "post_share_anchor",
+    "create_round_share_link",
+    "create_weekly_share_link",
     "resolve_shortlink",
     "shortlink_og",
     "get_share_payload",

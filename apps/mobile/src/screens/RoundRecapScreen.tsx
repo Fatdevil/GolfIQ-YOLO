@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 
+import { createRoundShareLink } from '@app/api/shareClient';
 import { fetchRoundRecap, type RoundRecap } from '@app/api/roundClient';
 import { fetchRoundStrokesGained, type RoundStrokesGained } from '@app/api/strokesGainedClient';
 import { t } from '@app/i18n';
@@ -45,6 +46,7 @@ export default function RoundRecapScreen({ route }: Props): JSX.Element {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [sgError, setSgError] = useState<string | null>(null);
+  const [shareLoading, setShareLoading] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -108,6 +110,14 @@ export default function RoundRecapScreen({ route }: Props): JSX.Element {
     return t('strokesGained.roundEven');
   }, [strokesGained]);
 
+  const bestCategoryLabel = useMemo(() => {
+    if (!strokesGained) return null;
+    const categories = Object.values(strokesGained.categories ?? {});
+    if (categories.length === 0) return null;
+    const best = categories.reduce((acc, curr) => (curr.value > acc.value ? curr : acc), categories[0]);
+    return best.label ?? null;
+  }, [strokesGained]);
+
   const handleShare = useCallback(async () => {
     if (!recap) return;
     const categories = recap.categories || {};
@@ -119,7 +129,7 @@ export default function RoundRecapScreen({ route }: Props): JSX.Element {
     const toPar = recap.toPar ?? t('round.recap.to_par_even');
     const score = recap.score ?? '—';
 
-    const message = t('round.recap.share_template', {
+    const fallbackMessage = t('round.recap.share_template', {
       course: courseName,
       score,
       toPar,
@@ -130,13 +140,30 @@ export default function RoundRecapScreen({ route }: Props): JSX.Element {
       focus: firstHint,
     });
 
+    setShareLoading(true);
+
     try {
+      const link = await createRoundShareLink(roundId);
+      const message = t('round.recap.share_link_template', {
+        course: courseName,
+        score,
+        toPar,
+        bestCategory: bestCategoryLabel ?? t('round.recap.share_focus_fallback'),
+        url: link.url,
+      });
       await Share.share({ message });
     } catch (err) {
-      console.warn('[round] Failed to share recap', err);
-      Alert.alert(t('round.recap.share_error_title'), t('round.recap.share_error_body'));
+      console.warn('[round] Failed to share recap link', err);
+      try {
+        await Share.share({ message: fallbackMessage });
+      } catch (shareErr) {
+        console.warn('[round] Failed to share fallback recap', shareErr);
+        Alert.alert(t('round.recap.share_error_title'), t('round.recap.share_error_body'));
+      }
+    } finally {
+      setShareLoading(false);
     }
-  }, [courseName, recap]);
+  }, [bestCategoryLabel, courseName, recap, roundId]);
 
   if (loading) {
     return (
@@ -168,8 +195,17 @@ export default function RoundRecapScreen({ route }: Props): JSX.Element {
       <View style={styles.card}>
         <View style={styles.cardHeader}>
           <Text style={styles.cardTitle}>{t('round.recap.categories_title')}</Text>
-          <TouchableOpacity style={styles.secondaryButton} onPress={handleShare} testID="share-round">
-            <Text style={styles.secondaryButtonText}>{t('round.recap.share_cta')}</Text>
+          <TouchableOpacity
+            style={styles.secondaryButton}
+            onPress={handleShare}
+            disabled={shareLoading}
+            testID="share-round"
+          >
+            {shareLoading ? (
+              <ActivityIndicator color="#00c853" />
+            ) : (
+              <Text style={styles.secondaryButtonText}>{t('round.recap.share_cta')}</Text>
+            )}
           </TouchableOpacity>
         </View>
         <View style={styles.grid}>
