@@ -20,6 +20,8 @@ import {
 } from "../../features/quickround/storage";
 import { QuickRound } from "../../features/quickround/types";
 
+export const DEMO_COURSE_NAME = "Demo Links Hero";
+
 function readStoredMemberId(): string | null {
   if (typeof window === "undefined") {
     return null;
@@ -34,7 +36,7 @@ function readStoredMemberId(): string | null {
 export default function QuickRoundStartPage() {
   const navigate = useNavigate();
   const { t } = useTranslation();
-  const [courseName, setCourseName] = useState("");
+  const [courseName, setCourseName] = useState(DEMO_COURSE_NAME);
   const [teesName, setTeesName] = useState("");
   const [holesCount, setHolesCount] = useState<9 | 18>(18);
   const [showPutts, setShowPutts] = useState(true);
@@ -109,10 +111,10 @@ export default function QuickRoundStartPage() {
 
   useEffect(() => {
     const selected = courses.find((course) => course.courseId === selectedCourseId);
-    if (selected && courseName.trim().length === 0) {
+    if (selected) {
       setCourseName(selected.name);
     }
-  }, [selectedCourseId, courses, courseName]);
+  }, [selectedCourseId, courses]);
 
   useEffect(() => {
     const selectedHero = heroCourses.find((course) => course.id === selectedHeroCourseId);
