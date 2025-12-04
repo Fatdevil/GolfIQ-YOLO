@@ -65,7 +65,7 @@ describe('RoundHistoryScreen', () => {
     expect(getByText('75 (+3)')).toBeTruthy();
 
     fireEvent.click(getAllByTestId('round-history-item')[0]);
-    expect(navigation.navigate).toHaveBeenCalledWith('RoundSummary', { roundId: 'r2' });
+    expect(navigation.navigate).toHaveBeenCalledWith('RoundRecap', { roundId: 'r2' });
   });
 
   it('shows empty state when no rounds are present', async () => {
