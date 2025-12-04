@@ -50,7 +50,7 @@ def test_create_shortlink_for_public_anchor():
     assert response.status_code == 200, response.text
     payload = response.json()
     assert payload["sid"]
-    assert payload["url"].startswith("/s/")
+    assert payload["url"] == f"{client.base_url}/s/{payload['sid']}"
     assert payload["ogUrl"] == f"{payload['url']}/o"
 
 

@@ -89,7 +89,7 @@ def test_round_share_returns_shortlink(share_client):
     assert response.status_code == 200, response.text
     payload = response.json()
     assert payload["sid"]
-    assert payload["url"].startswith("/s/")
+    assert payload["url"] == f"{client.base_url}/s/{payload['sid']}"
 
     share = client.get(f"/api/share/{payload['sid']}")
     assert share.status_code == 200
@@ -116,7 +116,7 @@ def test_weekly_share_returns_shortlink(share_client):
     assert response.status_code == 200, response.text
     payload = response.json()
     assert payload["sid"]
-    assert payload["url"].startswith("/s/")
+    assert payload["url"] == f"{client.base_url}/s/{payload['sid']}"
 
     share = client.get(f"/api/share/{payload['sid']}")
     assert share.status_code == 200

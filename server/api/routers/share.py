@@ -26,7 +26,7 @@ from server.rounds.weekly_summary import (
     build_weekly_summary_response,
 )
 from server.services.anchors_store import get_one
-from server.services.shortlinks import create, get
+from server.services.shortlinks import build_shortlink_url, create, get
 from server.services.telemetry import emit
 from server.utils.media import rewrite_media_url
 
@@ -60,7 +60,7 @@ def _derive_player_id(api_key: str | None, user_id: str | None) -> str:
 
 
 @router.post("/api/share/anchor", dependencies=[Depends(require_api_key)])
-def post_share_anchor(body: AnchorShareIn):
+def post_share_anchor(body: AnchorShareIn, request: Request):
     anchor = get_one(body.runId, body.hole, body.shot)
     if not anchor:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "anchor not found")
@@ -81,16 +81,18 @@ def post_share_anchor(body: AnchorShareIn):
         clip_id=anchor.clipId,
     )
     emit("share.anchor.create", {"sid": shortlink.sid, "clipId": anchor.clipId})
+    short_url = build_shortlink_url(str(request.base_url), shortlink.sid)
     return {
         "sid": shortlink.sid,
-        "url": f"/s/{shortlink.sid}",
-        "ogUrl": f"/s/{shortlink.sid}/o",
+        "url": short_url,
+        "ogUrl": f"{short_url}/o",
     }
 
 
 @router.post("/api/share/round/{round_id}", response_model=ShareLinkResponse)
 def create_round_share_link(
     round_id: str,
+    request: Request,
     api_key: str | None = Depends(require_api_key),
     user_id: UserIdHeader = None,
     service: RoundService = Depends(get_round_service),
@@ -128,11 +130,14 @@ def create_round_share_link(
     )
 
     emit("share.round.create", {"sid": shortlink.sid, "roundId": round_id})
-    return ShareLinkResponse(url=f"/s/{shortlink.sid}", sid=shortlink.sid)
+    return ShareLinkResponse(
+        url=build_shortlink_url(str(request.base_url), shortlink.sid), sid=shortlink.sid
+    )
 
 
 @router.post("/api/share/weekly", response_model=ShareLinkResponse)
 def create_weekly_share_link(
+    request: Request,
     api_key: str | None = Depends(require_api_key),
     user_id: UserIdHeader = None,
     service: RoundService = Depends(get_round_service),
@@ -183,7 +188,9 @@ def create_weekly_share_link(
             "roundCount": summary_payload.get("period", {}).get("roundCount", 0),
         },
     )
-    return ShareLinkResponse(url=f"/s/{shortlink.sid}", sid=shortlink.sid)
+    return ShareLinkResponse(
+        url=build_shortlink_url(str(request.base_url), shortlink.sid), sid=shortlink.sid
+    )
 
 
 @router.get("/s/{sid}")

@@ -70,3 +70,12 @@ def _reset_state() -> None:
 
 
 __all__ = ["ShortLink", "create", "get", "_reset_state"]
+
+
+def build_shortlink_url(base_url: str, sid: str) -> str:
+    """Build an absolute shortlink URL from a base and shortlink id."""
+
+    return f"{base_url.rstrip('/')}/s/{sid}"
+
+
+__all__.append("build_shortlink_url")
