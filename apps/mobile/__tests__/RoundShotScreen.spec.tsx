@@ -1,5 +1,6 @@
 import React from 'react';
 import { fireEvent, render, waitFor } from '@testing-library/react';
+import { Alert } from 'react-native';
 import { beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
 
 import RoundShotScreen from '@app/screens/RoundShotScreen';
@@ -21,6 +22,7 @@ const mockGetScores = getRoundScores as unknown as Mock;
 const mockLoad = loadActiveRoundState as unknown as Mock;
 const mockSave = saveActiveRoundState as unknown as Mock;
 const mockClear = clearActiveRoundState as unknown as Mock;
+const alertSpy = vi.spyOn(Alert, 'alert');
 
 const sampleState: ActiveRoundState = {
   round: { id: 'r1', holes: 18, startedAt: 'now', startHole: 1, courseName: 'Test Course' },
@@ -29,6 +31,7 @@ const sampleState: ActiveRoundState = {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  alertSpy.mockImplementation(() => {});
   mockLoad.mockResolvedValue(sampleState);
   mockAppendShot.mockResolvedValue({
     id: 's1',
@@ -155,5 +158,84 @@ describe('RoundShotScreen', () => {
     expect(mockSave).not.toHaveBeenCalled();
     expect(queryByText(/Hole 2\/18/)).toBeNull();
     expect(getByText(/Hole 1\/18/)).toBeTruthy();
+  });
+
+  it('bounds navigation using starting hole offset', async () => {
+    mockLoad.mockResolvedValueOnce({
+      round: { id: 'r-offset', holes: 9, startedAt: 'now', startHole: 10, courseName: 'Offset' },
+      currentHole: 10,
+    });
+
+    const { getByLabelText } = render(
+      <RoundShotScreen navigation={{} as any} route={undefined as any} />,
+    );
+
+    await waitFor(() => expect(mockGetScores).toHaveBeenCalled());
+
+    fireEvent.click(getByLabelText('Go to hole 18'));
+
+    await waitFor(() =>
+      expect(mockSave).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          round: expect.objectContaining({ id: 'r-offset' }),
+          currentHole: 18,
+        }),
+      ),
+    );
+
+    await waitFor(() => expect(getByLabelText('Next hole')).toBeDisabled());
+    fireEvent.click(getByLabelText('Next hole'));
+    expect(mockSave).toHaveBeenCalledTimes(1);
+  });
+
+  it('auto-advances correctly from an offset start', async () => {
+    mockLoad.mockResolvedValueOnce({
+      round: { id: 'r-offset-advance', holes: 9, startedAt: 'now', startHole: 10, courseName: 'Offset' },
+      currentHole: 10,
+    });
+
+    const { getByLabelText, getByTestId } = render(
+      <RoundShotScreen navigation={{} as any} route={undefined as any} />,
+    );
+
+    await waitFor(() => expect(mockGetScores).toHaveBeenCalled());
+
+    fireEvent.click(getByLabelText('Increase strokes'));
+    fireEvent.click(getByTestId('save-score'));
+
+    await waitFor(() =>
+      expect(mockUpdateHoleScore).toHaveBeenCalledWith('r-offset-advance', 10, expect.any(Object)),
+    );
+
+    await waitFor(() =>
+      expect(mockSave).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          round: expect.objectContaining({ id: 'r-offset-advance' }),
+          currentHole: 11,
+        }),
+      ),
+    );
+  });
+
+  it('triggers round complete when saving the final offset hole', async () => {
+    mockLoad.mockResolvedValueOnce({
+      round: { id: 'r-offset-complete', holes: 9, startedAt: 'now', startHole: 10, courseName: 'Offset' },
+      currentHole: 18,
+    });
+
+    const { getByLabelText, getByTestId } = render(
+      <RoundShotScreen navigation={{} as any} route={undefined as any} />,
+    );
+
+    await waitFor(() => expect(mockGetScores).toHaveBeenCalled());
+
+    fireEvent.click(getByLabelText('Increase strokes'));
+    fireEvent.click(getByTestId('save-score'));
+
+    await waitFor(() =>
+      expect(mockUpdateHoleScore).toHaveBeenCalledWith('r-offset-complete', 18, expect.any(Object)),
+    );
+    expect(alertSpy).toHaveBeenCalled();
+    expect(mockSave).not.toHaveBeenCalledWith(expect.objectContaining({ currentHole: 19 }));
   });
 });

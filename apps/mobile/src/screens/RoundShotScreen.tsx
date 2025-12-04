@@ -64,6 +64,7 @@ export default function RoundShotScreen({ navigation }: Props): JSX.Element {
   const [scoresLoading, setScoresLoading] = useState(false);
   const totalHoles = state?.round.holes ?? 18;
   const startingHole = state?.round.startHole ?? 1;
+  const lastHoleNumber = useMemo(() => startingHole + totalHoles - 1, [startingHole, totalHoles]);
 
   useEffect(() => {
     loadActiveRoundState()
@@ -204,14 +205,14 @@ export default function RoundShotScreen({ navigation }: Props): JSX.Element {
   const goToHole = useCallback(
     async (target: number) => {
       if (!state) return;
-      if (target < startingHole || target > totalHoles) return;
+      if (target < startingHole || target > lastHoleNumber) return;
       const saved = await ensureScoreSaved();
       if (!saved) return;
       const nextState = { ...state, currentHole: target };
       setState(nextState);
       await saveActiveRoundState(nextState);
     },
-    [ensureScoreSaved, startingHole, state, totalHoles],
+    [ensureScoreSaved, lastHoleNumber, startingHole, state],
   );
 
   const handleNextHole = useCallback(async () => {
@@ -245,7 +246,7 @@ export default function RoundShotScreen({ navigation }: Props): JSX.Element {
     async (options?: { autoAdvance?: boolean }) => {
       const updated = await persistScore();
       if (!options?.autoAdvance || !state) return updated;
-      if (currentHole < totalHoles) {
+      if (currentHole < lastHoleNumber) {
         await goToHole(currentHole + 1);
         return updated;
       }
@@ -266,7 +267,7 @@ export default function RoundShotScreen({ navigation }: Props): JSX.Element {
 
       return updated;
     },
-    [currentHole, goToHole, handleEndRound, persistScore, state, totalHoles],
+    [currentHole, goToHole, handleEndRound, lastHoleNumber, persistScore, state],
   );
 
   if (loading) {
@@ -337,9 +338,9 @@ export default function RoundShotScreen({ navigation }: Props): JSX.Element {
         <TouchableOpacity
           style={[
             styles.secondaryButton,
-            currentHole >= startingHole + totalHoles - 1 && styles.disabledButton,
+            currentHole >= lastHoleNumber && styles.disabledButton,
           ]}
-          disabled={currentHole >= startingHole + totalHoles - 1}
+          disabled={currentHole >= lastHoleNumber}
           onPress={handleNextHole}
           accessibilityLabel="Next hole"
         >
