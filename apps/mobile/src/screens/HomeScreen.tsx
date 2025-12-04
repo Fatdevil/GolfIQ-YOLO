@@ -343,6 +343,15 @@ export default function HomeScreen({ navigation }: Props): JSX.Element {
             </View>
           </TouchableOpacity>
         </View>
+        <TouchableOpacity
+          onPress={() => navigation.navigate('WeeklySummary')}
+          accessibilityLabel={t('weeklySummary.title')}
+          testID="weekly-summary-cta"
+        >
+          <View style={[styles.secondaryButton, { marginTop: 8 }]}>
+            <Text style={styles.secondaryButtonText}>{t('weeklySummary.title')}</Text>
+          </View>
+        </TouchableOpacity>
       </View>
 
       <WatchStatusCard memberId={data.memberId} plan={data.plan} />
