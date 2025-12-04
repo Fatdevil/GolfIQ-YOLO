@@ -16,7 +16,9 @@ from server.rounds.weekly_summary import (
 )
 
 router = APIRouter(
-    prefix="/api/player/summary", tags=["summary"], dependencies=[Depends(require_api_key)]
+    prefix="/api/player/summary",
+    tags=["summary"],
+    dependencies=[Depends(require_api_key)],
 )
 
 

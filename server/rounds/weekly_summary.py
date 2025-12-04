@@ -37,7 +37,7 @@ def _format_to_par(value: float | None) -> str | None:
     if abs(value) < 0.005:
         return "E"
     prefix = "+" if value > 0 else ""
-    rounded = round(value, 1)
+    rounded = float(round(value, 1))
     # Avoid trailing .0 when possible
     if rounded.is_integer():
         return f"{prefix}{int(rounded)}"
@@ -57,9 +57,7 @@ def _aggregate_summaries(summaries: list[RoundSummary]) -> AggregatedMetrics:
 
     driving_pct = (fairways_hit / fairways_total) if fairways_total else None
     approach_pct = (gir_total / holes_played) if holes_played else None
-    short_game_per_hole = (
-        short_game_total / holes_played if holes_played else None
-    )
+    short_game_per_hole = short_game_total / holes_played if holes_played else None
     putts_per_hole = (putts_total / holes_played) if holes_played else None
 
     return AggregatedMetrics(
@@ -76,7 +74,9 @@ def _aggregate_summaries(summaries: list[RoundSummary]) -> AggregatedMetrics:
     )
 
 
-def _trend(current: float | None, baseline: float | None, *, threshold: float = 0.02) -> Trend:
+def _trend(
+    current: float | None, baseline: float | None, *, threshold: float = 0.02
+) -> Trend:
     if current is None or baseline is None:
         return "flat"
     delta = current - baseline
@@ -206,8 +206,15 @@ def build_weekly_summary_response(
 ) -> dict:
     if not round_infos:
         return {
-            "period": {"from": now.date().isoformat(), "to": now.date().isoformat(), "roundCount": 0},
-            "headline": {"text": "Play a round to get your first weekly summary", "emoji": "⛳"},
+            "period": {
+                "from": now.date().isoformat(),
+                "to": now.date().isoformat(),
+                "roundCount": 0,
+            },
+            "headline": {
+                "text": "Play a round to get your first weekly summary",
+                "emoji": "⛳",
+            },
             "coreStats": {
                 "avgScore": None,
                 "bestScore": None,
@@ -232,8 +239,12 @@ def build_weekly_summary_response(
         putts_per_hole=metrics.putts_per_hole,
     )
 
-    period_from = min((info.ended_at or info.started_at or now).date() for info in round_infos)
-    period_to = max((info.ended_at or info.started_at or now).date() for info in round_infos)
+    period_from = min(
+        (info.ended_at or info.started_at or now).date() for info in round_infos
+    )
+    period_to = max(
+        (info.ended_at or info.started_at or now).date() for info in round_infos
+    )
 
     return {
         "period": {
