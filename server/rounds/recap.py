@@ -21,7 +21,9 @@ class RoundRecap(BaseModel):
     to_par: str | None = Field(default=None, serialization_alias="toPar")
     holes_played: int = Field(serialization_alias="holesPlayed")
     categories: dict[str, RoundRecapCategory]
-    focus_hints: list[str] = Field(default_factory=list, serialization_alias="focusHints")
+    focus_hints: list[str] = Field(
+        default_factory=list, serialization_alias="focusHints"
+    )
 
     model_config = ConfigDict(populate_by_name=True)
 
