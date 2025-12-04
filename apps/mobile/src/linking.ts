@@ -6,7 +6,8 @@ export const linking: LinkingOptions<any> = {
   prefixes,
   config: {
     screens: {
-      PlayerHome: 'home',
+      HomeDashboard: 'home',
+      PlayerHome: 'player-home',
       PlayCourseSelect: 'play',
       PlayTeeSelect: 'play/tee',
       PlayInRound: 'play/round',

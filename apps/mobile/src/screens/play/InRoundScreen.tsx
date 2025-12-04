@@ -42,7 +42,7 @@ export default function InRoundScreen({ navigation, route }: Props): JSX.Element
       const storedRun = await loadCurrentRun();
       if (!storedRun) {
         setError('Ingen pågående runda hittades.');
-        navigation.navigate('PlayerHome');
+        navigation.navigate('HomeDashboard');
         return;
       }
       setRun(storedRun);
@@ -183,7 +183,7 @@ export default function InRoundScreen({ navigation, route }: Props): JSX.Element
       (navigation as any).reset({
         index: 1,
         routes: [
-          { name: 'PlayerHome' },
+          { name: 'HomeDashboard' },
           { name: 'RoundStory', params: { runId: result.runId, summary: result.summary } },
         ],
       });

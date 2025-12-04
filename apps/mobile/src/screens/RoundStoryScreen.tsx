@@ -358,7 +358,7 @@ export default function RoundStoryScreen({ route, navigation }: Props): JSX.Elem
               <Text style={styles.secondaryButtonText}>Play another round</Text>
             </View>
           </TouchableOpacity>
-          <TouchableOpacity onPress={() => navigation.navigate('PlayerHome')} testID="round-story-home">
+          <TouchableOpacity onPress={() => navigation.navigate('HomeDashboard')} testID="round-story-home">
             <View style={styles.linkButton}>
               <Text style={styles.linkButtonText}>Back to Home</Text>
             </View>
