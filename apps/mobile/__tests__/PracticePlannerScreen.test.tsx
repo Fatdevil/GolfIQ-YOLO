@@ -3,14 +3,16 @@ import { fireEvent, render, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
 
 import PracticePlannerScreen from '@app/screens/PracticePlannerScreen';
-import { fetchAllDrills, fetchPracticePlan } from '@app/api/practiceClient';
+import { fetchAllDrills, fetchPracticePlan, fetchPracticePlanFromDrills } from '@app/api/practiceClient';
 
 vi.mock('@app/api/practiceClient', () => ({
   fetchPracticePlan: vi.fn(),
+  fetchPracticePlanFromDrills: vi.fn(),
   fetchAllDrills: vi.fn(),
 }));
 
 const mockFetchPlan = fetchPracticePlan as unknown as Mock;
+const mockFetchPlanFromDrills = fetchPracticePlanFromDrills as unknown as Mock;
 const mockFetchDrills = fetchAllDrills as unknown as Mock;
 
 const navigation = { navigate: vi.fn() } as any;
@@ -64,6 +66,7 @@ describe('PracticePlannerScreen', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockFetchPlan.mockResolvedValue(samplePlan);
+    mockFetchPlanFromDrills.mockResolvedValue(samplePlan);
     mockFetchDrills.mockResolvedValue(sampleDrills);
   });
 
@@ -102,5 +105,21 @@ describe('PracticePlannerScreen', () => {
 
     await waitFor(() => getByTestId('library-drill-c'));
     expect(getByText('Up & Down')).toBeTruthy();
+  });
+
+  it('uses focus drill ids when provided', async () => {
+    const { getByTestId } = render(
+      <PracticePlannerScreen
+        navigation={navigation}
+        route={{ params: { focusDrillIds: ['drill-a', 'drill-c'], maxMinutes: 45 } } as any}
+      />,
+    );
+
+    await waitFor(() => getByTestId('plan-drill-drill-a'));
+    expect(mockFetchPlanFromDrills).toHaveBeenCalledWith({
+      drillIds: ['drill-a', 'drill-c'],
+      maxMinutes: 45,
+    });
+    expect(getByTestId('plan-drill-drill-a')).toBeTruthy();
   });
 });

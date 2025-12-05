@@ -14,6 +14,7 @@ from server.schemas.coach_summary import (
     CoachSgCategory,
 )
 from server.services.demo_profile import _demo_diagnosis, _demo_model
+from server.coach.drill_recommendations import recommend_drills_for_round_summary
 
 
 def _demo_round_info(run_id: str, *, days_ago: int = 3) -> RoundInfo:
@@ -109,6 +110,10 @@ def build_demo_coach_round() -> CoachRoundSummary:
         CoachSgCategory(name="putt", sg=0.4),
     ]
 
+    recommended_drills = recommend_drills_for_round_summary(
+        ["approach", "putting"], max_drills=3
+    )
+
     return CoachRoundSummary(
         run_id=round_info.id,
         member_id=round_info.player_id,
@@ -135,6 +140,7 @@ def build_demo_coach_round() -> CoachRoundSummary:
         diagnosis=_demo_diagnosis(round_info.id),
         player_model=_demo_model(round_info.id),
         mission=None,
+        recommended_drills=recommended_drills,
     )
 
 

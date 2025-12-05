@@ -35,6 +35,42 @@ export default function CoachReportScreen({ route, navigation }: Props): JSX.Ele
   const [error, setError] = useState<string | null>(null);
   const [proRequired, setProRequired] = useState(false);
 
+  const recommendedDrillIds = useMemo(
+    () => summary?.recommendedDrills?.map((d) => d.id).filter(Boolean) ?? [],
+    [summary?.recommendedDrills],
+  );
+
+  const fallbackCategories = useMemo(() => {
+    const sg = summary?.strokesGained;
+    if (!sg) return [] as string[];
+
+    const pairs: Array<{ key: string; value: number }> = [
+      { key: 'driving', value: sg.driving ?? 0 },
+      { key: 'approach', value: sg.approach ?? 0 },
+      { key: 'short_game', value: sg.shortGame ?? 0 },
+      { key: 'putting', value: sg.putting ?? 0 },
+    ];
+
+    return pairs
+      .filter((item) => Number.isFinite(item.value))
+      .sort((a, b) => a.value - b.value)
+      .map((item) => item.key)
+      .slice(0, 2);
+  }, [summary?.strokesGained]);
+
+  const handleStartPractice = () => {
+    const drillIds = recommendedDrillIds;
+    if (drillIds.length) {
+      navigation.navigate('PracticePlanner', { focusDrillIds: drillIds, maxMinutes: 60 });
+      return;
+    }
+
+    navigation.navigate('PracticePlanner', {
+      focusCategories: fallbackCategories,
+      maxMinutes: 60,
+    });
+  };
+
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
@@ -204,23 +240,27 @@ export default function CoachReportScreen({ route, navigation }: Props): JSX.Ele
         </View>
 
         <View style={[styles.card, proRequired && styles.dimmed]}>
-          <View style={styles.rowSpaceBetween}>
-            <Text style={styles.cardTitle}>{t('coach_report_drills_title')}</Text>
-            <TouchableOpacity onPress={() => navigation.navigate('PracticePlanner')}>
-              <Text style={styles.link}>{t('practice_planner_plan_title')}</Text>
-            </TouchableOpacity>
-          </View>
+          <Text style={styles.cardTitle}>{t('coach_report_recommended_drills_title')}</Text>
           {summary?.recommendedDrills?.length ? (
             summary.recommendedDrills.map((drill) => (
               <View key={drill.id} style={styles.drillRow}>
-                <Text style={styles.tileLabel}>{drill.name}</Text>
-                <Text style={styles.muted}>{drill.category}</Text>
+                <View>
+                  <Text style={styles.tileLabel}>{drill.name}</Text>
+                  <Text style={styles.recommendedCategory}>{drill.category}</Text>
+                </View>
+                <Text style={styles.link}>{t('practice_planner_recommended')}</Text>
               </View>
             ))
           ) : (
             <Text style={styles.muted}>{t('practice_planner_no_data')}</Text>
           )}
         </View>
+
+        <TouchableOpacity onPress={handleStartPractice} testID="start-practice-button">
+          <View style={styles.primaryButton}>
+            <Text style={styles.primaryButtonText}>{t('coach_report_start_practice_button')}</Text>
+          </View>
+        </TouchableOpacity>
       </ScrollView>
 
       {proRequired ? (
@@ -283,6 +323,10 @@ const styles = StyleSheet.create({
   link: { color: '#2563eb', fontWeight: '700' },
   rowSpaceBetween: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   drillRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  recommendedCategory: {
+    color: '#2563eb',
+    fontWeight: '600',
+  },
   primaryButton: {
     backgroundColor: '#0f172a',
     paddingVertical: 10,

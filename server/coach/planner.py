@@ -146,4 +146,47 @@ def build_practice_plan(
     }
 
 
-__all__ = ["PracticePlan", "build_practice_plan"]
+def build_practice_plan_from_drills(
+    drill_ids: list[str],
+    max_minutes: int | None = None,
+) -> PracticePlan:
+    catalog = {drill["id"]: drill for drill in DRILL_CATALOG}
+    selected: list[Drill] = []
+    used_categories: list[DrillCategory] = []
+    total = 0
+
+    for drill_id in drill_ids:
+        drill = catalog.get(drill_id)
+        if not drill:
+            continue
+
+        duration = drill.get("duration_minutes", 0)
+        if max_minutes is not None and selected and total + duration > max_minutes:
+            continue
+
+        selected.append(drill)
+        total += duration
+        if drill["category"] not in used_categories:
+            used_categories.append(drill["category"])
+
+        if max_minutes is not None and total >= max_minutes:
+            break
+
+    if not selected:
+        return {
+            "focus_categories": [],
+            "drills": [],
+        }
+
+    return {
+        "focus_categories": used_categories
+        or ["driving", "approach", "short_game", "putting"],
+        "drills": selected,
+    }
+
+
+__all__ = [
+    "PracticePlan",
+    "build_practice_plan",
+    "build_practice_plan_from_drills",
+]

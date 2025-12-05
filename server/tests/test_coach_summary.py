@@ -6,6 +6,7 @@ from datetime import datetime, timedelta, timezone
 import pytest
 from fastapi.testclient import TestClient
 
+from server.coach import DRILL_CATALOG
 from server.schemas.anchors import AnchorIn
 
 
@@ -122,6 +123,10 @@ def test_build_coach_summary_merges_sources(monkeypatch, runs_module):
     assert summary.caddie.trusted_club == "7i"
     assert summary.mission is not None
     assert summary.mission.mission_label == "Wedge ladder 60–100 m"
+    assert summary.recommended_drills
+
+    catalog_ids = {drill["id"] for drill in DRILL_CATALOG}
+    assert all(drill.id in catalog_ids for drill in summary.recommended_drills)
 
 
 def test_coach_round_summary_endpoint_requires_pro(monkeypatch, tmp_path):
