@@ -19,7 +19,8 @@ import {
 import { QuickHole, QuickRound } from "../../features/quickround/types";
 import { useCourseBundle } from "../../courses/hooks";
 import { useGeolocation } from "../../hooks/useGeolocation";
-import { useAutoHoleSuggest } from "@/features/quickround/useAutoHoleSuggest";
+import { useAutoHoleSuggest } from "@/hooks/useAutoHoleSuggest";
+import { resolveCourseLayout } from "@/features/quickround/courseLayouts";
 import { computeQuickRoundSummary } from "../../features/quickround/summary";
 import { syncQuickRoundToWatch } from "../../features/watch/api";
 
@@ -48,18 +49,21 @@ export default function QuickRoundPlayPage() {
     "idle" | "loading" | "loaded" | "error"
   >("idle");
   const summaryCopyTimeout = useRef<number | null>(null);
-  const { position, error: geoError } = useGeolocation(autoHoleEnabled);
+  const geoState = useGeolocation(autoHoleEnabled);
+  const { position, error: geoError } = geoState;
   const { data: bundle, loading: bundleLoading, error: bundleError } = useCourseBundle(
     round?.courseId
   );
-  const autoHoleState = useAutoHoleSuggest({
-    enabled: autoHoleEnabled && Boolean(round?.courseId),
-    courseId: round?.courseId,
-    lastHole: currentHoleNumber,
-    lat: position?.lat,
-    lon: position?.lon,
-  });
-  const suggestion = autoHoleState.status === "suggested" ? autoHoleState.suggestion : null;
+  const courseLayout = useMemo(
+    () => resolveCourseLayout(round?.courseId, round?.courseName, bundle ?? null),
+    [bundle, round?.courseId, round?.courseName]
+  );
+  const autoHoleSuggestion = useAutoHoleSuggest(
+    autoHoleEnabled ? courseLayout : null,
+    geoState
+  );
+  const suggestion =
+    autoHoleSuggestion.suggestedHole != null ? autoHoleSuggestion : null;
 
   useEffect(() => {
     if (!roundId) {
@@ -73,16 +77,16 @@ export default function QuickRoundPlayPage() {
     }
     setRound(existing);
     setShowPutts(existing.showPutts ?? true);
-    setCurrentHoleNumber(determineCurrentHoleNumber(existing.holes));
+    setCurrentHoleNumber(determineCurrentHoleNumber(existing.holes, existing.startHole));
     setAutoHoleEnabled(Boolean(existing.courseId));
     setSuppressedSuggestion(null);
   }, [roundId]);
 
   useEffect(() => {
-    if (!round?.courseId && autoHoleEnabled) {
+    if (!courseLayout && autoHoleEnabled && !bundleLoading) {
       setAutoHoleEnabled(false);
     }
-  }, [round?.courseId, autoHoleEnabled]);
+  }, [autoHoleEnabled, bundleLoading, courseLayout]);
 
   useEffect(() => {
     if (suppressedSuggestion && suppressedSuggestion.expires <= Date.now()) {
@@ -194,16 +198,16 @@ export default function QuickRoundPlayPage() {
   });
   const courseTitle = round.courseName ?? t("profile.quickRounds.unknownCourse");
 
-  const autoHoleAvailable = Boolean(round.courseId);
+  const autoHoleAvailable = Boolean(courseLayout);
   const hasSuppressedActiveSuggestion =
     suggestion &&
     suppressedSuggestion &&
-    suppressedSuggestion.hole === suggestion.hole &&
+    suppressedSuggestion.hole === suggestion.suggestedHole &&
     suppressedSuggestion.expires > Date.now();
   const shouldShowSuggestion =
     autoHoleEnabled &&
     suggestion &&
-    suggestion.hole !== currentHoleNumber &&
+    suggestion.suggestedHole !== currentHoleNumber &&
     !hasSuppressedActiveSuggestion;
 
   const handleCopySummary = async () => {
@@ -267,15 +271,15 @@ export default function QuickRoundPlayPage() {
   };
 
   const handleAcceptSuggestion = () => {
-    if (!suggestion) {
+    if (!suggestion || suggestion.suggestedHole == null) {
       return;
     }
-    setCurrentHoleNumber(suggestion.hole);
+    setCurrentHoleNumber(suggestion.suggestedHole);
     setSuppressedSuggestion(null);
   };
 
   const handleIgnoreSuggestion = () => {
-    const ignoredHole = suggestion?.hole;
+    const ignoredHole = suggestion?.suggestedHole;
     if (ignoredHole) {
       setSuppressedSuggestion({
         hole: ignoredHole,
@@ -422,11 +426,11 @@ export default function QuickRoundPlayPage() {
           <div className="flex items-center justify-between gap-3">
             <div>
               <p className="font-semibold">
-                {t("quickround.autoHole.suggestedHole", { hole: suggestion.hole })}
+                {t("quickround.autoHole.suggestedHole", { hole: suggestion.suggestedHole })}
               </p>
               <p className="text-[10px] text-slate-400">
                 {t("quickround.autoHole.distance", {
-                  distance: Math.round(suggestion.distance_m),
+                  distance: Math.round(suggestion.distanceToSuggestedM ?? 0),
                 })}
               </p>
             </div>
@@ -686,9 +690,17 @@ function formatToPar(value: number | null): string {
   return rounded > 0 ? `+${formatted}` : formatted;
 }
 
-function determineCurrentHoleNumber(holes: QuickHole[]): number {
+function determineCurrentHoleNumber(holes: QuickHole[], preferredHole?: number): number {
   if (holes.length === 0) {
     return 1;
+  }
+  if (preferredHole && holes.some((hole) => hole.index === preferredHole)) {
+    const preferred = holes.find(
+      (hole) => hole.index === preferredHole && typeof hole.strokes !== "number"
+    );
+    if (preferred) {
+      return preferred.index;
+    }
   }
   const pending = holes.find((hole) => typeof hole.strokes !== "number");
   if (pending) {

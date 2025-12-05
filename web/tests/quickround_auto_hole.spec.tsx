@@ -8,12 +8,7 @@ import { NotificationProvider } from "../src/notifications/NotificationContext";
 import type { QuickRound } from "../src/features/quickround/types";
 import { UserSessionProvider } from "../src/user/UserSessionContext";
 
-const {
-  loadRoundMock,
-  saveRoundMock,
-  useGeolocationMock,
-  detectHoleMock,
-} = vi.hoisted(() => {
+const { loadRoundMock, saveRoundMock, useGeolocationMock } = vi.hoisted(() => {
   const useGeolocationMock = vi.fn<
     () => import("../src/hooks/useGeolocation").GeolocationState
   >(() => ({
@@ -27,7 +22,6 @@ const {
     loadRoundMock: vi.fn(),
     saveRoundMock: vi.fn(),
     useGeolocationMock,
-    detectHoleMock: vi.fn(),
   };
 });
 
@@ -40,10 +34,6 @@ vi.mock("../src/hooks/useGeolocation", () => ({
   useGeolocation: useGeolocationMock,
 }));
 
-vi.mock("../src/api/holeDetect", () => ({
-  detectHole: detectHoleMock,
-}));
-
 vi.mock("../src/user/historyApi", () => ({
   postQuickRoundSnapshots: vi.fn(),
 }));
@@ -52,24 +42,18 @@ describe("QuickRoundPlayPage auto hole suggestion", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     useGeolocationMock.mockReturnValue({
-      position: { lat: 59.3, lon: 18.1 },
+      position: { lat: 59.2966, lon: 18.106 },
       error: null,
       supported: true,
       loading: false,
-    });
-    detectHoleMock.mockResolvedValue({
-      hole: 5,
-      distance_m: 87,
-      confidence: 0.91,
-      reason: "closest_green",
     });
   });
 
   it("shows suggestion banner and jumps to suggested hole on accept", async () => {
     const round: QuickRound = {
       id: "qr-auto",
-      courseId: "hero_1",
-      courseName: "Demo Links",
+      courseId: "demo-links",
+      courseName: "Demo Links Hero",
       holes: [
         { index: 1, par: 4, strokes: 4 },
         { index: 2, par: 3, strokes: 3 },
@@ -110,16 +94,16 @@ describe("QuickRoundPlayPage auto hole suggestion", () => {
   });
 
   it("does not show banner when suggestion matches current hole", async () => {
-    detectHoleMock.mockResolvedValueOnce({
-      hole: 4,
-      distance_m: 12,
-      confidence: 0.5,
-      reason: "stay_on_current",
+    useGeolocationMock.mockReturnValue({
+      position: { lat: 59.2976, lon: 18.1031 },
+      error: null,
+      supported: true,
+      loading: false,
     });
     const round: QuickRound = {
       id: "qr-auto",
-      courseId: "hero_1",
-      courseName: "Demo Links",
+      courseId: "demo-links",
+      courseName: "Demo Links Hero",
       holes: [
         { index: 1, par: 4, strokes: 4 },
         { index: 2, par: 3, strokes: 3 },
@@ -144,9 +128,7 @@ describe("QuickRoundPlayPage auto hole suggestion", () => {
     );
 
     await waitFor(() => {
-      expect(detectHoleMock).toHaveBeenCalled();
+      expect(screen.queryByText(/Suggested hole/i)).toBeNull();
     });
-
-    expect(screen.queryByText(/Suggested hole/i)).toBeNull();
   });
 });
