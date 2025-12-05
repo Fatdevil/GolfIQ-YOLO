@@ -1,5 +1,11 @@
 import { ApiError, apiFetch } from '@app/api/client';
 
+export type CoachRecommendedDrill = {
+  id: string;
+  name: string;
+  category: string;
+};
+
 export type CoachRoundSummary = {
   roundId: string;
   courseName?: string | null;
@@ -15,11 +21,7 @@ export type CoachRoundSummary = {
     putting?: number | null;
   };
   focus: string[];
-  recommendedDrills?: {
-    id: string;
-    name: string;
-    category: string;
-  }[];
+  recommendedDrills?: CoachRecommendedDrill[];
 };
 
 export class ProRequiredError extends Error {
@@ -34,6 +36,7 @@ type CoachRoundSummaryResponse = {
   score?: number | null;
   sg_total?: number | null;
   sg_by_category?: Array<{ name: string; sg: number | null }>;
+  recommendedDrills?: CoachRecommendedDrill[];
   diagnosis?: {
     findings: Array<{
       title?: string | null;
@@ -90,6 +93,8 @@ function deriveFocus(payload: CoachRoundSummaryResponse): string[] {
 }
 
 function deriveRecommendedDrills(payload: CoachRoundSummaryResponse): CoachRoundSummary['recommendedDrills'] {
+  if (payload.recommendedDrills?.length) return payload.recommendedDrills;
+
   const drills: NonNullable<CoachRoundSummary['recommendedDrills']> = [];
   const seen = new Set<string>();
 

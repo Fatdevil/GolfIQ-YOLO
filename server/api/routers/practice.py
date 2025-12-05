@@ -8,7 +8,12 @@ from pydantic import AliasChoices, BaseModel, ConfigDict, Field
 
 from server.api.security import require_api_key
 from server.api.user_header import UserIdHeader
-from server.coach import DRILL_CATALOG, DrillCategory, build_practice_plan
+from server.coach import (
+    DRILL_CATALOG,
+    DrillCategory,
+    build_practice_plan,
+    build_practice_plan_from_drills,
+)
 from server.rounds.models import compute_round_summary
 from server.rounds.service import RoundService, get_round_service
 from server.rounds.weekly_summary import (
@@ -55,6 +60,18 @@ class PracticePlanOut(BaseModel):
     drills: List[DrillOut]
 
     model_config = ConfigDict(populate_by_name=True)
+
+
+class PracticePlanFromDrillsIn(BaseModel):
+    drill_ids: List[str] = Field(
+        serialization_alias="drillIds",
+        validation_alias=AliasChoices("drillIds", "drill_ids"),
+    )
+    max_minutes: int | None = Field(
+        default=None,
+        serialization_alias="maxMinutes",
+        validation_alias=AliasChoices("maxMinutes", "max_minutes"),
+    )
 
 
 async def _load_weekly_summary(
@@ -115,6 +132,18 @@ async def get_practice_plan(
         strokes_gained=strokes_gained,
         max_minutes=max_minutes,
         max_drills=4,
+    )
+    return PracticePlanOut.model_validate(plan)
+
+
+@router.post("/coach/practice/plan-from-drills", response_model=PracticePlanOut)
+async def create_practice_plan_from_drills(
+    payload: PracticePlanFromDrillsIn,
+    api_key: str | None = Depends(require_api_key),
+) -> PracticePlanOut:
+    plan = build_practice_plan_from_drills(
+        payload.drill_ids,
+        max_minutes=payload.max_minutes,
     )
     return PracticePlanOut.model_validate(plan)
 

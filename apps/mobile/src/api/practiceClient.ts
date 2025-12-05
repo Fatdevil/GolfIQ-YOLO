@@ -26,3 +26,16 @@ export async function fetchPracticePlan(params?: { maxMinutes?: number }): Promi
   const query = params?.maxMinutes ? `?max_minutes=${params.maxMinutes}` : '';
   return apiFetch<PracticePlan>(`/api/coach/practice/plan${query}`);
 }
+
+export async function fetchPracticePlanFromDrills(params: {
+  drillIds: string[];
+  maxMinutes?: number;
+}): Promise<PracticePlan> {
+  return apiFetch<PracticePlan>('/api/coach/practice/plan-from-drills', {
+    method: 'POST',
+    body: JSON.stringify({
+      drillIds: params.drillIds,
+      maxMinutes: params.maxMinutes,
+    }),
+  });
+}

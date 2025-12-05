@@ -59,7 +59,13 @@ export type RootStackParamList = {
   RoundScorecard: { roundId: string };
   CoachReport: { roundId: string; courseName?: string; date?: string; isDemo?: boolean };
   WeeklySummary: { isDemo?: boolean } | undefined;
-  PracticePlanner: undefined;
+  PracticePlanner:
+    | {
+        maxMinutes?: number;
+        focusCategories?: string[];
+        focusDrillIds?: string[];
+      }
+    | undefined;
   EventJoin: { code?: string } | undefined;
   EventLive: {
     id: string;

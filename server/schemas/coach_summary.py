@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Literal, List, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import AliasChoices, BaseModel, Field
 
 from server.schemas.coach_diagnosis import CoachDiagnosis
 from server.schemas.player_profile import PlayerModel
@@ -41,6 +41,12 @@ class CoachMissionSummary(BaseModel):
     success: Optional[bool] = None
 
 
+class CoachRecommendedDrill(BaseModel):
+    id: str
+    name: str
+    category: str
+
+
 class CoachRoundSummary(BaseModel):
     run_id: str
     member_id: Optional[str] = None
@@ -58,3 +64,8 @@ class CoachRoundSummary(BaseModel):
     mission: Optional[CoachMissionSummary] = None
     diagnosis: Optional[CoachDiagnosis] = None
     player_model: Optional[PlayerModel] = None
+    recommended_drills: List[CoachRecommendedDrill] = Field(
+        default_factory=list,
+        serialization_alias="recommendedDrills",
+        validation_alias=AliasChoices("recommendedDrills", "recommended_drills"),
+    )

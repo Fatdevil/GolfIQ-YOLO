@@ -3,13 +3,19 @@ import { ActivityIndicator, ScrollView, StyleSheet, Text, TouchableOpacity, View
 
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 
-import { fetchAllDrills, fetchPracticePlan, type Drill, type DrillCategory } from '@app/api/practiceClient';
+import {
+  fetchAllDrills,
+  fetchPracticePlan,
+  fetchPracticePlanFromDrills,
+  type Drill,
+  type DrillCategory,
+} from '@app/api/practiceClient';
 import { t } from '@app/i18n';
 import type { RootStackParamList } from '@app/navigation/types';
 
 const DURATIONS = [30, 45, 60, 90];
 
-function formatCategory(category: DrillCategory): string {
+function formatCategory(category: DrillCategory | string): string {
   switch (category) {
     case 'driving':
       return t('practice_planner_driving');
@@ -27,18 +33,26 @@ function formatCategory(category: DrillCategory): string {
 
 type Props = NativeStackScreenProps<RootStackParamList, 'PracticePlanner'>;
 
-export default function PracticePlannerScreen({ navigation }: Props): JSX.Element {
+export default function PracticePlannerScreen({ navigation, route }: Props): JSX.Element {
   const [loading, setLoading] = useState(true);
   const [planError, setPlanError] = useState<string | null>(null);
   const [plan, setPlan] = useState<Awaited<ReturnType<typeof fetchPracticePlan>> | null>(null);
   const [allDrills, setAllDrills] = useState<Drill[] | null>(null);
-  const [selectedMinutes, setSelectedMinutes] = useState(60);
+  const [selectedMinutes, setSelectedMinutes] = useState(route?.params?.maxMinutes ?? 60);
   const [showLibrary, setShowLibrary] = useState(false);
   const [completed, setCompleted] = useState<Set<string>>(new Set());
+  const focusDrillIds = route?.params?.focusDrillIds ?? [];
+  const focusCategoriesFromRoute = route?.params?.focusCategories ?? [];
+
+  const recommendedIds = useMemo(() => new Set(focusDrillIds), [focusDrillIds]);
 
   const loadPlan = (minutes: number) => {
     setLoading(true);
-    fetchPracticePlan({ maxMinutes: minutes })
+    const requester = focusDrillIds.length
+      ? fetchPracticePlanFromDrills({ drillIds: focusDrillIds, maxMinutes: minutes })
+      : fetchPracticePlan({ maxMinutes: minutes });
+
+    requester
       .then((data) => {
         setPlan(data);
         setPlanError(null);
@@ -57,7 +71,10 @@ export default function PracticePlannerScreen({ navigation }: Props): JSX.Elemen
       .catch(() => setAllDrills([]));
   }, []);
 
-  const focusChips = useMemo(() => plan?.focusCategories ?? [], [plan?.focusCategories]);
+  const focusChips = useMemo(() => {
+    if (plan?.focusCategories?.length) return plan.focusCategories;
+    return focusCategoriesFromRoute;
+  }, [plan?.focusCategories, focusCategoriesFromRoute]);
   const browseList = useMemo(() => allDrills ?? [], [allDrills]);
 
   const toggleComplete = (id: string) => {
@@ -136,6 +153,7 @@ export default function PracticePlannerScreen({ navigation }: Props): JSX.Elemen
         )}
         {plan?.drills?.map((drill) => {
           const done = completed.has(drill.id);
+          const isRecommended = recommendedIds.has(drill.id);
           return (
             <TouchableOpacity
               key={drill.id}
@@ -147,6 +165,7 @@ export default function PracticePlannerScreen({ navigation }: Props): JSX.Elemen
                   <Text style={styles.cardTitle}>{drill.name}</Text>
                   <Text style={styles.difficulty}>{drill.difficulty.toUpperCase()}</Text>
                 </View>
+                {isRecommended && <Text style={styles.recommendedBadge}>{t('practice_planner_recommended')}</Text>}
                 <Text style={styles.muted}>{formatCategory(drill.category)}</Text>
                 <Text style={styles.cardSubtitle} numberOfLines={2}>
                   {drill.description}
@@ -167,17 +186,23 @@ export default function PracticePlannerScreen({ navigation }: Props): JSX.Elemen
         </TouchableOpacity>
         {showLibrary && (
           <View style={{ marginTop: 8 }}>
-            {browseList.map((drill) => (
-              <View style={styles.libraryItem} key={`lib-${drill.id}`} testID={`library-${drill.id}`}>
-                <View style={styles.rowBetween}>
-                  <Text style={styles.cardTitle}>{drill.name}</Text>
-                  <Text style={styles.muted}>{formatCategory(drill.category)}</Text>
+            {browseList.map((drill) => {
+              const isRecommended = recommendedIds.has(drill.id);
+              return (
+                <View style={styles.libraryItem} key={`lib-${drill.id}`} testID={`library-${drill.id}`}>
+                  <View style={styles.rowBetween}>
+                    <Text style={styles.cardTitle}>{drill.name}</Text>
+                    <View style={styles.row}>
+                      {isRecommended && <Text style={styles.recommendedTag}>{t('practice_planner_recommended')}</Text>}
+                      <Text style={[styles.muted, { marginLeft: 8 }]}>{formatCategory(drill.category)}</Text>
+                    </View>
+                  </View>
+                  <Text style={styles.cardSubtitle} numberOfLines={2}>
+                    {drill.description}
+                  </Text>
                 </View>
-                <Text style={styles.cardSubtitle} numberOfLines={2}>
-                  {drill.description}
-                </Text>
-              </View>
-            ))}
+              );
+            })}
           </View>
         )}
       </View>
@@ -242,6 +267,16 @@ const styles = StyleSheet.create({
   detail: { marginTop: 4, color: '#333' },
   difficulty: { fontWeight: '700', color: '#0f172a' },
   doneLabel: { color: '#16a34a', fontWeight: '700', marginTop: 4 },
+  recommendedBadge: {
+    color: '#0f172a',
+    backgroundColor: '#e0f2fe',
+    alignSelf: 'flex-start',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 8,
+    marginTop: 4,
+    fontWeight: '700',
+  },
   secondaryButton: {
     borderRadius: 12,
     padding: 12,
@@ -253,6 +288,14 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     borderBottomWidth: 1,
     borderBottomColor: '#eee',
+  },
+  recommendedTag: {
+    color: '#0f172a',
+    backgroundColor: '#e0f2fe',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 8,
+    fontWeight: '700',
   },
   link: { color: '#0ea5e9', textAlign: 'center', fontWeight: '700' },
 });

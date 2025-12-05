@@ -50,6 +50,23 @@ describe('CoachReportScreen', () => {
     expect(getByText('+1.3')).toBeTruthy();
   });
 
+  it('navigates to practice planner with recommended drills', async () => {
+    mockFetchCoachRoundSummary.mockResolvedValue(sampleSummary);
+    const navigation = { navigate: vi.fn(), goBack: vi.fn() } as any;
+
+    const { getByTestId } = render(
+      <CoachReportScreen navigation={navigation} route={{ params: { roundId: 'round-1' } } as any} />,
+    );
+
+    await waitFor(() => getByTestId('start-practice-button'));
+    fireEvent.click(getByTestId('start-practice-button'));
+
+    expect(navigation.navigate).toHaveBeenCalledWith('PracticePlanner', {
+      focusDrillIds: ['drv_fairways_ladder', 'putt_distance'],
+      maxMinutes: 60,
+    });
+  });
+
   it('shows pro required overlay when gated', async () => {
     mockFetchCoachRoundSummary.mockRejectedValue(new ProRequiredError('pro-only'));
     const navigation = { navigate: vi.fn(), goBack: vi.fn() } as any;

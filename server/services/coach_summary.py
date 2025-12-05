@@ -5,10 +5,12 @@ from typing import Any, Iterable, Sequence
 
 from fastapi import HTTPException, status
 
+from server.coach import recommend_drills_for_round_summary
 from server.schemas.coach_summary import (
     CoachCaddieHighlight,
     CoachDiagnosis,
     CoachHoleSg,
+    CoachRecommendedDrill,
     CoachMissionSummary,
     CoachRoundSummary,
     CoachSequenceSummary,
@@ -205,6 +207,31 @@ def _build_mission_summary(run: RunRecord) -> CoachMissionSummary | None:
     )
 
 
+def _weakness_categories_from_sg(
+    sg_by_category: list[CoachSgCategory],
+) -> list[str]:
+    mapping = {
+        "tee": "driving",
+        "approach": "approach",
+        "short": "short_game",
+        "putt": "putting",
+    }
+
+    sorted_categories = sorted(
+        (item for item in sg_by_category if item.name in mapping),
+        key=lambda item: item.sg,
+    )
+
+    weaknesses: list[str] = []
+    for entry in sorted_categories:
+        mapped = mapping[entry.name]
+        if entry.sg < 0 or len(weaknesses) < 2:
+            if mapped not in weaknesses:
+                weaknesses.append(mapped)
+
+    return weaknesses or list(mapping.values())
+
+
 def build_coach_summary_for_run(
     run_id: str, *, _api_key: str | None = None
 ) -> CoachRoundSummary:
@@ -266,6 +293,19 @@ def build_coach_summary_for_run(
         except Exception:
             player_model = None
 
+    weaknesses = _weakness_categories_from_sg(sg_by_category)
+    recommended_drills = [
+        CoachRecommendedDrill(**drill)
+        for drill in recommend_drills_for_round_summary(weaknesses, max_drills=4)
+    ]
+    if not recommended_drills:
+        recommended_drills = [
+            CoachRecommendedDrill(**drill)
+            for drill in recommend_drills_for_round_summary(
+                ["driving", "approach", "short_game", "putting"], max_drills=4
+            )
+        ]
+
     return CoachRoundSummary(
         run_id=run.run_id,
         member_id=member_id,
@@ -281,6 +321,7 @@ def build_coach_summary_for_run(
         mission=mission_summary,
         diagnosis=diagnosis,
         player_model=player_model,
+        recommended_drills=recommended_drills,
     )
 
 
