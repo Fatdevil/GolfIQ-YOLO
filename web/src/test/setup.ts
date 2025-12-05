@@ -96,13 +96,21 @@ if (navigatorAny) {
     };
   }
   if (!navigatorAny.geolocation) {
-    navigatorAny.geolocation = {
+    const mockGeolocation = {
       getCurrentPosition: vi.fn((ok: any) =>
         ok({ coords: { latitude: 0, longitude: 0, accuracy: 0 } }),
       ),
       watchPosition: vi.fn(() => 1),
       clearWatch: vi.fn(),
     };
+    try {
+      navigatorAny.geolocation = mockGeolocation;
+    } catch {
+      Object.defineProperty(navigatorAny, 'geolocation', {
+        configurable: true,
+        value: mockGeolocation,
+      });
+    }
   }
 }
 

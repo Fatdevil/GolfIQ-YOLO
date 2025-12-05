@@ -9,9 +9,9 @@
     "preview": "vite preview",
     "lint": "tsc -p tsconfig.json --noEmit",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "vitest run",
+    "test": "NODE_OPTIONS=\"--require ./tests/arraybuffer-polyfill.cjs\" vitest run",
     "test:playslike": "vitest run src/__tests__/playslike.percent_v1.spec.ts src/__tests__/replay.dispersion.spec.ts ../shared/playslike/__tests__/adjust_temp_alt.spec.ts",
-    "test:unit": "vitest --config vitest.config.ts run"
+    "test:unit": "NODE_OPTIONS=\"--require ./tests/arraybuffer-polyfill.cjs\" vitest --config vitest.config.ts run"
   },
   "dependencies": {
     "@ffmpeg/ffmpeg": "^0.12.10",
@@ -40,6 +40,7 @@
     "@vitejs/plugin-react": "^4.3.1",
     "autoprefixer": "^10.4.20",
     "fake-indexeddb": "^6.2.5",
+    "happy-dom": "^20.0.11",
     "jsdom": "^27.1.0",
     "postcss": "^8.4.47",
     "tailwindcss": "^3.4.10",
