@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
-import { Linking } from 'react-native';
+import { ActivityIndicator, Linking, View } from 'react-native';
 
 import linking from '@app/linking';
 import type { RootStackParamList } from '@app/navigation/types';
@@ -44,6 +44,9 @@ import RoundScorecardScreen from '@app/screens/RoundScorecardScreen';
 import CoachReportScreen from '@app/screens/CoachReportScreen';
 import WeeklySummaryScreen from '@app/screens/WeeklySummaryScreen';
 import PracticePlannerScreen from '@app/screens/PracticePlannerScreen';
+import OnboardingScreen from '@app/screens/OnboardingScreen';
+import DemoExperienceScreen from '@app/screens/DemoExperienceScreen';
+import { getHasCompletedOnboarding } from '@app/storage/onboarding';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
@@ -51,6 +54,24 @@ registerWatchTempoTrainerBridge();
 
 export default function App(): JSX.Element {
   const [initialCode, setInitialCode] = useState<string | null>(null);
+  const [initialRoute, setInitialRoute] = useState<keyof RootStackParamList | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    getHasCompletedOnboarding()
+      .then((completed) => {
+        if (!cancelled) {
+          setInitialRoute(completed ? 'HomeDashboard' : 'Onboarding');
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setInitialRoute('Onboarding');
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -73,9 +94,27 @@ export default function App(): JSX.Element {
     };
   }, []);
 
+  if (!initialRoute) {
+    return (
+      <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
+        <ActivityIndicator />
+      </View>
+    );
+  }
+
   return (
     <NavigationContainer linking={linking}>
-      <Stack.Navigator initialRouteName="HomeDashboard">
+      <Stack.Navigator initialRouteName={initialRoute}>
+        <Stack.Screen
+          name="Onboarding"
+          component={OnboardingScreen}
+          options={{ headerShown: false }}
+        />
+        <Stack.Screen
+          name="DemoExperience"
+          component={DemoExperienceScreen}
+          options={{ title: t('round.recap.title') }}
+        />
         <Stack.Screen
           name="HomeDashboard"
           component={HomeDashboardScreen}

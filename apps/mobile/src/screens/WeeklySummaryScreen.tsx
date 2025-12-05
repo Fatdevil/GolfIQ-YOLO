@@ -11,6 +11,7 @@ import {
 import { createWeeklyShareLink } from '@app/api/shareClient';
 import { t } from '@app/i18n';
 import type { RootStackParamList } from '@app/navigation/types';
+import { fetchDemoWeeklySummary } from '@app/demo/demoService';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'WeeklySummary'>;
 
@@ -75,7 +76,8 @@ function formatSgValue(value: number | undefined): string {
   return value > 0 ? `+${value.toFixed(1)}` : value.toFixed(1);
 }
 
-export default function WeeklySummaryScreen({ navigation }: Props): JSX.Element {
+export default function WeeklySummaryScreen({ navigation, route }: Props): JSX.Element {
+  const { isDemo } = route.params ?? {};
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [summary, setSummary] = useState<Awaited<ReturnType<typeof fetchWeeklySummary>> | null>(null);
@@ -84,23 +86,43 @@ export default function WeeklySummaryScreen({ navigation }: Props): JSX.Element 
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
-    fetchWeeklySummary()
-      .then((data) => {
-        if (cancelled) return;
-        setSummary(data);
-        setError(null);
-      })
-      .catch(() => {
-        if (!cancelled) setError(t('weeklySummary.error'));
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
+    const loadDemo = async () => {
+      const result = await fetchDemoWeeklySummary();
+      if (cancelled) return;
+      setSummary(result);
+      setError(null);
+      setLoading(false);
+    };
+
+    const loadReal = () =>
+      fetchWeeklySummary()
+        .then((data) => {
+          if (cancelled) return;
+          setSummary(data);
+          setError(null);
+        })
+        .catch(() => {
+          if (!cancelled) setError(t('weeklySummary.error'));
+        })
+        .finally(() => {
+          if (!cancelled) setLoading(false);
+        });
+
+    if (isDemo) {
+      loadDemo().catch(() => {
+        if (!cancelled) {
+          setError(t('weeklySummary.error'));
+          setLoading(false);
+        }
       });
+    } else {
+      loadReal();
+    }
 
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [isDemo]);
 
   const hasRounds = summary?.period.roundCount && summary.period.roundCount > 0;
   const categories = useMemo(
@@ -133,14 +155,18 @@ export default function WeeklySummaryScreen({ navigation }: Props): JSX.Element 
     setShareLoading(true);
 
     try {
-      const link = await createWeeklyShareLink();
-      const message = t('weeklySummary.shareTemplate', {
-        rounds,
-        avgScore,
-        topCategory: topCategoryLabel,
-        url: link.url,
-      });
-      await Share.share({ message });
+      if (isDemo) {
+        await Share.share({ message: fallbackMessage });
+      } else {
+        const link = await createWeeklyShareLink();
+        const message = t('weeklySummary.shareTemplate', {
+          rounds,
+          avgScore,
+          topCategory: topCategoryLabel,
+          url: link.url,
+        });
+        await Share.share({ message });
+      }
     } catch (err) {
       console.warn('[weekly] Failed to share weekly summary', err);
       try {
@@ -152,7 +178,7 @@ export default function WeeklySummaryScreen({ navigation }: Props): JSX.Element 
     } finally {
       setShareLoading(false);
     }
-  }, [summary, topCategoryLabel]);
+  }, [isDemo, summary, topCategoryLabel]);
 
   if (loading) {
     return (
