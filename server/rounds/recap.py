@@ -37,6 +37,13 @@ CATEGORY_LABELS: dict[CategoryKey, str] = {
     "putting": "Putting",
 }
 
+PUTT_BUCKET_LABELS: dict[str, str] = {
+    "0_1m": "0–1 m",
+    "1_3m": "1–3 m",
+    "3_10m": "3–10 m",
+    "10m_plus": "10 m+",
+}
+
 
 def _format_to_par(value: int | None) -> str | None:
     if value is None:
@@ -183,6 +190,31 @@ def build_round_recap(round_info: RoundInfo, summary: RoundSummary) -> RoundReca
         short_game_per_hole=short_game_per_hole,
         putts_per_hole=putts_per_hole,
     )
+
+    miss_counts = {
+        "left": summary.fairway_miss_left or 0,
+        "right": summary.fairway_miss_right or 0,
+        "long": summary.fairway_miss_long or 0,
+        "short": summary.fairway_miss_short or 0,
+    }
+    total_misses = sum(miss_counts.values())
+    if total_misses and summary.fairways_total:
+        dominant = max(miss_counts, key=miss_counts.get)
+        if miss_counts[dominant] >= max(2, total_misses * 0.5):
+            focus_hints.append(
+                (
+                    f"Typical miss off the tee: {dominant} "
+                    f"({miss_counts[dominant]}/{summary.fairways_total} par-4/5 holes)."
+                )
+            )
+
+    if summary.first_putt_bucket_three_putts:
+        bucket, count = max(
+            summary.first_putt_bucket_three_putts.items(), key=lambda entry: entry[1]
+        )
+        if count > 0:
+            label = PUTT_BUCKET_LABELS.get(bucket, bucket)
+            focus_hints.append(f"Most 3-putts started from {label} looks ({count}).")
 
     return RoundRecap(
         round_id=summary.round_id,

@@ -2,10 +2,26 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from enum import Enum
 from pathlib import Path
 from typing import Dict, Optional
 
 from pydantic import AliasChoices, BaseModel, ConfigDict, Field
+
+
+class FairwayResult(str, Enum):
+    HIT = "hit"
+    LEFT = "left"
+    RIGHT = "right"
+    LONG = "long"
+    SHORT = "short"
+
+
+class PuttDistanceBucket(str, Enum):
+    ZERO_TO_ONE = "0_1m"
+    ONE_TO_THREE = "1_3m"
+    THREE_TO_TEN = "3_10m"
+    TEN_PLUS = "10m_plus"
 
 
 class Round(BaseModel):
@@ -113,7 +129,19 @@ class HoleScore(BaseModel):
         serialization_alias="fairwayHit",
         validation_alias=AliasChoices("fairway_hit", "fairwayHit"),
     )
+    fairway_result: FairwayResult | None = Field(
+        default=None,
+        serialization_alias="fairwayResult",
+        validation_alias=AliasChoices("fairway_result", "fairwayResult"),
+    )
     gir: Optional[bool] = None
+    first_putt_distance_bucket: PuttDistanceBucket | None = Field(
+        default=None,
+        serialization_alias="firstPuttDistanceBucket",
+        validation_alias=AliasChoices(
+            "first_putt_distance_bucket", "firstPuttDistanceBucket"
+        ),
+    )
 
     model_config = ConfigDict(populate_by_name=True)
 
@@ -170,7 +198,26 @@ class RoundSummary(BaseModel):
     fairways_total: Optional[int] = Field(
         default=None, serialization_alias="fairwaysTotal"
     )
+    fairway_miss_left: Optional[int] = Field(
+        default=None, serialization_alias="fairwayMissLeft"
+    )
+    fairway_miss_right: Optional[int] = Field(
+        default=None, serialization_alias="fairwayMissRight"
+    )
+    fairway_miss_long: Optional[int] = Field(
+        default=None, serialization_alias="fairwayMissLong"
+    )
+    fairway_miss_short: Optional[int] = Field(
+        default=None, serialization_alias="fairwayMissShort"
+    )
     gir_count: Optional[int] = Field(default=None, serialization_alias="girCount")
+
+    first_putt_bucket_counts: dict[str, int] = Field(
+        default_factory=dict, serialization_alias="firstPuttBucketCounts"
+    )
+    first_putt_bucket_three_putts: dict[str, int] = Field(
+        default_factory=dict, serialization_alias="firstPuttBucketThreePutts"
+    )
 
     holes_played: int = Field(serialization_alias="holesPlayed")
 
@@ -233,7 +280,19 @@ def compute_round_summary(scores: RoundScores) -> RoundSummary:
     back_strokes: list[int | None] = []
     fairways_hit = 0
     fairways_total = 0
+    fairway_misses: dict[FairwayResult, int] = {
+        FairwayResult.LEFT: 0,
+        FairwayResult.RIGHT: 0,
+        FairwayResult.LONG: 0,
+        FairwayResult.SHORT: 0,
+    }
     gir_count = 0
+    first_putt_bucket_counts: dict[PuttDistanceBucket, int] = {
+        bucket: 0 for bucket in PuttDistanceBucket
+    }
+    first_putt_bucket_three_putts: dict[PuttDistanceBucket, int] = {
+        bucket: 0 for bucket in PuttDistanceBucket
+    }
 
     for hole in scores.holes.values():
         strokes.append(hole.strokes)
@@ -248,11 +307,22 @@ def compute_round_summary(scores: RoundScores) -> RoundSummary:
 
         if hole.par in {4, 5}:
             fairways_total += 1
-            if hole.fairway_hit is True:
+            if hole.fairway_result is not None:
+                if hole.fairway_result == FairwayResult.HIT:
+                    fairways_hit += 1
+                elif hole.fairway_result in fairway_misses:
+                    fairway_misses[hole.fairway_result] += 1
+            elif hole.fairway_hit is True:
                 fairways_hit += 1
 
         if hole.gir:
             gir_count += 1
+
+        if hole.first_putt_distance_bucket is not None:
+            if hole.first_putt_distance_bucket in first_putt_bucket_counts:
+                first_putt_bucket_counts[hole.first_putt_distance_bucket] += 1
+                if hole.putts is not None and hole.putts >= 3:
+                    first_putt_bucket_three_putts[hole.first_putt_distance_bucket] += 1
 
     total_strokes = _safe_sum(strokes)
     total_par = _safe_sum(pars)
@@ -267,6 +337,17 @@ def compute_round_summary(scores: RoundScores) -> RoundSummary:
 
     category_stats = compute_round_category_stats(scores)
 
+    bucket_counts_serialized = {
+        bucket.value: count
+        for bucket, count in first_putt_bucket_counts.items()
+        if count > 0
+    }
+    bucket_three_putts_serialized = {
+        bucket.value: count
+        for bucket, count in first_putt_bucket_three_putts.items()
+        if count > 0
+    }
+
     return RoundSummary(
         round_id=scores.round_id,
         player_id=scores.player_id,
@@ -279,7 +360,21 @@ def compute_round_summary(scores: RoundScores) -> RoundSummary:
         total_penalties=total_penalties,
         fairways_hit=fairways_hit if fairways_total > 0 else None,
         fairways_total=fairways_total if fairways_total > 0 else None,
+        fairway_miss_left=(
+            fairway_misses[FairwayResult.LEFT] if fairways_total > 0 else None
+        ),
+        fairway_miss_right=(
+            fairway_misses[FairwayResult.RIGHT] if fairways_total > 0 else None
+        ),
+        fairway_miss_long=(
+            fairway_misses[FairwayResult.LONG] if fairways_total > 0 else None
+        ),
+        fairway_miss_short=(
+            fairway_misses[FairwayResult.SHORT] if fairways_total > 0 else None
+        ),
         gir_count=gir_count if scores.holes else None,
+        first_putt_bucket_counts=bucket_counts_serialized,
+        first_putt_bucket_three_putts=bucket_three_putts_serialized,
         holes_played=len(scores.holes),
         tee_shots=category_stats.tee_shots,
         approach_shots=category_stats.approach_shots,
@@ -464,6 +559,8 @@ __all__ = [
     "HoleScore",
     "RoundScores",
     "RoundSummary",
+    "FairwayResult",
+    "PuttDistanceBucket",
     "RoundCategoryStats",
     "compute_round_category_stats",
     "compute_round_summary",

@@ -18,6 +18,7 @@ import {
   getRoundScores,
   updateHoleScore,
   type HoleScore,
+  type PuttDistanceBucket,
   type Shot,
 } from '@app/api/roundClient';
 import type { RootStackParamList } from '@app/navigation/types';
@@ -29,6 +30,14 @@ import {
 } from '@app/round/roundState';
 
 const CLUBS = ['D', '3W', '5W', '4i', '5i', '6i', '7i', '8i', '9i', 'PW', 'GW', 'SW'];
+
+const FAIRWAY_OPTIONS = ['hit', 'left', 'right', 'long', 'short'] as const;
+const PUTT_BUCKET_OPTIONS: { value: PuttDistanceBucket; label: string }[] = [
+  { value: '0_1m', label: '0–1 m' },
+  { value: '1_3m', label: '1–3 m' },
+  { value: '3_10m', label: '3–10 m' },
+  { value: '10m_plus', label: '10+ m' },
+];
 
 type Props = NativeStackScreenProps<RootStackParamList, 'RoundShot'>;
 
@@ -176,6 +185,32 @@ export default function RoundShotScreen({ navigation }: Props): JSX.Element {
       updateScore({ [field]: currentValue == null ? true : !currentValue } as Partial<HoleScore>);
     },
     [currentScore, updateScore],
+  );
+
+  const handleFairwaySelect = useCallback(
+    (value: (typeof FAIRWAY_OPTIONS)[number]) => {
+      const nextValue = currentScore.fairwayResult === value ? undefined : value;
+      const fairwayHitOverride =
+        nextValue === 'hit' ? true : nextValue ? false : undefined;
+      const payload: Partial<HoleScore> = {
+        fairwayResult: nextValue,
+      };
+      if (fairwayHitOverride === undefined) {
+        payload.fairwayHit = undefined;
+      } else {
+        payload.fairwayHit = fairwayHitOverride;
+      }
+      updateScore(payload);
+    },
+    [currentScore.fairwayResult, updateScore],
+  );
+
+  const handlePuttBucketSelect = useCallback(
+    (value: PuttDistanceBucket) => {
+      const nextValue = currentScore.firstPuttDistanceBucket === value ? undefined : value;
+      updateScore({ firstPuttDistanceBucket: nextValue } as Partial<HoleScore>);
+    },
+    [currentScore.firstPuttDistanceBucket, updateScore],
   );
 
   const fairwayApplicable = currentScore.par === 4 || currentScore.par === 5;
@@ -442,6 +477,28 @@ export default function RoundShotScreen({ navigation }: Props): JSX.Element {
           </View>
         </View>
 
+        <View style={styles.choiceRow}>
+          <Text style={styles.scoreLabel}>First putt distance</Text>
+          <View style={styles.pillRow}>
+            {PUTT_BUCKET_OPTIONS.map((option) => {
+              const active = currentScore.firstPuttDistanceBucket === option.value;
+              return (
+                <TouchableOpacity
+                  key={option.value}
+                  style={[styles.pillButton, active && styles.pillButtonActive]}
+                  onPress={() => handlePuttBucketSelect(option.value)}
+                  accessibilityLabel={`Select first putt ${option.label}`}
+                  testID={`putt-bucket-${option.value}`}
+                >
+                  <Text style={[styles.pillText, active && styles.pillTextActive]}>
+                    {option.label}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        </View>
+
         <View style={styles.scoreRow}>
           <Text style={styles.scoreLabel}>Penalties</Text>
           <View style={styles.stepperRow}>
@@ -463,17 +520,33 @@ export default function RoundShotScreen({ navigation }: Props): JSX.Element {
           </View>
         </View>
 
+        {fairwayApplicable ? (
+          <View style={styles.choiceRow}>
+            <Text style={styles.scoreLabel}>Fairway result</Text>
+            <View style={styles.pillRow}>
+              {FAIRWAY_OPTIONS.map((option) => {
+                const active = currentScore.fairwayResult === option;
+                return (
+                  <TouchableOpacity
+                    key={option}
+                    style={[styles.pillButton, active && styles.pillButtonActive]}
+                    onPress={() => handleFairwaySelect(option)}
+                    accessibilityLabel={`Fairway ${option}`}
+                    testID={`fairway-${option}`}
+                  >
+                    <Text style={[styles.pillText, active && styles.pillTextActive]}>
+                      {option === 'hit'
+                        ? 'Hit'
+                        : `${option.charAt(0).toUpperCase()}${option.slice(1)}`}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          </View>
+        ) : null}
+
         <View style={styles.toggleRow}>
-          {fairwayApplicable ? (
-            <TouchableOpacity
-              style={[styles.toggleButton, currentScore.fairwayHit ? styles.toggleActive : null]}
-              onPress={() => toggleFlag('fairwayHit')}
-              accessibilityLabel="Toggle fairway hit"
-              testID="toggle-fairway"
-            >
-              <Text style={styles.toggleText}>Fairway {currentScore.fairwayHit ? '✓' : '—'}</Text>
-            </TouchableOpacity>
-          ) : null}
           <TouchableOpacity
             style={[styles.toggleButton, currentScore.gir ? styles.toggleActive : null]}
             onPress={() => toggleFlag('gir')}
@@ -659,6 +732,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
   },
+  choiceRow: {
+    gap: 8,
+  },
   scoreLabel: {
     fontWeight: '600',
     color: '#111827',
@@ -691,6 +767,29 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 8,
     flexWrap: 'wrap',
+  },
+  pillRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  pillButton: {
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: '#d1d5db',
+  },
+  pillButtonActive: {
+    backgroundColor: '#e0f2fe',
+    borderColor: '#0ea5e9',
+  },
+  pillText: {
+    fontWeight: '600',
+    color: '#111827',
+  },
+  pillTextActive: {
+    color: '#0f172a',
   },
   toggleButton: {
     paddingVertical: 8,

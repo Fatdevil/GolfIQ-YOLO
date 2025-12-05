@@ -117,6 +117,65 @@ describe('RoundShotScreen', () => {
     }));
   });
 
+  it('captures fairway miss direction and putt bucket', async () => {
+    mockGetScores.mockResolvedValueOnce({
+      roundId: 'r1',
+      holes: { 1: { holeNumber: 1, par: 4 } },
+    });
+    const { getByTestId } = render(
+      <RoundShotScreen navigation={{} as any} route={undefined as any} />,
+    );
+
+    await waitFor(() => expect(mockGetScores).toHaveBeenCalled());
+
+    fireEvent.click(getByTestId('fairway-left'));
+    fireEvent.click(getByTestId('putt-bucket-3_10m'));
+    fireEvent.click(getByTestId('save-score'));
+
+    await waitFor(() => expect(mockUpdateHoleScore).toHaveBeenCalled());
+    expect(mockUpdateHoleScore).toHaveBeenCalledWith(
+      'r1',
+      1,
+      expect.objectContaining({
+        fairwayResult: 'left',
+        fairwayHit: false,
+        firstPuttDistanceBucket: '3_10m',
+      }),
+    );
+  });
+
+  it('preloads fairway and putt selections when editing', async () => {
+    mockGetScores.mockResolvedValueOnce({
+      roundId: 'r1',
+      holes: {
+        1: {
+          holeNumber: 1,
+          par: 4,
+          fairwayResult: 'right',
+          fairwayHit: false,
+          firstPuttDistanceBucket: '1_3m',
+        },
+      },
+    });
+
+    const { getByTestId } = render(
+      <RoundShotScreen navigation={{} as any} route={undefined as any} />,
+    );
+
+    await waitFor(() => expect(mockGetScores).toHaveBeenCalled());
+    fireEvent.click(getByTestId('save-score'));
+
+    await waitFor(() => expect(mockUpdateHoleScore).toHaveBeenCalled());
+    expect(mockUpdateHoleScore).toHaveBeenCalledWith(
+      'r1',
+      1,
+      expect.objectContaining({
+        fairwayResult: 'right',
+        firstPuttDistanceBucket: '1_3m',
+      }),
+    );
+  });
+
   it('renders fallback when no active round exists', async () => {
     mockLoad.mockResolvedValueOnce(null);
     const { findByText } = render(
