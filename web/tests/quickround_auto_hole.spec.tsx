@@ -14,14 +14,14 @@ const {
   useGeolocationMock,
   detectHoleMock,
 } = vi.hoisted(() => {
-  const useGeolocationMock = vi.fn<[], import("../src/hooks/useGeolocation").GeolocationState>(
-    () => ({
-      position: null,
-      error: null,
-      supported: false,
-      loading: false,
-    })
-  );
+  const useGeolocationMock = vi.fn<
+    () => import("../src/hooks/useGeolocation").GeolocationState
+  >(() => ({
+    position: null,
+    error: null,
+    supported: false,
+    loading: false,
+  }));
 
   return {
     loadRoundMock: vi.fn(),
