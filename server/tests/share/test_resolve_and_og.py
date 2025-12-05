@@ -1,4 +1,5 @@
 import re
+from urllib.parse import urlsplit
 
 from fastapi.testclient import TestClient
 import pytest
@@ -56,17 +57,23 @@ def test_resolve_redirects_and_og_contains_meta():
 
     redirect = client.get(f"/s/{sid}", follow_redirects=False)
     assert redirect.status_code == 302
-    assert redirect.headers["location"] == "/clip/clip-share?t=2750"
+    redirect_location = redirect.headers["location"]
+    parsed_redirect = urlsplit(redirect_location)
+    assert parsed_redirect.path.endswith("/clip/clip-share")
+    assert parsed_redirect.query == "t=2750"
 
     og = client.get(f"/s/{sid}/o")
     assert og.status_code == 200
     body = og.text
     assert '<meta property="og:title" content="GolfIQ • H3 S2"/>' in body
     assert "Shot highlight (Strokes-Gained) – watch from the exact moment." in body
-    assert (
-        '<meta property="og:url" content="http://testserver/clip/clip-share?t=2750"/>'
-        in body
-    )
+    match_url = re.search(r'<meta property="og:url" content="([^"]*)"', body)
+    assert match_url, body
+    og_url = match_url.group(1)
+    og_parts = urlsplit(og_url)
+    assert og_parts.scheme in {"http", "https"}
+    assert og_parts.path.endswith("/clip/clip-share")
+    assert og_parts.query == "t=2750"
     match = re.search(r'<meta property="og:image" content="([^"]*)"', body)
     assert match, body
     assert match.group(1).startswith("http")

@@ -38,12 +38,17 @@ export const apiClient = baseClient;
 
 export async function apiFetch(
   path: string,
-  options: RequestInit = {}
+  options: RequestInit = {},
 ): Promise<Response> {
-  const existingHeaders =
-    typeof Headers !== "undefined" && options.headers instanceof Headers
-      ? Object.fromEntries(options.headers.entries())
-      : ((options.headers as Record<string, string>) ?? {});
+  const existingHeaders: Record<string, string> = {};
+
+  if (typeof Headers !== "undefined" && options.headers instanceof Headers) {
+    options.headers.forEach((value, key) => {
+      existingHeaders[key] = value;
+    });
+  } else {
+    Object.assign(existingHeaders, (options.headers as Record<string, string>) ?? {});
+  }
   const headers = withAuth(existingHeaders);
   return fetch(`${API}${path}`, {
     ...options,
