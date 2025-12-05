@@ -4,7 +4,8 @@ import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import QuickRoundStartPage, { DEMO_COURSE_NAME } from "./QuickRoundStartPage";
+import QuickRoundStartPage from "./QuickRoundStartPage";
+import { DEMO_COURSE_NAME } from "@/features/quickround/constants";
 import { fetchHeroCourses } from "@/api";
 
 const defaultHeroCourses = [

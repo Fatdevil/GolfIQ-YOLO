@@ -19,8 +19,10 @@ import {
   QuickRoundSummary,
 } from "../../features/quickround/storage";
 import { QuickRound } from "../../features/quickround/types";
-
-export const DEMO_COURSE_NAME = "Demo Links Hero";
+import { DEMO_COURSE_NAME } from "@/features/quickround/constants";
+import { DEMO_LINKS_HERO_LAYOUT } from "@/features/quickround/courseLayouts";
+import { useGeolocation } from "@/hooks/useGeolocation";
+import { useAutoHoleSuggest } from "@/hooks/useAutoHoleSuggest";
 
 function readStoredMemberId(): string | null {
   if (typeof window === "undefined") {
@@ -52,6 +54,35 @@ export default function QuickRoundStartPage() {
     const stored = loadDefaultHandicap();
     return stored != null ? String(stored) : "";
   });
+  const [startingHole, setStartingHole] = useState<number>(1);
+  const [startHoleManuallySet, setStartHoleManuallySet] = useState(false);
+
+  const selectedHeroCourse = useMemo(
+    () => heroCourses.find((course) => course.id === selectedHeroCourseId),
+    [heroCourses, selectedHeroCourseId]
+  );
+
+  const holeNumbers = useMemo(() => {
+    if (selectedHeroCourse?.holeDetails?.length) {
+      return selectedHeroCourse.holeDetails
+        .map((hole, index) => hole.number ?? index + 1)
+        .sort((a, b) => a - b);
+    }
+    const total = selectedHeroCourse?.holes ?? holesCount;
+    return Array.from({ length: total }, (_, index) => index + 1);
+  }, [holesCount, selectedHeroCourse]);
+
+  const geoState = useGeolocation(true);
+  const courseLayout = useMemo(() => {
+    const isDemoCourse =
+      selectedHeroCourse?.id === "demo-links" ||
+      courseName.trim().toLowerCase() === DEMO_COURSE_NAME.toLowerCase();
+    if (isDemoCourse) {
+      return DEMO_LINKS_HERO_LAYOUT;
+    }
+    return null;
+  }, [courseName, selectedHeroCourse]);
+  const autoHoleSuggestion = useAutoHoleSuggest(courseLayout, geoState);
 
   const persistHandicapDefault = (value: string) => {
     const trimmed = value.trim();
@@ -131,17 +162,17 @@ export default function QuickRoundStartPage() {
   }, [selectedCourseId, courses]);
 
   useEffect(() => {
-    const selectedHero = heroCourses.find((course) => course.id === selectedHeroCourseId);
-    if (!selectedHero) {
+    if (!selectedHeroCourse) {
       return;
     }
 
-    setSelectedCourseId(selectedHero.id);
-    setCourseName(selectedHero.name);
+    setSelectedCourseId(selectedHeroCourse.id);
+    setCourseName(selectedHeroCourse.name);
 
-    if (selectedHero.tees.length > 0) {
+    if (selectedHeroCourse.tees.length > 0) {
       const preferredTee =
-        selectedHero.tees.find((tee) => tee.id === selectedHeroTeeId) || selectedHero.tees[0];
+        selectedHeroCourse.tees.find((tee) => tee.id === selectedHeroTeeId) ||
+        selectedHeroCourse.tees[0];
       if (preferredTee) {
         setSelectedHeroTeeId(preferredTee.id);
         if (teesName.trim().length === 0) {
@@ -149,7 +180,34 @@ export default function QuickRoundStartPage() {
         }
       }
     }
-  }, [selectedHeroCourseId, selectedHeroTeeId, heroCourses, teesName]);
+  }, [selectedHeroCourse, selectedHeroTeeId, teesName]);
+
+  useEffect(() => {
+    if (holeNumbers.length === 0) {
+      return;
+    }
+    const minHole = holeNumbers[0];
+    const maxHole = holeNumbers[holeNumbers.length - 1];
+    setStartingHole((current) => {
+      if (current < minHole || current > maxHole) {
+        return minHole;
+      }
+      return current;
+    });
+  }, [holeNumbers]);
+
+  useEffect(() => {
+    if (startHoleManuallySet) {
+      return;
+    }
+    if (!autoHoleSuggestion.suggestedHole) {
+      return;
+    }
+    if (!holeNumbers.includes(autoHoleSuggestion.suggestedHole)) {
+      return;
+    }
+    setStartingHole(autoHoleSuggestion.suggestedHole);
+  }, [autoHoleSuggestion.suggestedHole, holeNumbers, startHoleManuallySet]);
 
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -157,22 +215,20 @@ export default function QuickRoundStartPage() {
     const trimmedCourseName = courseName.trim();
     const finalCourseName = trimmedCourseName || selectedCourse?.name || "";
     const finalCourseId = selectedCourse?.courseId ?? selectedCourseId;
-    const selectedHero = heroCourses.find((course) => course.id === selectedHeroCourseId);
-
     if (!finalCourseName) {
       setError(t("quickRound.start.courseNameRequired"));
       return;
     }
     const trimmedTeesName = teesName.trim();
-    const heroHoleMetadata = selectedHero?.holeDetails;
+    const heroHoleMetadata = selectedHeroCourse?.holeDetails;
     let holes: QuickRound["holes"];
     if (heroHoleMetadata && heroHoleMetadata.length > 0) {
       holes = heroHoleMetadata.map((hole, index) => ({
         index: hole.number ?? index + 1,
         par: hole.par ?? 4,
       }));
-    } else if (selectedHero?.holes) {
-      holes = Array.from({ length: selectedHero.holes }, (_, index) => ({
+    } else if (selectedHeroCourse?.holes) {
+      holes = Array.from({ length: selectedHeroCourse.holes }, (_, index) => ({
         index: index + 1,
         par: 4,
       }));
@@ -198,6 +254,7 @@ export default function QuickRoundStartPage() {
       courseId: finalCourseId,
       teesName: trimmedTeesName || undefined,
       holes,
+      startHole: startingHole,
       startedAt: new Date().toISOString(),
       showPutts,
       handicap,
@@ -282,6 +339,8 @@ export default function QuickRoundStartPage() {
                       onClick={() => {
                         setSelectedHeroCourseId(course.id);
                         setSelectedHeroTeeId(course.tees[0]?.id);
+                        setStartHoleManuallySet(false);
+                        setStartingHole(1);
                         setError(null);
                       }}
                       className={`rounded border px-4 py-3 text-left transition ${
@@ -384,6 +443,38 @@ export default function QuickRoundStartPage() {
                 </label>
               ))}
             </div>
+          </div>
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <label className="block text-sm font-medium text-slate-200" htmlFor="startHole">
+                Start hole
+              </label>
+              {autoHoleSuggestion.suggestedHole ? (
+                <span className="text-xs font-semibold text-emerald-300" data-testid="auto-hole-suggestion">
+                  Suggested hole: {autoHoleSuggestion.suggestedHole}
+                  {autoHoleSuggestion.distanceToSuggestedM != null && (
+                    <>
+                      {" "}(≈ {Math.round(autoHoleSuggestion.distanceToSuggestedM)} m away)
+                    </>
+                  )}
+                </span>
+              ) : null}
+            </div>
+            <select
+              id="startHole"
+              value={startingHole}
+              onChange={(event) => {
+                setStartingHole(Number(event.target.value));
+                setStartHoleManuallySet(true);
+              }}
+              className="w-full rounded border border-slate-700 bg-slate-950/80 px-3 py-2 text-sm text-slate-100 focus:border-emerald-400 focus:outline-none focus:ring-1 focus:ring-emerald-400"
+            >
+              {holeNumbers.map((hole) => (
+                <option key={hole} value={hole}>
+                  {t("quickRound.start.holesOption", { count: hole })}
+                </option>
+              ))}
+            </select>
           </div>
           <label className="flex items-center gap-3 text-sm text-slate-200">
             <input

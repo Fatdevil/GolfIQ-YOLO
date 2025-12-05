@@ -12,6 +12,7 @@ export type QuickRound = {
   courseId?: string;
   teesName?: string;
   holes: QuickHole[];
+  startHole?: number;
   startedAt: string;
   completedAt?: string;
   showPutts?: boolean;
