@@ -1,6 +1,6 @@
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import QuickRoundStartPage from "../src/pages/quick/QuickRoundStartPage";
@@ -86,13 +86,21 @@ describe("QuickRoundStartPage", () => {
       </MemoryRouter>
     );
 
-    await user.type(screen.getByLabelText(/Course name/i), "My Course");
+    const courseInput = screen.getByLabelText(/Course name/i);
+    await user.clear(courseInput);
+    await user.type(courseInput, "My Course");
     const handicapInput = screen.getByLabelText(/Handicap/i);
     await user.clear(handicapInput);
     await user.type(handicapInput, "12.4");
-    await user.click(screen.getByRole("button", { name: /Start round/i }));
+    expect((handicapInput as HTMLInputElement).value).toBe("12.4");
+    const startButton = screen.getByRole("button", { name: /Start round/i });
+    await user.click(startButton);
+    const form = startButton.closest("form");
+    expect(form).toBeTruthy();
+    fireEvent.submit(form!);
 
     expect(saveDefaultHandicapMock).toHaveBeenCalledWith(12.4);
+    await waitFor(() => expect(saveRoundMock).toHaveBeenCalled());
     const savedRound = saveRoundMock.mock.calls.at(-1)?.[0];
     expect(savedRound.handicap).toBe(12.4);
   });

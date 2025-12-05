@@ -13,12 +13,23 @@ const {
   saveRoundMock,
   useGeolocationMock,
   detectHoleMock,
-} = vi.hoisted(() => ({
-  loadRoundMock: vi.fn(),
-  saveRoundMock: vi.fn(),
-  useGeolocationMock: vi.fn(),
-  detectHoleMock: vi.fn(),
-}));
+} = vi.hoisted(() => {
+  const useGeolocationMock = vi.fn<
+    () => import("../src/hooks/useGeolocation").GeolocationState
+  >(() => ({
+    position: null,
+    error: null,
+    supported: false,
+    loading: false,
+  }));
+
+  return {
+    loadRoundMock: vi.fn(),
+    saveRoundMock: vi.fn(),
+    useGeolocationMock,
+    detectHoleMock: vi.fn(),
+  };
+});
 
 vi.mock("../src/features/quickround/storage", () => ({
   loadRound: loadRoundMock,
@@ -40,7 +51,12 @@ vi.mock("../src/user/historyApi", () => ({
 describe("QuickRoundPlayPage auto hole suggestion", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    useGeolocationMock.mockReturnValue({ position: { lat: 59.3, lon: 18.1 } });
+    useGeolocationMock.mockReturnValue({
+      position: { lat: 59.3, lon: 18.1 },
+      error: null,
+      supported: true,
+      loading: false,
+    });
     detectHoleMock.mockResolvedValue({
       hole: 5,
       distance_m: 87,

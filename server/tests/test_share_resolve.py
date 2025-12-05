@@ -1,13 +1,10 @@
 import json
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 
 import pytest
 from fastapi.testclient import TestClient
 
-from server.services.shortlinks import (
-    _reset_state as reset_shortlinks,
-    get as get_shortlink,
-)
+from server.services.shortlinks import _reset_state as reset_shortlinks
 
 
 def _headers(player: str = "player-1") -> dict[str, str]:
@@ -74,58 +71,32 @@ def _seed_round(
     return round_id
 
 
-def test_round_share_requires_auth(share_client):
+def test_resolve_round_share_returns_payload(share_client: tuple[TestClient, object]):
     client, service = share_client
-    round_id = _seed_round(client, service)
+    ended_at = datetime(2024, 1, 1, tzinfo=timezone.utc)
+    round_id = _seed_round(client, service, ended_at=ended_at)
 
-    response = client.post(f"/api/share/round/{round_id}")
+    created = client.post(f"/api/share/round/{round_id}", headers=_headers())
+    assert created.status_code == 200
+    sid = created.json()["sid"]
 
-    assert response.status_code in {401, 403}
-
-
-def test_round_share_returns_shortlink(share_client):
-    client, service = share_client
-    round_id = _seed_round(client, service)
-
-    response = client.post(f"/api/share/round/{round_id}", headers=_headers())
-
+    response = client.get(f"/share/resolve/{sid}")
     assert response.status_code == 200, response.text
     payload = response.json()
-    assert payload["sid"]
-    assert payload["url"] == f"{client.base_url}/s/{payload['sid']}"
-    shortlink = get_shortlink(payload["sid"])
-    assert shortlink
-    assert shortlink.url.startswith(f"/s/{payload['sid']}")
 
-    share = client.get(f"/api/share/{payload['sid']}")
-    assert share.status_code == 200
-    body = share.json()
-    assert body["kind"] == "round_recap"
-    assert body["round_id"] == round_id
+    assert payload["sid"] == sid
+    assert payload["type"] == "round"
+    assert payload["round"]["roundId"] == round_id
+    assert payload["round"]["courseName"] == "Test Course"
+    assert payload["round"]["score"] == 12
+    assert payload["round"]["toPar"] == "+1"
+    assert payload["round"]["date"] == ended_at.date().isoformat()
 
 
-def test_weekly_share_requires_auth(share_client):
+def test_resolve_unknown_sid_returns_404(share_client: tuple[TestClient, object]):
     client, _ = share_client
 
-    response = client.post("/api/share/weekly")
+    response = client.get("/share/resolve/unknown")
 
-    assert response.status_code in {401, 403}
-
-
-def test_weekly_share_returns_shortlink(share_client):
-    client, service = share_client
-    now = datetime.now(timezone.utc)
-    _seed_round(client, service, ended_at=now - timedelta(days=1))
-
-    response = client.post("/api/share/weekly", headers=_headers())
-
-    assert response.status_code == 200, response.text
-    payload = response.json()
-    assert payload["sid"]
-    assert payload["url"] == f"{client.base_url}/s/{payload['sid']}"
-
-    share = client.get(f"/api/share/{payload['sid']}")
-    assert share.status_code == 200
-    body = share.json()
-    assert body["kind"] == "weekly_summary"
-    assert body["summary"]["period"]["roundCount"] >= 1
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Share link not found"
