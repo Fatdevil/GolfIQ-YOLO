@@ -12,6 +12,7 @@ import {
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 
 import { getCurrentRound, listRounds, startRound, type RoundInfo } from '@app/api/roundClient';
+import { fetchCourses, type CourseSummary } from '@app/api/courseClient';
 import { t } from '@app/i18n';
 import type { RootStackParamList } from '@app/navigation/types';
 import { saveActiveRoundState } from '@app/round/roundState';
@@ -26,6 +27,8 @@ export default function StartRoundScreen({ navigation }: Props): JSX.Element {
   const [holes, setHoles] = useState<number>(18);
   const [activeRound, setActiveRound] = useState<RoundInfo | null>(null);
   const [recentRounds, setRecentRounds] = useState<RoundInfo[]>([]);
+  const [availableCourses, setAvailableCourses] = useState<CourseSummary[]>([]);
+  const [coursesLoading, setCoursesLoading] = useState(true);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const scrollRef = useRef<HTMLDivElement | null>(null);
@@ -34,15 +37,28 @@ export default function StartRoundScreen({ navigation }: Props): JSX.Element {
     let cancelled = false;
     async function hydrate(): Promise<void> {
       try {
-        const [current, history] = await Promise.all([
+        const demoCourse: CourseSummary = {
+          id: 'demo-links-hero',
+          name: 'Demo Links Hero',
+          holeCount: 5,
+        };
+
+        const [current, history, courses] = await Promise.all([
           getCurrentRound().catch(() => null),
           listRounds(5).catch(() => []),
+          fetchCourses().catch(() => null),
         ]);
         if (cancelled) return;
         setActiveRound(current ?? null);
         setRecentRounds(history ?? []);
-        if (!courseId && history?.length) {
-          setCourseId(history[0].courseName ?? history[0].courseId ?? '');
+        const hydratedCourses = courses && courses.length ? courses : [demoCourse];
+        setAvailableCourses(hydratedCourses);
+        const historyCourse = history?.[0];
+        if (!courseId && historyCourse) {
+          setCourseId(historyCourse.courseId ?? historyCourse.courseName ?? '');
+        }
+        if (!courseId && hydratedCourses.length) {
+          setCourseId((historyCourse?.courseId ?? historyCourse?.courseName) ?? hydratedCourses[0].id);
         }
         if (!teeName && history?.[0]?.teeName) {
           setTeeName(history[0].teeName ?? '');
@@ -50,7 +66,10 @@ export default function StartRoundScreen({ navigation }: Props): JSX.Element {
       } catch (err) {
         console.warn('Failed to load round context', err);
       } finally {
-        if (!cancelled) setLoading(false);
+        if (!cancelled) {
+          setCoursesLoading(false);
+          setLoading(false);
+        }
       }
     }
     hydrate();
@@ -63,9 +82,14 @@ export default function StartRoundScreen({ navigation }: Props): JSX.Element {
     return recentRounds.find((r) => r.courseName || r.courseId) ?? null;
   }, [recentRounds]);
 
-  const uniqueCourses = useMemo(() => {
+  const coursePickerOptions = useMemo(() => {
     const seen = new Set<string>();
     const items: { id: string; label: string }[] = [];
+    availableCourses.forEach((course) => {
+      if (seen.has(course.id)) return;
+      seen.add(course.id);
+      items.push({ id: course.id, label: course.name });
+    });
     recentRounds.forEach((round) => {
       const label = round.courseName ?? round.courseId;
       if (!label || seen.has(label)) return;
@@ -73,7 +97,12 @@ export default function StartRoundScreen({ navigation }: Props): JSX.Element {
       items.push({ id: label, label });
     });
     return items;
-  }, [recentRounds]);
+  }, [availableCourses, recentRounds]);
+
+  const selectedCourseOption = useMemo(
+    () => coursePickerOptions.find((course) => course.id === courseId) ?? null,
+    [courseId, coursePickerOptions],
+  );
 
   const handleResume = async () => {
     if (!activeRound) return;
@@ -182,7 +211,7 @@ export default function StartRoundScreen({ navigation }: Props): JSX.Element {
         {lastPlayedCourse ? (
           <TouchableOpacity
             style={styles.pillButton}
-            onPress={() => setCourseId(lastPlayedCourse.courseName ?? lastPlayedCourse.courseId ?? '')}
+            onPress={() => setCourseId(lastPlayedCourse.courseId ?? lastPlayedCourse.courseName ?? '')}
             accessibilityLabel={t('start_round.last_played')}
             testID="last-played-course"
           >
@@ -195,23 +224,26 @@ export default function StartRoundScreen({ navigation }: Props): JSX.Element {
         <TextInput
           style={styles.input}
           placeholder={t('start_round.course_placeholder')}
-          value={courseId}
+          value={selectedCourseOption?.label ?? courseId}
           onChangeText={setCourseId}
           accessibilityLabel={t('start_round.course_label')}
           testID="course-input"
         />
 
-        {uniqueCourses.length > 0 ? (
-          <View style={styles.pillRow}>
-            {uniqueCourses.map((course) => (
+        {coursesLoading ? (
+          <Text style={styles.muted}>{t('start_round.loading')}</Text>
+        ) : null}
+        {coursePickerOptions.length > 0 ? (
+            <View style={styles.pillRow}>
+            {coursePickerOptions.map((course) => (
               <TouchableOpacity
                 key={course.id}
-                style={[styles.pillButton, courseId === course.label && styles.pillButtonActive]}
-                onPress={() => setCourseId(course.label)}
+                style={[styles.pillButton, courseId === course.id && styles.pillButtonActive]}
+                onPress={() => setCourseId(course.id)}
                 accessibilityLabel={course.label}
                 testID={`course-${course.id}`}
               >
-                <Text style={[styles.pillText, courseId === course.label && styles.pillTextActive]}>
+                <Text style={[styles.pillText, courseId === course.id && styles.pillTextActive]}>
                   {course.label}
                 </Text>
               </TouchableOpacity>

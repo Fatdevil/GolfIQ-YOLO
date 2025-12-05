@@ -10,4 +10,6 @@ export type CourseLayout = {
   id: string;
   name: string;
   holes: HoleLayout[];
+  country?: string | null;
+  city?: string | null;
 };

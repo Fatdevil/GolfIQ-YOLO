@@ -2,6 +2,7 @@ import axios, { type AxiosInstance, type AxiosRequestHeaders } from "axios";
 import { getCurrentUserId } from "@/user/currentUserId";
 
 import type { GrossNetMode, TvFlags } from "@shared/events/types";
+import type { CourseLayout } from "@/types/course";
 
 const API = import.meta.env.VITE_API_BASE || "http://localhost:8000";
 const API_KEY = import.meta.env.VITE_API_KEY || "";
@@ -66,6 +67,14 @@ export type BundleIndexItem = {
   ttlSec?: number;
 };
 
+export type CourseSummary = {
+  id: string;
+  name: string;
+  country?: string | null;
+  city?: string | null;
+  holeCount: number;
+};
+
 export type HeroCourseTee = {
   id: string;
   label: string;
@@ -95,6 +104,16 @@ export async function fetchBundleIndex(): Promise<BundleIndexItem[]> {
     headers: withAuth(),
   });
   return response.data;
+}
+
+export async function fetchCourses(): Promise<CourseSummary[]> {
+  const resp = await apiFetch(`/courses`);
+  return resp.json();
+}
+
+export async function fetchCourseLayout(courseId: string): Promise<CourseLayout> {
+  const resp = await apiFetch(`/courses/${courseId}/layout`);
+  return resp.json();
 }
 
 export async function fetchHeroCourses(): Promise<HeroCourseSummary[]> {

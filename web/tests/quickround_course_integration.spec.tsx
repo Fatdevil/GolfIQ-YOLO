@@ -22,10 +22,21 @@ const {
   clearDefaultHandicapMock: vi.fn(),
 }));
 
-const fetchBundleIndexMock = vi.hoisted(() =>
+const fetchCoursesMock = vi.hoisted(() =>
   vi.fn(async () => [
-    { courseId: "demo-links", name: "Demo Links", holes: 18, version: 1 },
+    { id: "demo-links-hero", name: "Demo Links Hero", holeCount: 9 },
   ])
+);
+const fetchCourseLayoutMock = vi.hoisted(() =>
+  vi.fn(async () => ({
+    id: "demo-links-hero",
+    name: "Demo Links Hero",
+    holes: Array.from({ length: 9 }, (_, index) => ({
+      number: index + 1,
+      tee: { lat: 0, lon: 0 },
+      green: { lat: 0, lon: 1 },
+    })),
+  }))
 );
 const fetchHeroCoursesMock = vi.hoisted(() => vi.fn(async () => []));
 
@@ -39,7 +50,8 @@ vi.mock("../src/features/quickround/storage", () => ({
 }));
 
 vi.mock("@/api", () => ({
-  fetchBundleIndex: fetchBundleIndexMock,
+  fetchCourses: fetchCoursesMock,
+  fetchCourseLayout: fetchCourseLayoutMock,
   fetchHeroCourses: fetchHeroCoursesMock,
 }));
 
@@ -48,7 +60,8 @@ describe("QuickRoundStartPage course integration", () => {
     vi.clearAllMocks();
     loadAllRoundsMock.mockReturnValue([]);
     loadDefaultHandicapMock.mockReturnValue(null);
-    fetchBundleIndexMock.mockClear();
+    fetchCoursesMock.mockClear();
+    fetchCourseLayoutMock.mockClear();
     fetchHeroCoursesMock.mockResolvedValue([]);
   });
 
@@ -64,14 +77,16 @@ describe("QuickRoundStartPage course integration", () => {
       </MemoryRouter>
     );
 
-    await user.type(screen.getByLabelText(/Course name/i), "Testbanan");
-    await screen.findByRole("option", { name: /Demo Links \(18\)/i });
-    await user.selectOptions(screen.getByLabelText(/^Course$/i), "demo-links");
+    await screen.findByRole("option", { name: /Demo Links Hero/i });
+    const courseSelect = screen
+      .getAllByLabelText(/^Course$/i)
+      .find((element: HTMLElement) => element.tagName.toLowerCase() === "select");
+    await user.selectOptions(courseSelect as HTMLSelectElement, "demo-links-hero");
     await user.click(screen.getByRole("button", { name: /Start round/i }));
 
     expect(saveRoundMock).toHaveBeenCalledTimes(1);
     const savedRound = saveRoundMock.mock.calls[0][0];
-    expect(savedRound.courseId).toBe("demo-links");
+    expect(savedRound.courseId).toBe("demo-links-hero");
     expect(screen.getByTestId("play-page")).toBeTruthy();
   });
 
@@ -86,10 +101,10 @@ describe("QuickRoundStartPage course integration", () => {
       </MemoryRouter>
     );
 
-    await screen.findByRole("option", { name: /Demo Links \(18\)/i });
+    await screen.findByRole("option", { name: /Demo Links Hero/i });
     expect(screen.getByLabelText(/^Course$/i)).toBeTruthy();
-    await user.selectOptions(screen.getByLabelText(/^Course$/i), "demo-links");
-    const courseNameInput = screen.getByLabelText(/Course name/i) as HTMLInputElement;
-    expect(courseNameInput.value).toBe("Demo Links");
+    await user.selectOptions(screen.getByLabelText(/^Course$/i), "demo-links-hero");
+    const courseNameInput = screen.getAllByLabelText(/Course name/i)[0] as HTMLInputElement;
+    expect(courseNameInput.value).toBe("Demo Links Hero");
   });
 });

@@ -5,16 +5,19 @@ import { beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
 import RoundStartScreen from '@app/screens/RoundStartScreen';
 import { getCurrentRound, listRounds, startRound } from '@app/api/roundClient';
 import { saveActiveRoundState } from '@app/round/roundState';
+import { fetchCourses } from '@app/api/courseClient';
 
 type Nav = { navigate: (...args: any[]) => void };
 
 vi.mock('@app/api/roundClient');
+vi.mock('@app/api/courseClient');
 vi.mock('@app/round/roundState');
 
 const mockedStartRound = startRound as unknown as Mock;
 const mockedSaveState = saveActiveRoundState as unknown as Mock;
 const mockedGetCurrentRound = getCurrentRound as unknown as Mock;
 const mockedListRounds = listRounds as unknown as Mock;
+const mockedFetchCourses = fetchCourses as unknown as Mock;
 
 beforeEach(() => {
   mockedStartRound.mockResolvedValue({ id: 'r1', holes: 18, startedAt: 'now', startHole: 1 });
@@ -27,6 +30,9 @@ beforeEach(() => {
     startedAt: 'today',
   });
   mockedListRounds.mockResolvedValue([]);
+  mockedFetchCourses.mockResolvedValue([
+    { id: 'demo-links-hero', name: 'Demo Links Hero', holeCount: 5 },
+  ]);
 });
 
 describe('RoundStartScreen', () => {
@@ -66,5 +72,23 @@ describe('RoundStartScreen', () => {
       currentHole: 1,
     });
     expect(navigation.navigate).toHaveBeenCalledWith('RoundShot', { roundId: 'new-round' });
+  });
+
+  it('uses the first fetched course when none selected', async () => {
+    mockedGetCurrentRound.mockResolvedValueOnce(null);
+    mockedStartRound.mockResolvedValueOnce({ id: 'first-course', holes: 18, startedAt: 'now', startHole: 1 });
+    const navigation: Nav = { navigate: vi.fn() };
+
+    const { getByTestId } = render(
+      <RoundStartScreen navigation={navigation as any} route={undefined as any} />,
+    );
+
+    await waitFor(() => expect(getByTestId('course-demo-links-hero')).toBeTruthy());
+
+    fireEvent.click(getByTestId('start-round-button'));
+
+    await waitFor(() => expect(mockedStartRound).toHaveBeenCalledWith(expect.objectContaining({
+      courseId: 'demo-links-hero',
+    })));
   });
 });

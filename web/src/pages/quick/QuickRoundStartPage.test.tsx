@@ -5,13 +5,54 @@ import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import QuickRoundStartPage from "./QuickRoundStartPage";
-import { DEMO_COURSE_NAME } from "@/features/quickround/constants";
-import { fetchHeroCourses } from "@/api";
 
-const defaultHeroCourses = [
+// Using var avoids temporal dead zone when accessed inside hoisted mocks
+var demoName = "Demo Links Hero";
+
+var demoCourse: { id: string; name: string; holeCount: number };
+var demoCourseLayout: {
+  id: string;
+  name: string;
+  holeCount: number;
+  holes: { number: number; tee: { lat: number; lon: number }; green: { lat: number; lon: number } }[];
+};
+var fetchCoursesMock: ReturnType<typeof vi.fn>;
+var fetchCourseLayoutMock: ReturnType<typeof vi.fn>;
+var fetchHeroCoursesMock: ReturnType<typeof vi.fn>;
+
+vi.mock("@/api", () => {
+  demoName = "Demo Links Hero";
+  demoCourse = {
+    id: "demo-links-hero",
+    name: demoName,
+    holeCount: 9,
+  };
+
+  demoCourseLayout = {
+    ...demoCourse,
+    holes: Array.from({ length: 9 }, (_, index) => ({
+      number: index + 1,
+      tee: { lat: 0, lon: 0 },
+      green: { lat: 0, lon: 1 },
+    })),
+  };
+
+  fetchCoursesMock = vi.fn().mockResolvedValue([demoCourse]);
+  fetchCourseLayoutMock = vi.fn().mockResolvedValue(demoCourseLayout);
+  fetchHeroCoursesMock = vi.fn();
+
+  return {
+    fetchBundleIndex: vi.fn().mockResolvedValue([]),
+    fetchHeroCourses: fetchHeroCoursesMock,
+    fetchCourses: fetchCoursesMock,
+    fetchCourseLayout: fetchCourseLayoutMock,
+  };
+});
+
+const defaultHeroCourses = () => [
   {
     id: "demo-links",
-    name: DEMO_COURSE_NAME,
+    name: demoName,
     country: "USA",
     city: "Palo Alto",
     tees: [
@@ -23,11 +64,6 @@ const defaultHeroCourses = [
     lengthsByTee: { white: 985, blue: 1045 },
   },
 ];
-
-vi.mock("@/api", () => ({
-  fetchBundleIndex: vi.fn().mockResolvedValue([]),
-  fetchHeroCourses: vi.fn(),
-}));
 
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({
@@ -66,7 +102,9 @@ describe("QuickRoundStartPage hero courses", () => {
   });
 
   beforeEach(() => {
-    vi.mocked(fetchHeroCourses).mockResolvedValue(defaultHeroCourses);
+    fetchHeroCoursesMock.mockResolvedValue(defaultHeroCourses());
+    fetchCoursesMock.mockResolvedValue([demoCourse]);
+    fetchCourseLayoutMock.mockResolvedValue(demoCourseLayout);
     saveRound.mockReset();
   });
 
@@ -94,7 +132,7 @@ describe("QuickRoundStartPage hero courses", () => {
     await user.click(heroButton);
 
     const courseInput = screen.getByLabelText("quickRound.start.courseName") as HTMLInputElement;
-    expect(courseInput.value).toBe(DEMO_COURSE_NAME);
+    expect(courseInput.value).toBe(demoName);
 
     const teeSelect = screen.getByLabelText("quickRound.start.heroTeeLabel") as HTMLSelectElement;
     expect(teeSelect.value).toBe("white");
@@ -108,7 +146,7 @@ describe("QuickRoundStartPage hero courses", () => {
   });
 
   it("uses selected holes count when no hero course is chosen", async () => {
-    vi.mocked(fetchHeroCourses).mockResolvedValue([]);
+    fetchHeroCoursesMock.mockResolvedValue([]);
     const user = userEvent.setup();
 
     render(
@@ -138,7 +176,7 @@ describe("QuickRoundStartPage hero courses", () => {
   });
 
   it("derives hole metadata from selected hero course", async () => {
-    vi.mocked(fetchHeroCourses).mockResolvedValue([
+    fetchHeroCoursesMock.mockResolvedValue([
       {
         id: "hero-short",
         name: "Hero Short",
