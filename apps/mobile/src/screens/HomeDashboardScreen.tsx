@@ -24,8 +24,10 @@ import { fetchWeeklySummary, type WeeklySummary } from '@app/api/weeklySummary';
 import { createWeeklyShareLink } from '@app/api/shareClient';
 import { t } from '@app/i18n';
 import type { RootStackParamList } from '@app/navigation/types';
+import { loadEngagementState, saveEngagementState, type EngagementState } from '@app/storage/engagement';
 
 const CALIBRATION_SAMPLE_THRESHOLD = 5;
+const TARGET_ROUNDS_PER_WEEK = 3;
 
 type Props = NativeStackScreenProps<RootStackParamList, 'HomeDashboard'>;
 
@@ -37,6 +39,7 @@ type DashboardState = {
   weeklySummary: WeeklySummary | null;
   practicePlan: PracticePlan | null;
   bag: PlayerBag | null;
+  engagement: EngagementState | null;
 };
 
 function formatDate(value?: string | null): string | null {
@@ -59,11 +62,11 @@ function deriveGreeting(profile: PlayerProfile | null): string {
   return t('home_dashboard_greeting', { name: first || raw });
 }
 
-function summarizeBag(bag: PlayerBag | null): { calibrated: number; needsMore: number } {
-  if (!bag) return { calibrated: 0, needsMore: 0 };
+function summarizeBag(bag: PlayerBag | null): { calibrated: number; needsMore: number; total: number } {
+  if (!bag) return { calibrated: 0, needsMore: 0, total: 0 };
   const calibrated = bag.clubs.filter((club) => club.sampleCount >= CALIBRATION_SAMPLE_THRESHOLD).length;
   const needsMore = Math.max(bag.clubs.length - calibrated, 0);
-  return { calibrated, needsMore };
+  return { calibrated, needsMore, total: bag.clubs.length };
 }
 
 export default function HomeDashboardScreen({ navigation }: Props): JSX.Element {
@@ -75,6 +78,7 @@ export default function HomeDashboardScreen({ navigation }: Props): JSX.Element 
     weeklySummary: null,
     practicePlan: null,
     bag: null,
+    engagement: null,
   });
   const [sharingWeekly, setSharingWeekly] = useState(false);
 
@@ -82,7 +86,7 @@ export default function HomeDashboardScreen({ navigation }: Props): JSX.Element 
     let cancelled = false;
 
     const load = async () => {
-      const [profileRes, currentRoundRes, latestRoundRes, weeklyRes, practiceRes, bagRes] =
+      const [profileRes, currentRoundRes, latestRoundRes, weeklyRes, practiceRes, bagRes, engagementRes] =
         await Promise.allSettled([
           fetchPlayerProfile(),
           fetchCurrentRound(),
@@ -90,6 +94,7 @@ export default function HomeDashboardScreen({ navigation }: Props): JSX.Element 
           fetchWeeklySummary(),
           fetchPracticePlan({ maxMinutes: 30 }),
           fetchPlayerBag(),
+          loadEngagementState(),
         ]);
 
       if (cancelled) return;
@@ -99,6 +104,7 @@ export default function HomeDashboardScreen({ navigation }: Props): JSX.Element 
       const weeklySummary = weeklyRes.status === 'fulfilled' ? weeklyRes.value : null;
       const practicePlan = practiceRes.status === 'fulfilled' ? practiceRes.value : null;
       const bag = bagRes.status === 'fulfilled' ? bagRes.value : null;
+      const engagement = engagementRes.status === 'fulfilled' ? engagementRes.value : null;
 
       if (profileRes.status === 'rejected') console.warn('Home dashboard profile load failed', profileRes.reason);
       if (currentRoundRes.status === 'rejected')
@@ -108,6 +114,8 @@ export default function HomeDashboardScreen({ navigation }: Props): JSX.Element 
       if (weeklyRes.status === 'rejected') console.warn('Home dashboard weekly load failed', weeklyRes.reason);
       if (practiceRes.status === 'rejected') console.warn('Home dashboard practice load failed', practiceRes.reason);
       if (bagRes.status === 'rejected') console.warn('Home dashboard bag load failed', bagRes.reason);
+      if (engagementRes.status === 'rejected')
+        console.warn('Home dashboard engagement load failed', engagementRes.reason);
 
       setState({
         loading: false,
@@ -117,6 +125,7 @@ export default function HomeDashboardScreen({ navigation }: Props): JSX.Element 
         weeklySummary,
         practicePlan,
         bag,
+        engagement,
       });
     };
 
@@ -127,7 +136,7 @@ export default function HomeDashboardScreen({ navigation }: Props): JSX.Element 
     };
   }, []);
 
-  const { loading, profile, currentRound, latestRound, weeklySummary, practicePlan, bag } = state;
+  const { loading, profile, currentRound, latestRound, weeklySummary, practicePlan, bag, engagement } = state;
 
   const latestRoundDisplay = useMemo(() => {
     if (!latestRound) return null;
@@ -145,12 +154,20 @@ export default function HomeDashboardScreen({ navigation }: Props): JSX.Element 
   }, [latestRound]);
 
   const practiceHeadline = useMemo(() => {
-    if (!practicePlan?.drills?.length) return t('home_dashboard_practice_generic');
-    const drills = practicePlan.drills.slice(0, 3).map((d) => d.name).join(' · ');
-    return drills;
+    if (!practicePlan?.drills?.length) return t('home_dashboard_practice_prompt');
+    const drills = practicePlan.drills.length;
+    const totalMinutes = practicePlan.drills.reduce((sum, drill) => sum + (drill.durationMinutes ?? 0), 0);
+    const minutes = totalMinutes || drills * 15;
+    return t('home_dashboard_practice_today', { drills, minutes });
   }, [practicePlan]);
 
   const bagSummary = useMemo(() => summarizeBag(bag), [bag]);
+
+  const weeklyProgress = useMemo(() => {
+    const rounds = weeklySummary?.period.roundCount ?? 0;
+    const progress = Math.min(rounds / TARGET_ROUNDS_PER_WEEK, 1);
+    return { rounds, progress };
+  }, [weeklySummary?.period.roundCount ?? 0]);
 
   const weeklyTopCategory = useMemo(() => {
     const categories = weeklySummary?.categories ?? {};
@@ -163,6 +180,69 @@ export default function HomeDashboardScreen({ navigation }: Props): JSX.Element 
     }
     return t('weeklySummary.categories.driving');
   }, [weeklySummary?.categories]);
+
+  const hasNewWeeklySummary = useMemo(() => {
+    if (!weeklySummary?.period.to) return false;
+    if ((weeklySummary.period.roundCount ?? 0) <= 0) return false;
+    const periodTime = new Date(weeklySummary.period.to).getTime();
+    if (Number.isNaN(periodTime)) return false;
+    const lastSeen = engagement?.lastSeenWeeklySummaryAt;
+    if (!lastSeen) return true;
+    const lastSeenTime = new Date(lastSeen).getTime();
+    if (Number.isNaN(lastSeenTime)) return true;
+    return periodTime > lastSeenTime;
+  }, [engagement?.lastSeenWeeklySummaryAt, weeklySummary]);
+
+  const hasNewCoachReport = useMemo(() => {
+    if (!latestRound?.roundId) return false;
+    if (!latestRound?.endedAt && !latestRound?.startedAt) return false;
+    const lastSeen = engagement?.lastSeenCoachReportRoundId;
+    if (!lastSeen) return true;
+    return lastSeen !== latestRound.roundId;
+  }, [engagement?.lastSeenCoachReportRoundId, latestRound]);
+
+  const markWeeklySeen = useCallback(async () => {
+    const timestamp = weeklySummary?.period.to;
+    if (!timestamp) return;
+    setState((prev) => ({
+      ...prev,
+      engagement: { ...(prev.engagement ?? {}), lastSeenWeeklySummaryAt: timestamp },
+    }));
+    try {
+      await saveEngagementState({ lastSeenWeeklySummaryAt: timestamp });
+    } catch (err) {
+      console.warn('Home dashboard engagement save failed (weekly)', err);
+    }
+  }, [weeklySummary?.period.to]);
+
+  const markCoachReportSeen = useCallback(async () => {
+    const roundId = latestRound?.roundId;
+    if (!roundId) return;
+    setState((prev) => ({
+      ...prev,
+      engagement: { ...(prev.engagement ?? {}), lastSeenCoachReportRoundId: roundId },
+    }));
+    try {
+      await saveEngagementState({ lastSeenCoachReportRoundId: roundId });
+    } catch (err) {
+      console.warn('Home dashboard engagement save failed (coach report)', err);
+    }
+  }, [latestRound?.roundId]);
+
+  const handleOpenWeekly = useCallback(() => {
+    navigation.navigate('WeeklySummary');
+    void markWeeklySeen();
+  }, [markWeeklySeen, navigation]);
+
+  const handleOpenCoachReport = useCallback(() => {
+    if (!latestRoundDisplay) return;
+    navigation.navigate('CoachReport', {
+      roundId: latestRoundDisplay.roundId,
+      courseName: latestRoundDisplay.course,
+      date: latestRoundDisplay.date ?? undefined,
+    });
+    void markCoachReportSeen();
+  }, [latestRoundDisplay, markCoachReportSeen, navigation]);
 
   const handleShareWeekly = useCallback(async () => {
     if (!weeklySummary) return;
@@ -251,14 +331,22 @@ export default function HomeDashboardScreen({ navigation }: Props): JSX.Element 
       <View style={styles.card}>
         <View style={styles.rowSpaceBetween}>
           <Text style={styles.cardTitle}>{t('home_dashboard_last_round_title')}</Text>
-          {latestRoundDisplay && (
-            <TouchableOpacity
-              onPress={() => navigation.navigate('RoundRecap', { roundId: latestRoundDisplay.roundId })}
-              testID="view-last-round"
-            >
-              <Text style={styles.link}>{t('home_dashboard_last_round_cta')}</Text>
-            </TouchableOpacity>
-          )}
+          <View style={styles.rowGapSmall}>
+            {hasNewCoachReport ? (
+              <View style={styles.badge} testID="coach-badge">
+                <View style={styles.badgeDot} />
+                <Text style={styles.badgeText}>{t('home_dashboard_badge_new_coach_report')}</Text>
+              </View>
+            ) : null}
+            {latestRoundDisplay && (
+              <TouchableOpacity
+                onPress={() => navigation.navigate('RoundRecap', { roundId: latestRoundDisplay.roundId })}
+                testID="view-last-round"
+              >
+                <Text style={styles.link}>{t('home_dashboard_last_round_cta')}</Text>
+              </TouchableOpacity>
+            )}
+          </View>
         </View>
         {latestRoundDisplay ? (
           <>
@@ -274,7 +362,15 @@ export default function HomeDashboardScreen({ navigation }: Props): JSX.Element 
       </View>
 
       <View style={styles.card}>
-        <Text style={styles.cardTitle}>{t('home_dashboard_weekly_title')}</Text>
+        <View style={styles.rowSpaceBetween}>
+          <Text style={styles.cardTitle}>{t('home_dashboard_weekly_title')}</Text>
+          {hasNewWeeklySummary ? (
+            <View style={styles.badge} testID="weekly-badge">
+              <View style={styles.badgeDot} />
+              <Text style={styles.badgeText}>{t('home_dashboard_badge_new')}</Text>
+            </View>
+          ) : null}
+        </View>
         {weeklySummary ? (
           <>
             <Text style={styles.cardBody} testID="weekly-headline">
@@ -286,20 +382,24 @@ export default function HomeDashboardScreen({ navigation }: Props): JSX.Element 
                 avg: weeklySummary.coreStats.avgScore ?? '–',
               })}
             </Text>
-            <TouchableOpacity onPress={() => navigation.navigate('WeeklySummary')} testID="open-weekly">
+            <View style={styles.progressBlock}>
+              <View style={styles.progressBar}>
+                <View style={[styles.progressFill, { width: `${weeklyProgress.progress * 100}%` }]} />
+              </View>
+              <Text style={styles.muted} testID="weekly-progress-text">
+                {weeklyProgress.rounds === 0
+                  ? t('home_dashboard_weekly_first_round')
+                  : t('home_dashboard_weekly_progress', {
+                      current: weeklyProgress.rounds,
+                      target: TARGET_ROUNDS_PER_WEEK,
+                    })}
+              </Text>
+            </View>
+            <TouchableOpacity onPress={handleOpenWeekly} testID="open-weekly">
               <Text style={styles.link}>{t('home_dashboard_weekly_cta')}</Text>
             </TouchableOpacity>
             {latestRoundDisplay ? (
-              <TouchableOpacity
-                onPress={() =>
-                  navigation.navigate('CoachReport', {
-                    roundId: latestRoundDisplay.roundId,
-                    courseName: latestRoundDisplay.course,
-                    date: latestRoundDisplay.date ?? undefined,
-                  })
-                }
-                testID="open-coach-report-weekly"
-              >
+              <TouchableOpacity onPress={handleOpenCoachReport} testID="open-coach-report-weekly">
                 <Text style={styles.link}>{t('coach_report_cta_from_recap')}</Text>
               </TouchableOpacity>
             ) : null}
@@ -335,10 +435,15 @@ export default function HomeDashboardScreen({ navigation }: Props): JSX.Element 
         <Text style={styles.cardBody} testID="bag-status">
           {t('home_dashboard_bag_status', {
             calibrated: bagSummary.calibrated,
-            needs: bagSummary.needsMore,
+            total: Math.max(bagSummary.total, bagSummary.calibrated),
           })}
         </Text>
         <Text style={styles.muted}>{t('home_dashboard_bag_helper')}</Text>
+        {bagSummary.needsMore > 0 ? (
+          <Text style={styles.muted} testID="bag-needs-more">
+            {t('home_dashboard_bag_needs_more', { count: bagSummary.needsMore })}
+          </Text>
+        ) : null}
         <TouchableOpacity onPress={() => navigation.navigate('MyBag')} testID="open-bag">
           <Text style={styles.link}>{t('home_dashboard_bag_cta')}</Text>
         </TouchableOpacity>
@@ -420,5 +525,43 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+  },
+  rowGapSmall: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  badge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#eef2ff',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 999,
+    gap: 4,
+  },
+  badgeDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#6366f1',
+  },
+  badgeText: {
+    color: '#312e81',
+    fontWeight: '700',
+    fontSize: 12,
+  },
+  progressBlock: {
+    gap: 6,
+  },
+  progressBar: {
+    height: 8,
+    backgroundColor: '#e5e7eb',
+    borderRadius: 999,
+    overflow: 'hidden',
+  },
+  progressFill: {
+    height: '100%',
+    backgroundColor: '#22c55e',
   },
 });
