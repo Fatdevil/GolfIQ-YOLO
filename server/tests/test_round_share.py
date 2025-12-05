@@ -4,7 +4,10 @@ from datetime import datetime, timedelta, timezone
 import pytest
 from fastapi.testclient import TestClient
 
-from server.services.shortlinks import _reset_state as reset_shortlinks
+from server.services.shortlinks import (
+    _reset_state as reset_shortlinks,
+    get as get_shortlink,
+)
 
 
 def _headers(player: str = "player-1") -> dict[str, str]:
@@ -90,6 +93,9 @@ def test_round_share_returns_shortlink(share_client):
     payload = response.json()
     assert payload["sid"]
     assert payload["url"] == f"{client.base_url}/s/{payload['sid']}"
+    shortlink = get_shortlink(payload["sid"])
+    assert shortlink
+    assert shortlink.url.startswith(f"/s/{payload['sid']}")
 
     share = client.get(f"/api/share/{payload['sid']}")
     assert share.status_code == 200

@@ -263,7 +263,7 @@ def create_round_share_link(
         description = f"Round recap for {info.course_id}"
 
     shortlink = create(
-        url=lambda sid: f"/share/round/{sid}",
+        url=lambda sid: f"/s/{sid}?share=round",
         title="GolfIQ • Round recap",
         description=description,
         image=None,
@@ -311,7 +311,7 @@ def create_weekly_share_link(
     )
 
     shortlink = create(
-        url=lambda sid: f"/share/weekly/{sid}",
+        url=lambda sid: f"/s/{sid}?share=weekly",
         title="GolfIQ • Weekly summary",
         description="Shared weekly performance",
         image=None,
@@ -362,15 +362,31 @@ def resolve_share_link(sid: str) -> ShareResolveResponse:
 
 
 @router.get("/s/{sid}")
-def resolve_shortlink(sid: str):
+def resolve_shortlink(sid: str, request: Request):
     shortlink = get(sid)
     if not shortlink:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "not found")
     if shortlink.clip_id and not is_clip_public(shortlink.clip_id):
         raise HTTPException(status.HTTP_404_NOT_FOUND, "not found")
 
+    share_type = _infer_share_type(shortlink)
+    share_destination = (
+        shortlink.url
+        if shortlink.url.startswith("/s/")
+        else (
+            f"/s/{sid}?share={share_type}"
+            if share_type in {"round", "weekly", "coach"}
+            else shortlink.url
+        )
+    )
+    destination = (
+        _absolute(str(request.base_url), share_destination) or share_destination
+    )
+
     emit("share.anchor.open", {"sid": sid})
-    return RedirectResponse(url=shortlink.url, status_code=status.HTTP_302_FOUND)
+    if str(request.url) == destination:
+        destination = f"/s/{sid}?share={share_type or 'share'}"
+    return RedirectResponse(url=destination, status_code=status.HTTP_302_FOUND)
 
 
 @router.get("/s/{sid}/o")

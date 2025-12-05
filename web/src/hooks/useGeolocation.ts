@@ -5,27 +5,39 @@ export type GeoPosition = {
   lon: number;
 };
 
-export function useGeolocation(
-  enabled: boolean
-): { position?: GeoPosition; error?: Error } {
-  const [position, setPosition] = useState<GeoPosition | undefined>();
-  const [error, setError] = useState<Error | undefined>();
+export type GeolocationState = {
+  position: GeoPosition | null;
+  error: Error | null;
+  supported: boolean;
+};
+
+const buildDefaultState = (): GeolocationState => ({
+  position: null,
+  error: null,
+  supported: typeof navigator !== "undefined" && "geolocation" in navigator,
+});
+
+export function useGeolocation(enabled: boolean): GeolocationState {
+  const [state, setState] = useState<GeolocationState>(buildDefaultState);
 
   useEffect(() => {
-    if (!enabled || typeof navigator === "undefined" || !("geolocation" in navigator)) {
+    if (!enabled || !buildDefaultState().supported) {
       return;
     }
 
     const watchId = navigator.geolocation.watchPosition(
       (pos) => {
-        setPosition({
-          lat: pos.coords.latitude,
-          lon: pos.coords.longitude,
+        setState({
+          position: {
+            lat: pos.coords.latitude,
+            lon: pos.coords.longitude,
+          },
+          error: null,
+          supported: true,
         });
-        setError(undefined);
       },
       (err) => {
-        setError(new Error(err.message));
+        setState((prev) => ({ ...prev, error: new Error(err.message) }));
       },
       { enableHighAccuracy: true, maximumAge: 10_000, timeout: 10_000 }
     );
@@ -35,5 +47,5 @@ export function useGeolocation(
     };
   }, [enabled]);
 
-  return { position, error };
+  return state;
 }

@@ -53,6 +53,20 @@ export default function QuickRoundStartPage() {
     return stored != null ? String(stored) : "";
   });
 
+  const persistHandicapDefault = (value: string) => {
+    const trimmed = value.trim();
+
+    if (!trimmed) {
+      clearDefaultHandicap();
+      return;
+    }
+
+    const parsed = Number(trimmed);
+    if (Number.isFinite(parsed)) {
+      saveDefaultHandicap(parsed);
+    }
+  };
+
   const dateFormatter = useMemo(
     () =>
       new Intl.DateTimeFormat("sv-SE", {
@@ -174,10 +188,7 @@ export default function QuickRoundStartPage() {
       const parsed = Number(trimmedHandicap);
       if (Number.isFinite(parsed)) {
         handicap = parsed;
-        saveDefaultHandicap(parsed);
       }
-    } else {
-      clearDefaultHandicap();
     }
     const roundId = createRoundId();
     const round: QuickRound = {
@@ -342,7 +353,11 @@ export default function QuickRoundStartPage() {
               inputMode="decimal"
               step="0.1"
               value={handicapInput}
-              onChange={(event) => setHandicapInput(event.target.value)}
+              onChange={(event) => {
+                const nextValue = event.target.value;
+                setHandicapInput(nextValue);
+                persistHandicapDefault(nextValue);
+              }}
               className="w-full rounded border border-slate-700 bg-slate-950/80 px-3 py-2 text-sm text-slate-100 focus:border-emerald-400 focus:outline-none focus:ring-1 focus:ring-emerald-400"
               placeholder="14.3"
             />

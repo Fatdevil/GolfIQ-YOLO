@@ -40,7 +40,11 @@ vi.mock("../src/user/historyApi", () => ({
 describe("QuickRoundPlayPage auto hole suggestion", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    useGeolocationMock.mockReturnValue({ position: { lat: 59.3, lon: 18.1 } });
+    useGeolocationMock.mockReturnValue({
+      position: { lat: 59.3, lon: 18.1 },
+      error: null,
+      supported: true,
+    });
     detectHoleMock.mockResolvedValue({
       hole: 5,
       distance_m: 87,

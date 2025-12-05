@@ -33,6 +33,8 @@ export default defineConfig({
     environment: 'node',
     environmentMatchGlobs: [
       ['tests/**/*.spec.tsx', 'happy-dom'],
+      ['tests/useGeolocation_hook.spec.ts', 'happy-dom'],
+      ['tests/use_auto_hole_suggest.spec.ts', 'happy-dom'],
       ['src/**/__tests__/**/*.tsx', 'happy-dom'],
       ['src/**/*.test.tsx', 'happy-dom'],
     ],
