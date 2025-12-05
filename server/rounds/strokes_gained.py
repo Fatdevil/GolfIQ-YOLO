@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Literal, TypedDict
 
 from server.rounds.models import RoundCategoryStats, RoundSummary
-from server.rounds.recap import CATEGORY_LABELS
+from server.rounds.recap import CATEGORY_LABELS, PUTT_BUCKET_LABELS
 
 CategoryKey = Literal["driving", "approach", "short_game", "putting"]
 
@@ -122,6 +122,19 @@ def _build_driving(
     if penalty_rate:
         parts.append(f"{penalty_rate * 100:.0f}% penalties from tee")
 
+    miss_counts = {
+        "left": summary.fairway_miss_left or 0,
+        "right": summary.fairway_miss_right or 0,
+        "long": summary.fairway_miss_long or 0,
+        "short": summary.fairway_miss_short or 0,
+    }
+    if summary.fairways_total:
+        dominant = max(miss_counts, key=miss_counts.get)
+        if miss_counts[dominant] >= max(2, summary.fairways_total * 0.35):
+            parts.append(
+                f"Typical miss: {dominant} ({miss_counts[dominant]}/{summary.fairways_total})"
+            )
+
     return CategoryStrokesGained(
         value=value,
         label=CATEGORY_LABELS["driving"],
@@ -192,11 +205,19 @@ def _build_putting(summary: RoundSummary) -> CategoryStrokesGained:
         target=PUTTING_TARGET_PER_HOLE,
         spread=PUTTING_SPREAD,
     )
+    comment = f"{per_hole:.1f} putts per hole"
+    if summary.first_putt_bucket_three_putts:
+        bucket, count = max(
+            summary.first_putt_bucket_three_putts.items(), key=lambda entry: entry[1]
+        )
+        if count > 0:
+            label = PUTT_BUCKET_LABELS.get(bucket, bucket)
+            comment = f"{comment}; 3-putts mostly from {label} starts"
     return CategoryStrokesGained(
         value=value,
         label=CATEGORY_LABELS["putting"],
         grade=_grade_from_value(value),
-        comment=f"{per_hole:.1f} putts per hole",
+        comment=comment,
     )
 
 

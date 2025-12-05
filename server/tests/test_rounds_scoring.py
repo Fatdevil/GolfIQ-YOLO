@@ -92,6 +92,60 @@ def test_summary_endpoint(round_client):
     assert summary["holesPlayed"] == 2
 
 
+def test_fairway_result_and_putt_buckets(round_client):
+    client, _ = round_client
+    round_id = _start_round(client)
+
+    client.put(
+        f"/api/rounds/{round_id}/scores/1",
+        json={
+            "par": 4,
+            "strokes": 5,
+            "putts": 2,
+            "fairwayResult": "left",
+            "firstPuttDistanceBucket": "3_10m",
+        },
+        headers=_headers(),
+    )
+    client.put(
+        f"/api/rounds/{round_id}/scores/2",
+        json={
+            "par": 5,
+            "strokes": 6,
+            "putts": 3,
+            "fairwayResult": "hit",
+            "firstPuttDistanceBucket": "10m_plus",
+        },
+        headers=_headers(),
+    )
+    client.put(
+        f"/api/rounds/{round_id}/scores/3",
+        json={
+            "par": 3,
+            "strokes": 3,
+            "putts": 2,
+            "firstPuttDistanceBucket": "1_3m",
+        },
+        headers=_headers(),
+    )
+
+    summary_resp = client.get(f"/api/rounds/{round_id}/summary", headers=_headers())
+    assert summary_resp.status_code == 200
+    summary = summary_resp.json()
+
+    assert summary["fairwaysHit"] == 1
+    assert summary["fairwayMissLeft"] == 1
+    assert summary["fairwayMissRight"] == 0
+    assert summary["fairwaysTotal"] == 2
+
+    assert summary["firstPuttBucketCounts"] == {
+        "1_3m": 1,
+        "3_10m": 1,
+        "10m_plus": 1,
+    }
+    assert summary["firstPuttBucketThreePutts"] == {"10m_plus": 1}
+
+
 def test_scores_require_ownership(round_client):
     client, _ = round_client
     round_id = _start_round(client)

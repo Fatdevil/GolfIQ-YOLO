@@ -33,6 +33,9 @@ export interface Shot {
   tempoRatio?: number | null;
 }
 
+export type FairwayResult = 'hit' | 'left' | 'right' | 'long' | 'short';
+export type PuttDistanceBucket = '0_1m' | '1_3m' | '3_10m' | '10m_plus';
+
 export interface HoleScore {
   holeNumber: number;
   par?: number | null;
@@ -40,7 +43,9 @@ export interface HoleScore {
   putts?: number | null;
   penalties?: number | null;
   fairwayHit?: boolean | null;
+  fairwayResult?: FairwayResult | null;
   gir?: boolean | null;
+  firstPuttDistanceBucket?: PuttDistanceBucket | null;
 }
 
 export interface RoundScores {
@@ -66,7 +71,13 @@ export interface RoundSummary {
   penalties?: number | null;
   fairwaysHit?: number | null;
   fairwaysTotal?: number | null;
+  fairwayMissLeft?: number | null;
+  fairwayMissRight?: number | null;
+  fairwayMissLong?: number | null;
+  fairwayMissShort?: number | null;
   girCount?: number | null;
+  firstPuttBucketCounts?: Partial<Record<PuttDistanceBucket, number>>;
+  firstPuttBucketThreePutts?: Partial<Record<PuttDistanceBucket, number>>;
   holesPlayed: number;
 }
 

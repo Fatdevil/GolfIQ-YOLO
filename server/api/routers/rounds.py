@@ -11,6 +11,8 @@ from server.api.user_header import UserIdHeader
 from server.club_distance import ClubDistanceService, get_club_distance_service
 from server.rounds.club_distances import update_club_distances_from_round
 from server.rounds.models import (
+    FairwayResult,
+    PuttDistanceBucket,
     Round,
     RoundInfo,
     RoundScores,
@@ -131,7 +133,19 @@ class UpdateHoleScoreRequest(BaseModel):
         serialization_alias="fairwayHit",
         validation_alias=AliasChoices("fairway_hit", "fairwayHit"),
     )
+    fairway_result: FairwayResult | None = Field(
+        default=None,
+        serialization_alias="fairwayResult",
+        validation_alias=AliasChoices("fairway_result", "fairwayResult"),
+    )
     gir: bool | None = None
+    first_putt_distance_bucket: PuttDistanceBucket | None = Field(
+        default=None,
+        serialization_alias="firstPuttDistanceBucket",
+        validation_alias=AliasChoices(
+            "first_putt_distance_bucket", "firstPuttDistanceBucket"
+        ),
+    )
 
     model_config = ConfigDict(populate_by_name=True)
 
