@@ -10,6 +10,7 @@ import * as roundClient from '@app/api/roundClient';
 import * as weeklyApi from '@app/api/weeklySummary';
 import type { RootStackParamList } from '@app/navigation/types';
 import HomeDashboardScreen from '@app/screens/HomeDashboardScreen';
+import * as engagementStorage from '@app/storage/engagement';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'HomeDashboard'>;
 
@@ -68,6 +69,10 @@ vi.mock('@app/api/roundClient', () => ({
 vi.mock('@app/api/weeklySummary', () => ({ fetchWeeklySummary: vi.fn() }));
 vi.mock('@app/api/practiceClient', () => ({ fetchPracticePlan: vi.fn() }));
 vi.mock('@app/api/bagClient', () => ({ fetchPlayerBag: vi.fn() }));
+vi.mock('@app/storage/engagement', () => ({
+  loadEngagementState: vi.fn(),
+  saveEngagementState: vi.fn(),
+}));
 
 describe('HomeDashboardScreen', () => {
   beforeEach(() => {
@@ -78,6 +83,8 @@ describe('HomeDashboardScreen', () => {
     vi.mocked(weeklyApi.fetchWeeklySummary).mockResolvedValue(mockWeekly);
     vi.mocked(practiceClient.fetchPracticePlan).mockResolvedValue(mockPracticePlan);
     vi.mocked(bagClient.fetchPlayerBag).mockResolvedValue(mockBag);
+    vi.mocked(engagementStorage.loadEngagementState).mockResolvedValue({});
+    vi.mocked(engagementStorage.saveEngagementState).mockResolvedValue();
   });
 
   it('renders active round CTA and resumes on tap', async () => {
@@ -138,5 +145,90 @@ describe('HomeDashboardScreen', () => {
     await waitFor(() => {
       expect(navigation.navigate).toHaveBeenCalledWith('PracticePlanner');
     });
+  });
+
+  it('shows a new weekly badge when summary is fresh', async () => {
+    vi.mocked(engagementStorage.loadEngagementState).mockResolvedValue({
+      lastSeenWeeklySummaryAt: '2023-12-31',
+    });
+    const navigation = createNavigation();
+
+    render(<HomeDashboardScreen navigation={navigation} route={createRoute()} />);
+
+    expect(await screen.findByTestId('weekly-badge')).toBeVisible();
+  });
+
+  it('hides weekly badge when already seen', async () => {
+    vi.mocked(engagementStorage.loadEngagementState).mockResolvedValue({
+      lastSeenWeeklySummaryAt: mockWeekly.period.to,
+    });
+    const navigation = createNavigation();
+
+    render(<HomeDashboardScreen navigation={navigation} route={createRoute()} />);
+
+    await waitFor(() => {
+      expect(screen.queryByTestId('weekly-badge')).toBeNull();
+    });
+  });
+
+  it('shows coach badge for unseen latest round', async () => {
+    vi.mocked(roundClient.fetchLatestCompletedRound).mockResolvedValue({
+      roundId: 'new-round',
+      playerId: 'player-1',
+      courseId: 'course-1',
+      teeName: 'Blue',
+      holes: 18,
+      startedAt: '2024-01-02T00:00:00Z',
+      endedAt: '2024-01-02T01:00:00Z',
+      holesPlayed: 18,
+    } as roundClient.RoundSummaryWithRoundInfo);
+    vi.mocked(engagementStorage.loadEngagementState).mockResolvedValue({
+      lastSeenCoachReportRoundId: 'old-round',
+    });
+    const navigation = createNavigation();
+
+    render(<HomeDashboardScreen navigation={navigation} route={createRoute()} />);
+
+    expect(await screen.findByTestId('coach-badge')).toBeVisible();
+  });
+
+  it('marks weekly summary as seen when opening it', async () => {
+    const navigation = createNavigation();
+
+    render(<HomeDashboardScreen navigation={navigation} route={createRoute()} />);
+
+    const weeklyCta = await screen.findByTestId('open-weekly');
+    fireEvent.click(weeklyCta);
+
+    await waitFor(() => {
+      expect(navigation.navigate).toHaveBeenCalledWith('WeeklySummary');
+      expect(engagementStorage.saveEngagementState).toHaveBeenCalledWith({
+        lastSeenWeeklySummaryAt: mockWeekly.period.to,
+      });
+    });
+  });
+
+  it('renders weekly progress copy', async () => {
+    vi.mocked(weeklyApi.fetchWeeklySummary).mockResolvedValue({
+      ...mockWeekly,
+      period: { ...mockWeekly.period, roundCount: 2 },
+    });
+    const navigation = createNavigation();
+
+    render(<HomeDashboardScreen navigation={navigation} route={createRoute()} />);
+
+    expect(await screen.findByTestId('weekly-progress-text')).toHaveTextContent('2/3 rounds this week');
+  });
+
+  it('shows encouragement when no rounds this week', async () => {
+    vi.mocked(weeklyApi.fetchWeeklySummary).mockResolvedValue({
+      ...mockWeekly,
+      period: { ...mockWeekly.period, roundCount: 0 },
+    });
+    const navigation = createNavigation();
+
+    render(<HomeDashboardScreen navigation={navigation} route={createRoute()} />);
+
+    expect(await screen.findByTestId('weekly-progress-text')).toHaveTextContent('Play your first round this week');
   });
 });
