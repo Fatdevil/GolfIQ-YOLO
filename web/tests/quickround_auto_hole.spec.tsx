@@ -16,7 +16,12 @@ const {
 } = vi.hoisted(() => ({
   loadRoundMock: vi.fn(),
   saveRoundMock: vi.fn(),
-  useGeolocationMock: vi.fn(),
+  useGeolocationMock: vi.fn(() => ({
+    position: null,
+    error: null,
+    supported: false,
+    loading: false,
+  })),
   detectHoleMock: vi.fn(),
 }));
 
@@ -44,6 +49,7 @@ describe("QuickRoundPlayPage auto hole suggestion", () => {
       position: { lat: 59.3, lon: 18.1 },
       error: null,
       supported: true,
+      loading: false,
     });
     detectHoleMock.mockResolvedValue({
       hole: 5,

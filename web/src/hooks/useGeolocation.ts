@@ -9,12 +9,14 @@ export type GeolocationState = {
   position: GeoPosition | null;
   error: Error | null;
   supported: boolean;
+  loading: boolean;
 };
 
 const buildDefaultState = (): GeolocationState => ({
   position: null,
   error: null,
   supported: typeof navigator !== "undefined" && "geolocation" in navigator,
+  loading: false,
 });
 
 export function useGeolocation(enabled: boolean): GeolocationState {
@@ -25,6 +27,8 @@ export function useGeolocation(enabled: boolean): GeolocationState {
       return;
     }
 
+    setState((prev) => ({ ...prev, loading: true }));
+
     const watchId = navigator.geolocation.watchPosition(
       (pos) => {
         setState({
@@ -34,10 +38,15 @@ export function useGeolocation(enabled: boolean): GeolocationState {
           },
           error: null,
           supported: true,
+          loading: false,
         });
       },
       (err) => {
-        setState((prev) => ({ ...prev, error: new Error(err.message) }));
+        setState((prev) => ({
+          ...prev,
+          error: new Error(err.message),
+          loading: false,
+        }));
       },
       { enableHighAccuracy: true, maximumAge: 10_000, timeout: 10_000 }
     );

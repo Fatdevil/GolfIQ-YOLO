@@ -52,6 +52,7 @@ describe("useGeolocation", () => {
     expect(watchPositionMock).toHaveBeenCalledTimes(1);
     expect(result.current.position).toEqual({ lat: 10, lon: 20 });
     expect(result.current.supported).toBe(true);
+    expect(result.current.loading).toBe(false);
 
     unmount();
 
@@ -63,6 +64,11 @@ describe("useGeolocation", () => {
 
     expect(watchPositionMock).not.toHaveBeenCalled();
     expect(clearWatchMock).not.toHaveBeenCalled();
-    expect(result.current).toEqual({ position: null, error: null, supported: true });
+    expect(result.current).toEqual({
+      position: null,
+      error: null,
+      supported: true,
+      loading: false,
+    });
   });
 });
