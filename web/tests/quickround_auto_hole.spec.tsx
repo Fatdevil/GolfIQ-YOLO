@@ -13,17 +13,23 @@ const {
   saveRoundMock,
   useGeolocationMock,
   detectHoleMock,
-} = vi.hoisted(() => ({
-  loadRoundMock: vi.fn(),
-  saveRoundMock: vi.fn(),
-  useGeolocationMock: vi.fn(() => ({
-    position: null,
-    error: null,
-    supported: false,
-    loading: false,
-  })),
-  detectHoleMock: vi.fn(),
-}));
+} = vi.hoisted(() => {
+  const useGeolocationMock = vi.fn<[], import("../src/hooks/useGeolocation").GeolocationState>(
+    () => ({
+      position: null,
+      error: null,
+      supported: false,
+      loading: false,
+    })
+  );
+
+  return {
+    loadRoundMock: vi.fn(),
+    saveRoundMock: vi.fn(),
+    useGeolocationMock,
+    detectHoleMock: vi.fn(),
+  };
+});
 
 vi.mock("../src/features/quickround/storage", () => ({
   loadRound: loadRoundMock,
