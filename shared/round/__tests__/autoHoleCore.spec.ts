@@ -6,8 +6,20 @@ const demoCourse: CourseLayout = {
   id: 'demo',
   name: 'Demo Course',
   holes: [
-    { number: 1, tee: { lat: 59.3, lon: 18.1 }, green: { lat: 59.301, lon: 18.101 } },
-    { number: 2, tee: { lat: 59.305, lon: 18.102 }, green: { lat: 59.306, lon: 18.103 } },
+    {
+      number: 1,
+      par: 4,
+      yardage_m: 360,
+      tee: { lat: 59.3, lon: 18.1 },
+      green: { lat: 59.301, lon: 18.101 },
+    },
+    {
+      number: 2,
+      par: 3,
+      yardage_m: 155,
+      tee: { lat: 59.305, lon: 18.102 },
+      green: { lat: 59.306, lon: 18.103 },
+    },
   ],
 };
 

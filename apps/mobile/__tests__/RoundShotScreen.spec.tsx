@@ -64,8 +64,20 @@ beforeEach(() => {
     id: 'demo-course',
     name: 'Demo Course',
     holes: [
-      { number: 1, tee: { lat: 59.3, lon: 18.1 }, green: { lat: 59.301, lon: 18.101 } },
-      { number: 2, tee: { lat: 59.305, lon: 18.103 }, green: { lat: 59.306, lon: 18.104 } },
+      {
+        number: 1,
+        par: 4,
+        yardage_m: 360,
+        tee: { lat: 59.3, lon: 18.1 },
+        green: { lat: 59.301, lon: 18.101 },
+      },
+      {
+        number: 2,
+        par: 3,
+        yardage_m: 150,
+        tee: { lat: 59.305, lon: 18.103 },
+        green: { lat: 59.306, lon: 18.104 },
+      },
     ],
   });
   mockUseGeolocation.mockReturnValue({
@@ -142,6 +154,16 @@ describe('RoundShotScreen', () => {
 
     await waitFor(() => expect(mockFetchCourseLayout).toHaveBeenCalledWith('demo-course'));
     expect(await findByText(/GPS suggests hole 1/)).toBeTruthy();
+  });
+
+  it('renders par and yardage from course layout', async () => {
+    const { findByText } = render(
+      <RoundShotScreen navigation={{} as any} route={undefined as any} />,
+    );
+
+    await waitFor(() => expect(mockFetchCourseLayout).toHaveBeenCalled());
+    expect(await findByText('Par 4')).toBeTruthy();
+    expect(await findByText('360 m')).toBeTruthy();
   });
 
   it('hides auto-hole hint when geolocation is unavailable', async () => {

@@ -138,6 +138,11 @@ export default function RoundShotScreen({ navigation }: Props): JSX.Element {
     }, 0);
   }, [scores]);
 
+  const currentHoleLayout = useMemo(() => {
+    if (!courseLayout) return null;
+    return courseLayout.holes.find((hole) => hole.number === currentHole) ?? null;
+  }, [courseLayout, currentHole]);
+
   const holeNumbers = useMemo(
     () => Array.from({ length: totalHoles }, (_, idx) => startingHole + idx),
     [startingHole, totalHoles],
@@ -379,6 +384,14 @@ export default function RoundShotScreen({ navigation }: Props): JSX.Element {
           <Text style={styles.muted}>Running total: {runningTotal || 0}</Text>
           <Text style={styles.muted}>Start: Hole {startingHole}</Text>
         </View>
+        {currentHoleLayout && (
+          <View style={styles.holeMetaRow}>
+            <Text style={styles.holeMetaText}>Par {currentHoleLayout.par}</Text>
+            {currentHoleLayout.yardage_m != null && (
+              <Text style={styles.holeMetaText}>{currentHoleLayout.yardage_m} m</Text>
+            )}
+          </View>
+        )}
       </View>
 
       <View style={styles.holePickerRow}>
@@ -695,6 +708,21 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     gap: 8,
+  },
+  holeMetaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 4,
+  },
+  holeMetaText: {
+    color: '#0f172a',
+    backgroundColor: '#e2e8f0',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+    marginRight: 8,
+    fontSize: 12,
+    fontWeight: '600',
   },
   holeBadge: {
     backgroundColor: '#0f172a',

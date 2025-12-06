@@ -2,6 +2,8 @@ export type LatLon = { lat: number; lon: number };
 
 export type HoleLayout = {
   number: number;
+  par: number;
+  yardage_m?: number | null;
   tee: LatLon;
   green: LatLon;
 };
@@ -12,6 +14,7 @@ export type CourseLayout = {
   holes: HoleLayout[];
   country?: string | null;
   city?: string | null;
+  location?: LatLon | null;
 };
 
 export type CourseSummaryGeo = {

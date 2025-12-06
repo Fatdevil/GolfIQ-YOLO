@@ -74,6 +74,37 @@ describe("QuickRoundPlayPage", () => {
     expect(savedRound.holes[0].strokes).toBe(5);
   });
 
+  it("shows course layout par and yardage for current hole", async () => {
+    const round: QuickRound = {
+      id: "qr-456",
+      courseId: "demo-links-hero",
+      courseName: "Demo Links Hero",
+      holes: [
+        { index: 1, par: 4 },
+        { index: 2, par: 4 },
+      ],
+      startedAt: "2024-05-02T12:00:00.000Z",
+      showPutts: true,
+    };
+
+    loadRoundMock.mockReturnValueOnce(round);
+
+    render(
+      <UserSessionProvider>
+        <NotificationProvider>
+          <MemoryRouter initialEntries={["/play/qr-456"]}>
+            <Routes>
+              <Route path="/play/:roundId" element={<QuickRoundPlayPage />} />
+            </Routes>
+          </MemoryRouter>
+        </NotificationProvider>
+      </UserSessionProvider>
+    );
+
+    expect(await screen.findByText(/Par 4/)).toBeTruthy();
+    expect(screen.getByText(/360 m/)).toBeTruthy();
+  });
+
   it("marks round as completed", async () => {
     const round: QuickRound = {
       id: "qr-999",

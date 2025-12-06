@@ -74,6 +74,7 @@ export type CourseSummary = {
   city?: string | null;
   holeCount: number;
   location?: { lat: number; lon: number } | null;
+  totalPar?: number | null;
 };
 
 export type HeroCourseTee = {

@@ -17,6 +17,8 @@ def test_list_courses_returns_demo_course():
         assert demo["location"] is not None
         assert isinstance(demo["location"].get("lat"), (int, float))
         assert isinstance(demo["location"].get("lon"), (int, float))
+        assert isinstance(demo.get("totalPar"), int)
+        assert demo["totalPar"] > 0
 
 
 def test_get_course_layout_returns_holes():
@@ -27,6 +29,13 @@ def test_get_course_layout_returns_holes():
         assert layout["id"] == "demo-links-hero"
         assert isinstance(layout.get("holes"), list)
         assert len(layout["holes"]) > 0
+        assert all(
+            "par" in hole and isinstance(hole["par"], int) for hole in layout["holes"]
+        )
+        assert all(
+            "yardage_m" in hole and isinstance(hole["yardage_m"], int)
+            for hole in layout["holes"]
+        )
 
 
 def test_get_course_layout_404_for_unknown():
