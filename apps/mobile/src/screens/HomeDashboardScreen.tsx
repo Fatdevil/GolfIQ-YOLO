@@ -15,6 +15,7 @@ import { fetchPlayerBag, type PlayerBag } from '@app/api/bagClient';
 import {
   fetchCurrentRound,
   fetchLatestCompletedRound,
+  startRound,
   type RoundInfo,
   type RoundSummaryWithRoundInfo,
 } from '@app/api/roundClient';
@@ -22,9 +23,14 @@ import { fetchPracticePlan, type PracticePlan } from '@app/api/practiceClient';
 import { fetchPlayerProfile, type PlayerProfile } from '@app/api/player';
 import { fetchWeeklySummary, type WeeklySummary } from '@app/api/weeklySummary';
 import { createWeeklyShareLink } from '@app/api/shareClient';
+import { fetchCourseLayout, fetchCourses } from '@app/api/courseClient';
 import { t } from '@app/i18n';
 import type { RootStackParamList } from '@app/navigation/types';
 import { loadEngagementState, saveEngagementState, type EngagementState } from '@app/storage/engagement';
+import { useGeolocation } from '@app/hooks/useGeolocation';
+import { saveActiveRoundState } from '@app/round/roundState';
+import { computeNearestCourse } from '@shared/round/autoHoleCore';
+import { buildQuickStartPlan } from '@app/utils/quickStartRound';
 
 const CALIBRATION_SAMPLE_THRESHOLD = 5;
 const TARGET_ROUNDS_PER_WEEK = 3;
@@ -81,6 +87,8 @@ export default function HomeDashboardScreen({ navigation }: Props): JSX.Element 
     engagement: null,
   });
   const [sharingWeekly, setSharingWeekly] = useState(false);
+  const [quickStarting, setQuickStarting] = useState(false);
+  const geo = useGeolocation();
 
   useEffect(() => {
     let cancelled = false;
@@ -229,6 +237,61 @@ export default function HomeDashboardScreen({ navigation }: Props): JSX.Element 
     }
   }, [latestRound?.roundId]);
 
+  const handleQuickStart = useCallback(async () => {
+    setQuickStarting(true);
+    try {
+      const courses = await fetchCourses().catch(() => null);
+      if (!courses || courses.length === 0) {
+        navigation.navigate('RoundStart');
+        return;
+      }
+
+      const nearest = computeNearestCourse(
+        courses.map((course) => ({
+          id: course.id,
+          name: course.name,
+          location: course.location ?? null,
+        })),
+        geo.position,
+      );
+
+      if (!nearest.suggestedCourseId) {
+        navigation.navigate('RoundStart');
+        return;
+      }
+
+      const layout = await fetchCourseLayout(nearest.suggestedCourseId).catch(() => null);
+      if (!layout) {
+        navigation.navigate('RoundStart');
+        return;
+      }
+
+      const plan = buildQuickStartPlan({
+        courses,
+        playerPosition: geo.position,
+        courseLayoutsById: { [layout.id]: layout },
+      });
+
+      if (!plan) {
+        navigation.navigate('RoundStart');
+        return;
+      }
+
+      const round = await startRound({
+        courseId: plan.courseId,
+        startHole: plan.startHole,
+        holes: plan.holeCount,
+      });
+
+      await saveActiveRoundState({ round, currentHole: round.startHole ?? 1 });
+      navigation.navigate('RoundShot', { roundId: round.id });
+    } catch (err) {
+      navigation.navigate('RoundStart');
+    } finally {
+      setQuickStarting(false);
+    }
+  }, [geo.position, navigation]);
+
   const handleOpenWeekly = useCallback(() => {
     navigation.navigate('WeeklySummary');
     void markWeeklySeen();
@@ -326,6 +389,20 @@ export default function HomeDashboardScreen({ navigation }: Props): JSX.Element 
             </TouchableOpacity>
           </>
         )}
+        <TouchableOpacity
+          disabled={quickStarting}
+          onPress={handleQuickStart}
+          testID="quick-start-round"
+          accessibilityLabel={t('home_dashboard_quick_start_gps_cta')}
+        >
+          <View style={[styles.secondaryButton, quickStarting && styles.disabledButton]}>
+            {quickStarting ? (
+              <ActivityIndicator color="#0f172a" />
+            ) : (
+              <Text style={styles.secondaryButtonText}>{t('home_dashboard_quick_start_gps_cta')}</Text>
+            )}
+          </View>
+        </TouchableOpacity>
       </View>
 
       <View style={styles.card}>
@@ -516,6 +593,23 @@ const styles = StyleSheet.create({
   primaryButtonText: {
     color: '#fff',
     fontWeight: '700',
+  },
+  secondaryButton: {
+    marginTop: 4,
+    borderColor: '#d1d5db',
+    borderWidth: 1,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 10,
+    alignItems: 'center',
+    backgroundColor: '#f9fafb',
+  },
+  secondaryButtonText: {
+    color: '#0f172a',
+    fontWeight: '700',
+  },
+  disabledButton: {
+    opacity: 0.7,
   },
   link: {
     color: '#2563eb',

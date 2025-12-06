@@ -23,6 +23,7 @@ export const en = {
   home_dashboard_quick_start_resume_cta: 'Resume round',
   home_dashboard_quick_start_new_round: 'Start a new round to log shots and stats.',
   home_dashboard_quick_start_new_round_cta: 'Start a new round',
+  home_dashboard_quick_start_gps_cta: 'Quick start round here',
   home_dashboard_unknown_course: 'your course',
   home_dashboard_last_round_title: 'Last round',
   home_dashboard_last_round_cta: 'View recap',
