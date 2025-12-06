@@ -39,7 +39,12 @@ export function buildQuickStartPlan(context: QuickStartContext): QuickStartPlan 
 
   const holeSuggestion = computeAutoHoleSuggestion(layout, playerPosition);
   const startHole = holeSuggestion.suggestedHole ?? 1;
-  const holeCount = layout.holes.length >= 18 ? 18 : layout.holes.length;
+  const totalHoles = layout.holes.length;
+  const desiredMax = Math.min(18, totalHoles);
+  const remaining = Math.max(totalHoles - (startHole - 1), 0);
+  const holeCount = Math.min(desiredMax, remaining);
+
+  if (holeCount <= 0) return null;
 
   return {
     courseId: nearest.suggestedCourseId,

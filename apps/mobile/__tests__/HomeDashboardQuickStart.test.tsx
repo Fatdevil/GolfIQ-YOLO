@@ -91,7 +91,7 @@ describe('HomeDashboardScreen quick start', () => {
     vi.mocked(roundClient.startRound).mockResolvedValue({
       id: 'round-123',
       courseId: 'near',
-      holes: 18,
+      holes: 16,
       startHole: 3,
       startedAt: 'now',
     } as any);
@@ -105,7 +105,7 @@ describe('HomeDashboardScreen quick start', () => {
     fireEvent.click(quickStart);
 
     await waitFor(() => {
-      expect(roundClient.startRound).toHaveBeenCalledWith({ courseId: 'near', startHole: 3, holes: 18 });
+      expect(roundClient.startRound).toHaveBeenCalledWith({ courseId: 'near', startHole: 3, holes: 16 });
     });
     expect(roundState.saveActiveRoundState).toHaveBeenCalledWith({
       round: expect.objectContaining({ id: 'round-123' }),
