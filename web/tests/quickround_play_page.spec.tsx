@@ -105,6 +105,41 @@ describe("QuickRoundPlayPage", () => {
     expect(screen.getByText(/360 m/)).toBeTruthy();
   });
 
+  it("renders caddie targets for the current hole", async () => {
+    const round: QuickRound = {
+      id: "qr-457",
+      courseId: "demo-links-hero",
+      courseName: "Demo Links Hero",
+      holes: [
+        { index: 1, par: 4 },
+        { index: 2, par: 4 },
+      ],
+      startedAt: "2024-05-02T12:00:00.000Z",
+      showPutts: true,
+    };
+
+    loadRoundMock.mockReturnValueOnce(round);
+
+    render(
+      <UserSessionProvider>
+        <NotificationProvider>
+          <MemoryRouter initialEntries={["/play/qr-457"]}>
+            <Routes>
+              <Route path="/play/:roundId" element={<QuickRoundPlayPage />} />
+            </Routes>
+          </MemoryRouter>
+        </NotificationProvider>
+      </UserSessionProvider>
+    );
+
+    const caddieHeadings = await screen.findAllByText(/Caddie Targets/);
+    expect(caddieHeadings.length).toBeGreaterThan(0);
+    const layupTargets = await screen.findAllByText(/Layup: 216 m from tee/);
+    expect(layupTargets.length).toBeGreaterThan(0);
+    const greenTargets = await screen.findAllByText(/Green: Center of green/);
+    expect(greenTargets.length).toBeGreaterThan(0);
+  });
+
   it("marks round as completed", async () => {
     const round: QuickRound = {
       id: "qr-999",

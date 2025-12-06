@@ -17,6 +17,20 @@ export type CourseLayout = {
   location?: LatLon | null;
 };
 
+export type CaddieTarget = {
+  type: 'layup' | 'green';
+  holeNumber: number;
+  position: LatLon;
+  description: string;
+  carryDistanceM: number | null;
+};
+
+export type HoleCaddieTargets = {
+  holeNumber: number;
+  layup: CaddieTarget | null;
+  green: CaddieTarget;
+};
+
 export type CourseSummaryGeo = {
   id: string;
   name: string;
@@ -125,5 +139,50 @@ export function computeNearestCourse(
     suggestedCourseId: closest.id,
     distanceToSuggestedM: closest.distance,
     confidence,
+  };
+}
+
+function interpolateLatLon(a: LatLon, b: LatLon, t: number): LatLon {
+  const clampedT = Math.max(0, Math.min(1, t));
+  return {
+    lat: a.lat + (b.lat - a.lat) * clampedT,
+    lon: a.lon + (b.lon - a.lon) * clampedT,
+  };
+}
+
+export function computeHoleCaddieTargets(
+  _layout: CourseLayout,
+  hole: HoleLayout,
+): HoleCaddieTargets {
+  const greenTarget: CaddieTarget = {
+    type: 'green',
+    holeNumber: hole.number,
+    position: hole.green,
+    description: 'Center of green',
+    carryDistanceM: null,
+  };
+
+  let layup: CaddieTarget | null = null;
+  if (hole.yardage_m != null && hole.yardage_m > 0) {
+    const total = hole.yardage_m;
+    const desired = Math.min(total * 0.6, 220);
+
+    const tee = hole.tee;
+    const green = hole.green;
+    const layupPos = interpolateLatLon(tee, green, desired / total);
+
+    layup = {
+      type: 'layup',
+      holeNumber: hole.number,
+      position: layupPos,
+      description: 'Safe layup',
+      carryDistanceM: Math.round(desired),
+    };
+  }
+
+  return {
+    holeNumber: hole.number,
+    layup,
+    green: greenTarget,
   };
 }
