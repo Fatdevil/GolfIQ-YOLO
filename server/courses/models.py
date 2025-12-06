@@ -12,6 +12,8 @@ class LatLon(BaseModel):
 
 class HoleLayout(BaseModel):
     number: int
+    par: int
+    yardage_m: int | None = None
     tee: LatLon
     green: LatLon
 

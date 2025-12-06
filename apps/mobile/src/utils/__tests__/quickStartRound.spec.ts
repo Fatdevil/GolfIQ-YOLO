@@ -16,6 +16,7 @@ describe('buildQuickStartPlan', () => {
     name: 'Near Course',
     holes: Array.from({ length: 18 }, (_, index) => ({
       number: index + 1,
+      par: 4,
       tee: { lat: 59.3 + index * 0.001, lon: 18.1 },
       green: { lat: 59.3005 + index * 0.001, lon: 18.1005 },
     })),
@@ -26,6 +27,7 @@ describe('buildQuickStartPlan', () => {
     name: 'Near Course 9',
     holes: Array.from({ length: 9 }, (_, index) => ({
       number: index + 1,
+      par: 4,
       tee: { lat: 59.3 + index * 0.001, lon: 18.1 },
       green: { lat: 59.3005 + index * 0.001, lon: 18.1005 },
     })),

@@ -84,6 +84,8 @@ describe('HomeDashboardScreen quick start', () => {
       name: 'Near Course',
       holes: Array.from({ length: 18 }, (_, index) => ({
         number: index + 1,
+        par: 4,
+        yardage_m: 360 + index,
         tee: { lat: 59.3 + index * 0.001, lon: 18.1 },
         green: { lat: 59.3005 + index * 0.001, lon: 18.1005 },
       })),

@@ -58,6 +58,10 @@ export default function QuickRoundPlayPage() {
     () => resolveCourseLayout(round?.courseId, round?.courseName, bundle ?? null),
     [bundle, round?.courseId, round?.courseName]
   );
+  const currentHoleLayout = useMemo(() => {
+    if (!courseLayout) return null;
+    return courseLayout.holes.find((hole) => hole.number === currentHoleNumber) ?? null;
+  }, [courseLayout, currentHoleNumber]);
   const autoHoleSuggestion = useAutoHoleSuggest(
     autoHoleEnabled ? courseLayout : null,
     geoState
@@ -382,6 +386,14 @@ export default function QuickRoundPlayPage() {
                 </p>
               )}
               <p className="mt-2 text-xs text-emerald-300">Aktivt hål: {currentHoleNumber}</p>
+              {currentHoleLayout && (
+                <p className="text-xs text-slate-300">
+                  Par {currentHoleLayout.par}
+                  {currentHoleLayout.yardage_m
+                    ? ` · ${currentHoleLayout.yardage_m} m`
+                    : ""}
+                </p>
+              )}
             </div>
             <div className="flex w-full flex-col items-end gap-2 text-sm text-slate-200 sm:w-auto sm:flex-row sm:items-center sm:gap-4">
               <label className="flex items-center gap-2 text-sm text-slate-200">

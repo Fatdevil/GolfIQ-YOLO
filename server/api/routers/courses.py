@@ -27,6 +27,7 @@ class CourseSummaryOut(BaseModel):
     city: str | None = None
     holeCount: int
     location: LatLon | None = None
+    totalPar: int | None = None
 
 
 @router.get("/course-layouts", response_model=list[CourseSummaryOut])
@@ -39,6 +40,11 @@ async def list_course_layouts() -> list[CourseSummaryOut]:
             city=course.city,
             holeCount=len(course.holes),
             location=course.location,
+            totalPar=(
+                sum(hole.par for hole in course.holes if hole.par is not None)
+                if course.holes
+                else None
+            ),
         )
         for course in DEMO_COURSES.values()
     ]
