@@ -6,6 +6,7 @@ import { beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
 import RoundShotScreen from '@app/screens/RoundShotScreen';
 import { appendShot, endRound, getRoundScores, updateHoleScore } from '@app/api/roundClient';
 import { fetchCourseLayout } from '@app/api/courseClient';
+import { fetchPlayerBag } from '@app/api/bagClient';
 import { useGeolocation } from '@app/hooks/useGeolocation';
 import {
   clearActiveRoundState,
@@ -13,21 +14,26 @@ import {
   saveActiveRoundState,
   type ActiveRoundState,
 } from '@app/round/roundState';
+import { loadCaddieSettings } from '@app/caddie/caddieSettingsStorage';
 
 vi.mock('@app/api/roundClient');
 vi.mock('@app/api/courseClient');
+vi.mock('@app/api/bagClient');
 vi.mock('@app/round/roundState');
 vi.mock('@app/hooks/useGeolocation');
+vi.mock('@app/caddie/caddieSettingsStorage');
 
 const mockAppendShot = appendShot as unknown as Mock;
 const mockEndRound = endRound as unknown as Mock;
 const mockUpdateHoleScore = updateHoleScore as unknown as Mock;
 const mockGetScores = getRoundScores as unknown as Mock;
 const mockFetchCourseLayout = fetchCourseLayout as unknown as Mock;
+const mockFetchPlayerBag = fetchPlayerBag as unknown as Mock;
 const mockLoad = loadActiveRoundState as unknown as Mock;
 const mockSave = saveActiveRoundState as unknown as Mock;
 const mockClear = clearActiveRoundState as unknown as Mock;
 const mockUseGeolocation = useGeolocation as unknown as Mock;
+const mockLoadCaddieSettings = loadCaddieSettings as unknown as Mock;
 const alertSpy = vi.spyOn(Alert, 'alert');
 
 const sampleState: ActiveRoundState = {
@@ -80,6 +86,15 @@ beforeEach(() => {
       },
     ],
   });
+  mockFetchPlayerBag.mockResolvedValue({
+    clubs: [
+      { clubId: 'D', label: 'Driver', avgCarryM: 240, sampleCount: 10, active: true },
+      { clubId: '3W', label: '3 Wood', avgCarryM: 225, sampleCount: 8, active: true },
+      { clubId: '4i', label: '4 Iron', avgCarryM: 190, sampleCount: 6, active: true },
+      { clubId: '7i', label: '7 Iron', avgCarryM: 150, sampleCount: 8, active: true },
+    ],
+  });
+  mockLoadCaddieSettings.mockResolvedValue({ stockShape: 'straight', riskProfile: 'normal' });
   mockUseGeolocation.mockReturnValue({
     position: null,
     error: null,
@@ -175,6 +190,58 @@ describe('RoundShotScreen', () => {
     expect(await findByTestId('caddie-targets')).toBeTruthy();
     expect(await findByText(/Layup: 216 m from tee/)).toBeTruthy();
     expect(await findByText(/Green: center of green/)).toBeTruthy();
+  });
+
+  it('shows target-aware layup strategy for safe par 5', async () => {
+    mockLoadCaddieSettings.mockResolvedValueOnce({ stockShape: 'straight', riskProfile: 'safe' });
+    mockFetchCourseLayout.mockResolvedValueOnce({
+      id: 'demo-course',
+      name: 'Demo Course',
+      holes: [
+        {
+          number: 1,
+          par: 5,
+          yardage_m: 480,
+          tee: { lat: 59.3, lon: 18.1 },
+          green: { lat: 59.301, lon: 18.101 },
+        },
+      ],
+    });
+
+    const { findByTestId, findByText } = render(
+      <RoundShotScreen navigation={{} as any} route={undefined as any} />,
+    );
+
+    await waitFor(() => expect(mockFetchPlayerBag).toHaveBeenCalled());
+    expect(await findByTestId('caddie-decision')).toBeTruthy();
+    expect(await findByText(/Safe layup/)).toBeTruthy();
+    expect(await findByText(/Club: 3 Wood/)).toBeTruthy();
+  });
+
+  it('attacks green for aggressive short par 4', async () => {
+    mockLoadCaddieSettings.mockResolvedValueOnce({ stockShape: 'straight', riskProfile: 'aggressive' });
+    mockFetchCourseLayout.mockResolvedValueOnce({
+      id: 'demo-course',
+      name: 'Demo Course',
+      holes: [
+        {
+          number: 1,
+          par: 4,
+          yardage_m: 300,
+          tee: { lat: 59.3, lon: 18.1 },
+          green: { lat: 59.301, lon: 18.101 },
+        },
+      ],
+    });
+
+    const { findByTestId, findByText } = render(
+      <RoundShotScreen navigation={{} as any} route={undefined as any} />,
+    );
+
+    await waitFor(() => expect(mockFetchPlayerBag).toHaveBeenCalled());
+    expect(await findByTestId('caddie-decision')).toBeTruthy();
+    expect(await findByText(/Attack the green/)).toBeTruthy();
+    expect(await findByText(/Club: Driver/)).toBeTruthy();
   });
 
   it('hides auto-hole hint when geolocation is unavailable', async () => {

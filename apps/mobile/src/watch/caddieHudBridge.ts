@@ -14,6 +14,9 @@ export interface CaddieHudPayload {
   club: string;
   intent: ShotShapeIntent;
   riskProfile: RiskProfile;
+  strategy?: 'attack' | 'layup';
+  targetDistanceM?: number | null;
+  recommendedClubId?: string | null;
 
   coreCarryMinM?: number | null;
   coreCarryMaxM?: number | null;
