@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { type PlayerBag } from '@app/api/bagClient';
-import { computeCaddieDecision, normalizeRiskPreference } from '@app/caddie/caddieDecisionEngine';
+import { computeCaddieDecision, normalizeRiskPreference } from '@app/caddie/CaddieDecisionEngine';
 import type { HoleCaddieTargets } from '@shared/round/autoHoleCore';
 
 const bag: PlayerBag = {

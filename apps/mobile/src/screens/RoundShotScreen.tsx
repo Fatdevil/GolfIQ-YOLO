@@ -36,7 +36,7 @@ import {
   loadCaddieSettings,
   type CaddieSettings,
 } from '@app/caddie/caddieSettingsStorage';
-import { computeCaddieDecision, normalizeRiskPreference } from '@app/caddie/caddieDecisionEngine';
+import { computeCaddieDecision, normalizeRiskPreference } from '@app/caddie/CaddieDecisionEngine';
 import type { CaddieDecision } from '@app/caddie/CaddieDecision';
 import { computeEffectiveDistance } from '@app/caddie/playsLike';
 import {
