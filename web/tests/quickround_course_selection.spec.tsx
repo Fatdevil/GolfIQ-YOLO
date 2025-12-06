@@ -13,7 +13,8 @@ const {
   loadDefaultHandicapMock,
   saveDefaultHandicapMock,
   clearDefaultHandicapMock,
-  fetchBundleIndexMock,
+  fetchCoursesMock,
+  fetchCourseLayoutMock,
   fetchHeroCoursesMock,
 } = vi.hoisted(() => ({
   saveRoundMock: vi.fn(),
@@ -22,7 +23,8 @@ const {
   loadDefaultHandicapMock: vi.fn(() => null as number | null),
   saveDefaultHandicapMock: vi.fn(),
   clearDefaultHandicapMock: vi.fn(),
-  fetchBundleIndexMock: vi.fn(),
+  fetchCoursesMock: vi.fn(),
+  fetchCourseLayoutMock: vi.fn(),
   fetchHeroCoursesMock: vi.fn(),
 }));
 
@@ -36,7 +38,8 @@ vi.mock("../src/features/quickround/storage", () => ({
 }));
 
 vi.mock("@/api", () => ({
-  fetchBundleIndex: fetchBundleIndexMock,
+  fetchCourses: fetchCoursesMock,
+  fetchCourseLayout: fetchCourseLayoutMock,
   fetchHeroCourses: fetchHeroCoursesMock,
 }));
 
@@ -44,10 +47,22 @@ describe("QuickRoundStartPage course selection", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     loadAllRoundsMock.mockReturnValue([]);
-    fetchBundleIndexMock.mockResolvedValue([
-      { courseId: "hero-18", name: "Hero Ridge", holes: 18 },
-      { courseId: "hero-9", name: "Nine Hills", holes: 9 },
+    fetchCoursesMock.mockResolvedValue([
+      { id: "hero-18", name: "Hero Ridge", holeCount: 18 },
+      { id: "hero-9", name: "Nine Hills", holeCount: 9 },
     ]);
+    fetchCourseLayoutMock.mockImplementation(async (courseId: string) => ({
+      id: courseId,
+      name: courseId === "hero-18" ? "Hero Ridge" : "Nine Hills",
+      holes: Array.from(
+        { length: courseId === "hero-18" ? 18 : 9 },
+        (_, index) => ({
+          number: index + 1,
+          tee: { lat: 0, lon: 0 },
+          green: { lat: 0, lon: 1 },
+        })
+      ),
+    }));
     fetchHeroCoursesMock.mockResolvedValue([]);
   });
 
@@ -63,11 +78,13 @@ describe("QuickRoundStartPage course selection", () => {
       </MemoryRouter>
     );
 
-    await screen.findByRole("option", { name: /Hero Ridge \(18\)/i });
-    const courseSelect = screen.getByLabelText(/^Course$/i);
-    await user.selectOptions(courseSelect, "hero-18");
+    await screen.findByRole("option", { name: /Hero Ridge/i });
+    const courseSelect = screen
+      .getAllByLabelText(/^Course$/i)
+      .find((element: HTMLElement) => element.tagName.toLowerCase() === "select");
+    await user.selectOptions(courseSelect as HTMLSelectElement, "hero-18");
 
-    const courseNameInput = screen.getByLabelText(/Course name/i) as HTMLInputElement;
+    const courseNameInput = screen.getAllByLabelText(/Course name/i)[0] as HTMLInputElement;
     await waitFor(() => expect(courseNameInput.value).toBe("Hero Ridge"));
 
     await user.click(screen.getByRole("button", { name: /Start round/i }));

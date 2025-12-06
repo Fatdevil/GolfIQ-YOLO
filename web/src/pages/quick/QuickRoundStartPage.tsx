@@ -3,9 +3,10 @@ import { useTranslation } from "react-i18next";
 import { Link, useNavigate } from "react-router-dom";
 
 import {
-  fetchBundleIndex,
+  fetchCourses,
+  fetchCourseLayout,
   fetchHeroCourses,
-  type BundleIndexItem,
+  type CourseSummary,
   type HeroCourseSummary,
   type HeroCourseTee,
 } from "@/api";
@@ -23,6 +24,7 @@ import { DEMO_COURSE_NAME } from "@/features/quickround/constants";
 import { DEMO_LINKS_HERO_LAYOUT } from "@/features/quickround/courseLayouts";
 import { useGeolocation } from "@/hooks/useGeolocation";
 import { useAutoHoleSuggest } from "@/hooks/useAutoHoleSuggest";
+import type { CourseLayout } from "@/types/course";
 
 function readStoredMemberId(): string | null {
   if (typeof window === "undefined") {
@@ -38,18 +40,22 @@ function readStoredMemberId(): string | null {
 export default function QuickRoundStartPage() {
   const navigate = useNavigate();
   const { t } = useTranslation();
-  const [courseName, setCourseName] = useState(DEMO_COURSE_NAME);
+  const [courseName, setCourseName] = useState("");
+  const [courseNameTouched, setCourseNameTouched] = useState(false);
   const [teesName, setTeesName] = useState("");
   const [holesCount, setHolesCount] = useState<9 | 18>(18);
   const [showPutts, setShowPutts] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [rounds, setRounds] = useState<QuickRoundSummary[]>([]);
-  const [courses, setCourses] = useState<BundleIndexItem[]>([]);
+  const [courses, setCourses] = useState<CourseSummary[]>([]);
   const [heroCourses, setHeroCourses] = useState<HeroCourseSummary[]>([]);
   const [selectedHeroCourseId, setSelectedHeroCourseId] =
     useState<string>();
   const [selectedHeroTeeId, setSelectedHeroTeeId] = useState<string>();
   const [selectedCourseId, setSelectedCourseId] = useState<string | undefined>();
+  const [courseLayout, setCourseLayout] = useState<CourseLayout | null>(null);
+  const [courseLayoutLoading, setCourseLayoutLoading] = useState(false);
+  const [coursesLoading, setCoursesLoading] = useState(false);
   const [handicapInput, setHandicapInput] = useState<string>(() => {
     const stored = loadDefaultHandicap();
     return stored != null ? String(stored) : "";
@@ -61,6 +67,10 @@ export default function QuickRoundStartPage() {
     () => heroCourses.find((course) => course.id === selectedHeroCourseId),
     [heroCourses, selectedHeroCourseId]
   );
+  const selectedCourse = useMemo(
+    () => courses.find((course) => course.id === selectedCourseId),
+    [courses, selectedCourseId]
+  );
 
   const holeNumbers = useMemo(() => {
     if (selectedHeroCourse?.holeDetails?.length) {
@@ -68,20 +78,17 @@ export default function QuickRoundStartPage() {
         .map((hole, index) => hole.number ?? index + 1)
         .sort((a, b) => a - b);
     }
-    const total = selectedHeroCourse?.holes ?? holesCount;
+    if (courseLayout?.holes?.length) {
+      return courseLayout.holes
+        .map((hole) => hole.number)
+        .sort((a, b) => a - b);
+    }
+    const total =
+      selectedHeroCourse?.holes ?? selectedCourse?.holeCount ?? holesCount;
     return Array.from({ length: total }, (_, index) => index + 1);
-  }, [holesCount, selectedHeroCourse]);
+  }, [courseLayout?.holes, holesCount, selectedCourse?.holeCount, selectedHeroCourse]);
 
   const geoState = useGeolocation(true);
-  const courseLayout = useMemo(() => {
-    const isDemoCourse =
-      selectedHeroCourse?.id === "demo-links" ||
-      courseName.trim().toLowerCase() === DEMO_COURSE_NAME.toLowerCase();
-    if (isDemoCourse) {
-      return DEMO_LINKS_HERO_LAYOUT;
-    }
-    return null;
-  }, [courseName, selectedHeroCourse]);
   const autoHoleSuggestion = useAutoHoleSuggest(courseLayout, geoState);
 
   const persistHandicapDefault = (value: string) => {
@@ -117,22 +124,56 @@ export default function QuickRoundStartPage() {
   useEffect(() => {
     let cancelled = false;
 
-    fetchBundleIndex()
-      .then((list) => {
-        if (!cancelled) {
-          setCourses(list);
+    const demoCourse: CourseSummary = {
+      id: "demo-links-hero",
+      name: DEMO_COURSE_NAME,
+      holeCount: DEMO_LINKS_HERO_LAYOUT.holes.length,
+      city: null,
+      country: null,
+    };
+
+    async function loadCourses() {
+      setCoursesLoading(true);
+      try {
+        const list = await fetchCourses();
+        if (cancelled) return;
+        if (list.length === 0) {
+          setCourses([demoCourse]);
+          setCourseLayout(DEMO_LINKS_HERO_LAYOUT);
+          setSelectedCourseId(demoCourse.id);
+          if (!courseNameTouched) {
+            setCourseName(demoCourse.name);
+          }
+          return;
         }
-      })
-      .catch(() => {
-        if (!cancelled) {
-          setCourses([]);
+        setCourses(list);
+        const defaultCourse = list[0];
+        setSelectedCourseId((current) => current ?? defaultCourse.id);
+        if (!courseNameTouched) {
+          setCourseName((current) => current || defaultCourse.name);
         }
-      });
+      } catch (error) {
+        if (!cancelled) {
+          setCourses([demoCourse]);
+          setCourseLayout(DEMO_LINKS_HERO_LAYOUT);
+          setSelectedCourseId(demoCourse.id);
+          if (!courseNameTouched) {
+            setCourseName(demoCourse.name);
+          }
+        }
+      } finally {
+        if (!cancelled) {
+          setCoursesLoading(false);
+        }
+      }
+    }
+
+    loadCourses();
 
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [courseNameTouched]);
 
   useEffect(() => {
     let cancelled = false;
@@ -155,9 +196,51 @@ export default function QuickRoundStartPage() {
   }, []);
 
   useEffect(() => {
-    const selected = courses.find((course) => course.courseId === selectedCourseId);
+    if (!selectedCourseId) {
+      setCourseLayout(null);
+      return;
+    }
+
+    let cancelled = false;
+    setCourseLayoutLoading(true);
+
+    fetchCourseLayout(selectedCourseId)
+      .then((layout) => {
+        if (cancelled) return;
+        setCourseLayout(layout);
+        if (!courseNameTouched) {
+          setCourseName((current) => current || layout.name);
+        }
+      })
+      .catch(() => {
+        if (cancelled) return;
+        if (selectedCourseId === "demo-links-hero") {
+          setCourseLayout(DEMO_LINKS_HERO_LAYOUT);
+          if (!courseNameTouched) {
+            setCourseName(DEMO_COURSE_NAME);
+          }
+          return;
+        }
+        setCourseLayout(null);
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setCourseLayoutLoading(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [courseNameTouched, selectedCourseId]);
+
+  useEffect(() => {
+    const selected = courses.find((course) => course.id === selectedCourseId);
     if (selected) {
       setCourseName(selected.name);
+      if (selected.holeCount === 9 || selected.holeCount === 18) {
+        setHolesCount(selected.holeCount as 9 | 18);
+      }
     }
   }, [selectedCourseId, courses]);
 
@@ -211,10 +294,11 @@ export default function QuickRoundStartPage() {
 
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    const selectedCourse = courses.find((course) => course.courseId === selectedCourseId);
+    const selectedCourse = courses.find((course) => course.id === selectedCourseId);
     const trimmedCourseName = courseName.trim();
-    const finalCourseName = trimmedCourseName || selectedCourse?.name || "";
-    const finalCourseId = selectedCourse?.courseId ?? selectedCourseId;
+    const finalCourseName =
+      trimmedCourseName || courseLayout?.name || selectedCourse?.name || "";
+    const finalCourseId = selectedCourse?.id ?? selectedCourseId;
     if (!finalCourseName) {
       setError(t("quickRound.start.courseNameRequired"));
       return;
@@ -227,6 +311,14 @@ export default function QuickRoundStartPage() {
         index: hole.number ?? index + 1,
         par: hole.par ?? 4,
       }));
+    } else if (courseLayout?.holes?.length) {
+      holes = courseLayout.holes
+        .slice()
+        .sort((a, b) => a.number - b.number)
+        .map((hole) => ({
+          index: hole.number,
+          par: 4,
+        }));
     } else if (selectedHeroCourse?.holes) {
       holes = Array.from({ length: selectedHeroCourse.holes }, (_, index) => ({
         index: index + 1,
@@ -283,6 +375,7 @@ export default function QuickRoundStartPage() {
               type="text"
               value={courseName}
               onChange={(event) => {
+                setCourseNameTouched(true);
                 setCourseName(event.target.value);
                 if (error) {
                   setError(null);
@@ -305,16 +398,19 @@ export default function QuickRoundStartPage() {
                 setSelectedHeroCourseId(undefined);
                 setSelectedHeroTeeId(undefined);
                 setSelectedCourseId(value);
+                setStartHoleManuallySet(false);
                 if (error && (value || courseName.trim().length > 0)) {
                   setError(null);
                 }
               }}
               className="w-full rounded border border-slate-700 bg-slate-950/80 px-3 py-2 text-sm text-slate-100 focus:border-emerald-400 focus:outline-none focus:ring-1 focus:ring-emerald-400"
             >
-              <option value="">{t("quickround.course.none")}</option>
+              <option value="" disabled={coursesLoading}>
+                {coursesLoading ? t("common.loading") : t("quickround.course.none")}
+              </option>
               {courses.map((course) => (
-                <option key={course.courseId} value={course.courseId}>
-                  {course.name} ({course.holes})
+                <option key={course.id} value={course.id}>
+                  {course.name} ({course.holeCount})
                 </option>
               ))}
             </select>
@@ -449,6 +545,9 @@ export default function QuickRoundStartPage() {
               <label className="block text-sm font-medium text-slate-200" htmlFor="startHole">
                 Start hole
               </label>
+              {courseLayoutLoading ? (
+                <span className="text-xs text-slate-400">Loading layout…</span>
+              ) : null}
               {autoHoleSuggestion.suggestedHole ? (
                 <span className="text-xs font-semibold text-emerald-300" data-testid="auto-hole-suggestion">
                   Suggested hole: {autoHoleSuggestion.suggestedHole}
