@@ -73,6 +73,7 @@ export type CourseSummary = {
   country?: string | null;
   city?: string | null;
   holeCount: number;
+  location?: { lat: number; lon: number } | null;
 };
 
 export type HeroCourseTee = {

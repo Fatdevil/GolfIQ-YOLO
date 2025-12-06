@@ -6,7 +6,7 @@ from pydantic import BaseModel
 from server.api.security import require_api_key
 from server.bundles.hero_catalog import list_hero_course_summaries
 from server.bundles.hero_models import HeroCourseSummary
-from server.courses.models import CourseLayout
+from server.courses.models import CourseLayout, LatLon
 from server.courses.registry import DEMO_COURSES
 from server.courses.schemas import CourseBundle
 from server.courses.store import get_course_bundle, list_course_ids
@@ -26,6 +26,7 @@ class CourseSummaryOut(BaseModel):
     country: str | None = None
     city: str | None = None
     holeCount: int
+    location: LatLon | None = None
 
 
 @router.get("/course-layouts", response_model=list[CourseSummaryOut])
@@ -37,6 +38,7 @@ async def list_course_layouts() -> list[CourseSummaryOut]:
             country=course.country,
             city=course.city,
             holeCount=len(course.holes),
+            location=course.location,
         )
         for course in DEMO_COURSES.values()
     ]

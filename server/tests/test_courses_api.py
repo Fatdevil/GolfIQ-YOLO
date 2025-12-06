@@ -14,6 +14,9 @@ def test_list_courses_returns_demo_course():
         assert any(course["id"] == "demo-links-hero" for course in data)
         demo = next(course for course in data if course["id"] == "demo-links-hero")
         assert demo["holeCount"] > 0
+        assert demo["location"] is not None
+        assert isinstance(demo["location"].get("lat"), (int, float))
+        assert isinstance(demo["location"].get("lon"), (int, float))
 
 
 def test_get_course_layout_returns_holes():

@@ -1,6 +1,6 @@
 import { MemoryRouter, Route, Routes } from "react-router-dom";
-import { beforeEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import QuickRoundStartPage from "../src/pages/quick/QuickRoundStartPage";
@@ -40,6 +40,7 @@ const fetchCoursesMock = vi.hoisted(() =>
       holeCount: 5,
       country: null,
       city: null,
+      location: null as { lat: number; lon: number } | null,
     },
   ])
 );
@@ -47,6 +48,17 @@ const fetchCourseLayoutMock = vi.hoisted(() => vi.fn(async () => demoCourseLayou
 const fetchHeroCoursesMock = vi.hoisted(() => vi.fn(async () => []));
 const useAutoHoleSuggestMock = vi.hoisted(() =>
   vi.fn(() => ({ suggestedHole: null, distanceToSuggestedM: null }))
+);
+const useGeolocationMock = vi.hoisted(() =>
+  vi.fn(
+    () =>
+      ({
+        position: null as { lat: number; lon: number } | null,
+        error: null,
+        supported: false,
+        loading: false,
+      })
+  )
 );
 
 vi.mock("../src/features/quickround/storage", () => ({
@@ -67,14 +79,28 @@ vi.mock("@/api", () => ({
 vi.mock("@/hooks/useAutoHoleSuggest", () => ({
   useAutoHoleSuggest: useAutoHoleSuggestMock,
 }));
+vi.mock("@/hooks/useGeolocation", () => ({
+  useGeolocation: useGeolocationMock,
+}));
 
 describe("QuickRoundStartPage", () => {
+  afterEach(() => {
+    cleanup();
+  });
+
   beforeEach(() => {
     vi.clearAllMocks();
     loadAllRoundsMock.mockReturnValue([]);
     loadDefaultHandicapMock.mockReturnValue(null);
     fetchCoursesMock.mockResolvedValue([
-      { id: "demo-links-hero", name: "Demo Links Hero", holeCount: 5, country: null, city: null },
+      {
+        id: "demo-links-hero",
+        name: "Demo Links Hero",
+        holeCount: 5,
+        country: null,
+        city: null,
+        location: null,
+      },
     ]);
     fetchCourseLayoutMock.mockResolvedValue(demoCourseLayout);
     fetchHeroCoursesMock.mockResolvedValue([]);
@@ -82,6 +108,7 @@ describe("QuickRoundStartPage", () => {
       suggestedHole: null,
       distanceToSuggestedM: null,
     });
+    useGeolocationMock.mockReturnValue({ position: null, error: null, supported: false, loading: false });
   });
 
   it("creates a round and navigates to play view", async () => {
@@ -140,6 +167,50 @@ describe("QuickRoundStartPage", () => {
       }),
       expect.anything()
     );
+  });
+
+  it("auto-selects the nearest course when GPS is available", async () => {
+    fetchCoursesMock.mockResolvedValueOnce([
+      {
+        id: "near-course",
+        name: "Near Course",
+        holeCount: 9,
+        country: null,
+        city: null,
+        location: { lat: 59.3, lon: 18.1 },
+      },
+      {
+        id: "far-course",
+        name: "Far Course",
+        holeCount: 9,
+        country: null,
+        city: null,
+        location: { lat: 0, lon: 0 },
+      },
+    ]);
+    useGeolocationMock.mockReturnValue({
+      position: { lat: 59.3002, lon: 18.0999 },
+      error: null,
+      supported: true,
+      loading: false,
+    });
+
+    render(
+      <MemoryRouter initialEntries={["/play"]}>
+        <Routes>
+          <Route path="/play" element={<QuickRoundStartPage />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await screen.findByRole("option", { name: /Near Course/ });
+    const selectElements = await screen.findAllByLabelText(/Course/i);
+    const courseSelect = selectElements.find(
+      (element: HTMLElement) => element.tagName.toLowerCase() === "select"
+    ) as HTMLSelectElement;
+
+    await waitFor(() => expect(courseSelect.value).toBe("near-course"));
+    expect(screen.getByText(/GPS suggests Near Course/)).toBeInTheDocument();
   });
 
   it("persists handicap defaults when provided", async () => {

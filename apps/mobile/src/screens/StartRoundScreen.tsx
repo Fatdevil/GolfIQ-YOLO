@@ -16,6 +16,8 @@ import { fetchCourses, type CourseSummary } from '@app/api/courseClient';
 import { t } from '@app/i18n';
 import type { RootStackParamList } from '@app/navigation/types';
 import { saveActiveRoundState } from '@app/round/roundState';
+import { useGeolocation } from '@app/hooks/useGeolocation';
+import { computeNearestCourse } from '@shared/round/autoHoleCore';
 
 const holesOptions = [9, 18];
 
@@ -31,7 +33,10 @@ export default function StartRoundScreen({ navigation }: Props): JSX.Element {
   const [coursesLoading, setCoursesLoading] = useState(true);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+  const [courseManuallySet, setCourseManuallySet] = useState(false);
   const scrollRef = useRef<HTMLDivElement | null>(null);
+
+  const geo = useGeolocation();
 
   useEffect(() => {
     let cancelled = false;
@@ -99,6 +104,26 @@ export default function StartRoundScreen({ navigation }: Props): JSX.Element {
     return items;
   }, [availableCourses, recentRounds]);
 
+  const courseGeo = useMemo(
+    () =>
+      availableCourses.map((course) => ({
+        id: course.id,
+        name: course.name,
+        location: course.location ?? null,
+      })),
+    [availableCourses],
+  );
+
+  const autoCourseSuggestion = useMemo(
+    () => computeNearestCourse(courseGeo, geo.position),
+    [courseGeo, geo.position],
+  );
+
+  const autoCourseName = useMemo(
+    () => availableCourses.find((course) => course.id === autoCourseSuggestion.suggestedCourseId)?.name ?? null,
+    [availableCourses, autoCourseSuggestion.suggestedCourseId],
+  );
+
   const selectedCourseOption = useMemo(
     () => coursePickerOptions.find((course) => course.id === courseId) ?? null,
     [courseId, coursePickerOptions],
@@ -158,6 +183,13 @@ export default function StartRoundScreen({ navigation }: Props): JSX.Element {
     scrollRef.current?.scrollTo({ top: 120, behavior: 'smooth' });
   };
 
+  useEffect(() => {
+    if (courseManuallySet) return;
+    if (!autoCourseSuggestion.suggestedCourseId) return;
+    if (autoCourseSuggestion.confidence === 'low') return;
+    setCourseId(autoCourseSuggestion.suggestedCourseId);
+  }, [autoCourseSuggestion.confidence, autoCourseSuggestion.suggestedCourseId, courseManuallySet]);
+
   if (loading) {
     return (
       <View style={styles.center}>
@@ -211,7 +243,10 @@ export default function StartRoundScreen({ navigation }: Props): JSX.Element {
         {lastPlayedCourse ? (
           <TouchableOpacity
             style={styles.pillButton}
-            onPress={() => setCourseId(lastPlayedCourse.courseId ?? lastPlayedCourse.courseName ?? '')}
+            onPress={() => {
+              setCourseId(lastPlayedCourse.courseId ?? lastPlayedCourse.courseName ?? '');
+              setCourseManuallySet(true);
+            }}
             accessibilityLabel={t('start_round.last_played')}
             testID="last-played-course"
           >
@@ -225,7 +260,10 @@ export default function StartRoundScreen({ navigation }: Props): JSX.Element {
           style={styles.input}
           placeholder={t('start_round.course_placeholder')}
           value={selectedCourseOption?.label ?? courseId}
-          onChangeText={setCourseId}
+          onChangeText={(value) => {
+            setCourseId(value);
+            setCourseManuallySet(true);
+          }}
           accessibilityLabel={t('start_round.course_label')}
           testID="course-input"
         />
@@ -239,7 +277,10 @@ export default function StartRoundScreen({ navigation }: Props): JSX.Element {
               <TouchableOpacity
                 key={course.id}
                 style={[styles.pillButton, courseId === course.id && styles.pillButtonActive]}
-                onPress={() => setCourseId(course.id)}
+                onPress={() => {
+                  setCourseId(course.id);
+                  setCourseManuallySet(true);
+                }}
                 accessibilityLabel={course.label}
                 testID={`course-${course.id}`}
               >
@@ -249,6 +290,11 @@ export default function StartRoundScreen({ navigation }: Props): JSX.Element {
               </TouchableOpacity>
             ))}
           </View>
+        ) : null}
+        {autoCourseSuggestion.suggestedCourseId ? (
+          <Text style={styles.autoCourseHint}>
+            GPS suggests {autoCourseName ?? autoCourseSuggestion.suggestedCourseId}
+          </Text>
         ) : null}
       </View>
 
@@ -404,5 +450,9 @@ const styles = StyleSheet.create({
   },
   disabled: {
     opacity: 0.7,
+  },
+  autoCourseHint: {
+    color: '#6b7280',
+    fontSize: 12,
   },
 });
