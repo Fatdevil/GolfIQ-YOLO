@@ -30,7 +30,11 @@ import {
   type ActiveRoundState,
 } from '@app/round/roundState';
 import { useGeolocation } from '@app/hooks/useGeolocation';
-import { computeAutoHoleSuggestion, type CourseLayout } from '@shared/round/autoHoleCore';
+import {
+  computeAutoHoleSuggestion,
+  computeHoleCaddieTargets,
+  type CourseLayout,
+} from '@shared/round/autoHoleCore';
 
 const CLUBS = ['D', '3W', '5W', '4i', '5i', '6i', '7i', '8i', '9i', 'PW', 'GW', 'SW'];
 
@@ -142,6 +146,10 @@ export default function RoundShotScreen({ navigation }: Props): JSX.Element {
     if (!courseLayout) return null;
     return courseLayout.holes.find((hole) => hole.number === currentHole) ?? null;
   }, [courseLayout, currentHole]);
+  const caddieTargets = useMemo(() => {
+    if (!courseLayout || !currentHoleLayout) return null;
+    return computeHoleCaddieTargets(courseLayout, currentHoleLayout);
+  }, [courseLayout, currentHoleLayout]);
 
   const holeNumbers = useMemo(
     () => Array.from({ length: totalHoles }, (_, idx) => startingHole + idx),
@@ -393,6 +401,18 @@ export default function RoundShotScreen({ navigation }: Props): JSX.Element {
           </View>
         )}
       </View>
+
+      {caddieTargets && (
+        <View style={styles.caddieTargetsContainer} testID="caddie-targets">
+          <Text style={styles.caddieTargetsTitle}>Caddie targets</Text>
+          <Text style={styles.caddieTargetsLine}>Green: center of green</Text>
+          {caddieTargets.layup && (
+            <Text style={styles.caddieTargetsLine}>
+              Layup: {caddieTargets.layup.carryDistanceM} m from tee (safe layup)
+            </Text>
+          )}
+        </View>
+      )}
 
       <View style={styles.holePickerRow}>
         <TouchableOpacity
@@ -723,6 +743,22 @@ const styles = StyleSheet.create({
     marginRight: 8,
     fontSize: 12,
     fontWeight: '600',
+  },
+  caddieTargetsContainer: {
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    backgroundColor: '#f8fafc',
+    borderRadius: 12,
+    padding: 12,
+    gap: 4,
+  },
+  caddieTargetsTitle: {
+    fontWeight: '700',
+    color: '#0f172a',
+  },
+  caddieTargetsLine: {
+    color: '#1f2937',
+    fontSize: 14,
   },
   holeBadge: {
     backgroundColor: '#0f172a',

@@ -23,6 +23,7 @@ import { useAutoHoleSuggest } from "@/hooks/useAutoHoleSuggest";
 import { resolveCourseLayout } from "@/features/quickround/courseLayouts";
 import { computeQuickRoundSummary } from "../../features/quickround/summary";
 import { syncQuickRoundToWatch } from "../../features/watch/api";
+import { computeHoleCaddieTargets } from "@shared/round/autoHoleCore";
 
 export default function QuickRoundPlayPage() {
   const { roundId } = useParams<{ roundId: string }>();
@@ -62,6 +63,10 @@ export default function QuickRoundPlayPage() {
     if (!courseLayout) return null;
     return courseLayout.holes.find((hole) => hole.number === currentHoleNumber) ?? null;
   }, [courseLayout, currentHoleNumber]);
+  const caddieTargets = useMemo(() => {
+    if (!courseLayout || !currentHoleLayout) return null;
+    return computeHoleCaddieTargets(courseLayout, currentHoleLayout);
+  }, [courseLayout, currentHoleLayout]);
   const autoHoleSuggestion = useAutoHoleSuggest(
     autoHoleEnabled ? courseLayout : null,
     geoState
@@ -433,6 +438,17 @@ export default function QuickRoundPlayPage() {
           </p>
         )}
       </header>
+      {caddieTargets && (
+        <section className="rounded-lg border border-slate-800 bg-slate-900/60 p-4 text-sm text-slate-200">
+          <h3 className="text-base font-semibold text-slate-100">Caddie Targets</h3>
+          <p className="mt-2">Green: Center of green</p>
+          {caddieTargets.layup && (
+            <p className="mt-1">
+              Layup: {caddieTargets.layup.carryDistanceM} m from tee (safe fairway layup)
+            </p>
+          )}
+        </section>
+      )}
       {shouldShowSuggestion && suggestion && (
         <div className="rounded-lg border border-emerald-500/50 bg-slate-900/70 p-3 text-xs text-slate-100">
           <div className="flex items-center justify-between gap-3">

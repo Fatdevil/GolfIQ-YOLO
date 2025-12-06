@@ -141,7 +141,7 @@ describe('RoundShotScreen', () => {
   });
 
   it('shows GPS-based hole suggestion hint', async () => {
-    mockUseGeolocation.mockReturnValueOnce({
+    mockUseGeolocation.mockReturnValue({
       position: { lat: 59.3001, lon: 18.1001 },
       error: null,
       supported: true,
@@ -166,8 +166,19 @@ describe('RoundShotScreen', () => {
     expect(await findByText('360 m')).toBeTruthy();
   });
 
+  it('shows caddie targets with layup distance', async () => {
+    const { findByTestId, findByText } = render(
+      <RoundShotScreen navigation={{} as any} route={undefined as any} />,
+    );
+
+    await waitFor(() => expect(mockFetchCourseLayout).toHaveBeenCalled());
+    expect(await findByTestId('caddie-targets')).toBeTruthy();
+    expect(await findByText(/Layup: 216 m from tee/)).toBeTruthy();
+    expect(await findByText(/Green: center of green/)).toBeTruthy();
+  });
+
   it('hides auto-hole hint when geolocation is unavailable', async () => {
-    mockUseGeolocation.mockReturnValueOnce({
+    mockUseGeolocation.mockReturnValue({
       position: { lat: 59.3001, lon: 18.1001 },
       error: null,
       supported: false,
