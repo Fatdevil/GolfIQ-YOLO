@@ -28,8 +28,8 @@ class CourseSummaryOut(BaseModel):
     holeCount: int
 
 
-@router.get("/courses", response_model=list[CourseSummaryOut])
-async def list_courses() -> list[CourseSummaryOut]:
+@router.get("/course-layouts", response_model=list[CourseSummaryOut])
+async def list_course_layouts() -> list[CourseSummaryOut]:
     return [
         CourseSummaryOut(
             id=course.id,
@@ -42,7 +42,7 @@ async def list_courses() -> list[CourseSummaryOut]:
     ]
 
 
-@router.get("/courses/{course_id}/layout", response_model=CourseLayout)
+@router.get("/course-layouts/{course_id}", response_model=CourseLayout)
 async def get_course_layout(course_id: str) -> CourseLayout:
     try:
         return DEMO_COURSES[course_id]

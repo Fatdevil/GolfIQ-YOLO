@@ -107,12 +107,12 @@ export async function fetchBundleIndex(): Promise<BundleIndexItem[]> {
 }
 
 export async function fetchCourses(): Promise<CourseSummary[]> {
-  const resp = await apiFetch(`/courses`);
+  const resp = await apiFetch(`/course-layouts`);
   return resp.json();
 }
 
 export async function fetchCourseLayout(courseId: string): Promise<CourseLayout> {
-  const resp = await apiFetch(`/courses/${courseId}/layout`);
+  const resp = await apiFetch(`/course-layouts/${courseId}`);
   return resp.json();
 }
 

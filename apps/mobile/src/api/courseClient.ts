@@ -9,5 +9,5 @@ export type CourseSummary = {
 };
 
 export async function fetchCourses(): Promise<CourseSummary[]> {
-  return apiFetch<CourseSummary[]>('/courses');
+  return apiFetch<CourseSummary[]>('/course-layouts');
 }
