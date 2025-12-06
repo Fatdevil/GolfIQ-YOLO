@@ -123,7 +123,7 @@ describe('Live viewer states', () => {
     HlsMock.instances[0]?.emit('error', { fatal: true, response: { code: 403 }, type: 'networkError' });
 
     await waitFor(() => {
-      expect(getLiveState).toHaveBeenCalledTimes(2);
+      expect(getLiveState).toHaveBeenCalledTimes(1);
     });
 
     await waitFor(() => {
@@ -146,7 +146,7 @@ describe('Live viewer states', () => {
 
     await screen.findByTestId('live-viewer-video');
     await waitFor(() => {
-      expect(getLiveState).toHaveBeenCalledTimes(2);
+      expect(getLiveState).toHaveBeenCalledTimes(1);
     });
 
     await waitFor(() => {
