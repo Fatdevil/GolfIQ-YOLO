@@ -21,6 +21,7 @@ import {
   type PuttDistanceBucket,
   type Shot,
 } from '@app/api/roundClient';
+import { fetchCourseLayout } from '@app/api/courseClient';
 import type { RootStackParamList } from '@app/navigation/types';
 import {
   clearActiveRoundState,
@@ -28,6 +29,8 @@ import {
   saveActiveRoundState,
   type ActiveRoundState,
 } from '@app/round/roundState';
+import { useGeolocation } from '@app/hooks/useGeolocation';
+import { computeAutoHoleSuggestion, type CourseLayout } from '@shared/round/autoHoleCore';
 
 const CLUBS = ['D', '3W', '5W', '4i', '5i', '6i', '7i', '8i', '9i', 'PW', 'GW', 'SW'];
 
@@ -71,9 +74,11 @@ export default function RoundShotScreen({ navigation }: Props): JSX.Element {
   const [scoreSaving, setScoreSaving] = useState(false);
   const [scoreDirty, setScoreDirty] = useState(false);
   const [scoresLoading, setScoresLoading] = useState(false);
+  const [courseLayout, setCourseLayout] = useState<CourseLayout | null>(null);
   const totalHoles = state?.round.holes ?? 18;
   const startingHole = state?.round.startHole ?? 1;
   const lastHoleNumber = useMemo(() => startingHole + totalHoles - 1, [startingHole, totalHoles]);
+  const geo = useGeolocation();
 
   useEffect(() => {
     loadActiveRoundState()
@@ -84,6 +89,31 @@ export default function RoundShotScreen({ navigation }: Props): JSX.Element {
   }, []);
 
   const currentHole = state?.currentHole ?? startingHole;
+
+  useEffect(() => {
+    let cancelled = false;
+    const courseId = state?.round.courseId;
+    if (!courseId) {
+      setCourseLayout(null);
+      return undefined;
+    }
+
+    fetchCourseLayout(courseId)
+      .then((layout) => {
+        if (!cancelled) {
+          setCourseLayout(layout);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setCourseLayout(null);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [state?.round.courseId]);
 
   useEffect(() => {
     if (!state?.round.id) return;
@@ -112,6 +142,14 @@ export default function RoundShotScreen({ navigation }: Props): JSX.Element {
     () => Array.from({ length: totalHoles }, (_, idx) => startingHole + idx),
     [startingHole, totalHoles],
   );
+
+  const autoHoleSuggestion = useMemo(() => {
+    if (!geo.supported) {
+      return { suggestedHole: null, distanceToSuggestedM: null, confidence: 'low' };
+    }
+
+    return computeAutoHoleSuggestion(courseLayout, geo.position);
+  }, [courseLayout, geo.position, geo.supported]);
 
   const roundLabel = useMemo(() => {
     if (!state) return '';
@@ -382,6 +420,18 @@ export default function RoundShotScreen({ navigation }: Props): JSX.Element {
           <Text style={styles.secondaryButtonText}>Next</Text>
         </TouchableOpacity>
       </View>
+
+      {courseLayout &&
+        geo.supported &&
+        autoHoleSuggestion.suggestedHole &&
+        autoHoleSuggestion.confidence !== 'low' ? (
+          <Text style={styles.autoHoleHint}>
+            GPS suggests hole {autoHoleSuggestion.suggestedHole}
+            {autoHoleSuggestion.distanceToSuggestedM != null
+              ? ` (~${Math.round(autoHoleSuggestion.distanceToSuggestedM)} m away)`
+              : ''}
+          </Text>
+        ) : null}
 
       <Text style={styles.label}>Club</Text>
       <FlatList
@@ -688,6 +738,12 @@ const styles = StyleSheet.create({
   },
   holeChipTextActive: {
     color: '#fff',
+  },
+  autoHoleHint: {
+    marginTop: 6,
+    marginBottom: 2,
+    color: '#065f46',
+    fontWeight: '600',
   },
   label: {
     fontWeight: '600',
