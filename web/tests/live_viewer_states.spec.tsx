@@ -134,7 +134,7 @@ describe('Live viewer states', () => {
     });
   });
 
-  it('enters offline state when live heartbeat expires', async () => {
+  it('shows preparing state when live heartbeat expires', async () => {
     renderViewer([
       createLiveState(),
       createLiveState({ isLive: false, viewerUrl: null }),
@@ -150,7 +150,7 @@ describe('Live viewer states', () => {
     });
 
     await waitFor(() => {
-      expect(screen.getByTestId('live-viewer-overlay').textContent).toContain('Live stream is offline. Try again soon.');
+      expect(screen.getByTestId('live-viewer-overlay').textContent).toContain('Preparing stream…');
     });
   });
 });

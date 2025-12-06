@@ -22,6 +22,7 @@ import {
   type Shot,
 } from '@app/api/roundClient';
 import { fetchCourseLayout } from '@app/api/courseClient';
+import { fetchPlayerBag, type PlayerBag } from '@app/api/bagClient';
 import type { RootStackParamList } from '@app/navigation/types';
 import {
   clearActiveRoundState,
@@ -30,6 +31,14 @@ import {
   type ActiveRoundState,
 } from '@app/round/roundState';
 import { useGeolocation } from '@app/hooks/useGeolocation';
+import {
+  DEFAULT_SETTINGS as DEFAULT_CADDIE_SETTINGS,
+  loadCaddieSettings,
+  type CaddieSettings,
+} from '@app/caddie/caddieSettingsStorage';
+import { computeCaddieDecision, normalizeRiskPreference } from '@app/caddie/CaddieDecisionEngine';
+import type { CaddieDecision } from '@app/caddie/CaddieDecision';
+import { computeEffectiveDistance } from '@app/caddie/playsLike';
 import {
   computeAutoHoleSuggestion,
   computeHoleCaddieTargets,
@@ -49,6 +58,12 @@ const PUTT_BUCKET_OPTIONS: { value: PuttDistanceBucket; label: string }[] = [
 type Props = NativeStackScreenProps<RootStackParamList, 'RoundShot'>;
 
 type Coords = { latitude: number; longitude: number };
+
+function getClubLabel(clubId: string, bag: PlayerBag | null): string {
+  if (!bag) return clubId;
+  const match = bag.clubs.find((club) => club.clubId === clubId);
+  return match?.label ?? clubId;
+}
 
 function resolveCurrentPosition(): Promise<Coords> {
   return new Promise((resolve, reject) => {
@@ -79,6 +94,9 @@ export default function RoundShotScreen({ navigation }: Props): JSX.Element {
   const [scoreDirty, setScoreDirty] = useState(false);
   const [scoresLoading, setScoresLoading] = useState(false);
   const [courseLayout, setCourseLayout] = useState<CourseLayout | null>(null);
+  const [playerBag, setPlayerBag] = useState<PlayerBag | null>(null);
+  const [bagLoading, setBagLoading] = useState(false);
+  const [caddieSettings, setCaddieSettings] = useState<CaddieSettings | null>(null);
   const totalHoles = state?.round.holes ?? 18;
   const startingHole = state?.round.startHole ?? 1;
   const lastHoleNumber = useMemo(() => startingHole + totalHoles - 1, [startingHole, totalHoles]);
@@ -90,6 +108,42 @@ export default function RoundShotScreen({ navigation }: Props): JSX.Element {
         setState(roundState);
       })
       .finally(() => setLoading(false));
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    setBagLoading(true);
+
+    fetchPlayerBag()
+      .then((bag) => {
+        if (!cancelled) setPlayerBag(bag);
+      })
+      .catch(() => {
+        if (!cancelled) setPlayerBag(null);
+      })
+      .finally(() => {
+        if (!cancelled) setBagLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    loadCaddieSettings()
+      .then((settings) => {
+        if (!cancelled) setCaddieSettings(settings);
+      })
+      .catch(() => {
+        if (!cancelled) setCaddieSettings(DEFAULT_CADDIE_SETTINGS);
+      });
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const currentHole = state?.currentHole ?? startingHole;
@@ -150,6 +204,29 @@ export default function RoundShotScreen({ navigation }: Props): JSX.Element {
     if (!courseLayout || !currentHoleLayout) return null;
     return computeHoleCaddieTargets(courseLayout, currentHoleLayout);
   }, [courseLayout, currentHoleLayout]);
+
+  const caddieDecision = useMemo<CaddieDecision | null>(() => {
+    if (!caddieTargets || !currentHoleLayout) return null;
+
+    const riskPreference = normalizeRiskPreference(
+      caddieSettings?.riskProfile ?? DEFAULT_CADDIE_SETTINGS.riskProfile,
+    );
+
+    return computeCaddieDecision({
+      holeNumber: currentHole,
+      holePar: currentHoleLayout.par,
+      holeYardageM: currentHoleLayout.yardage_m ?? null,
+      targets: caddieTargets,
+      playerBag,
+      riskPreference,
+      playsLikeDistanceFn: (flatDistanceM, elevationDiffM, wind) => {
+        return computeEffectiveDistance(flatDistanceM, elevationDiffM, wind.speedMps, wind.angleDeg)
+          .effectiveDistance;
+      },
+      elevationDiffM: 0,
+      wind: { speedMps: 0, angleDeg: 0 },
+    });
+  }, [caddieTargets, currentHoleLayout, currentHole, caddieSettings?.riskProfile, playerBag]);
 
   const holeNumbers = useMemo(
     () => Array.from({ length: totalHoles }, (_, idx) => startingHole + idx),
@@ -401,6 +478,27 @@ export default function RoundShotScreen({ navigation }: Props): JSX.Element {
           </View>
         )}
       </View>
+
+      {bagLoading && <Text style={styles.muted}>Loading bag distances…</Text>}
+
+      {caddieDecision && (
+        <View style={styles.caddiePanel} testID="caddie-decision">
+          <Text style={styles.caddieHeadline}>
+            {caddieDecision.strategy === 'layup' ? 'Safe layup' : 'Attack the green'}
+          </Text>
+          {caddieDecision.targetDistanceM != null && (
+            <Text style={styles.caddieDetail}>
+              Target: {caddieDecision.targetDistanceM} m plays-like
+            </Text>
+          )}
+          {caddieDecision.recommendedClubId && (
+            <Text style={styles.caddieDetail}>
+              Club: {getClubLabel(caddieDecision.recommendedClubId, playerBag)}
+            </Text>
+          )}
+          <Text style={styles.caddieExplanation}>{caddieDecision.explanation}</Text>
+        </View>
+      )}
 
       {caddieTargets && (
         <View style={styles.caddieTargetsContainer} testID="caddie-targets">
@@ -743,6 +841,26 @@ const styles = StyleSheet.create({
     marginRight: 8,
     fontSize: 12,
     fontWeight: '600',
+  },
+  caddiePanel: {
+    borderWidth: 1,
+    borderColor: '#c7d2fe',
+    backgroundColor: '#eef2ff',
+    borderRadius: 12,
+    padding: 12,
+    gap: 4,
+  },
+  caddieHeadline: {
+    fontWeight: '800',
+    fontSize: 16,
+    color: '#111827',
+  },
+  caddieDetail: {
+    color: '#1f2937',
+    fontWeight: '600',
+  },
+  caddieExplanation: {
+    color: '#374151',
   },
   caddieTargetsContainer: {
     borderWidth: 1,
