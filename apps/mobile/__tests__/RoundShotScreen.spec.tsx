@@ -5,6 +5,8 @@ import { beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
 
 import RoundShotScreen from '@app/screens/RoundShotScreen';
 import { appendShot, endRound, getRoundScores, updateHoleScore } from '@app/api/roundClient';
+import { fetchCourseLayout } from '@app/api/courseClient';
+import { useGeolocation } from '@app/hooks/useGeolocation';
 import {
   clearActiveRoundState,
   loadActiveRoundState,
@@ -13,19 +15,30 @@ import {
 } from '@app/round/roundState';
 
 vi.mock('@app/api/roundClient');
+vi.mock('@app/api/courseClient');
 vi.mock('@app/round/roundState');
+vi.mock('@app/hooks/useGeolocation');
 
 const mockAppendShot = appendShot as unknown as Mock;
 const mockEndRound = endRound as unknown as Mock;
 const mockUpdateHoleScore = updateHoleScore as unknown as Mock;
 const mockGetScores = getRoundScores as unknown as Mock;
+const mockFetchCourseLayout = fetchCourseLayout as unknown as Mock;
 const mockLoad = loadActiveRoundState as unknown as Mock;
 const mockSave = saveActiveRoundState as unknown as Mock;
 const mockClear = clearActiveRoundState as unknown as Mock;
+const mockUseGeolocation = useGeolocation as unknown as Mock;
 const alertSpy = vi.spyOn(Alert, 'alert');
 
 const sampleState: ActiveRoundState = {
-  round: { id: 'r1', holes: 18, startedAt: 'now', startHole: 1, courseName: 'Test Course' },
+  round: {
+    id: 'r1',
+    holes: 18,
+    startedAt: 'now',
+    startHole: 1,
+    courseName: 'Test Course',
+    courseId: 'demo-course',
+  },
   currentHole: 1,
 };
 
@@ -47,6 +60,20 @@ beforeEach(() => {
   mockGetScores.mockResolvedValue({ roundId: 'r1', holes: {} });
   mockSave.mockResolvedValue(undefined);
   mockClear.mockResolvedValue(undefined);
+  mockFetchCourseLayout.mockResolvedValue({
+    id: 'demo-course',
+    name: 'Demo Course',
+    holes: [
+      { number: 1, tee: { lat: 59.3, lon: 18.1 }, green: { lat: 59.301, lon: 18.101 } },
+      { number: 2, tee: { lat: 59.305, lon: 18.103 }, green: { lat: 59.306, lon: 18.104 } },
+    ],
+  });
+  mockUseGeolocation.mockReturnValue({
+    position: null,
+    error: null,
+    supported: true,
+    loading: false,
+  });
 });
 
 (global as any).navigator = {
@@ -99,6 +126,38 @@ describe('RoundShotScreen', () => {
       ...sampleState,
       currentHole: 2,
     }));
+  });
+
+  it('shows GPS-based hole suggestion hint', async () => {
+    mockUseGeolocation.mockReturnValueOnce({
+      position: { lat: 59.3001, lon: 18.1001 },
+      error: null,
+      supported: true,
+      loading: false,
+    });
+
+    const { findByText } = render(
+      <RoundShotScreen navigation={{} as any} route={undefined as any} />,
+    );
+
+    await waitFor(() => expect(mockFetchCourseLayout).toHaveBeenCalledWith('demo-course'));
+    expect(await findByText(/GPS suggests hole 1/)).toBeTruthy();
+  });
+
+  it('hides auto-hole hint when geolocation is unavailable', async () => {
+    mockUseGeolocation.mockReturnValueOnce({
+      position: { lat: 59.3001, lon: 18.1001 },
+      error: null,
+      supported: false,
+      loading: false,
+    });
+
+    const { queryByText } = render(
+      <RoundShotScreen navigation={{} as any} route={undefined as any} />,
+    );
+
+    await waitFor(() => expect(mockFetchCourseLayout).toHaveBeenCalled());
+    expect(queryByText(/GPS suggests hole/)).toBeNull();
   });
 
   it('saves scoring changes and auto advances', async () => {
