@@ -35,5 +35,6 @@ DEMO_COURSES: dict[str, CourseLayout] = {
         ],
         country=None,
         city=None,
+        location={"lat": 59.29864, "lon": 18.10024},
     )
 }

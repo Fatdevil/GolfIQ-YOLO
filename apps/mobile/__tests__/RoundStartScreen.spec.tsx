@@ -6,18 +6,21 @@ import RoundStartScreen from '@app/screens/RoundStartScreen';
 import { getCurrentRound, listRounds, startRound } from '@app/api/roundClient';
 import { saveActiveRoundState } from '@app/round/roundState';
 import { fetchCourses } from '@app/api/courseClient';
+import { useGeolocation } from '@app/hooks/useGeolocation';
 
 type Nav = { navigate: (...args: any[]) => void };
 
 vi.mock('@app/api/roundClient');
 vi.mock('@app/api/courseClient');
 vi.mock('@app/round/roundState');
+vi.mock('@app/hooks/useGeolocation');
 
 const mockedStartRound = startRound as unknown as Mock;
 const mockedSaveState = saveActiveRoundState as unknown as Mock;
 const mockedGetCurrentRound = getCurrentRound as unknown as Mock;
 const mockedListRounds = listRounds as unknown as Mock;
 const mockedFetchCourses = fetchCourses as unknown as Mock;
+const mockedUseGeolocation = useGeolocation as unknown as Mock;
 
 beforeEach(() => {
   mockedStartRound.mockResolvedValue({ id: 'r1', holes: 18, startedAt: 'now', startHole: 1 });
@@ -31,8 +34,9 @@ beforeEach(() => {
   });
   mockedListRounds.mockResolvedValue([]);
   mockedFetchCourses.mockResolvedValue([
-    { id: 'demo-links-hero', name: 'Demo Links Hero', holeCount: 5 },
+    { id: 'demo-links-hero', name: 'Demo Links Hero', holeCount: 5, location: null },
   ]);
+  mockedUseGeolocation.mockReturnValue({ position: null, error: null, supported: false, loading: false });
 });
 
 describe('RoundStartScreen', () => {
@@ -90,5 +94,49 @@ describe('RoundStartScreen', () => {
     await waitFor(() => expect(mockedStartRound).toHaveBeenCalledWith(expect.objectContaining({
       courseId: 'demo-links-hero',
     })));
+  });
+
+  it('auto-selects nearest course and shows hint when GPS is available', async () => {
+    mockedGetCurrentRound.mockResolvedValueOnce(null);
+    mockedFetchCourses.mockResolvedValueOnce([
+      { id: 'near', name: 'Near', holeCount: 9, location: { lat: 59.3, lon: 18.1 } },
+      { id: 'far', name: 'Far', holeCount: 9, location: { lat: 0, lon: 0 } },
+    ]);
+    mockedUseGeolocation.mockReturnValue({
+      position: { lat: 59.3001, lon: 18.0999 },
+      error: null,
+      supported: true,
+      loading: false,
+    });
+    const navigation: Nav = { navigate: vi.fn() };
+
+    const { getByTestId, getByText } = render(
+      <RoundStartScreen navigation={navigation as any} route={undefined as any} />,
+    );
+
+    await waitFor(() => expect(getByTestId('course-near')).toBeTruthy());
+    expect(getByText(/GPS suggests Near/)).toBeTruthy();
+    fireEvent.click(getByTestId('start-round-button'));
+
+    await waitFor(() =>
+      expect(mockedStartRound).toHaveBeenCalledWith(expect.objectContaining({ courseId: 'near' })),
+    );
+  });
+
+  it('does not auto-select when geolocation is unavailable', async () => {
+    mockedGetCurrentRound.mockResolvedValueOnce(null);
+    mockedFetchCourses.mockResolvedValueOnce([
+      { id: 'demo-links-hero', name: 'Demo Links Hero', holeCount: 5, location: null },
+    ]);
+    mockedUseGeolocation.mockReturnValue({ position: null, error: null, supported: false, loading: false });
+
+    const navigation: Nav = { navigate: vi.fn() };
+
+    const { getByTestId, queryByText } = render(
+      <RoundStartScreen navigation={navigation as any} route={undefined as any} />,
+    );
+
+    await waitFor(() => expect(getByTestId('course-demo-links-hero')).toBeTruthy());
+    expect(queryByText(/GPS suggests/)).toBeNull();
   });
 });

@@ -14,6 +14,18 @@ export type CourseLayout = {
   city?: string | null;
 };
 
+export type CourseSummaryGeo = {
+  id: string;
+  name: string;
+  location: LatLon | null;
+};
+
+export type AutoCourseSuggestion = {
+  suggestedCourseId: string | null;
+  distanceToSuggestedM: number | null;
+  confidence: 'low' | 'medium' | 'high';
+};
+
 export type AutoHoleSuggestion = {
   suggestedHole: number | null;
   distanceToSuggestedM: number | null;
@@ -68,6 +80,46 @@ export function computeAutoHoleSuggestion(
 
   return {
     suggestedHole: closest.hole,
+    distanceToSuggestedM: closest.distance,
+    confidence,
+  };
+}
+
+export function computeNearestCourse(
+  courses: CourseSummaryGeo[],
+  playerPosition: LatLon | null,
+): AutoCourseSuggestion {
+  if (!courses.length || !playerPosition) {
+    return { suggestedCourseId: null, distanceToSuggestedM: null, confidence: 'low' };
+  }
+
+  const withLocation = courses.filter((course) => course.location);
+  if (withLocation.length === 0) {
+    return { suggestedCourseId: null, distanceToSuggestedM: null, confidence: 'low' };
+  }
+
+  let closest: { id: string; distance: number } | null = null;
+
+  for (const course of withLocation) {
+    const distance = distanceMeters(playerPosition, course.location!);
+    if (!closest || distance < closest.distance) {
+      closest = { id: course.id, distance };
+    }
+  }
+
+  if (!closest) {
+    return { suggestedCourseId: null, distanceToSuggestedM: null, confidence: 'low' };
+  }
+
+  if (closest.distance > 5_000) {
+    return { suggestedCourseId: null, distanceToSuggestedM: closest.distance, confidence: 'low' };
+  }
+
+  const confidence: AutoCourseSuggestion['confidence'] =
+    closest.distance < 200 ? 'high' : closest.distance < 1_000 ? 'medium' : 'low';
+
+  return {
+    suggestedCourseId: closest.id,
     distanceToSuggestedM: closest.distance,
     confidence,
   };

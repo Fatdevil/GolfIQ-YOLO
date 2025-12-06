@@ -22,3 +22,4 @@ class CourseLayout(BaseModel):
     holes: List[HoleLayout]
     country: str | None = None
     city: str | None = None
+    location: LatLon | None = None

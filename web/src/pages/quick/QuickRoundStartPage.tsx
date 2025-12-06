@@ -25,6 +25,7 @@ import { DEMO_LINKS_HERO_LAYOUT } from "@/features/quickround/courseLayouts";
 import { useGeolocation } from "@/hooks/useGeolocation";
 import { useAutoHoleSuggest } from "@/hooks/useAutoHoleSuggest";
 import type { CourseLayout } from "@/types/course";
+import { computeNearestCourse } from "@shared/round/autoHoleCore";
 
 function readStoredMemberId(): string | null {
   if (typeof window === "undefined") {
@@ -53,6 +54,7 @@ export default function QuickRoundStartPage() {
     useState<string>();
   const [selectedHeroTeeId, setSelectedHeroTeeId] = useState<string>();
   const [selectedCourseId, setSelectedCourseId] = useState<string | undefined>();
+  const [courseSelectionManuallySet, setCourseSelectionManuallySet] = useState(false);
   const [courseLayout, setCourseLayout] = useState<CourseLayout | null>(null);
   const [courseLayoutLoading, setCourseLayoutLoading] = useState(false);
   const [coursesLoading, setCoursesLoading] = useState(false);
@@ -90,6 +92,26 @@ export default function QuickRoundStartPage() {
 
   const geoState = useGeolocation(true);
   const autoHoleSuggestion = useAutoHoleSuggest(courseLayout, geoState);
+  const playerLatLon = geoState.position
+    ? { lat: geoState.position.lat, lon: geoState.position.lon }
+    : null;
+  const courseGeo = useMemo(
+    () =>
+      courses.map((course) => ({
+        id: course.id,
+        name: course.name,
+        location: course.location ?? null,
+      })),
+    [courses]
+  );
+  const autoCourseSuggestion = useMemo(
+    () => computeNearestCourse(courseGeo, playerLatLon),
+    [courseGeo, playerLatLon]
+  );
+  const autoCourseName = useMemo(
+    () => courses.find((course) => course.id === autoCourseSuggestion.suggestedCourseId)?.name ?? null,
+    [autoCourseSuggestion.suggestedCourseId, courses]
+  );
 
   const persistHandicapDefault = (value: string) => {
     const trimmed = value.trim();
@@ -292,6 +314,25 @@ export default function QuickRoundStartPage() {
     setStartingHole(autoHoleSuggestion.suggestedHole);
   }, [autoHoleSuggestion.suggestedHole, holeNumbers, startHoleManuallySet]);
 
+  useEffect(() => {
+    if (courseSelectionManuallySet) {
+      return;
+    }
+    const suggestedId = autoCourseSuggestion.suggestedCourseId;
+    if (!suggestedId) {
+      return;
+    }
+    if (autoCourseSuggestion.confidence === "low") {
+      return;
+    }
+    setSelectedCourseId((current) => {
+      if (current === suggestedId) {
+        return current;
+      }
+      return suggestedId;
+    });
+  }, [autoCourseSuggestion.confidence, autoCourseSuggestion.suggestedCourseId, courseSelectionManuallySet]);
+
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const selectedCourse = courses.find((course) => course.id === selectedCourseId);
@@ -398,13 +439,14 @@ export default function QuickRoundStartPage() {
                 setSelectedHeroCourseId(undefined);
                 setSelectedHeroTeeId(undefined);
                 setSelectedCourseId(value);
+                setCourseSelectionManuallySet(true);
                 setStartHoleManuallySet(false);
                 if (error && (value || courseName.trim().length > 0)) {
                   setError(null);
                 }
               }}
               className="w-full rounded border border-slate-700 bg-slate-950/80 px-3 py-2 text-sm text-slate-100 focus:border-emerald-400 focus:outline-none focus:ring-1 focus:ring-emerald-400"
-            >
+              >
               <option value="" disabled={coursesLoading}>
                 {coursesLoading ? t("common.loading") : t("quickround.course.none")}
               </option>
@@ -414,6 +456,14 @@ export default function QuickRoundStartPage() {
                 </option>
               ))}
             </select>
+            {autoCourseSuggestion.suggestedCourseId ? (
+              <p className="text-xs text-slate-400">
+                GPS suggests {autoCourseName ?? autoCourseSuggestion.suggestedCourseId}
+                {autoCourseSuggestion.distanceToSuggestedM
+                  ? ` (≈ ${Math.round(autoCourseSuggestion.distanceToSuggestedM)} m away)`
+                  : ""}
+              </p>
+            ) : null}
           </div>
           {heroCourses.length > 0 ? (
             <div className="space-y-3">
@@ -435,6 +485,7 @@ export default function QuickRoundStartPage() {
                       onClick={() => {
                         setSelectedHeroCourseId(course.id);
                         setSelectedHeroTeeId(course.tees[0]?.id);
+                        setCourseSelectionManuallySet(true);
                         setStartHoleManuallySet(false);
                         setStartingHole(1);
                         setError(null);

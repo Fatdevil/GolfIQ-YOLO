@@ -7,6 +7,7 @@ export type CourseSummary = {
   country?: string | null;
   city?: string | null;
   holeCount: number;
+  location?: { lat: number; lon: number } | null;
 };
 
 export async function fetchCourses(): Promise<CourseSummary[]> {
