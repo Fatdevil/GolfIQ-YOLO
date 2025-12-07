@@ -3,12 +3,12 @@ import { useTranslation } from "react-i18next";
 import { fetchBagStats } from "@/api/bagStatsClient";
 import { loadBag, updateClubCarry, upsertClub } from "@web/bag/storage";
 import type { BagState, BagClub } from "@web/bag/types";
+import { mapBagStateToPlayerBag } from "@web/bag/utils";
 import { useUnits } from "@/preferences/UnitsContext";
 import { convertMeters, formatDistance } from "@/utils/distance";
 import { analyzeBagGaps, type ClubDataStatusById } from "@shared/caddie/bagGapInsights";
 import { buildBagTuningSuggestions } from "@shared/caddie/bagTuningSuggestions";
 import { shouldUseBagStat, type BagClubStatsMap } from "@shared/caddie/bagStats";
-import type { PlayerBag } from "@shared/caddie/playerBag";
 import { computeBagReadiness } from "@shared/caddie/bagReadiness";
 
 function formatTimestamp(timestamp: number): string {
@@ -20,19 +20,6 @@ function formatTimestamp(timestamp: number): string {
   } catch {
     return new Date(timestamp).toLocaleString();
   }
-}
-
-function mapToPlayerBag(bag: BagState): PlayerBag {
-  return {
-    clubs: bag.clubs.map((club) => ({
-      clubId: club.id,
-      label: club.label,
-      avgCarryM: club.carry_m ?? null,
-      manualAvgCarryM: club.carry_m ?? null,
-      sampleCount: 0,
-      active: true,
-    })),
-  };
 }
 
 export default function MyBagPage(): JSX.Element {
@@ -118,7 +105,7 @@ export default function MyBagPage(): JSX.Element {
     };
   }, []);
 
-  const playerBag = React.useMemo(() => mapToPlayerBag(bag), [bag]);
+  const playerBag = React.useMemo(() => mapBagStateToPlayerBag(bag), [bag]);
   const gapAnalysis = React.useMemo(
     () => (bagStats ? analyzeBagGaps(playerBag, bagStats) : null),
     [bagStats, playerBag]

@@ -593,6 +593,7 @@ export const en = {
       base: '{{calibrated}} of {{total}} clubs calibrated',
       details: '{{noData}} without data · {{needsMore}} need more samples · {{gaps}} large gaps · {{overlaps}} overlaps',
     },
+    readinessTileSuggestionPrefix: 'Suggestion:',
   },
 } as const;
 

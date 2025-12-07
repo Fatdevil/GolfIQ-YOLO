@@ -12,6 +12,7 @@ import {
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 
 import { fetchPlayerBag, type PlayerBag } from '@app/api/bagClient';
+import { fetchBagStats } from '@app/api/bagStatsClient';
 import {
   fetchCurrentRound,
   fetchLatestCompletedRound,
@@ -31,6 +32,10 @@ import { useGeolocation } from '@app/hooks/useGeolocation';
 import { saveActiveRoundState } from '@app/round/roundState';
 import { computeNearestCourse } from '@shared/round/autoHoleCore';
 import { buildQuickStartPlan } from '@app/utils/quickStartRound';
+import { buildBagReadinessOverview } from '@shared/caddie/bagReadiness';
+import type { BagClubStatsMap } from '@shared/caddie/bagStats';
+import type { BagSuggestion } from '@shared/caddie/bagTuningSuggestions';
+import { formatDistance } from '@app/utils/distance';
 
 const CALIBRATION_SAMPLE_THRESHOLD = 5;
 const TARGET_ROUNDS_PER_WEEK = 3;
@@ -45,6 +50,7 @@ type DashboardState = {
   weeklySummary: WeeklySummary | null;
   practicePlan: PracticePlan | null;
   bag: PlayerBag | null;
+  bagStats: BagClubStatsMap | null;
   engagement: EngagementState | null;
 };
 
@@ -75,6 +81,36 @@ function summarizeBag(bag: PlayerBag | null): { calibrated: number; needsMore: n
   return { calibrated, needsMore, total: bag.clubs.length };
 }
 
+function formatBagSuggestion(
+  suggestion: BagSuggestion,
+  clubLabels: Record<string, string>,
+): string | null {
+  const lower = suggestion.lowerClubId ? clubLabels[suggestion.lowerClubId] ?? suggestion.lowerClubId : null;
+  const upper = suggestion.upperClubId ? clubLabels[suggestion.upperClubId] ?? suggestion.upperClubId : null;
+  const clubLabel = suggestion.clubId ? clubLabels[suggestion.clubId] ?? suggestion.clubId : null;
+  const distanceLabel =
+    suggestion.gapDistance != null ? formatDistance(suggestion.gapDistance, { withUnit: true }) : null;
+
+  if (suggestion.type === 'fill_gap' && lower && upper && distanceLabel) {
+    return t('bag.suggestions.fill_gap', { lower, upper, distance: distanceLabel });
+  }
+
+  if (suggestion.type === 'reduce_overlap' && lower && upper) {
+    return t('bag.suggestions.reduce_overlap', { lower, upper, distance: distanceLabel });
+  }
+
+  if (suggestion.type === 'calibrate' && clubLabel) {
+    return t(
+      suggestion.severity === 'high'
+        ? 'bag.suggestions.calibrate.no_data'
+        : 'bag.suggestions.calibrate.needs_more_samples',
+      { club: clubLabel },
+    );
+  }
+
+  return null;
+}
+
 export default function HomeDashboardScreen({ navigation }: Props): JSX.Element {
   const [state, setState] = useState<DashboardState>({
     loading: true,
@@ -84,6 +120,7 @@ export default function HomeDashboardScreen({ navigation }: Props): JSX.Element 
     weeklySummary: null,
     practicePlan: null,
     bag: null,
+    bagStats: null,
     engagement: null,
   });
   const [sharingWeekly, setSharingWeekly] = useState(false);
@@ -94,7 +131,7 @@ export default function HomeDashboardScreen({ navigation }: Props): JSX.Element 
     let cancelled = false;
 
     const load = async () => {
-      const [profileRes, currentRoundRes, latestRoundRes, weeklyRes, practiceRes, bagRes, engagementRes] =
+      const [profileRes, currentRoundRes, latestRoundRes, weeklyRes, practiceRes, bagRes, bagStatsRes, engagementRes] =
         await Promise.allSettled([
           fetchPlayerProfile(),
           fetchCurrentRound(),
@@ -102,6 +139,7 @@ export default function HomeDashboardScreen({ navigation }: Props): JSX.Element 
           fetchWeeklySummary(),
           fetchPracticePlan({ maxMinutes: 30 }),
           fetchPlayerBag(),
+          fetchBagStats(),
           loadEngagementState(),
         ]);
 
@@ -113,6 +151,7 @@ export default function HomeDashboardScreen({ navigation }: Props): JSX.Element 
       const practicePlan = practiceRes.status === 'fulfilled' ? practiceRes.value : null;
       const bag = bagRes.status === 'fulfilled' ? bagRes.value : null;
       const engagement = engagementRes.status === 'fulfilled' ? engagementRes.value : null;
+      const bagStats = bagStatsRes.status === 'fulfilled' ? bagStatsRes.value : null;
 
       if (profileRes.status === 'rejected') console.warn('Home dashboard profile load failed', profileRes.reason);
       if (currentRoundRes.status === 'rejected')
@@ -122,6 +161,7 @@ export default function HomeDashboardScreen({ navigation }: Props): JSX.Element 
       if (weeklyRes.status === 'rejected') console.warn('Home dashboard weekly load failed', weeklyRes.reason);
       if (practiceRes.status === 'rejected') console.warn('Home dashboard practice load failed', practiceRes.reason);
       if (bagRes.status === 'rejected') console.warn('Home dashboard bag load failed', bagRes.reason);
+      if (bagStatsRes.status === 'rejected') console.warn('Home dashboard bag stats load failed', bagStatsRes.reason);
       if (engagementRes.status === 'rejected')
         console.warn('Home dashboard engagement load failed', engagementRes.reason);
 
@@ -133,6 +173,7 @@ export default function HomeDashboardScreen({ navigation }: Props): JSX.Element 
         weeklySummary,
         practicePlan,
         bag,
+        bagStats,
         engagement,
       });
     };
@@ -144,7 +185,7 @@ export default function HomeDashboardScreen({ navigation }: Props): JSX.Element 
     };
   }, []);
 
-  const { loading, profile, currentRound, latestRound, weeklySummary, practicePlan, bag, engagement } = state;
+  const { loading, profile, currentRound, latestRound, weeklySummary, practicePlan, bag, bagStats, engagement } = state;
 
   const latestRoundDisplay = useMemo(() => {
     if (!latestRound) return null;
@@ -208,6 +249,24 @@ export default function HomeDashboardScreen({ navigation }: Props): JSX.Element 
     if (!lastSeen) return true;
     return lastSeen !== latestRound.roundId;
   }, [engagement?.lastSeenCoachReportRoundId, latestRound]);
+
+  const clubLabels = useMemo(() => {
+    const labels: Record<string, string> = {};
+    bag?.clubs.forEach((club) => {
+      labels[club.clubId] = club.label;
+    });
+    return labels;
+  }, [bag?.clubs]);
+
+  const bagReadinessOverview = useMemo(
+    () => buildBagReadinessOverview(bag ?? { clubs: [] }, bagStats ?? {}),
+    [bag, bagStats],
+  );
+
+  const readinessSuggestion = useMemo(() => {
+    if (!bagReadinessOverview.suggestions.length) return null;
+    return formatBagSuggestion(bagReadinessOverview.suggestions[0], clubLabels);
+  }, [bagReadinessOverview.suggestions, clubLabels]);
 
   const markWeeklySeen = useCallback(async () => {
     const timestamp = weeklySummary?.period.to;
@@ -360,6 +419,43 @@ export default function HomeDashboardScreen({ navigation }: Props): JSX.Element 
         </Text>
         <Text style={styles.subtitle}>{t('home_dashboard_subtitle')}</Text>
       </View>
+
+      <TouchableOpacity
+        onPress={() => navigation.navigate('MyBag')}
+        activeOpacity={0.85}
+        testID="home-bag-readiness"
+      >
+        <View style={styles.card}>
+          <View style={styles.rowSpaceBetween}>
+            <Text style={styles.cardTitle}>{t('bag.readinessTitle')}</Text>
+            <View style={styles.badge}>
+              <Text style={styles.badgeText}>{t(`bag.readinessGrade.${bagReadinessOverview.readiness.grade}`)}</Text>
+            </View>
+          </View>
+          <Text style={styles.readinessScore} testID="home-bag-readiness-score">
+            {bagReadinessOverview.readiness.score}/100
+          </Text>
+          <Text style={styles.cardBody}>
+            {t('bag.readinessSummary.base', {
+              calibrated: bagReadinessOverview.readiness.calibratedClubs,
+              total: bagReadinessOverview.readiness.totalClubs,
+            })}
+          </Text>
+          <Text style={styles.muted}>
+            {t('bag.readinessSummary.details', {
+              noData: bagReadinessOverview.readiness.noDataCount,
+              needsMore: bagReadinessOverview.readiness.needsMoreSamplesCount,
+              gaps: bagReadinessOverview.readiness.largeGapCount,
+              overlaps: bagReadinessOverview.readiness.overlapCount,
+            })}
+          </Text>
+          {readinessSuggestion ? (
+            <Text style={styles.suggestionLine} numberOfLines={2} testID="home-bag-readiness-suggestion">
+              {t('bag.readinessTileSuggestionPrefix')} {readinessSuggestion}
+            </Text>
+          ) : null}
+        </View>
+      </TouchableOpacity>
 
       <View style={styles.card}>
         <Text style={styles.cardTitle}>{t('home_dashboard_quick_start_title')}</Text>
@@ -577,6 +673,11 @@ const styles = StyleSheet.create({
     color: '#6b7280',
     fontSize: 13,
   },
+  readinessScore: {
+    fontSize: 28,
+    fontWeight: '800',
+    color: '#0f172a',
+  },
   score: {
     fontSize: 18,
     fontWeight: '700',
@@ -644,6 +745,11 @@ const styles = StyleSheet.create({
     color: '#312e81',
     fontWeight: '700',
     fontSize: 12,
+  },
+  suggestionLine: {
+    color: '#1f2937',
+    fontSize: 13,
+    marginTop: 6,
   },
   progressBlock: {
     gap: 6,

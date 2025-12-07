@@ -4,6 +4,9 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 
 import { HomeHubPage } from "@/pages/home/HomeHubPage";
+import * as bagStatsApi from "@/api/bagStatsClient";
+import { UnitsProvider } from "@/preferences/UnitsContext";
+import type { BagClubStatsMap } from "@shared/caddie/bagStats";
 
 vi.mock("@/access/UserAccessContext", () => ({
   useAccessPlan: vi.fn(),
@@ -23,6 +26,7 @@ vi.mock("@/demo/demoData", () => ({
 vi.mock("@/notifications/NotificationContext", () => ({
   useNotifications: () => ({ notify: vi.fn() }),
 }));
+vi.mock("@/api/bagStatsClient", () => ({ fetchBagStats: vi.fn() }));
 
 import { useAccessFeatures, useAccessPlan, useFeatureFlag } from "@/access/UserAccessContext";
 import {
@@ -39,6 +43,13 @@ const mockComputeOnboardingChecklist =
   computeOnboardingChecklist as unknown as Mock;
 const mockMarkHomeSeen = markHomeSeen as unknown as Mock;
 const mockSeedDemoData = seedDemoData as unknown as Mock;
+const mockFetchBagStats = bagStatsApi.fetchBagStats as unknown as Mock;
+
+const mockBagStats: BagClubStatsMap = {
+  '9i': { clubId: '9i', meanDistanceM: 120, sampleCount: 8 },
+  '7i': { clubId: '7i', meanDistanceM: 140, sampleCount: 8 },
+  '5i': { clubId: '5i', meanDistanceM: 160, sampleCount: 8 },
+};
 
 const baseChecklist: OnboardingChecklist = {
   allDone: false,
@@ -53,7 +64,9 @@ const baseChecklist: OnboardingChecklist = {
 const renderHome = () => {
   return render(
     <MemoryRouter>
-      <HomeHubPage />
+      <UnitsProvider>
+        <HomeHubPage />
+      </UnitsProvider>
     </MemoryRouter>,
   );
 };
@@ -79,6 +92,7 @@ describe("HomeHubPage", () => {
     mockComputeOnboardingChecklist.mockReturnValue({ ...baseChecklist });
     mockMarkHomeSeen.mockClear();
     mockSeedDemoData.mockClear();
+    mockFetchBagStats.mockResolvedValue(mockBagStats);
   });
 
   it("renders home hub with entry cards and free plan badge", () => {
@@ -139,5 +153,31 @@ describe("HomeHubPage", () => {
     const [demoButton] = await screen.findAllByTestId("seed-demo-data");
     fireEvent.click(demoButton);
     expect(mockSeedDemoData).toHaveBeenCalled();
+  });
+
+  it("shows bag readiness score and suggestion", async () => {
+    mockFetchBagStats.mockResolvedValue({
+      ...mockBagStats,
+      driver: { clubId: "driver", meanDistanceM: 230, sampleCount: 3 },
+    });
+
+    renderHome();
+
+    const tiles = await screen.findAllByTestId("home-bag-readiness");
+    expect(tiles[0]).toBeVisible();
+    const scores = await screen.findAllByTestId("home-bag-readiness-score");
+    expect(scores[0].textContent).toMatch(/\d{1,3}\/100/);
+    const suggestions = await screen.findAllByTestId("home-bag-readiness-suggestion");
+    expect(suggestions[0].textContent).toMatch(/Förslag|Suggestion/);
+  });
+
+  it("handles missing stats gracefully", async () => {
+    mockFetchBagStats.mockResolvedValue({});
+
+    renderHome();
+
+    const tiles = await screen.findAllByTestId("home-bag-readiness");
+    expect(tiles[0]).toBeVisible();
+    expect((await screen.findAllByText(/Bag readiness/i))[0]).toBeVisible();
   });
 });

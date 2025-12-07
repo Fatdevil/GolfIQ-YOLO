@@ -4,6 +4,7 @@ import React from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import * as bagClient from '@app/api/bagClient';
+import * as bagStatsClient from '@app/api/bagStatsClient';
 import * as playerApi from '@app/api/player';
 import * as practiceClient from '@app/api/practiceClient';
 import * as roundClient from '@app/api/roundClient';
@@ -11,6 +12,7 @@ import * as weeklyApi from '@app/api/weeklySummary';
 import type { RootStackParamList } from '@app/navigation/types';
 import HomeDashboardScreen from '@app/screens/HomeDashboardScreen';
 import * as engagementStorage from '@app/storage/engagement';
+import type { BagClubStatsMap } from '@shared/caddie/bagStats';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'HomeDashboard'>;
 
@@ -49,6 +51,11 @@ const mockBag: bagClient.PlayerBag = {
   ],
 };
 
+const mockBagStats: BagClubStatsMap = {
+  '7i': { clubId: '7i', meanDistanceM: 150, sampleCount: 6 },
+  '5w': { clubId: '5w', meanDistanceM: 190, sampleCount: 2 },
+};
+
 function createNavigation(): Navigation {
   return {
     navigate: vi.fn(),
@@ -69,6 +76,7 @@ vi.mock('@app/api/roundClient', () => ({
 vi.mock('@app/api/weeklySummary', () => ({ fetchWeeklySummary: vi.fn() }));
 vi.mock('@app/api/practiceClient', () => ({ fetchPracticePlan: vi.fn() }));
 vi.mock('@app/api/bagClient', () => ({ fetchPlayerBag: vi.fn() }));
+vi.mock('@app/api/bagStatsClient', () => ({ fetchBagStats: vi.fn() }));
 vi.mock('@app/storage/engagement', () => ({
   loadEngagementState: vi.fn(),
   saveEngagementState: vi.fn(),
@@ -83,6 +91,7 @@ describe('HomeDashboardScreen', () => {
     vi.mocked(weeklyApi.fetchWeeklySummary).mockResolvedValue(mockWeekly);
     vi.mocked(practiceClient.fetchPracticePlan).mockResolvedValue(mockPracticePlan);
     vi.mocked(bagClient.fetchPlayerBag).mockResolvedValue(mockBag);
+    vi.mocked(bagStatsClient.fetchBagStats).mockResolvedValue(mockBagStats);
     vi.mocked(engagementStorage.loadEngagementState).mockResolvedValue({});
     vi.mocked(engagementStorage.saveEngagementState).mockResolvedValue();
   });
@@ -230,5 +239,29 @@ describe('HomeDashboardScreen', () => {
     render(<HomeDashboardScreen navigation={navigation} route={createRoute()} />);
 
     expect(await screen.findByTestId('weekly-progress-text')).toHaveTextContent('Play your first round this week');
+  });
+
+  it('surfaces bag readiness with score and suggestion', async () => {
+    vi.mocked(bagStatsClient.fetchBagStats).mockResolvedValue({
+      '7i': { clubId: '7i', meanDistanceM: 150, sampleCount: 8 },
+      '5w': { clubId: '5w', meanDistanceM: 205, sampleCount: 8 },
+    });
+    const navigation = createNavigation();
+
+    render(<HomeDashboardScreen navigation={navigation} route={createRoute()} />);
+
+    expect(await screen.findByTestId('home-bag-readiness')).toBeVisible();
+    expect(screen.getByTestId('home-bag-readiness-score').textContent).toMatch(/\d{1,3}\/100/);
+    expect(screen.getByTestId('home-bag-readiness-suggestion').textContent).toMatch(/Suggestion/);
+  });
+
+  it('shows a low readiness grade when stats are missing', async () => {
+    vi.mocked(bagStatsClient.fetchBagStats).mockResolvedValue({});
+    const navigation = createNavigation();
+
+    render(<HomeDashboardScreen navigation={navigation} route={createRoute()} />);
+
+    expect(await screen.findByTestId('home-bag-readiness')).toBeVisible();
+    expect(screen.getByText(/Needs work/i)).toBeVisible();
   });
 });

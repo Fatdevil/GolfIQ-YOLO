@@ -348,6 +348,7 @@
   "bag.readinessGrade.excellent": "Utmärkt",
   "bag.readinessSummary.base": "{{calibrated}} av {{total}} klubbor kalibrerade",
   "bag.readinessSummary.details": "{{noData}} utan data · {{needsMore}} behöver fler slag · {{gaps}} stora luckor · {{overlaps}} överlapp",
+  "bag.readinessTileSuggestionPrefix": "Förslag:",
   "units.label": "Enheter",
   "bag.notes": "Anteckningar",
   "languageSelector.label": "Språk",
