@@ -50,6 +50,9 @@ const sampleDecision = {
   targetDistanceM: 150,
   rawDistanceM: 150,
   recommendedClubId: '7i',
+  recommendedClubDistanceSource: 'auto_calibrated' as const,
+  recommendedClubSampleCount: 12,
+  recommendedClubMinSamples: 5,
   explanation: 'Go for it',
 };
 
@@ -113,5 +116,30 @@ describe('RoundShotScreen', () => {
     const payload = mockUpdateHoleScore.mock.calls[mockUpdateHoleScore.mock.calls.length - 1][2];
     expect(payload.caddieDecision.followed).toBe(false);
     expect(payload.caddieDecision.recommendedClubId).toBe('5i');
+  });
+
+  it.each([
+    ['auto_calibrated', 'Auto-calibrated · 12 shots'],
+    ['partial_stats', 'needs more data'],
+    ['manual', 'Based on your bag carry'],
+    ['default', 'Estimate (no club data yet)'],
+  ])('shows calibration copy for %s distances', async (distanceSource, expectedText) => {
+    mockComputeCaddieDecision.mockReturnValue({
+      ...sampleDecision,
+      recommendedClubDistanceSource: distanceSource,
+      recommendedClubSampleCount: 12,
+      recommendedClubMinSamples: 5,
+    });
+
+    const navigation = { navigate: vi.fn() } as any;
+    const { findByTestId, queryByText } = render(
+      <RoundShotScreen navigation={navigation} route={{ params: { roundId: 'round-1' } } as any} />,
+    );
+
+    const captionNode = await findByTestId('caddie-calibration-caption');
+
+    const caption = queryByText((content) => content.includes(expectedText));
+    expect(captionNode).toBeTruthy();
+    expect(caption).toBeTruthy();
   });
 });

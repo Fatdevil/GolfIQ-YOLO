@@ -48,6 +48,8 @@ describe('getEffectiveCarryM', () => {
       manualCarryM: 140,
       source: 'manual',
       samples: 10,
+      distanceSource: 'manual',
+      sampleCount: 10,
     };
 
     expect(getEffectiveCarryM(candidate)).toBe(140);
@@ -60,6 +62,8 @@ describe('getEffectiveCarryM', () => {
       manualCarryM: 160,
       source: 'auto',
       samples: 10,
+      distanceSource: 'default',
+      sampleCount: 10,
     };
 
     expect(getEffectiveCarryM(candidate)).toBe(152);
@@ -69,9 +73,9 @@ describe('getEffectiveCarryM', () => {
 describe('chooseClubForTargetDistance', () => {
   it('selects the smallest club covering plays-like distance', () => {
     const club = chooseClubForTargetDistance(150, 0, [
-      { club: '9i', baselineCarryM: 138, samples: 10, source: 'auto' },
-      { club: '8i', baselineCarryM: 152, samples: 8, source: 'auto' },
-      { club: '7i', baselineCarryM: 160, samples: 6, source: 'auto' },
+      { club: '9i', baselineCarryM: 138, samples: 10, source: 'auto', distanceSource: 'default' },
+      { club: '8i', baselineCarryM: 152, samples: 8, source: 'auto', distanceSource: 'default' },
+      { club: '7i', baselineCarryM: 160, samples: 6, source: 'auto', distanceSource: 'default' },
     ]);
 
     expect(club?.club).toBe('8i');
@@ -79,9 +83,9 @@ describe('chooseClubForTargetDistance', () => {
 
   it('breaks ties by samples then club name', () => {
     const club = chooseClubForTargetDistance(150, 0, [
-      { club: '8i', baselineCarryM: 155, samples: 3, source: 'auto' },
-      { club: '7i', baselineCarryM: 155, samples: 6, source: 'auto' },
-      { club: '6i', baselineCarryM: 170, samples: 2, source: 'auto' },
+      { club: '8i', baselineCarryM: 155, samples: 3, source: 'auto', distanceSource: 'default' },
+      { club: '7i', baselineCarryM: 155, samples: 6, source: 'auto', distanceSource: 'default' },
+      { club: '6i', baselineCarryM: 170, samples: 2, source: 'auto', distanceSource: 'default' },
     ]);
 
     expect(club?.club).toBe('7i');
@@ -89,8 +93,8 @@ describe('chooseClubForTargetDistance', () => {
 
   it('falls back to longest club when none cover plays-like distance', () => {
     const club = chooseClubForTargetDistance(200, 0, [
-      { club: '9i', baselineCarryM: 138, samples: 10, source: 'auto' },
-      { club: '8i', baselineCarryM: 148, samples: 8, source: 'auto' },
+      { club: '9i', baselineCarryM: 138, samples: 10, source: 'auto', distanceSource: 'default' },
+      { club: '8i', baselineCarryM: 148, samples: 8, source: 'auto', distanceSource: 'default' },
     ]);
 
     expect(club?.club).toBe('8i');
@@ -104,8 +108,8 @@ describe('buildCaddieDecisionFromContext', () => {
       explicitIntent: 'straight',
       settings: DEFAULT_SETTINGS,
       clubs: [
-        { club: '8i', baselineCarryM: 148, samples: 8, source: 'auto' },
-        { club: '7i', baselineCarryM: 160, samples: 10, source: 'auto' },
+        { club: '8i', baselineCarryM: 148, samples: 8, source: 'auto', distanceSource: 'default' },
+        { club: '7i', baselineCarryM: 160, samples: 10, source: 'auto', distanceSource: 'default' },
       ],
       shotShapeProfile: sampleProfile,
     });
@@ -115,13 +119,104 @@ describe('buildCaddieDecisionFromContext', () => {
     expect(result?.risk.coreZone.carryMaxM).toBeGreaterThan(result!.risk.coreZone.carryMinM);
   });
 
+  it('propagates distance source metadata for auto calibrated clubs', () => {
+    const result = buildCaddieDecisionFromContext({
+      conditions: baseConditions,
+      explicitIntent: 'straight',
+      settings: DEFAULT_SETTINGS,
+      clubs: [
+        {
+          club: '7i',
+          baselineCarryM: 160,
+          samples: 10,
+          sampleCount: 10,
+          minSamples: 5,
+          source: 'auto',
+          distanceSource: 'auto_calibrated',
+        },
+      ],
+      shotShapeProfile: sampleProfile,
+    });
+
+    expect(result?.distanceSource).toBe('auto_calibrated');
+    expect(result?.sampleCount).toBe(10);
+    expect(result?.minSamples).toBe(5);
+  });
+
+  it('propagates partial stat metadata when below threshold', () => {
+    const result = buildCaddieDecisionFromContext({
+      conditions: baseConditions,
+      explicitIntent: 'straight',
+      settings: DEFAULT_SETTINGS,
+      clubs: [
+        {
+          club: '7i',
+          baselineCarryM: 150,
+          samples: 10,
+          sampleCount: 2,
+          minSamples: 5,
+          source: 'auto',
+          distanceSource: 'partial_stats',
+        },
+      ],
+      shotShapeProfile: sampleProfile,
+    });
+
+    expect(result?.distanceSource).toBe('partial_stats');
+    expect(result?.sampleCount).toBe(2);
+    expect(result?.minSamples).toBe(5);
+  });
+
+  it('marks manual carries correctly', () => {
+    const result = buildCaddieDecisionFromContext({
+      conditions: baseConditions,
+      explicitIntent: 'straight',
+      settings: DEFAULT_SETTINGS,
+      clubs: [
+        {
+          club: '7i',
+          baselineCarryM: 150,
+          manualCarryM: 148,
+          samples: 0,
+          source: 'manual',
+          distanceSource: 'manual',
+        },
+      ],
+      shotShapeProfile: sampleProfile,
+    });
+
+    expect(result?.distanceSource).toBe('manual');
+    expect(result?.sampleCount).toBe(0);
+  });
+
+  it('falls back to defaults when no metadata exists', () => {
+    const result = buildCaddieDecisionFromContext({
+      conditions: baseConditions,
+      explicitIntent: 'straight',
+      settings: DEFAULT_SETTINGS,
+      clubs: [
+        {
+          club: '7i',
+          baselineCarryM: 150,
+          samples: 0,
+          source: 'auto',
+          distanceSource: 'default',
+        },
+      ],
+      shotShapeProfile: sampleProfile,
+    });
+
+    expect(result?.distanceSource).toBe('default');
+    expect(result?.sampleCount).toBe(0);
+  });
+
   it('uses stock shape when explicit intent is missing', () => {
     const result = buildCaddieDecisionFromContext({
       conditions: baseConditions,
       settings: { stockShape: 'draw', riskProfile: 'normal' },
       clubs: [
-        { club: '8i', baselineCarryM: 148, samples: 8, source: 'auto' },
-        { club: '7i', baselineCarryM: 160, samples: 10, source: 'auto' },
+        { club: '8i', baselineCarryM: 148, samples: 8, source: 'auto', distanceSource: 'default' },
+        { club: '7i', baselineCarryM: 160, samples: 10, source: 'auto', distanceSource: 'default' },
       ],
       shotShapeProfile: { ...sampleProfile, intent: 'draw' },
     });
@@ -131,8 +226,8 @@ describe('buildCaddieDecisionFromContext', () => {
 
   it('applies risk profile buffers when choosing clubs', () => {
     const clubs = [
-      { club: '9i', baselineCarryM: 155, samples: 5, source: 'auto' as const },
-      { club: '8i', baselineCarryM: 165, samples: 5, source: 'auto' as const },
+      { club: '9i', baselineCarryM: 155, samples: 5, source: 'auto' as const, distanceSource: 'default' },
+      { club: '8i', baselineCarryM: 165, samples: 5, source: 'auto' as const, distanceSource: 'default' },
     ];
 
     const aggressive = buildCaddieDecisionFromContext({
@@ -161,8 +256,8 @@ describe('buildCaddieDecisionFromContext', () => {
       explicitIntent: 'straight',
       settings: DEFAULT_SETTINGS,
       clubs: [
-        { club: '9i', baselineCarryM: 150, samples: 5, source: 'auto' as const },
-        { club: '8i', baselineCarryM: 160, samples: 5, source: 'auto' as const },
+        { club: '9i', baselineCarryM: 150, samples: 5, source: 'auto' as const, distanceSource: 'default' },
+        { club: '8i', baselineCarryM: 160, samples: 5, source: 'auto' as const, distanceSource: 'default' },
       ],
       shotShapeProfile: sampleProfile,
     });
@@ -186,6 +281,7 @@ describe('mapDistanceStatsToCandidate', () => {
 
     expect(candidate.manualCarryM).toBe(150);
     expect(candidate.samples).toBe(12);
+    expect(candidate.distanceSource).toBe('manual');
   });
 });
 

@@ -47,6 +47,7 @@ import {
   type CourseLayout,
 } from '@shared/round/autoHoleCore';
 import type { BagClubStatsMap } from '@shared/caddie/bagStats';
+import { formatDistanceSourceLabel } from '@app/caddie/distanceSourceLabels';
 
 const CLUBS = ['D', '3W', '5W', '4i', '5i', '6i', '7i', '8i', '9i', 'PW', 'GW', 'SW'];
 
@@ -247,6 +248,14 @@ export default function RoundShotScreen({ navigation }: Props): JSX.Element {
     playerBag,
     bagStats,
   ]);
+
+  const caddieCalibrationLabel = caddieDecision
+    ? formatDistanceSourceLabel(
+        caddieDecision.recommendedClubDistanceSource,
+        caddieDecision.recommendedClubSampleCount ?? undefined,
+        caddieDecision.recommendedClubMinSamples ?? undefined,
+      )
+    : null;
 
   const holeNumbers = useMemo(
     () => Array.from({ length: totalHoles }, (_, idx) => startingHole + idx),
@@ -534,6 +543,11 @@ export default function RoundShotScreen({ navigation }: Props): JSX.Element {
               Club: {getClubLabel(caddieDecision.recommendedClubId, playerBag)}
             </Text>
           )}
+          {caddieCalibrationLabel ? (
+            <Text style={styles.caddieDetail} testID="caddie-calibration-caption">
+              {caddieCalibrationLabel}
+            </Text>
+          ) : null}
           <Text style={styles.caddieExplanation}>{caddieDecision.explanation}</Text>
         </View>
       )}

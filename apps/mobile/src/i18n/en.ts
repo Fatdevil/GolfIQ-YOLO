@@ -437,6 +437,12 @@ export const en = {
       profile_safe_hint: 'Caddie keeps extra buffer to avoid big trouble.',
       profile_aggressive_hint: 'Caddie accepts smaller margins to play closer to the flag.',
     },
+    calibration: {
+      auto: 'Auto-calibrated · {{count}} shots',
+      partial: 'Bag carry · {{count}}/{{min}} shots (needs more data)',
+      manual: 'Based on your bag carry',
+      default: 'Estimate (no club data yet)',
+    },
     setup: {
       title: 'Caddie setup',
       subtitle: 'Tell GolfIQ how you like to shape shots and manage risk.',
