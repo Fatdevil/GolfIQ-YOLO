@@ -9,6 +9,7 @@ import { analyzeBagGaps, type ClubDataStatusById } from "@shared/caddie/bagGapIn
 import { buildBagTuningSuggestions } from "@shared/caddie/bagTuningSuggestions";
 import { shouldUseBagStat, type BagClubStatsMap } from "@shared/caddie/bagStats";
 import type { PlayerBag } from "@shared/caddie/playerBag";
+import { computeBagReadiness } from "@shared/caddie/bagReadiness";
 
 function formatTimestamp(timestamp: number): string {
   try {
@@ -122,6 +123,10 @@ export default function MyBagPage(): JSX.Element {
     () => (bagStats ? analyzeBagGaps(playerBag, bagStats) : null),
     [bagStats, playerBag]
   );
+  const readiness = React.useMemo(
+    () => computeBagReadiness(playerBag, bagStats ?? {}),
+    [bagStats, playerBag]
+  );
   const clubDataStatuses: ClubDataStatusById = gapAnalysis?.dataStatusByClubId ?? {};
   const bagInsights = gapAnalysis?.insights ?? [];
   const bagSuggestions = React.useMemo(
@@ -144,6 +149,37 @@ export default function MyBagPage(): JSX.Element {
         <p className="text-sm text-slate-400">
           Senast uppdaterad: {formatTimestamp(bag.updatedAt)}
         </p>
+      </div>
+
+      <div
+        className="rounded-lg border border-slate-800 bg-slate-900/60 px-4 py-3 shadow"
+        data-testid="bag-readiness"
+      >
+        <div className="flex items-start justify-between gap-4">
+          <div className="flex flex-col gap-1">
+            <h2 className="text-lg font-semibold text-slate-100">
+              {t("bag.readinessTitle")}
+            </h2>
+            <p className="text-3xl font-extrabold text-slate-50">{readiness.score}/100</p>
+            <p className="text-sm text-slate-200">
+              {t("bag.readinessSummary.base", {
+                calibrated: readiness.calibratedClubs,
+                total: readiness.totalClubs,
+              })}
+            </p>
+            <p className="text-xs text-slate-400">
+              {t("bag.readinessSummary.details", {
+                noData: readiness.noDataCount,
+                needsMore: readiness.needsMoreSamplesCount,
+                gaps: readiness.largeGapCount,
+                overlaps: readiness.overlapCount,
+              })}
+            </p>
+          </div>
+          <div className="shrink-0 rounded-full border border-emerald-700/80 bg-emerald-500/10 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-emerald-200">
+            {t(`bag.readinessGrade.${readiness.grade}`)}
+          </div>
+        </div>
       </div>
 
       {bagStatsError ? (

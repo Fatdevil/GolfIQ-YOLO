@@ -117,6 +117,27 @@ describe("MyBagPage", () => {
     expect(savedMeters).toBeCloseTo(164.6, 1);
   });
 
+  it("shows bag readiness summary and grade", async () => {
+    fetchBagStatsMock.mockResolvedValue({
+      "7i": { clubId: "7i", meanDistanceM: 150, sampleCount: 6 },
+      DR: { clubId: "DR", meanDistanceM: 230, sampleCount: 7 },
+    });
+
+    render(
+      <UnitsContext.Provider value={{ unit: "metric", setUnit: () => {} }}>
+        <MemoryRouter>
+          <MyBagPage />
+        </MemoryRouter>
+      </UnitsContext.Provider>
+    );
+
+    await screen.findByTestId("bag-readiness");
+
+    expect(screen.getByText(/Bag readiness/i)).toBeInTheDocument();
+    expect(screen.getByText(/Excellent/i)).toBeInTheDocument();
+    expect(screen.getByText(/of 2 clubs calibrated/i)).toBeInTheDocument();
+  });
+
   it("shows bag insights when gaps or overlaps are detected", async () => {
     const insightsBag: BagState = {
       updatedAt: Date.now(),

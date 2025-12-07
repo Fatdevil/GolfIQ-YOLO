@@ -55,6 +55,18 @@ describe('MyBagScreen', () => {
     expect(getByText('Driver')).toBeTruthy();
   });
 
+  it('shows bag readiness score and grade when data is calibrated', async () => {
+    const { getByTestId, getByText } = render(
+      <MyBagScreen navigation={navigation} route={undefined as any} />,
+    );
+
+    await waitFor(() => getByTestId('bag-readiness'));
+
+    expect(getByText('Bag readiness')).toBeTruthy();
+    expect(getByText(/Excellent/i)).toBeTruthy();
+    expect(getByText(/of 2 clubs calibrated/)).toBeTruthy();
+  });
+
   it('allows toggling a club active state', async () => {
     const updated = {
       ...sampleBag,
@@ -284,6 +296,20 @@ describe('MyBagScreen', () => {
 
     expect(rerendered.queryByText(/Collect a few more shots to auto-calibrate/)).toBeNull();
     expect(rerendered.queryByText('No shot data yet – default carry in use')).toBeNull();
+  });
+
+  it('shows a lower readiness grade when no stats are available', async () => {
+    mockFetchBagStats.mockResolvedValueOnce({});
+
+    const { getByTestId, getByText } = render(
+      <MyBagScreen navigation={navigation} route={undefined as any} />,
+    );
+
+    await waitFor(() => getByTestId('bag-readiness'));
+
+    expect(getByText(/Needs work/i)).toBeTruthy();
+    expect(getByText(/0 of 2 clubs calibrated/)).toBeTruthy();
+    expect(getByText(/without data/)).toBeTruthy();
   });
 
   it('uses cached bag stats when online fetch fails', async () => {
