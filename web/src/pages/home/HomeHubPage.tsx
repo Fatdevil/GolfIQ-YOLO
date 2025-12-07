@@ -1,10 +1,12 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
+import type { TFunction } from "i18next";
 import { Link } from "react-router-dom";
 
 import { FeatureGate } from "@/access/FeatureGate";
 import { UpgradeGate } from "@/access/UpgradeGate";
 import { useAccessFeatures, useAccessPlan } from "@/access/UserAccessContext";
+import { fetchBagStats } from "@/api/bagStatsClient";
 import {
   computeOnboardingChecklist,
   markHomeSeen,
@@ -12,6 +14,15 @@ import {
 } from "@/onboarding/checklist";
 import { seedDemoData } from "@/demo/demoData";
 import { useNotifications } from "@/notifications/NotificationContext";
+import { mapBagStateToPlayerBag } from "@web/bag/utils";
+import { loadBag } from "@web/bag/storage";
+import type { BagState } from "@web/bag/types";
+import { buildBagReadinessOverview } from "@shared/caddie/bagReadiness";
+import type { BagClubStatsMap } from "@shared/caddie/bagStats";
+import type { BagSuggestion } from "@shared/caddie/bagTuningSuggestions";
+import { useUnits } from "@/preferences/UnitsContext";
+import type { DistanceUnit } from "@/preferences/units";
+import { formatDistance } from "@/utils/distance";
 
 const Card: React.FC<{
   title: string;
@@ -56,13 +67,49 @@ const GhostMatchBadge: React.FC = () => {
   );
 };
 
+function formatBagSuggestion(
+  suggestion: BagSuggestion,
+  clubLabels: Record<string, string>,
+  unit: DistanceUnit,
+  t: TFunction,
+): string | null {
+  const lower = suggestion.lowerClubId ? clubLabels[suggestion.lowerClubId] ?? suggestion.lowerClubId : null;
+  const upper = suggestion.upperClubId ? clubLabels[suggestion.upperClubId] ?? suggestion.upperClubId : null;
+  const clubLabel = suggestion.clubId ? clubLabels[suggestion.clubId] ?? suggestion.clubId : null;
+  const distanceLabel =
+    suggestion.gapDistance != null ? formatDistance(suggestion.gapDistance, unit, { withUnit: true }) : null;
+
+  if (suggestion.type === "fill_gap" && lower && upper && distanceLabel) {
+    return t("bag.suggestions.fill_gap", { lower, upper, distance: distanceLabel });
+  }
+
+  if (suggestion.type === "reduce_overlap" && lower && upper) {
+    return t("bag.suggestions.reduce_overlap", { lower, upper, distance: distanceLabel });
+  }
+
+  if (suggestion.type === "calibrate" && clubLabel) {
+    return t(
+      suggestion.severity === "high"
+        ? "bag.suggestions.calibrate.no_data"
+        : "bag.suggestions.calibrate.needs_more_samples",
+      { club: clubLabel },
+    );
+  }
+
+  return null;
+}
+
 export const HomeHubPage: React.FC = () => {
   const { t } = useTranslation();
   const { plan, isPro } = useAccessPlan();
   const { notify } = useNotifications();
+  const { unit } = useUnits();
+  const [bag] = useState<BagState>(() => loadBag());
   const [checklist, setChecklist] = useState<OnboardingChecklist>(() =>
     computeOnboardingChecklist(),
   );
+  const [bagStats, setBagStats] = useState<BagClubStatsMap | null>(null);
+  const [bagStatsLoading, setBagStatsLoading] = useState(false);
 
   useEffect(() => {
     markHomeSeen();
@@ -74,6 +121,51 @@ export const HomeHubPage: React.FC = () => {
     setChecklist(computeOnboardingChecklist());
     notify("success", t("onboarding.seed.success"));
   };
+
+  useEffect(() => {
+    let cancelled = false;
+    setBagStatsLoading(true);
+    fetchBagStats()
+      .then((stats) => {
+        if (!cancelled) {
+          setBagStats(stats);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setBagStats(null);
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setBagStatsLoading(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const playerBag = useMemo(() => mapBagStateToPlayerBag(bag), [bag]);
+  const bagReadiness = useMemo(
+    () => buildBagReadinessOverview(playerBag, bagStats ?? {}),
+    [bagStats, playerBag],
+  );
+  const clubLabels = useMemo(() => {
+    const labels: Record<string, string> = {};
+    bag.clubs.forEach((club) => {
+      labels[club.id] = club.label;
+    });
+    return labels;
+  }, [bag.clubs]);
+  const readinessSuggestion = useMemo(
+    () =>
+      bagReadiness.suggestions.length > 0
+        ? formatBagSuggestion(bagReadiness.suggestions[0], clubLabels, unit, t)
+        : null,
+    [bagReadiness.suggestions, clubLabels, t, unit],
+  );
 
   const effectivePlan = plan === "pro" ? "PRO" : "FREE";
 
@@ -143,6 +235,47 @@ export const HomeHubPage: React.FC = () => {
           </p>
         )}
       </section>
+
+      <Link
+        to="/bag"
+        className="block rounded-xl border border-emerald-800/60 bg-emerald-900/40 p-4 shadow-sm transition hover:border-emerald-500"
+        data-testid="home-bag-readiness"
+      >
+        <div className="flex items-start justify-between gap-3">
+          <div className="space-y-1">
+            <h2 className="text-lg font-semibold text-emerald-50">{t("bag.readinessTitle")}</h2>
+            <p className="text-sm text-emerald-100">
+              {t("bag.readinessSummary.base", {
+                calibrated: bagReadiness.readiness.calibratedClubs,
+                total: bagReadiness.readiness.totalClubs,
+              })}
+            </p>
+            <p className="text-xs text-emerald-200/80">
+              {t("bag.readinessSummary.details", {
+                noData: bagReadiness.readiness.noDataCount,
+                needsMore: bagReadiness.readiness.needsMoreSamplesCount,
+                gaps: bagReadiness.readiness.largeGapCount,
+                overlaps: bagReadiness.readiness.overlapCount,
+              })}
+            </p>
+            {bagStatsLoading ? (
+              <p className="text-[11px] text-emerald-100/80">{t("bag.loading")}</p>
+            ) : readinessSuggestion ? (
+              <p className="text-sm font-semibold text-emerald-100" data-testid="home-bag-readiness-suggestion">
+                {t("bag.readinessTileSuggestionPrefix")} {readinessSuggestion}
+              </p>
+            ) : null}
+          </div>
+          <div className="text-right">
+            <div className="inline-flex items-center rounded-full border border-emerald-700/80 bg-emerald-500/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-emerald-200">
+              {t(`bag.readinessGrade.${bagReadiness.readiness.grade}`)}
+            </div>
+            <div className="mt-2 text-3xl font-extrabold text-emerald-50" data-testid="home-bag-readiness-score">
+              {bagReadiness.readiness.score}/100
+            </div>
+          </div>
+        </div>
+      </Link>
 
       <div className="grid gap-4 md:grid-cols-2">
         <Card

@@ -362,6 +362,7 @@
   "bag.readinessGrade.excellent": "Excellent",
   "bag.readinessSummary.base": "{{calibrated}} of {{total}} clubs calibrated",
   "bag.readinessSummary.details": "{{noData}} without data · {{needsMore}} need more samples · {{gaps}} large gaps · {{overlaps}} overlaps",
+  "bag.readinessTileSuggestionPrefix": "Suggestion:",
   "units.label": "Units",
   "bag.notes": "Notes",
 

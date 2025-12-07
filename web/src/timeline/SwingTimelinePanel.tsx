@@ -98,7 +98,11 @@ export default function SwingTimelinePanel({ runId }: SwingTimelinePanelProps) {
 
   if (!events.length) {
     return (
-      <div className="rounded-md border border-slate-800 bg-slate-900/60 px-4 py-3 text-sm text-slate-300">
+      <div
+        role="status"
+        aria-live="polite"
+        className="rounded-md border border-slate-800 bg-slate-900/60 px-4 py-3 text-sm text-slate-300"
+      >
         No timeline available for this round yet.
       </div>
     );

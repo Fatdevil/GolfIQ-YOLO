@@ -1,6 +1,7 @@
 import { analyzeBagGaps } from './bagGapInsights';
 import type { BagClubStatsMap } from './bagStats';
 import type { PlayerBag } from './playerBag';
+import { buildBagTuningSuggestions, type BagSuggestion } from './bagTuningSuggestions';
 
 export type BagReadinessGrade = 'poor' | 'okay' | 'good' | 'excellent';
 
@@ -13,6 +14,11 @@ export interface BagReadiness {
   noDataCount: number;
   largeGapCount: number;
   overlapCount: number;
+}
+
+export interface BagReadinessOverview {
+  readiness: BagReadiness;
+  suggestions: BagSuggestion[];
 }
 
 function clampScore(score: number): number {
@@ -82,5 +88,18 @@ export function computeBagReadiness(
     noDataCount,
     largeGapCount,
     overlapCount,
+  };
+}
+
+export function buildBagReadinessOverview(
+  bag: PlayerBag,
+  statsByClubId: BagClubStatsMap,
+): BagReadinessOverview {
+  const readiness = computeBagReadiness(bag, statsByClubId);
+  const { suggestions } = buildBagTuningSuggestions(bag, statsByClubId);
+
+  return {
+    readiness,
+    suggestions,
   };
 }

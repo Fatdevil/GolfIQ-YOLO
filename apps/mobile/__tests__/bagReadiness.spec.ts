@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import type { PlayerBag } from '@shared/caddie/playerBag';
 import { MIN_AUTOCALIBRATED_SAMPLES, type BagClubStatsMap } from '@shared/caddie/bagStats';
-import { computeBagReadiness } from '@shared/caddie/bagReadiness';
+import { buildBagReadinessOverview, computeBagReadiness } from '@shared/caddie/bagReadiness';
 
 const baseBag: PlayerBag = {
   clubs: [
@@ -70,5 +70,31 @@ describe('computeBagReadiness', () => {
     expect(readiness.score).toBeLessThanOrEqual(40);
     expect(readiness.grade).toBe('poor');
     expect(readiness.noDataCount).toBe(readiness.totalClubs);
+  });
+
+  it('builds an overview with readiness and prioritized suggestions', () => {
+    const stats: BagClubStatsMap = {
+      '9i': { clubId: '9i', meanDistanceM: 118, sampleCount: MIN_AUTOCALIBRATED_SAMPLES + 2 },
+      '7i': { clubId: '7i', meanDistanceM: 140, sampleCount: MIN_AUTOCALIBRATED_SAMPLES + 2 },
+    };
+
+    const overview = buildBagReadinessOverview(baseBag, stats);
+
+    expect(overview.readiness.score).toBeGreaterThan(85);
+    expect(overview.readiness.grade).toBe('excellent');
+    expect(overview.suggestions.length).toBeGreaterThan(0);
+  });
+
+  it('returns an overview without suggestions when the bag is in great shape', () => {
+    const stats: BagClubStatsMap = {
+      '9i': { clubId: '9i', meanDistanceM: 120, sampleCount: MIN_AUTOCALIBRATED_SAMPLES + 5 },
+      '7i': { clubId: '7i', meanDistanceM: 140, sampleCount: MIN_AUTOCALIBRATED_SAMPLES + 5 },
+      '5i': { clubId: '5i', meanDistanceM: 160, sampleCount: MIN_AUTOCALIBRATED_SAMPLES + 5 },
+    };
+
+    const overview = buildBagReadinessOverview(baseBag, stats);
+
+    expect(overview.readiness.score).toBeGreaterThanOrEqual(95);
+    expect(overview.suggestions.length).toBe(0);
   });
 });
