@@ -3,6 +3,7 @@ import { ActivityIndicator, ScrollView, StyleSheet, Text, TextInput, TouchableOp
 
 import { fetchShotShapeProfile, type ShotShapeIntent, type ShotShapeProfile } from '@app/api/caddieApi';
 import { fetchClubDistances } from '@app/api/clubDistanceClient';
+import { fetchBagStats } from '@app/api/bagStatsClient';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import {
   buildCaddieDecisionFromContext,
@@ -24,6 +25,8 @@ import { t } from '@app/i18n';
 import type { RootStackParamList } from '@app/navigation/types';
 import { buildCaddieHudPayload } from '@app/caddie/caddieHudMapper';
 import { isCaddieHudAvailable, sendCaddieHudClear, sendCaddieHudUpdate } from '@app/watch/caddieHudBridge';
+import type { BagClubStatsMap } from '@shared/caddie/bagStats';
+import { shouldUseBagStat } from '@shared/caddie/bagStats';
 
 const INTENTS: ShotShapeIntent[] = ['straight', 'fade', 'draw'];
 
@@ -44,6 +47,7 @@ export default function CaddieApproachScreen({ navigation }: Props): JSX.Element
   const [error, setError] = useState<string | null>(null);
   const [profile, setProfile] = useState<ShotShapeProfile | null>(null);
   const [selectedClub, setSelectedClub] = useState<string | null>(null);
+  const [bagStats, setBagStats] = useState<BagClubStatsMap | null>(null);
   const intentTouchedRef = useRef(false);
 
   useEffect(() => {
@@ -101,8 +105,38 @@ export default function CaddieApproachScreen({ navigation }: Props): JSX.Element
     };
   }, []);
 
+  useEffect(() => {
+    let cancelled = false;
+
+    fetchBagStats()
+      .then((stats) => {
+        if (!cancelled) setBagStats(stats);
+      })
+      .catch(() => {
+        if (!cancelled) setBagStats(null);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const calibratedCandidates = useMemo(() => {
+    if (!bagStats) return candidates;
+    return candidates.map((candidate) => {
+      const stat = bagStats[candidate.club];
+      if (!shouldUseBagStat(stat)) return candidate;
+      return {
+        ...candidate,
+        baselineCarryM: stat.meanDistanceM,
+        samples: stat.sampleCount,
+        source: 'auto' as const,
+      };
+    });
+  }, [bagStats, candidates]);
+
   const candidate = useMemo(() => {
-    if (!candidates.length) return null;
+    if (!calibratedCandidates.length) return null;
     const playsLike = computePlaysLikeDistance({
       targetDistanceM: conditions.targetDistanceM,
       windSpeedMps: conditions.windSpeedMps,
@@ -110,8 +144,8 @@ export default function CaddieApproachScreen({ navigation }: Props): JSX.Element
       elevationDeltaM: conditions.elevationDeltaM,
     });
     const buffer = riskProfileToBufferM(settings.riskProfile);
-    return chooseClubForTargetDistance(playsLike, buffer, candidates);
-  }, [candidates, conditions, settings.riskProfile]);
+    return chooseClubForTargetDistance(playsLike, buffer, calibratedCandidates);
+  }, [calibratedCandidates, conditions, settings.riskProfile]);
 
   useEffect(() => {
     setSelectedClub(candidate?.club ?? null);
@@ -140,14 +174,15 @@ export default function CaddieApproachScreen({ navigation }: Props): JSX.Element
 
   const decision: CaddieDecisionOutput | null = useMemo(() => {
     if (!selectedClub || !profile) return null;
+    const clubsForDecision = calibratedCandidates.length ? calibratedCandidates : candidates;
     return buildCaddieDecisionFromContext({
       conditions,
       explicitIntent: intent,
       settings,
-      clubs: candidates,
+      clubs: clubsForDecision,
       shotShapeProfile: profile,
     });
-  }, [candidates, conditions, intent, profile, selectedClub, settings]);
+  }, [calibratedCandidates, candidates, conditions, intent, profile, selectedClub, settings]);
 
   useEffect(() => {
     if (!isCaddieHudAvailable()) return;

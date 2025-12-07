@@ -10,6 +10,8 @@ import {
 import type { CaddieSettings, RiskProfile } from '@app/caddie/caddieSettingsStorage';
 import type { CaddieDecision } from '@app/caddie/CaddieDecision';
 import type { HoleCaddieTargets } from '@shared/round/autoHoleCore';
+import type { BagClubStatsMap } from '@shared/caddie/bagStats';
+import { MIN_AUTOCALIBRATED_SAMPLES, shouldUseBagStat } from '@shared/caddie/bagStats';
 
 export interface CaddieConditions {
   targetDistanceM: number;
@@ -184,6 +186,7 @@ export type TargetAwareCaddieDecisionContext = {
   holeYardageM: number | null;
   targets: HoleCaddieTargets | null;
   playerBag: PlayerBag | null;
+  bagStats?: BagClubStatsMap | null;
   riskPreference: CaddieRiskPreference | RiskProfile | null;
   playsLikeDistanceFn: (
     flatDistanceM: number,
@@ -206,29 +209,47 @@ export function normalizeRiskPreference(risk: CaddieRiskPreference | RiskProfile
   return 'balanced';
 }
 
-function getClubCarry(club: { avgCarryM: number | null; manualAvgCarryM?: number | null }): number | null {
+function getClubCarry(
+  club: { clubId?: string; avgCarryM: number | null; manualAvgCarryM?: number | null },
+  bagStats?: BagClubStatsMap | null,
+  minSamples: number = MIN_AUTOCALIBRATED_SAMPLES,
+): number | null {
   const manual = club.manualAvgCarryM;
   if (Number.isFinite(manual)) return manual as number;
-  const auto = club.avgCarryM;
+  const stat = club.clubId ? bagStats?.[club.clubId] : undefined;
+  const autoStat = shouldUseBagStat(stat, minSamples) ? stat.meanDistanceM : null;
+  const auto = Number.isFinite(autoStat) ? (autoStat as number) : club.avgCarryM;
   if (Number.isFinite(auto)) return auto as number;
   return null;
 }
 
-export function getMaxCarryFromBag(bag: PlayerBag | null): number {
+export function getMaxCarryFromBag(
+  bag: PlayerBag | null,
+  bagStats?: BagClubStatsMap | null,
+  minSamples: number = MIN_AUTOCALIBRATED_SAMPLES,
+): number {
   if (!bag) return 0;
   const carries = bag.clubs
     .filter((club) => club.active !== false)
-    .map((club) => getClubCarry(club))
+    .map((club) => getClubCarry(club, bagStats, minSamples))
     .filter((carry): carry is number => Number.isFinite(carry));
   if (!carries.length) return 0;
   return Math.max(...carries);
 }
 
-export function pickClubForDistance(bag: PlayerBag, targetM: number | null): string | null {
+export function pickClubForDistance(
+  bag: PlayerBag,
+  targetM: number | null,
+  bagStats?: BagClubStatsMap | null,
+  minSamples: number = MIN_AUTOCALIBRATED_SAMPLES,
+): string | null {
   if (!Number.isFinite(targetM ?? NaN)) return null;
   const clubsWithCarry: DistanceClub[] = bag.clubs
     .filter((club) => club.active !== false)
-    .map((club) => ({ id: club.clubId, carry: getClubCarry(club) }))
+    .map((club) => ({
+      id: club.clubId,
+      carry: getClubCarry(club, bagStats, minSamples),
+    }))
     .filter((club): club is DistanceClub => Number.isFinite(club.carry));
 
   if (!clubsWithCarry.length) return null;
@@ -287,7 +308,7 @@ export function computeCaddieDecision(ctx: TargetAwareCaddieDecisionContext): Ca
   if (!ctx.targets || !ctx.playerBag) return null;
 
   const risk = normalizeRiskPreference(ctx.riskPreference);
-  const maxCarry = getMaxCarryFromBag(ctx.playerBag);
+  const maxCarry = getMaxCarryFromBag(ctx.playerBag, ctx.bagStats);
   const total = ctx.holeYardageM ?? 0;
   const hasLayup = Boolean(ctx.targets.layup?.carryDistanceM);
   const targetType = chooseTargetType(total, ctx.holePar, risk, maxCarry, hasLayup);
@@ -300,7 +321,11 @@ export function computeCaddieDecision(ctx: TargetAwareCaddieDecisionContext): Ca
     ? roundDistance(ctx.playsLikeDistanceFn(rawDistanceM, ctx.elevationDiffM, ctx.wind))
     : null;
 
-  const recommendedClubId = pickClubForDistance(ctx.playerBag, targetDistanceM ?? rawDistanceM);
+  const recommendedClubId = pickClubForDistance(
+    ctx.playerBag,
+    targetDistanceM ?? rawDistanceM,
+    ctx.bagStats,
+  );
   const strategy = targetType === 'layup' ? 'layup' : 'attack';
 
   return {
