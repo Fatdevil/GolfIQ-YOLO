@@ -24,6 +24,7 @@ import type { RootStackParamList } from '@app/navigation/types';
 import { MIN_AUTOCALIBRATED_SAMPLES, shouldUseBagStat } from '@shared/caddie/bagStats';
 import type { BagClubStats, BagClubStatsMap } from '@shared/caddie/bagStats';
 import { analyzeBagGaps, type ClubDataStatus } from '@shared/caddie/bagGapInsights';
+import { buildBagTuningSuggestions } from '@shared/caddie/bagTuningSuggestions';
 import { formatDistance } from '@app/utils/distance';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'MyBag'>;
@@ -350,6 +351,14 @@ export default function MyBagScreen({}: Props): JSX.Element {
     [state.bag, state.bagStats],
   );
 
+  const bagSuggestions = useMemo(
+    () =>
+      state.bag && state.bagStats
+        ? buildBagTuningSuggestions(state.bag, state.bagStats).suggestions
+        : [],
+    [state.bag, state.bagStats],
+  );
+
   const dataStatuses = useMemo(
     () => (state.bag && state.bagStats ? gapAnalysis.dataStatusByClubId : {}),
     [gapAnalysis.dataStatusByClubId, state.bag, state.bagStats],
@@ -410,6 +419,49 @@ export default function MyBagScreen({}: Props): JSX.Element {
                   {label}
                 </Text>
               );
+            })}
+          </View>
+        </View>
+      ) : null}
+
+      {bagSuggestions.length > 0 ? (
+        <View style={styles.infoCard} testID="bag-suggestions">
+          <Text style={styles.infoTitle}>{t('bag.suggestions.title')}</Text>
+          <View style={{ gap: 4 }}>
+            {bagSuggestions.slice(0, 4).map((suggestion) => {
+              const lower = suggestion.lowerClubId
+                ? clubLabels[suggestion.lowerClubId] ?? suggestion.lowerClubId
+                : null;
+              const upper = suggestion.upperClubId
+                ? clubLabels[suggestion.upperClubId] ?? suggestion.upperClubId
+                : null;
+              const clubLabel = suggestion.clubId
+                ? clubLabels[suggestion.clubId] ?? suggestion.clubId
+                : null;
+              const distanceLabel =
+                suggestion.gapDistance != null
+                  ? formatDistance(suggestion.gapDistance, { withUnit: true })
+                  : null;
+
+              let label: string | null = null;
+              if (suggestion.type === 'fill_gap' && lower && upper && distanceLabel) {
+                label = t('bag.suggestions.fill_gap', { lower, upper, distance: distanceLabel });
+              } else if (suggestion.type === 'reduce_overlap' && lower && upper) {
+                label = t('bag.suggestions.reduce_overlap', { lower, upper, distance: distanceLabel });
+              } else if (suggestion.type === 'calibrate' && clubLabel) {
+                label = t(
+                  suggestion.severity === 'high'
+                    ? 'bag.suggestions.calibrate.no_data'
+                    : 'bag.suggestions.calibrate.needs_more_samples',
+                  { club: clubLabel },
+                );
+              }
+
+              return label ? (
+                <Text key={suggestion.id} style={styles.infoBody}>
+                  {label}
+                </Text>
+              ) : null;
             })}
           </View>
         </View>

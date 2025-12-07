@@ -570,6 +570,18 @@ export const en = {
       needs_more_samples: 'Collect a few more shots to auto-calibrate',
       no_data: 'No shot data yet – default carry in use',
     },
+    suggestions: {
+      title: 'Suggested bag tweaks',
+      fill_gap:
+        'Big distance gap between {{lower}} and {{upper}} ({{distance}}). Consider adding a club to cover this range.',
+      reduce_overlap:
+        '{{lower}} and {{upper}} carry almost the same distance. You may not need both for full swings.',
+      calibrate: {
+        no_data: '{{club}} has no shot data yet. Hit a few full shots to lock in its carry.',
+        needs_more_samples:
+          '{{club}} has limited data. Collect a few more shots for a reliable carry.',
+      },
+    },
   },
 } as const;
 
