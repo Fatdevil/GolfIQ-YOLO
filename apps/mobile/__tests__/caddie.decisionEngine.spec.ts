@@ -14,6 +14,7 @@ import type { PlayerBag } from '@app/api/bagClient';
 import type { BagClubStatsMap } from '@shared/caddie/bagStats';
 import { DEFAULT_SETTINGS } from '@app/caddie/caddieSettingsStorage';
 import { computePlaysLikeDistance } from '@app/caddie/caddieDistanceEngine';
+import type { BagReadinessOverview } from '@shared/caddie/bagReadiness';
 
 const sampleProfile = {
   club: '7i',
@@ -99,6 +100,29 @@ describe('chooseClubForTargetDistance', () => {
 
     expect(club?.club).toBe('8i');
   });
+
+  it('leans toward better readiness when distance is tied', () => {
+    const club = chooseClubForTargetDistance(150, 0, [
+      {
+        club: '7i',
+        baselineCarryM: 152,
+        samples: 8,
+        source: 'auto',
+        distanceSource: 'default',
+        readiness: 'poor',
+      },
+      {
+        club: '8i',
+        baselineCarryM: 151,
+        samples: 8,
+        source: 'auto',
+        distanceSource: 'default',
+        readiness: 'excellent',
+      },
+    ]);
+
+    expect(club?.club).toBe('8i');
+  });
 });
 
 describe('buildCaddieDecisionFromContext', () => {
@@ -141,6 +165,100 @@ describe('buildCaddieDecisionFromContext', () => {
     expect(result?.distanceSource).toBe('auto_calibrated');
     expect(result?.sampleCount).toBe(10);
     expect(result?.minSamples).toBe(5);
+  });
+
+  it('prefers more reliable clubs when readiness is stronger', () => {
+    const readiness: BagReadinessOverview = {
+      readiness: {
+        score: 90,
+        grade: 'excellent',
+        totalClubs: 2,
+        calibratedClubs: 2,
+        needsMoreSamplesCount: 0,
+        noDataCount: 0,
+        largeGapCount: 0,
+        overlapCount: 0,
+      },
+      suggestions: [],
+      dataStatusByClubId: { '8i': 'auto_calibrated', '7i': 'needs_more_samples' },
+    };
+
+    const result = buildCaddieDecisionFromContext({
+      conditions: { ...baseConditions, targetDistanceM: 149 },
+      explicitIntent: 'straight',
+      settings: DEFAULT_SETTINGS,
+      clubs: [
+        { club: '8i', baselineCarryM: 150, samples: 8, source: 'auto', distanceSource: 'default' },
+        { club: '7i', baselineCarryM: 151, samples: 10, source: 'auto', distanceSource: 'default' },
+      ],
+      shotShapeProfile: { ...sampleProfile, coreCarryMeanM: 150 },
+      bagReadinessOverview: readiness,
+    });
+
+    expect(result?.club).toBe('8i');
+    expect(result?.clubReadiness).toBe('excellent');
+  });
+
+  it('still returns a club when readiness is weak', () => {
+    const result = buildCaddieDecisionFromContext({
+      conditions: baseConditions,
+      explicitIntent: 'straight',
+      settings: DEFAULT_SETTINGS,
+      clubs: [
+        { club: '8i', baselineCarryM: 148, samples: 2, source: 'auto', distanceSource: 'default' },
+        { club: '7i', baselineCarryM: 160, samples: 2, source: 'auto', distanceSource: 'default' },
+      ],
+      shotShapeProfile: sampleProfile,
+      bagReadinessOverview: {
+        readiness: {
+          score: 20,
+          grade: 'poor',
+          totalClubs: 2,
+          calibratedClubs: 0,
+          needsMoreSamplesCount: 2,
+          noDataCount: 0,
+          largeGapCount: 0,
+          overlapCount: 0,
+        },
+        suggestions: [],
+        dataStatusByClubId: { '7i': 'needs_more_samples', '8i': 'needs_more_samples' },
+      },
+    });
+
+    expect(result?.club).toBe('7i');
+    expect(result?.clubReadiness).toBe('ok');
+  });
+
+  it('keeps legacy ordering when readiness is excellent everywhere', () => {
+    const readiness: BagReadinessOverview = {
+      readiness: {
+        score: 95,
+        grade: 'excellent',
+        totalClubs: 2,
+        calibratedClubs: 2,
+        needsMoreSamplesCount: 0,
+        noDataCount: 0,
+        largeGapCount: 0,
+        overlapCount: 0,
+      },
+      suggestions: [],
+      dataStatusByClubId: { '8i': 'auto_calibrated', '7i': 'auto_calibrated' },
+    };
+
+    const result = buildCaddieDecisionFromContext({
+      conditions: baseConditions,
+      explicitIntent: 'straight',
+      settings: DEFAULT_SETTINGS,
+      clubs: [
+        { club: '8i', baselineCarryM: 148, samples: 8, source: 'auto', distanceSource: 'default' },
+        { club: '7i', baselineCarryM: 160, samples: 10, source: 'auto', distanceSource: 'default' },
+      ],
+      shotShapeProfile: sampleProfile,
+      bagReadinessOverview: readiness,
+    });
+
+    expect(result?.club).toBe('7i');
+    expect(result?.clubReadiness).toBe('excellent');
   });
 
   it('propagates partial stat metadata when below threshold', () => {

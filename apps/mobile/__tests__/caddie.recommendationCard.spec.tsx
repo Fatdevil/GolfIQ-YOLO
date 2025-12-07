@@ -24,6 +24,7 @@ describe('CaddieRecommendationCard', () => {
       tailLeftProb: 0.06,
       tailRightProb: 0.02,
     },
+    clubReadiness: 'excellent',
   };
   const settings: CaddieSettings = {
     stockShape: 'fade',
@@ -52,5 +53,17 @@ describe('CaddieRecommendationCard', () => {
     );
 
     expect(screen.getByText(/Low on-course sample size/)).toBeInTheDocument();
+  });
+
+  it('surfaces readiness hints when club data is weak', () => {
+    render(
+      <CaddieRecommendationCard
+        decision={{ ...decision, clubReadiness: 'poor' }}
+        settings={settings}
+      />,
+    );
+
+    expect(screen.getByTestId('caddie-readiness-hint')).toBeInTheDocument();
+    expect(screen.getByText(/Limited data/)).toBeInTheDocument();
   });
 });

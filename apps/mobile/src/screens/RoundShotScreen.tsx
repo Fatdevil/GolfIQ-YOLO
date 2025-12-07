@@ -221,45 +221,6 @@ export default function RoundShotScreen({ navigation }: Props): JSX.Element {
     return computeHoleCaddieTargets(courseLayout, currentHoleLayout);
   }, [courseLayout, currentHoleLayout]);
 
-  const caddieDecision = useMemo<CaddieDecision | null>(() => {
-    if (!caddieTargets || !currentHoleLayout) return null;
-
-    const riskPreference = normalizeRiskPreference(
-      caddieSettings?.riskProfile ?? DEFAULT_CADDIE_SETTINGS.riskProfile,
-    );
-
-    return computeCaddieDecision({
-      holeNumber: currentHole,
-      holePar: currentHoleLayout.par,
-      holeYardageM: currentHoleLayout.yardage_m ?? null,
-      targets: caddieTargets,
-      playerBag,
-      bagStats,
-      riskPreference,
-      playsLikeDistanceFn: (flatDistanceM, elevationDiffM, wind) => {
-        return computeEffectiveDistance(flatDistanceM, elevationDiffM, wind.speedMps, wind.angleDeg)
-          .effectiveDistance;
-      },
-      elevationDiffM: 0,
-      wind: { speedMps: 0, angleDeg: 0 },
-    });
-  }, [
-    caddieTargets,
-    currentHoleLayout,
-    currentHole,
-    caddieSettings?.riskProfile,
-    playerBag,
-    bagStats,
-  ]);
-
-  const caddieCalibrationLabel = caddieDecision
-    ? formatDistanceSourceLabel(
-        caddieDecision.recommendedClubDistanceSource,
-        caddieDecision.recommendedClubSampleCount ?? undefined,
-        caddieDecision.recommendedClubMinSamples ?? undefined,
-      )
-    : null;
-
   const holeNumbers = useMemo(
     () => Array.from({ length: totalHoles }, (_, idx) => startingHole + idx),
     [startingHole, totalHoles],
@@ -294,6 +255,59 @@ export default function RoundShotScreen({ navigation }: Props): JSX.Element {
 
   const showBagReadinessHint =
     bagReadinessOverview != null && bagReadinessOverview.readiness.grade !== 'excellent';
+
+  const caddieDecision = useMemo<CaddieDecision | null>(() => {
+    if (!caddieTargets || !currentHoleLayout) return null;
+
+    const riskPreference = normalizeRiskPreference(
+      caddieSettings?.riskProfile ?? DEFAULT_CADDIE_SETTINGS.riskProfile,
+    );
+
+    return computeCaddieDecision({
+      holeNumber: currentHole,
+      holePar: currentHoleLayout.par,
+      holeYardageM: currentHoleLayout.yardage_m ?? null,
+      targets: caddieTargets,
+      playerBag,
+      bagStats,
+      bagReadinessOverview,
+      riskPreference,
+      playsLikeDistanceFn: (flatDistanceM, elevationDiffM, wind) => {
+        return computeEffectiveDistance(flatDistanceM, elevationDiffM, wind.speedMps, wind.angleDeg)
+          .effectiveDistance;
+      },
+      elevationDiffM: 0,
+      wind: { speedMps: 0, angleDeg: 0 },
+    });
+  }, [
+    caddieTargets,
+    currentHoleLayout,
+    currentHole,
+    caddieSettings?.riskProfile,
+    playerBag,
+    bagStats,
+    bagReadinessOverview,
+  ]);
+
+  const caddieCalibrationLabel = caddieDecision
+    ? formatDistanceSourceLabel(
+        caddieDecision.recommendedClubDistanceSource,
+        caddieDecision.recommendedClubSampleCount ?? undefined,
+        caddieDecision.recommendedClubMinSamples ?? undefined,
+      )
+    : null;
+
+  const caddieReadinessHint = useMemo(() => {
+    if (!caddieDecision?.recommendedClubReadiness) return null;
+    if (caddieDecision.recommendedClubReadiness === 'excellent') return null;
+    if (
+      caddieDecision.recommendedClubReadiness === 'poor' ||
+      caddieDecision.recommendedClubReadiness === 'unknown'
+    ) {
+      return t('caddie.decision.readiness_hint.limited');
+    }
+    return t('caddie.decision.readiness_hint.ok');
+  }, [caddieDecision?.recommendedClubReadiness]);
 
   const autoHoleSuggestion = useMemo(() => {
     if (!geo.supported) {
@@ -605,6 +619,11 @@ export default function RoundShotScreen({ navigation }: Props): JSX.Element {
           {caddieCalibrationLabel ? (
             <Text style={styles.caddieDetail} testID="caddie-calibration-caption">
               {caddieCalibrationLabel}
+            </Text>
+          ) : null}
+          {caddieReadinessHint ? (
+            <Text style={styles.caddieDetail} testID="caddie-readiness-caption">
+              {caddieReadinessHint}
             </Text>
           ) : null}
           <Text style={styles.caddieExplanation}>{caddieDecision.explanation}</Text>

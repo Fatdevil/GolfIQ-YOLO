@@ -56,6 +56,7 @@ const sampleDecision = {
   recommendedClubDistanceSource: 'auto_calibrated' as const,
   recommendedClubSampleCount: 12,
   recommendedClubMinSamples: 5,
+  recommendedClubReadiness: 'excellent' as const,
   explanation: 'Go for it',
 };
 
@@ -94,6 +95,10 @@ describe('RoundShotScreen', () => {
 
     await waitFor(() => expect(mockGetRoundScores).toHaveBeenCalled());
     await waitFor(() => expect(getByTestId('caddie-decision')).toBeTruthy());
+
+    expect(mockComputeCaddieDecision).toHaveBeenCalledWith(
+      expect.objectContaining({ bagReadinessOverview: expect.any(Object) }),
+    );
 
     fireEvent.click(getByTestId('save-score'));
 
@@ -169,7 +174,7 @@ describe('RoundShotScreen', () => {
     expect(getByText('Bag readiness')).toBeTruthy();
     expect(getByText(/Needs work|Okay/)).toBeTruthy();
 
-    fireEvent.press(hint);
+    fireEvent.click(hint);
     expect(navigation.navigate).toHaveBeenCalledWith('MyBag');
   });
 
@@ -205,5 +210,19 @@ describe('RoundShotScreen', () => {
 
     await waitFor(() => expect(mockFetchPlayerBag).toHaveBeenCalled());
     expect(queryByTestId('bag-readiness-hint')).toBeNull();
+  });
+
+  it('shows readiness caption when the recommended club has weak data', async () => {
+    mockComputeCaddieDecision.mockReturnValueOnce({
+      ...sampleDecision,
+      recommendedClubReadiness: 'poor',
+    });
+
+    const navigation = { navigate: vi.fn() } as any;
+    const { findByTestId } = render(
+      <RoundShotScreen navigation={navigation} route={{ params: { roundId: 'round-1' } } as any} />,
+    );
+
+    expect(await findByTestId('caddie-readiness-caption')).toBeTruthy();
   });
 });

@@ -28,7 +28,7 @@ import { buildCaddieHudPayload } from '@app/caddie/caddieHudMapper';
 import { isCaddieHudAvailable, sendCaddieHudClear, sendCaddieHudUpdate } from '@app/watch/caddieHudBridge';
 import type { BagClubStatsMap } from '@shared/caddie/bagStats';
 import { MIN_AUTOCALIBRATED_SAMPLES, shouldUseBagStat } from '@shared/caddie/bagStats';
-import { buildBagReadinessOverview } from '@shared/caddie/bagReadiness';
+import { buildBagReadinessOverview, getClubReadiness } from '@shared/caddie/bagReadiness';
 import { formatBagSuggestion } from '@app/caddie/formatBagSuggestion';
 
 const INTENTS: ShotShapeIntent[] = ['straight', 'fade', 'draw'];
@@ -146,32 +146,6 @@ export default function CaddieApproachScreen({ navigation }: Props): JSX.Element
     };
   }, []);
 
-  const calibratedCandidates = useMemo(() => {
-    if (!bagStats) return candidates;
-    return candidates.map((candidate) => {
-      const stat = bagStats[candidate.club];
-      const minSamples = MIN_AUTOCALIBRATED_SAMPLES;
-      if (!stat) return candidate;
-      if (!shouldUseBagStat(stat, minSamples)) {
-        return {
-          ...candidate,
-          distanceSource: 'partial_stats',
-          sampleCount: stat.sampleCount,
-          minSamples,
-        };
-      }
-      return {
-        ...candidate,
-        baselineCarryM: stat.meanDistanceM,
-        samples: stat.sampleCount,
-        source: 'auto' as const,
-        distanceSource: 'auto_calibrated' as const,
-        sampleCount: stat.sampleCount,
-        minSamples,
-      };
-    });
-  }, [bagStats, candidates]);
-
   const clubLabels = useMemo(() => {
     const labels: Record<string, string> = {};
     bag?.clubs.forEach((club) => {
@@ -185,6 +159,37 @@ export default function CaddieApproachScreen({ navigation }: Props): JSX.Element
     if (!bagStats) return null;
     return buildBagReadinessOverview(bag, bagStats);
   }, [bag, bagStats]);
+
+  const calibratedCandidates = useMemo(() => {
+    if (!bagStats) return candidates;
+    return candidates.map((candidate) => {
+      const stat = bagStats[candidate.club];
+      const minSamples = MIN_AUTOCALIBRATED_SAMPLES;
+      const readiness = bagReadinessOverview
+        ? getClubReadiness(candidate.club, bagReadinessOverview)
+        : candidate.readiness;
+      if (!stat) return readiness ? { ...candidate, readiness } : candidate;
+      if (!shouldUseBagStat(stat, minSamples)) {
+        return {
+          ...candidate,
+          distanceSource: 'partial_stats',
+          sampleCount: stat.sampleCount,
+          minSamples,
+          readiness,
+        };
+      }
+      return {
+        ...candidate,
+        baselineCarryM: stat.meanDistanceM,
+        samples: stat.sampleCount,
+        source: 'auto' as const,
+        distanceSource: 'auto_calibrated' as const,
+        sampleCount: stat.sampleCount,
+        minSamples,
+        readiness,
+      };
+    });
+  }, [bagReadinessOverview, bagStats, candidates]);
 
   const readinessSummary = useMemo(() => {
     if (!bagReadinessOverview) return null;
@@ -248,8 +253,18 @@ export default function CaddieApproachScreen({ navigation }: Props): JSX.Element
       settings,
       clubs: clubsForDecision,
       shotShapeProfile: profile,
+      bagReadinessOverview,
     });
-  }, [calibratedCandidates, candidates, conditions, intent, profile, selectedClub, settings]);
+  }, [
+    bagReadinessOverview,
+    calibratedCandidates,
+    candidates,
+    conditions,
+    intent,
+    profile,
+    selectedClub,
+    settings,
+  ]);
 
   useEffect(() => {
     if (!isCaddieHudAvailable()) return;
