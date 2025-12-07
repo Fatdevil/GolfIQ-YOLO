@@ -14,6 +14,8 @@ const { loadRoundMock, saveRoundMock } = vi.hoisted(() => ({
   saveRoundMock: vi.fn(),
 }));
 
+const mockFetchBagStats = vi.fn();
+
 const mockedPostQuickRoundSnapshots = vi.mocked(postQuickRoundSnapshots);
 
 vi.mock("../src/features/quickround/storage", () => ({
@@ -27,6 +29,12 @@ vi.mock("@/user/UserSessionContext", () => ({
   UserSessionProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
   useUserSession: () => ({ session: { userId: "test-user", createdAt: "" }, loading: false }),
 }));
+vi.mock("@/api/bagStatsClient", () => ({
+  fetchBagStats: mockFetchBagStats,
+}));
+vi.mock("@/preferences/UnitsContext", () => ({
+  useUnits: () => ({ unit: "metric", setUnit: vi.fn() }),
+}));
 vi.mock("@/access/PlanProvider", () => ({
   PlanProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
   usePlan: () => ({ plan: "PRO", setPlan: vi.fn(), hasFeature: () => true }),
@@ -36,6 +44,7 @@ describe("QuickRoundPlayPage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockedPostQuickRoundSnapshots.mockReset();
+    mockFetchBagStats.mockResolvedValue({});
   });
 
   it("updates strokes and saves round", async () => {

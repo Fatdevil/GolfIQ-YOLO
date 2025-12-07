@@ -7,16 +7,22 @@ import RoundRecapScreen from '@app/screens/RoundRecapScreen';
 import { fetchRoundRecap } from '@app/api/roundClient';
 import { fetchRoundStrokesGained } from '@app/api/strokesGainedClient';
 import { createRoundShareLink } from '@app/api/shareClient';
+import { fetchPlayerBag } from '@app/api/bagClient';
+import { fetchBagStats } from '@app/api/bagStatsClient';
 
 vi.mock('@app/api/roundClient');
 vi.mock('@app/api/strokesGainedClient');
 vi.mock('@app/api/shareClient', () => ({
   createRoundShareLink: vi.fn(),
 }));
+vi.mock('@app/api/bagClient');
+vi.mock('@app/api/bagStatsClient');
 
 const mockFetchRecap = fetchRoundRecap as unknown as Mock;
 const mockFetchRoundStrokesGained = fetchRoundStrokesGained as unknown as Mock;
 const mockCreateRoundShareLink = createRoundShareLink as unknown as Mock;
+const mockFetchPlayerBag = fetchPlayerBag as unknown as Mock;
+const mockFetchBagStats = fetchBagStats as unknown as Mock;
 
 const sampleRecap = {
   roundId: 'r1',
@@ -54,10 +60,26 @@ const sampleStrokes = {
   },
 };
 
+const sampleBag = {
+  clubs: [
+    { clubId: 'pw', label: 'PW', avgCarryM: 110, sampleCount: 0, active: true },
+    { clubId: '8i', label: '8i', avgCarryM: 140, sampleCount: 0, active: true },
+    { clubId: '5i', label: '5i', avgCarryM: 195, sampleCount: 0, active: true },
+  ],
+};
+
+const sampleBagStats = {
+  pw: { clubId: 'pw', meanDistanceM: 112, sampleCount: 8 },
+  '8i': { clubId: '8i', meanDistanceM: 150, sampleCount: 8 },
+  '5i': { clubId: '5i', meanDistanceM: 215, sampleCount: 8 },
+};
+
 describe('RoundRecapScreen', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockCreateRoundShareLink.mockResolvedValue({ url: 'https://golfiq.app/s/abc123' });
+    mockFetchPlayerBag.mockResolvedValue(sampleBag);
+    mockFetchBagStats.mockResolvedValue(sampleBagStats);
   });
 
   it('renders recap data and focus hints', async () => {
@@ -147,5 +169,49 @@ describe('RoundRecapScreen', () => {
     await waitFor(() => expect(mockFetchRecap).toHaveBeenCalled());
     expect(queryByTestId('recap-sg-driving')).toBeNull();
     expect(getByText('Strokes Gained unavailable right now.')).toBeTruthy();
+  });
+
+  it('shows bag readiness recap info and suggestion', async () => {
+    mockFetchRecap.mockResolvedValue(sampleRecap);
+    mockFetchRoundStrokesGained.mockResolvedValue(sampleStrokes);
+    const navigate = vi.fn();
+
+    const { getByTestId, getByText } = render(
+      <RoundRecapScreen navigation={{ navigate } as any} route={{ params: { roundId: 'r1' } } as any} />,
+    );
+
+    const readinessCard = await waitFor(() => getByTestId('recap-bag-readiness'));
+    expect(readinessCard).toBeTruthy();
+    expect(getByText(/Bag readiness/)).toBeTruthy();
+    expect(getByText(/Suggestion:/)).toBeTruthy();
+  });
+
+  it('navigates to My Bag from the recap panel', async () => {
+    mockFetchRecap.mockResolvedValue(sampleRecap);
+    mockFetchRoundStrokesGained.mockResolvedValue(sampleStrokes);
+    const navigate = vi.fn();
+
+    const { getByTestId } = render(
+      <RoundRecapScreen navigation={{ navigate } as any} route={{ params: { roundId: 'r1' } } as any} />,
+    );
+
+    await waitFor(() => getByTestId('recap-bag-readiness'));
+    fireEvent.click(getByTestId('recap-open-bag'));
+
+    expect(navigate).toHaveBeenCalledWith('MyBag');
+  });
+
+  it('hides readiness recap when bag data is missing', async () => {
+    mockFetchRecap.mockResolvedValue(sampleRecap);
+    mockFetchRoundStrokesGained.mockResolvedValue(sampleStrokes);
+    mockFetchPlayerBag.mockResolvedValueOnce({ clubs: [] });
+    mockFetchBagStats.mockResolvedValueOnce(null);
+
+    const { queryByTestId } = render(
+      <RoundRecapScreen navigation={{} as any} route={{ params: { roundId: 'r1' } } as any} />,
+    );
+
+    await waitFor(() => expect(mockFetchRecap).toHaveBeenCalled());
+    expect(queryByTestId('recap-bag-readiness')).toBeNull();
   });
 });

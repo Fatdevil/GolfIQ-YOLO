@@ -6,6 +6,7 @@ import {
   buildBagReadinessOverview,
   computeBagReadiness,
   getClubReadiness,
+  buildBagReadinessRecapInfo,
 } from '@shared/caddie/bagReadiness';
 
 const baseBag: PlayerBag = {
@@ -115,5 +116,47 @@ describe('computeBagReadiness', () => {
     expect(getClubReadiness('5i', overview)).toBe('poor');
     expect(getClubReadiness('lob', overview)).toBe('unknown');
     expect(getClubReadiness('7i', null)).toBe('unknown');
+  });
+
+  it('builds recap info with score, grade, summary, and a top suggestion', () => {
+    const stats: BagClubStatsMap = {
+      '9i': { clubId: '9i', meanDistanceM: 118, sampleCount: MIN_AUTOCALIBRATED_SAMPLES + 2 },
+      '7i': { clubId: '7i', meanDistanceM: 140, sampleCount: MIN_AUTOCALIBRATED_SAMPLES + 2 },
+      '5i': { clubId: '5i', meanDistanceM: 205, sampleCount: MIN_AUTOCALIBRATED_SAMPLES + 2 },
+    };
+
+    const recap = buildBagReadinessRecapInfo(baseBag, stats);
+
+    expect(recap).not.toBeNull();
+    expect(recap?.score).toBeGreaterThan(0);
+    expect(['good', 'excellent']).toContain(recap?.grade);
+    expect(recap?.summary).toBe('gaps_present');
+    expect(recap?.topSuggestionId).toBe('fill_gap:7i:5i');
+  });
+
+  it('returns null recap info when stats are missing or the bag is empty', () => {
+    expect(buildBagReadinessRecapInfo(baseBag, null)).toBeNull();
+    expect(buildBagReadinessRecapInfo({ clubs: [] }, {})).toBeNull();
+  });
+
+  it('prioritizes the highest-severity suggestion for recap info', () => {
+    const bag: PlayerBag = {
+      clubs: [
+        { clubId: '9i', label: '9i', avgCarryM: 120, sampleCount: 0, active: true },
+        { clubId: '8i', label: '8i', avgCarryM: 125, sampleCount: 0, active: true },
+        { clubId: '7i', label: '7i', avgCarryM: 130, sampleCount: 0, active: true },
+      ],
+    };
+
+    const stats: BagClubStatsMap = {
+      '9i': { clubId: '9i', meanDistanceM: 120, sampleCount: MIN_AUTOCALIBRATED_SAMPLES + 1 },
+      '8i': { clubId: '8i', meanDistanceM: 121, sampleCount: MIN_AUTOCALIBRATED_SAMPLES + 1 },
+      // 7i intentionally missing to create a high-severity calibration suggestion
+    };
+
+    const recap = buildBagReadinessRecapInfo(bag, stats);
+
+    expect(recap?.summary).toBe('missing_data');
+    expect(recap?.topSuggestionId).toBe('calibrate:7i');
   });
 });

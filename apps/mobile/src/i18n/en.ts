@@ -599,6 +599,16 @@ export const en = {
       details: '{{noData}} without data · {{needsMore}} need more samples · {{gaps}} large gaps · {{overlaps}} overlaps',
     },
     readinessTileSuggestionPrefix: 'Suggestion:',
+    readinessRecap: {
+      summary: {
+        missing_data: 'Some clubs still need data before they can be trusted.',
+        needs_more_samples: 'Collect a few more shots to firm up your distances.',
+        gaps_present: 'Mind the distance gaps between parts of your bag.',
+        overlaps_present: 'Carries are overlapping; tighten your spacing.',
+        ready: 'Bag looks calibrated with balanced coverage.',
+      },
+      tuneCta: 'Tune my bag',
+    },
   },
 } as const;
 

@@ -22,6 +22,13 @@ export interface BagReadinessOverview {
   dataStatusByClubId: ClubDataStatusById;
 }
 
+export interface BagReadinessRecapInfo {
+  score: number; // 0–100
+  grade: BagReadinessGrade; // identifier for UI to format (e.g. "excellent")
+  summary: string; // identifier for UI/i18n to render a short summary line
+  topSuggestionId?: string;
+}
+
 function clampScore(score: number): number {
   if (Number.isNaN(score)) return 0;
   if (score < 0) return 0;
@@ -105,6 +112,37 @@ export function buildBagReadinessOverview(
     suggestions,
     dataStatusByClubId,
   };
+}
+
+function summarizeReadiness(readiness: BagReadiness): string {
+  if (readiness.noDataCount > 0) return 'missing_data';
+  if (readiness.needsMoreSamplesCount > 0) return 'needs_more_samples';
+  if (readiness.largeGapCount > 0) return 'gaps_present';
+  if (readiness.overlapCount > 0) return 'overlaps_present';
+  return 'ready';
+}
+
+export function buildBagReadinessRecapInfo(
+  bag: PlayerBag | null | undefined,
+  stats: BagClubStatsMap | null | undefined,
+): BagReadinessRecapInfo | null {
+  try {
+    if (!bag || !bag.clubs?.length) return null;
+    if (!stats) return null;
+
+    const overview = buildBagReadinessOverview(bag, stats);
+    const topSuggestionId = overview.suggestions[0]?.id;
+
+    return {
+      score: overview.readiness.score,
+      grade: overview.readiness.grade,
+      summary: summarizeReadiness(overview.readiness),
+      topSuggestionId,
+    };
+  } catch (err) {
+    console.warn('[bag] Failed to build recap readiness info', err);
+    return null;
+  }
 }
 
 export type ClubReadinessLevel = 'excellent' | 'ok' | 'poor' | 'unknown';
