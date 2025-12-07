@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import React from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -6,6 +6,7 @@ import CaddieApproachScreen from '@app/screens/CaddieApproachScreen';
 import * as distanceClient from '@app/api/clubDistanceClient';
 import * as caddieApi from '@app/api/caddieApi';
 import * as bagStatsClient from '@app/api/bagStatsClient';
+import * as bagClient from '@app/api/bagClient';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { RootStackParamList } from '@app/navigation/types';
 import * as settingsStorage from '@app/caddie/caddieSettingsStorage';
@@ -21,6 +22,9 @@ vi.mock('@app/api/caddieApi', () => ({
 }));
 vi.mock('@app/api/bagStatsClient', () => ({
   fetchBagStats: vi.fn(),
+}));
+vi.mock('@app/api/bagClient', () => ({
+  fetchPlayerBag: vi.fn(),
 }));
 vi.mock('@app/caddie/caddieSettingsStorage', () => ({
   loadCaddieSettings: vi.fn(),
@@ -45,11 +49,18 @@ describe('CaddieApproachScreen', () => {
     vi.mocked(distanceClient.fetchClubDistances).mockReset();
     vi.mocked(caddieApi.fetchShotShapeProfile).mockReset();
     vi.mocked(bagStatsClient.fetchBagStats).mockReset();
+    vi.mocked(bagClient.fetchPlayerBag).mockReset();
     vi.mocked(settingsStorage.loadCaddieSettings).mockResolvedValue({
       stockShape: 'straight',
       riskProfile: 'normal',
     });
     vi.mocked(bagStatsClient.fetchBagStats).mockResolvedValue({});
+    vi.mocked(bagClient.fetchPlayerBag).mockResolvedValue({
+      clubs: [
+        { clubId: '7i', label: '7 Iron' },
+        { clubId: '9i', label: '9 Iron' },
+      ],
+    });
     vi.mocked(caddieHudBridge.isCaddieHudAvailable).mockReturnValue(false);
     vi.mocked(caddieHudBridge.sendCaddieHudUpdate).mockReset();
     vi.mocked(caddieHudBridge.sendCaddieHudClear).mockReset();
@@ -328,5 +339,41 @@ describe('CaddieApproachScreen', () => {
 
     const labelNode = await screen.findByTestId('caddie-calibration-label');
     expect(labelNode.textContent).toContain(label);
+  });
+
+  it('shows bag readiness hint for low readiness and navigates', async () => {
+    vi.mocked(bagStatsClient.fetchBagStats).mockResolvedValueOnce({});
+    const navigation = createNavigation();
+
+    render(<CaddieApproachScreen navigation={navigation} route={createRoute()} />);
+
+    const hint = await screen.findByTestId('bag-readiness-hint');
+    expect(hint).toBeInTheDocument();
+    expect(screen.getByText('Bag readiness')).toBeInTheDocument();
+
+    fireEvent.press(hint);
+    expect(navigation.navigate).toHaveBeenCalledWith('MyBag');
+  });
+
+  it('hides bag readiness hint when readiness is excellent', async () => {
+    vi.mocked(bagStatsClient.fetchBagStats).mockResolvedValueOnce({
+      '7i': { clubId: '7i', sampleCount: 20, meanDistanceM: 150, p20DistanceM: null, p80DistanceM: null },
+      '9i': { clubId: '9i', sampleCount: 20, meanDistanceM: 130, p20DistanceM: null, p80DistanceM: null },
+    });
+
+    render(<CaddieApproachScreen navigation={createNavigation()} route={createRoute()} />);
+
+    await waitFor(() => expect(bagStatsClient.fetchBagStats).toHaveBeenCalled());
+    expect(screen.queryByTestId('bag-readiness-hint')).toBeNull();
+  });
+
+  it('hides bag readiness hint when bag is missing', async () => {
+    vi.mocked(bagClient.fetchPlayerBag).mockResolvedValueOnce(null as any);
+    vi.mocked(bagStatsClient.fetchBagStats).mockResolvedValueOnce(null as any);
+
+    render(<CaddieApproachScreen navigation={createNavigation()} route={createRoute()} />);
+
+    await waitFor(() => expect(bagClient.fetchPlayerBag).toHaveBeenCalled());
+    expect(screen.queryByTestId('bag-readiness-hint')).toBeNull();
   });
 });

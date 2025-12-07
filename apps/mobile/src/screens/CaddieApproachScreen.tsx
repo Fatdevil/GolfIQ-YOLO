@@ -4,6 +4,7 @@ import { ActivityIndicator, ScrollView, StyleSheet, Text, TextInput, TouchableOp
 import { fetchShotShapeProfile, type ShotShapeIntent, type ShotShapeProfile } from '@app/api/caddieApi';
 import { fetchClubDistances } from '@app/api/clubDistanceClient';
 import { fetchBagStats } from '@app/api/bagStatsClient';
+import { fetchPlayerBag, type PlayerBag } from '@app/api/bagClient';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import {
   buildCaddieDecisionFromContext,
@@ -27,6 +28,8 @@ import { buildCaddieHudPayload } from '@app/caddie/caddieHudMapper';
 import { isCaddieHudAvailable, sendCaddieHudClear, sendCaddieHudUpdate } from '@app/watch/caddieHudBridge';
 import type { BagClubStatsMap } from '@shared/caddie/bagStats';
 import { MIN_AUTOCALIBRATED_SAMPLES, shouldUseBagStat } from '@shared/caddie/bagStats';
+import { buildBagReadinessOverview } from '@shared/caddie/bagReadiness';
+import { formatBagSuggestion } from '@app/caddie/formatBagSuggestion';
 
 const INTENTS: ShotShapeIntent[] = ['straight', 'fade', 'draw'];
 
@@ -48,6 +51,8 @@ export default function CaddieApproachScreen({ navigation }: Props): JSX.Element
   const [profile, setProfile] = useState<ShotShapeProfile | null>(null);
   const [selectedClub, setSelectedClub] = useState<string | null>(null);
   const [bagStats, setBagStats] = useState<BagClubStatsMap | null>(null);
+  const [bag, setBag] = useState<PlayerBag | null>(null);
+  const [bagLoading, setBagLoading] = useState(false);
   const intentTouchedRef = useRef(false);
 
   useEffect(() => {
@@ -121,6 +126,26 @@ export default function CaddieApproachScreen({ navigation }: Props): JSX.Element
     };
   }, []);
 
+  useEffect(() => {
+    let cancelled = false;
+    setBagLoading(true);
+
+    fetchPlayerBag()
+      .then((playerBag) => {
+        if (!cancelled) setBag(playerBag);
+      })
+      .catch(() => {
+        if (!cancelled) setBag(null);
+      })
+      .finally(() => {
+        if (!cancelled) setBagLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const calibratedCandidates = useMemo(() => {
     if (!bagStats) return candidates;
     return candidates.map((candidate) => {
@@ -146,6 +171,36 @@ export default function CaddieApproachScreen({ navigation }: Props): JSX.Element
       };
     });
   }, [bagStats, candidates]);
+
+  const clubLabels = useMemo(() => {
+    const labels: Record<string, string> = {};
+    bag?.clubs.forEach((club) => {
+      labels[club.clubId] = club.label;
+    });
+    return labels;
+  }, [bag?.clubs]);
+
+  const bagReadinessOverview = useMemo(() => {
+    if (!bag || !bag.clubs?.length) return null;
+    if (!bagStats) return null;
+    return buildBagReadinessOverview(bag, bagStats);
+  }, [bag, bagStats]);
+
+  const readinessSummary = useMemo(() => {
+    if (!bagReadinessOverview) return null;
+    return t('bag.readinessSummary.base', {
+      calibrated: bagReadinessOverview.readiness.calibratedClubs,
+      total: bagReadinessOverview.readiness.totalClubs,
+    });
+  }, [bagReadinessOverview]);
+
+  const readinessSuggestion = useMemo(() => {
+    if (!bagReadinessOverview?.suggestions.length) return null;
+    return formatBagSuggestion(bagReadinessOverview.suggestions[0], clubLabels);
+  }, [bagReadinessOverview?.suggestions, clubLabels]);
+
+  const showBagReadinessHint =
+    bagReadinessOverview != null && bagReadinessOverview.readiness.grade !== 'excellent';
 
   const candidate = useMemo(() => {
     if (!calibratedCandidates.length) return null;
@@ -227,6 +282,10 @@ export default function CaddieApproachScreen({ navigation }: Props): JSX.Element
     setIntent(option);
   };
 
+  const handleOpenMyBag = () => {
+    navigation.navigate('MyBag');
+  };
+
   if (loadingDistances) {
     return (
       <View style={styles.center} testID="caddie-approach-loading">
@@ -264,6 +323,30 @@ export default function CaddieApproachScreen({ navigation }: Props): JSX.Element
         </TouchableOpacity>
       </View>
       <Text style={styles.helper}>{profileLabel}</Text>
+
+      {bagLoading && <Text style={styles.helper}>{t('bag.readinessSummary.base', { calibrated: 0, total: 0 })}</Text>}
+
+      {showBagReadinessHint && bagReadinessOverview ? (
+        <TouchableOpacity
+          onPress={handleOpenMyBag}
+          style={styles.readinessBanner}
+          accessibilityRole="button"
+          testID="bag-readiness-hint"
+        >
+          <View style={styles.readinessHeader}>
+            <Text style={styles.readinessLabel}>{t('bag.readinessTitle')}</Text>
+            <Text style={styles.readinessGrade}>
+              {t(`bag.readinessGrade.${bagReadinessOverview.readiness.grade}`)}
+            </Text>
+          </View>
+          {readinessSummary ? <Text style={styles.readinessSummary}>{readinessSummary}</Text> : null}
+          {readinessSuggestion ? (
+            <Text style={styles.readinessSuggestion} numberOfLines={1}>
+              {t('bag.readinessTileSuggestionPrefix')} {readinessSuggestion}
+            </Text>
+          ) : null}
+        </TouchableOpacity>
+      ) : null}
 
       <View style={styles.inputs}>
         <View style={styles.inputRow}>
@@ -379,6 +462,23 @@ const styles = StyleSheet.create({
     color: '#c2c2d0',
     fontSize: 14,
   },
+  readinessBanner: {
+    borderWidth: 1,
+    borderColor: '#b45309',
+    backgroundColor: '#2d1a00',
+    borderRadius: 10,
+    padding: 12,
+    gap: 6,
+  },
+  readinessHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  readinessLabel: { color: '#fbbf24', fontWeight: '800' },
+  readinessGrade: { color: '#f59e0b', fontWeight: '700' },
+  readinessSummary: { color: '#fcd34d' },
+  readinessSuggestion: { color: '#fde68a', fontWeight: '600' },
   settingsButton: {
     paddingHorizontal: 12,
     paddingVertical: 8,
