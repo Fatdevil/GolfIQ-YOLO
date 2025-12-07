@@ -1,5 +1,10 @@
-import { MIN_AUTOCALIBRATED_SAMPLES, shouldUseBagStat, type BagClubStatsMap } from '@shared/caddie/bagStats';
-import type { PlayerBag } from '@app/api/bagClient';
+import {
+  MIN_AUTOCALIBRATED_SAMPLES,
+  shouldUseBagStat,
+  type BagClubStats,
+  type BagClubStatsMap,
+} from './bagStats';
+import type { PlayerBag } from './playerBag';
 
 export const LARGE_GAP_MIN = 30;
 export const OVERLAP_MAX = 7;
@@ -15,6 +20,7 @@ export interface BagGapInsight {
 
 export interface BagGapAnalysis {
   insights: BagGapInsight[];
+  dataStatusByClubId: ClubDataStatusById;
 }
 
 export type ClubDataStatus = 'auto_calibrated' | 'needs_more_samples' | 'no_data';
@@ -33,6 +39,28 @@ function collectCalibratedClubs(
     })
     .filter((entry): entry is { clubId: string; carry: number } => Boolean(entry))
     .sort((a, b) => a.carry - b.carry);
+}
+
+export function computeClubDataStatusMap(
+  bag: PlayerBag,
+  statsByClub: BagClubStatsMap,
+  minSamples: number = MIN_AUTOCALIBRATED_SAMPLES,
+): ClubDataStatusById {
+  const result: ClubDataStatusById = {};
+
+  bag.clubs.forEach((club) => {
+    const stat = (statsByClub as Record<string, BagClubStats | undefined>)[club.clubId];
+    const sampleCount = stat?.sampleCount ?? 0;
+    if (shouldUseBagStat(stat, minSamples)) {
+      result[club.clubId] = 'auto_calibrated';
+    } else if (sampleCount > 0) {
+      result[club.clubId] = 'needs_more_samples';
+    } else {
+      result[club.clubId] = 'no_data';
+    }
+  });
+
+  return result;
 }
 
 export function analyzeBagGaps(
@@ -65,26 +93,5 @@ export function analyzeBagGaps(
     }
   }
 
-  return { insights };
-}
-
-export function computeClubDataStatusMap(
-  bag: PlayerBag,
-  statsByClub: BagClubStatsMap,
-  minSamples: number = MIN_AUTOCALIBRATED_SAMPLES,
-): ClubDataStatusById {
-  const result: ClubDataStatusById = {};
-
-  bag.clubs.forEach((club) => {
-    const stat = statsByClub?.[club.clubId];
-    if (shouldUseBagStat(stat, minSamples)) {
-      result[club.clubId] = 'auto_calibrated';
-    } else if (stat?.sampleCount && stat.sampleCount > 0) {
-      result[club.clubId] = 'needs_more_samples';
-    } else {
-      result[club.clubId] = 'no_data';
-    }
-  });
-
-  return result;
+  return { insights, dataStatusByClubId: computeClubDataStatusMap(bag, statsByClub, minSamples) };
 }

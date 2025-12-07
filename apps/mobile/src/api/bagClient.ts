@@ -1,18 +1,8 @@
 import { apiFetch } from '@app/api/client';
+import type { PlayerBag, PlayerBagClub } from '@shared/caddie/playerBag';
 
-export type ClubDistance = {
-  clubId: string;
-  label: string;
-  avgCarryM: number | null;
-  stdDevM?: number | null;
-  sampleCount: number;
-  active: boolean;
-  manualAvgCarryM?: number | null;
-};
-
-export type PlayerBag = {
-  clubs: ClubDistance[];
-};
+export type ClubDistance = PlayerBagClub;
+export type { PlayerBag };
 
 export async function fetchPlayerBag(): Promise<PlayerBag> {
   return apiFetch<PlayerBag>('/api/player/bag');

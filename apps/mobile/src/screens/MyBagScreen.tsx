@@ -23,11 +23,7 @@ import { t } from '@app/i18n';
 import type { RootStackParamList } from '@app/navigation/types';
 import { MIN_AUTOCALIBRATED_SAMPLES, shouldUseBagStat } from '@shared/caddie/bagStats';
 import type { BagClubStats, BagClubStatsMap } from '@shared/caddie/bagStats';
-import {
-  analyzeBagGaps,
-  computeClubDataStatusMap,
-  type ClubDataStatus,
-} from '@app/caddie/bagGapInsights';
+import { analyzeBagGaps, type ClubDataStatus } from '@shared/caddie/bagGapInsights';
 import { formatDistance } from '@app/utils/distance';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'MyBag'>;
@@ -348,16 +344,15 @@ export default function MyBagScreen({}: Props): JSX.Element {
 
   const gapAnalysis = useMemo(
     () =>
-      state.bag && state.bagStats ? analyzeBagGaps(state.bag, state.bagStats) : { insights: [] },
+      state.bag && state.bagStats
+        ? analyzeBagGaps(state.bag, state.bagStats)
+        : { insights: [], dataStatusByClubId: {} },
     [state.bag, state.bagStats],
   );
 
   const dataStatuses = useMemo(
-    () =>
-      state.bag && state.bagStats
-        ? computeClubDataStatusMap(state.bag, state.bagStats)
-        : {},
-    [state.bag, state.bagStats],
+    () => (state.bag && state.bagStats ? gapAnalysis.dataStatusByClubId : {}),
+    [gapAnalysis.dataStatusByClubId, state.bag, state.bagStats],
   );
 
   const clubLabels = useMemo(() => {

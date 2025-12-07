@@ -1,9 +1,13 @@
 import React from "react";
 import { useTranslation } from "react-i18next";
+import { fetchBagStats } from "@/api/bagStatsClient";
 import { loadBag, updateClubCarry, upsertClub } from "@web/bag/storage";
 import type { BagState, BagClub } from "@web/bag/types";
 import { useUnits } from "@/preferences/UnitsContext";
 import { convertMeters, formatDistance } from "@/utils/distance";
+import { analyzeBagGaps, type ClubDataStatusById } from "@shared/caddie/bagGapInsights";
+import { shouldUseBagStat, type BagClubStatsMap } from "@shared/caddie/bagStats";
+import type { PlayerBag } from "@shared/caddie/playerBag";
 
 function formatTimestamp(timestamp: number): string {
   try {
@@ -16,6 +20,19 @@ function formatTimestamp(timestamp: number): string {
   }
 }
 
+function mapToPlayerBag(bag: BagState): PlayerBag {
+  return {
+    clubs: bag.clubs.map((club) => ({
+      clubId: club.id,
+      label: club.label,
+      avgCarryM: club.carry_m ?? null,
+      manualAvgCarryM: club.carry_m ?? null,
+      sampleCount: 0,
+      active: true,
+    })),
+  };
+}
+
 export default function MyBagPage(): JSX.Element {
   const { t } = useTranslation();
   const { unit } = useUnits();
@@ -25,6 +42,9 @@ export default function MyBagPage(): JSX.Element {
     id: "",
     label: "",
   });
+  const [bagStats, setBagStats] = React.useState<BagClubStatsMap | null>(null);
+  const [bagStatsError, setBagStatsError] = React.useState<string | null>(null);
+  const [bagStatsLoading, setBagStatsLoading] = React.useState(false);
 
   const handleCarryChange = React.useCallback(
     (club: BagClub, value: string) => {
@@ -69,6 +89,48 @@ export default function MyBagPage(): JSX.Element {
     [newClub]
   );
 
+  React.useEffect(() => {
+    let cancelled = false;
+    setBagStatsLoading(true);
+    fetchBagStats()
+      .then((stats) => {
+        if (!cancelled) {
+          setBagStats(stats);
+          setBagStatsError(null);
+        }
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          const message = err instanceof Error ? err.message : String(err);
+          setBagStatsError(message);
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setBagStatsLoading(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const playerBag = React.useMemo(() => mapToPlayerBag(bag), [bag]);
+  const gapAnalysis = React.useMemo(
+    () => (bagStats ? analyzeBagGaps(playerBag, bagStats) : null),
+    [bagStats, playerBag]
+  );
+  const clubDataStatuses: ClubDataStatusById = gapAnalysis?.dataStatusByClubId ?? {};
+  const bagInsights = gapAnalysis?.insights ?? [];
+  const clubLabels = React.useMemo(() => {
+    const labels: Record<string, string> = {};
+    bag.clubs.forEach((club) => {
+      labels[club.id] = club.label;
+    });
+    return labels;
+  }, [bag.clubs]);
+
   return (
     <div className="mx-auto flex w-full max-w-3xl flex-col gap-6 px-4 py-6">
       <div>
@@ -77,6 +139,46 @@ export default function MyBagPage(): JSX.Element {
           Senast uppdaterad: {formatTimestamp(bag.updatedAt)}
         </p>
       </div>
+
+      {bagStatsError ? (
+        <div className="rounded-lg border border-amber-700/80 bg-amber-500/10 px-4 py-3 text-sm text-amber-100">
+          {t("bag.insights.load_error")}
+        </div>
+      ) : null}
+
+      {bagInsights.length > 0 ? (
+        <div className="rounded-lg border border-slate-800 bg-slate-900/60 px-4 py-3 shadow">
+          <div className="flex items-center justify-between gap-2">
+            <h2 className="text-lg font-semibold text-slate-100">
+              {t("bag.insights.title")}
+            </h2>
+            {bagStatsLoading ? (
+              <span className="text-xs text-slate-400">{t("bag.loading")}</span>
+            ) : null}
+          </div>
+          <ul className="mt-2 flex flex-col gap-2 text-sm text-slate-200">
+            {bagInsights.map((insight) => {
+              const lower = clubLabels[insight.lowerClubId] ?? insight.lowerClubId;
+              const upper = clubLabels[insight.upperClubId] ?? insight.upperClubId;
+              const distance = formatDistance(insight.gapDistance, unit, { withUnit: true });
+              const key = `${insight.type}-${insight.lowerClubId}-${insight.upperClubId}`;
+              const label =
+                insight.type === "large_gap"
+                  ? t("bag.insights.large_gap", { lower, upper, distance })
+                  : t("bag.insights.overlap", { lower, upper, distance });
+              return (
+                <li
+                  key={key}
+                  className="flex items-start gap-2 rounded border border-slate-800 bg-slate-950/60 px-3 py-2"
+                >
+                  <span className="mt-1 h-2 w-2 rounded-full bg-emerald-400" aria-hidden />
+                  <span>{label}</span>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      ) : null}
 
       <div className="rounded-lg border border-slate-800 bg-slate-900/60 shadow">
         <div className="overflow-x-auto">
@@ -120,11 +222,47 @@ export default function MyBagPage(): JSX.Element {
                       className="w-full rounded border border-slate-700 bg-slate-950 px-2 py-1 text-sm text-slate-100 focus:border-emerald-500 focus:outline-none"
                       placeholder="—"
                     />
-                    <p className="mt-1 text-xs text-slate-500">
-                      {club.carry_m != null
-                        ? formatDistance(club.carry_m, unit, { withUnit: true })
-                        : t("bag.noCarry")}
-                    </p>
+                    {(() => {
+                      const stat = bagStats?.[club.id];
+                      const status = clubDataStatuses[club.id];
+                      const autoCarryLabel = shouldUseBagStat(stat)
+                        ? formatDistance(stat.meanDistanceM, unit, { withUnit: true })
+                        : null;
+                      const baseCarryLabel =
+                        club.carry_m != null
+                          ? formatDistance(club.carry_m, unit, { withUnit: true })
+                          : t("bag.noCarry");
+                      const hasStat = Boolean(stat);
+                      const hasSamples = (stat?.sampleCount ?? 0) > 0;
+                      const showNeedsMore =
+                        (status === "needs_more_samples" || (hasStat && hasSamples)) && !autoCarryLabel;
+                      const showNoData = status === "no_data" || (hasStat && !hasSamples);
+
+                      return (
+                        <div className="mt-1 space-y-1">
+                          <p className="text-xs text-slate-500">{baseCarryLabel}</p>
+                          {autoCarryLabel ? (
+                            <div className="flex flex-wrap items-center gap-2 text-xs text-emerald-300">
+                              <span className="rounded border border-emerald-700/60 bg-emerald-500/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide">
+                                {t("bag.insights.auto_label")}
+                              </span>
+                              <span>{autoCarryLabel}</span>
+                              {stat?.sampleCount ? (
+                                <span className="text-slate-500">
+                                  {t("bag.insights.sample_count", { count: stat.sampleCount })}
+                                </span>
+                              ) : null}
+                            </div>
+                          ) : null}
+                          {showNeedsMore ? (
+                            <p className="text-xs text-amber-300">{t("bag.insights.needs_more_samples")}</p>
+                          ) : null}
+                          {showNoData ? (
+                            <p className="text-xs text-slate-400">{t("bag.insights.no_data")}</p>
+                          ) : null}
+                        </div>
+                      );
+                    })()}
                   </td>
                   <td className="px-4 py-3">
                     <input
