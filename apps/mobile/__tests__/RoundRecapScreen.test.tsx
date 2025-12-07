@@ -35,6 +35,12 @@ const sampleRecap = {
     'Work on driving accuracy – you hit 29% of fairways.',
     'Practice lag putting – 2.5 putts per hole.',
   ],
+  caddieSummary: {
+    totalDecisions: 3,
+    followedDecisions: 2,
+    followRate: 0.67,
+    notes: ['You tended to follow the caddie and often scored better when you did.'],
+  },
 };
 
 const sampleStrokes = {
@@ -73,6 +79,10 @@ describe('RoundRecapScreen', () => {
     expect(getByText(/driving accuracy/)).toBeTruthy();
     expect(getByTestId('recap-sg-driving')).toBeTruthy();
     expect(getByText('+0.8')).toBeTruthy();
+    const caddieSummary = getByTestId('caddie-summary');
+    expect(caddieSummary).toBeTruthy();
+    expect(within(caddieSummary).getByText(/Decisions followed: 2\/3/)).toBeTruthy();
+    expect(within(caddieSummary).getByText(/follow the caddie/)).toBeTruthy();
   });
 
   it('shares summary text', async () => {
@@ -85,7 +95,8 @@ describe('RoundRecapScreen', () => {
     );
 
     await waitFor(() => expect(mockFetchRecap).toHaveBeenCalled());
-    fireEvent.click(getByTestId('share-round'));
+    const shareButton = await waitFor(() => getByTestId('share-round'));
+    fireEvent.click(shareButton);
 
     await waitFor(() => expect(shareSpy).toHaveBeenCalled());
     const message = shareSpy.mock.calls[0][0].message;

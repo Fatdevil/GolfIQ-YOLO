@@ -291,6 +291,25 @@ export default function RoundRecapScreen({ route, navigation }: Props): JSX.Elem
         )}
       </View>
 
+      {recap.caddieSummary ? (
+        <View style={styles.card} testID="caddie-summary">
+          <Text style={styles.cardTitle}>{t('round.recap.caddie_title')}</Text>
+          <Text style={styles.bodyText}>
+            {t('round.recap.caddie_follow_rate', {
+              followed: recap.caddieSummary.followedDecisions,
+              total: recap.caddieSummary.totalDecisions,
+              rate:
+                recap.caddieSummary.followRate != null
+                  ? ` (${Math.round(recap.caddieSummary.followRate * 100)}%)`
+                  : '',
+            })}
+          </Text>
+          {recap.caddieSummary.notes.map((note, idx) => (
+            <Text key={idx} style={styles.bullet}>{`• ${note}`}</Text>
+          ))}
+        </View>
+      ) : null}
+
       <View style={styles.card}>
         <Text style={styles.cardTitle}>{t('round.recap.focus_title')}</Text>
         {recap.focusHints.length === 0 ? (
@@ -330,6 +349,7 @@ const styles = StyleSheet.create({
   score: { fontSize: 20, fontWeight: '700', marginTop: 4 },
   helper: { color: '#6b7280' },
   muted: { color: '#6b7280', marginTop: 4, textAlign: 'center' },
+  bodyText: { color: '#111827' },
   card: { borderWidth: 1, borderColor: '#e5e7eb', borderRadius: 12, padding: 12, gap: 12 },
   cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   cardTitle: { fontSize: 18, fontWeight: '700' },

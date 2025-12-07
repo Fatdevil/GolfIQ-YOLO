@@ -383,6 +383,8 @@ export const en = {
       share_link_template:
         'Great round at {{course}}! Shot {{score}} ({{toPar}}). Best area: {{bestCategory}}. Tracked with GolfIQ – {{url}}',
       to_par_even: 'E',
+      caddie_title: 'Caddie & strategy',
+      caddie_follow_rate: 'Decisions followed: {{followed}}/{{total}}{{rate}}',
     },
   },
   strokesGained: {

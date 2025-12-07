@@ -4,7 +4,12 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from server.rounds.models import RoundInfo, RoundSummary
+from server.rounds.models import (
+    CaddieDecisionTelemetry,
+    RoundInfo,
+    RoundScores,
+    RoundSummary,
+)
 
 
 class RoundRecapCategory(BaseModel):
@@ -24,6 +29,18 @@ class RoundRecap(BaseModel):
     focus_hints: list[str] = Field(
         default_factory=list, serialization_alias="focusHints"
     )
+    caddie_summary: "CaddieTelemetrySummary | None" = Field(  # type: ignore
+        default=None, serialization_alias="caddieSummary"
+    )
+
+    model_config = ConfigDict(populate_by_name=True)
+
+
+class CaddieTelemetrySummary(BaseModel):
+    total_decisions: int = Field(serialization_alias="totalDecisions")
+    followed_decisions: int = Field(serialization_alias="followedDecisions")
+    follow_rate: float | None = Field(default=None, serialization_alias="followRate")
+    notes: list[str] = Field(default_factory=list)
 
     model_config = ConfigDict(populate_by_name=True)
 
@@ -82,6 +99,76 @@ def _compute_short_game_quality(short_game_per_hole: float | None) -> float | No
     return _clamp(1 - ((short_game_per_hole - 0.5) / 1.5))
 
 
+def _average(values: list[int]) -> float | None:
+    if not values:
+        return None
+    return sum(values) / len(values)
+
+
+def _compute_caddie_summary(
+    scores: RoundScores | None,
+) -> CaddieTelemetrySummary | None:
+    if scores is None:
+        return None
+
+    decisions: list[CaddieDecisionTelemetry] = []
+    for hole in scores.holes.values():
+        if hole.caddie_decision is not None:
+            decisions.append(hole.caddie_decision)
+
+    if not decisions:
+        return None
+
+    total = len(decisions)
+    followed = [d for d in decisions if d.followed]
+    not_followed = [d for d in decisions if d.followed is False]
+    attack_count = sum(1 for d in decisions if d.strategy == "attack")
+    layup_count = sum(1 for d in decisions if d.strategy == "layup")
+
+    followed_scores = [
+        d.resulting_score for d in followed if d.resulting_score is not None
+    ]
+    not_followed_scores = [
+        d.resulting_score for d in not_followed if d.resulting_score is not None
+    ]
+
+    follow_rate = len(followed) / total if total else None
+
+    notes: list[str] = []
+
+    avg_followed = _average(followed_scores)
+    avg_not_followed = _average(not_followed_scores)
+
+    if follow_rate is not None:
+        if follow_rate > 0.5:
+            if (
+                avg_followed is None
+                or avg_not_followed is None
+                or avg_followed <= avg_not_followed
+            ):
+                notes.append(
+                    "You tended to follow the caddie and often scored better when you did."
+                )
+            else:
+                notes.append("You tended to follow the caddie on most holes.")
+        else:
+            notes.append(
+                "You often deviated from the caddie's plan – check if the strategy fits your game."
+            )
+
+    if attack_count or layup_count:
+        notes.append(
+            f"Strategies used: {attack_count} attack / {layup_count} layup decisions."
+        )
+
+    return CaddieTelemetrySummary(
+        total_decisions=total,
+        followed_decisions=len(followed),
+        follow_rate=follow_rate,
+        notes=notes,
+    )
+
+
 def _build_focus_hints(
     *,
     driving_pct: float | None,
@@ -138,7 +225,9 @@ def _build_focus_hints(
     return hints
 
 
-def build_round_recap(round_info: RoundInfo, summary: RoundSummary) -> RoundRecap:
+def build_round_recap(
+    round_info: RoundInfo, summary: RoundSummary, scores: RoundScores | None = None
+) -> RoundRecap:
     holes = max(summary.holes_played, 0)
     driving_pct = None
     if summary.fairways_hit is not None and summary.fairways_total:
@@ -216,6 +305,8 @@ def build_round_recap(round_info: RoundInfo, summary: RoundSummary) -> RoundReca
             label = PUTT_BUCKET_LABELS.get(bucket, bucket)
             focus_hints.append(f"Most 3-putts started from {label} looks ({count}).")
 
+    caddie_summary = _compute_caddie_summary(scores)
+
     return RoundRecap(
         round_id=summary.round_id,
         course_name=course_name,
@@ -225,11 +316,13 @@ def build_round_recap(round_info: RoundInfo, summary: RoundSummary) -> RoundReca
         holes_played=holes,
         categories=categories,
         focus_hints=focus_hints,
+        caddie_summary=caddie_summary,
     )
 
 
 __all__ = [
     "RoundRecap",
     "RoundRecapCategory",
+    "CaddieTelemetrySummary",
     "build_round_recap",
 ]

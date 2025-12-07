@@ -12,6 +12,7 @@ from server.club_distance import ClubDistanceService, get_club_distance_service
 from server.rounds.club_distances import update_club_distances_from_round
 from server.rounds.models import (
     FairwayResult,
+    CaddieDecisionTelemetry,
     PuttDistanceBucket,
     Round,
     RoundInfo,
@@ -146,6 +147,11 @@ class UpdateHoleScoreRequest(BaseModel):
             "first_putt_distance_bucket", "firstPuttDistanceBucket"
         ),
     )
+    caddie_decision: CaddieDecisionTelemetry | None = Field(
+        default=None,
+        serialization_alias="caddieDecision",
+        validation_alias=AliasChoices("caddie_decision", "caddieDecision"),
+    )
 
     model_config = ConfigDict(populate_by_name=True)
 
@@ -247,7 +253,7 @@ def get_round_recap(
         round_info = service.get_round_info(player_id=player_id, round_id=round_id)
         scores = service.get_scores(player_id=player_id, round_id=round_id)
         summary = compute_round_summary(scores)
-        return build_round_recap(round_info, summary)
+        return build_round_recap(round_info, summary, scores)
     except RoundNotFound:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="round not found"

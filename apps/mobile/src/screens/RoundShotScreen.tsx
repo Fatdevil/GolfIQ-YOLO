@@ -17,6 +17,7 @@ import {
   endRound,
   getRoundScores,
   updateHoleScore,
+  type CaddieDecisionTelemetry,
   type HoleScore,
   type PuttDistanceBucket,
   type Shot,
@@ -268,12 +269,30 @@ export default function RoundShotScreen({ navigation }: Props): JSX.Element {
     const payloadEntries = Object.entries(currentScore).filter(
       ([key, value]) => key !== 'holeNumber' && value !== undefined,
     );
+    const payload: Partial<HoleScore> & { caddieDecision?: CaddieDecisionTelemetry } =
+      Object.fromEntries(payloadEntries) as Partial<HoleScore>;
+
+    const caddieDecisionTelemetry: CaddieDecisionTelemetry | undefined = caddieDecision
+      ? {
+          strategy: caddieDecision.strategy,
+          targetType: caddieDecision.targetType,
+          recommendedClubId: caddieDecision.recommendedClubId,
+          targetDistanceM: caddieDecision.targetDistanceM,
+          followed:
+            caddieDecision.recommendedClubId != null &&
+            club === caddieDecision.recommendedClubId,
+          resultingScore: currentScore.strokes ?? null,
+        }
+      : undefined;
+    if (caddieDecisionTelemetry) {
+      payload.caddieDecision = caddieDecisionTelemetry;
+    }
     setScoreSaving(true);
     try {
       const updated = await updateHoleScore(
         state.round.id,
         currentHole,
-        Object.fromEntries(payloadEntries) as Partial<HoleScore>,
+        payload,
       );
       setScores(updated.holes ?? {});
       setScoreDirty(false);
