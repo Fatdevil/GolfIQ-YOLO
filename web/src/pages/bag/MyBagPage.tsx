@@ -6,6 +6,7 @@ import type { BagState, BagClub } from "@web/bag/types";
 import { useUnits } from "@/preferences/UnitsContext";
 import { convertMeters, formatDistance } from "@/utils/distance";
 import { analyzeBagGaps, type ClubDataStatusById } from "@shared/caddie/bagGapInsights";
+import { buildBagTuningSuggestions } from "@shared/caddie/bagTuningSuggestions";
 import { shouldUseBagStat, type BagClubStatsMap } from "@shared/caddie/bagStats";
 import type { PlayerBag } from "@shared/caddie/playerBag";
 
@@ -123,6 +124,11 @@ export default function MyBagPage(): JSX.Element {
   );
   const clubDataStatuses: ClubDataStatusById = gapAnalysis?.dataStatusByClubId ?? {};
   const bagInsights = gapAnalysis?.insights ?? [];
+  const bagSuggestions = React.useMemo(
+    () =>
+      bagStats ? buildBagTuningSuggestions(playerBag, bagStats).suggestions : [],
+    [bagStats, playerBag]
+  );
   const clubLabels = React.useMemo(() => {
     const labels: Record<string, string> = {};
     bag.clubs.forEach((club) => {
@@ -175,6 +181,59 @@ export default function MyBagPage(): JSX.Element {
                   <span>{label}</span>
                 </li>
               );
+            })}
+          </ul>
+        </div>
+      ) : null}
+
+      {bagSuggestions.length > 0 ? (
+        <div className="rounded-lg border border-slate-800 bg-slate-900/60 px-4 py-3 shadow">
+          <div className="flex items-center justify-between gap-2">
+            <h2 className="text-lg font-semibold text-slate-100">
+              {t("bag.suggestions.title")}
+            </h2>
+            {bagStatsLoading ? (
+              <span className="text-xs text-slate-400">{t("bag.loading")}</span>
+            ) : null}
+          </div>
+          <ul className="mt-2 flex flex-col gap-2 text-sm text-slate-200">
+            {bagSuggestions.slice(0, 4).map((suggestion) => {
+              const lower =
+                suggestion.lowerClubId &&
+                (clubLabels[suggestion.lowerClubId] ?? suggestion.lowerClubId);
+              const upper =
+                suggestion.upperClubId &&
+                (clubLabels[suggestion.upperClubId] ?? suggestion.upperClubId);
+              const clubLabel =
+                suggestion.clubId && (clubLabels[suggestion.clubId] ?? suggestion.clubId);
+              const distanceLabel =
+                suggestion.gapDistance != null
+                  ? formatDistance(suggestion.gapDistance, unit, { withUnit: true })
+                  : null;
+
+              let label: string | null = null;
+              if (suggestion.type === "fill_gap" && lower && upper && distanceLabel) {
+                label = t("bag.suggestions.fill_gap", { lower, upper, distance: distanceLabel });
+              } else if (suggestion.type === "reduce_overlap" && lower && upper) {
+                label = t("bag.suggestions.reduce_overlap", { lower, upper, distance: distanceLabel });
+              } else if (suggestion.type === "calibrate" && clubLabel) {
+                label = t(
+                  suggestion.severity === "high"
+                    ? "bag.suggestions.calibrate.no_data"
+                    : "bag.suggestions.calibrate.needs_more_samples",
+                  { club: clubLabel }
+                );
+              }
+
+              return label ? (
+                <li
+                  key={suggestion.id}
+                  className="flex items-start gap-2 rounded border border-slate-800 bg-slate-950/60 px-3 py-2"
+                >
+                  <span className="mt-1 h-2 w-2 rounded-full bg-emerald-400" aria-hidden />
+                  <span>{label}</span>
+                </li>
+              ) : null;
             })}
           </ul>
         </div>

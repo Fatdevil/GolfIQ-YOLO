@@ -350,6 +350,11 @@
   "bag.insights.auto_label": "Auto",
   "bag.insights.sample_count": "{{count}} shots",
   "bag.insights.load_error": "Could not load bag insights right now.",
+  "bag.suggestions.title": "Suggested bag tweaks",
+  "bag.suggestions.fill_gap": "Big distance gap between {{lower}} and {{upper}} ({{distance}}). Consider adding a club to cover this range.",
+  "bag.suggestions.reduce_overlap": "{{lower}} and {{upper}} carry almost the same distance. You may not need both for full swings.",
+  "bag.suggestions.calibrate.no_data": "{{club}} has no shot data yet. Hit a few full shots to lock in its carry.",
+  "bag.suggestions.calibrate.needs_more_samples": "{{club}} has limited data. Collect a few more shots for a reliable carry.",
   "units.label": "Units",
   "bag.notes": "Notes",
 

@@ -7,6 +7,7 @@ import { fetchPlayerBag, updatePlayerClubs } from '@app/api/bagClient';
 import * as bagStatsClient from '@app/api/bagStatsClient';
 import * as apiClient from '@app/api/client';
 import * as bagStatsStorage from '@app/storage/bagStatsStorage';
+import * as bagTuning from '@shared/caddie/bagTuningSuggestions';
 
 vi.mock('@app/api/bagClient', () => ({
   fetchPlayerBag: vi.fn(),
@@ -197,6 +198,54 @@ describe('MyBagScreen', () => {
     expect(
       getByText('7 Iron and 6 Iron carry almost the same distance (6 m apart)'),
     ).toBeTruthy();
+  });
+
+  it('shows bag tuning suggestions based on insights and data status', async () => {
+    const tuningBag = {
+      clubs: [
+        { clubId: '9i', label: '9 Iron', avgCarryM: 125, sampleCount: 10, active: true },
+        { clubId: '7i', label: '7 Iron', avgCarryM: 145, sampleCount: 10, active: true },
+        { clubId: '4h', label: '4 Hybrid', avgCarryM: 210, sampleCount: 10, active: true },
+        { clubId: '5i', label: '5 Iron', avgCarryM: 212, sampleCount: 10, active: true },
+        { clubId: 'gw', label: 'Gap Wedge', avgCarryM: 95, sampleCount: 0, active: true },
+      ],
+    };
+    mockFetchBag.mockResolvedValueOnce(tuningBag);
+    mockFetchBagStats.mockResolvedValueOnce({
+      '9i': { clubId: '9i', meanDistanceM: 125, sampleCount: 8 },
+      '7i': { clubId: '7i', meanDistanceM: 146, sampleCount: 8 },
+      '4h': { clubId: '4h', meanDistanceM: 210, sampleCount: 9 },
+      '5i': { clubId: '5i', meanDistanceM: 211, sampleCount: 9 },
+    });
+
+    const { getByTestId, getByText } = render(
+      <MyBagScreen navigation={navigation} route={undefined as any} />,
+    );
+
+    await waitFor(() => getByTestId('bag-suggestions'));
+
+    expect(getByText('Suggested bag tweaks')).toBeTruthy();
+    expect(
+      getByText('Big distance gap between 7 Iron and 4 Hybrid (64 m). Consider adding a club to cover this range.'),
+    ).toBeTruthy();
+    expect(getByText('4 Hybrid and 5 Iron carry almost the same distance. You may not need both for full swings.')).toBeTruthy();
+    expect(getByText('Gap Wedge has no shot data yet. Hit a few full shots to lock in its carry.')).toBeTruthy();
+  });
+
+  it('hides suggestions when none are available', async () => {
+    const spy = vi
+      .spyOn(bagTuning, 'buildBagTuningSuggestions')
+      .mockReturnValue({ suggestions: [] });
+
+    const { queryByTestId, getByTestId } = render(
+      <MyBagScreen navigation={navigation} route={undefined as any} />,
+    );
+
+    await waitFor(() => getByTestId('club-card-7i'));
+
+    expect(queryByTestId('bag-suggestions')).toBeNull();
+
+    spy.mockRestore();
   });
 
   it('shows needs-data hints for clubs without enough samples', async () => {

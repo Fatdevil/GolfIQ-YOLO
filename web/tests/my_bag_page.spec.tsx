@@ -6,6 +6,7 @@ import { MemoryRouter } from "react-router-dom";
 import MyBagPage from "@web/pages/bag/MyBagPage";
 import type { BagState } from "@web/bag/types";
 import { UnitsContext } from "@web/preferences/UnitsContext";
+import * as bagTuning from "@shared/caddie/bagTuningSuggestions";
 
 type StorageModule = typeof import("@web/bag/storage");
 type BagStatsModule = typeof import("@/api/bagStatsClient");
@@ -192,5 +193,66 @@ describe("MyBagPage", () => {
     const gapWedgeRow = screen.getByDisplayValue("Gap wedge").closest("tr");
     expect(gapWedgeRow).not.toBeNull();
     await within(gapWedgeRow as HTMLElement).findByText(/No shot data yet/i);
+  });
+
+  it("shows bag tuning suggestions from shared helper", async () => {
+    const tuningBag: BagState = {
+      updatedAt: Date.now(),
+      clubs: [
+        { id: "9i", label: "9i", carry_m: null, notes: null },
+        { id: "7i", label: "7i", carry_m: null, notes: null },
+        { id: "4H", label: "4-hybrid", carry_m: null, notes: null },
+        { id: "5i", label: "5i", carry_m: null, notes: null },
+        { id: "GW", label: "Gap wedge", carry_m: null, notes: null },
+      ],
+    };
+    loadBagMock().mockReturnValue(tuningBag);
+    fetchBagStatsMock.mockResolvedValue({
+      "9i": { clubId: "9i", meanDistanceM: 125, sampleCount: 7 },
+      "7i": { clubId: "7i", meanDistanceM: 146, sampleCount: 7 },
+      "4H": { clubId: "4H", meanDistanceM: 210, sampleCount: 8 },
+      "5i": { clubId: "5i", meanDistanceM: 211, sampleCount: 8 },
+    });
+
+    render(
+      <UnitsContext.Provider value={{ unit: "metric", setUnit: () => {} }}>
+        <MemoryRouter>
+          <MyBagPage />
+        </MemoryRouter>
+      </UnitsContext.Provider>
+    );
+
+    await screen.findByText(/Suggested bag tweaks/i);
+    expect(
+      screen.getByText(
+        /Big distance gap between 7i and 4-hybrid \(64 m\). Consider adding a club to cover this range./i
+      )
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/4-hybrid and 5i carry almost the same distance. You may not need both for full swings./i)
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/Gap wedge has no shot data yet. Hit a few full shots to lock in its carry./i)
+    ).toBeInTheDocument();
+  });
+
+  it("hides bag tuning suggestions when helper returns none", async () => {
+    const spy = vi
+      .spyOn(bagTuning, "buildBagTuningSuggestions")
+      .mockReturnValue({ suggestions: [] });
+
+    render(
+      <UnitsContext.Provider value={{ unit: "metric", setUnit: () => {} }}>
+        <MemoryRouter>
+          <MyBagPage />
+        </MemoryRouter>
+      </UnitsContext.Provider>
+    );
+
+    await waitFor(() => expect(fetchBagStatsMock).toHaveBeenCalled());
+
+    expect(screen.queryByText(/Bag suggestions/i)).toBeNull();
+
+    spy.mockRestore();
   });
 });
