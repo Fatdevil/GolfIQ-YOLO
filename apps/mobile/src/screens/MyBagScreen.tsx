@@ -18,21 +18,27 @@ import {
   type ClubDistance,
   type ClubUpdate,
 } from '@app/api/bagClient';
+import { fetchBagStats } from '@app/api/bagStatsClient';
 import { t } from '@app/i18n';
 import type { RootStackParamList } from '@app/navigation/types';
+import { MIN_AUTOCALIBRATED_SAMPLES, shouldUseBagStat } from '@shared/caddie/bagStats';
+import type { BagClubStats, BagClubStatsMap } from '@shared/caddie/bagStats';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'MyBag'>;
 
 type ScreenState = {
   loading: boolean;
   bag: { clubs: ClubDistance[] } | null;
+  bagStats: BagClubStatsMap | null;
   error: string | null;
   actionError: string | null;
   savingClub: string | null;
 };
 
+type ClubWithStats = ClubDistance & { bagStat?: BagClubStats };
+
 type ClubCardProps = {
-  club: ClubDistance;
+  club: ClubWithStats;
   onUpdate: (update: ClubUpdate) => Promise<void>;
   isSaving: boolean;
 };
@@ -102,6 +108,19 @@ function ClubCard({ club, onUpdate, isSaving }: ClubCardProps): JSX.Element {
     await onUpdate({ clubId: club.clubId, active: value });
   };
 
+  const autoCarryLabel = shouldUseBagStat(club.bagStat)
+    ? `${Math.round(club.bagStat.meanDistanceM)} m`
+    : null;
+
+  const autoHint = club.bagStat
+    ? shouldUseBagStat(club.bagStat)
+      ? t('my_bag_auto_samples', { count: club.bagStat.sampleCount })
+      : t('my_bag_auto_need_more', {
+          count: club.bagStat.sampleCount,
+          min: MIN_AUTOCALIBRATED_SAMPLES,
+        })
+    : null;
+
   return (
     <View style={styles.card} testID={`club-card-${club.clubId}`}>
       <View style={styles.cardHeader}>
@@ -128,6 +147,18 @@ function ClubCard({ club, onUpdate, isSaving }: ClubCardProps): JSX.Element {
           <Text style={styles.manualPill}>{t('my_bag_manual_override')}</Text>
         ) : null}
       </View>
+
+      {autoCarryLabel ? (
+        <View style={styles.autoRow}>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.autoLabel}>{t('my_bag_auto_calibrated_label')}</Text>
+            {autoHint ? <Text style={styles.muted}>{autoHint}</Text> : null}
+          </View>
+          <Text style={styles.autoCarry}>{autoCarryLabel}</Text>
+        </View>
+      ) : autoHint ? (
+        <Text style={styles.autoHint}>{autoHint}</Text>
+      ) : null}
 
       <View style={styles.inputGroup}>
         <Text style={styles.inputLabel}>{t('my_bag_label_field')}</Text>
@@ -177,13 +208,18 @@ function ClubCard({ club, onUpdate, isSaving }: ClubCardProps): JSX.Element {
   );
 }
 
+function attachStats(clubs: ClubDistance[], stats: BagClubStatsMap | null): ClubWithStats[] {
+  if (!stats) return clubs;
+  return clubs.map((club) => ({ ...club, bagStat: stats[club.clubId] }));
+}
+
 type GroupedClubs = {
   title: string;
-  clubs: ClubDistance[];
+  clubs: ClubWithStats[];
 };
 
-function groupClubs(clubs: ClubDistance[]): GroupedClubs[] {
-  const groups: Record<string, ClubDistance[]> = {
+function groupClubs(clubs: ClubWithStats[]): GroupedClubs[] {
+  const groups: Record<string, ClubWithStats[]> = {
     woods: [],
     irons: [],
     wedges: [],
@@ -216,6 +252,7 @@ export default function MyBagScreen({}: Props): JSX.Element {
   const [state, setState] = useState<ScreenState>({
     loading: true,
     bag: null,
+    bagStats: null,
     error: null,
     actionError: null,
     savingClub: null,
@@ -227,14 +264,53 @@ export default function MyBagScreen({}: Props): JSX.Element {
       try {
         const bag = await fetchPlayerBag();
         if (!cancelled)
-          setState({ loading: false, bag, error: null, actionError: null, savingClub: null });
+          setState((prev) => ({
+            ...prev,
+            loading: false,
+            bag,
+            error: null,
+            actionError: null,
+            savingClub: null,
+          }));
       } catch (err) {
         if (!cancelled) {
           const message = err instanceof Error ? err.message : t('my_bag_error');
-          setState({ loading: false, bag: null, error: message, actionError: null, savingClub: null });
+          setState((prev) => ({
+            ...prev,
+            loading: false,
+            bag: null,
+            error: message,
+            actionError: null,
+            savingClub: null,
+          }));
         }
       }
     })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    fetchBagStats()
+      .then((stats) => {
+        if (!cancelled)
+          setState((prev) => ({
+            ...prev,
+            bagStats: stats,
+          }));
+      })
+      .catch((err) => {
+        console.warn('[bagStats] failed to load bag stats for bag screen', err);
+        if (!cancelled)
+          setState((prev) => ({
+            ...prev,
+            bagStats: null,
+          }));
+      });
+
     return () => {
       cancelled = true;
     };
@@ -251,10 +327,12 @@ export default function MyBagScreen({}: Props): JSX.Element {
     }
   };
 
-  const groups = useMemo(
-    () => groupClubs(state.bag?.clubs ?? []),
-    [state.bag?.clubs],
+  const clubsWithStats = useMemo(
+    () => attachStats(state.bag?.clubs ?? [], state.bagStats),
+    [state.bag?.clubs, state.bagStats],
   );
+
+  const groups = useMemo(() => groupClubs(clubsWithStats), [clubsWithStats]);
 
   if (state.loading) {
     return (
@@ -348,6 +426,16 @@ const styles = StyleSheet.create({
     color: '#312e81',
     fontWeight: '700',
   },
+  autoRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+    paddingVertical: 4,
+  },
+  autoLabel: { color: '#0f172a', fontWeight: '700' },
+  autoCarry: { fontWeight: '700', color: '#0ea5e9', fontSize: 16 },
+  autoHint: { color: '#6b7280' },
   inputGroup: { gap: 6 },
   inputLabel: { color: '#0f172a', fontWeight: '600' },
   input: {
