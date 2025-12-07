@@ -12,6 +12,8 @@ import type { CaddieDecision } from '@app/caddie/CaddieDecision';
 import type { HoleCaddieTargets } from '@shared/round/autoHoleCore';
 import type { BagClubStatsMap, DistanceSource } from '@shared/caddie/bagStats';
 import { MIN_AUTOCALIBRATED_SAMPLES, shouldUseBagStat } from '@shared/caddie/bagStats';
+import type { BagReadinessOverview, ClubReadinessLevel } from '@shared/caddie/bagReadiness';
+import { getClubReadiness } from '@shared/caddie/bagReadiness';
 
 export interface CaddieConditions {
   targetDistanceM: number;
@@ -29,6 +31,7 @@ export interface CaddieClubCandidate {
   distanceSource: DistanceSource;
   sampleCount?: number;
   minSamples?: number;
+  readiness?: ClubReadinessLevel;
 }
 
 export interface CaddieDecisionContext {
@@ -37,6 +40,7 @@ export interface CaddieDecisionContext {
   settings: CaddieSettings;
   clubs: CaddieClubCandidate[];
   shotShapeProfile: ShotShapeProfile;
+  bagReadinessOverview?: BagReadinessOverview | null;
 }
 
 export interface CaddieDecisionOutput {
@@ -51,16 +55,42 @@ export interface CaddieDecisionOutput {
   sampleCount?: number;
   minSamples?: number;
   risk: ShotShapeRiskSummary;
+  clubReadiness?: ClubReadinessLevel;
 }
 
 function candidateSampleCount(candidate: CaddieClubCandidate): number {
   return candidate.sampleCount ?? candidate.samples ?? 0;
 }
 
-function compareCandidates(a: CaddieClubCandidate & { effectiveCarryM: number }, b: CaddieClubCandidate & { effectiveCarryM: number }): number {
-  if (a.effectiveCarryM !== b.effectiveCarryM) {
-    return a.effectiveCarryM - b.effectiveCarryM;
+function readinessRank(level: ClubReadinessLevel | undefined): number {
+  switch (level) {
+    case 'excellent':
+      return 3;
+    case 'ok':
+      return 2;
+    case 'poor':
+      return 1;
+    case 'unknown':
+    default:
+      return 0;
   }
+}
+
+// Slight readiness bias: when distance is effectively tied, lean toward better calibrated data.
+function compareCandidates(
+  a: CaddieClubCandidate & { effectiveCarryM: number },
+  b: CaddieClubCandidate & { effectiveCarryM: number },
+): number {
+  if (a.effectiveCarryM !== b.effectiveCarryM) {
+    const diff = a.effectiveCarryM - b.effectiveCarryM;
+    if (Math.abs(diff) <= 2) {
+      const readinessDelta = readinessRank(b.readiness) - readinessRank(a.readiness);
+      if (readinessDelta !== 0) return readinessDelta;
+    }
+    return diff;
+  }
+  const readinessDelta = readinessRank(b.readiness) - readinessRank(a.readiness);
+  if (readinessDelta !== 0) return readinessDelta;
   const sampleDiff = candidateSampleCount(b) - candidateSampleCount(a);
   if (sampleDiff !== 0) return sampleDiff;
   return a.club.localeCompare(b.club);
@@ -94,7 +124,11 @@ export function chooseClubForTargetDistance(
 
   const effectiveTarget = targetDistanceM + safetyBufferM;
   const withCarry = clubStats
-    .map((club) => ({ ...club, effectiveCarryM: getEffectiveCarryM(club) }))
+    .map((club) => ({
+      ...club,
+      readiness: club.readiness,
+      effectiveCarryM: getEffectiveCarryM(club),
+    }))
     .filter((club) => Number.isFinite(club.effectiveCarryM) && club.effectiveCarryM > 0);
 
   if (!withCarry.length) return null;
@@ -107,7 +141,7 @@ export function chooseClubForTargetDistance(
     return [...covering].sort(compareCandidates)[0];
   }
 
-  const fallback = [...shortList].sort((a, b) => compareCandidates(a, b))[shortList.length - 1];
+  const fallback = [...shortList].sort((a, b) => compareCandidates(b, a))[0];
   return fallback ?? null;
 }
 
@@ -125,8 +159,29 @@ export function buildCaddieDecisionFromContext(
     elevationDeltaM: ctx.conditions.elevationDeltaM,
   });
 
-  const selected = chooseClubForTargetDistance(playsLike.effectiveDistanceM, safetyBufferM, ctx.clubs);
+  const clubsWithReadiness = ctx.clubs.map((club) =>
+    club.readiness || ctx.bagReadinessOverview
+      ? { ...club, readiness: club.readiness ?? getClubReadiness(club.club, ctx.bagReadinessOverview) }
+      : club,
+  );
+
+  let selected = chooseClubForTargetDistance(playsLike.effectiveDistanceM, safetyBufferM, clubsWithReadiness);
   if (!selected) return null;
+
+  if (ctx.bagReadinessOverview) {
+    const comparable = clubsWithReadiness
+      .filter((club) => club.club !== selected?.club)
+      .filter((club) => Math.abs(getEffectiveCarryM(club) - selected.effectiveCarryM) <= 2)
+      .sort((a, b) => readinessRank(b.readiness) - readinessRank(a.readiness));
+
+    const preferred = comparable.find(
+      (club) => readinessRank(club.readiness) > readinessRank(selected?.readiness),
+    );
+
+    if (preferred) {
+      selected = { ...preferred, effectiveCarryM: getEffectiveCarryM(preferred) };
+    }
+  }
 
   const effectiveCarryM = getEffectiveCarryM(selected);
   const risk = computeRiskZonesFromProfile(ctx.shotShapeProfile);
@@ -147,6 +202,7 @@ export function buildCaddieDecisionFromContext(
     sampleCount: selected.sampleCount ?? samples,
     minSamples: selected.minSamples,
     risk,
+    clubReadiness: selected.readiness,
   };
 }
 
@@ -207,6 +263,7 @@ export type TargetAwareCaddieDecisionContext = {
   targets: HoleCaddieTargets | null;
   playerBag: PlayerBag | null;
   bagStats?: BagClubStatsMap | null;
+  bagReadinessOverview?: BagReadinessOverview | null;
   riskPreference: CaddieRiskPreference | RiskProfile | null;
   playsLikeDistanceFn: (
     flatDistanceM: number,
@@ -398,6 +455,9 @@ export function computeCaddieDecision(ctx: TargetAwareCaddieDecisionContext): Ca
   const recommendedCarry = recommendedClub
     ? getClubCarryDetails(recommendedClub, ctx.bagStats)
     : null;
+  const recommendedReadiness = recommendedClubId
+    ? getClubReadiness(recommendedClubId, ctx.bagReadinessOverview)
+    : undefined;
 
   return {
     holeNumber: ctx.holeNumber,
@@ -409,6 +469,7 @@ export function computeCaddieDecision(ctx: TargetAwareCaddieDecisionContext): Ca
     recommendedClubDistanceSource: recommendedCarry?.distanceSource,
     recommendedClubSampleCount: recommendedCarry?.sampleCount ?? null,
     recommendedClubMinSamples: recommendedCarry?.minSamples ?? null,
+    recommendedClubReadiness: recommendedReadiness,
     explanation: buildExplanation({
       strategy,
       targetDistance: targetDistanceM,

@@ -7,6 +7,7 @@ import * as distanceClient from '@app/api/clubDistanceClient';
 import * as caddieApi from '@app/api/caddieApi';
 import * as bagStatsClient from '@app/api/bagStatsClient';
 import * as bagClient from '@app/api/bagClient';
+import * as caddieDecisionEngine from '@app/caddie/CaddieDecisionEngine';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { RootStackParamList } from '@app/navigation/types';
 import * as settingsStorage from '@app/caddie/caddieSettingsStorage';
@@ -50,6 +51,7 @@ describe('CaddieApproachScreen', () => {
     vi.mocked(caddieApi.fetchShotShapeProfile).mockReset();
     vi.mocked(bagStatsClient.fetchBagStats).mockReset();
     vi.mocked(bagClient.fetchPlayerBag).mockReset();
+    vi.mocked(distanceClient.fetchClubDistances).mockResolvedValue([]);
     vi.mocked(settingsStorage.loadCaddieSettings).mockResolvedValue({
       stockShape: 'straight',
       riskProfile: 'normal',
@@ -341,6 +343,66 @@ describe('CaddieApproachScreen', () => {
     expect(labelNode.textContent).toContain(label);
   });
 
+  it('passes bag readiness into the decision context', async () => {
+    const spy = vi.spyOn(caddieDecisionEngine, 'buildCaddieDecisionFromContext');
+    vi.mocked(distanceClient.fetchClubDistances).mockResolvedValue([
+      {
+        club: '8i',
+        baselineCarryM: 148,
+        samples: 6,
+        source: 'auto',
+        carryStdM: 4,
+        lastUpdated: '2024-01-01T00:00:00Z',
+      },
+    ]);
+    vi.mocked(bagStatsClient.fetchBagStats).mockResolvedValue({});
+    vi.mocked(caddieApi.fetchShotShapeProfile).mockResolvedValue({
+      club: '8i',
+      intent: 'straight',
+      coreCarryMeanM: 148,
+      coreCarryStdM: 6,
+      coreSideMeanM: 0,
+      coreSideStdM: 5,
+      tailLeftProb: 0.03,
+      tailRightProb: 0.01,
+    });
+
+    render(<CaddieApproachScreen navigation={createNavigation()} route={createRoute()} />);
+
+    await waitFor(() => expect(spy).toHaveBeenCalled());
+    expect(spy.mock.calls[0][0]).toEqual(expect.objectContaining({ bagReadinessOverview: expect.any(Object) }));
+
+    spy.mockRestore();
+  });
+
+  it('shows readiness hints when club data is limited', async () => {
+    vi.mocked(distanceClient.fetchClubDistances).mockResolvedValue([
+      {
+        club: '8i',
+        baselineCarryM: 148,
+        samples: 6,
+        source: 'auto',
+        carryStdM: 4,
+        lastUpdated: '2024-01-01T00:00:00Z',
+      },
+    ]);
+    vi.mocked(bagStatsClient.fetchBagStats).mockResolvedValue({});
+    vi.mocked(caddieApi.fetchShotShapeProfile).mockResolvedValue({
+      club: '8i',
+      intent: 'straight',
+      coreCarryMeanM: 148,
+      coreCarryStdM: 6,
+      coreSideMeanM: 0,
+      coreSideStdM: 5,
+      tailLeftProb: 0.03,
+      tailRightProb: 0.01,
+    });
+
+    render(<CaddieApproachScreen navigation={createNavigation()} route={createRoute()} />);
+
+    expect(await screen.findByTestId('caddie-readiness-hint')).toBeInTheDocument();
+  });
+
   it('shows bag readiness hint for low readiness and navigates', async () => {
     vi.mocked(bagStatsClient.fetchBagStats).mockResolvedValueOnce({});
     const navigation = createNavigation();
@@ -351,7 +413,7 @@ describe('CaddieApproachScreen', () => {
     expect(hint).toBeInTheDocument();
     expect(screen.getByText('Bag readiness')).toBeInTheDocument();
 
-    fireEvent.press(hint);
+    fireEvent.click(hint);
     expect(navigation.navigate).toHaveBeenCalledWith('MyBag');
   });
 

@@ -419,6 +419,11 @@ export const en = {
       tail_left: 'Rare big miss left: ~{{percent}}% of shots.',
       tail_right: 'Rare big miss right: ~{{percent}}% of shots.',
       low_samples: 'Low on-course sample size for this club. Distances will improve as you log more shots.',
+      readiness_hint: {
+        limited: 'Limited data for this club – consider tuning your bag in My Bag.',
+        ok: 'Data is still stabilizing for this club. Log a few more shots for a sharper pick.',
+        preferred: 'Chose this club over similar options because its data is more reliable.',
+      },
       screen_title: 'Caddie recommendation',
       target_label: 'Target distance (m)',
       wind_label: 'Wind speed (m/s)',

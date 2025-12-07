@@ -1,4 +1,5 @@
 import type { DistanceSource } from '@shared/caddie/bagStats';
+import type { ClubReadinessLevel } from '@shared/caddie/bagReadiness';
 
 export type CaddieStrategyType = 'attack' | 'layup';
 
@@ -12,5 +13,6 @@ export type CaddieDecision = {
   recommendedClubDistanceSource?: DistanceSource | null;
   recommendedClubSampleCount?: number | null;
   recommendedClubMinSamples?: number | null;
+  recommendedClubReadiness?: ClubReadinessLevel;
   explanation: string;
 };

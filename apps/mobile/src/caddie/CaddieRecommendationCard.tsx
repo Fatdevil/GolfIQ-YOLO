@@ -43,6 +43,16 @@ export function CaddieRecommendationCard({ decision, settings }: CaddieRecommend
   const tailRight = decision.risk.tailRightProb > 0.01;
   const lowSamples =
     (decision.sampleCount ?? decision.samples ?? 0) < (decision.minSamples ?? MIN_AUTOCALIBRATED_SAMPLES);
+  const readinessHint =
+    decision.clubReadiness === 'poor' || decision.clubReadiness === 'unknown'
+      ? t('caddie.decision.readiness_hint.limited')
+      : decision.clubReadiness === 'ok'
+        ? t('caddie.decision.readiness_hint.ok')
+        : null;
+  const readinessPreference =
+    decision.clubReadiness && decision.clubReadiness !== 'excellent'
+      ? t('caddie.decision.readiness_hint.preferred')
+      : null;
   const profileHint =
     settings.riskProfile === 'safe'
       ? t('caddie.decision.profile_safe_hint')
@@ -79,6 +89,12 @@ export function CaddieRecommendationCard({ decision, settings }: CaddieRecommend
       ) : null}
 
       {lowSamples ? <Text style={styles.helper}>{t('caddie.decision.low_samples')}</Text> : null}
+      {readinessHint ? (
+        <Text style={styles.helper} testID="caddie-readiness-hint">
+          {readinessHint}
+        </Text>
+      ) : null}
+      {readinessPreference ? <Text style={styles.helper}>{readinessPreference}</Text> : null}
     </View>
   );
 }

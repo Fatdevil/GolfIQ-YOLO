@@ -2,7 +2,11 @@ import { describe, expect, it } from 'vitest';
 
 import type { PlayerBag } from '@shared/caddie/playerBag';
 import { MIN_AUTOCALIBRATED_SAMPLES, type BagClubStatsMap } from '@shared/caddie/bagStats';
-import { buildBagReadinessOverview, computeBagReadiness } from '@shared/caddie/bagReadiness';
+import {
+  buildBagReadinessOverview,
+  computeBagReadiness,
+  getClubReadiness,
+} from '@shared/caddie/bagReadiness';
 
 const baseBag: PlayerBag = {
   clubs: [
@@ -96,5 +100,20 @@ describe('computeBagReadiness', () => {
 
     expect(overview.readiness.score).toBeGreaterThanOrEqual(95);
     expect(overview.suggestions.length).toBe(0);
+  });
+
+  it('maps per-club readiness levels from the overview', () => {
+    const stats: BagClubStatsMap = {
+      '9i': { clubId: '9i', meanDistanceM: 120, sampleCount: MIN_AUTOCALIBRATED_SAMPLES + 5 },
+      '7i': { clubId: '7i', meanDistanceM: 140, sampleCount: 2 },
+    };
+
+    const overview = buildBagReadinessOverview(baseBag, stats);
+
+    expect(getClubReadiness('9i', overview)).toBe('excellent');
+    expect(getClubReadiness('7i', overview)).toBe('ok');
+    expect(getClubReadiness('5i', overview)).toBe('poor');
+    expect(getClubReadiness('lob', overview)).toBe('unknown');
+    expect(getClubReadiness('7i', null)).toBe('unknown');
   });
 });

@@ -1,4 +1,4 @@
-import { analyzeBagGaps } from './bagGapInsights';
+import { analyzeBagGaps, type ClubDataStatusById } from './bagGapInsights';
 import type { BagClubStatsMap } from './bagStats';
 import type { PlayerBag } from './playerBag';
 import { buildBagTuningSuggestions, type BagSuggestion } from './bagTuningSuggestions';
@@ -19,6 +19,7 @@ export interface BagReadiness {
 export interface BagReadinessOverview {
   readiness: BagReadiness;
   suggestions: BagSuggestion[];
+  dataStatusByClubId: ClubDataStatusById;
 }
 
 function clampScore(score: number): number {
@@ -95,11 +96,29 @@ export function buildBagReadinessOverview(
   bag: PlayerBag,
   statsByClubId: BagClubStatsMap,
 ): BagReadinessOverview {
+  const { dataStatusByClubId } = analyzeBagGaps(bag, statsByClubId);
   const readiness = computeBagReadiness(bag, statsByClubId);
   const { suggestions } = buildBagTuningSuggestions(bag, statsByClubId);
 
   return {
     readiness,
     suggestions,
+    dataStatusByClubId,
   };
+}
+
+export type ClubReadinessLevel = 'excellent' | 'ok' | 'poor' | 'unknown';
+
+export function getClubReadiness(
+  clubId: string,
+  overview: BagReadinessOverview | null | undefined,
+): ClubReadinessLevel {
+  if (!overview) return 'unknown';
+  const status = overview.dataStatusByClubId?.[clubId];
+
+  if (status === 'auto_calibrated') return 'excellent';
+  if (status === 'needs_more_samples') return 'ok';
+  if (status === 'no_data') return 'poor';
+
+  return 'unknown';
 }
