@@ -264,25 +264,25 @@ export default function MyBagScreen({}: Props): JSX.Element {
       try {
         const bag = await fetchPlayerBag();
         if (!cancelled)
-          setState({
+          setState((prev) => ({
+            ...prev,
             loading: false,
             bag,
-            bagStats: null,
             error: null,
             actionError: null,
             savingClub: null,
-          });
+          }));
       } catch (err) {
         if (!cancelled) {
           const message = err instanceof Error ? err.message : t('my_bag_error');
-          setState({
+          setState((prev) => ({
+            ...prev,
             loading: false,
             bag: null,
-            bagStats: null,
             error: message,
             actionError: null,
             savingClub: null,
-          });
+          }));
         }
       }
     })();

@@ -107,6 +107,31 @@ describe('MyBagScreen', () => {
     expect(driverCard.getByText('245 m')).toBeTruthy();
   });
 
+  it('preserves bag stats when bag fetch resolves after stats', async () => {
+    let resolveBag!: (value: typeof sampleBag) => void;
+    const deferredBag = new Promise<typeof sampleBag>((resolve) => {
+      resolveBag = resolve;
+    });
+
+    mockFetchBag.mockReturnValueOnce(deferredBag);
+    mockFetchBagStats.mockResolvedValueOnce(sampleBagStats);
+
+    const { getByTestId } = render(
+      <MyBagScreen navigation={navigation} route={undefined as any} />,
+    );
+
+    await waitFor(() => expect(mockFetchBagStats).toHaveBeenCalled());
+
+    resolveBag(sampleBag);
+
+    await waitFor(() => getByTestId('club-card-driver'));
+
+    const driverCard = within(getByTestId('club-card-driver'));
+
+    expect(driverCard.getByText('Auto-calibrated · 12 shots')).toBeTruthy();
+    expect(driverCard.getByText('245 m')).toBeTruthy();
+  });
+
   it('prompts for more samples when stats are below the threshold', async () => {
     mockFetchBagStats.mockResolvedValueOnce({
       driver: sampleBagStats.driver,
