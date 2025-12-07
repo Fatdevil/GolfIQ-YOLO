@@ -36,6 +36,16 @@ export interface Shot {
 export type FairwayResult = 'hit' | 'left' | 'right' | 'long' | 'short';
 export type PuttDistanceBucket = '0_1m' | '1_3m' | '3_10m' | '10m_plus';
 
+export type CaddieDecisionTelemetry = {
+  strategy?: 'attack' | 'layup';
+  targetType?: 'green' | 'layup';
+  recommendedClubId?: string | null;
+  targetDistanceM?: number | null;
+  followed?: boolean | null;
+  resultingScore?: number | null;
+  notes?: string | null;
+};
+
 export interface HoleScore {
   holeNumber: number;
   par?: number | null;
@@ -46,7 +56,10 @@ export interface HoleScore {
   fairwayResult?: FairwayResult | null;
   gir?: boolean | null;
   firstPuttDistanceBucket?: PuttDistanceBucket | null;
+  caddieDecision?: CaddieDecisionTelemetry;
 }
+
+export type HoleUpdate = Partial<HoleScore> & { caddieDecision?: CaddieDecisionTelemetry };
 
 export interface RoundScores {
   roundId: string;
@@ -109,6 +122,12 @@ export type RoundRecap = {
     putting?: RoundRecapCategory;
   };
   focusHints: string[];
+  caddieSummary?: {
+    totalDecisions: number;
+    followedDecisions: number;
+    followRate?: number | null;
+    notes: string[];
+  } | null;
 };
 
 export interface RoundInfo {
@@ -192,7 +211,7 @@ export async function getRoundScores(roundId: string): Promise<RoundScores> {
 export async function updateHoleScore(
   roundId: string,
   holeNumber: number,
-  payload: Partial<HoleScore>,
+  payload: HoleUpdate,
 ): Promise<RoundScores> {
   const response = await apiFetch<RoundScores>(`/api/rounds/${roundId}/scores/${holeNumber}`, {
     method: 'PUT',

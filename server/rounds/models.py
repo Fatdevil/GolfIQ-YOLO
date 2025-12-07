@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from enum import Enum
 from pathlib import Path
-from typing import Dict, Optional
+from typing import Dict, Literal, Optional
 
 from pydantic import AliasChoices, BaseModel, ConfigDict, Field
 
@@ -22,6 +22,34 @@ class PuttDistanceBucket(str, Enum):
     ONE_TO_THREE = "1_3m"
     THREE_TO_TEN = "3_10m"
     TEN_PLUS = "10m_plus"
+
+
+class CaddieDecisionTelemetry(BaseModel):
+    strategy: Literal["attack", "layup"] | None = None
+    target_type: Literal["green", "layup"] | None = Field(
+        default=None,
+        serialization_alias="targetType",
+        validation_alias=AliasChoices("target_type", "targetType"),
+    )
+    recommended_club_id: str | None = Field(
+        default=None,
+        serialization_alias="recommendedClubId",
+        validation_alias=AliasChoices("recommended_club_id", "recommendedClubId"),
+    )
+    target_distance_m: float | None = Field(
+        default=None,
+        serialization_alias="targetDistanceM",
+        validation_alias=AliasChoices("target_distance_m", "targetDistanceM"),
+    )
+    followed: bool | None = None
+    resulting_score: int | None = Field(
+        default=None,
+        serialization_alias="resultingScore",
+        validation_alias=AliasChoices("resulting_score", "resultingScore"),
+    )
+    notes: str | None = None
+
+    model_config = ConfigDict(populate_by_name=True)
 
 
 class Round(BaseModel):
@@ -141,6 +169,11 @@ class HoleScore(BaseModel):
         validation_alias=AliasChoices(
             "first_putt_distance_bucket", "firstPuttDistanceBucket"
         ),
+    )
+    caddie_decision: CaddieDecisionTelemetry | None = Field(
+        default=None,
+        serialization_alias="caddieDecision",
+        validation_alias=AliasChoices("caddie_decision", "caddieDecision"),
     )
 
     model_config = ConfigDict(populate_by_name=True)
