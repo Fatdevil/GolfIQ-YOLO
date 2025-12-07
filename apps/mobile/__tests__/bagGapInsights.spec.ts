@@ -7,7 +7,7 @@ import {
   OVERLAP_MAX,
   analyzeBagGaps,
   computeClubDataStatusMap,
-} from '@app/caddie/bagGapInsights';
+} from '@shared/caddie/bagGapInsights';
 
 const baseBag: PlayerBag = {
   clubs: [
