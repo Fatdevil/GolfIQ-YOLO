@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import CaddieApproachScreen from '@app/screens/CaddieApproachScreen';
 import * as distanceClient from '@app/api/clubDistanceClient';
 import * as caddieApi from '@app/api/caddieApi';
+import * as bagStatsClient from '@app/api/bagStatsClient';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { RootStackParamList } from '@app/navigation/types';
 import * as settingsStorage from '@app/caddie/caddieSettingsStorage';
@@ -17,6 +18,9 @@ vi.mock('@app/api/clubDistanceClient', () => ({
 }));
 vi.mock('@app/api/caddieApi', () => ({
   fetchShotShapeProfile: vi.fn(),
+}));
+vi.mock('@app/api/bagStatsClient', () => ({
+  fetchBagStats: vi.fn(),
 }));
 vi.mock('@app/caddie/caddieSettingsStorage', () => ({
   loadCaddieSettings: vi.fn(),
@@ -40,10 +44,12 @@ describe('CaddieApproachScreen', () => {
   beforeEach(() => {
     vi.mocked(distanceClient.fetchClubDistances).mockReset();
     vi.mocked(caddieApi.fetchShotShapeProfile).mockReset();
+    vi.mocked(bagStatsClient.fetchBagStats).mockReset();
     vi.mocked(settingsStorage.loadCaddieSettings).mockResolvedValue({
       stockShape: 'straight',
       riskProfile: 'normal',
     });
+    vi.mocked(bagStatsClient.fetchBagStats).mockResolvedValue({});
     vi.mocked(caddieHudBridge.isCaddieHudAvailable).mockReturnValue(false);
     vi.mocked(caddieHudBridge.sendCaddieHudUpdate).mockReset();
     vi.mocked(caddieHudBridge.sendCaddieHudClear).mockReset();
@@ -87,7 +93,7 @@ describe('CaddieApproachScreen', () => {
 
     expect(await screen.findByTestId('caddie-recommendation-card')).toBeInTheDocument();
     expect(screen.getByText('7i · straight shot')).toBeInTheDocument();
-    expect(screen.getByText(/Plays like/)).toBeInTheDocument();
+    expect(screen.getByText(/Plays-like/)).toBeInTheDocument();
   });
 
   it('sends HUD updates when available', async () => {
@@ -163,5 +169,82 @@ describe('CaddieApproachScreen', () => {
       expect(caddieApi.fetchShotShapeProfile).toHaveBeenCalled();
     });
     expect(caddieHudBridge.sendCaddieHudUpdate).not.toHaveBeenCalled();
+  });
+
+  it('feeds calibrated candidates into the decision and card', async () => {
+    vi.mocked(distanceClient.fetchClubDistances).mockResolvedValue([
+      {
+        club: '7i',
+        baselineCarryM: 150,
+        samples: 6,
+        source: 'auto',
+        carryStdM: 5,
+        lastUpdated: '2024-01-01T00:00:00Z',
+      },
+      {
+        club: '6i',
+        baselineCarryM: 170,
+        samples: 6,
+        source: 'auto',
+        carryStdM: 5,
+        lastUpdated: '2024-01-01T00:00:00Z',
+      },
+    ]);
+    vi.mocked(bagStatsClient.fetchBagStats).mockResolvedValue({
+      '7i': { clubId: '7i', sampleCount: 8, meanDistanceM: 168, p20DistanceM: null, p80DistanceM: null },
+    });
+    vi.mocked(caddieApi.fetchShotShapeProfile).mockResolvedValue({
+      club: '7i',
+      intent: 'straight',
+      coreCarryMeanM: 168,
+      coreCarryStdM: 6,
+      coreSideMeanM: 0,
+      coreSideStdM: 5,
+      tailLeftProb: 0.03,
+      tailRightProb: 0.01,
+    });
+
+    render(<CaddieApproachScreen navigation={createNavigation()} route={createRoute()} />);
+
+    expect(await screen.findByTestId('caddie-recommendation-card')).toBeInTheDocument();
+    expect(screen.getByText('7i · straight shot')).toBeInTheDocument();
+    expect(screen.getByTestId('selected-club-hint').textContent).toContain('7i');
+  });
+
+  it('falls back to baseline carries when stats are missing', async () => {
+    vi.mocked(distanceClient.fetchClubDistances).mockResolvedValue([
+      {
+        club: '7i',
+        baselineCarryM: 150,
+        samples: 6,
+        source: 'auto',
+        carryStdM: 5,
+        lastUpdated: '2024-01-01T00:00:00Z',
+      },
+      {
+        club: '6i',
+        baselineCarryM: 170,
+        samples: 6,
+        source: 'auto',
+        carryStdM: 5,
+        lastUpdated: '2024-01-01T00:00:00Z',
+      },
+    ]);
+    vi.mocked(caddieApi.fetchShotShapeProfile).mockResolvedValue({
+      club: '6i',
+      intent: 'straight',
+      coreCarryMeanM: 170,
+      coreCarryStdM: 6,
+      coreSideMeanM: 0,
+      coreSideStdM: 5,
+      tailLeftProb: 0.03,
+      tailRightProb: 0.01,
+    });
+
+    render(<CaddieApproachScreen navigation={createNavigation()} route={createRoute()} />);
+
+    expect(await screen.findByTestId('caddie-recommendation-card')).toBeInTheDocument();
+    expect(screen.getByText('6i · straight shot')).toBeInTheDocument();
+    expect(screen.getByTestId('selected-club-hint').textContent).toContain('6i');
   });
 });

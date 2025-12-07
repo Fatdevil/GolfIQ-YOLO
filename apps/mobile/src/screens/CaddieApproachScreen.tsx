@@ -174,14 +174,15 @@ export default function CaddieApproachScreen({ navigation }: Props): JSX.Element
 
   const decision: CaddieDecisionOutput | null = useMemo(() => {
     if (!selectedClub || !profile) return null;
+    const clubsForDecision = calibratedCandidates.length ? calibratedCandidates : candidates;
     return buildCaddieDecisionFromContext({
       conditions,
       explicitIntent: intent,
       settings,
-      clubs: candidates,
+      clubs: clubsForDecision,
       shotShapeProfile: profile,
     });
-  }, [candidates, conditions, intent, profile, selectedClub, settings]);
+  }, [calibratedCandidates, candidates, conditions, intent, profile, selectedClub, settings]);
 
   useEffect(() => {
     if (!isCaddieHudAvailable()) return;

@@ -38,7 +38,9 @@ def _shot_distance_m(shot: Shot) -> float | None:
         return compute_baseline_carry(shot)
     except Exception:
         try:
-            return haversine_m(shot.start_lat, shot.start_lon, shot.end_lat, shot.end_lon)
+            return haversine_m(
+                shot.start_lat, shot.start_lon, shot.end_lat, shot.end_lon
+            )
         except Exception:
             return None
 

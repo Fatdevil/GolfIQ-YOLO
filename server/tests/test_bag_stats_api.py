@@ -1,8 +1,9 @@
-
 def test_bag_stats_endpoint(round_client):
     client, _, rounds = round_client
     player_id = "test-user"
-    rnd = rounds.start_round(player_id=player_id, course_id=None, tee_name=None, holes=9, start_hole=1)
+    rnd = rounds.start_round(
+        player_id=player_id, course_id=None, tee_name=None, holes=9, start_hole=1
+    )
 
     def _append(distance_m: float):
         delta = distance_m / 111_111
