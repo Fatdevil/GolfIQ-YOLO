@@ -23,6 +23,12 @@ import { t } from '@app/i18n';
 import type { RootStackParamList } from '@app/navigation/types';
 import { MIN_AUTOCALIBRATED_SAMPLES, shouldUseBagStat } from '@shared/caddie/bagStats';
 import type { BagClubStats, BagClubStatsMap } from '@shared/caddie/bagStats';
+import {
+  analyzeBagGaps,
+  computeClubDataStatusMap,
+  type ClubDataStatus,
+} from '@app/caddie/bagGapInsights';
+import { formatDistance } from '@app/utils/distance';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'MyBag'>;
 
@@ -41,12 +47,13 @@ type ClubCardProps = {
   club: ClubWithStats;
   onUpdate: (update: ClubUpdate) => Promise<void>;
   isSaving: boolean;
+  status?: ClubDataStatus;
 };
 
 function formatCarryLabel(club: ClubDistance): string {
   const source = club.manualAvgCarryM ?? club.avgCarryM;
   if (source == null) return t('my_bag_not_calibrated');
-  return `${Math.round(source)} m`;
+  return formatDistance(source, { withUnit: true });
 }
 
 function formatSampleLabel(club: ClubDistance): string {
@@ -56,7 +63,7 @@ function formatSampleLabel(club: ClubDistance): string {
   return t('my_bag_not_calibrated');
 }
 
-function ClubCard({ club, onUpdate, isSaving }: ClubCardProps): JSX.Element {
+function ClubCard({ club, onUpdate, isSaving, status }: ClubCardProps): JSX.Element {
   const [label, setLabel] = useState(club.label);
   const [manualInput, setManualInput] = useState(
     club.manualAvgCarryM != null
@@ -109,7 +116,7 @@ function ClubCard({ club, onUpdate, isSaving }: ClubCardProps): JSX.Element {
   };
 
   const autoCarryLabel = shouldUseBagStat(club.bagStat)
-    ? `${Math.round(club.bagStat.meanDistanceM)} m`
+    ? formatDistance(club.bagStat.meanDistanceM, { withUnit: true })
     : null;
 
   const autoHint = club.bagStat
@@ -158,6 +165,13 @@ function ClubCard({ club, onUpdate, isSaving }: ClubCardProps): JSX.Element {
         </View>
       ) : autoHint ? (
         <Text style={styles.autoHint}>{autoHint}</Text>
+      ) : null}
+
+      {status === 'needs_more_samples' && !autoCarryLabel && !autoHint ? (
+        <Text style={styles.autoHint}>{t('bag.insights.needs_more_samples')}</Text>
+      ) : null}
+      {status === 'no_data' ? (
+        <Text style={styles.autoHint}>{t('bag.insights.no_data')}</Text>
       ) : null}
 
       <View style={styles.inputGroup}>
@@ -332,6 +346,28 @@ export default function MyBagScreen({}: Props): JSX.Element {
     [state.bag?.clubs, state.bagStats],
   );
 
+  const gapAnalysis = useMemo(
+    () =>
+      state.bag && state.bagStats ? analyzeBagGaps(state.bag, state.bagStats) : { insights: [] },
+    [state.bag, state.bagStats],
+  );
+
+  const dataStatuses = useMemo(
+    () =>
+      state.bag && state.bagStats
+        ? computeClubDataStatusMap(state.bag, state.bagStats)
+        : {},
+    [state.bag, state.bagStats],
+  );
+
+  const clubLabels = useMemo(() => {
+    const labels: Record<string, string> = {};
+    state.bag?.clubs.forEach((club) => {
+      labels[club.clubId] = club.label;
+    });
+    return labels;
+  }, [state.bag?.clubs]);
+
   const groups = useMemo(() => groupClubs(clubsWithStats), [clubsWithStats]);
 
   if (state.loading) {
@@ -362,6 +398,28 @@ export default function MyBagScreen({}: Props): JSX.Element {
         <Text style={styles.infoBody}>{t('my_bag_calibration_hint')}</Text>
       </View>
 
+      {gapAnalysis.insights.length > 0 ? (
+        <View style={styles.infoCard} testID="bag-insights">
+          <Text style={styles.infoTitle}>{t('bag.insights.title')}</Text>
+          <View style={{ gap: 4 }}>
+            {gapAnalysis.insights.slice(0, 3).map((insight) => {
+              const distanceLabel = formatDistance(insight.gapDistance, { withUnit: true });
+              const lower = clubLabels[insight.lowerClubId] ?? insight.lowerClubId;
+              const upper = clubLabels[insight.upperClubId] ?? insight.upperClubId;
+              const label =
+                insight.type === 'large_gap'
+                  ? t('bag.insights.large_gap', { lower, upper, distance: distanceLabel })
+                  : t('bag.insights.overlap', { lower, upper, distance: distanceLabel });
+              return (
+                <Text key={`${insight.lowerClubId}-${insight.upperClubId}`} style={styles.infoBody}>
+                  {label}
+                </Text>
+              );
+            })}
+          </View>
+        </View>
+      ) : null}
+
       {groups.map((group) => (
         <View key={group.title} style={styles.group} testID={`group-${group.title}`}>
           <Text style={styles.groupTitle}>{group.title}</Text>
@@ -371,6 +429,7 @@ export default function MyBagScreen({}: Props): JSX.Element {
               club={club}
               onUpdate={handleUpdate}
               isSaving={state.savingClub === club.clubId}
+              status={dataStatuses[club.clubId]}
             />
           ))}
         </View>

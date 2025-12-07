@@ -562,6 +562,15 @@ export const en = {
   my_bag_entry_settings: 'Manage bag & distances',
   my_bag_entry_planner: 'Edit bag & club distances',
   my_bag_validation_error: 'Enter a valid carry distance in meters',
+  bag: {
+    insights: {
+      title: 'Bag insights',
+      large_gap: 'Large distance gap between {{lower}} and {{upper}} ({{distance}})',
+      overlap: '{{lower}} and {{upper}} carry almost the same distance ({{distance}} apart)',
+      needs_more_samples: 'Collect a few more shots to auto-calibrate',
+      no_data: 'No shot data yet – default carry in use',
+    },
+  },
 } as const;
 
 export type TranslationKeys = typeof en;
