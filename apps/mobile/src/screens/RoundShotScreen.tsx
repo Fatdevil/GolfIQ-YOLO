@@ -48,6 +48,9 @@ import {
 } from '@shared/round/autoHoleCore';
 import type { BagClubStatsMap } from '@shared/caddie/bagStats';
 import { formatDistanceSourceLabel } from '@app/caddie/distanceSourceLabels';
+import { t } from '@app/i18n';
+import { formatBagSuggestion } from '@app/caddie/formatBagSuggestion';
+import { buildBagReadinessOverview } from '@shared/caddie/bagReadiness';
 
 const CLUBS = ['D', '3W', '5W', '4i', '5i', '6i', '7i', '8i', '9i', 'PW', 'GW', 'SW'];
 
@@ -262,6 +265,36 @@ export default function RoundShotScreen({ navigation }: Props): JSX.Element {
     [startingHole, totalHoles],
   );
 
+  const clubLabels = useMemo(() => {
+    const labels: Record<string, string> = {};
+    playerBag?.clubs.forEach((club) => {
+      labels[club.clubId] = club.label;
+    });
+    return labels;
+  }, [playerBag?.clubs]);
+
+  const bagReadinessOverview = useMemo(() => {
+    if (!playerBag || !playerBag.clubs?.length) return null;
+    if (!bagStats) return null;
+    return buildBagReadinessOverview(playerBag, bagStats);
+  }, [bagStats, playerBag]);
+
+  const readinessSummary = useMemo(() => {
+    if (!bagReadinessOverview) return null;
+    return t('bag.readinessSummary.base', {
+      calibrated: bagReadinessOverview.readiness.calibratedClubs,
+      total: bagReadinessOverview.readiness.totalClubs,
+    });
+  }, [bagReadinessOverview]);
+
+  const readinessSuggestion = useMemo(() => {
+    if (!bagReadinessOverview?.suggestions.length) return null;
+    return formatBagSuggestion(bagReadinessOverview.suggestions[0], clubLabels);
+  }, [bagReadinessOverview?.suggestions, clubLabels]);
+
+  const showBagReadinessHint =
+    bagReadinessOverview != null && bagReadinessOverview.readiness.grade !== 'excellent';
+
   const autoHoleSuggestion = useMemo(() => {
     if (!geo.supported) {
       return { suggestedHole: null, distanceToSuggestedM: null, confidence: 'low' };
@@ -389,6 +422,10 @@ export default function RoundShotScreen({ navigation }: Props): JSX.Element {
   );
 
   const fairwayApplicable = currentScore.par === 4 || currentScore.par === 5;
+
+  const handleOpenMyBag = useCallback(() => {
+    navigation.navigate('MyBag');
+  }, [navigation]);
 
   const handleLogShot = useCallback(async () => {
     if (!state) return;
@@ -527,6 +564,28 @@ export default function RoundShotScreen({ navigation }: Props): JSX.Element {
       </View>
 
       {bagLoading && <Text style={styles.muted}>Loading bag distances…</Text>}
+
+      {showBagReadinessHint && bagReadinessOverview ? (
+        <TouchableOpacity
+          style={styles.readinessBanner}
+          onPress={handleOpenMyBag}
+          accessibilityRole="button"
+          testID="bag-readiness-hint"
+        >
+          <View style={styles.readinessHeader}>
+            <Text style={styles.readinessLabel}>{t('bag.readinessTitle')}</Text>
+            <Text style={styles.readinessGrade}>
+              {t(`bag.readinessGrade.${bagReadinessOverview.readiness.grade}`)}
+            </Text>
+          </View>
+          {readinessSummary ? <Text style={styles.readinessSummary}>{readinessSummary}</Text> : null}
+          {readinessSuggestion ? (
+            <Text style={styles.readinessSuggestion} numberOfLines={1}>
+              {t('bag.readinessTileSuggestionPrefix')} {readinessSuggestion}
+            </Text>
+          ) : null}
+        </TouchableOpacity>
+      ) : null}
 
       {caddieDecision && (
         <View style={styles.caddiePanel} testID="caddie-decision">
@@ -902,6 +961,23 @@ const styles = StyleSheet.create({
     padding: 12,
     gap: 4,
   },
+  readinessBanner: {
+    borderWidth: 1,
+    borderColor: '#fde68a',
+    backgroundColor: '#fef9c3',
+    borderRadius: 12,
+    padding: 12,
+    gap: 6,
+  },
+  readinessHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  readinessLabel: { fontWeight: '800', color: '#92400e' },
+  readinessGrade: { color: '#b45309', fontWeight: '700' },
+  readinessSummary: { color: '#78350f' },
+  readinessSuggestion: { color: '#92400e', fontWeight: '600' },
   caddieHeadline: {
     fontWeight: '800',
     fontSize: 16,

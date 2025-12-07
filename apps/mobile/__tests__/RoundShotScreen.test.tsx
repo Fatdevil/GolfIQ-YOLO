@@ -6,6 +6,7 @@ import RoundShotScreen from '@app/screens/RoundShotScreen';
 import { appendShot, endRound, getRoundScores, updateHoleScore } from '@app/api/roundClient';
 import { fetchCourseLayout } from '@app/api/courseClient';
 import { fetchPlayerBag } from '@app/api/bagClient';
+import { fetchBagStats } from '@app/api/bagStatsClient';
 import { computeCaddieDecision } from '@app/caddie/CaddieDecisionEngine';
 import { computeHoleCaddieTargets } from '@shared/round/autoHoleCore';
 import { loadActiveRoundState, saveActiveRoundState } from '@app/round/roundState';
@@ -15,6 +16,7 @@ import { loadCaddieSettings } from '@app/caddie/caddieSettingsStorage';
 vi.mock('@app/api/roundClient');
 vi.mock('@app/api/courseClient');
 vi.mock('@app/api/bagClient');
+vi.mock('@app/api/bagStatsClient');
 vi.mock('@app/caddie/CaddieDecisionEngine');
 vi.mock('@shared/round/autoHoleCore');
 vi.mock('@app/round/roundState');
@@ -25,6 +27,7 @@ const mockUpdateHoleScore = updateHoleScore as unknown as Mock;
 const mockGetRoundScores = getRoundScores as unknown as Mock;
 const mockFetchCourseLayout = fetchCourseLayout as unknown as Mock;
 const mockFetchPlayerBag = fetchPlayerBag as unknown as Mock;
+const mockFetchBagStats = fetchBagStats as unknown as Mock;
 const mockComputeCaddieDecision = computeCaddieDecision as unknown as Mock;
 const mockComputeHoleCaddieTargets = computeHoleCaddieTargets as unknown as Mock;
 const mockLoadActiveRoundState = loadActiveRoundState as unknown as Mock;
@@ -74,6 +77,9 @@ describe('RoundShotScreen', () => {
     });
     mockFetchCourseLayout.mockResolvedValue({ holes: [{ number: 1, par: 4, yardage_m: 350 }] });
     mockFetchPlayerBag.mockResolvedValue({ clubs: [{ clubId: '7i', label: '7 Iron' }] });
+    mockFetchBagStats.mockResolvedValue({
+      '7i': { clubId: '7i', sampleCount: 12, meanDistanceM: 150, p20DistanceM: null, p80DistanceM: null },
+    });
     mockComputeCaddieDecision.mockReturnValue(sampleDecision);
     mockComputeHoleCaddieTargets.mockReturnValue({ green: { carryDistanceM: 150 }, layup: null });
     mockUseGeolocation.mockReturnValue({ supported: false, position: null, error: null, loading: false });
@@ -141,5 +147,63 @@ describe('RoundShotScreen', () => {
     const caption = queryByText((content) => content.includes(expectedText));
     expect(captionNode).toBeTruthy();
     expect(caption).toBeTruthy();
+  });
+
+  it('shows readiness hint and navigates to My Bag for low readiness', async () => {
+    mockFetchPlayerBag.mockResolvedValueOnce({
+      clubs: [
+        { clubId: '7i', label: '7 Iron' },
+        { clubId: '9i', label: '9 Iron' },
+      ],
+    });
+    mockFetchBagStats.mockResolvedValueOnce({});
+
+    const navigation = { navigate: vi.fn() } as any;
+    const { findByTestId, getByText } = render(
+      <RoundShotScreen navigation={navigation} route={{ params: { roundId: 'round-1' } } as any} />,
+    );
+
+    const hint = await findByTestId('bag-readiness-hint');
+
+    expect(hint).toBeTruthy();
+    expect(getByText('Bag readiness')).toBeTruthy();
+    expect(getByText(/Needs work|Okay/)).toBeTruthy();
+
+    fireEvent.press(hint);
+    expect(navigation.navigate).toHaveBeenCalledWith('MyBag');
+  });
+
+  it('hides readiness hint for excellent readiness', async () => {
+    mockFetchPlayerBag.mockResolvedValueOnce({
+      clubs: [
+        { clubId: '7i', label: '7 Iron' },
+        { clubId: '9i', label: '9 Iron' },
+      ],
+    });
+    mockFetchBagStats.mockResolvedValueOnce({
+      '7i': { clubId: '7i', sampleCount: 20, meanDistanceM: 150, p20DistanceM: null, p80DistanceM: null },
+      '9i': { clubId: '9i', sampleCount: 20, meanDistanceM: 130, p20DistanceM: null, p80DistanceM: null },
+    });
+
+    const navigation = { navigate: vi.fn() } as any;
+    const { queryByTestId } = render(
+      <RoundShotScreen navigation={navigation} route={{ params: { roundId: 'round-1' } } as any} />,
+    );
+
+    await waitFor(() => expect(mockFetchBagStats).toHaveBeenCalled());
+    expect(queryByTestId('bag-readiness-hint')).toBeNull();
+  });
+
+  it('hides readiness hint when bag is missing', async () => {
+    mockFetchPlayerBag.mockResolvedValueOnce(null);
+    mockFetchBagStats.mockResolvedValueOnce(null);
+
+    const navigation = { navigate: vi.fn() } as any;
+    const { queryByTestId } = render(
+      <RoundShotScreen navigation={navigation} route={{ params: { roundId: 'round-1' } } as any} />,
+    );
+
+    await waitFor(() => expect(mockFetchPlayerBag).toHaveBeenCalled());
+    expect(queryByTestId('bag-readiness-hint')).toBeNull();
   });
 });
