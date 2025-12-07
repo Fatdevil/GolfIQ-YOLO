@@ -40,11 +40,13 @@ import {
 import { computeCaddieDecision, normalizeRiskPreference } from '@app/caddie/CaddieDecisionEngine';
 import type { CaddieDecision } from '@app/caddie/CaddieDecision';
 import { computeEffectiveDistance } from '@app/caddie/playsLike';
+import { fetchBagStats } from '@app/api/bagStatsClient';
 import {
   computeAutoHoleSuggestion,
   computeHoleCaddieTargets,
   type CourseLayout,
 } from '@shared/round/autoHoleCore';
+import type { BagClubStatsMap } from '@shared/caddie/bagStats';
 
 const CLUBS = ['D', '3W', '5W', '4i', '5i', '6i', '7i', '8i', '9i', 'PW', 'GW', 'SW'];
 
@@ -97,6 +99,7 @@ export default function RoundShotScreen({ navigation }: Props): JSX.Element {
   const [courseLayout, setCourseLayout] = useState<CourseLayout | null>(null);
   const [playerBag, setPlayerBag] = useState<PlayerBag | null>(null);
   const [bagLoading, setBagLoading] = useState(false);
+  const [bagStats, setBagStats] = useState<BagClubStatsMap | null>(null);
   const [caddieSettings, setCaddieSettings] = useState<CaddieSettings | null>(null);
   const totalHoles = state?.round.holes ?? 18;
   const startingHole = state?.round.startHole ?? 1;
@@ -124,6 +127,14 @@ export default function RoundShotScreen({ navigation }: Props): JSX.Element {
       })
       .finally(() => {
         if (!cancelled) setBagLoading(false);
+      });
+
+    fetchBagStats()
+      .then((stats) => {
+        if (!cancelled) setBagStats(stats);
+      })
+      .catch(() => {
+        if (!cancelled) setBagStats(null);
       });
 
     return () => {
@@ -219,6 +230,7 @@ export default function RoundShotScreen({ navigation }: Props): JSX.Element {
       holeYardageM: currentHoleLayout.yardage_m ?? null,
       targets: caddieTargets,
       playerBag,
+      bagStats,
       riskPreference,
       playsLikeDistanceFn: (flatDistanceM, elevationDiffM, wind) => {
         return computeEffectiveDistance(flatDistanceM, elevationDiffM, wind.speedMps, wind.angleDeg)
@@ -227,7 +239,14 @@ export default function RoundShotScreen({ navigation }: Props): JSX.Element {
       elevationDiffM: 0,
       wind: { speedMps: 0, angleDeg: 0 },
     });
-  }, [caddieTargets, currentHoleLayout, currentHole, caddieSettings?.riskProfile, playerBag]);
+  }, [
+    caddieTargets,
+    currentHoleLayout,
+    currentHole,
+    caddieSettings?.riskProfile,
+    playerBag,
+    bagStats,
+  ]);
 
   const holeNumbers = useMemo(
     () => Array.from({ length: totalHoles }, (_, idx) => startingHole + idx),

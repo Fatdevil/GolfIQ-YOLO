@@ -161,6 +161,27 @@ class RoundService:
 
         return [s.to_shot() for s in self._read_shot_records(round_id)]
 
+    def list_recent_shots(
+        self,
+        *,
+        player_id: str,
+        round_limit: int = 20,
+        max_shots: int | None = 500,
+    ) -> list[Shot]:
+        rounds = self._list_round_records(player_id=player_id, limit=round_limit)
+        shots: list[Shot] = []
+        for record in rounds:
+            try:
+                for shot in self._read_shot_records(record.id):
+                    shots.append(shot.to_shot())
+            except Exception:
+                continue
+
+        shots.sort(key=lambda s: s.created_at, reverse=True)
+        if max_shots is not None:
+            shots = shots[: max(1, max_shots)]
+        return shots
+
     # Queries
     def list_rounds(self, *, player_id: str, limit: int = 50) -> List[RoundInfo]:
         records = self._list_round_records(player_id=player_id, limit=limit)

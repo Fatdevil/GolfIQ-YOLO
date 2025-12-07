@@ -4,10 +4,14 @@ import {
   buildCaddieDecisionFromContext,
   chooseClubForTargetDistance,
   getEffectiveCarryM,
+  getMaxCarryFromBag,
   mapDistanceStatsToCandidate,
+  pickClubForDistance,
   riskProfileToBufferM,
   type CaddieClubCandidate,
 } from '@app/caddie/CaddieDecisionEngine';
+import type { PlayerBag } from '@app/api/bagClient';
+import type { BagClubStatsMap } from '@shared/caddie/bagStats';
 import { DEFAULT_SETTINGS } from '@app/caddie/caddieSettingsStorage';
 import { computePlaysLikeDistance } from '@app/caddie/caddieDistanceEngine';
 
@@ -182,5 +186,55 @@ describe('mapDistanceStatsToCandidate', () => {
 
     expect(candidate.manualCarryM).toBe(150);
     expect(candidate.samples).toBe(12);
+  });
+});
+
+describe('bag stats integration', () => {
+  const baseBag: PlayerBag = {
+    clubs: [
+      {
+        clubId: '8i',
+        label: '8i',
+        avgCarryM: 145,
+        sampleCount: 0,
+        active: true,
+      },
+      {
+        clubId: '7i',
+        label: '7i',
+        avgCarryM: 155,
+        sampleCount: 0,
+        active: true,
+      },
+    ],
+  };
+
+  const stats: BagClubStatsMap = {
+    '7i': { clubId: '7i', sampleCount: 8, meanDistanceM: 168, p20DistanceM: 160, p80DistanceM: 175 },
+  };
+
+  it('prefers calibrated bag stats over stored averages', () => {
+    const club = pickClubForDistance(baseBag, 165, stats);
+    expect(club).toBe('7i');
+    expect(getMaxCarryFromBag(baseBag, stats)).toBeCloseTo(168);
+  });
+
+  it('still honors manual overrides even when stats exist', () => {
+    const bagWithManual: PlayerBag = {
+      clubs: [
+        {
+          clubId: '7i',
+          label: '7i',
+          avgCarryM: 150,
+          manualAvgCarryM: 140,
+          sampleCount: 0,
+          active: true,
+        },
+      ],
+    };
+
+    const club = pickClubForDistance(bagWithManual, 145, stats);
+    expect(club).toBe('7i');
+    expect(getMaxCarryFromBag(bagWithManual, stats)).toBe(140);
   });
 });
