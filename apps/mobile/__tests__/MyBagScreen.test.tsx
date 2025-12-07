@@ -1,5 +1,5 @@
 import React from 'react';
-import { fireEvent, render, waitFor, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
 
 import MyBagScreen from '@app/screens/MyBagScreen';
@@ -145,6 +145,96 @@ describe('MyBagScreen', () => {
     await waitFor(() => getByTestId('club-card-7i'));
 
     expect(getByText('Collect a few more shots to auto-calibrate (2/5)')).toBeTruthy();
+  });
+
+  it('renders bag gap insights when a large gap exists', async () => {
+    const gapBag = {
+      clubs: [
+        { clubId: '9i', label: '9 Iron', avgCarryM: 125, sampleCount: 10, active: true },
+        { clubId: '7i', label: '7 Iron', avgCarryM: 145, sampleCount: 10, active: true },
+        { clubId: '4h', label: '4 Hybrid', avgCarryM: 190, sampleCount: 10, active: true },
+      ],
+    };
+    mockFetchBag.mockResolvedValueOnce(gapBag);
+    mockFetchBagStats.mockResolvedValueOnce({
+      '9i': { clubId: '9i', meanDistanceM: 125, sampleCount: 8 },
+      '7i': { clubId: '7i', meanDistanceM: 150, sampleCount: 9 },
+      '4h': { clubId: '4h', meanDistanceM: 210, sampleCount: 12 },
+    });
+
+    const { getByTestId, getByText } = render(
+      <MyBagScreen navigation={navigation} route={undefined as any} />,
+    );
+
+    await waitFor(() => getByTestId('bag-insights'));
+
+    expect(getByText('Bag insights')).toBeTruthy();
+    expect(
+      getByText('Large distance gap between 7 Iron and 4 Hybrid (60 m)'),
+    ).toBeTruthy();
+  });
+
+  it('shows overlap insights for very small gaps', async () => {
+    const overlapBag = {
+      clubs: [
+        { clubId: '7i', label: '7 Iron', avgCarryM: 150, sampleCount: 10, active: true },
+        { clubId: '6i', label: '6 Iron', avgCarryM: 154, sampleCount: 10, active: true },
+      ],
+    };
+    mockFetchBag.mockResolvedValueOnce(overlapBag);
+    mockFetchBagStats.mockResolvedValueOnce({
+      '7i': { clubId: '7i', meanDistanceM: 150, sampleCount: 9 },
+      '6i': { clubId: '6i', meanDistanceM: 156, sampleCount: 9 },
+    });
+
+    const { getByTestId, getByText } = render(
+      <MyBagScreen navigation={navigation} route={undefined as any} />,
+    );
+
+    await waitFor(() => getByTestId('bag-insights'));
+
+    expect(getByText('Bag insights')).toBeTruthy();
+    expect(
+      getByText('7 Iron and 6 Iron carry almost the same distance (6 m apart)'),
+    ).toBeTruthy();
+  });
+
+  it('shows needs-data hints for clubs without enough samples', async () => {
+    const statusBag = {
+      clubs: [
+        { clubId: 'pw', label: 'PW', avgCarryM: 110, sampleCount: 0, active: true },
+        { clubId: 'gw', label: 'GW', avgCarryM: 95, sampleCount: 0, active: true },
+      ],
+    };
+    mockFetchBag.mockResolvedValueOnce(statusBag);
+    mockFetchBagStats.mockResolvedValueOnce({
+      pw: { clubId: 'pw', meanDistanceM: 110, sampleCount: 2 },
+    });
+
+    const { getByText, getByTestId, queryByText } = render(
+      <MyBagScreen navigation={navigation} route={undefined as any} />,
+    );
+
+    await waitFor(() => getByTestId('club-card-pw'));
+
+    expect(getByText(/Collect a few more shots to auto-calibrate/)).toBeTruthy();
+    expect(getByText('No shot data yet – default carry in use')).toBeTruthy();
+
+    // When stats improve the hints should go away
+    cleanup();
+    mockFetchBagStats.mockResolvedValueOnce({
+      pw: { clubId: 'pw', meanDistanceM: 112, sampleCount: 6 },
+      gw: { clubId: 'gw', meanDistanceM: 96, sampleCount: 6 },
+    });
+    mockFetchBag.mockResolvedValueOnce(statusBag);
+
+    const rerendered = render(
+      <MyBagScreen navigation={navigation} route={undefined as any} />,
+    );
+    await waitFor(() => rerendered.getByTestId('club-card-pw'));
+
+    expect(rerendered.queryByText(/Collect a few more shots to auto-calibrate/)).toBeNull();
+    expect(rerendered.queryByText('No shot data yet – default carry in use')).toBeNull();
   });
 
   it('uses cached bag stats when online fetch fails', async () => {
