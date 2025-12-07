@@ -10,7 +10,7 @@ import {
 import type { CaddieSettings, RiskProfile } from '@app/caddie/caddieSettingsStorage';
 import type { CaddieDecision } from '@app/caddie/CaddieDecision';
 import type { HoleCaddieTargets } from '@shared/round/autoHoleCore';
-import type { BagClubStatsMap } from '@shared/caddie/bagStats';
+import type { BagClubStatsMap, DistanceSource } from '@shared/caddie/bagStats';
 import { MIN_AUTOCALIBRATED_SAMPLES, shouldUseBagStat } from '@shared/caddie/bagStats';
 
 export interface CaddieConditions {
@@ -26,6 +26,9 @@ export interface CaddieClubCandidate {
   manualCarryM?: number | null;
   source: 'auto' | 'manual';
   samples: number;
+  distanceSource: DistanceSource;
+  sampleCount?: number;
+  minSamples?: number;
 }
 
 export interface CaddieDecisionContext {
@@ -44,14 +47,21 @@ export interface CaddieDecisionOutput {
   playsLikeBreakdown: { slopeAdjustM: number; windAdjustM: number };
   source: 'auto' | 'manual';
   samples: number;
+  distanceSource: DistanceSource;
+  sampleCount?: number;
+  minSamples?: number;
   risk: ShotShapeRiskSummary;
+}
+
+function candidateSampleCount(candidate: CaddieClubCandidate): number {
+  return candidate.sampleCount ?? candidate.samples ?? 0;
 }
 
 function compareCandidates(a: CaddieClubCandidate & { effectiveCarryM: number }, b: CaddieClubCandidate & { effectiveCarryM: number }): number {
   if (a.effectiveCarryM !== b.effectiveCarryM) {
     return a.effectiveCarryM - b.effectiveCarryM;
   }
-  const sampleDiff = (b.samples ?? 0) - (a.samples ?? 0);
+  const sampleDiff = candidateSampleCount(b) - candidateSampleCount(a);
   if (sampleDiff !== 0) return sampleDiff;
   return a.club.localeCompare(b.club);
 }
@@ -120,6 +130,7 @@ export function buildCaddieDecisionFromContext(
 
   const effectiveCarryM = getEffectiveCarryM(selected);
   const risk = computeRiskZonesFromProfile(ctx.shotShapeProfile);
+  const samples = candidateSampleCount(selected);
 
   return {
     club: selected.club,
@@ -131,7 +142,10 @@ export function buildCaddieDecisionFromContext(
       windAdjustM: playsLike.windAdjustM,
     },
     source: selected.source,
-    samples: selected.samples,
+    samples,
+    distanceSource: selected.distanceSource,
+    sampleCount: selected.sampleCount ?? samples,
+    minSamples: selected.minSamples,
     risk,
   };
 }
@@ -166,12 +180,18 @@ export function getPlaysLikeRecommendation(
 }
 
 export function mapDistanceStatsToCandidate(stats: ClubDistanceStats): CaddieClubCandidate {
+  const distanceSource: DistanceSource =
+    stats.source === 'manual' && stats.manualCarryM != null ? 'manual' : 'default';
+
   return {
     club: stats.club,
     baselineCarryM: stats.baselineCarryM,
     manualCarryM: stats.manualCarryM ?? null,
     source: stats.source,
     samples: stats.samples,
+    distanceSource,
+    sampleCount: stats.samples,
+    minSamples: MIN_AUTOCALIBRATED_SAMPLES,
   };
 }
 
@@ -209,18 +229,62 @@ export function normalizeRiskPreference(risk: CaddieRiskPreference | RiskProfile
   return 'balanced';
 }
 
+type ClubCarryDetails = {
+  carry: number | null;
+  distanceSource: DistanceSource;
+  sampleCount?: number;
+  minSamples?: number;
+};
+
+function getClubCarryDetails(
+  club: { clubId?: string; avgCarryM: number | null; manualAvgCarryM?: number | null },
+  bagStats?: BagClubStatsMap | null,
+  minSamples: number = MIN_AUTOCALIBRATED_SAMPLES,
+): ClubCarryDetails {
+  const manual = club.manualAvgCarryM;
+  const stat = club.clubId ? bagStats?.[club.clubId] : undefined;
+
+  if (Number.isFinite(manual)) {
+    return {
+      carry: manual as number,
+      distanceSource: 'manual',
+      sampleCount: stat?.sampleCount,
+      minSamples: stat ? minSamples : undefined,
+    };
+  }
+
+  if (stat) {
+    if (shouldUseBagStat(stat, minSamples)) {
+      return {
+        carry: stat.meanDistanceM,
+        distanceSource: 'auto_calibrated',
+        sampleCount: stat.sampleCount,
+        minSamples,
+      };
+    }
+
+    return {
+      carry: Number.isFinite(club.avgCarryM) ? (club.avgCarryM as number) : null,
+      distanceSource: 'partial_stats',
+      sampleCount: stat.sampleCount,
+      minSamples,
+    };
+  }
+
+  const carry = Number.isFinite(club.avgCarryM) ? (club.avgCarryM as number) : null;
+
+  return {
+    carry,
+    distanceSource: 'default',
+  };
+}
+
 function getClubCarry(
   club: { clubId?: string; avgCarryM: number | null; manualAvgCarryM?: number | null },
   bagStats?: BagClubStatsMap | null,
   minSamples: number = MIN_AUTOCALIBRATED_SAMPLES,
 ): number | null {
-  const manual = club.manualAvgCarryM;
-  if (Number.isFinite(manual)) return manual as number;
-  const stat = club.clubId ? bagStats?.[club.clubId] : undefined;
-  const autoStat = shouldUseBagStat(stat, minSamples) ? stat.meanDistanceM : null;
-  const auto = Number.isFinite(autoStat) ? (autoStat as number) : club.avgCarryM;
-  if (Number.isFinite(auto)) return auto as number;
-  return null;
+  return getClubCarryDetails(club, bagStats, minSamples).carry;
 }
 
 export function getMaxCarryFromBag(
@@ -328,6 +392,13 @@ export function computeCaddieDecision(ctx: TargetAwareCaddieDecisionContext): Ca
   );
   const strategy = targetType === 'layup' ? 'layup' : 'attack';
 
+  const recommendedClub = recommendedClubId
+    ? ctx.playerBag.clubs.find((club) => club.clubId === recommendedClubId)
+    : null;
+  const recommendedCarry = recommendedClub
+    ? getClubCarryDetails(recommendedClub, ctx.bagStats)
+    : null;
+
   return {
     holeNumber: ctx.holeNumber,
     strategy,
@@ -335,6 +406,9 @@ export function computeCaddieDecision(ctx: TargetAwareCaddieDecisionContext): Ca
     rawDistanceM: rawDistanceM ?? null,
     targetDistanceM,
     recommendedClubId,
+    recommendedClubDistanceSource: recommendedCarry?.distanceSource,
+    recommendedClubSampleCount: recommendedCarry?.sampleCount ?? null,
+    recommendedClubMinSamples: recommendedCarry?.minSamples ?? null,
     explanation: buildExplanation({
       strategy,
       targetDistance: targetDistanceM,

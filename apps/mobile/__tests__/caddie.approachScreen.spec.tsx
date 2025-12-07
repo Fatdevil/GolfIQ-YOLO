@@ -247,4 +247,86 @@ describe('CaddieApproachScreen', () => {
     expect(screen.getByText('6i · straight shot')).toBeInTheDocument();
     expect(screen.getByTestId('selected-club-hint').textContent).toContain('6i');
   });
+
+  it.each([
+    {
+      bagStats: {
+        '7i': { clubId: '7i', sampleCount: 12, meanDistanceM: 168, p20DistanceM: null, p80DistanceM: null },
+      },
+      label: 'Auto-calibrated',
+      distances: undefined,
+    },
+    {
+      bagStats: {
+        '7i': { clubId: '7i', sampleCount: 2, meanDistanceM: 160, p20DistanceM: null, p80DistanceM: null },
+      },
+      label: 'needs more data',
+      distances: undefined,
+    },
+    {
+      bagStats: {},
+      label: 'Based on your bag carry',
+      distances: [
+        {
+          club: '7i',
+          baselineCarryM: 165,
+          samples: 6,
+          source: 'manual' as const,
+          manualCarryM: 165,
+          carryStdM: 5,
+          lastUpdated: '2024-01-01T00:00:00Z',
+        },
+        {
+          club: '6i',
+          baselineCarryM: 150,
+          samples: 6,
+          source: 'auto' as const,
+          carryStdM: 4,
+          lastUpdated: '2024-01-01T00:00:00Z',
+        },
+      ],
+    },
+    {
+      bagStats: {},
+      label: 'Estimate (no club data yet)',
+      distances: undefined,
+    },
+  ])('shows calibration status for recommendations', async ({ bagStats, label, distances }) => {
+    vi.mocked(distanceClient.fetchClubDistances).mockResolvedValue(
+      distances ?? [
+        {
+          club: '7i',
+          baselineCarryM: 165,
+          samples: 6,
+          source: 'auto',
+          carryStdM: 5,
+          lastUpdated: '2024-01-01T00:00:00Z',
+        },
+        {
+          club: '8i',
+          baselineCarryM: 145,
+          samples: 6,
+          source: 'auto',
+          carryStdM: 5,
+          lastUpdated: '2024-01-01T00:00:00Z',
+        },
+      ],
+    );
+    vi.mocked(bagStatsClient.fetchBagStats).mockResolvedValue(bagStats);
+    vi.mocked(caddieApi.fetchShotShapeProfile).mockResolvedValue({
+      club: '7i',
+      intent: 'straight',
+      coreCarryMeanM: 165,
+      coreCarryStdM: 6,
+      coreSideMeanM: 0,
+      coreSideStdM: 5,
+      tailLeftProb: 0.03,
+      tailRightProb: 0.01,
+    });
+
+    render(<CaddieApproachScreen navigation={createNavigation()} route={createRoute()} />);
+
+    const labelNode = await screen.findByTestId('caddie-calibration-label');
+    expect(labelNode.textContent).toContain(label);
+  });
 });

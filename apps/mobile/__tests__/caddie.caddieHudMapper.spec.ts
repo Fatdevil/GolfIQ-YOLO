@@ -13,6 +13,9 @@ describe('buildCaddieHudPayload', () => {
       playsLikeBreakdown: { slopeAdjustM: -2, windAdjustM: 1 },
       source: 'auto',
       samples: 8,
+      distanceSource: 'default',
+      sampleCount: 8,
+      minSamples: 5,
       risk: {
         coreZone: {
           carryMinM: 145,

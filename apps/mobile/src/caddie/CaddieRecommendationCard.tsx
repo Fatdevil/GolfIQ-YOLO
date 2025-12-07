@@ -4,6 +4,8 @@ import { StyleSheet, Text, View } from 'react-native';
 import type { CaddieDecisionOutput } from '@app/caddie/CaddieDecisionEngine';
 import type { CaddieSettings } from '@app/caddie/caddieSettingsStorage';
 import { t } from '@app/i18n';
+import { formatDistanceSourceLabel } from '@app/caddie/distanceSourceLabels';
+import { MIN_AUTOCALIBRATED_SAMPLES } from '@shared/caddie/bagStats';
 
 export interface CaddieRecommendationCardProps {
   decision: CaddieDecisionOutput;
@@ -30,13 +32,17 @@ export function CaddieRecommendationCard({ decision, settings }: CaddieRecommend
     slope: `${slope >= 0 ? '+' : ''}${slope}`,
     wind: `${wind >= 0 ? '+' : ''}${wind}`,
   });
-  const sourceLabel =
-    decision.source === 'manual' ? t('caddie.decision.source_manual') : t('caddie.decision.source_auto');
+  const calibrationLabel = formatDistanceSourceLabel(
+    decision.distanceSource,
+    decision.sampleCount ?? decision.samples,
+    decision.minSamples,
+  );
   const profileLabel = t('caddie.decision.profile_badge', { profile: riskProfileLabel(settings.riskProfile) });
   const core = decision.risk.coreZone;
   const tailLeft = decision.risk.tailLeftProb > 0.01;
   const tailRight = decision.risk.tailRightProb > 0.01;
-  const lowSamples = decision.samples < 5;
+  const lowSamples =
+    (decision.sampleCount ?? decision.samples ?? 0) < (decision.minSamples ?? MIN_AUTOCALIBRATED_SAMPLES);
   const profileHint =
     settings.riskProfile === 'safe'
       ? t('caddie.decision.profile_safe_hint')
@@ -51,7 +57,7 @@ export function CaddieRecommendationCard({ decision, settings }: CaddieRecommend
         <Text style={styles.badgeText}>{profileLabel}</Text>
       </View>
       <Text style={styles.playsLike}>{playsLike}</Text>
-      <Text style={styles.source}>{sourceLabel}</Text>
+      {calibrationLabel ? <Text style={styles.source} testID="caddie-calibration-label">{calibrationLabel}</Text> : null}
       {profileHint ? <Text style={styles.hint}>{profileHint}</Text> : null}
 
       <Text style={styles.sectionTitle}>{t('caddie.decision.core_window', {

@@ -15,6 +15,9 @@ describe('CaddieRecommendationCard', () => {
     playsLikeBreakdown: { slopeAdjustM: -2, windAdjustM: 4 },
     source: 'auto',
     samples: 3,
+    distanceSource: 'auto_calibrated',
+    sampleCount: 3,
+    minSamples: 5,
     risk: {
       coreZone: { carryMinM: 148, carryMaxM: 158, sideMinM: -6, sideMaxM: 4 },
       fullZone: { carryMinM: 140, carryMaxM: 165, sideMinM: -10, sideMaxM: 8 },
@@ -37,10 +40,16 @@ describe('CaddieRecommendationCard', () => {
     expect(screen.getByTestId('caddie-tail-left')).toHaveTextContent('6%');
     expect(screen.getByTestId('caddie-tail-right')).toBeInTheDocument();
     expect(screen.getByText(/Profile:/)).toBeInTheDocument();
+    expect(screen.getByTestId('caddie-calibration-label')).toHaveTextContent('Auto-calibrated');
   });
 
   it('shows low sample hint when samples are small', () => {
-    render(<CaddieRecommendationCard decision={{ ...decision, samples: 2 }} settings={settings} />);
+    render(
+      <CaddieRecommendationCard
+        decision={{ ...decision, samples: 2, sampleCount: 2, minSamples: 5 }}
+        settings={settings}
+      />,
+    );
 
     expect(screen.getByText(/Low on-course sample size/)).toBeInTheDocument();
   });
