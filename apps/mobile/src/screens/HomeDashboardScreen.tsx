@@ -258,15 +258,15 @@ export default function HomeDashboardScreen({ navigation }: Props): JSX.Element 
     return labels;
   }, [bag?.clubs]);
 
-  const bagReadinessOverview = useMemo(
-    () => buildBagReadinessOverview(bag ?? { clubs: [] }, bagStats ?? {}),
-    [bag, bagStats],
-  );
+  const bagReadinessOverview = useMemo(() => {
+    if (!bag || !bag.clubs?.length) return null;
+    return buildBagReadinessOverview(bag, bagStats ?? {});
+  }, [bag, bagStats]);
 
   const readinessSuggestion = useMemo(() => {
-    if (!bagReadinessOverview.suggestions.length) return null;
+    if (!bagReadinessOverview?.suggestions.length) return null;
     return formatBagSuggestion(bagReadinessOverview.suggestions[0], clubLabels);
-  }, [bagReadinessOverview.suggestions, clubLabels]);
+  }, [bagReadinessOverview?.suggestions, clubLabels]);
 
   const markWeeklySeen = useCallback(async () => {
     const timestamp = weeklySummary?.period.to;
@@ -428,32 +428,42 @@ export default function HomeDashboardScreen({ navigation }: Props): JSX.Element 
         <View style={styles.card}>
           <View style={styles.rowSpaceBetween}>
             <Text style={styles.cardTitle}>{t('bag.readinessTitle')}</Text>
-            <View style={styles.badge}>
-              <Text style={styles.badgeText}>{t(`bag.readinessGrade.${bagReadinessOverview.readiness.grade}`)}</Text>
-            </View>
+            {bagReadinessOverview ? (
+              <View style={styles.badge}>
+                <Text style={styles.badgeText}>
+                  {t(`bag.readinessGrade.${bagReadinessOverview.readiness.grade}`)}
+                </Text>
+              </View>
+            ) : null}
           </View>
-          <Text style={styles.readinessScore} testID="home-bag-readiness-score">
-            {bagReadinessOverview.readiness.score}/100
-          </Text>
-          <Text style={styles.cardBody}>
-            {t('bag.readinessSummary.base', {
-              calibrated: bagReadinessOverview.readiness.calibratedClubs,
-              total: bagReadinessOverview.readiness.totalClubs,
-            })}
-          </Text>
-          <Text style={styles.muted}>
-            {t('bag.readinessSummary.details', {
-              noData: bagReadinessOverview.readiness.noDataCount,
-              needsMore: bagReadinessOverview.readiness.needsMoreSamplesCount,
-              gaps: bagReadinessOverview.readiness.largeGapCount,
-              overlaps: bagReadinessOverview.readiness.overlapCount,
-            })}
-          </Text>
-          {readinessSuggestion ? (
-            <Text style={styles.suggestionLine} numberOfLines={2} testID="home-bag-readiness-suggestion">
-              {t('bag.readinessTileSuggestionPrefix')} {readinessSuggestion}
-            </Text>
-          ) : null}
+          {bagReadinessOverview ? (
+            <>
+              <Text style={styles.readinessScore} testID="home-bag-readiness-score">
+                {bagReadinessOverview.readiness.score}/100
+              </Text>
+              <Text style={styles.cardBody}>
+                {t('bag.readinessSummary.base', {
+                  calibrated: bagReadinessOverview.readiness.calibratedClubs,
+                  total: bagReadinessOverview.readiness.totalClubs,
+                })}
+              </Text>
+              <Text style={styles.muted}>
+                {t('bag.readinessSummary.details', {
+                  noData: bagReadinessOverview.readiness.noDataCount,
+                  needsMore: bagReadinessOverview.readiness.needsMoreSamplesCount,
+                  gaps: bagReadinessOverview.readiness.largeGapCount,
+                  overlaps: bagReadinessOverview.readiness.overlapCount,
+                })}
+              </Text>
+              {readinessSuggestion ? (
+                <Text style={styles.suggestionLine} numberOfLines={2} testID="home-bag-readiness-suggestion">
+                  {t('bag.readinessTileSuggestionPrefix')} {readinessSuggestion}
+                </Text>
+              ) : null}
+            </>
+          ) : (
+            <Text style={styles.cardBody}>{t('my_bag_error')}</Text>
+          )}
         </View>
       </TouchableOpacity>
 

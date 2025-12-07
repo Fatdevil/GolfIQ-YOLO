@@ -1,6 +1,6 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import React from "react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import SwingTimelinePanel from "./SwingTimelinePanel";
 
@@ -22,6 +22,10 @@ vi.mock("@/access/UpgradeGate", () => ({
 }));
 
 describe("SwingTimelinePanel", () => {
+  afterEach(() => {
+    cleanup();
+  });
+
   beforeEach(() => {
     mockFetchSessionTimeline.mockReset();
     mockUseAccessPlan.mockReset();
@@ -73,8 +77,7 @@ describe("SwingTimelinePanel", () => {
     render(<SwingTimelinePanel runId="run-1" />);
 
     await waitFor(() => expect(mockFetchSessionTimeline).toHaveBeenCalled());
-    expect(
-      await screen.findByText(/No timeline available for this round yet/),
-    ).toBeInTheDocument();
+    const emptyState = await screen.findByRole("status");
+    expect(emptyState).toHaveTextContent(/No timeline available for this round yet/i);
   });
 });

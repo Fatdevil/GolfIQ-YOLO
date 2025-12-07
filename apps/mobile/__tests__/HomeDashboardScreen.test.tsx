@@ -264,4 +264,15 @@ describe('HomeDashboardScreen', () => {
     expect(await screen.findByTestId('home-bag-readiness')).toBeVisible();
     expect(screen.getByText(/Needs work/i)).toBeVisible();
   });
+
+  it('avoids showing a perfect readiness score when the bag fails to load', async () => {
+    vi.mocked(bagClient.fetchPlayerBag).mockRejectedValue(new Error('bag failed'));
+    const navigation = createNavigation();
+
+    render(<HomeDashboardScreen navigation={navigation} route={createRoute()} />);
+
+    expect(await screen.findByTestId('home-bag-readiness')).toBeVisible();
+    expect(screen.queryByTestId('home-bag-readiness-score')).toBeNull();
+    expect(screen.getByText(/Unable to load your bag./i)).toBeVisible();
+  });
 });
