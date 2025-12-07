@@ -1,6 +1,6 @@
 import { t } from '@app/i18n';
 import type { BagSuggestion } from '@shared/caddie/bagTuningSuggestions';
-import { formatDistance } from '@shared/geography/distance';
+import { formatDistance } from '@app/utils/distance';
 
 export function formatBagSuggestion(
   suggestion: BagSuggestion,
