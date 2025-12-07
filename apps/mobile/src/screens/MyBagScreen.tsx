@@ -24,6 +24,7 @@ import type { RootStackParamList } from '@app/navigation/types';
 import { MIN_AUTOCALIBRATED_SAMPLES, shouldUseBagStat } from '@shared/caddie/bagStats';
 import type { BagClubStats, BagClubStatsMap } from '@shared/caddie/bagStats';
 import { analyzeBagGaps, type ClubDataStatus } from '@shared/caddie/bagGapInsights';
+import { computeBagReadiness } from '@shared/caddie/bagReadiness';
 import { buildBagTuningSuggestions } from '@shared/caddie/bagTuningSuggestions';
 import { formatDistance } from '@app/utils/distance';
 
@@ -351,6 +352,11 @@ export default function MyBagScreen({}: Props): JSX.Element {
     [state.bag, state.bagStats],
   );
 
+  const bagReadiness = useMemo(
+    () => (state.bag ? computeBagReadiness(state.bag, state.bagStats ?? {}) : null),
+    [state.bag, state.bagStats],
+  );
+
   const bagSuggestions = useMemo(
     () =>
       state.bag && state.bagStats
@@ -396,6 +402,30 @@ export default function MyBagScreen({}: Props): JSX.Element {
       <Text style={styles.title}>{t('my_bag_title')}</Text>
       <Text style={styles.subtitle}>{t('my_bag_subtitle')}</Text>
       {state.actionError ? <Text style={styles.errorBanner}>{state.actionError}</Text> : null}
+
+      {bagReadiness ? (
+        <View style={styles.infoCard} testID="bag-readiness">
+          <View style={styles.rowBetween}>
+            <Text style={styles.infoTitle}>{t('bag.readinessTitle')}</Text>
+            <Text style={styles.readinessGrade}>{t(`bag.readinessGrade.${bagReadiness.grade}`)}</Text>
+          </View>
+          <Text style={styles.readinessScore}>{`${bagReadiness.score}/100`}</Text>
+          <Text style={styles.infoBody}>
+            {t('bag.readinessSummary.base', {
+              calibrated: bagReadiness.calibratedClubs,
+              total: bagReadiness.totalClubs,
+            })}
+          </Text>
+          <Text style={styles.muted}>
+            {t('bag.readinessSummary.details', {
+              noData: bagReadiness.noDataCount,
+              needsMore: bagReadiness.needsMoreSamplesCount,
+              gaps: bagReadiness.largeGapCount,
+              overlaps: bagReadiness.overlapCount,
+            })}
+          </Text>
+        </View>
+      ) : null}
 
       <View style={styles.infoCard}>
         <Text style={styles.infoTitle}>{t('my_bag_avg_carry_label')}</Text>
@@ -507,6 +537,8 @@ const styles = StyleSheet.create({
   },
   infoTitle: { fontWeight: '700', color: '#0f172a' },
   infoBody: { color: '#1f2937', marginTop: 4 },
+  readinessScore: { fontSize: 28, fontWeight: '800', color: '#0f172a', marginTop: 4 },
+  readinessGrade: { color: '#0ea5e9', fontWeight: '700' },
   group: { gap: 10 },
   groupTitle: { fontWeight: '700', fontSize: 18, color: '#0f172a' },
   card: {

@@ -582,6 +582,17 @@ export const en = {
           '{{club}} has limited data. Collect a few more shots for a reliable carry.',
       },
     },
+    readinessTitle: 'Bag readiness',
+    readinessGrade: {
+      poor: 'Needs work',
+      okay: 'Okay',
+      good: 'Good',
+      excellent: 'Excellent',
+    },
+    readinessSummary: {
+      base: '{{calibrated}} of {{total}} clubs calibrated',
+      details: '{{noData}} without data · {{needsMore}} need more samples · {{gaps}} large gaps · {{overlaps}} overlaps',
+    },
   },
 } as const;
 
