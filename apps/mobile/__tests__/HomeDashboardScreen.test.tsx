@@ -336,4 +336,24 @@ describe('HomeDashboardScreen', () => {
       'Practice streak: 3 days in a row',
     );
   });
+
+  it('navigates to practice history when progress tile is tapped with history', async () => {
+    vi.mocked(practiceHistory.summarizeRecentPracticeHistory).mockReturnValue({
+      totalSessions: 2,
+      completedSessions: 1,
+      windowDays: 14,
+      lastCompleted: undefined,
+      lastStarted: undefined,
+      streakDays: 0,
+    });
+
+    const navigation = createNavigation();
+
+    render(<HomeDashboardScreen navigation={navigation} route={createRoute()} />);
+
+    const card = await screen.findByTestId('practice-progress-card');
+    fireEvent.click(card);
+
+    expect(navigation.navigate).toHaveBeenCalledWith('PracticeHistory');
+  });
 });

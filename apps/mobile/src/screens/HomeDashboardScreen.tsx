@@ -227,6 +227,14 @@ export default function HomeDashboardScreen({ navigation }: Props): JSX.Element 
     [practiceOverview],
   );
 
+  const handleOpenPracticeProgress = useCallback(() => {
+    if (practiceProgressModel?.hasData) {
+      navigation.navigate('PracticeHistory');
+    } else {
+      navigation.navigate('RangeQuickPracticeStart');
+    }
+  }, [navigation, practiceProgressModel?.hasData]);
+
   const latestRoundDisplay = useMemo(() => {
     if (!latestRound) return null;
     const ended = latestRound.endedAt ?? latestRound.startedAt;
@@ -644,7 +652,12 @@ export default function HomeDashboardScreen({ navigation }: Props): JSX.Element 
       </View>
 
       {practiceProgressModel ? (
-        <View style={styles.card} testID="practice-progress-card">
+        <TouchableOpacity
+          style={styles.card}
+          activeOpacity={0.9}
+          onPress={handleOpenPracticeProgress}
+          testID="practice-progress-card"
+        >
           <Text style={styles.cardTitle}>{t('practice.progress.title')}</Text>
           <View style={styles.progressBlock}>
             <View style={styles.progressBar}>
@@ -662,10 +675,10 @@ export default function HomeDashboardScreen({ navigation }: Props): JSX.Element 
               {t(practiceProgressModel.subtitleKey, practiceProgressModel.subtitleParams)}
             </Text>
           </View>
-          <TouchableOpacity onPress={() => navigation.navigate('RangePractice')} testID="open-practice-progress">
+          <TouchableOpacity onPress={handleOpenPracticeProgress} testID="open-practice-progress">
             <Text style={styles.link}>{t('practice.progress.cta')}</Text>
           </TouchableOpacity>
-        </View>
+        </TouchableOpacity>
       ) : null}
 
       <View style={styles.card}>

@@ -26,6 +26,20 @@ export type MissionStreak = {
   lastCompletedAt?: string;
 };
 
+export type PracticeHistoryListStatus = 'completed' | 'partial' | 'incomplete';
+
+export type PracticeHistoryListItem = {
+  id: string;
+  missionId: string;
+  day: string;
+  occurredAt: string;
+  targetClubsLabel: string;
+  targetSampleCount?: number;
+  completedSampleCount: number;
+  status: PracticeHistoryListStatus;
+  countsTowardStreak: boolean;
+};
+
 export type CompletionSummary = {
   completed: number;
   attempted: number;
@@ -49,6 +63,12 @@ function entryTimestamp(entry: PracticeMissionHistoryEntry): number {
   return Number.NaN;
 }
 
+function normalizeDay(value: Date): string {
+  const normalized = new Date(value);
+  normalized.setHours(0, 0, 0, 0);
+  return normalized.toISOString();
+}
+
 function normalizeMissionId(raw: unknown): string | null {
   if (typeof raw === 'string' && raw.trim().length > 0) return raw;
   return null;
@@ -59,6 +79,14 @@ function normalizeTargetClubs(raw: unknown): string[] {
     return raw.filter((club): club is string => typeof club === 'string' && club.trim().length > 0);
   }
   return [];
+}
+
+function formatTargetClubs(clubs: string[], labels?: Record<string, string>): string {
+  if (!clubs.length) return '';
+  return clubs
+    .map((club) => labels?.[club] ?? club)
+    .filter((club) => club.trim().length > 0)
+    .join(', ');
 }
 
 function coerceSampleCount(raw: unknown): number | undefined {
@@ -247,4 +275,67 @@ export function computeRecentCompletionSummary(
   const recent = selectRecentMissions(state, { daysBack: windowDays, limit: MAX_PRACTICE_HISTORY_ENTRIES }, now);
   const completed = recent.filter((entry) => entry.status === 'completed').length;
   return { completed, attempted: recent.length };
+}
+
+function buildStreakDaySet(state: PracticeMissionHistoryEntry[], missionId: string, now: Date): Set<number> {
+  const streak = computeMissionStreak(state, missionId, now);
+  if (!streak.lastCompletedAt || streak.consecutiveDays <= 0) return new Set();
+
+  const anchor = new Date(streak.lastCompletedAt);
+  if (Number.isNaN(anchor.getTime())) return new Set();
+
+  const anchorDay = Math.floor(anchor.getTime() / DAY_MS);
+  const days = new Set<number>();
+  for (let i = 0; i < streak.consecutiveDays; i += 1) {
+    days.add(anchorDay - i);
+  }
+  return days;
+}
+
+export function buildPracticeHistoryList(
+  state: PracticeMissionHistoryEntry[],
+  options: { limit?: number; daysBack?: number; clubLabels?: Record<string, string>; now?: Date } = {},
+): PracticeHistoryListItem[] {
+  const { limit = 20, daysBack = DEFAULT_HISTORY_WINDOW_DAYS, clubLabels, now = new Date() } = options;
+  const recent = selectRecentMissions(state, { daysBack, limit }, now);
+
+  const streakDaysByMission = new Map<string, Set<number>>();
+  for (const entry of recent) {
+    if (!streakDaysByMission.has(entry.missionId)) {
+      streakDaysByMission.set(entry.missionId, buildStreakDaySet(state, entry.missionId, now));
+    }
+  }
+
+  return recent.map((entry) => {
+    const occurredAt = entry.endedAt ?? entry.startedAt;
+    const occurredDate = occurredAt ? new Date(occurredAt) : new Date();
+    const day = normalizeDay(occurredDate);
+    const completedSamples = entry.completedSampleCount ?? 0;
+    const targetSamples = entry.targetSampleCount;
+
+    let status: PracticeHistoryListStatus = 'incomplete';
+    if (completedSamples > 0) {
+      if (entry.status === 'completed' || (typeof targetSamples === 'number' && completedSamples >= targetSamples)) {
+        status = 'completed';
+      } else {
+        status = 'partial';
+      }
+    }
+
+    const streakDays = streakDaysByMission.get(entry.missionId);
+    const countsTowardStreak =
+      status === 'completed' && streakDays?.has(Math.floor(occurredDate.getTime() / DAY_MS)) === true;
+
+    return {
+      id: entry.id,
+      missionId: entry.missionId,
+      day,
+      occurredAt: occurredAt ?? day,
+      targetClubsLabel: formatTargetClubs(entry.targetClubs, clubLabels),
+      targetSampleCount: targetSamples,
+      completedSampleCount: completedSamples,
+      status,
+      countsTowardStreak,
+    };
+  });
 }
