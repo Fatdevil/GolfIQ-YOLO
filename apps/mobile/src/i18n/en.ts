@@ -673,6 +673,11 @@ export const en = {
           description: 'Record a few swings so we can auto-calibrate this club.',
         },
       },
+      progress: {
+        recent: '{{count}} sessions in the last {{days}} days',
+        empty: 'Not practised yet',
+        streak: 'On a streak',
+      },
     },
   },
 } as const;

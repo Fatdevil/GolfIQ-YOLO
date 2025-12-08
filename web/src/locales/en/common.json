@@ -52,6 +52,9 @@
   "practice.history.detail.unrepeatable": "Not enough info to repeat this mission.",
   "practice.history.detail.missing": "We could not load this mission. Try another from your history.",
   "practice.history.detail.unknown": "Unknown",
+  "practice.missionProgress.recent": "{{count}} sessions in the last {{days}} days",
+  "practice.missionProgress.empty": "Not practised yet",
+  "practice.missionProgress.streak": "On a streak",
 
   "home.profile.title": "My GolfIQ",
   "home.profile.subtitle": "See your rounds, range sessions, caddie insights and SG preview.",

@@ -1,8 +1,8 @@
 import React from "react";
-import { render, screen, waitFor } from "@testing-library/react";
+import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import userEvent from "@testing-library/user-event";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@/features/range/api", () => ({
   postRangeAnalyze: vi.fn(),
@@ -16,15 +16,31 @@ vi.mock("@/user/UserSessionContext", () => ({
   ),
   useUserSession: () => ({ session: { userId: "test-user", createdAt: "" }, loading: false }),
 }));
+vi.mock("@/access/UserAccessContext", () => ({
+  useAccessPlan: () => ({ isPro: true, loading: false }),
+}));
+vi.mock("@/practice/practiceMissionHistory", async () => {
+  const actual = await vi.importActual<typeof import("@/practice/practiceMissionHistory")>(
+    "@/practice/practiceMissionHistory"
+  );
+
+  return {
+    ...actual,
+    loadPracticeMissionHistory: vi.fn(),
+  };
+});
 
 import { postRangeAnalyze } from "@/features/range/api";
 import RangePracticePage from "./RangePracticePage";
+import { MissionDetails } from "./RangePracticePage";
 import { RangeImpactCard } from "../range/RangeImpactCard";
 import type { RangeShotMetrics } from "../range/types";
+import { RANGE_MISSIONS } from "@/range/missions";
 import { UnitsContext } from "@/preferences/UnitsContext";
 import type { DistanceUnit } from "@/preferences/units";
 import { UserSessionProvider } from "@/user/UserSessionContext";
 import { postRangeSessionSnapshots } from "@/user/historyApi";
+import { loadPracticeMissionHistory } from "@/practice/practiceMissionHistory";
 
 const mockedPostRangeAnalyze = vi.mocked(postRangeAnalyze);
 
@@ -32,6 +48,11 @@ describe("RangePracticePage", () => {
   beforeEach(() => {
     mockedPostRangeAnalyze.mockReset();
     vi.mocked(postRangeSessionSnapshots).mockReset();
+    vi.mocked(loadPracticeMissionHistory).mockResolvedValue([]);
+  });
+
+  afterEach(() => {
+    cleanup();
   });
 
   it("logs a shot and updates UI", async () => {
@@ -102,6 +123,51 @@ describe("RangePracticePage", () => {
     );
 
     expect(screen.getByText("164 yd")).toBeDefined();
+  });
+
+  it("shows mission history progress when available", () => {
+    const mission = RANGE_MISSIONS[0];
+    renderWithUnit(
+      "metric",
+      <MissionDetails
+        mission={mission}
+        missionProgress={null}
+        missionHistoryProgress={{
+          missionId: mission.id,
+          completedSessions: 2,
+          lastCompletedAt: Date.now(),
+          inStreak: true,
+        }}
+        unit="metric"
+      />,
+      "/range/practice"
+    );
+
+    const progressNode = screen.getByTestId("mission-history-progress");
+    expect(progressNode).toHaveTextContent("2 sessions in the last 14 days");
+    expect(progressNode).toHaveTextContent("On a streak");
+  });
+
+  it("shows empty mission progress when no history", () => {
+    const mission = RANGE_MISSIONS[1];
+    renderWithUnit(
+      "metric",
+      <MissionDetails
+        mission={mission}
+        missionProgress={null}
+        missionHistoryProgress={{
+          missionId: mission.id,
+          completedSessions: 0,
+          lastCompletedAt: null,
+          inStreak: false,
+        }}
+        unit="metric"
+      />,
+      "/range/practice"
+    );
+
+    const progressNode = screen.getByTestId("mission-history-progress");
+    expect(progressNode).toHaveTextContent("Not practised yet");
   });
 });
 

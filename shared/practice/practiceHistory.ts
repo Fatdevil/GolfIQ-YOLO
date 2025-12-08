@@ -26,6 +26,13 @@ export type MissionStreak = {
   lastCompletedAt?: string;
 };
 
+export type MissionProgress = {
+  missionId: string;
+  completedSessions: number;
+  lastCompletedAt: number | null;
+  inStreak: boolean;
+};
+
 export type PracticeHistoryListStatus = 'completed' | 'partial' | 'incomplete';
 
 export type PracticeHistoryListItem = {
@@ -299,6 +306,58 @@ export function computeRecentCompletionSummary(
   const recent = selectRecentMissions(state, { daysBack: windowDays, limit: MAX_PRACTICE_HISTORY_ENTRIES }, now);
   const completed = recent.filter((entry) => entry.status === 'completed').length;
   return { completed, attempted: recent.length };
+}
+
+export function buildMissionProgressById(
+  state: PracticeMissionHistoryEntry[],
+  missionIds: ReadonlyArray<string>,
+  options: { windowDays?: number; now?: Date } = {},
+): Record<string, MissionProgress> {
+  const { windowDays = DEFAULT_HISTORY_WINDOW_DAYS, now = new Date() } = options;
+  const windowMs = windowDays * DAY_MS;
+  const nowMs = now.getTime();
+  const missionSet = new Set(missionIds.filter((id) => typeof id === 'string' && id.trim().length > 0));
+  const base: Record<string, MissionProgress> = {};
+
+  missionSet.forEach((missionId) => {
+    base[missionId] = {
+      missionId,
+      completedSessions: 0,
+      lastCompletedAt: null,
+      inStreak: false,
+    };
+  });
+
+  if (missionSet.size === 0) return base;
+
+  const streakDaysByMission = new Map<string, Set<number>>();
+  const recent = state.filter((entry) => {
+    const ts = entryTimestamp(entry);
+    if (Number.isNaN(ts)) return false;
+    return nowMs - ts <= windowMs;
+  });
+
+  for (const entry of recent) {
+    if (!missionSet.has(entry.missionId) || entry.status !== 'completed') continue;
+
+    const ts = entryTimestamp(entry);
+    if (Number.isNaN(ts)) continue;
+
+    const current = base[entry.missionId];
+    current.completedSessions += 1;
+    current.lastCompletedAt = current.lastCompletedAt != null ? Math.max(current.lastCompletedAt, ts) : ts;
+
+    if (!streakDaysByMission.has(entry.missionId)) {
+      streakDaysByMission.set(entry.missionId, buildStreakDaySet(state, entry.missionId, now));
+    }
+
+    const streakDays = streakDaysByMission.get(entry.missionId);
+    if (streakDays && streakDays.has(Math.floor(ts / DAY_MS))) {
+      current.inStreak = true;
+    }
+  }
+
+  return base;
 }
 
 function buildStreakDaySet(state: PracticeMissionHistoryEntry[], missionId: string, now: Date): Set<number> {

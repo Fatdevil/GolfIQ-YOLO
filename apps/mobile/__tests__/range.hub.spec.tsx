@@ -1,7 +1,7 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import React from 'react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { RootStackParamList } from '@app/navigation/types';
 import RangePracticeScreen from '@app/screens/RangePracticeScreen';
@@ -10,6 +10,7 @@ import * as bagClient from '@app/api/bagClient';
 import * as bagStatsClient from '@app/api/bagStatsClient';
 import * as bagReadiness from '@shared/caddie/bagReadiness';
 import * as bagPracticeRecommendations from '@shared/caddie/bagPracticeRecommendations';
+import * as practiceHistory from '@app/storage/practiceMissionHistory';
 
 vi.mock('@app/range/rangeTrainingGoalStorage', () => ({
   loadCurrentTrainingGoal: vi.fn(),
@@ -26,6 +27,10 @@ vi.mock('@shared/caddie/bagReadiness', () => ({
 vi.mock('@shared/caddie/bagPracticeRecommendations', () => ({
   buildBagPracticeRecommendation: vi.fn(),
 }));
+vi.mock('@app/storage/practiceMissionHistory', () => ({
+  loadPracticeMissionHistory: vi.fn(),
+  PRACTICE_MISSION_WINDOW_DAYS: 14,
+}));
 
 type Props = NativeStackScreenProps<RootStackParamList, 'RangePractice'>;
 
@@ -40,6 +45,7 @@ function createNavigation(): Props['navigation'] {
 
 describe('RangePracticeScreen', () => {
   beforeEach(() => {
+    vi.setSystemTime(new Date('2024-04-10T12:00:00.000Z'));
     vi.mocked(trainingGoalStorage.loadCurrentTrainingGoal).mockResolvedValue(null);
     vi.mocked(bagClient.fetchPlayerBag).mockResolvedValue({
       clubs: [
@@ -63,6 +69,11 @@ describe('RangePracticeScreen', () => {
       dataStatusByClubId: {},
     });
     vi.mocked(bagPracticeRecommendations.buildBagPracticeRecommendation).mockReturnValue(null);
+    vi.mocked(practiceHistory.loadPracticeMissionHistory).mockResolvedValue([]);
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   it('navigates to range history when CTA pressed', () => {
@@ -130,10 +141,21 @@ describe('RangePracticeScreen', () => {
     } as bagPracticeRecommendations.BagPracticeRecommendation;
 
     vi.mocked(bagPracticeRecommendations.buildBagPracticeRecommendation).mockReturnValue(recommendation);
+    vi.mocked(practiceHistory.loadPracticeMissionHistory).mockResolvedValue([
+      {
+        id: 'recent',
+        missionId: recommendation.id,
+        startedAt: '2024-04-09T10:00:00.000Z',
+        status: 'completed',
+        targetClubs: ['8i'],
+        completedSampleCount: 10,
+      },
+    ]);
 
     render(<RangePracticeScreen navigation={navigation} route={{ key: 'RangePractice', name: 'RangePractice' } as Props['route']} />);
 
     expect(await screen.findByTestId('range-recommendation-card')).toHaveTextContent('Practice gapping 8 iron & 9 iron');
+    expect(screen.getByTestId('range-recommendation-progress')).toHaveTextContent('1 sessions in the last 14 days');
 
     fireEvent.click(screen.getByTestId('range-recommendation-cta'));
 
@@ -150,5 +172,29 @@ describe('RangePracticeScreen', () => {
 
     expect(await screen.findByTestId('training-goal-card')).toBeInTheDocument();
     expect(screen.queryByTestId('range-recommendation-card')).toBeNull();
+  });
+
+  it('shows empty state when no practice history', async () => {
+    const navigation = createNavigation();
+    const recommendation = {
+      id: 'practice_fill_gap:8i:9i',
+      titleKey: 'bag.practice.fill_gap.title',
+      descriptionKey: 'bag.practice.fill_gap.description',
+      targetClubs: ['8i', '9i'],
+      targetSampleCount: 16,
+      sourceSuggestionId: 'fill_gap:8i:9i',
+    } as bagPracticeRecommendations.BagPracticeRecommendation;
+
+    vi.mocked(bagPracticeRecommendations.buildBagPracticeRecommendation).mockReturnValue(recommendation);
+    vi.mocked(practiceHistory.loadPracticeMissionHistory).mockResolvedValue([]);
+
+    render(
+      <RangePracticeScreen
+        navigation={navigation}
+        route={{ key: 'RangePractice', name: 'RangePractice' } as Props['route']}
+      />,
+    );
+
+    expect(await screen.findByTestId('range-recommendation-progress')).toHaveTextContent('Not practised yet');
   });
 });
