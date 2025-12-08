@@ -102,6 +102,74 @@ describe('practiceHistory helpers', () => {
     expect(streak.lastCompletedAt).toBe('2024-02-10T09:00:00.000Z');
   });
 
+  it('treats streak as inactive when the last completion is stale', () => {
+    const entries: PracticeMissionHistoryEntry[] = [
+      {
+        id: 'a',
+        missionId: 'mission-1',
+        startedAt: '2024-02-01T09:00:00.000Z',
+        status: 'completed',
+        targetClubs: ['7i'],
+        completedSampleCount: 10,
+      },
+      {
+        id: 'b',
+        missionId: 'mission-1',
+        startedAt: '2024-01-31T09:00:00.000Z',
+        status: 'completed',
+        targetClubs: ['7i'],
+        completedSampleCount: 10,
+      },
+      {
+        id: 'c',
+        missionId: 'mission-1',
+        startedAt: '2024-01-30T09:00:00.000Z',
+        status: 'completed',
+        targetClubs: ['7i'],
+        completedSampleCount: 10,
+      },
+    ];
+
+    const streak = computeMissionStreak(entries, 'mission-1', new Date('2024-02-10T12:00:00.000Z'));
+
+    expect(streak.consecutiveDays).toBe(0);
+    expect(streak.lastCompletedAt).toBe('2024-02-01T09:00:00.000Z');
+  });
+
+  it('counts streak when last completion was yesterday', () => {
+    const entries: PracticeMissionHistoryEntry[] = [
+      {
+        id: 'a',
+        missionId: 'mission-1',
+        startedAt: '2024-03-10T09:00:00.000Z',
+        status: 'completed',
+        targetClubs: ['7i'],
+        completedSampleCount: 10,
+      },
+      {
+        id: 'b',
+        missionId: 'mission-1',
+        startedAt: '2024-03-09T09:00:00.000Z',
+        status: 'completed',
+        targetClubs: ['7i'],
+        completedSampleCount: 10,
+      },
+      {
+        id: 'c',
+        missionId: 'mission-1',
+        startedAt: '2024-03-07T09:00:00.000Z',
+        status: 'completed',
+        targetClubs: ['7i'],
+        completedSampleCount: 10,
+      },
+    ];
+
+    const streak = computeMissionStreak(entries, 'mission-1', new Date('2024-03-11T08:00:00.000Z'));
+
+    expect(streak.consecutiveDays).toBe(2);
+    expect(streak.lastCompletedAt).toBe('2024-03-10T09:00:00.000Z');
+  });
+
   it('ignores sessions with zero target swings', () => {
     const state: PracticeMissionHistoryEntry[] = [];
 

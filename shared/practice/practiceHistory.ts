@@ -224,6 +224,11 @@ export function computeMissionStreak(
       : now.getTime();
   const anchorDay = Math.floor(anchorTimestamp / DAY_MS);
 
+  const todayDay = Math.floor(now.getTime() / DAY_MS);
+  if (todayDay - anchorDay > 1) {
+    return { consecutiveDays: 0, lastCompletedAt };
+  }
+
   let streak = 0;
   let currentDay = anchorDay;
   while (days.has(currentDay)) {
