@@ -72,6 +72,7 @@ export default function RangeQuickPracticeStartScreen({ navigation, route }: Pro
       targetDistanceM: hasDistance ? parsedDistance : null,
       cameraAngle: selectedAngle,
       missionId,
+      practiceRecommendation,
     });
   };
 

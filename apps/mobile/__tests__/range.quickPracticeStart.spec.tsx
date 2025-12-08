@@ -52,12 +52,15 @@ describe('RangeQuickPracticeStartScreen', () => {
 
     fireEvent.click(screen.getByTestId('start-quick-practice'));
 
-    expect(navigation.navigate).toHaveBeenCalledWith('RangeCameraSetup', {
-      club: '7i',
-      targetDistanceM: 145,
-      cameraAngle: 'face_on',
-      missionId: undefined,
-    });
+    expect(navigation.navigate).toHaveBeenCalledWith(
+      'RangeCameraSetup',
+      expect.objectContaining({
+        club: '7i',
+        targetDistanceM: 145,
+        cameraAngle: 'face_on',
+        missionId: undefined,
+      }),
+    );
   });
 
   it('shows current training goal inline when available', async () => {

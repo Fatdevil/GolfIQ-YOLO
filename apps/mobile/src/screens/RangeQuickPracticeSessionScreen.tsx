@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, ScrollView, StyleSheet, Switch, Text, TouchableOpacity, View } from 'react-native';
 
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -12,6 +12,7 @@ import { computeTempoTargetFromHistory, type TempoTarget } from '@app/range/temp
 import { loadCurrentTrainingGoal } from '@app/range/rangeTrainingGoalStorage';
 import { loadRangeHistory } from '@app/range/rangeHistoryStorage';
 import { t } from '@app/i18n';
+import { appendPracticeMissionSession } from '@app/storage/practiceMissionHistory';
 import {
   isTempoTrainerAvailable,
   sendTempoTrainerActivation,
@@ -75,6 +76,8 @@ export default function RangeQuickPracticeSessionScreen({ navigation, route }: P
   const [tempoTarget, setTempoTarget] = useState<TempoTarget | null>(null);
   const [isTempoTrainerEnabled, setIsTempoTrainerEnabled] = useState(false);
   const [pendingTrainerResult, setPendingTrainerResult] = useState<TempoTrainerResultMessage | null>(null);
+  const practiceRecommendation = route?.params?.practiceRecommendation;
+  const sessionStartedAtRef = useRef<string>(session?.startedAt ?? new Date().toISOString());
   const angleLabel = useMemo(() => {
     if (sessionState?.cameraAngle === 'down_the_line') return 'DTL';
     if (sessionState?.cameraAngle === 'face_on') return 'Face-on';
@@ -236,6 +239,33 @@ export default function RangeQuickPracticeSessionScreen({ navigation, route }: P
     const missionMeta = missionId ? { id: missionId, titleKey: mission?.titleKey } : undefined;
 
     const summary = buildSummary(sessionState, goal?.text ?? undefined, missionMeta);
+
+    if (practiceRecommendation) {
+      const shotsForTargets = sessionState.shots.filter((shot) =>
+        shot.club && practiceRecommendation.targetClubs.includes(shot.club),
+      );
+      const totalShots = shotsForTargets.length > 0 ? shotsForTargets.length : sessionState.shots.length;
+      const completed =
+        practiceRecommendation.targetSampleCount != null
+          ? totalShots >= practiceRecommendation.targetSampleCount
+          : totalShots > 0;
+
+      try {
+        await appendPracticeMissionSession({
+          id: typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : `${Date.now()}`,
+          recommendationId: practiceRecommendation.id,
+          startedAt: sessionStartedAtRef.current,
+          completedAt: completed ? new Date().toISOString() : undefined,
+          targetSampleCount: practiceRecommendation.targetSampleCount,
+          totalShots,
+          targetClubs: practiceRecommendation.targetClubs,
+          completed,
+        });
+      } catch (err) {
+        console.warn('[range] Failed to persist practice mission session', err);
+      }
+    }
+
     navigation.navigate('RangeQuickPracticeSummary', { summary });
   };
 

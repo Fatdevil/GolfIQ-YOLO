@@ -13,6 +13,8 @@ import * as trainingGoalStorage from '@app/range/rangeTrainingGoalStorage';
 import * as missionStorage from '@app/range/rangeMissionsStorage';
 import * as missions from '@app/range/rangeMissions';
 import * as tempoBridge from '@app/watch/tempoTrainerBridge';
+import * as practiceMissionHistory from '@app/storage/practiceMissionHistory';
+import type { BagPracticeRecommendation } from '@shared/caddie/bagPracticeRecommendations';
 
 vi.mock('@app/api/range', () => ({
   analyzeRangeShot: vi.fn(),
@@ -46,6 +48,10 @@ vi.mock('@app/watch/tempoTrainerBridge', () => ({
   subscribeToTempoTrainerResults: vi.fn(),
 }));
 
+vi.mock('@app/storage/practiceMissionHistory', () => ({
+  appendPracticeMissionSession: vi.fn(),
+}));
+
 type Props = NativeStackScreenProps<RootStackParamList, 'RangeQuickPracticeSession'>;
 
 function createNavigation(): Props['navigation'] {
@@ -57,11 +63,15 @@ function createNavigation(): Props['navigation'] {
   } as unknown as Props['navigation'];
 }
 
-function createRoute(session: RangeSession, missionId?: string): Props['route'] {
+function createRoute(
+  session: RangeSession,
+  missionId?: string,
+  practiceRecommendation?: BagPracticeRecommendation,
+): Props['route'] {
   return {
     key: 'RangeQuickPracticeSession',
     name: 'RangeQuickPracticeSession',
-    params: { session, missionId },
+    params: { session, missionId, practiceRecommendation },
   } as Props['route'];
 }
 
@@ -73,6 +83,7 @@ describe('RangeQuickPracticeSessionScreen', () => {
     vi.mocked(rangeHistory.loadRangeHistory).mockResolvedValue([]);
     vi.mocked(tempoBridge.isTempoTrainerAvailable).mockReturnValue(true);
     vi.mocked(tempoBridge.subscribeToTempoTrainerResults).mockReturnValue(() => {});
+    vi.mocked(practiceMissionHistory.appendPracticeMissionSession).mockResolvedValue();
   });
 
   it('shows angle label and logs shot with camera angle', async () => {
@@ -161,6 +172,73 @@ describe('RangeQuickPracticeSessionScreen', () => {
       expect(summaryStorage.saveLastRangeSessionSummary).not.toHaveBeenCalled();
       expect(rangeHistory.appendRangeHistoryEntry).not.toHaveBeenCalled();
     });
+  });
+
+  it('persists practice mission history when recommendation is present', async () => {
+    const navigation = createNavigation();
+    const session: RangeSession = {
+      id: 'session-1',
+      mode: 'quick',
+      startedAt: '2024-01-01T00:00:00.000Z',
+      club: '7i',
+      targetDistanceM: 150,
+      cameraAngle: 'face_on',
+      shots: [
+        {
+          id: 'shot-1',
+          timestamp: '2024-01-01T00:05:00.000Z',
+          club: '7i',
+          targetDistanceM: 150,
+        },
+        {
+          id: 'shot-2',
+          timestamp: '2024-01-01T00:06:00.000Z',
+          club: '7i',
+          targetDistanceM: 150,
+        },
+        {
+          id: 'shot-3',
+          timestamp: '2024-01-01T00:07:00.000Z',
+          club: 'pw',
+        },
+      ],
+    };
+
+    const recommendation: BagPracticeRecommendation = {
+      id: 'practice_calibrate:7i',
+      titleKey: 'bag.practice.calibrate.title',
+      descriptionKey: 'bag.practice.calibrate.more_samples.description',
+      targetClubs: ['7i'],
+      targetSampleCount: 2,
+      sourceSuggestionId: 'suggestion-1',
+    };
+
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2024-01-01T02:00:00.000Z'));
+
+    render(
+      <RangeQuickPracticeSessionScreen
+        navigation={navigation}
+        route={createRoute(session, undefined, recommendation)}
+      />,
+    );
+
+    fireEvent.click(screen.getByTestId('end-session'));
+
+    await waitFor(() => {
+      expect(practiceMissionHistory.appendPracticeMissionSession).toHaveBeenCalledWith(
+        expect.objectContaining({
+          recommendationId: recommendation.id,
+          targetSampleCount: 2,
+          totalShots: 2,
+          targetClubs: recommendation.targetClubs,
+          completed: true,
+          startedAt: session.startedAt,
+        }),
+      );
+    });
+
+    vi.useRealTimers();
   });
 
   it('tags summary with mission from navigation params', async () => {

@@ -44,14 +44,17 @@ describe('RangeCameraSetupScreen', () => {
     expect(screen.getByTestId('angle-ok')).toBeInTheDocument();
 
     fireEvent.click(screen.getByTestId('camera-continue'));
-    expect(navigation.navigate).toHaveBeenCalledWith('RangeQuickPracticeSession', {
-      session: expect.objectContaining({
-        club: '7i',
-        targetDistanceM: 145,
-        cameraAngle: 'down_the_line',
-        mode: 'quick',
+    expect(navigation.navigate).toHaveBeenCalledWith(
+      'RangeQuickPracticeSession',
+      expect.objectContaining({
+        session: expect.objectContaining({
+          club: '7i',
+          targetDistanceM: 145,
+          cameraAngle: 'down_the_line',
+          mode: 'quick',
+        }),
       }),
-    });
+    );
     vi.useRealTimers();
   });
 });

@@ -28,6 +28,12 @@ import { fetchCourseLayout, fetchCourses } from '@app/api/courseClient';
 import { t } from '@app/i18n';
 import type { RootStackParamList } from '@app/navigation/types';
 import { loadEngagementState, saveEngagementState, type EngagementState } from '@app/storage/engagement';
+import {
+  PRACTICE_MISSION_WINDOW_DAYS,
+  loadPracticeMissionHistory,
+  summarizeRecentPracticeHistory,
+  type PracticeProgressOverview,
+} from '@app/storage/practiceMissionHistory';
 import { useGeolocation } from '@app/hooks/useGeolocation';
 import { saveActiveRoundState } from '@app/round/roundState';
 import { computeNearestCourse } from '@shared/round/autoHoleCore';
@@ -36,6 +42,7 @@ import { buildBagReadinessOverview } from '@shared/caddie/bagReadiness';
 import type { BagClubStatsMap } from '@shared/caddie/bagStats';
 import type { BagSuggestion } from '@shared/caddie/bagTuningSuggestions';
 import { formatDistance } from '@app/utils/distance';
+import { buildPracticeProgressTileModel } from '@app/home/practiceProgressHelpers';
 
 const CALIBRATION_SAMPLE_THRESHOLD = 5;
 const TARGET_ROUNDS_PER_WEEK = 3;
@@ -125,6 +132,7 @@ export default function HomeDashboardScreen({ navigation }: Props): JSX.Element 
   });
   const [sharingWeekly, setSharingWeekly] = useState(false);
   const [quickStarting, setQuickStarting] = useState(false);
+  const [practiceOverview, setPracticeOverview] = useState<PracticeProgressOverview | null>(null);
   const geo = useGeolocation();
 
   useEffect(() => {
@@ -185,7 +193,39 @@ export default function HomeDashboardScreen({ navigation }: Props): JSX.Element 
     };
   }, []);
 
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadPracticeHistory = async () => {
+      try {
+        const history = await loadPracticeMissionHistory();
+        if (cancelled) return;
+        setPracticeOverview(summarizeRecentPracticeHistory(history, new Date()));
+      } catch (err) {
+        if (!cancelled) {
+          console.warn('Home dashboard practice history load failed', err);
+          setPracticeOverview({
+            totalSessions: 0,
+            completedSessions: 0,
+            windowDays: PRACTICE_MISSION_WINDOW_DAYS,
+          });
+        }
+      }
+    };
+
+    loadPracticeHistory().catch((err) => console.warn('Home dashboard practice history crashed', err));
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const { loading, profile, currentRound, latestRound, weeklySummary, practicePlan, bag, bagStats, engagement } = state;
+
+  const practiceProgressModel = useMemo(
+    () => buildPracticeProgressTileModel(practiceOverview),
+    [practiceOverview],
+  );
 
   const latestRoundDisplay = useMemo(() => {
     if (!latestRound) return null;
@@ -602,6 +642,34 @@ export default function HomeDashboardScreen({ navigation }: Props): JSX.Element 
           <Text style={styles.cardBody}>{t('home_dashboard_weekly_empty')}</Text>
         )}
       </View>
+
+      {practiceProgressModel ? (
+        <View style={styles.card} testID="practice-progress-card">
+          <Text style={styles.cardTitle}>{t('practice.progress.title')}</Text>
+          <View style={styles.progressBlock}>
+            <View style={styles.progressBar}>
+              <View
+                style={[
+                  styles.progressFill,
+                  { width: `${Math.min(1, Math.max(0, practiceProgressModel.completionRatio)) * 100}%` },
+                ]}
+              />
+            </View>
+            <Text style={styles.cardBody} testID="practice-progress-summary">
+              {practiceProgressModel.hasData && practiceProgressModel.completedSessions != null
+                ? t(practiceProgressModel.completedSessionsLabelKey, {
+                    completed: practiceProgressModel.completedSessions,
+                    total: practiceProgressModel.totalSessions,
+                  })
+                : t('practice.progress.getStarted')}
+            </Text>
+            <Text style={styles.muted}>{t(practiceProgressModel.subtitleKey)}</Text>
+          </View>
+          <TouchableOpacity onPress={() => navigation.navigate('RangePractice')} testID="open-practice-progress">
+            <Text style={styles.link}>{t('practice.progress.cta')}</Text>
+          </TouchableOpacity>
+        </View>
+      ) : null}
 
       <View style={styles.card}>
         <Text style={styles.cardTitle}>{t('home_dashboard_practice_title')}</Text>

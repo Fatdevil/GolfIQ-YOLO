@@ -34,10 +34,12 @@ export type RootStackParamList = {
     targetDistanceM?: number | null;
     cameraAngle: import('@app/range/rangeSession').RangeCameraAngle;
     missionId?: string;
+    practiceRecommendation?: import('@shared/caddie/bagPracticeRecommendations').BagPracticeRecommendation;
   };
   RangeQuickPracticeSession: {
     session: import('@app/range/rangeSession').RangeSession;
     missionId?: string;
+    practiceRecommendation?: import('@shared/caddie/bagPracticeRecommendations').BagPracticeRecommendation;
   };
   RangeQuickPracticeSummary: { summary: import('@app/range/rangeSession').RangeSessionSummary };
   RangeHistory: undefined;
