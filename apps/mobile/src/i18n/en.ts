@@ -50,6 +50,8 @@ export const en = {
   home_dashboard_badge_new_coach_report: 'New coach report',
   home_dashboard_practice_title: "Today's practice",
   home_dashboard_practice_cta: 'Open Practice Planner',
+  home_dashboard_practice_next_title: 'Next mission',
+  home_dashboard_practice_next_cta: 'Start mission',
   home_dashboard_practice_today: 'Today: {{drills}} drills · {{minutes}} min',
   home_dashboard_practice_prompt: 'Get a practice plan in 30 seconds',
   home_dashboard_bag_title: 'Bag calibration',

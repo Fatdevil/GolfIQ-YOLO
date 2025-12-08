@@ -222,6 +222,13 @@ export function buildBagPracticeRecommendations(
   }
 }
 
+export type PracticeRecommendationInput = {
+  overview: BagReadinessOverview | null | undefined;
+  suggestions?: BagSuggestion[] | null;
+  history?: PracticeMissionHistoryEntry[] | null;
+  options?: { windowDays?: number; now?: Date };
+};
+
 export function buildBagPracticeRecommendation(
   overview: BagReadinessOverview | null | undefined,
   suggestions?: BagSuggestion[] | null,
@@ -229,5 +236,15 @@ export function buildBagPracticeRecommendation(
   options: { windowDays?: number; now?: Date } = {},
 ): BagPracticeRecommendation | null {
   const [first] = buildBagPracticeRecommendations(overview, suggestions, history, options);
+  return first ?? null;
+}
+
+export function getTopPracticeRecommendation({
+  overview,
+  suggestions,
+  history,
+  options,
+}: PracticeRecommendationInput): BagPracticeRecommendation | null {
+  const [first] = buildBagPracticeRecommendations(overview, suggestions, history, options ?? {});
   return first ?? null;
 }

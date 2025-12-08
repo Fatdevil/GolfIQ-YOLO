@@ -5,6 +5,7 @@ import {
   buildBagPracticeRecommendation,
   buildBagPracticeRecommendations,
   buildMissionCoverageByClub,
+  getTopPracticeRecommendation,
 } from '../bagPracticeRecommendations';
 import type { PracticeMissionHistoryEntry } from '@shared/practice/practiceHistory';
 import type { BagSuggestion } from '../bagTuningSuggestions';
@@ -130,8 +131,8 @@ describe('buildBagPracticeRecommendation', () => {
       {
         id: 'old-gap',
         missionId: 'practice_fill_gap:8i:9i',
-        startedAt: '2024-04-25T12:00:00.000Z',
-        endedAt: '2024-04-25T12:30:00.000Z',
+        startedAt: '2024-05-01T12:00:00.000Z',
+        endedAt: '2024-05-01T12:30:00.000Z',
         status: 'completed',
         targetClubs: ['8i'],
         completedSampleCount: 20,
@@ -183,5 +184,41 @@ describe('buildBagPracticeRecommendation', () => {
 
     expect(coverage['8i']?.completed).toBe(1);
     expect(coverage['9i']).toBeUndefined();
+  });
+
+  it('returns the highest priority recommendation', () => {
+    const suggestions: BagSuggestion[] = [
+      { id: 'calibrate:7i', type: 'calibrate', severity: 'low', clubId: '7i' },
+      { id: 'calibrate:pw', type: 'calibrate', severity: 'medium', clubId: 'pw' },
+    ];
+
+    const now = new Date('2024-05-15T12:00:00.000Z');
+    const history: PracticeMissionHistoryEntry[] = [
+      {
+        id: 'recent',
+        missionId: 'practice_calibrate:pw',
+        startedAt: '2024-05-14T12:00:00.000Z',
+        endedAt: '2024-05-14T12:30:00.000Z',
+        status: 'completed',
+        targetClubs: ['pw'],
+        completedSampleCount: 12,
+      },
+    ];
+
+    const rec = getTopPracticeRecommendation({
+      overview: baseOverview,
+      suggestions,
+      history,
+      options: { now },
+    });
+
+    expect(rec).not.toBeNull();
+    expect(rec?.id).toBe('practice_calibrate:7i');
+  });
+
+  it('returns null when no recommendations are available', () => {
+    const rec = getTopPracticeRecommendation({ overview: null, suggestions: [], history: [] });
+
+    expect(rec).toBeNull();
   });
 });
