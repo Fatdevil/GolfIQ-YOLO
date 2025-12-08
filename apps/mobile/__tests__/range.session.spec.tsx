@@ -211,6 +211,9 @@ describe('RangeQuickPracticeSessionScreen', () => {
       targetClubs: ['7i'],
       targetSampleCount: 2,
       sourceSuggestionId: 'suggestion-1',
+      status: 'new',
+      priorityScore: 0,
+      lastCompletedAt: null,
     };
 
     vi.useFakeTimers();
@@ -276,6 +279,9 @@ describe('RangeQuickPracticeSessionScreen', () => {
       targetClubs: ['7i'],
       targetSampleCount: 2,
       sourceSuggestionId: 'suggestion-1',
+      status: 'new',
+      priorityScore: 0,
+      lastCompletedAt: null,
     };
 
     vi.useFakeTimers();

@@ -110,6 +110,9 @@ describe('RangeQuickPracticeStartScreen', () => {
             descriptionKey: 'bag.practice.calibrate.more_samples.description',
             targetClubs: ['PW'],
             sourceSuggestionId: 'calibrate:pw',
+            status: 'new',
+            priorityScore: 0,
+            lastCompletedAt: null,
           },
         })}
       />,

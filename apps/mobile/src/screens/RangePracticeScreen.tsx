@@ -9,7 +9,7 @@ import { buildMissionProgressById, type PracticeMissionHistoryEntry } from '@sha
 import { loadCurrentTrainingGoal } from '@app/range/rangeTrainingGoalStorage';
 import { fetchPlayerBag, type PlayerBag } from '@app/api/bagClient';
 import { fetchBagStats } from '@app/api/bagStatsClient';
-import { buildBagReadinessOverview } from '@shared/caddie/bagReadiness';
+import { buildBagReadinessOverview, type BagReadinessOverview } from '@shared/caddie/bagReadiness';
 import { buildBagPracticeRecommendation, type BagPracticeRecommendation } from '@shared/caddie/bagPracticeRecommendations';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'RangePractice'>;
@@ -17,6 +17,7 @@ type Props = NativeStackScreenProps<RootStackParamList, 'RangePractice'>;
 export default function RangePracticeScreen({ navigation }: Props): JSX.Element {
   const [trainingGoal, setTrainingGoal] = useState<string | null>(null);
   const [bag, setBag] = useState<PlayerBag | null>(null);
+  const [bagOverview, setBagOverview] = useState<BagReadinessOverview | null>(null);
   const [practiceRecommendation, setPracticeRecommendation] = useState<BagPracticeRecommendation | null>(null);
   const [practiceHistory, setPracticeHistory] = useState<PracticeMissionHistoryEntry[]>([]);
 
@@ -77,11 +78,15 @@ export default function RangePracticeScreen({ navigation }: Props): JSX.Element 
         setBag(bagPayload);
 
         const overview = buildBagReadinessOverview(bagPayload, bagStatsPayload ?? {});
-        setPracticeRecommendation(buildBagPracticeRecommendation(overview, overview.suggestions));
+        setBagOverview(overview);
+        setPracticeRecommendation(
+          buildBagPracticeRecommendation(overview, overview.suggestions, practiceHistory),
+        );
       } catch (err) {
         if (!cancelled) {
           console.warn('[range] Unable to load bag readiness for practice', err);
           setBag(null);
+          setBagOverview(null);
           setPracticeRecommendation(null);
         }
       }
@@ -98,6 +103,13 @@ export default function RangePracticeScreen({ navigation }: Props): JSX.Element 
       unsubscribe();
     };
   }, [navigation]);
+
+  useEffect(() => {
+    if (!bagOverview) return;
+    setPracticeRecommendation(
+      buildBagPracticeRecommendation(bagOverview, bagOverview.suggestions, practiceHistory),
+    );
+  }, [bagOverview, practiceHistory]);
 
   const clubLabels = useMemo(() => {
     const labels: Record<string, string> = {};
@@ -120,6 +132,14 @@ export default function RangePracticeScreen({ navigation }: Props): JSX.Element 
       description: t(practiceRecommendation.descriptionKey, { lower, upper, club }),
     };
   }, [clubLabels, practiceRecommendation]);
+
+  const recommendationStatusLabel = useMemo(() => {
+    if (!practiceRecommendation) return null;
+
+    if (practiceRecommendation.status === 'new') return t('bag.practice.status.new');
+    if (practiceRecommendation.status === 'due') return t('bag.practice.status.due');
+    return t('bag.practice.status.fresh');
+  }, [practiceRecommendation]);
 
   const recommendationProgress = useMemo(() => {
     if (!practiceRecommendation) return null;
@@ -175,6 +195,11 @@ export default function RangePracticeScreen({ navigation }: Props): JSX.Element 
         <View style={styles.card} testID="range-recommendation-card">
           <Text style={styles.cardOverline}>{t('bag.practice.recommendedTitle')}</Text>
           <Text style={styles.cardTitle}>{recommendationCopy.title}</Text>
+          {recommendationStatusLabel ? (
+            <Text style={styles.statusChip} testID="range-recommendation-status">
+              {recommendationStatusLabel}
+            </Text>
+          ) : null}
           <Text style={styles.cardSubtitle}>{recommendationCopy.description}</Text>
           {recommendationProgressLabel ? (
             <Text style={styles.cardHelper} testID="range-recommendation-progress">
@@ -305,6 +330,16 @@ const styles = StyleSheet.create({
   },
   cardHelper: {
     color: '#6B7280',
+  },
+  statusChip: {
+    alignSelf: 'flex-start',
+    backgroundColor: '#ECFDF3',
+    color: '#047857',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 999,
+    fontWeight: '700',
+    fontSize: 12,
   },
   primaryButton: {
     marginTop: 8,

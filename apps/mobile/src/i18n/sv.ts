@@ -44,6 +44,14 @@ export const sv = {
   },
   bag: {
     practice: {
+      recommendedTitle: 'Rekommenderad träning',
+      recommendedHelper: 'Baserat på din bageredskap',
+      startCta: 'Starta träning',
+      status: {
+        new: 'Nytt mission',
+        due: 'Dags för finjustering',
+        fresh: 'Håll det skarpt',
+      },
       progress: {
         recent: '{{count}} pass de senaste {{days}} dagarna',
         empty: 'Inte tränat ännu',

@@ -656,6 +656,11 @@ export const en = {
       recommendedTitle: 'Recommended practice',
       recommendedHelper: 'Based on your bag readiness',
       startCta: 'Start practice',
+      status: {
+        new: 'New mission',
+        due: 'Due for tune-up',
+        fresh: 'Keep it sharp',
+      },
       fill_gap: {
         title: 'Practice gapping {{lower}} & {{upper}}',
         description: 'Alternate between these clubs to tighten the distance gap.',

@@ -29,6 +29,10 @@ vi.mock("@/practice/practiceMissionHistory", async () => {
     loadPracticeMissionHistory: vi.fn(),
   };
 });
+vi.mock("@/api/bagStatsClient", () => ({ fetchBagStats: vi.fn() }));
+vi.mock("@shared/caddie/bagPracticeRecommendations", () => ({
+  buildBagPracticeRecommendations: vi.fn(),
+}));
 
 import { postRangeAnalyze } from "@/features/range/api";
 import RangePracticePage from "./RangePracticePage";
@@ -41,14 +45,20 @@ import type { DistanceUnit } from "@/preferences/units";
 import { UserSessionProvider } from "@/user/UserSessionContext";
 import { postRangeSessionSnapshots } from "@/user/historyApi";
 import { loadPracticeMissionHistory } from "@/practice/practiceMissionHistory";
+import { fetchBagStats } from "@/api/bagStatsClient";
+import { buildBagPracticeRecommendations } from "@shared/caddie/bagPracticeRecommendations";
 
 const mockedPostRangeAnalyze = vi.mocked(postRangeAnalyze);
+const mockedFetchBagStats = vi.mocked(fetchBagStats);
+const mockedBuildRecommendations = vi.mocked(buildBagPracticeRecommendations);
 
 describe("RangePracticePage", () => {
   beforeEach(() => {
     mockedPostRangeAnalyze.mockReset();
     vi.mocked(postRangeSessionSnapshots).mockReset();
     vi.mocked(loadPracticeMissionHistory).mockResolvedValue([]);
+    mockedFetchBagStats.mockResolvedValue({});
+    mockedBuildRecommendations.mockReturnValue([]);
   });
 
   afterEach(() => {
@@ -168,6 +178,62 @@ describe("RangePracticePage", () => {
 
     const progressNode = screen.getByTestId("mission-history-progress");
     expect(progressNode).toHaveTextContent("Not practised yet");
+  });
+
+  it("renders recommendations in priority order with status labels", async () => {
+    mockedBuildRecommendations.mockReturnValue([
+      {
+        id: "practice_fill_gap:7i:8i",
+        titleKey: "bag.practice.fill_gap.title",
+        descriptionKey: "bag.practice.fill_gap.description",
+        targetClubs: ["7i", "8i"],
+        targetSampleCount: 12,
+        sourceSuggestionId: "fill_gap:7i:8i",
+        status: "due",
+        priorityScore: 30,
+        lastCompletedAt: null,
+      },
+      {
+        id: "practice_calibrate:pw",
+        titleKey: "bag.practice.calibrate.title",
+        descriptionKey: "bag.practice.calibrate.more_samples.description",
+        targetClubs: ["PW"],
+        targetSampleCount: 8,
+        sourceSuggestionId: "calibrate:pw",
+        status: "fresh",
+        priorityScore: 5,
+        lastCompletedAt: null,
+      },
+    ] as any);
+
+    renderWithUnit("metric", <RangePracticePage />);
+
+    const items = await screen.findAllByTestId("range-practice-recommendation");
+    expect(items).toHaveLength(2);
+    expect(items[0]).toHaveTextContent(/Due for tune-up/);
+    expect(items[1]).toHaveTextContent(/Keep it sharp/);
+  });
+
+  it("shows empty progress text when history is missing", async () => {
+    mockedBuildRecommendations.mockReturnValue([
+      {
+        id: "practice_calibrate:9i",
+        titleKey: "bag.practice.calibrate.title",
+        descriptionKey: "bag.practice.calibrate.more_samples.description",
+        targetClubs: ["9i"],
+        targetSampleCount: 10,
+        sourceSuggestionId: "calibrate:9i",
+        status: "new",
+        priorityScore: 10,
+        lastCompletedAt: null,
+      },
+    ] as any);
+    vi.mocked(loadPracticeMissionHistory).mockResolvedValue([]);
+
+    renderWithUnit("metric", <RangePracticePage />);
+
+    const progress = await screen.findByTestId("range-practice-recommendation-progress");
+    expect(progress).toHaveTextContent("Not practised yet");
   });
 });
 

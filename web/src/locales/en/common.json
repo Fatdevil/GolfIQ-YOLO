@@ -55,6 +55,11 @@
   "practice.missionProgress.recent": "{{count}} sessions in the last {{days}} days",
   "practice.missionProgress.empty": "Not practised yet",
   "practice.missionProgress.streak": "On a streak",
+  "bag.practice.recommendedTitle": "Recommended practice",
+  "bag.practice.recommendedHelper": "Based on your bag readiness",
+  "bag.practice.status.new": "New mission",
+  "bag.practice.status.due": "Due for tune-up",
+  "bag.practice.status.fresh": "Keep it sharp",
 
   "home.profile.title": "My GolfIQ",
   "home.profile.subtitle": "See your rounds, range sessions, caddie insights and SG preview.",
