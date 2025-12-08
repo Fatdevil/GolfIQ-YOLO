@@ -1,8 +1,8 @@
+import React, { type ReactElement } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter } from "react-router-dom";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import type { ReactElement } from "react";
 import { UnitsContext } from "../src/preferences/UnitsContext";
 
 import RangePracticePage from "../src/pages/RangePracticePage";
@@ -25,11 +25,18 @@ const { postRangeAnalyzeMock } = vi.hoisted(() => ({
   postRangeAnalyzeMock: vi.fn(),
 }));
 
+const { recordPracticeMissionOutcomeMock } = vi.hoisted(() => ({
+  recordPracticeMissionOutcomeMock: vi.fn(),
+}));
+
 vi.mock("../src/features/range/api", () => ({
   postRangeAnalyze: postRangeAnalyzeMock,
 }));
 vi.mock("../src/user/historyApi", () => ({
   postRangeSessionSnapshots: vi.fn(),
+}));
+vi.mock("@/practice/practiceMissionHistory", () => ({
+  recordPracticeMissionOutcome: recordPracticeMissionOutcomeMock,
 }));
 vi.mock("../src/access/PlanProvider", () => ({
   PlanProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
@@ -59,7 +66,7 @@ function renderWithProviders(ui: ReactElement, access = accessValue) {
           </UnitsContext.Provider>
         </UserAccessContext.Provider>
       </UserSessionProvider>
-    </MemoryRouter>
+    </MemoryRouter>,
   );
 }
 
@@ -67,11 +74,13 @@ describe("RangePracticePage missions mode", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     window.localStorage?.clear();
+    recordPracticeMissionOutcomeMock.mockReset();
+    recordPracticeMissionOutcomeMock.mockResolvedValue([]);
     loadBagMock.mockImplementation(() => ({
       updatedAt: Date.now(),
       clubs: [
-        { id: "7i", label: "7-iron", carry_m: null },
         { id: "PW", label: "Pitching wedge", carry_m: null },
+        { id: "7i", label: "7-iron", carry_m: null },
       ],
     }));
     updateClubCarryMock.mockImplementation((bag: BagState, clubId: string, carry: number | null) => ({
@@ -102,7 +111,10 @@ describe("RangePracticePage missions mode", () => {
       ),
     );
 
-    const hitButton = screen.getByRole("button", { name: /Hit & analyze/i });
+    const hitButton = screen
+      .getAllByRole("button", { name: /Hit & analyze/i })
+      .find((button: HTMLButtonElement) => !button.hasAttribute("disabled")) ??
+      screen.getAllByRole("button", { name: /Hit & analyze/i })[0];
     await user.click(hitButton);
     await user.click(hitButton);
     await user.click(hitButton);

@@ -76,6 +76,7 @@ import { convertMeters, formatDistance } from "@/utils/distance";
 import { useUserSession } from "@/user/UserSessionContext";
 import { postRangeSessionSnapshots } from "@/user/historyApi";
 import { mapRangeSessionToSnapshot } from "@/user/historySync";
+import { persistMissionOutcomeFromSession } from "@/practice/missionOutcomeRecorder";
 
 const DEFAULT_ANALYZE_FRAMES = 8;
 const DEFAULT_REF_LEN_PX = 100;
@@ -325,7 +326,7 @@ export default function RangePracticePage() {
     }
   }, [gameMode]);
 
-  const handleEndSession = React.useCallback(() => {
+  const handleEndSession = React.useCallback(async () => {
     if (shots.length === 0) {
       return;
     }
@@ -408,6 +409,13 @@ export default function RangePracticePage() {
     };
 
     appendRangeSession(session);
+
+    await persistMissionOutcomeFromSession(mission, shots, {
+      sessionId: session.id,
+      startedAt: session.startedAt,
+      endedAt: session.endedAt,
+      missionTargetReps,
+    });
 
     if (userId) {
       const snapshot = mapRangeSessionToSnapshot(session);
