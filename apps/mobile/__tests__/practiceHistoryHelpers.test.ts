@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   buildPracticeHistoryList,
+  buildPracticeMissionDetail,
   DEFAULT_HISTORY_WINDOW_DAYS,
   type PracticeMissionHistoryEntry,
 } from '@shared/practice/practiceHistory';
@@ -98,5 +99,60 @@ describe('buildPracticeHistoryList', () => {
       .filter((item) => item.status === 'completed')
       .map((item) => item.countsTowardStreak);
     expect(streakFlags).toEqual([true, true]);
+  });
+});
+
+describe('buildPracticeMissionDetail', () => {
+  it('handles legacy entries without targets or end time', () => {
+    const entries: PracticeMissionHistoryEntry[] = [
+      {
+        id: 'legacy',
+        missionId: 'custom-1',
+        startedAt: '2024-04-05T10:00:00.000Z',
+        status: 'completed',
+        targetClubs: ['7i'],
+        completedSampleCount: 12,
+      },
+    ];
+
+    const detail = buildPracticeMissionDetail(entries, 'legacy');
+
+    expect(detail).not.toBeNull();
+    expect(detail?.targetSampleCount).toBeNull();
+    expect(detail?.completionRatio).toBeNull();
+    expect(detail?.endedAt).toBeNull();
+  });
+
+  it('returns detail with streak flag and ratio for modern mission', () => {
+    const now = new Date('2024-04-10T12:00:00.000Z');
+    const entries: PracticeMissionHistoryEntry[] = [
+      {
+        id: 'one',
+        missionId: 'practice_calibrate:7i',
+        startedAt: '2024-04-09T10:00:00.000Z',
+        endedAt: '2024-04-09T11:00:00.000Z',
+        status: 'completed',
+        targetClubs: ['7i'],
+        targetSampleCount: 24,
+        completedSampleCount: 18,
+      },
+      {
+        id: 'two',
+        missionId: 'practice_calibrate:7i',
+        startedAt: '2024-04-10T10:00:00.000Z',
+        endedAt: '2024-04-10T11:00:00.000Z',
+        status: 'completed',
+        targetClubs: ['7i'],
+        targetSampleCount: 24,
+        completedSampleCount: 24,
+      },
+    ];
+
+    const detail = buildPracticeMissionDetail(entries, 'two', { now, clubLabels: { '7i': '7 Iron' } });
+
+    expect(detail).not.toBeNull();
+    expect(detail?.completionRatio).toBeCloseTo(1);
+    expect(detail?.countedTowardStreak).toBe(true);
+    expect(detail?.targetClubs[0]).toEqual({ id: '7i', label: '7 Iron' });
   });
 });

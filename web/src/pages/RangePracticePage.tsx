@@ -1,5 +1,6 @@
 import React from "react";
 import { useTranslation } from "react-i18next";
+import { useLocation } from "react-router-dom";
 import { BetaBadge } from "@/access/BetaBadge";
 import { FeatureGate } from "@/access/FeatureGate";
 import { UpgradeGate } from "@/access/UpgradeGate";
@@ -173,6 +174,7 @@ export default function RangePracticePage() {
   const { status: calibrationStatus } = useCalibrationStatus();
   const { session: userSession } = useUserSession();
   const { isPro, loading: accessLoading } = useAccessPlan();
+  const location = useLocation();
   const userId = userSession?.userId ?? null;
   const [bag] = React.useState<BagState>(() => loadBag());
   const [currentClubId, setCurrentClubId] = React.useState<string>(
@@ -220,12 +222,7 @@ export default function RangePracticePage() {
     () => (mission ? computeMissionProgress(mission, shots) : null),
     [mission, shots]
   );
-  const searchParams = React.useMemo(() => {
-    if (typeof window === "undefined") {
-      return new URLSearchParams();
-    }
-    return new URLSearchParams(window.location.search ?? "");
-  }, []);
+  const searchParams = React.useMemo(() => new URLSearchParams(location.search ?? ""), [location.search]);
 
   const missionPrefInitialized = React.useRef(false);
 
@@ -261,6 +258,13 @@ export default function RangePracticePage() {
       setMissionId(null);
     }
   }, [missionId, mission]);
+
+  React.useEffect(() => {
+    const presetClub = searchParams.get("club");
+    if (presetClub && bag.clubs.some((club) => club.id === presetClub)) {
+      setCurrentClubId(presetClub);
+    }
+  }, [bag.clubs, searchParams]);
 
   const makeGhostProfileFromCurrent = React.useCallback(
     (

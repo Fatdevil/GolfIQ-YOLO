@@ -45,6 +45,20 @@ export type CompletionSummary = {
   attempted: number;
 };
 
+export type PracticeMissionDetail = {
+  id: string;
+  missionId: string;
+  startedAt: Date;
+  endedAt: Date | null;
+  missionKind: 'recommended' | 'custom' | 'other';
+  targetClubs: Array<{ id: string; label: string }>;
+  targetSampleCount: number | null;
+  completedSampleCount: number;
+  completionRatio: number | null;
+  countedTowardStreak: boolean;
+  originSuggestionId?: string | null;
+};
+
 export const MAX_PRACTICE_HISTORY_ENTRIES = 100;
 export const DEFAULT_HISTORY_WINDOW_DAYS = 14;
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -74,6 +88,12 @@ function normalizeMissionId(raw: unknown): string | null {
   return null;
 }
 
+function inferMissionKind(missionId: string): PracticeMissionDetail['missionKind'] {
+  if (/^(practice_|practice|rec-|recommendation)/.test(missionId)) return 'recommended';
+  if (/^(custom|user)/.test(missionId)) return 'custom';
+  return 'other';
+}
+
 function normalizeTargetClubs(raw: unknown): string[] {
   if (Array.isArray(raw)) {
     return raw.filter((club): club is string => typeof club === 'string' && club.trim().length > 0);
@@ -87,6 +107,10 @@ function formatTargetClubs(clubs: string[], labels?: Record<string, string>): st
     .map((club) => labels?.[club] ?? club)
     .filter((club) => club.trim().length > 0)
     .join(', ');
+}
+
+function mapTargetClubs(clubs: string[], labels?: Record<string, string>): Array<{ id: string; label: string }> {
+  return clubs.map((club) => ({ id: club, label: labels?.[club] ?? club }));
 }
 
 function coerceSampleCount(raw: unknown): number | undefined {
@@ -338,4 +362,49 @@ export function buildPracticeHistoryList(
       countsTowardStreak,
     };
   });
+}
+
+function computeEntryStatus(entry: PracticeMissionHistoryEntry): PracticeHistoryListStatus {
+  const completedSamples = entry.completedSampleCount ?? 0;
+  const targetSamples = entry.targetSampleCount;
+
+  if (completedSamples <= 0) return 'incomplete';
+  if (entry.status === 'completed' || (typeof targetSamples === 'number' && completedSamples >= targetSamples)) {
+    return 'completed';
+  }
+  return 'partial';
+}
+
+export function buildPracticeMissionDetail(
+  state: PracticeMissionHistoryEntry[],
+  id: string,
+  options: { clubLabels?: Record<string, string>; now?: Date } = {},
+): PracticeMissionDetail | null {
+  const { clubLabels, now = new Date() } = options;
+  const entry = state.find((candidate) => candidate.id === id);
+  if (!entry) return null;
+
+  const occurredAt = entry.endedAt ?? entry.startedAt;
+  const occurredDate = occurredAt ? new Date(occurredAt) : now;
+  const status = computeEntryStatus(entry);
+
+  const streakDays = buildStreakDaySet(state, entry.missionId, now);
+  const countsTowardStreak = status === 'completed' && streakDays.has(Math.floor(occurredDate.getTime() / DAY_MS));
+
+  const targetSampleCount = typeof entry.targetSampleCount === 'number' ? entry.targetSampleCount : null;
+  const completionRatio = targetSampleCount && targetSampleCount > 0 ? entry.completedSampleCount / targetSampleCount : null;
+
+  return {
+    id: entry.id,
+    missionId: entry.missionId,
+    startedAt: entry.startedAt ? new Date(entry.startedAt) : occurredDate,
+    endedAt: entry.endedAt ? new Date(entry.endedAt) : null,
+    missionKind: inferMissionKind(entry.missionId),
+    targetClubs: mapTargetClubs(entry.targetClubs, clubLabels),
+    targetSampleCount,
+    completedSampleCount: entry.completedSampleCount ?? 0,
+    completionRatio,
+    countedTowardStreak: countsTowardStreak,
+    originSuggestionId: entry.missionId || null,
+  };
 }

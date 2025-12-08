@@ -3,6 +3,7 @@ import { render, screen, waitFor } from "@testing-library/react";
 import type { ReactElement } from "react";
 import { UnitsContext } from "../src/preferences/UnitsContext";
 import userEvent from "@testing-library/user-event";
+import { MemoryRouter } from "react-router-dom";
 
 import RangePracticePage from "../src/pages/RangePracticePage";
 import type { BagState } from "../src/bag/types";
@@ -50,13 +51,15 @@ const proAccessValue = {
 
 function renderWithAccess(ui: ReactElement) {
   return render(
-    <UserSessionProvider>
-      <UserAccessContext.Provider value={proAccessValue}>
-        <UnitsContext.Provider value={{ unit: "metric", setUnit: () => {} }}>
-          {ui}
-        </UnitsContext.Provider>
-      </UserAccessContext.Provider>
-    </UserSessionProvider>,
+    <MemoryRouter initialEntries={["/range/practice"]}>
+      <UserSessionProvider>
+        <UserAccessContext.Provider value={proAccessValue}>
+          <UnitsContext.Provider value={{ unit: "metric", setUnit: () => {} }}>
+            {ui}
+          </UnitsContext.Provider>
+        </UserAccessContext.Provider>
+      </UserSessionProvider>
+    </MemoryRouter>,
   );
 }
 

@@ -74,6 +74,7 @@ export type RootStackParamList = {
       }
     | undefined;
   PracticeHistory: undefined;
+  PracticeMissionDetail: { entryId: string };
   EventJoin: { code?: string } | undefined;
   EventLive: {
     id: string;

@@ -99,4 +99,26 @@ describe('PracticeHistoryScreen', () => {
 
     expect(vi.mocked(navigation.navigate).mock.calls[0][0]).toBe('RangeQuickPracticeStart');
   });
+
+  it('opens mission detail when tapping a history row', async () => {
+    vi.mocked(practiceHistoryStorage.loadPracticeMissionHistory).mockResolvedValue([
+      {
+        id: 'entry-1',
+        missionId: 'rec-1',
+        startedAt: new Date().toISOString(),
+        status: 'completed',
+        targetClubs: ['7i'],
+        completedSampleCount: 8,
+      },
+    ]);
+
+    const navigation = createNavigation();
+
+    render(<PracticeHistoryScreen navigation={navigation} route={createRoute()} />);
+
+    const row = await screen.findByTestId('practice-history-item');
+    fireEvent.click(row);
+
+    expect(vi.mocked(navigation.navigate)).toHaveBeenCalledWith('PracticeMissionDetail', { entryId: 'entry-1' });
+  });
 });

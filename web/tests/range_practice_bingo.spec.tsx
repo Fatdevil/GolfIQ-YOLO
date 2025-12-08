@@ -2,6 +2,7 @@ import React from "react";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { MemoryRouter } from "react-router-dom";
 
 vi.mock("@/features/range/api", () => ({
   postRangeAnalyze: vi.fn(),
@@ -64,10 +65,12 @@ describe("Range practice Target Bingo v1", () => {
 
 function renderWithUnit(unit: DistanceUnit, ui: React.ReactElement) {
   return render(
-    <UserSessionProvider>
-      <UnitsContext.Provider value={{ unit, setUnit: () => {} }}>
-        {ui}
-      </UnitsContext.Provider>
-    </UserSessionProvider>
+    <MemoryRouter initialEntries={["/range/practice"]}>
+      <UserSessionProvider>
+        <UnitsContext.Provider value={{ unit, setUnit: () => {} }}>
+          {ui}
+        </UnitsContext.Provider>
+      </UserSessionProvider>
+    </MemoryRouter>
   );
 }
