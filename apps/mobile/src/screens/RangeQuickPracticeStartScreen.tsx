@@ -16,8 +16,9 @@ const angleDescriptions: Record<RangeCameraAngle, string> = {
 
 export default function RangeQuickPracticeStartScreen({ navigation, route }: Props): JSX.Element {
   const missionId = route.params?.missionId;
+  const practiceRecommendation = route.params?.practiceRecommendation;
   const mission = missionId ? getMissionById(missionId) : undefined;
-  const [club, setClub] = useState('');
+  const [club, setClub] = useState(() => practiceRecommendation?.targetClubs?.[0] ?? '');
   const [targetDistance, setTargetDistance] = useState('');
   const [selectedAngle, setSelectedAngle] = useState<RangeCameraAngle>('down_the_line');
   const [trainingGoal, setTrainingGoal] = useState<string | null>(null);
@@ -46,6 +47,22 @@ export default function RangeQuickPracticeStartScreen({ navigation, route }: Pro
     [selectedAngle],
   );
 
+  const recommendationTitle = useMemo(() => {
+    if (!practiceRecommendation) return null;
+    const [lower, upper] = practiceRecommendation.targetClubs;
+    return t(practiceRecommendation.titleKey, {
+      lower,
+      upper,
+      club: lower,
+    });
+  }, [practiceRecommendation]);
+
+  useEffect(() => {
+    if (practiceRecommendation?.targetClubs?.[0]) {
+      setClub(practiceRecommendation.targetClubs[0]);
+    }
+  }, [practiceRecommendation?.targetClubs]);
+
   const handleStart = () => {
     const trimmedClub = club.trim();
     const parsedDistance = Number(targetDistance);
@@ -64,6 +81,12 @@ export default function RangeQuickPracticeStartScreen({ navigation, route }: Pro
       <Text style={styles.subtitle}>
         Välj kamera-vinkel och mål så guidar vi dig genom uppställningen innan inspelningen startar.
       </Text>
+      {practiceRecommendation && recommendationTitle ? (
+        <View style={styles.recommendationPill} testID="range-start-recommendation">
+          <Text style={styles.helper}>{t('bag.practice.recommendedHelper')}</Text>
+          <Text style={styles.recommendationTitle}>{recommendationTitle}</Text>
+        </View>
+      ) : null}
       {trainingGoal ? (
         <Text style={styles.goalInline} numberOfLines={2}>
           {t('range.trainingGoal.current_inline', { text: trainingGoal })}
@@ -160,6 +183,16 @@ const styles = StyleSheet.create({
   subtitle: {
     fontSize: 14,
     color: '#4B5563',
+  },
+  recommendationPill: {
+    padding: 12,
+    borderRadius: 12,
+    backgroundColor: '#ECFDF3',
+    gap: 4,
+  },
+  recommendationTitle: {
+    color: '#065F46',
+    fontWeight: '700',
   },
   goalInline: {
     color: '#111827',

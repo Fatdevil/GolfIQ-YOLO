@@ -609,6 +609,28 @@ export const en = {
       },
       tuneCta: 'Tune my bag',
     },
+    practice: {
+      recommendedTitle: 'Recommended practice',
+      recommendedHelper: 'Based on your bag readiness',
+      startCta: 'Start practice',
+      fill_gap: {
+        title: 'Practice gapping {{lower}} & {{upper}}',
+        description: 'Alternate between these clubs to tighten the distance gap.',
+      },
+      reduce_overlap: {
+        title: 'Separate {{lower}} and {{upper}}',
+        description: 'Hit both clubs to decide which one stays in the bag.',
+      },
+      calibrate: {
+        title: 'Collect shots with {{club}}',
+        more_samples: {
+          description: 'Add a small bucket to firm up this club’s carry distance.',
+        },
+        no_data: {
+          description: 'Record a few swings so we can auto-calibrate this club.',
+        },
+      },
+    },
   },
 } as const;
 

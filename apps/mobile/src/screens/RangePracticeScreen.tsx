@@ -1,15 +1,21 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { RootStackParamList } from '@app/navigation/types';
 import { t } from '@app/i18n';
 import { loadCurrentTrainingGoal } from '@app/range/rangeTrainingGoalStorage';
+import { fetchPlayerBag, type PlayerBag } from '@app/api/bagClient';
+import { fetchBagStats } from '@app/api/bagStatsClient';
+import { buildBagReadinessOverview } from '@shared/caddie/bagReadiness';
+import { buildBagPracticeRecommendation, type BagPracticeRecommendation } from '@shared/caddie/bagPracticeRecommendations';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'RangePractice'>;
 
 export default function RangePracticeScreen({ navigation }: Props): JSX.Element {
   const [trainingGoal, setTrainingGoal] = useState<string | null>(null);
+  const [bag, setBag] = useState<PlayerBag | null>(null);
+  const [practiceRecommendation, setPracticeRecommendation] = useState<BagPracticeRecommendation | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -29,6 +35,65 @@ export default function RangePracticeScreen({ navigation }: Props): JSX.Element 
       unsubscribe();
     };
   }, [navigation]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const load = async () => {
+      try {
+        const [bagPayload, bagStatsPayload] = await Promise.all([
+          fetchPlayerBag(),
+          fetchBagStats(),
+        ]);
+
+        if (cancelled) return;
+
+        setBag(bagPayload);
+
+        const overview = buildBagReadinessOverview(bagPayload, bagStatsPayload ?? {});
+        setPracticeRecommendation(buildBagPracticeRecommendation(overview, overview.suggestions));
+      } catch (err) {
+        if (!cancelled) {
+          console.warn('[range] Unable to load bag readiness for practice', err);
+          setBag(null);
+          setPracticeRecommendation(null);
+        }
+      }
+    };
+
+    const unsubscribe = typeof (navigation as any).addListener === 'function'
+      ? (navigation as any).addListener('focus', load)
+      : () => {};
+
+    load();
+
+    return () => {
+      cancelled = true;
+      unsubscribe();
+    };
+  }, [navigation]);
+
+  const clubLabels = useMemo(() => {
+    const labels: Record<string, string> = {};
+    bag?.clubs.forEach((club) => {
+      labels[club.clubId] = club.label;
+    });
+    return labels;
+  }, [bag?.clubs]);
+
+  const recommendationCopy = useMemo(() => {
+    if (!practiceRecommendation) return null;
+
+    const [firstClubId, secondClubId] = practiceRecommendation.targetClubs;
+    const lower = firstClubId ? clubLabels[firstClubId] ?? firstClubId : undefined;
+    const upper = secondClubId ? clubLabels[secondClubId] ?? secondClubId : undefined;
+    const club = lower;
+
+    return {
+      title: t(practiceRecommendation.titleKey, { lower, upper, club }),
+      description: t(practiceRecommendation.descriptionKey, { lower, upper, club }),
+    };
+  }, [clubLabels, practiceRecommendation]);
 
   return (
     <View style={styles.container}>
@@ -53,6 +118,25 @@ export default function RangePracticeScreen({ navigation }: Props): JSX.Element 
           </>
         )}
       </TouchableOpacity>
+
+      {practiceRecommendation && recommendationCopy ? (
+        <View style={styles.card} testID="range-recommendation-card">
+          <Text style={styles.cardOverline}>{t('bag.practice.recommendedTitle')}</Text>
+          <Text style={styles.cardTitle}>{recommendationCopy.title}</Text>
+          <Text style={styles.cardSubtitle}>{recommendationCopy.description}</Text>
+          <TouchableOpacity
+            accessibilityLabel={t('bag.practice.startCta')}
+            onPress={() =>
+              navigation.navigate('RangeQuickPracticeStart', { practiceRecommendation })
+            }
+            testID="range-recommendation-cta"
+          >
+            <View style={styles.primaryButton}>
+              <Text style={styles.primaryButtonText}>{t('bag.practice.startCta')}</Text>
+            </View>
+          </TouchableOpacity>
+        </View>
+      ) : null}
 
       <Text style={styles.title}>Range & Training</Text>
       <Text style={styles.subtitle}>Värm upp, följ din träning och lås upp fler insikter.</Text>
