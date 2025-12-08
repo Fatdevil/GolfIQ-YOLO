@@ -42,7 +42,7 @@ function StatusPill({ status }: { status: PracticeHistoryListItem['status'] }): 
   );
 }
 
-function HistoryItem({ item }: { item: PracticeHistoryListItem }): JSX.Element {
+function HistoryItem({ item, onPress }: { item: PracticeHistoryListItem; onPress?: () => void }): JSX.Element {
   const dateLabel = useMemo(() => formatDate(item.day), [item.day]);
   const sampleLabel = item.targetSampleCount
     ? t('practice.history.samplesWithTarget', {
@@ -52,15 +52,17 @@ function HistoryItem({ item }: { item: PracticeHistoryListItem }): JSX.Element {
     : t('practice.history.samples', { completed: item.completedSampleCount });
 
   return (
-    <View style={styles.item} testID="practice-history-item">
-      <View style={styles.itemHeader}>
-        <Text style={styles.itemDate}>{dateLabel}</Text>
-        <StatusPill status={item.status} />
+    <TouchableOpacity onPress={onPress} testID="practice-history-item">
+      <View style={styles.item}>
+        <View style={styles.itemHeader}>
+          <Text style={styles.itemDate}>{dateLabel}</Text>
+          <StatusPill status={item.status} />
+        </View>
+        <Text style={styles.itemClubs}>{item.targetClubsLabel || t('practice.history.anyClub')}</Text>
+        <Text style={styles.itemSamples}>{sampleLabel}</Text>
+        {item.countsTowardStreak ? <Text style={styles.streak}>{t('practice.history.streakTag')}</Text> : null}
       </View>
-      <Text style={styles.itemClubs}>{item.targetClubsLabel || t('practice.history.anyClub')}</Text>
-      <Text style={styles.itemSamples}>{sampleLabel}</Text>
-      {item.countsTowardStreak ? <Text style={styles.streak}>{t('practice.history.streakTag')}</Text> : null}
-    </View>
+    </TouchableOpacity>
   );
 }
 
@@ -131,6 +133,10 @@ export default function PracticeHistoryScreen({ navigation }: Props): JSX.Elemen
     navigation.navigate('RangeQuickPracticeStart', recommendation ? { practiceRecommendation: recommendation } : undefined);
   };
 
+  const handleSelectHistoryItem = (entryId: string) => {
+    navigation.navigate('PracticeMissionDetail', { entryId });
+  };
+
   if (loading) {
     return (
       <View style={styles.container}>
@@ -158,7 +164,9 @@ export default function PracticeHistoryScreen({ navigation }: Props): JSX.Elemen
           data={items}
           keyExtractor={(item) => item.id}
           contentContainerStyle={styles.list}
-          renderItem={({ item }) => <HistoryItem item={item} />}
+          renderItem={({ item }) => (
+            <HistoryItem item={item} onPress={() => handleSelectHistoryItem(item.id)} />
+          )}
           testID="practice-history-list"
         />
       )}

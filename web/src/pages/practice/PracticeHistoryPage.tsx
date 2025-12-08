@@ -59,7 +59,11 @@ function PracticeHistoryRow({
     : t("practice.history.samples", { completed: item.completedSampleCount });
 
   return (
-    <div className="flex flex-col gap-2 py-3 sm:flex-row sm:items-center sm:justify-between" data-testid="practice-history-item">
+    <Link
+      to={`/practice/history/${item.id}`}
+      className="flex flex-col gap-2 py-3 transition hover:bg-slate-800/40 sm:flex-row sm:items-center sm:justify-between"
+      data-testid="practice-history-item"
+    >
       <div className="space-y-1">
         <div className="flex items-center gap-2">
           <p className="text-sm font-semibold text-slate-100">{dateLabel}</p>
@@ -73,7 +77,7 @@ function PracticeHistoryRow({
         <p className="text-xs text-slate-400">{samplesLabel}</p>
       </div>
       <StatusBadge status={item.status} />
-    </div>
+    </Link>
   );
 }
 
