@@ -57,6 +57,17 @@ export const en = {
   home_dashboard_bag_helper: 'Used by Caddie to recommend clubs.',
   home_dashboard_bag_needs_more: '{{count}} need more shots',
   home_dashboard_bag_cta: 'Edit My Bag',
+  practice: {
+    progress: {
+      title: 'Practice progress',
+      subtitleLast7Days: 'Last 7 days',
+      none: 'No missions completed yet',
+      some: '{{completed}} of {{total}} missions completed',
+      all: 'Great work! All missions completed',
+      getStarted: 'Start your first recommended practice to see progress here.',
+      cta: 'Head to range',
+    },
+  },
   weeklySummary: {
     title: 'Weekly Summary',
     period: 'Week of {{from}} – {{to}}',

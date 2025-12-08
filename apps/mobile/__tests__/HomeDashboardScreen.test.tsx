@@ -12,6 +12,7 @@ import * as weeklyApi from '@app/api/weeklySummary';
 import type { RootStackParamList } from '@app/navigation/types';
 import HomeDashboardScreen from '@app/screens/HomeDashboardScreen';
 import * as engagementStorage from '@app/storage/engagement';
+import * as practiceHistory from '@app/storage/practiceMissionHistory';
 import type { BagClubStatsMap } from '@shared/caddie/bagStats';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'HomeDashboard'>;
@@ -81,6 +82,10 @@ vi.mock('@app/storage/engagement', () => ({
   loadEngagementState: vi.fn(),
   saveEngagementState: vi.fn(),
 }));
+vi.mock('@app/storage/practiceMissionHistory', () => ({
+  loadPracticeMissionHistory: vi.fn(),
+  summarizeRecentPracticeHistory: vi.fn(),
+}));
 
 describe('HomeDashboardScreen', () => {
   beforeEach(() => {
@@ -94,6 +99,14 @@ describe('HomeDashboardScreen', () => {
     vi.mocked(bagStatsClient.fetchBagStats).mockResolvedValue(mockBagStats);
     vi.mocked(engagementStorage.loadEngagementState).mockResolvedValue({});
     vi.mocked(engagementStorage.saveEngagementState).mockResolvedValue();
+    vi.mocked(practiceHistory.loadPracticeMissionHistory).mockResolvedValue([]);
+    vi.mocked(practiceHistory.summarizeRecentPracticeHistory).mockReturnValue({
+      totalSessions: 0,
+      completedSessions: 0,
+      windowDays: 7,
+      lastCompleted: undefined,
+      lastStarted: undefined,
+    });
   });
 
   it('renders active round CTA and resumes on tap', async () => {
@@ -274,5 +287,32 @@ describe('HomeDashboardScreen', () => {
     expect(await screen.findByTestId('home-bag-readiness')).toBeVisible();
     expect(screen.queryByTestId('home-bag-readiness-score')).toBeNull();
     expect(screen.getByText(/Unable to load your bag./i)).toBeVisible();
+  });
+
+  it('shows practice progress prompt when history is empty', async () => {
+    const navigation = createNavigation();
+
+    render(<HomeDashboardScreen navigation={navigation} route={createRoute()} />);
+
+    expect(await screen.findByTestId('practice-progress-card')).toBeVisible();
+    expect(screen.getByTestId('practice-progress-summary')).toHaveTextContent(
+      'Start your first recommended practice to see progress here.',
+    );
+  });
+
+  it('surfaces completed missions count in practice progress tile', async () => {
+    vi.mocked(practiceHistory.summarizeRecentPracticeHistory).mockReturnValue({
+      totalSessions: 3,
+      completedSessions: 2,
+      windowDays: 7,
+      lastCompleted: undefined,
+      lastStarted: undefined,
+    });
+    const navigation = createNavigation();
+
+    render(<HomeDashboardScreen navigation={navigation} route={createRoute()} />);
+
+    expect(await screen.findByTestId('practice-progress-card')).toBeVisible();
+    expect(screen.getByTestId('practice-progress-summary')).toHaveTextContent('2 of 3 missions completed');
   });
 });

@@ -1,4 +1,5 @@
 import { en } from './en';
+import { sv } from './sv';
 
 type LeafValue = string | number | boolean | null | undefined;
 
@@ -36,4 +37,4 @@ export function t(key: string, params?: Interpolation): string {
   return interpolate(value, params);
 }
 
-export { en };
+export { en, sv };
