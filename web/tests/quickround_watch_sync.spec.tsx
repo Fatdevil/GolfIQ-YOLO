@@ -1,11 +1,10 @@
-import { MemoryRouter, Route, Routes } from "react-router-dom";
+import { Route, Routes } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 
 import QuickRoundPlayPage from "../src/pages/quick/QuickRoundPlayPage";
-import { NotificationProvider } from "../src/notifications/NotificationContext";
 import { QuickRound } from "../src/features/quickround/types";
-import { UserSessionProvider } from "../src/user/UserSessionContext";
+import { QuickRoundTestProviders } from "./helpers/quickroundProviders";
 
 const { loadRoundMock, saveRoundMock } = vi.hoisted(() => ({
   loadRoundMock: vi.fn(),
@@ -46,15 +45,11 @@ describe("QuickRound watch sync", () => {
     loadRoundMock.mockReturnValueOnce(round);
 
     render(
-      <UserSessionProvider>
-        <NotificationProvider>
-          <MemoryRouter initialEntries={["/play/qr-watch-1"]}>
-            <Routes>
-              <Route path="/play/:roundId" element={<QuickRoundPlayPage />} />
-            </Routes>
-          </MemoryRouter>
-        </NotificationProvider>
-      </UserSessionProvider>
+      <QuickRoundTestProviders initialEntries={["/play/qr-watch-1"]}>
+        <Routes>
+          <Route path="/play/:roundId" element={<QuickRoundPlayPage />} />
+        </Routes>
+      </QuickRoundTestProviders>,
     );
 
     const statuses = await screen.findAllByTestId("quickround-watch-status");
@@ -87,15 +82,11 @@ describe("QuickRound watch sync", () => {
     loadRoundMock.mockReturnValueOnce(round);
 
     render(
-      <UserSessionProvider>
-        <NotificationProvider>
-          <MemoryRouter initialEntries={["/play/qr-watch-2"]}>
-            <Routes>
-              <Route path="/play/:roundId" element={<QuickRoundPlayPage />} />
-            </Routes>
-          </MemoryRouter>
-        </NotificationProvider>
-      </UserSessionProvider>
+      <QuickRoundTestProviders initialEntries={["/play/qr-watch-2"]}>
+        <Routes>
+          <Route path="/play/:roundId" element={<QuickRoundPlayPage />} />
+        </Routes>
+      </QuickRoundTestProviders>,
     );
 
     const statuses = await screen.findAllByTestId("quickround-watch-status");

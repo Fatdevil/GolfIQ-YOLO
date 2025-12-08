@@ -1,13 +1,11 @@
-import { MemoryRouter, Route, Routes } from "react-router-dom";
+import { Route, Routes } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen, waitFor, within } from "@testing-library/react";
 
 import QuickRoundPlayPage from "../src/pages/quick/QuickRoundPlayPage";
-import { NotificationProvider } from "../src/notifications/NotificationContext";
 import type { QuickRound } from "@/features/quickround/types";
-import { UserSessionProvider } from "@/user/UserSessionContext";
 import { postQuickRoundSnapshots } from "@/user/historyApi";
-import { UserAccessProvider } from "@/access/UserAccessContext";
+import { QuickRoundTestProviders } from "./helpers/quickroundProviders";
 
 const { loadRoundMock, saveRoundMock, fetchSgPreviewMock } = vi.hoisted(() => ({
   loadRoundMock: vi.fn(),
@@ -80,17 +78,11 @@ describe("QuickRound SG preview", () => {
     });
 
     render(
-      <UserSessionProvider>
-        <UserAccessProvider autoFetch={false} initialPlan="pro">
-          <NotificationProvider>
-            <MemoryRouter initialEntries={["/play/qr-sg"]}>
-              <Routes>
-                <Route path="/play/:roundId" element={<QuickRoundPlayPage />} />
-              </Routes>
-            </MemoryRouter>
-          </NotificationProvider>
-        </UserAccessProvider>
-      </UserSessionProvider>
+      <QuickRoundTestProviders initialEntries={["/play/qr-sg"]} withAccessProvider>
+        <Routes>
+          <Route path="/play/:roundId" element={<QuickRoundPlayPage />} />
+        </Routes>
+      </QuickRoundTestProviders>,
     );
 
     const headers = await screen.findAllByText(/Strokes Gained preview/i);
@@ -121,17 +113,11 @@ describe("QuickRound SG preview", () => {
     fetchSgPreviewMock.mockRejectedValueOnce(new Error("boom"));
 
     render(
-      <UserSessionProvider>
-        <UserAccessProvider autoFetch={false} initialPlan="pro">
-          <NotificationProvider>
-            <MemoryRouter initialEntries={["/play/qr-sg-error"]}>
-              <Routes>
-                <Route path="/play/:roundId" element={<QuickRoundPlayPage />} />
-              </Routes>
-            </MemoryRouter>
-          </NotificationProvider>
-        </UserAccessProvider>
-      </UserSessionProvider>
+      <QuickRoundTestProviders initialEntries={["/play/qr-sg-error"]} withAccessProvider>
+        <Routes>
+          <Route path="/play/:roundId" element={<QuickRoundPlayPage />} />
+        </Routes>
+      </QuickRoundTestProviders>,
     );
 
     const headers = await screen.findAllByText(/Strokes Gained preview/i);

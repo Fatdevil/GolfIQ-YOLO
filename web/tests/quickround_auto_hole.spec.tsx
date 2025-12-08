@@ -1,12 +1,11 @@
-import { MemoryRouter, Route, Routes } from "react-router-dom";
+import { Route, Routes } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import QuickRoundPlayPage from "../src/pages/quick/QuickRoundPlayPage";
-import { NotificationProvider } from "../src/notifications/NotificationContext";
 import type { QuickRound } from "../src/features/quickround/types";
-import { UserSessionProvider } from "../src/user/UserSessionContext";
+import { QuickRoundTestProviders } from "./helpers/quickroundProviders";
 
 const { loadRoundMock, saveRoundMock, useGeolocationMock } = vi.hoisted(() => {
   const useGeolocationMock = vi.fn<
@@ -69,15 +68,11 @@ describe("QuickRoundPlayPage auto hole suggestion", () => {
     const user = userEvent.setup();
 
     render(
-      <UserSessionProvider>
-        <NotificationProvider>
-          <MemoryRouter initialEntries={["/play/qr-auto"]}>
-            <Routes>
-              <Route path="/play/:roundId" element={<QuickRoundPlayPage />} />
-            </Routes>
-          </MemoryRouter>
-        </NotificationProvider>
-      </UserSessionProvider>
+      <QuickRoundTestProviders initialEntries={["/play/qr-auto"]}>
+        <Routes>
+          <Route path="/play/:roundId" element={<QuickRoundPlayPage />} />
+        </Routes>
+      </QuickRoundTestProviders>,
     );
 
     expect(await screen.findByText(/Aktivt hål: 4/i)).toBeTruthy();
@@ -116,15 +111,11 @@ describe("QuickRoundPlayPage auto hole suggestion", () => {
     loadRoundMock.mockReturnValueOnce(round);
 
     render(
-      <UserSessionProvider>
-        <NotificationProvider>
-          <MemoryRouter initialEntries={["/play/qr-auto"]}>
-            <Routes>
-              <Route path="/play/:roundId" element={<QuickRoundPlayPage />} />
-            </Routes>
-          </MemoryRouter>
-        </NotificationProvider>
-      </UserSessionProvider>
+      <QuickRoundTestProviders initialEntries={["/play/qr-auto"]}>
+        <Routes>
+          <Route path="/play/:roundId" element={<QuickRoundPlayPage />} />
+        </Routes>
+      </QuickRoundTestProviders>,
     );
 
     await waitFor(() => {

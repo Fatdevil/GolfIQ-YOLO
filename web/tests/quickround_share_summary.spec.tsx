@@ -1,12 +1,11 @@
-import { MemoryRouter, Route, Routes } from "react-router-dom";
+import { Route, Routes } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import QuickRoundPlayPage from "../src/pages/quick/QuickRoundPlayPage";
-import { NotificationProvider } from "../src/notifications/NotificationContext";
 import type { QuickRound } from "../src/features/quickround/types";
-import { UserSessionProvider } from "../src/user/UserSessionContext";
+import { QuickRoundTestProviders } from "./helpers/quickroundProviders";
 
 const { loadRoundMock, saveRoundMock } = vi.hoisted(() => ({
   loadRoundMock: vi.fn(),
@@ -54,17 +53,13 @@ describe("QuickRoundPlayPage share summary", () => {
     });
 
     try {
-    render(
-      <UserSessionProvider>
-        <NotificationProvider>
-          <MemoryRouter initialEntries={["/play/qr-1"]}>
-            <Routes>
-              <Route path="/play/:roundId" element={<QuickRoundPlayPage />} />
-            </Routes>
-          </MemoryRouter>
-        </NotificationProvider>
-      </UserSessionProvider>
-    );
+      render(
+        <QuickRoundTestProviders initialEntries={["/play/qr-1"]}>
+          <Routes>
+            <Route path="/play/:roundId" element={<QuickRoundPlayPage />} />
+          </Routes>
+        </QuickRoundTestProviders>,
+      );
 
       const button = await screen.findByRole("button", {
         name: /Copy round summary/i,

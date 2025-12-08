@@ -1,12 +1,11 @@
-import { MemoryRouter, Route, Routes } from "react-router-dom";
+import { Route, Routes } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, render, screen, waitFor } from "@testing-library/react";
 
 import QuickRoundPlayPage from "../src/pages/quick/QuickRoundPlayPage";
-import { NotificationProvider } from "../src/notifications/NotificationContext";
 import { QuickRound } from "../src/features/quickround/types";
-import { UserSessionProvider } from "@/user/UserSessionContext";
 import { fetchBagStats } from "@/api/bagStatsClient";
+import { QuickRoundTestProviders } from "./helpers/quickroundProviders";
 import * as bagReadiness from "@shared/caddie/bagReadiness";
 
 const { loadRoundMock, saveRoundMock, loadBagMock } = vi.hoisted(() => ({
@@ -24,9 +23,6 @@ vi.mock("@/api/bagStatsClient", () => ({
 }));
 vi.mock("@/bag/storage", () => ({
   loadBag: loadBagMock,
-}));
-vi.mock("@/preferences/UnitsContext", () => ({
-  useUnits: () => ({ unit: "metric", setUnit: vi.fn() }),
 }));
 vi.mock("@/user/UserSessionContext", () => ({
   UserSessionProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
@@ -87,15 +83,11 @@ describe("Round recap bag readiness on web", () => {
     mockFetchBagStats.mockResolvedValue(recapStats);
 
     render(
-      <UserSessionProvider>
-        <NotificationProvider>
-          <MemoryRouter initialEntries={["/play/qr-readiness"]}>
-            <Routes>
-              <Route path="/play/:roundId" element={<QuickRoundPlayPage />} />
-            </Routes>
-          </MemoryRouter>
-        </NotificationProvider>
-      </UserSessionProvider>,
+      <QuickRoundTestProviders initialEntries={["/play/qr-readiness"]}>
+        <Routes>
+          <Route path="/play/:roundId" element={<QuickRoundPlayPage />} />
+        </Routes>
+      </QuickRoundTestProviders>,
     );
 
     expect(await screen.findByTestId("round-recap-bag-readiness")).toBeTruthy();
@@ -105,15 +97,11 @@ describe("Round recap bag readiness on web", () => {
 
   it("links to the bag page from the recap panel", async () => {
     render(
-      <UserSessionProvider>
-        <NotificationProvider>
-          <MemoryRouter initialEntries={["/play/qr-readiness"]}>
-            <Routes>
-              <Route path="/play/:roundId" element={<QuickRoundPlayPage />} />
-            </Routes>
-          </MemoryRouter>
-        </NotificationProvider>
-      </UserSessionProvider>,
+      <QuickRoundTestProviders initialEntries={["/play/qr-readiness"]}>
+        <Routes>
+          <Route path="/play/:roundId" element={<QuickRoundPlayPage />} />
+        </Routes>
+      </QuickRoundTestProviders>,
     );
 
     const cta = await screen.findByTestId("round-recap-open-bag");
@@ -128,15 +116,11 @@ describe("Round recap bag readiness on web", () => {
     const recapSpy = vi.spyOn(bagReadiness, "buildBagReadinessRecapInfo").mockReturnValue(null);
 
     render(
-      <UserSessionProvider>
-        <NotificationProvider>
-          <MemoryRouter initialEntries={["/play/qr-readiness"]}>
-            <Routes>
-              <Route path="/play/:roundId" element={<QuickRoundPlayPage />} />
-            </Routes>
-          </MemoryRouter>
-        </NotificationProvider>
-      </UserSessionProvider>,
+      <QuickRoundTestProviders initialEntries={["/play/qr-readiness"]}>
+        <Routes>
+          <Route path="/play/:roundId" element={<QuickRoundPlayPage />} />
+        </Routes>
+      </QuickRoundTestProviders>,
     );
 
     await waitFor(() => expect(mockFetchBagStats).toHaveBeenCalled());
