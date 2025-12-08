@@ -275,11 +275,20 @@ export const HomeHubPage: React.FC = () => {
             </Link>
           }
           footer={
-            <div className="flex flex-wrap gap-2 text-[11px] font-semibold text-emerald-200">
-              <span className="inline-flex items-center rounded-full bg-emerald-500/10 px-2 py-0.5">
-                {t("home.range.badge.bingo")}
-              </span>
-              <GhostMatchBadge />
+            <div className="flex flex-wrap items-center gap-3 text-[11px] font-semibold text-emerald-200">
+              <div className="flex flex-wrap gap-2">
+                <span className="inline-flex items-center rounded-full bg-emerald-500/10 px-2 py-0.5">
+                  {t("home.range.badge.bingo")}
+                </span>
+                <GhostMatchBadge />
+              </div>
+              <Link
+                to="/practice/history"
+                className="text-emerald-200 underline-offset-2 hover:text-emerald-100 hover:underline"
+                data-testid="home-practice-history-link"
+              >
+                {t("practice.history.viewLink")}
+              </Link>
             </div>
           }
         />
