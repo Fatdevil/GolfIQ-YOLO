@@ -16,9 +16,16 @@ vi.mock("react-router-dom", async () => {
   };
 });
 
-vi.mock("@/practice/practiceMissionHistory", () => ({
-  loadPracticeMissionHistory: vi.fn(),
-}));
+vi.mock("@/practice/practiceMissionHistory", async () => {
+  const actual = await vi.importActual<typeof import("@/practice/practiceMissionHistory")>(
+    "@/practice/practiceMissionHistory"
+  );
+
+  return {
+    ...actual,
+    loadPracticeMissionHistory: vi.fn(),
+  };
+});
 
 vi.mock("@/bag/storage", () => ({
   loadBag: vi.fn(),

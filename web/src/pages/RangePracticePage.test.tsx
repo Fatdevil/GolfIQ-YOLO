@@ -19,10 +19,16 @@ vi.mock("@/user/UserSessionContext", () => ({
 vi.mock("@/access/UserAccessContext", () => ({
   useAccessPlan: () => ({ isPro: true, loading: false }),
 }));
-vi.mock("@/practice/practiceMissionHistory", () => ({
-  loadPracticeMissionHistory: vi.fn(),
-  PRACTICE_MISSION_WINDOW_DAYS: 14,
-}));
+vi.mock("@/practice/practiceMissionHistory", async () => {
+  const actual = await vi.importActual<typeof import("@/practice/practiceMissionHistory")>(
+    "@/practice/practiceMissionHistory"
+  );
+
+  return {
+    ...actual,
+    loadPracticeMissionHistory: vi.fn(),
+  };
+});
 
 import { postRangeAnalyze } from "@/features/range/api";
 import RangePracticePage from "./RangePracticePage";

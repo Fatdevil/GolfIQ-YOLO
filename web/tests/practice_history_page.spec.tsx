@@ -9,10 +9,16 @@ import { UnitsProvider } from "@/preferences/UnitsContext";
 import type { PracticeMissionHistoryEntry } from "@shared/practice/practiceHistory";
 import { createDefaultBag } from "@/bag/types";
 
-vi.mock("@/practice/practiceMissionHistory", () => ({
-  loadPracticeMissionHistory: vi.fn(),
-  PRACTICE_MISSION_WINDOW_DAYS: 14,
-}));
+vi.mock("@/practice/practiceMissionHistory", async () => {
+  const actual = await vi.importActual<typeof import("@/practice/practiceMissionHistory")>(
+    "@/practice/practiceMissionHistory"
+  );
+
+  return {
+    ...actual,
+    loadPracticeMissionHistory: vi.fn(),
+  };
+});
 
 vi.mock("@/bag/storage", () => ({
   loadBag: vi.fn(),

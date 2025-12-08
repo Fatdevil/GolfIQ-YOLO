@@ -8,9 +8,16 @@ const { recordPracticeMissionOutcomeMock } = vi.hoisted(() => ({
   recordPracticeMissionOutcomeMock: vi.fn(),
 }));
 
-vi.mock("@/practice/practiceMissionHistory", () => ({
-  recordPracticeMissionOutcome: recordPracticeMissionOutcomeMock,
-}));
+vi.mock("@/practice/practiceMissionHistory", async () => {
+  const actual = await vi.importActual<typeof import("@/practice/practiceMissionHistory")>(
+    "@/practice/practiceMissionHistory"
+  );
+
+  return {
+    ...actual,
+    recordPracticeMissionOutcome: recordPracticeMissionOutcomeMock,
+  };
+});
 
 const mission: RangeMission = {
   id: "approach_band_80_130",

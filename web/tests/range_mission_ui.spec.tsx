@@ -35,9 +35,16 @@ vi.mock("../src/features/range/api", () => ({
 vi.mock("../src/user/historyApi", () => ({
   postRangeSessionSnapshots: vi.fn(),
 }));
-vi.mock("@/practice/practiceMissionHistory", () => ({
-  recordPracticeMissionOutcome: recordPracticeMissionOutcomeMock,
-}));
+vi.mock("@/practice/practiceMissionHistory", async () => {
+  const actual = await vi.importActual<typeof import("@/practice/practiceMissionHistory")>(
+    "@/practice/practiceMissionHistory"
+  );
+
+  return {
+    ...actual,
+    recordPracticeMissionOutcome: recordPracticeMissionOutcomeMock,
+  };
+});
 vi.mock("../src/access/PlanProvider", () => ({
   PlanProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
   usePlan: () => ({ plan: "PRO", setPlan: vi.fn(), hasFeature: () => true }),
