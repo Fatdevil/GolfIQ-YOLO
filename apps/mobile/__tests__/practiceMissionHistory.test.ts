@@ -3,8 +3,8 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   PRACTICE_MISSION_WINDOW_DAYS,
   summarizeRecentPracticeHistory,
-  type PracticeMissionSession,
 } from '@app/storage/practiceMissionHistory';
+import type { PracticeMissionHistoryEntry } from '@shared/practice/practiceHistory';
 
 const NOW = new Date('2024-06-15T12:00:00.000Z');
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -19,26 +19,27 @@ describe('practiceMissionHistory', () => {
       windowDays: PRACTICE_MISSION_WINDOW_DAYS,
       lastCompleted: undefined,
       lastStarted: undefined,
+      streakDays: 0,
     });
   });
 
   it('filters to recent window and counts completions', () => {
-    const recent: PracticeMissionSession = {
+    const recent: PracticeMissionHistoryEntry = {
       id: 's1',
-      recommendationId: 'rec-1',
+      missionId: 'rec-1',
       startedAt: new Date(NOW.getTime() - DAY_MS).toISOString(),
-      completedAt: new Date(NOW.getTime() - DAY_MS / 2).toISOString(),
+      endedAt: new Date(NOW.getTime() - DAY_MS / 2).toISOString(),
       targetClubs: ['7i'],
-      totalShots: 12,
-      completed: true,
+      completedSampleCount: 12,
+      status: 'completed',
     };
-    const old: PracticeMissionSession = {
+    const old: PracticeMissionHistoryEntry = {
       id: 's2',
-      recommendationId: 'rec-2',
-      startedAt: new Date(NOW.getTime() - DAY_MS * 10).toISOString(),
+      missionId: 'rec-2',
+      startedAt: new Date(NOW.getTime() - DAY_MS * 20).toISOString(),
       targetClubs: ['PW'],
-      totalShots: 4,
-      completed: false,
+      completedSampleCount: 4,
+      status: 'abandoned',
     };
 
     const overview = summarizeRecentPracticeHistory([recent, old], NOW);
@@ -52,22 +53,22 @@ describe('practiceMissionHistory', () => {
   it('prefers completion time when choosing the latest completed session', () => {
     vi.useFakeTimers();
     vi.setSystemTime(NOW);
-    const recentCompleted: PracticeMissionSession = {
+    const recentCompleted: PracticeMissionHistoryEntry = {
       id: 'recent-complete',
-      recommendationId: 'rec-3',
+      missionId: 'rec-3',
       startedAt: new Date(NOW.getTime() - DAY_MS * 2).toISOString(),
-      completedAt: new Date(NOW.getTime() - DAY_MS).toISOString(),
+      endedAt: new Date(NOW.getTime() - DAY_MS).toISOString(),
       targetClubs: ['9i'],
-      totalShots: 10,
-      completed: true,
+      completedSampleCount: 10,
+      status: 'completed',
     };
-    const latestStarted: PracticeMissionSession = {
+    const latestStarted: PracticeMissionHistoryEntry = {
       id: 'latest-started',
-      recommendationId: 'rec-4',
+      missionId: 'rec-4',
       startedAt: NOW.toISOString(),
       targetClubs: ['5w'],
-      totalShots: 5,
-      completed: false,
+      completedSampleCount: 5,
+      status: 'abandoned',
     };
 
     const overview = summarizeRecentPracticeHistory([recentCompleted, latestStarted], NOW);

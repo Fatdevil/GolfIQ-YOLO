@@ -12,7 +12,7 @@ import { computeTempoTargetFromHistory, type TempoTarget } from '@app/range/temp
 import { loadCurrentTrainingGoal } from '@app/range/rangeTrainingGoalStorage';
 import { loadRangeHistory } from '@app/range/rangeHistoryStorage';
 import { t } from '@app/i18n';
-import { appendPracticeMissionSession } from '@app/storage/practiceMissionHistory';
+import { recordPracticeMissionOutcome } from '@app/storage/practiceMissionHistory';
 import {
   isTempoTrainerAvailable,
   sendTempoTrainerActivation,
@@ -241,28 +241,27 @@ export default function RangeQuickPracticeSessionScreen({ navigation, route }: P
     const summary = buildSummary(sessionState, goal?.text ?? undefined, missionMeta);
 
     if (practiceRecommendation) {
-      const shotsForTargets = sessionState.shots.filter((shot) =>
-        shot.club && practiceRecommendation.targetClubs.includes(shot.club),
+      const shotsForTargets = sessionState.shots.filter(
+        (shot) => shot.club && practiceRecommendation.targetClubs.includes(shot.club),
       );
       const totalTargetShots = shotsForTargets.length;
-      const completed =
-        practiceRecommendation.targetSampleCount != null
-          ? totalTargetShots >= practiceRecommendation.targetSampleCount
-          : totalTargetShots > 0;
 
-      try {
-        await appendPracticeMissionSession({
-          id: typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : `${Date.now()}`,
-          recommendationId: practiceRecommendation.id,
-          startedAt: sessionStartedAtRef.current,
-          completedAt: completed ? new Date().toISOString() : undefined,
-          targetSampleCount: practiceRecommendation.targetSampleCount,
-          totalShots: totalTargetShots,
-          targetClubs: practiceRecommendation.targetClubs,
-          completed,
-        });
-      } catch (err) {
-        console.warn('[range] Failed to persist practice mission session', err);
+      if (totalTargetShots > 0) {
+        try {
+          const missionOutcome = {
+            missionId: practiceRecommendation.id,
+            sessionId: sessionState.id,
+            startedAt: sessionStartedAtRef.current,
+            endedAt: new Date().toISOString(),
+            targetSampleCount: practiceRecommendation.targetSampleCount,
+            targetClubs: practiceRecommendation.targetClubs,
+            completedSampleCount: totalTargetShots,
+          };
+
+          await recordPracticeMissionOutcome(missionOutcome);
+        } catch (err) {
+          console.warn('[range] Failed to persist practice mission session', err);
+        }
       }
     }
 

@@ -656,14 +656,11 @@ export default function HomeDashboardScreen({ navigation }: Props): JSX.Element 
               />
             </View>
             <Text style={styles.cardBody} testID="practice-progress-summary">
-              {practiceProgressModel.hasData && practiceProgressModel.completedSessions != null
-                ? t(practiceProgressModel.completedSessionsLabelKey, {
-                    completed: practiceProgressModel.completedSessions,
-                    total: practiceProgressModel.totalSessions,
-                  })
-                : t('practice.progress.getStarted')}
+              {t(practiceProgressModel.summaryKey, practiceProgressModel.summaryParams)}
             </Text>
-            <Text style={styles.muted}>{t(practiceProgressModel.subtitleKey)}</Text>
+            <Text style={styles.muted} testID="practice-progress-subtitle">
+              {t(practiceProgressModel.subtitleKey, practiceProgressModel.subtitleParams)}
+            </Text>
           </View>
           <TouchableOpacity onPress={() => navigation.navigate('RangePractice')} testID="open-practice-progress">
             <Text style={styles.link}>{t('practice.progress.cta')}</Text>
