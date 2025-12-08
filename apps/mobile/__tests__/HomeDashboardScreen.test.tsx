@@ -103,7 +103,7 @@ describe('HomeDashboardScreen', () => {
     vi.mocked(practiceHistory.summarizeRecentPracticeHistory).mockReturnValue({
       totalSessions: 0,
       completedSessions: 0,
-      windowDays: 7,
+      windowDays: 14,
       lastCompleted: undefined,
       lastStarted: undefined,
     });
@@ -296,7 +296,7 @@ describe('HomeDashboardScreen', () => {
 
     expect(await screen.findByTestId('practice-progress-card')).toBeVisible();
     expect(screen.getByTestId('practice-progress-summary')).toHaveTextContent(
-      'Start your first recommended practice to see progress here.',
+      'Start your first recommended session to see progress here.',
     );
   });
 
@@ -304,7 +304,7 @@ describe('HomeDashboardScreen', () => {
     vi.mocked(practiceHistory.summarizeRecentPracticeHistory).mockReturnValue({
       totalSessions: 3,
       completedSessions: 2,
-      windowDays: 7,
+      windowDays: 14,
       lastCompleted: undefined,
       lastStarted: undefined,
     });
@@ -313,6 +313,27 @@ describe('HomeDashboardScreen', () => {
     render(<HomeDashboardScreen navigation={navigation} route={createRoute()} />);
 
     expect(await screen.findByTestId('practice-progress-card')).toBeVisible();
-    expect(screen.getByTestId('practice-progress-summary')).toHaveTextContent('2 of 3 missions completed');
+    expect(screen.getByTestId('practice-progress-summary')).toHaveTextContent(
+      'Completed 2 of 3 recommended sessions',
+    );
+  });
+
+  it('surfaces streak copy when streak is active', async () => {
+    vi.mocked(practiceHistory.summarizeRecentPracticeHistory).mockReturnValue({
+      totalSessions: 4,
+      completedSessions: 3,
+      windowDays: 14,
+      lastCompleted: undefined,
+      lastStarted: undefined,
+      streakDays: 3,
+    });
+
+    const navigation = createNavigation();
+
+    render(<HomeDashboardScreen navigation={navigation} route={createRoute()} />);
+
+    expect(await screen.findByTestId('practice-progress-subtitle')).toHaveTextContent(
+      'Practice streak: 3 days in a row',
+    );
   });
 });

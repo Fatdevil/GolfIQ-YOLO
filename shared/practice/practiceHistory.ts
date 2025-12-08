@@ -1,0 +1,245 @@
+export type PracticeMissionStatus = 'completed' | 'abandoned';
+
+export type PracticeMissionHistoryEntry = {
+  id: string;
+  missionId: string;
+  startedAt: string;
+  endedAt?: string;
+  status: PracticeMissionStatus;
+  targetClubs: string[];
+  targetSampleCount?: number;
+  completedSampleCount: number;
+};
+
+export type PracticeMissionOutcome = {
+  missionId: string;
+  sessionId?: string;
+  startedAt: string;
+  endedAt?: string;
+  targetClubs: string[];
+  targetSampleCount?: number;
+  completedSampleCount: number;
+};
+
+export type MissionStreak = {
+  consecutiveDays: number;
+  lastCompletedAt?: string;
+};
+
+export type CompletionSummary = {
+  completed: number;
+  attempted: number;
+};
+
+export const MAX_PRACTICE_HISTORY_ENTRIES = 100;
+export const DEFAULT_HISTORY_WINDOW_DAYS = 14;
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+function isFiniteDate(value?: string): boolean {
+  if (!value) return false;
+  const time = new Date(value).getTime();
+  return Number.isFinite(time) && time > 0 && time < 9999999999999;
+}
+
+function entryTimestamp(entry: PracticeMissionHistoryEntry): number {
+  const candidates = [entry.endedAt, entry.startedAt];
+  for (const candidate of candidates) {
+    if (isFiniteDate(candidate)) return new Date(candidate!).getTime();
+  }
+  return Number.NaN;
+}
+
+function normalizeMissionId(raw: unknown): string | null {
+  if (typeof raw === 'string' && raw.trim().length > 0) return raw;
+  return null;
+}
+
+function normalizeTargetClubs(raw: unknown): string[] {
+  if (Array.isArray(raw)) {
+    return raw.filter((club): club is string => typeof club === 'string' && club.trim().length > 0);
+  }
+  return [];
+}
+
+function coerceSampleCount(raw: unknown): number | undefined {
+  if (typeof raw === 'number' && Number.isFinite(raw) && raw >= 0) return Math.round(raw);
+  return undefined;
+}
+
+function deriveStatus(entry: Partial<PracticeMissionHistoryEntry>): PracticeMissionStatus {
+  if ('status' in entry && (entry as PracticeMissionHistoryEntry).status) {
+    const status = (entry as PracticeMissionHistoryEntry).status;
+    if (status === 'completed' || status === 'abandoned') return status;
+  }
+  if ('completed' in entry && typeof (entry as any).completed === 'boolean') {
+    return (entry as any).completed ? 'completed' : 'abandoned';
+  }
+  if (
+    typeof entry.completedSampleCount === 'number' &&
+    typeof entry.targetSampleCount === 'number' &&
+    entry.completedSampleCount >= entry.targetSampleCount
+  ) {
+    return 'completed';
+  }
+  return 'abandoned';
+}
+
+function createEntryId(missionId: string, startedAt?: string, endedAt?: string): string {
+  const timestamp = startedAt ?? endedAt ?? new Date().toISOString();
+  return `${missionId}:${timestamp}:${Math.random().toString(36).slice(2, 8)}`;
+}
+
+export function normalizePracticeHistoryEntries(raw: unknown): PracticeMissionHistoryEntry[] {
+  if (!Array.isArray(raw)) return [];
+
+  const normalized: PracticeMissionHistoryEntry[] = [];
+
+  for (const candidate of raw) {
+    if (!candidate || typeof candidate !== 'object') continue;
+
+    const missionId = normalizeMissionId((candidate as any).missionId ?? (candidate as any).recommendationId);
+    if (!missionId) continue;
+
+    const startedAt: string | undefined = (candidate as any).startedAt;
+    const endedAt: string | undefined = (candidate as any).endedAt ?? (candidate as any).completedAt;
+    const targetSampleCount = coerceSampleCount((candidate as any).targetSampleCount);
+    const completedSampleCount = coerceSampleCount((candidate as any).completedSampleCount ?? (candidate as any).totalShots) ?? 0;
+    const targetClubs = normalizeTargetClubs((candidate as any).targetClubs);
+
+    if (!isFiniteDate(startedAt) && !isFiniteDate(endedAt)) continue;
+    if (completedSampleCount <= 0) continue;
+
+    const status = deriveStatus({
+      ...(candidate as any),
+      targetSampleCount,
+      completedSampleCount,
+    });
+
+    const id: string =
+      typeof (candidate as any).id === 'string' && (candidate as any).id.trim().length > 0
+        ? (candidate as any).id
+        : `${missionId}:${startedAt ?? endedAt}`;
+
+    normalized.push({
+      id,
+      missionId,
+      startedAt: startedAt ?? endedAt!,
+      endedAt,
+      status,
+      targetClubs,
+      targetSampleCount,
+      completedSampleCount,
+    });
+  }
+
+  return normalized
+    .filter((entry) => !Number.isNaN(entryTimestamp(entry)))
+    .sort((a, b) => entryTimestamp(a) - entryTimestamp(b));
+}
+
+export function recordMissionOutcome(
+  previousState: PracticeMissionHistoryEntry[],
+  outcome: PracticeMissionOutcome,
+): PracticeMissionHistoryEntry[] {
+  const missionId = normalizeMissionId(outcome.missionId);
+  const targetClubs = normalizeTargetClubs(outcome.targetClubs);
+  const completedSampleCount = coerceSampleCount(outcome.completedSampleCount);
+
+  if (!missionId || targetClubs.length === 0 || !completedSampleCount || completedSampleCount <= 0) {
+    return previousState;
+  }
+
+  const startedAt = isFiniteDate(outcome.startedAt) ? outcome.startedAt : undefined;
+  const endedAt = isFiniteDate(outcome.endedAt) ? outcome.endedAt : undefined;
+  if (!startedAt && !endedAt) return previousState;
+
+  const targetSampleCount = coerceSampleCount(outcome.targetSampleCount);
+  const status: PracticeMissionStatus =
+    targetSampleCount != null && completedSampleCount < targetSampleCount ? 'abandoned' : 'completed';
+
+  const id = outcome.sessionId ?? createEntryId(missionId, startedAt, endedAt);
+
+  const nextEntry: PracticeMissionHistoryEntry = {
+    id: id ?? createEntryId(missionId, startedAt, endedAt),
+    missionId,
+    startedAt: startedAt ?? endedAt!,
+    endedAt,
+    status,
+    targetClubs,
+    targetSampleCount: targetSampleCount ?? undefined,
+    completedSampleCount,
+  };
+
+  const next = [...previousState, nextEntry];
+  if (next.length > MAX_PRACTICE_HISTORY_ENTRIES) {
+    return next.slice(next.length - MAX_PRACTICE_HISTORY_ENTRIES);
+  }
+  return next;
+}
+
+export function selectRecentMissions(
+  state: PracticeMissionHistoryEntry[],
+  options: { limit?: number; daysBack?: number },
+  now: Date = new Date(),
+): PracticeMissionHistoryEntry[] {
+  const { limit = MAX_PRACTICE_HISTORY_ENTRIES, daysBack = DEFAULT_HISTORY_WINDOW_DAYS } = options;
+  const nowMs = now.getTime();
+  const windowMs = daysBack * 24 * 60 * 60 * 1000;
+
+  const filtered = state
+    .filter((entry) => {
+      const ts = entryTimestamp(entry);
+      if (Number.isNaN(ts)) return false;
+      return nowMs - ts <= windowMs;
+    })
+    .sort((a, b) => entryTimestamp(b) - entryTimestamp(a));
+
+  return filtered.slice(0, limit);
+}
+
+export function computeMissionStreak(
+  state: PracticeMissionHistoryEntry[],
+  missionId: string,
+  now: Date = new Date(),
+): MissionStreak {
+  const missionEntries = state
+    .filter((entry) => entry.missionId === missionId && entry.status === 'completed')
+    .sort((a, b) => entryTimestamp(b) - entryTimestamp(a));
+
+  if (missionEntries.length === 0) return { consecutiveDays: 0 };
+
+  const days = new Set<number>();
+  for (const entry of missionEntries) {
+    const ts = entryTimestamp(entry);
+    if (Number.isNaN(ts)) continue;
+    const day = Math.floor(ts / DAY_MS);
+    days.add(day);
+  }
+
+  const lastCompletedAt = missionEntries[0].endedAt ?? missionEntries[0].startedAt;
+  const anchorTimestamp = missionEntries[0].endedAt
+    ? new Date(missionEntries[0].endedAt).getTime()
+    : missionEntries[0].startedAt
+      ? new Date(missionEntries[0].startedAt).getTime()
+      : now.getTime();
+  const anchorDay = Math.floor(anchorTimestamp / DAY_MS);
+
+  let streak = 0;
+  let currentDay = anchorDay;
+  while (days.has(currentDay)) {
+    streak += 1;
+    currentDay -= 1;
+  }
+
+  return { consecutiveDays: streak, lastCompletedAt };
+}
+
+export function computeRecentCompletionSummary(
+  state: PracticeMissionHistoryEntry[],
+  windowDays: number = DEFAULT_HISTORY_WINDOW_DAYS,
+  now: Date = new Date(),
+): CompletionSummary {
+  const recent = selectRecentMissions(state, { daysBack: windowDays, limit: MAX_PRACTICE_HISTORY_ENTRIES }, now);
+  const completed = recent.filter((entry) => entry.status === 'completed').length;
+  return { completed, attempted: recent.length };
+}

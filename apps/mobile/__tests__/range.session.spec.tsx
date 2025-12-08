@@ -49,7 +49,7 @@ vi.mock('@app/watch/tempoTrainerBridge', () => ({
 }));
 
 vi.mock('@app/storage/practiceMissionHistory', () => ({
-  appendPracticeMissionSession: vi.fn(),
+  recordPracticeMissionOutcome: vi.fn(),
 }));
 
 type Props = NativeStackScreenProps<RootStackParamList, 'RangeQuickPracticeSession'>;
@@ -83,7 +83,7 @@ describe('RangeQuickPracticeSessionScreen', () => {
     vi.mocked(rangeHistory.loadRangeHistory).mockResolvedValue([]);
     vi.mocked(tempoBridge.isTempoTrainerAvailable).mockReturnValue(true);
     vi.mocked(tempoBridge.subscribeToTempoTrainerResults).mockReturnValue(() => {});
-    vi.mocked(practiceMissionHistory.appendPracticeMissionSession).mockResolvedValue();
+    vi.mocked(practiceMissionHistory.recordPracticeMissionOutcome).mockResolvedValue([]);
   });
 
   it('shows angle label and logs shot with camera angle', async () => {
@@ -225,18 +225,17 @@ describe('RangeQuickPracticeSessionScreen', () => {
 
     fireEvent.click(screen.getByTestId('end-session'));
 
-    await waitFor(() => {
-      expect(practiceMissionHistory.appendPracticeMissionSession).toHaveBeenCalledWith(
-        expect.objectContaining({
-          recommendationId: recommendation.id,
-          targetSampleCount: 2,
-          totalShots: 2,
-          targetClubs: recommendation.targetClubs,
-          completed: true,
-          startedAt: session.startedAt,
-        }),
-      );
-    });
+    await vi.runAllTimersAsync();
+
+    expect(practiceMissionHistory.recordPracticeMissionOutcome).toHaveBeenCalledWith(
+      expect.objectContaining({
+        missionId: recommendation.id,
+        targetSampleCount: 2,
+        completedSampleCount: 2,
+        targetClubs: recommendation.targetClubs,
+        startedAt: session.startedAt,
+      }),
+    );
 
     vi.useRealTimers();
   });
@@ -291,18 +290,9 @@ describe('RangeQuickPracticeSessionScreen', () => {
 
     fireEvent.click(screen.getByTestId('end-session'));
 
-    await waitFor(() => {
-      expect(practiceMissionHistory.appendPracticeMissionSession).toHaveBeenCalledWith(
-        expect.objectContaining({
-          recommendationId: recommendation.id,
-          targetSampleCount: 2,
-          totalShots: 0,
-          targetClubs: recommendation.targetClubs,
-          completed: false,
-          startedAt: session.startedAt,
-        }),
-      );
-    });
+    await vi.runAllTimersAsync();
+
+    expect(practiceMissionHistory.recordPracticeMissionOutcome).not.toHaveBeenCalled();
 
     vi.useRealTimers();
   });

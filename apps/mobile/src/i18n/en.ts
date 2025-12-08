@@ -60,11 +60,11 @@ export const en = {
   practice: {
     progress: {
       title: 'Practice progress',
-      subtitleLast7Days: 'Last 7 days',
-      none: 'No missions completed yet',
-      some: '{{completed}} of {{total}} missions completed',
-      all: 'Great work! All missions completed',
-      getStarted: 'Start your first recommended practice to see progress here.',
+      subtitleWindow: 'Last {{window}} days',
+      completedSummary: 'Completed {{completed}} of {{total}} recommended sessions',
+      abandonedOnly: "You’ve started missions – finish one to begin a streak.",
+      streak: 'Practice streak: {{days}} days in a row',
+      getStarted: 'Start your first recommended session to see progress here.',
       cta: 'Head to range',
     },
   },
