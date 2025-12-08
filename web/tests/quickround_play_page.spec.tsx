@@ -1,17 +1,20 @@
-import { MemoryRouter, Route, Routes } from "react-router-dom";
+import { Route, Routes } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import QuickRoundPlayPage from "../src/pages/quick/QuickRoundPlayPage";
-import { NotificationProvider } from "../src/notifications/NotificationContext";
 import { QuickRound } from "../src/features/quickround/types";
-import { UserSessionProvider } from "@/user/UserSessionContext";
 import { postQuickRoundSnapshots } from "@/user/historyApi";
+import { QuickRoundTestProviders } from "./helpers/quickroundProviders";
 
 const { loadRoundMock, saveRoundMock } = vi.hoisted(() => ({
   loadRoundMock: vi.fn(),
   saveRoundMock: vi.fn(),
+}));
+
+const { mockFetchBagStats } = vi.hoisted(() => ({
+  mockFetchBagStats: vi.fn(),
 }));
 
 const mockedPostQuickRoundSnapshots = vi.mocked(postQuickRoundSnapshots);
@@ -27,6 +30,9 @@ vi.mock("@/user/UserSessionContext", () => ({
   UserSessionProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
   useUserSession: () => ({ session: { userId: "test-user", createdAt: "" }, loading: false }),
 }));
+vi.mock("@/api/bagStatsClient", () => ({
+  fetchBagStats: (...args: Parameters<typeof mockFetchBagStats>) => mockFetchBagStats(...args),
+}));
 vi.mock("@/access/PlanProvider", () => ({
   PlanProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
   usePlan: () => ({ plan: "PRO", setPlan: vi.fn(), hasFeature: () => true }),
@@ -36,6 +42,7 @@ describe("QuickRoundPlayPage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockedPostQuickRoundSnapshots.mockReset();
+    mockFetchBagStats.mockResolvedValue({});
   });
 
   it("updates strokes and saves round", async () => {
@@ -54,15 +61,11 @@ describe("QuickRoundPlayPage", () => {
     const user = userEvent.setup();
 
     render(
-      <UserSessionProvider>
-        <NotificationProvider>
-          <MemoryRouter initialEntries={["/play/qr-123"]}>
-            <Routes>
-              <Route path="/play/:roundId" element={<QuickRoundPlayPage />} />
-            </Routes>
-          </MemoryRouter>
-        </NotificationProvider>
-      </UserSessionProvider>
+      <QuickRoundTestProviders initialEntries={["/play/qr-123"]}>
+        <Routes>
+          <Route path="/play/:roundId" element={<QuickRoundPlayPage />} />
+        </Routes>
+      </QuickRoundTestProviders>,
     );
 
     const strokesInput = await screen.findByLabelText("Slag hål 1");
@@ -90,15 +93,11 @@ describe("QuickRoundPlayPage", () => {
     loadRoundMock.mockReturnValueOnce(round);
 
     render(
-      <UserSessionProvider>
-        <NotificationProvider>
-          <MemoryRouter initialEntries={["/play/qr-456"]}>
-            <Routes>
-              <Route path="/play/:roundId" element={<QuickRoundPlayPage />} />
-            </Routes>
-          </MemoryRouter>
-        </NotificationProvider>
-      </UserSessionProvider>
+      <QuickRoundTestProviders initialEntries={["/play/qr-456"]}>
+        <Routes>
+          <Route path="/play/:roundId" element={<QuickRoundPlayPage />} />
+        </Routes>
+      </QuickRoundTestProviders>,
     );
 
     expect(await screen.findByText(/Par 4/)).toBeTruthy();
@@ -121,15 +120,11 @@ describe("QuickRoundPlayPage", () => {
     loadRoundMock.mockReturnValueOnce(round);
 
     render(
-      <UserSessionProvider>
-        <NotificationProvider>
-          <MemoryRouter initialEntries={["/play/qr-457"]}>
-            <Routes>
-              <Route path="/play/:roundId" element={<QuickRoundPlayPage />} />
-            </Routes>
-          </MemoryRouter>
-        </NotificationProvider>
-      </UserSessionProvider>
+      <QuickRoundTestProviders initialEntries={["/play/qr-457"]}>
+        <Routes>
+          <Route path="/play/:roundId" element={<QuickRoundPlayPage />} />
+        </Routes>
+      </QuickRoundTestProviders>,
     );
 
     const caddieHeadings = await screen.findAllByText(/Caddie Targets/);
@@ -152,15 +147,11 @@ describe("QuickRoundPlayPage", () => {
     const user = userEvent.setup();
 
     render(
-      <UserSessionProvider>
-        <NotificationProvider>
-          <MemoryRouter initialEntries={["/play/qr-999"]}>
-            <Routes>
-              <Route path="/play/:roundId" element={<QuickRoundPlayPage />} />
-            </Routes>
-          </MemoryRouter>
-        </NotificationProvider>
-      </UserSessionProvider>
+      <QuickRoundTestProviders initialEntries={["/play/qr-999"]}>
+        <Routes>
+          <Route path="/play/:roundId" element={<QuickRoundPlayPage />} />
+        </Routes>
+      </QuickRoundTestProviders>,
     );
 
     const buttons = await screen.findAllByRole("button", { name: /Avsluta runda/i });
@@ -176,15 +167,11 @@ describe("QuickRoundPlayPage", () => {
     loadRoundMock.mockReturnValueOnce(null);
 
     render(
-      <UserSessionProvider>
-        <NotificationProvider>
-          <MemoryRouter initialEntries={["/play/missing"]}>
-            <Routes>
-              <Route path="/play/:roundId" element={<QuickRoundPlayPage />} />
-            </Routes>
-          </MemoryRouter>
-        </NotificationProvider>
-      </UserSessionProvider>
+      <QuickRoundTestProviders initialEntries={["/play/missing"]}>
+        <Routes>
+          <Route path="/play/:roundId" element={<QuickRoundPlayPage />} />
+        </Routes>
+      </QuickRoundTestProviders>,
     );
 
     expect(screen.getByText(/Round not found/i)).toBeTruthy();
@@ -206,15 +193,11 @@ describe("QuickRoundPlayPage", () => {
     loadRoundMock.mockReturnValueOnce(round);
 
     render(
-      <UserSessionProvider>
-        <NotificationProvider>
-          <MemoryRouter initialEntries={["/play/qr-555"]}>
-            <Routes>
-              <Route path="/play/:roundId" element={<QuickRoundPlayPage />} />
-            </Routes>
-          </MemoryRouter>
-        </NotificationProvider>
-      </UserSessionProvider>
+      <QuickRoundTestProviders initialEntries={["/play/qr-555"]}>
+        <Routes>
+          <Route path="/play/:roundId" element={<QuickRoundPlayPage />} />
+        </Routes>
+      </QuickRoundTestProviders>,
     );
 
     expect(await screen.findByText(/Net strokes/i)).toBeTruthy();

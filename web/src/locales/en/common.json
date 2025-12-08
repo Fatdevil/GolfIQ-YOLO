@@ -363,6 +363,12 @@
   "bag.readinessSummary.base": "{{calibrated}} of {{total}} clubs calibrated",
   "bag.readinessSummary.details": "{{noData}} without data · {{needsMore}} need more samples · {{gaps}} large gaps · {{overlaps}} overlaps",
   "bag.readinessTileSuggestionPrefix": "Suggestion:",
+  "bag.readinessRecap.summary.missing_data": "Some clubs still need data before they can be trusted.",
+  "bag.readinessRecap.summary.needs_more_samples": "Collect a few more shots to firm up your distances.",
+  "bag.readinessRecap.summary.gaps_present": "Mind the distance gaps between parts of your bag.",
+  "bag.readinessRecap.summary.overlaps_present": "Carries are overlapping; tighten your spacing.",
+  "bag.readinessRecap.summary.ready": "Bag looks calibrated with balanced coverage.",
+  "bag.readinessRecap.tuneCta": "Tune my bag",
   "units.label": "Units",
   "bag.notes": "Notes",
 

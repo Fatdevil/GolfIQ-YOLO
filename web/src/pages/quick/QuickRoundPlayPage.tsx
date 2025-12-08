@@ -11,6 +11,12 @@ import { UpgradeGate } from "@/access/UpgradeGate";
 import { QuickRoundCoachSection } from "./QuickRoundCoachSection";
 import { SgPreviewCard } from "./SgPreviewCard";
 import { ShareWithCoachButton } from "@/coach/ShareWithCoachButton";
+import { fetchBagStats } from "@/api/bagStatsClient";
+import { mapBagStateToPlayerBag } from "@/bag/utils";
+import { loadBag } from "@/bag/storage";
+import type { BagState } from "@/bag/types";
+import { useUnits } from "@/preferences/UnitsContext";
+import { formatBagSuggestion } from "@/bag/formatBagSuggestion";
 
 import {
   loadRound,
@@ -24,12 +30,15 @@ import { resolveCourseLayout } from "@/features/quickround/courseLayouts";
 import { computeQuickRoundSummary } from "../../features/quickround/summary";
 import { syncQuickRoundToWatch } from "../../features/watch/api";
 import { computeHoleCaddieTargets } from "@shared/round/autoHoleCore";
+import type { BagClubStatsMap } from "@shared/caddie/bagStats";
+import { buildBagReadinessOverview, buildBagReadinessRecapInfo } from "@shared/caddie/bagReadiness";
 
 export default function QuickRoundPlayPage() {
   const { roundId } = useParams<{ roundId: string }>();
   const { t } = useTranslation();
   const { notify } = useNotifications();
   const { session: userSession } = useUserSession();
+  const { unit } = useUnits();
   const userId = userSession?.userId ?? null;
   const [round, setRound] = useState<QuickRound | null>(null);
   const [notFound, setNotFound] = useState(false);
@@ -50,6 +59,8 @@ export default function QuickRoundPlayPage() {
     "idle" | "loading" | "loaded" | "error"
   >("idle");
   const summaryCopyTimeout = useRef<number | null>(null);
+  const [bag] = useState<BagState>(() => loadBag());
+  const [bagStats, setBagStats] = useState<BagClubStatsMap | null>(null);
   const geoState = useGeolocation(autoHoleEnabled);
   const { position, error: geoError } = geoState;
   const { data: bundle, loading: bundleLoading, error: bundleError } = useCourseBundle(
@@ -90,6 +101,25 @@ export default function QuickRoundPlayPage() {
     setAutoHoleEnabled(Boolean(existing.courseId));
     setSuppressedSuggestion(null);
   }, [roundId]);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetchBagStats()
+      .then((stats) => {
+        if (!cancelled) {
+          setBagStats(stats);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setBagStats(null);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     if (!courseLayout && autoHoleEnabled && !bundleLoading) {
@@ -146,6 +176,44 @@ export default function QuickRoundPlayPage() {
     }
     return computeQuickRoundSummary(round);
   }, [round]);
+
+  const playerBag = useMemo(() => mapBagStateToPlayerBag(bag), [bag]);
+
+  const bagReadinessOverview = useMemo(() => {
+    if (!bagStats || bag.clubs.length === 0) return null;
+    try {
+      return buildBagReadinessOverview(playerBag, bagStats);
+    } catch (err) {
+      console.warn("[quickround] Failed to compute bag readiness", err);
+      return null;
+    }
+  }, [bag.clubs.length, bagStats, playerBag]);
+
+  const bagReadinessRecap = useMemo(
+    () => (bag.clubs.length ? buildBagReadinessRecapInfo(playerBag, bagStats) : null),
+    [bag.clubs.length, bagStats, playerBag],
+  );
+
+  const clubLabels = useMemo(() => {
+    const labels: Record<string, string> = {};
+    bag.clubs.forEach((club) => {
+      labels[club.id] = club.label;
+    });
+    return labels;
+  }, [bag.clubs]);
+
+  const bagReadinessSummary = useMemo(() => {
+    if (!bagReadinessRecap) return null;
+    return t(`bag.readinessRecap.summary.${bagReadinessRecap.summary}`);
+  }, [bagReadinessRecap, t]);
+
+  const bagReadinessSuggestion = useMemo(() => {
+    if (!bagReadinessRecap?.topSuggestionId || !bagReadinessOverview?.suggestions?.length) return null;
+    const suggestion =
+      bagReadinessOverview.suggestions.find((item) => item.id === bagReadinessRecap.topSuggestionId) ??
+      bagReadinessOverview.suggestions[0];
+    return suggestion ? formatBagSuggestion(suggestion, clubLabels, unit, t) : null;
+  }, [bagReadinessOverview?.suggestions, bagReadinessRecap?.topSuggestionId, clubLabels, unit, t]);
 
   const memberId = useMemo(
     () => round?.memberId ?? readStoredMemberId(),
@@ -560,6 +628,43 @@ export default function QuickRoundPlayPage() {
           </div>
         </section>
       )}
+      {bagReadinessRecap ? (
+        // TODO: send telemetry for recap bag readiness impressions
+        <section
+          className="rounded-lg border border-slate-800 bg-slate-900/60 p-6 text-sm text-slate-200"
+          data-testid="round-recap-bag-readiness"
+        >
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <h3 className="text-base font-semibold text-slate-100">{t("bag.readinessTitle")}</h3>
+              {bagReadinessSummary ? (
+                <p className="text-sm text-slate-300">{bagReadinessSummary}</p>
+              ) : null}
+            </div>
+            <Link
+              to="/bag"
+              className="rounded-md border border-emerald-400/60 px-3 py-1 text-xs font-semibold text-emerald-100 hover:bg-emerald-500/10"
+              data-testid="round-recap-open-bag"
+              // TODO: track recap-to-bag navigation
+            >
+              {t("bag.readinessRecap.tuneCta")}
+            </Link>
+          </div>
+          <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+              <div className="text-2xl font-semibold text-slate-50">{bagReadinessRecap.score}/100</div>
+              <div className="text-xs uppercase tracking-wide text-slate-400">
+                {t(`bag.readinessGrade.${bagReadinessRecap.grade}`)}
+              </div>
+            </div>
+            {bagReadinessSuggestion ? (
+              <p className="max-w-xl text-sm text-slate-200" data-testid="round-recap-bag-suggestion">
+                {t("bag.readinessTileSuggestionPrefix")} {bagReadinessSuggestion}
+              </p>
+            ) : null}
+          </div>
+        </section>
+      ) : null}
       {round?.completedAt && (
         <UpgradeGate feature="SG_PREVIEW">
           <section className="rounded-lg border border-slate-800 bg-slate-900/60 p-6 text-sm text-slate-200">

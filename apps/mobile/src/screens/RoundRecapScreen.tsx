@@ -17,6 +17,16 @@ import { fetchRoundStrokesGained, type RoundStrokesGained } from '@app/api/strok
 import { fetchDemoRoundRecap } from '@app/demo/demoService';
 import { t } from '@app/i18n';
 import type { RootStackParamList } from '@app/navigation/types';
+import { fetchPlayerBag } from '@app/api/bagClient';
+import { fetchBagStats } from '@app/api/bagStatsClient';
+import {
+  buildBagReadinessOverview,
+  buildBagReadinessRecapInfo,
+  type BagReadinessRecapInfo,
+} from '@shared/caddie/bagReadiness';
+import type { PlayerBag } from '@shared/caddie/playerBag';
+import type { BagClubStatsMap } from '@shared/caddie/bagStats';
+import { formatBagSuggestion } from '@app/caddie/formatBagSuggestion';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'RoundRecap'>;
 
@@ -48,6 +58,8 @@ export default function RoundRecapScreen({ route, navigation }: Props): JSX.Elem
   const [error, setError] = useState<string | null>(null);
   const [sgError, setSgError] = useState<string | null>(null);
   const [shareLoading, setShareLoading] = useState(false);
+  const [bag, setBag] = useState<PlayerBag | null>(null);
+  const [bagStats, setBagStats] = useState<BagClubStatsMap | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -101,6 +113,28 @@ export default function RoundRecapScreen({ route, navigation }: Props): JSX.Elem
     };
   }, [isDemo, roundId]);
 
+  useEffect(() => {
+    if (isDemo) return;
+    let cancelled = false;
+
+    Promise.allSettled([fetchPlayerBag(), fetchBagStats()])
+      .then(([bagResult, statsResult]) => {
+        if (cancelled) return;
+        setBag(bagResult.status === 'fulfilled' ? bagResult.value : null);
+        setBagStats(statsResult.status === 'fulfilled' ? statsResult.value : null);
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setBag(null);
+          setBagStats(null);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isDemo]);
+
   const scoreLine = useMemo(() => {
     if (!recap) return '';
     const toPar = recap.toPar ?? t('round.recap.to_par_even');
@@ -115,6 +149,41 @@ export default function RoundRecapScreen({ route, navigation }: Props): JSX.Elem
     if (Number.isNaN(parsed.getTime())) return recap.date;
     return parsed.toLocaleDateString();
   }, [recap?.date]);
+
+  const bagReadinessOverview = useMemo(() => {
+    if (!bag || !bagStats) return null;
+    try {
+      return buildBagReadinessOverview(bag, bagStats);
+    } catch (err) {
+      console.warn('[round] Failed to compute recap bag readiness', err);
+      return null;
+    }
+  }, [bag, bagStats]);
+
+  const bagReadinessRecap = useMemo<BagReadinessRecapInfo | null>(() => {
+    return buildBagReadinessRecapInfo(bag, bagStats);
+  }, [bag, bagStats]);
+
+  const clubLabels = useMemo(() => {
+    const labels: Record<string, string> = {};
+    bag?.clubs?.forEach((club) => {
+      labels[club.clubId] = club.label;
+    });
+    return labels;
+  }, [bag?.clubs]);
+
+  const readinessSummary = useMemo(() => {
+    if (!bagReadinessRecap) return null;
+    return t(`bag.readinessRecap.summary.${bagReadinessRecap.summary}`);
+  }, [bagReadinessRecap, t]);
+
+  const readinessSuggestion = useMemo(() => {
+    if (!bagReadinessRecap?.topSuggestionId || !bagReadinessOverview?.suggestions?.length) return null;
+    const suggestion =
+      bagReadinessOverview.suggestions.find((item) => item.id === bagReadinessRecap.topSuggestionId) ??
+      bagReadinessOverview.suggestions[0];
+    return suggestion ? formatBagSuggestion(suggestion, clubLabels) : null;
+  }, [bagReadinessOverview?.suggestions, bagReadinessRecap?.topSuggestionId, clubLabels]);
 
   const strokesInsight = useMemo(() => {
     if (!strokesGained) return null;
@@ -214,6 +283,37 @@ export default function RoundRecapScreen({ route, navigation }: Props): JSX.Elem
         <Text style={styles.score}>{scoreLine}</Text>
         <Text style={styles.helper}>{t('round.recap.holes', { holes: recap.holesPlayed })}</Text>
       </View>
+
+      {bagReadinessRecap ? (
+        // TODO: track recap bag readiness impressions
+        <View style={styles.card} testID="recap-bag-readiness">
+          <View style={styles.cardHeader}>
+            <Text style={styles.cardTitle}>{t('bag.readinessTitle')}</Text>
+            <TouchableOpacity
+              style={styles.secondaryButton}
+              onPress={() => {
+                navigation.navigate('MyBag');
+                // TODO: track bag readiness recap navigation
+              }}
+              testID="recap-open-bag"
+            >
+              <Text style={styles.secondaryButtonText}>{t('bag.readinessRecap.tuneCta')}</Text>
+            </TouchableOpacity>
+          </View>
+          <View style={styles.readinessRow}>
+            <Text style={styles.readinessScore}>{bagReadinessRecap.score}/100</Text>
+            <Text style={styles.readinessGrade}>
+              {t(`bag.readinessGrade.${bagReadinessRecap.grade}`)}
+            </Text>
+          </View>
+          {readinessSummary ? <Text style={styles.bodyText}>{readinessSummary}</Text> : null}
+          {readinessSuggestion ? (
+            <Text style={styles.suggestionLine} numberOfLines={2} testID="recap-bag-suggestion">
+              {t('bag.readinessTileSuggestionPrefix')} {readinessSuggestion}
+            </Text>
+          ) : null}
+        </View>
+      ) : null}
 
       <View style={styles.card}>
         <View style={styles.cardHeader}>
@@ -353,6 +453,10 @@ const styles = StyleSheet.create({
   card: { borderWidth: 1, borderColor: '#e5e7eb', borderRadius: 12, padding: 12, gap: 12 },
   cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   cardTitle: { fontSize: 18, fontWeight: '700' },
+  readinessRow: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between' },
+  readinessScore: { fontSize: 24, fontWeight: '700', color: '#111827' },
+  readinessGrade: { color: '#6b7280', fontWeight: '600' },
+  suggestionLine: { color: '#111827' },
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
   tile: {
     width: '48%',
