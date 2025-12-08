@@ -67,6 +67,22 @@ export const en = {
       getStarted: 'Start your first recommended session to see progress here.',
       cta: 'Head to range',
     },
+    history: {
+      title: 'Practice history',
+      loading: 'Loading practice history…',
+      emptyTitle: 'No missions yet',
+      emptyBody: 'Start a recommended session to begin tracking your practice.',
+      startCta: 'Start recommended practice',
+      status: {
+        completed: 'Completed',
+        partial: 'Partial',
+        incomplete: 'Incomplete',
+      },
+      streakTag: 'Streak day',
+      samples: '{{completed}} swings',
+      samplesWithTarget: '{{completed}} / {{target}} swings',
+      anyClub: 'Any club',
+    },
   },
   weeklySummary: {
     title: 'Weekly Summary',
