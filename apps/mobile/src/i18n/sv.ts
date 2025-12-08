@@ -59,4 +59,6 @@ export const sv = {
       },
     },
   },
+  home_dashboard_practice_next_title: 'Nästa mission',
+  home_dashboard_practice_next_cta: 'Starta mission',
 };

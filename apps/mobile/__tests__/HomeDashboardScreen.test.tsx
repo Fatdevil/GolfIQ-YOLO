@@ -14,6 +14,7 @@ import HomeDashboardScreen from '@app/screens/HomeDashboardScreen';
 import * as engagementStorage from '@app/storage/engagement';
 import * as practiceHistory from '@app/storage/practiceMissionHistory';
 import type { BagClubStatsMap } from '@shared/caddie/bagStats';
+import * as bagPracticeRecommendations from '@shared/caddie/bagPracticeRecommendations';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'HomeDashboard'>;
 
@@ -86,6 +87,9 @@ vi.mock('@app/storage/practiceMissionHistory', () => ({
   loadPracticeMissionHistory: vi.fn(),
   summarizeRecentPracticeHistory: vi.fn(),
 }));
+vi.mock('@shared/caddie/bagPracticeRecommendations', () => ({
+  getTopPracticeRecommendation: vi.fn(),
+}));
 
 describe('HomeDashboardScreen', () => {
   beforeEach(() => {
@@ -107,6 +111,7 @@ describe('HomeDashboardScreen', () => {
       lastCompleted: undefined,
       lastStarted: undefined,
     });
+    vi.mocked(bagPracticeRecommendations.getTopPracticeRecommendation).mockReturnValue(null);
   });
 
   it('renders active round CTA and resumes on tap', async () => {
@@ -166,6 +171,35 @@ describe('HomeDashboardScreen', () => {
     fireEvent.click(screen.getByTestId('open-practice'));
     await waitFor(() => {
       expect(navigation.navigate).toHaveBeenCalledWith('PracticePlanner');
+    });
+  });
+
+  it('surfaces next practice mission and routes to quick start', async () => {
+    const navigation = createNavigation();
+    const recommendation: bagPracticeRecommendations.BagPracticeRecommendation = {
+      id: 'practice_fill_gap:7i:5w',
+      titleKey: 'bag.practice.fill_gap.title',
+      descriptionKey: 'bag.practice.fill_gap.description',
+      targetClubs: ['7i', '5w'],
+      targetSampleCount: 16,
+      sourceSuggestionId: 'fill_gap:7i:5w',
+      status: 'due',
+      priorityScore: 42,
+      lastCompletedAt: null,
+    };
+    vi.mocked(bagPracticeRecommendations.getTopPracticeRecommendation).mockReturnValue(recommendation);
+
+    render(<HomeDashboardScreen navigation={navigation} route={createRoute()} />);
+
+    expect(await screen.findByTestId('practice-next-mission')).toBeVisible();
+    expect(screen.getByTestId('practice-next-status')).toHaveTextContent('Due for tune-up');
+
+    fireEvent.click(screen.getByTestId('practice-next-cta'));
+
+    await waitFor(() => {
+      expect(navigation.navigate).toHaveBeenCalledWith('RangeQuickPracticeStart', {
+        practiceRecommendation: recommendation,
+      });
     });
   });
 

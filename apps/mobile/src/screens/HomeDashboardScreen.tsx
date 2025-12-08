@@ -34,6 +34,7 @@ import {
   summarizeRecentPracticeHistory,
   type PracticeProgressOverview,
 } from '@app/storage/practiceMissionHistory';
+import type { PracticeMissionHistoryEntry } from '@shared/practice/practiceHistory';
 import { useGeolocation } from '@app/hooks/useGeolocation';
 import { saveActiveRoundState } from '@app/round/roundState';
 import { computeNearestCourse } from '@shared/round/autoHoleCore';
@@ -43,6 +44,7 @@ import type { BagClubStatsMap } from '@shared/caddie/bagStats';
 import type { BagSuggestion } from '@shared/caddie/bagTuningSuggestions';
 import { formatDistance } from '@app/utils/distance';
 import { buildPracticeProgressTileModel } from '@app/home/practiceProgressHelpers';
+import { getTopPracticeRecommendation, type BagPracticeRecommendation } from '@shared/caddie/bagPracticeRecommendations';
 
 const CALIBRATION_SAMPLE_THRESHOLD = 5;
 const TARGET_ROUNDS_PER_WEEK = 3;
@@ -133,6 +135,7 @@ export default function HomeDashboardScreen({ navigation }: Props): JSX.Element 
   const [sharingWeekly, setSharingWeekly] = useState(false);
   const [quickStarting, setQuickStarting] = useState(false);
   const [practiceOverview, setPracticeOverview] = useState<PracticeProgressOverview | null>(null);
+  const [practiceHistory, setPracticeHistory] = useState<PracticeMissionHistoryEntry[]>([]);
   const geo = useGeolocation();
 
   useEffect(() => {
@@ -201,6 +204,7 @@ export default function HomeDashboardScreen({ navigation }: Props): JSX.Element 
         const history = await loadPracticeMissionHistory();
         if (cancelled) return;
         setPracticeOverview(summarizeRecentPracticeHistory(history, new Date()));
+        setPracticeHistory(history);
       } catch (err) {
         if (!cancelled) {
           console.warn('Home dashboard practice history load failed', err);
@@ -209,6 +213,7 @@ export default function HomeDashboardScreen({ navigation }: Props): JSX.Element 
             completedSessions: 0,
             windowDays: PRACTICE_MISSION_WINDOW_DAYS,
           });
+          setPracticeHistory([]);
         }
       }
     };
@@ -226,6 +231,34 @@ export default function HomeDashboardScreen({ navigation }: Props): JSX.Element 
     () => buildPracticeProgressTileModel(practiceOverview),
     [practiceOverview],
   );
+
+  const clubLabels = useMemo(() => {
+    const labels: Record<string, string> = {};
+    bag?.clubs.forEach((club) => {
+      labels[club.clubId] = club.label;
+    });
+    return labels;
+  }, [bag?.clubs]);
+
+  const bagReadinessOverview = useMemo(() => {
+    if (!bag || !bag.clubs?.length) return null;
+    return buildBagReadinessOverview(bag, bagStats ?? {});
+  }, [bag, bagStats]);
+
+  const readinessSuggestion = useMemo(() => {
+    if (!bagReadinessOverview?.suggestions.length) return null;
+    return formatBagSuggestion(bagReadinessOverview.suggestions[0], clubLabels);
+  }, [bagReadinessOverview?.suggestions, clubLabels]);
+
+  const practiceRecommendation = useMemo<BagPracticeRecommendation | null>(() => {
+    if (!bagReadinessOverview) return null;
+
+    return getTopPracticeRecommendation({
+      overview: bagReadinessOverview,
+      suggestions: bagReadinessOverview.suggestions,
+      history: practiceHistory,
+    });
+  }, [bagReadinessOverview, practiceHistory]);
 
   const handleOpenPracticeProgress = useCallback(() => {
     if (practiceProgressModel?.hasData) {
@@ -298,23 +331,26 @@ export default function HomeDashboardScreen({ navigation }: Props): JSX.Element 
     return lastSeen !== latestRound.roundId;
   }, [engagement?.lastSeenCoachReportRoundId, latestRound]);
 
-  const clubLabels = useMemo(() => {
-    const labels: Record<string, string> = {};
-    bag?.clubs.forEach((club) => {
-      labels[club.clubId] = club.label;
-    });
-    return labels;
-  }, [bag?.clubs]);
+  const practiceRecommendationCopy = useMemo(() => {
+    if (!practiceRecommendation) return null;
 
-  const bagReadinessOverview = useMemo(() => {
-    if (!bag || !bag.clubs?.length) return null;
-    return buildBagReadinessOverview(bag, bagStats ?? {});
-  }, [bag, bagStats]);
+    const [firstClubId, secondClubId] = practiceRecommendation.targetClubs;
+    const lower = firstClubId ? clubLabels[firstClubId] ?? firstClubId : undefined;
+    const upper = secondClubId ? clubLabels[secondClubId] ?? secondClubId : undefined;
+    const club = lower;
 
-  const readinessSuggestion = useMemo(() => {
-    if (!bagReadinessOverview?.suggestions.length) return null;
-    return formatBagSuggestion(bagReadinessOverview.suggestions[0], clubLabels);
-  }, [bagReadinessOverview?.suggestions, clubLabels]);
+    return {
+      title: t(practiceRecommendation.titleKey, { lower, upper, club }),
+      description: t(practiceRecommendation.descriptionKey, { lower, upper, club }),
+    };
+  }, [clubLabels, practiceRecommendation]);
+
+  const practiceRecommendationStatusLabel = useMemo(() => {
+    if (!practiceRecommendation) return null;
+    if (practiceRecommendation.status === 'new') return t('bag.practice.status.new');
+    if (practiceRecommendation.status === 'due') return t('bag.practice.status.due');
+    return t('bag.practice.status.fresh');
+  }, [practiceRecommendation]);
 
   const markWeeklySeen = useCallback(async () => {
     const timestamp = weeklySummary?.period.to;
@@ -449,6 +485,17 @@ export default function HomeDashboardScreen({ navigation }: Props): JSX.Element 
       setSharingWeekly(false);
     }
   }, [weeklySummary, weeklyTopCategory]);
+
+  const handleStartPracticeRecommendation = useCallback(() => {
+    if (!practiceRecommendation) return;
+
+    try {
+      navigation.navigate('RangeQuickPracticeStart', { practiceRecommendation });
+    } catch (err) {
+      console.warn('[home] Unable to start recommended practice from home', err);
+      navigation.navigate('RangePractice');
+    }
+  }, [navigation, practiceRecommendation]);
 
   if (loading) {
     return (
@@ -686,6 +733,23 @@ export default function HomeDashboardScreen({ navigation }: Props): JSX.Element 
         <Text style={styles.cardBody} testID="practice-snippet">
           {practiceHeadline}
         </Text>
+        {practiceRecommendationCopy ? (
+          <View style={styles.recommendationBlock} testID="practice-next-mission">
+            <View style={styles.rowSpaceBetween}>
+              <Text style={styles.cardOverline}>{t('home_dashboard_practice_next_title')}</Text>
+              {practiceRecommendationStatusLabel ? (
+                <View style={styles.badge} testID="practice-next-status">
+                  <Text style={styles.badgeText}>{practiceRecommendationStatusLabel}</Text>
+                </View>
+              ) : null}
+            </View>
+            <Text style={styles.cardTitle}>{practiceRecommendationCopy.title}</Text>
+            <Text style={styles.muted}>{practiceRecommendationCopy.description}</Text>
+            <TouchableOpacity onPress={handleStartPracticeRecommendation} testID="practice-next-cta">
+              <Text style={styles.link}>{t('home_dashboard_practice_next_cta')}</Text>
+            </TouchableOpacity>
+          </View>
+        ) : null}
         <TouchableOpacity onPress={() => navigation.navigate('PracticePlanner')} testID="open-practice">
           <Text style={styles.link}>{t('home_dashboard_practice_cta')}</Text>
         </TouchableOpacity>
@@ -752,6 +816,12 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '700',
     color: '#111827',
+  },
+  cardOverline: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#6b7280',
+    textTransform: 'uppercase',
   },
   cardBody: {
     fontSize: 14,
@@ -838,6 +908,10 @@ const styles = StyleSheet.create({
     color: '#1f2937',
     fontSize: 13,
     marginTop: 6,
+  },
+  recommendationBlock: {
+    gap: 6,
+    paddingVertical: 4,
   },
   progressBlock: {
     gap: 6,
