@@ -42,4 +42,13 @@ export const sv = {
       },
     },
   },
+  bag: {
+    practice: {
+      progress: {
+        recent: '{{count}} pass de senaste {{days}} dagarna',
+        empty: 'Inte tränat ännu',
+        streak: 'På en streak',
+      },
+    },
+  },
 };

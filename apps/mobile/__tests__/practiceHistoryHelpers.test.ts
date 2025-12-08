@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   buildPracticeHistoryList,
   buildPracticeMissionDetail,
+  buildMissionProgressById,
   DEFAULT_HISTORY_WINDOW_DAYS,
   type PracticeMissionHistoryEntry,
 } from '@shared/practice/practiceHistory';
@@ -99,6 +100,108 @@ describe('buildPracticeHistoryList', () => {
       .filter((item) => item.status === 'completed')
       .map((item) => item.countsTowardStreak);
     expect(streakFlags).toEqual([true, true]);
+  });
+});
+
+describe('buildMissionProgressById', () => {
+  const NOW = new Date('2024-04-10T12:00:00.000Z');
+
+  it('returns defaults when no history', () => {
+    const progress = buildMissionProgressById([], ['rec-1'], { now: NOW, windowDays: DEFAULT_HISTORY_WINDOW_DAYS });
+
+    expect(progress['rec-1']).toEqual({
+      missionId: 'rec-1',
+      completedSessions: 0,
+      lastCompletedAt: null,
+      inStreak: false,
+    });
+  });
+
+  it('tracks counts and last completion per mission', () => {
+    const entries: PracticeMissionHistoryEntry[] = [
+      {
+        id: 'one',
+        missionId: 'rec-1',
+        startedAt: '2024-04-05T10:00:00.000Z',
+        status: 'completed',
+        targetClubs: ['7i'],
+        completedSampleCount: 10,
+      },
+      {
+        id: 'two',
+        missionId: 'rec-1',
+        startedAt: '2024-04-09T10:00:00.000Z',
+        status: 'completed',
+        targetClubs: ['7i'],
+        completedSampleCount: 12,
+      },
+      {
+        id: 'three',
+        missionId: 'rec-2',
+        startedAt: '2024-04-08T12:00:00.000Z',
+        status: 'completed',
+        targetClubs: ['pw'],
+        completedSampleCount: 8,
+      },
+    ];
+
+    const progress = buildMissionProgressById(entries, ['rec-1', 'rec-2'], { now: NOW, windowDays: 14 });
+
+    expect(progress['rec-1'].completedSessions).toBe(2);
+    expect(progress['rec-1'].lastCompletedAt).toBe(new Date('2024-04-09T10:00:00.000Z').getTime());
+    expect(progress['rec-2'].completedSessions).toBe(1);
+  });
+
+  it('ignores missions outside the window', () => {
+    const entries: PracticeMissionHistoryEntry[] = [
+      {
+        id: 'stale',
+        missionId: 'rec-1',
+        startedAt: '2024-02-01T10:00:00.000Z',
+        status: 'completed',
+        targetClubs: ['7i'],
+        completedSampleCount: 5,
+      },
+    ];
+
+    const progress = buildMissionProgressById(entries, ['rec-1'], { now: NOW, windowDays: 30 });
+
+    expect(progress['rec-1'].completedSessions).toBe(0);
+    expect(progress['rec-1'].lastCompletedAt).toBeNull();
+  });
+
+  it('sets streak flag when mission has streak day', () => {
+    const entries: PracticeMissionHistoryEntry[] = [
+      {
+        id: 'one',
+        missionId: 'rec-1',
+        startedAt: '2024-04-09T08:00:00.000Z',
+        status: 'completed',
+        targetClubs: ['7i'],
+        completedSampleCount: 10,
+      },
+      {
+        id: 'two',
+        missionId: 'rec-1',
+        startedAt: '2024-04-10T08:00:00.000Z',
+        status: 'completed',
+        targetClubs: ['7i'],
+        completedSampleCount: 12,
+      },
+      {
+        id: 'other',
+        missionId: 'rec-2',
+        startedAt: '2024-04-05T09:00:00.000Z',
+        status: 'completed',
+        targetClubs: ['pw'],
+        completedSampleCount: 6,
+      },
+    ];
+
+    const progress = buildMissionProgressById(entries, ['rec-1', 'rec-2'], { now: NOW, windowDays: 14 });
+
+    expect(progress['rec-1'].inStreak).toBe(true);
+    expect(progress['rec-2'].inStreak).toBe(false);
   });
 });
 

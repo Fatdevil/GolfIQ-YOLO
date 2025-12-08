@@ -78,6 +78,15 @@ import { useUserSession } from "@/user/UserSessionContext";
 import { postRangeSessionSnapshots } from "@/user/historyApi";
 import { mapRangeSessionToSnapshot } from "@/user/historySync";
 import { persistMissionOutcomeFromSession } from "@/practice/missionOutcomeRecorder";
+import {
+  PRACTICE_MISSION_WINDOW_DAYS,
+  loadPracticeMissionHistory,
+} from "@/practice/practiceMissionHistory";
+import {
+  buildMissionProgressById,
+  type MissionProgress,
+  type PracticeMissionHistoryEntry,
+} from "@shared/practice/practiceHistory";
 
 const DEFAULT_ANALYZE_FRAMES = 8;
 const DEFAULT_REF_LEN_PX = 100;
@@ -191,6 +200,7 @@ export default function RangePracticePage() {
     null
   );
   const [missionId, setMissionId] = React.useState<MissionId | null>(null);
+  const [practiceHistory, setPracticeHistory] = React.useState<PracticeMissionHistoryEntry[]>([]);
   const [bingoCfg, setBingoCfg] = React.useState<ClassicTargetBingoConfig>({
     target_m: 150,
     tolerance_m: 7,
@@ -222,6 +232,13 @@ export default function RangePracticePage() {
     () => (mission ? computeMissionProgress(mission, shots) : null),
     [mission, shots]
   );
+  const missionHistoryProgress = React.useMemo(() => {
+    if (!missionId) return null;
+    const map = buildMissionProgressById(practiceHistory, [missionId], {
+      windowDays: PRACTICE_MISSION_WINDOW_DAYS,
+    });
+    return map[missionId];
+  }, [missionId, practiceHistory]);
   const searchParams = React.useMemo(() => new URLSearchParams(location.search ?? ""), [location.search]);
 
   const missionPrefInitialized = React.useRef(false);
@@ -258,6 +275,29 @@ export default function RangePracticePage() {
       setMissionId(null);
     }
   }, [missionId, mission]);
+
+  React.useEffect(() => {
+    let cancelled = false;
+
+    const loadHistory = async () => {
+      try {
+        const history = await loadPracticeMissionHistory();
+        if (!cancelled) {
+          setPracticeHistory(history);
+        }
+      } catch (err) {
+        if (!cancelled) {
+          console.warn("[practice] Failed to load mission history", err);
+        }
+      }
+    };
+
+    loadHistory().catch((err) => console.warn("[practice] mission history load crashed", err));
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   React.useEffect(() => {
     const presetClub = searchParams.get("club");
@@ -865,7 +905,12 @@ export default function RangePracticePage() {
               </div>
 
               {mission ? (
-                <MissionDetails mission={mission} missionProgress={missionProgress} unit={unit} />
+                <MissionDetails
+                  mission={mission}
+                  missionProgress={missionProgress}
+                  missionHistoryProgress={missionHistoryProgress}
+                  unit={unit}
+                />
               ) : (
                 <p className="text-xs text-slate-400">
                   {t("range.mission.noneSelected")}
@@ -1211,12 +1256,14 @@ export default function RangePracticePage() {
 type MissionDetailsProps = {
   mission: RangeMission;
   missionProgress: ReturnType<typeof computeMissionProgress> | null;
+  missionHistoryProgress: MissionProgress | null;
   unit: DistanceUnit;
 };
 
 const MissionDetails: React.FC<MissionDetailsProps> = ({
   mission,
   missionProgress,
+  missionHistoryProgress,
   unit,
 }) => {
   const { t } = useTranslation();
@@ -1226,10 +1273,29 @@ const MissionDetails: React.FC<MissionDetailsProps> = ({
     )
     .join(" • ");
 
+  const missionHistoryLabel = React.useMemo(() => {
+    const base =
+      missionHistoryProgress && missionHistoryProgress.completedSessions > 0
+        ? t("practice.missionProgress.recent", {
+            count: missionHistoryProgress.completedSessions,
+            days: PRACTICE_MISSION_WINDOW_DAYS,
+          })
+        : t("practice.missionProgress.empty");
+
+    if (missionHistoryProgress?.inStreak) {
+      return `${base} • ${t("practice.missionProgress.streak")}`;
+    }
+
+    return base;
+  }, [missionHistoryProgress, t]);
+
   return (
     <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700">
       <div className="font-medium text-slate-900">{mission.label}</div>
       <div className="mt-1 text-slate-600">{mission.description}</div>
+      <div className="mt-1 text-xs text-slate-500" data-testid="mission-history-progress">
+        {missionHistoryLabel}
+      </div>
       <div className="mt-2 text-xs text-slate-500">
         <span className="font-semibold text-slate-700">Targets:</span> {targetText}
       </div>
@@ -1268,3 +1334,5 @@ const MissionDetails: React.FC<MissionDetailsProps> = ({
     </div>
   );
 };
+
+export { MissionDetails };

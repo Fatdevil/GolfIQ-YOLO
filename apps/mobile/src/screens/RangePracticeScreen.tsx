@@ -4,6 +4,8 @@ import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { RootStackParamList } from '@app/navigation/types';
 import { t } from '@app/i18n';
+import { loadPracticeMissionHistory, PRACTICE_MISSION_WINDOW_DAYS } from '@app/storage/practiceMissionHistory';
+import { buildMissionProgressById, type PracticeMissionHistoryEntry } from '@shared/practice/practiceHistory';
 import { loadCurrentTrainingGoal } from '@app/range/rangeTrainingGoalStorage';
 import { fetchPlayerBag, type PlayerBag } from '@app/api/bagClient';
 import { fetchBagStats } from '@app/api/bagStatsClient';
@@ -16,6 +18,7 @@ export default function RangePracticeScreen({ navigation }: Props): JSX.Element 
   const [trainingGoal, setTrainingGoal] = useState<string | null>(null);
   const [bag, setBag] = useState<PlayerBag | null>(null);
   const [practiceRecommendation, setPracticeRecommendation] = useState<BagPracticeRecommendation | null>(null);
+  const [practiceHistory, setPracticeHistory] = useState<PracticeMissionHistoryEntry[]>([]);
 
   useEffect(() => {
     let cancelled = false;
@@ -35,6 +38,29 @@ export default function RangePracticeScreen({ navigation }: Props): JSX.Element 
       unsubscribe();
     };
   }, [navigation]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadHistory = async () => {
+      try {
+        const history = await loadPracticeMissionHistory();
+        if (!cancelled) {
+          setPracticeHistory(history);
+        }
+      } catch (err) {
+        if (!cancelled) {
+          console.warn('[range] Failed to load practice history', err);
+        }
+      }
+    };
+
+    loadHistory().catch((err) => console.warn('[range] practice history load crashed', err));
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -95,6 +121,32 @@ export default function RangePracticeScreen({ navigation }: Props): JSX.Element 
     };
   }, [clubLabels, practiceRecommendation]);
 
+  const recommendationProgress = useMemo(() => {
+    if (!practiceRecommendation) return null;
+    const map = buildMissionProgressById(practiceHistory, [practiceRecommendation.id], {
+      windowDays: PRACTICE_MISSION_WINDOW_DAYS,
+    });
+    return map[practiceRecommendation.id];
+  }, [practiceHistory, practiceRecommendation]);
+
+  const recommendationProgressLabel = useMemo(() => {
+    if (!recommendationProgress) return null;
+    const parts = [
+      recommendationProgress.completedSessions > 0
+        ? t('bag.practice.progress.recent', {
+            count: recommendationProgress.completedSessions,
+            days: PRACTICE_MISSION_WINDOW_DAYS,
+          })
+        : t('bag.practice.progress.empty'),
+    ];
+
+    if (recommendationProgress.inStreak) {
+      parts.push(t('bag.practice.progress.streak'));
+    }
+
+    return parts.join(' • ');
+  }, [recommendationProgress]);
+
   return (
     <View style={styles.container}>
       <TouchableOpacity
@@ -124,6 +176,11 @@ export default function RangePracticeScreen({ navigation }: Props): JSX.Element 
           <Text style={styles.cardOverline}>{t('bag.practice.recommendedTitle')}</Text>
           <Text style={styles.cardTitle}>{recommendationCopy.title}</Text>
           <Text style={styles.cardSubtitle}>{recommendationCopy.description}</Text>
+          {recommendationProgressLabel ? (
+            <Text style={styles.cardHelper} testID="range-recommendation-progress">
+              {recommendationProgressLabel}
+            </Text>
+          ) : null}
           <TouchableOpacity
             accessibilityLabel={t('bag.practice.startCta')}
             onPress={() =>
@@ -245,6 +302,9 @@ const styles = StyleSheet.create({
   cardSubtitle: {
     fontSize: 14,
     color: '#4B5563',
+  },
+  cardHelper: {
+    color: '#6B7280',
   },
   primaryButton: {
     marginTop: 8,
