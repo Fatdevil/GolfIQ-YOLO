@@ -23,7 +23,12 @@ export type RootStackParamList = {
   PlayRoundSetup: undefined;
   RangePractice: undefined;
   RangeMissions: undefined;
-  RangeQuickPracticeStart: { missionId?: string } | undefined;
+  RangeQuickPracticeStart:
+    | {
+        missionId?: string;
+        practiceRecommendation?: import('@shared/caddie/bagPracticeRecommendations').BagPracticeRecommendation;
+      }
+    | undefined;
   RangeCameraSetup: {
     club: string | null;
     targetDistanceM?: number | null;

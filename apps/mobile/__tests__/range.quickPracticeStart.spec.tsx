@@ -92,4 +92,27 @@ describe('RangeQuickPracticeStartScreen', () => {
       expect.objectContaining({ missionId: 'solid_contact_wedges' }),
     );
   });
+
+  it('prefills club and surfaces recommendation details when provided', async () => {
+    const navigation = createNavigation();
+    vi.mocked(trainingGoalStorage.loadCurrentTrainingGoal).mockResolvedValue(null);
+
+    render(
+      <RangeQuickPracticeStartScreen
+        navigation={navigation}
+        route={createRoute({
+          practiceRecommendation: {
+            id: 'practice_calibrate:pw',
+            titleKey: 'bag.practice.calibrate.title',
+            descriptionKey: 'bag.practice.calibrate.more_samples.description',
+            targetClubs: ['PW'],
+            sourceSuggestionId: 'calibrate:pw',
+          },
+        })}
+      />,
+    );
+
+    expect(await screen.findByTestId('range-start-recommendation')).toHaveTextContent('Based on your bag readiness');
+    expect(screen.getByTestId('club-input')).toHaveValue('PW');
+  });
 });
