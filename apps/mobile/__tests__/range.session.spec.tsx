@@ -241,6 +241,72 @@ describe('RangeQuickPracticeSessionScreen', () => {
     vi.useRealTimers();
   });
 
+  it('does not count non-target swings toward mission completion', async () => {
+    const navigation = createNavigation();
+    const session: RangeSession = {
+      id: 'session-nt-1',
+      mode: 'quick',
+      startedAt: '2024-01-01T00:00:00.000Z',
+      club: 'pw',
+      targetDistanceM: 120,
+      cameraAngle: 'face_on',
+      shots: [
+        {
+          id: 'shot-1',
+          timestamp: '2024-01-01T00:05:00.000Z',
+          club: 'pw',
+          targetDistanceM: 120,
+          carryM: 115,
+          sideDeg: 1,
+        },
+        {
+          id: 'shot-2',
+          timestamp: '2024-01-01T00:07:00.000Z',
+          club: '9i',
+          targetDistanceM: 120,
+          carryM: 118,
+          sideDeg: -1,
+        },
+      ],
+    };
+
+    const recommendation: BagPracticeRecommendation = {
+      id: 'practice_calibrate:7i',
+      titleKey: 'bag.practice.calibrate.title',
+      descriptionKey: 'bag.practice.calibrate.more_samples.description',
+      targetClubs: ['7i'],
+      targetSampleCount: 2,
+      sourceSuggestionId: 'suggestion-1',
+    };
+
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2024-01-01T02:00:00.000Z'));
+
+    render(
+      <RangeQuickPracticeSessionScreen
+        navigation={navigation}
+        route={createRoute(session, undefined, recommendation)}
+      />,
+    );
+
+    fireEvent.click(screen.getByTestId('end-session'));
+
+    await waitFor(() => {
+      expect(practiceMissionHistory.appendPracticeMissionSession).toHaveBeenCalledWith(
+        expect.objectContaining({
+          recommendationId: recommendation.id,
+          targetSampleCount: 2,
+          totalShots: 0,
+          targetClubs: recommendation.targetClubs,
+          completed: false,
+          startedAt: session.startedAt,
+        }),
+      );
+    });
+
+    vi.useRealTimers();
+  });
+
   it('tags summary with mission from navigation params', async () => {
     const navigation = createNavigation();
     const session: RangeSession = {

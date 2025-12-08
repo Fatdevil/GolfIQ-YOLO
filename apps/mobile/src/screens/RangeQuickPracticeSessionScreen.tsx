@@ -244,11 +244,11 @@ export default function RangeQuickPracticeSessionScreen({ navigation, route }: P
       const shotsForTargets = sessionState.shots.filter((shot) =>
         shot.club && practiceRecommendation.targetClubs.includes(shot.club),
       );
-      const totalShots = shotsForTargets.length > 0 ? shotsForTargets.length : sessionState.shots.length;
+      const totalTargetShots = shotsForTargets.length;
       const completed =
         practiceRecommendation.targetSampleCount != null
-          ? totalShots >= practiceRecommendation.targetSampleCount
-          : totalShots > 0;
+          ? totalTargetShots >= practiceRecommendation.targetSampleCount
+          : totalTargetShots > 0;
 
       try {
         await appendPracticeMissionSession({
@@ -257,7 +257,7 @@ export default function RangeQuickPracticeSessionScreen({ navigation, route }: P
           startedAt: sessionStartedAtRef.current,
           completedAt: completed ? new Date().toISOString() : undefined,
           targetSampleCount: practiceRecommendation.targetSampleCount,
-          totalShots,
+          totalShots: totalTargetShots,
           targetClubs: practiceRecommendation.targetClubs,
           completed,
         });
