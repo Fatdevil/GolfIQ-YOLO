@@ -2,6 +2,7 @@ import { render, screen } from "@testing-library/react";
 import type { ReactElement } from "react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { MemoryRouter } from "react-router-dom";
 import type { TargetBingoResult } from "../src/features/range/games";
 
 vi.mock("../src/bag/storage", () => ({
@@ -80,13 +81,15 @@ const proAccessValue = {
 
 function renderWithAccess(ui: ReactElement) {
   return render(
-    <UserSessionProvider>
-      <UserAccessContext.Provider value={proAccessValue}>
-        <UnitsContext.Provider value={{ unit: "metric", setUnit: () => {} }}>
-          {ui}
-        </UnitsContext.Provider>
-      </UserAccessContext.Provider>
-    </UserSessionProvider>,
+    <MemoryRouter initialEntries={["/range/practice"]}>
+      <UserSessionProvider>
+        <UserAccessContext.Provider value={proAccessValue}>
+          <UnitsContext.Provider value={{ unit: "metric", setUnit: () => {} }}>
+            {ui}
+          </UnitsContext.Provider>
+        </UserAccessContext.Provider>
+      </UserSessionProvider>
+    </MemoryRouter>,
   );
 }
 

@@ -2,6 +2,7 @@ import React from "react";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { MemoryRouter } from "react-router-dom";
 
 import RangePracticePage from "@/pages/RangePracticePage";
 import { UserAccessContext } from "@/access/UserAccessContext";
@@ -57,26 +58,28 @@ const mockedPostRangeAnalyze = vi.mocked(postRangeAnalyze);
 
 function renderWithUnit(unit: DistanceUnit, ui: React.ReactElement) {
   return render(
-    <UserSessionProvider>
-      <UserAccessContext.Provider
-        value={{
-          loading: false,
-          plan: "pro",
-          hasFeature: () => true,
-          hasPlanFeature: () => true,
-          isPro: true,
-          isFree: false,
-          refresh: async () => undefined,
-          trial: null,
-          expiresAt: null,
-          error: undefined,
-        }}
-      >
-        <UnitsContext.Provider value={{ unit, setUnit: () => {} }}>
-          {ui}
-        </UnitsContext.Provider>
-      </UserAccessContext.Provider>
-    </UserSessionProvider>,
+    <MemoryRouter initialEntries={["/range/practice"]}>
+      <UserSessionProvider>
+        <UserAccessContext.Provider
+          value={{
+            loading: false,
+            plan: "pro",
+            hasFeature: () => true,
+            hasPlanFeature: () => true,
+            isPro: true,
+            isFree: false,
+            refresh: async () => undefined,
+            trial: null,
+            expiresAt: null,
+            error: undefined,
+          }}
+        >
+          <UnitsContext.Provider value={{ unit, setUnit: () => {} }}>
+            {ui}
+          </UnitsContext.Provider>
+        </UserAccessContext.Provider>
+      </UserSessionProvider>
+    </MemoryRouter>,
   );
 }
 
