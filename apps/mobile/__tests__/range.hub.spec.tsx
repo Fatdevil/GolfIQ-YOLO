@@ -138,6 +138,9 @@ describe('RangePracticeScreen', () => {
       targetClubs: ['8i', '9i'],
       targetSampleCount: 16,
       sourceSuggestionId: 'fill_gap:8i:9i',
+      status: 'new',
+      priorityScore: 0,
+      lastCompletedAt: null,
     } as bagPracticeRecommendations.BagPracticeRecommendation;
 
     vi.mocked(bagPracticeRecommendations.buildBagPracticeRecommendation).mockReturnValue(recommendation);
@@ -155,6 +158,7 @@ describe('RangePracticeScreen', () => {
     render(<RangePracticeScreen navigation={navigation} route={{ key: 'RangePractice', name: 'RangePractice' } as Props['route']} />);
 
     expect(await screen.findByTestId('range-recommendation-card')).toHaveTextContent('Practice gapping 8 iron & 9 iron');
+    expect(screen.getByTestId('range-recommendation-status')).toHaveTextContent('New mission');
     expect(screen.getByTestId('range-recommendation-progress')).toHaveTextContent('1 sessions in the last 14 days');
 
     fireEvent.click(screen.getByTestId('range-recommendation-cta'));
@@ -183,6 +187,9 @@ describe('RangePracticeScreen', () => {
       targetClubs: ['8i', '9i'],
       targetSampleCount: 16,
       sourceSuggestionId: 'fill_gap:8i:9i',
+      status: 'new',
+      priorityScore: 0,
+      lastCompletedAt: null,
     } as bagPracticeRecommendations.BagPracticeRecommendation;
 
     vi.mocked(bagPracticeRecommendations.buildBagPracticeRecommendation).mockReturnValue(recommendation);
@@ -196,5 +203,31 @@ describe('RangePracticeScreen', () => {
     );
 
     expect(await screen.findByTestId('range-recommendation-progress')).toHaveTextContent('Not practised yet');
+  });
+
+  it('shows due label for stale recommendations', async () => {
+    const navigation = createNavigation();
+    const recommendation = {
+      id: 'practice_calibrate:8i',
+      titleKey: 'bag.practice.calibrate.title',
+      descriptionKey: 'bag.practice.calibrate.no_data.description',
+      targetClubs: ['8i'],
+      targetSampleCount: 8,
+      sourceSuggestionId: 'calibrate:8i',
+      status: 'due',
+      priorityScore: 15,
+      lastCompletedAt: null,
+    } as bagPracticeRecommendations.BagPracticeRecommendation;
+
+    vi.mocked(bagPracticeRecommendations.buildBagPracticeRecommendation).mockReturnValue(recommendation);
+
+    render(
+      <RangePracticeScreen
+        navigation={navigation}
+        route={{ key: 'RangePractice', name: 'RangePractice' } as Props['route']}
+      />,
+    );
+
+    expect(await screen.findByTestId('range-recommendation-status')).toHaveTextContent('Due for tune-up');
   });
 });

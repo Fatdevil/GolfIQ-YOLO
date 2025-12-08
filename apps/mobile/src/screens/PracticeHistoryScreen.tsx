@@ -108,7 +108,7 @@ export default function PracticeHistoryScreen({ navigation }: Props): JSX.Elemen
         let recommendation: BagPracticeRecommendation | null = null;
         if (bag) {
           const overview = buildBagReadinessOverview(bag, bagStats ?? {});
-          recommendation = buildBagPracticeRecommendation(overview, overview.suggestions);
+          recommendation = buildBagPracticeRecommendation(overview, overview.suggestions, history);
         }
 
         setState({ loading: false, items, recommendation });

@@ -55,6 +55,11 @@
   "practice.missionProgress.recent": "{{count}} pass de senaste {{days}} dagarna",
   "practice.missionProgress.empty": "Inte tränat ännu",
   "practice.missionProgress.streak": "På en streak",
+  "bag.practice.recommendedTitle": "Rekommenderad träning",
+  "bag.practice.recommendedHelper": "Baserat på din bagstatus",
+  "bag.practice.status.new": "Nytt mission",
+  "bag.practice.status.due": "Dags för finjustering",
+  "bag.practice.status.fresh": "Håll det skarpt",
 
   "home.profile.title": "My GolfIQ",
   "home.profile.subtitle": "Se dina rundor, rangepass, caddie-insikter och SG-förhandsvisning.",

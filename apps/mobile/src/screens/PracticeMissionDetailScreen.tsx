@@ -87,6 +87,9 @@ export default function PracticeMissionDetailScreen({ navigation, route }: Props
       targetClubs: state.detail.targetClubs.map((club) => club.id),
       targetSampleCount: state.detail.targetSampleCount ?? undefined,
       sourceSuggestionId: state.detail.originSuggestionId ?? state.detail.missionId,
+      status: 'fresh',
+      priorityScore: 0,
+      lastCompletedAt: state.detail.endedAt ?? state.detail.startedAt ?? null,
     };
   }, [state.detail]);
 

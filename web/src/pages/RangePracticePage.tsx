@@ -87,6 +87,11 @@ import {
   type MissionProgress,
   type PracticeMissionHistoryEntry,
 } from "@shared/practice/practiceHistory";
+import { fetchBagStats } from "@/api/bagStatsClient";
+import { mapBagStateToPlayerBag } from "@/bag/utils";
+import { buildBagReadinessOverview } from "@shared/caddie/bagReadiness";
+import { type BagClubStatsMap } from "@shared/caddie/bagStats";
+import { buildBagPracticeRecommendations, type BagPracticeRecommendation } from "@shared/caddie/bagPracticeRecommendations";
 
 const DEFAULT_ANALYZE_FRAMES = 8;
 const DEFAULT_REF_LEN_PX = 100;
@@ -136,7 +141,7 @@ function pickNumber(...values: (number | null | undefined)[]): number | null {
   return null;
 }
 
-function mapRangeMetrics(response: RangeAnalyzeResponse): RangeShotMetrics {
+  function mapRangeMetrics(response: RangeAnalyzeResponse): RangeShotMetrics {
   const metrics = response.metrics ?? null;
   const ballSpeedMps = pickNumber(response.ball_speed_mps, metrics?.ball_speed_mps);
   const ballSpeedMph =
@@ -186,6 +191,7 @@ export default function RangePracticePage() {
   const location = useLocation();
   const userId = userSession?.userId ?? null;
   const [bag] = React.useState<BagState>(() => loadBag());
+  const [bagStats, setBagStats] = React.useState<BagClubStatsMap | null>(null);
   const [currentClubId, setCurrentClubId] = React.useState<string>(
     () => bag.clubs[0]?.id ?? "7i"
   );
@@ -219,6 +225,7 @@ export default function RangePracticePage() {
   const [showCalibrationGuide, setShowCalibrationGuide] = React.useState<boolean>(
     () => !loadCalibrationStatus().calibrated,
   );
+  const [recommendations, setRecommendations] = React.useState<BagPracticeRecommendation[]>([]);
   const ghostCandidates = React.useMemo(() => loadRangeSessions(), []);
   const sessionStartRef = React.useRef<string>(new Date().toISOString());
   const ghostSessionOptions = React.useMemo(
@@ -226,6 +233,15 @@ export default function RangePracticePage() {
     [ghostCandidates],
   );
   const hasGhostCandidates = ghostSessionOptions.length > 0;
+
+  const clubLabels = React.useMemo(
+    () =>
+      bag.clubs.reduce<Record<string, string>>((acc, club) => {
+        acc[club.id] = club.label;
+        return acc;
+      }, {}),
+    [bag],
+  );
 
   const mission = missionId ? getMissionById(missionId) ?? null : null;
   const missionProgress = React.useMemo(
@@ -239,6 +255,14 @@ export default function RangePracticePage() {
     });
     return map[missionId];
   }, [missionId, practiceHistory]);
+  const recommendationProgress = React.useMemo(() => {
+    if (recommendations.length === 0) return {} as Record<string, MissionProgress>;
+    return buildMissionProgressById(
+      practiceHistory,
+      recommendations.map((rec) => rec.id),
+      { windowDays: PRACTICE_MISSION_WINDOW_DAYS },
+    );
+  }, [practiceHistory, recommendations]);
   const searchParams = React.useMemo(() => new URLSearchParams(location.search ?? ""), [location.search]);
 
   const missionPrefInitialized = React.useRef(false);
@@ -271,6 +295,30 @@ export default function RangePracticePage() {
   }, [accessLoading, isPro, searchParams]);
 
   React.useEffect(() => {
+    let cancelled = false;
+
+    const loadStats = async () => {
+      try {
+        const stats = await fetchBagStats();
+        if (!cancelled) {
+          setBagStats(stats);
+        }
+      } catch (err) {
+        if (!cancelled) {
+          console.warn("[practice] Failed to load bag stats", err);
+          setBagStats({});
+        }
+      }
+    };
+
+    loadStats().catch((err) => console.warn("[practice] bag stats load crashed", err));
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  React.useEffect(() => {
     if (missionId && !mission) {
       setMissionId(null);
     }
@@ -298,6 +346,18 @@ export default function RangePracticePage() {
       cancelled = true;
     };
   }, []);
+
+  React.useEffect(() => {
+    try {
+      const playerBag = mapBagStateToPlayerBag(bag);
+      const overview = buildBagReadinessOverview(playerBag, bagStats ?? {});
+      const recs = buildBagPracticeRecommendations(overview, overview.suggestions, practiceHistory);
+      setRecommendations(recs);
+    } catch (err) {
+      console.warn("[practice] Failed to build practice recommendations", err);
+      setRecommendations([]);
+    }
+  }, [bag, bagStats, practiceHistory]);
 
   React.useEffect(() => {
     const presetClub = searchParams.get("club");
@@ -623,6 +683,30 @@ export default function RangePracticePage() {
     [unit]
   );
 
+  const formatRecommendationCopy = React.useCallback(
+    (rec: BagPracticeRecommendation) => {
+      const [lowerId, upperId] = rec.targetClubs;
+      const lower = lowerId ? clubLabels[lowerId] ?? lowerId : undefined;
+      const upper = upperId ? clubLabels[upperId] ?? upperId : undefined;
+      const club = lower;
+
+      return {
+        title: t(rec.titleKey, { lower, upper, club }),
+        description: t(rec.descriptionKey, { lower, upper, club }),
+      };
+    },
+    [clubLabels, t]
+  );
+
+  const formatRecommendationStatus = React.useCallback(
+    (status: BagPracticeRecommendation["status"]) => {
+      if (status === "new") return t("bag.practice.status.new");
+      if (status === "due") return t("bag.practice.status.due");
+      return t("bag.practice.status.fresh");
+    },
+    [t]
+  );
+
   return (
     <div className="max-w-2xl mx-auto p-4 flex flex-col gap-4">
       <h1 className="text-xl font-semibold">{t("range.practice.title")}</h1>
@@ -655,6 +739,77 @@ export default function RangePracticePage() {
 
       {showCalibrationGuide && (
         <CalibrationGuide onClose={() => setShowCalibrationGuide(false)} />
+      )}
+
+      {recommendations.length > 0 && (
+        <section
+          className="rounded-lg border border-emerald-500/30 bg-emerald-900/20 p-4 text-sm"
+          data-testid="range-practice-recommendations"
+        >
+          <div className="flex flex-col gap-1">
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-emerald-200">
+              {t("bag.practice.recommendedTitle")}
+            </p>
+            <p className="text-xs text-emerald-100/80">
+              {t("bag.practice.recommendedHelper")}
+            </p>
+          </div>
+
+          <div className="mt-3 space-y-2">
+            {recommendations.map((rec) => {
+              const copy = formatRecommendationCopy(rec);
+              const statusLabel = formatRecommendationStatus(rec.status);
+              const progress = recommendationProgress?.[rec.id];
+              const helperParts: string[] = [];
+
+              if (progress) {
+                helperParts.push(
+                  progress.completedSessions > 0
+                    ? t("practice.missionProgress.recent", {
+                        count: progress.completedSessions,
+                        days: PRACTICE_MISSION_WINDOW_DAYS,
+                      })
+                    : t("practice.missionProgress.empty"),
+                );
+
+                if (progress.inStreak) {
+                  helperParts.push(t("practice.missionProgress.streak"));
+                }
+              }
+
+              const helper = helperParts.join(" • ");
+              const statusClasses =
+                rec.status === "due"
+                  ? "border-amber-400/60 bg-amber-500/10 text-amber-200"
+                  : rec.status === "fresh"
+                    ? "border-slate-500/60 bg-slate-800 text-slate-200"
+                    : "border-emerald-400/60 bg-emerald-500/10 text-emerald-200";
+
+              return (
+                <div
+                  key={rec.id}
+                  className="rounded-md border border-slate-800/60 bg-slate-950/60 p-3"
+                  data-testid="range-practice-recommendation"
+                >
+                  <div className="flex flex-wrap items-center gap-2 justify-between">
+                    <h3 className="font-semibold text-slate-100">{copy.title}</h3>
+                    <span
+                      className={`inline-flex items-center rounded-full border px-3 py-1 text-[11px] font-semibold ${statusClasses}`}
+                    >
+                      {statusLabel}
+                    </span>
+                  </div>
+                  <p className="text-slate-200">{copy.description}</p>
+                  {helper ? (
+                    <p className="text-[11px] text-slate-400" data-testid="range-practice-recommendation-progress">
+                      {helper}
+                    </p>
+                  ) : null}
+                </div>
+              );
+            })}
+          </div>
+        </section>
       )}
 
       <div className="flex flex-wrap items-center gap-3 text-sm">
