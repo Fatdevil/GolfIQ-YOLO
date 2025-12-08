@@ -9,6 +9,8 @@ import { fetchRoundStrokesGained } from '@app/api/strokesGainedClient';
 import { createRoundShareLink } from '@app/api/shareClient';
 import { fetchPlayerBag } from '@app/api/bagClient';
 import { fetchBagStats } from '@app/api/bagStatsClient';
+import { loadPracticeMissionHistory } from '@app/storage/practiceMissionHistory';
+import { getTopPracticeRecommendationForRecap } from '@shared/caddie/bagPracticeRecommendations';
 
 vi.mock('@app/api/roundClient');
 vi.mock('@app/api/strokesGainedClient');
@@ -17,12 +19,18 @@ vi.mock('@app/api/shareClient', () => ({
 }));
 vi.mock('@app/api/bagClient');
 vi.mock('@app/api/bagStatsClient');
+vi.mock('@app/storage/practiceMissionHistory');
+vi.mock('@shared/caddie/bagPracticeRecommendations', () => ({
+  getTopPracticeRecommendationForRecap: vi.fn(),
+}));
 
 const mockFetchRecap = fetchRoundRecap as unknown as Mock;
 const mockFetchRoundStrokesGained = fetchRoundStrokesGained as unknown as Mock;
 const mockCreateRoundShareLink = createRoundShareLink as unknown as Mock;
 const mockFetchPlayerBag = fetchPlayerBag as unknown as Mock;
 const mockFetchBagStats = fetchBagStats as unknown as Mock;
+const mockLoadPracticeHistory = loadPracticeMissionHistory as unknown as Mock;
+const mockGetTopPracticeRecommendationForRecap = getTopPracticeRecommendationForRecap as unknown as Mock;
 
 const sampleRecap = {
   roundId: 'r1',
@@ -74,12 +82,25 @@ const sampleBagStats = {
   '5i': { clubId: '5i', meanDistanceM: 215, sampleCount: 8 },
 };
 
+const samplePracticeRecommendation = {
+  id: 'practice_fill_gap:pw:8i',
+  titleKey: 'bag.practice.fill_gap.title',
+  descriptionKey: 'bag.practice.fill_gap.description',
+  targetClubs: ['pw', '8i'],
+  sourceSuggestionId: 'fill_gap:pw:8i',
+  status: 'new',
+  priorityScore: 10,
+  lastCompletedAt: null,
+};
+
 describe('RoundRecapScreen', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockCreateRoundShareLink.mockResolvedValue({ url: 'https://golfiq.app/s/abc123' });
     mockFetchPlayerBag.mockResolvedValue(sampleBag);
     mockFetchBagStats.mockResolvedValue(sampleBagStats);
+    mockLoadPracticeHistory.mockResolvedValue([]);
+    mockGetTopPracticeRecommendationForRecap.mockReturnValue(null);
   });
 
   it('renders recap data and focus hints', async () => {
@@ -199,6 +220,40 @@ describe('RoundRecapScreen', () => {
     fireEvent.click(getByTestId('recap-open-bag'));
 
     expect(navigate).toHaveBeenCalledWith('MyBag');
+  });
+
+  it('shows the next practice mission card and starts quick practice', async () => {
+    mockFetchRecap.mockResolvedValue(sampleRecap);
+    mockFetchRoundStrokesGained.mockResolvedValue(sampleStrokes);
+    mockGetTopPracticeRecommendationForRecap.mockReturnValue(samplePracticeRecommendation);
+    const navigate = vi.fn();
+
+    const { getByTestId, getByText } = render(
+      <RoundRecapScreen navigation={{ navigate } as any} route={{ params: { roundId: 'r1' } } as any} />,
+    );
+
+    await waitFor(() => expect(getByTestId('recap-practice-recommendation')).toBeTruthy());
+    expect(getByText(/Next practice mission/i)).toBeTruthy();
+    expect(getByText(/Practice gapping PW & 8i/)).toBeTruthy();
+    expect(getByTestId('recap-practice-status')).toBeTruthy();
+
+    fireEvent.press(getByText(/Start mission/i));
+    expect(navigate).toHaveBeenCalledWith('RangeQuickPracticeStart', {
+      practiceRecommendation: samplePracticeRecommendation,
+    });
+  });
+
+  it('hides the practice mission card when no recommendation is available', async () => {
+    mockFetchRecap.mockResolvedValue(sampleRecap);
+    mockFetchRoundStrokesGained.mockResolvedValue(sampleStrokes);
+    mockGetTopPracticeRecommendationForRecap.mockReturnValue(null);
+
+    const { queryByTestId, getByText } = render(
+      <RoundRecapScreen navigation={{} as any} route={{ params: { roundId: 'r1' } } as any} />,
+    );
+
+    await waitFor(() => expect(getByText('Pebble Beach')).toBeTruthy());
+    expect(queryByTestId('recap-practice-recommendation')).toBeNull();
   });
 
   it('hides readiness recap when bag data is missing', async () => {

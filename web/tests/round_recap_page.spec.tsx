@@ -7,6 +7,8 @@ import { QuickRound } from "../src/features/quickround/types";
 import { fetchBagStats } from "@/api/bagStatsClient";
 import { QuickRoundTestProviders } from "./helpers/quickroundProviders";
 import * as bagReadiness from "@shared/caddie/bagReadiness";
+import { loadPracticeMissionHistory } from "@/practice/practiceMissionHistory";
+import { getTopPracticeRecommendationForRecap } from "@shared/caddie/bagPracticeRecommendations";
 
 const { loadRoundMock, saveRoundMock, loadBagMock } = vi.hoisted(() => ({
   loadRoundMock: vi.fn(),
@@ -23,6 +25,12 @@ vi.mock("@/api/bagStatsClient", () => ({
 }));
 vi.mock("@/bag/storage", () => ({
   loadBag: loadBagMock,
+}));
+vi.mock("@/practice/practiceMissionHistory", () => ({
+  loadPracticeMissionHistory: vi.fn(),
+}));
+vi.mock("@shared/caddie/bagPracticeRecommendations", () => ({
+  getTopPracticeRecommendationForRecap: vi.fn(),
 }));
 vi.mock("@/user/UserSessionContext", () => ({
   UserSessionProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
@@ -62,6 +70,17 @@ const recapStats = {
   "5i": { clubId: "5i", meanDistanceM: 215, sampleCount: 8 },
 };
 
+const sampleRecommendation = {
+  id: "practice_fill_gap:7i:9i",
+  titleKey: "bag.practice.fill_gap.title",
+  descriptionKey: "bag.practice.fill_gap.description",
+  targetClubs: ["7i", "9i"],
+  sourceSuggestionId: "fill_gap:7i:9i",
+  status: "due",
+  priorityScore: 5,
+  lastCompletedAt: null,
+};
+
 const getBagStatsMock = () => vi.mocked(fetchBagStats);
 
 describe("Round recap bag readiness on web", () => {
@@ -76,6 +95,8 @@ describe("Round recap bag readiness on web", () => {
     loadRoundMock.mockReturnValue(baseRound);
     loadBagMock.mockReturnValue(recapBag);
     mockFetchBagStats.mockResolvedValue(recapStats);
+    vi.mocked(loadPracticeMissionHistory).mockResolvedValue([]);
+    vi.mocked(getTopPracticeRecommendationForRecap).mockReturnValue(null as any);
   });
 
   it("renders bag readiness recap info with suggestion", async () => {
@@ -106,6 +127,39 @@ describe("Round recap bag readiness on web", () => {
 
     const cta = await screen.findByTestId("round-recap-open-bag");
     expect(cta.getAttribute("href")).toBe("/bag");
+  });
+
+  it("renders next practice mission when available", async () => {
+    vi.mocked(getTopPracticeRecommendationForRecap).mockReturnValue(sampleRecommendation as any);
+
+    render(
+      <QuickRoundTestProviders initialEntries={["/play/qr-readiness"]}>
+        <Routes>
+          <Route path="/play/:roundId" element={<QuickRoundPlayPage />} />
+        </Routes>
+      </QuickRoundTestProviders>,
+    );
+
+    expect(await screen.findByTestId("round-recap-practice-recommendation")).toBeTruthy();
+    expect(screen.getByText(/Next practice mission/i)).toBeTruthy();
+    expect(screen.getByTestId("round-recap-practice-recommendation").textContent).toContain("7i");
+    const cta = screen.getByTestId("round-recap-practice-cta");
+    expect(cta.getAttribute("href")).toContain("/range/practice");
+  });
+
+  it("hides the practice recommendation when none is available", async () => {
+    vi.mocked(getTopPracticeRecommendationForRecap).mockReturnValue(null as any);
+
+    render(
+      <QuickRoundTestProviders initialEntries={["/play/qr-readiness"]}>
+        <Routes>
+          <Route path="/play/:roundId" element={<QuickRoundPlayPage />} />
+        </Routes>
+      </QuickRoundTestProviders>,
+    );
+
+    expect(await screen.findByTestId("round-recap-bag-readiness")).toBeTruthy();
+    expect(screen.queryByTestId("round-recap-practice-recommendation")).toBeNull();
   });
 
   it("hides the recap card when stats are unavailable", async () => {

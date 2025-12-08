@@ -430,6 +430,9 @@ export const en = {
       to_par_even: 'E',
       caddie_title: 'Caddie & strategy',
       caddie_follow_rate: 'Decisions followed: {{followed}}/{{total}}{{rate}}',
+      nextPracticeTitle: 'Next practice mission',
+      nextPracticeHelper: 'Based on your bag readiness and practice history, we recommend:',
+      nextPracticeCta: 'Start mission',
     },
   },
   strokesGained: {
