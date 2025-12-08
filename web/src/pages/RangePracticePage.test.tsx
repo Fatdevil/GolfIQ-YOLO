@@ -1,5 +1,6 @@
 import React from "react";
 import { render, screen, waitFor } from "@testing-library/react";
+import { MemoryRouter } from "react-router-dom";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -104,12 +105,18 @@ describe("RangePracticePage", () => {
   });
 });
 
-function renderWithUnit(unit: DistanceUnit, ui: React.ReactElement) {
+function renderWithUnit(
+  unit: DistanceUnit,
+  ui: React.ReactElement,
+  initialPath = "/range/practice"
+) {
   return render(
-    <UserSessionProvider>
-      <UnitsContext.Provider value={{ unit, setUnit: () => {} }}>
-        {ui}
-      </UnitsContext.Provider>
-    </UserSessionProvider>
+    <MemoryRouter initialEntries={[initialPath]}>
+      <UserSessionProvider>
+        <UnitsContext.Provider value={{ unit, setUnit: () => {} }}>
+          {ui}
+        </UnitsContext.Provider>
+      </UserSessionProvider>
+    </MemoryRouter>
   );
 }
