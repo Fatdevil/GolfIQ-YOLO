@@ -124,6 +124,12 @@ export const en = {
         catchUp: 'Catch up',
       },
     },
+    goal: {
+      status: {
+        goal_reached_title: 'Weekly goal complete 🎉',
+        exceeded_title: "You're ahead of your goal",
+      },
+    },
   },
   weeklySummary: {
     title: 'Weekly Summary',

@@ -56,6 +56,8 @@
   "practice.goals.emptyPrompt": "Starta ditt första träningsmission den här veckan.",
   "practice.goals.status.onTrack": "På rätt spår",
   "practice.goals.status.catchUp": "Kom ikapp",
+  "practice.goal.status.goal_reached_title": "Veckomål klart 🎉",
+  "practice.goal.status.exceeded_title": "Du ligger före ditt mål",
   "practice.missions.title": "Träningsuppdrag",
   "practice.missions.cta.viewAll": "Visa alla missions",
   "practice.missions.status.overdue": "Hög prioritet",

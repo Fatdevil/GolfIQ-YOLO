@@ -292,7 +292,7 @@ describe("HomeHubPage", () => {
     expect(loadedHistory).toHaveLength(3);
 
     const summaries = await screen.findAllByText("3/3 missions this week");
-    const statuses = await screen.findAllByText("On track");
+    const statuses = await screen.findAllByText(/weekly goal complete/i);
 
     expect(summaries.length).toBeGreaterThan(0);
     expect(statuses.length).toBeGreaterThan(0);

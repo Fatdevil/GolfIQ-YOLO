@@ -9,14 +9,22 @@ vi.mock("@/api", async () => {
 });
 
 import { postTelemetryEvent } from "@/api";
-import { recordPracticeMissionOutcome, clearPracticeHistoryForTests } from "@/practice/practiceMissionHistory";
+import {
+  recordPracticeMissionOutcome,
+  clearPracticeHistoryForTests,
+  PRACTICE_MISSION_HISTORY_KEY,
+} from "@/practice/practiceMissionHistory";
 
 const telemetry = vi.mocked(postTelemetryEvent);
 
 describe("practice mission outcome telemetry", () => {
+  const now = new Date("2024-02-08T12:00:00Z");
+
   beforeEach(() => {
+    vi.useFakeTimers();
     telemetry.mockReset();
     clearPracticeHistoryForTests();
+    vi.setSystemTime(now);
     const storage = new Map<string, string>();
     vi.stubGlobal("window", {
       localStorage: {
@@ -32,6 +40,7 @@ describe("practice mission outcome telemetry", () => {
   });
 
   afterEach(() => {
+    vi.useRealTimers();
     vi.unstubAllGlobals();
   });
 
@@ -55,5 +64,100 @@ describe("practice mission outcome telemetry", () => {
         samplesCount: 8,
       }),
     );
+    expect(telemetry).not.toHaveBeenCalledWith(expect.objectContaining({ event: "practice_goal_reached" }));
+  });
+
+  it("emits a goal reached event when the weekly target is hit", async () => {
+    const existingHistory = [
+      {
+        id: "e1",
+        missionId: "m1",
+        startedAt: "2024-02-05T10:00:00Z",
+        endedAt: "2024-02-05T10:20:00Z",
+        status: "completed",
+        targetClubs: ["7i"],
+        completedSampleCount: 8,
+      },
+      {
+        id: "e2",
+        missionId: "m2",
+        startedAt: "2024-02-06T10:00:00Z",
+        endedAt: "2024-02-06T10:20:00Z",
+        status: "completed",
+        targetClubs: ["7i"],
+        completedSampleCount: 8,
+      },
+    ];
+    window.localStorage.setItem(PRACTICE_MISSION_HISTORY_KEY, JSON.stringify(existingHistory));
+
+    await recordPracticeMissionOutcome({
+      missionId: "practice_fill_gap:7i:8i",
+      sessionId: "session-1",
+      startedAt: "2024-02-07T10:00:00Z",
+      endedAt: "2024-02-07T10:00:00Z",
+      targetClubs: ["7i", "8i"],
+      targetSampleCount: 10,
+      completedSampleCount: 12,
+    });
+
+    expect(telemetry).toHaveBeenCalledWith(
+      expect.objectContaining({
+        event: "practice_goal_reached",
+        goalId: "weekly_mission_completions",
+        targetCompletions: 3,
+        completedInWindow: 3,
+        windowDays: 7,
+        platform: "web",
+        source: "practice_mission",
+      }),
+    );
+  });
+
+  it("does not duplicate goal reached events after the target is satisfied", async () => {
+    const existingHistory = [
+      {
+        id: "e1",
+        missionId: "m1",
+        startedAt: "2024-02-03T10:00:00Z",
+        endedAt: "2024-02-03T10:20:00Z",
+        status: "completed",
+        targetClubs: ["7i"],
+        completedSampleCount: 8,
+      },
+      {
+        id: "e2",
+        missionId: "m2",
+        startedAt: "2024-02-04T10:00:00Z",
+        endedAt: "2024-02-04T10:20:00Z",
+        status: "completed",
+        targetClubs: ["7i"],
+        completedSampleCount: 8,
+      },
+      {
+        id: "e3",
+        missionId: "m3",
+        startedAt: "2024-02-06T10:00:00Z",
+        endedAt: "2024-02-06T10:20:00Z",
+        status: "completed",
+        targetClubs: ["7i"],
+        completedSampleCount: 8,
+      },
+    ];
+    window.localStorage.setItem(PRACTICE_MISSION_HISTORY_KEY, JSON.stringify(existingHistory));
+
+    await recordPracticeMissionOutcome({
+      missionId: "practice_fill_gap:7i:8i",
+      sessionId: "session-1",
+      startedAt: "2024-02-07T10:00:00Z",
+      endedAt: "2024-02-07T10:00:00Z",
+      targetClubs: ["7i", "8i"],
+      targetSampleCount: 10,
+      completedSampleCount: 12,
+    });
+
+    expect(telemetry).toHaveBeenCalledWith(
+      expect.objectContaining({ event: "practice_mission_complete" }),
+    );
+    expect(telemetry).not.toHaveBeenCalledWith(expect.objectContaining({ event: "practice_goal_reached" }));
   });
 });

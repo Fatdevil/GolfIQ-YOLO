@@ -292,7 +292,7 @@ export default function RangeQuickPracticeSessionScreen({ navigation, route }: P
             completedSampleCount: totalTargetShots,
           };
 
-          await recordPracticeMissionOutcome(missionOutcome);
+          await recordPracticeMissionOutcome(missionOutcome, { source: 'quick_practice' });
         } catch (err) {
           console.warn('[range] Failed to persist practice mission session', err);
         }

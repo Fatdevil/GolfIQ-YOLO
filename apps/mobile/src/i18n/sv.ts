@@ -64,6 +64,12 @@ export const sv = {
         catchUp: 'Kom ikapp',
       },
     },
+    goal: {
+      status: {
+        goal_reached_title: 'Veckomål klart 🎉',
+        exceeded_title: 'Du ligger före ditt mål',
+      },
+    },
   },
   bag: {
     practice: {

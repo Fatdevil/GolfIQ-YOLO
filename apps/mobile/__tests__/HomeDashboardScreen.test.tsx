@@ -464,7 +464,61 @@ describe('HomeDashboardScreen', () => {
     render(<HomeDashboardScreen navigation={navigation} route={createRoute()} />);
 
     expect(await screen.findByTestId('practice-goal-summary')).toHaveTextContent('3/3 missions this week');
-    expect(screen.getByTestId('practice-goal-status')).toHaveTextContent('On track');
+    expect(screen.getByTestId('practice-goal-status')).toHaveTextContent('Weekly goal complete 🎉');
+  });
+
+  it('celebrates when weekly practice goal is exceeded', async () => {
+    const navigation = createNavigation();
+    vi.mocked(practiceHistory.loadPracticeMissionHistory).mockResolvedValue([
+      {
+        id: 'e1',
+        missionId: 'm1',
+        startedAt: '2024-02-04T10:00:00Z',
+        endedAt: '2024-02-04T10:00:00Z',
+        status: 'completed',
+        targetClubs: [],
+        completedSampleCount: 10,
+      },
+      {
+        id: 'e2',
+        missionId: 'm2',
+        startedAt: '2024-02-05T10:00:00Z',
+        endedAt: '2024-02-05T10:00:00Z',
+        status: 'completed',
+        targetClubs: [],
+        completedSampleCount: 10,
+      },
+      {
+        id: 'e3',
+        missionId: 'm3',
+        startedAt: '2024-02-06T10:00:00Z',
+        endedAt: '2024-02-06T10:00:00Z',
+        status: 'completed',
+        targetClubs: [],
+        completedSampleCount: 10,
+      },
+      {
+        id: 'e4',
+        missionId: 'm4',
+        startedAt: '2024-02-07T10:00:00Z',
+        endedAt: '2024-02-07T10:00:00Z',
+        status: 'completed',
+        targetClubs: [],
+        completedSampleCount: 10,
+      },
+    ]);
+    vi.mocked(practiceHistory.summarizeRecentPracticeHistory).mockReturnValue({
+      totalSessions: 4,
+      completedSessions: 4,
+      windowDays: 14,
+      lastCompleted: undefined,
+      lastStarted: undefined,
+    });
+
+    render(<HomeDashboardScreen navigation={navigation} route={createRoute()} />);
+
+    expect(await screen.findByTestId('practice-goal-summary')).toHaveTextContent('4/3 missions this week');
+    expect(screen.getByTestId('practice-goal-status')).toHaveTextContent("You're ahead of your goal");
   });
 
   it('surfaces streak copy when streak is active', async () => {
