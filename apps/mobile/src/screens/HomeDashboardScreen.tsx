@@ -45,7 +45,7 @@ import type { BagSuggestion } from '@shared/caddie/bagTuningSuggestions';
 import { formatDistance } from '@app/utils/distance';
 import { buildPracticeProgressTileModel } from '@app/home/practiceProgressHelpers';
 import { getTopPracticeRecommendation, type BagPracticeRecommendation } from '@shared/caddie/bagPracticeRecommendations';
-import { buildWeeklyPracticeGoalProgress } from '@shared/practice/practiceGoals';
+import { buildWeeklyPracticeGoalProgress, type PracticeGoalStatus } from '@shared/practice/practiceGoals';
 
 const CALIBRATION_SAMPLE_THRESHOLD = 5;
 const TARGET_ROUNDS_PER_WEEK = 3;
@@ -238,21 +238,35 @@ export default function HomeDashboardScreen({ navigation }: Props): JSX.Element 
     [practiceHistory],
   );
 
-  const practiceGoalSummary = useMemo(() => {
-    if (!practiceGoalProgress) return null;
-    if (practiceHistory.length === 0) return t('practice.goals.emptyPrompt');
-    return t('practice.goals.summary', {
-      completed: practiceGoalProgress.completedInWindow,
-      target: practiceGoalProgress.targetCompletions,
-    });
-  }, [practiceGoalProgress, practiceHistory.length]);
+  const practiceGoalCopy = useMemo(() => {
+    const summary = practiceGoalProgress
+      ? t('practice.goals.summary', {
+          completed: practiceGoalProgress.completedInWindow,
+          target: practiceGoalProgress.targetCompletions,
+        })
+      : null;
 
-  const practiceGoalStatusLabel = useMemo(() => {
-    if (!practiceGoalProgress || practiceHistory.length === 0) return null;
-    return practiceGoalProgress.isOnTrack
-      ? t('practice.goals.status.onTrack')
-      : t('practice.goals.status.catchUp');
-  }, [practiceGoalProgress, practiceHistory.length]);
+    const status: PracticeGoalStatus | null = practiceGoalProgress?.status ?? null;
+
+    if (!practiceGoalProgress) return { summary: null, statusLabel: null };
+
+    if (status === 'not_started') {
+      return { summary: t('practice.goals.emptyPrompt'), statusLabel: null };
+    }
+
+    if (status === 'goal_reached') {
+      return { summary, statusLabel: t('practice.goal.status.goal_reached_title') };
+    }
+
+    if (status === 'exceeded') {
+      return { summary, statusLabel: t('practice.goal.status.exceeded_title') };
+    }
+
+    return {
+      summary,
+      statusLabel: t('practice.goals.status.catchUp'),
+    };
+  }, [practiceGoalProgress]);
 
   const clubLabels = useMemo(() => {
     const labels: Record<string, string> = {};
@@ -746,12 +760,12 @@ export default function HomeDashboardScreen({ navigation }: Props): JSX.Element 
             <Text style={styles.muted} testID="practice-progress-subtitle">
               {t(practiceProgressModel.subtitleKey, practiceProgressModel.subtitleParams)}
             </Text>
-            {practiceGoalSummary ? (
+            {practiceGoalCopy.summary ? (
               <View style={[styles.rowSpaceBetween, styles.goalRow]}>
                 <Text style={styles.cardBody} testID="practice-goal-summary">
-                  {practiceGoalSummary}
+                  {practiceGoalCopy.summary}
                 </Text>
-                {practiceGoalStatusLabel ? (
+                {practiceGoalCopy.statusLabel ? (
                   <View
                     style={[
                       styles.goalPill,
@@ -765,7 +779,7 @@ export default function HomeDashboardScreen({ navigation }: Props): JSX.Element 
                         practiceGoalProgress?.isOnTrack ? styles.goalPillTextOnTrack : styles.goalPillTextCatchUp,
                       ]}
                     >
-                      {practiceGoalStatusLabel}
+                      {practiceGoalCopy.statusLabel}
                     </Text>
                   </View>
                 ) : null}

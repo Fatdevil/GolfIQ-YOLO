@@ -9,6 +9,8 @@ import {
 import { getItem, setItem } from '@app/storage/asyncStorage';
 import type { PracticeMissionHistoryEntry, PracticeMissionOutcome } from '@shared/practice/practiceHistory';
 import { safeEmit } from '@app/telemetry';
+import { buildWeeklyPracticeGoalProgress, didJustReachWeeklyGoal } from '@shared/practice/practiceGoals';
+import { trackPracticeGoalReached } from '@shared/practice/practiceGoalAnalytics';
 
 export type PracticeProgressOverview = {
   totalSessions: number;
@@ -48,8 +50,10 @@ async function persistHistory(history: PracticeMissionHistoryEntry[]): Promise<v
 
 export async function recordPracticeMissionOutcome(
   outcome: PracticeMissionOutcome,
+  options?: { source?: 'practice_mission' | 'quick_practice' | 'round_recap' },
 ): Promise<PracticeMissionHistoryEntry[]> {
   const history = await loadPracticeMissionHistory();
+  const goalBefore = buildWeeklyPracticeGoalProgress({ missionHistory: history, now: new Date(Date.now()) });
   const next = recordMissionOutcome(history, outcome);
   if (next !== history) {
     await persistHistory(next);
@@ -59,6 +63,21 @@ export async function recordPracticeMissionOutcome(
         missionId: latestEntry.missionId,
         samplesCount: latestEntry.completedSampleCount,
       });
+
+      const goalAfter = buildWeeklyPracticeGoalProgress({ missionHistory: next, now: new Date(Date.now()) });
+      if (didJustReachWeeklyGoal({ before: goalBefore, after: goalAfter })) {
+        trackPracticeGoalReached(
+          { emit: safeEmit },
+          {
+            goalId: 'weekly_mission_completions',
+            targetCompletions: goalAfter.targetCompletions,
+            completedInWindow: goalAfter.completedInWindow,
+            windowDays: goalAfter.windowDays,
+            platform: 'mobile',
+            source: options?.source ?? 'practice_mission',
+          },
+        );
+      }
     }
   }
   return next;

@@ -22,7 +22,7 @@ import type { BagSuggestion } from "@shared/caddie/bagTuningSuggestions";
 import { useUnits } from "@/preferences/UnitsContext";
 import { formatBagSuggestion } from "@/bag/formatBagSuggestion";
 import { loadPracticeMissionHistory } from "@/practice/practiceMissionHistory";
-import { buildWeeklyPracticeGoalProgress } from "@shared/practice/practiceGoals";
+import { buildWeeklyPracticeGoalProgress, type PracticeGoalStatus } from "@shared/practice/practiceGoals";
 import type { PracticeMissionHistoryEntry } from "@shared/practice/practiceHistory";
 
 const Card: React.FC<{
@@ -162,20 +162,30 @@ export const HomeHubPage: React.FC = () => {
       }),
     [practiceHistory],
   );
-  const practiceGoalSummary = useMemo(() => {
-    if (!practiceGoalProgress) return null;
-    if (practiceHistory.length === 0) return t("practice.goals.emptyPrompt");
-    return t("practice.goals.summary", {
+  const practiceGoalCopy = useMemo(() => {
+    if (!practiceGoalProgress) return { summary: null, statusLabel: null };
+
+    const summary = t("practice.goals.summary", {
       completed: practiceGoalProgress.completedInWindow,
       target: practiceGoalProgress.targetCompletions,
     });
-  }, [practiceGoalProgress, practiceHistory.length, t]);
-  const practiceGoalStatusLabel = useMemo(() => {
-    if (!practiceGoalProgress || practiceHistory.length === 0) return null;
-    return practiceGoalProgress.isOnTrack
-      ? t("practice.goals.status.onTrack")
-      : t("practice.goals.status.catchUp");
-  }, [practiceGoalProgress, practiceHistory.length, t]);
+
+    const status: PracticeGoalStatus | null = practiceGoalProgress.status;
+
+    if (status === "not_started") {
+      return { summary: t("practice.goals.emptyPrompt"), statusLabel: null };
+    }
+
+    if (status === "goal_reached") {
+      return { summary, statusLabel: t("practice.goal.status.goal_reached_title") };
+    }
+
+    if (status === "exceeded") {
+      return { summary, statusLabel: t("practice.goal.status.exceeded_title") };
+    }
+
+    return { summary, statusLabel: t("practice.goals.status.catchUp") };
+  }, [practiceGoalProgress, t]);
 
   const effectivePlan = plan === "pro" ? "PRO" : "FREE";
 
@@ -344,12 +354,9 @@ export const HomeHubPage: React.FC = () => {
           }
         >
           <div className="space-y-2 text-sm text-slate-200">
-            <div
-              className="flex items-center justify-between gap-3"
-              data-testid="practice-goal-row"
-            >
-              <div data-testid="practice-goal-summary">{practiceGoalSummary ?? ""}</div>
-              {practiceGoalStatusLabel ? (
+            <div className="flex items-center justify-between gap-3" data-testid="practice-goal-row">
+              <div data-testid="practice-goal-summary">{practiceGoalCopy.summary ?? ""}</div>
+              {practiceGoalCopy.statusLabel ? (
                 <span
                   className={
                     "inline-flex items-center rounded-full px-3 py-1 text-[11px] font-semibold " +
@@ -359,7 +366,7 @@ export const HomeHubPage: React.FC = () => {
                   }
                   data-testid="practice-goal-status"
                 >
-                  {practiceGoalStatusLabel}
+                  {practiceGoalCopy.statusLabel}
                 </span>
               ) : null}
             </div>

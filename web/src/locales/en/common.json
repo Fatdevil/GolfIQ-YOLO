@@ -56,6 +56,8 @@
   "practice.goals.emptyPrompt": "Start your first practice mission this week.",
   "practice.goals.status.onTrack": "On track",
   "practice.goals.status.catchUp": "Catch up",
+  "practice.goal.status.goal_reached_title": "Weekly goal complete 🎉",
+  "practice.goal.status.exceeded_title": "You're ahead of your goal",
   "practice.missions.title": "Practice missions",
   "practice.missions.cta.viewAll": "View all missions",
   "practice.missions.status.overdue": "High priority",
