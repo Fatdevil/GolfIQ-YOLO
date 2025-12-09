@@ -183,7 +183,7 @@ describe('HomeDashboardScreen', () => {
     fireEvent.click(cta);
 
     await waitFor(() => {
-      expect(navigation.navigate).toHaveBeenCalledWith('PracticeMissions');
+      expect(navigation.navigate).toHaveBeenCalledWith('PracticeMissions', { source: 'home' });
     });
   });
 
@@ -212,6 +212,7 @@ describe('HomeDashboardScreen', () => {
     await waitFor(() => {
       expect(navigation.navigate).toHaveBeenCalledWith('RangeQuickPracticeStart', {
         practiceRecommendation: recommendation,
+        entrySource: 'range_home',
       });
     });
   });

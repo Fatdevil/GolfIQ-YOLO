@@ -82,6 +82,9 @@ describe('RangeMissionsScreen', () => {
 
     fireEvent.click(await screen.findByTestId('start-mission-solid_contact_wedges'));
 
-    expect(navigation.navigate).toHaveBeenCalledWith('RangeQuickPracticeStart', { missionId: 'solid_contact_wedges' });
+    expect(navigation.navigate).toHaveBeenCalledWith('RangeQuickPracticeStart', {
+      missionId: 'solid_contact_wedges',
+      entrySource: 'missions',
+    });
   });
 });

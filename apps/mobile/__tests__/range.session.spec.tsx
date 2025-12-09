@@ -1,13 +1,14 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import React from 'react';
-import { describe, expect, it, vi, beforeEach } from 'vitest';
+import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 
+import { logQuickPracticeSessionComplete, logQuickPracticeSessionStart } from '@app/analytics/practiceQuick';
 import * as rangeApi from '@app/api/range';
 import * as rangeHistory from '@app/range/rangeHistoryStorage';
 import * as summaryStorage from '@app/range/rangeSummaryStorage';
 import RangeQuickPracticeSessionScreen from '@app/screens/RangeQuickPracticeSessionScreen';
-import type { RootStackParamList } from '@app/navigation/types';
+import type { QuickPracticeEntrySource, RootStackParamList } from '@app/navigation/types';
 import type { RangeSession } from '@app/range/rangeSession';
 import * as trainingGoalStorage from '@app/range/rangeTrainingGoalStorage';
 import * as missionStorage from '@app/range/rangeMissionsStorage';
@@ -41,6 +42,11 @@ vi.mock('@app/range/rangeMissions', () => ({
   getMissionById: vi.fn(),
 }));
 
+vi.mock('@app/analytics/practiceQuick', () => ({
+  logQuickPracticeSessionStart: vi.fn(),
+  logQuickPracticeSessionComplete: vi.fn(),
+}));
+
 vi.mock('@app/watch/tempoTrainerBridge', () => ({
   isTempoTrainerAvailable: vi.fn(),
   sendTempoTrainerActivation: vi.fn(),
@@ -67,11 +73,12 @@ function createRoute(
   session: RangeSession,
   missionId?: string,
   practiceRecommendation?: BagPracticeRecommendation,
+  entrySource?: QuickPracticeEntrySource,
 ): Props['route'] {
   return {
     key: 'RangeQuickPracticeSession',
     name: 'RangeQuickPracticeSession',
-    params: { session, missionId, practiceRecommendation },
+    params: { session, missionId, practiceRecommendation, entrySource },
   } as Props['route'];
 }
 
@@ -84,6 +91,156 @@ describe('RangeQuickPracticeSessionScreen', () => {
     vi.mocked(tempoBridge.isTempoTrainerAvailable).mockReturnValue(true);
     vi.mocked(tempoBridge.subscribeToTempoTrainerResults).mockReturnValue(() => {});
     vi.mocked(practiceMissionHistory.recordPracticeMissionOutcome).mockResolvedValue([]);
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('logs quick practice start with entry source and recommendation', async () => {
+    const navigation = createNavigation();
+    const session: RangeSession = {
+      id: 'session-start-1',
+      mode: 'quick',
+      startedAt: '2024-01-01T00:00:00.000Z',
+      club: '7i',
+      targetDistanceM: 150,
+      cameraAngle: 'face_on',
+      shots: [],
+    } as any;
+
+    const recommendation: BagPracticeRecommendation = {
+      id: 'practice_calibrate:7i',
+      titleKey: 'bag.practice.calibrate.title',
+      descriptionKey: 'bag.practice.calibrate.more_samples.description',
+      targetClubs: ['7i', '9i'],
+      targetSampleCount: 2,
+      sourceSuggestionId: 'suggestion-1',
+      status: 'new',
+      priorityScore: 0,
+      lastCompletedAt: null,
+    };
+
+    render(
+      <RangeQuickPracticeSessionScreen
+        navigation={navigation}
+        route={createRoute(session, undefined, recommendation, 'range_home')}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(logQuickPracticeSessionStart).toHaveBeenCalledWith({
+        surface: 'mobile',
+        entrySource: 'range_home',
+        hasRecommendation: true,
+        targetClubsCount: 2,
+      });
+    });
+  });
+
+  it('logs quick practice completion analytics on end', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2024-01-01T00:10:00.000Z'));
+    const navigation = createNavigation();
+    const session: RangeSession = {
+      id: 'session-complete-1',
+      mode: 'quick',
+      startedAt: '2024-01-01T00:00:00.000Z',
+      club: '7i',
+      targetDistanceM: 150,
+      cameraAngle: 'face_on',
+      shots: [
+        { id: 'shot-1', timestamp: '2024-01-01T00:05:00.000Z', club: '7i', targetDistanceM: 150 },
+        { id: 'shot-2', timestamp: '2024-01-01T00:06:00.000Z', club: '7i', targetDistanceM: 150 },
+      ],
+    } as any;
+
+    render(
+      <RangeQuickPracticeSessionScreen
+        navigation={navigation}
+        route={createRoute(session, undefined, undefined, 'range_home')}
+      />,
+    );
+
+    fireEvent.click(screen.getByTestId('end-session'));
+
+    await vi.runAllTimersAsync();
+
+    expect(logQuickPracticeSessionStart).toHaveBeenCalledTimes(1);
+    expect(logQuickPracticeSessionComplete).toHaveBeenCalledWith(
+      expect.objectContaining({
+        surface: 'mobile',
+        entrySource: 'range_home',
+        hasRecommendation: false,
+        swingsCount: 2,
+      }),
+    );
+
+    vi.useRealTimers();
+  });
+
+  it('logs quick practice analytics when a pinned mission exists without route missionId', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2024-01-01T00:10:00.000Z'));
+    const navigation = createNavigation();
+    const session: RangeSession = {
+      id: 'session-pinned-1',
+      mode: 'quick',
+      startedAt: '2024-01-01T00:00:00.000Z',
+      club: '7i',
+      targetDistanceM: 150,
+      cameraAngle: 'face_on',
+      shots: [
+        { id: 'shot-1', timestamp: '2024-01-01T00:05:00.000Z', club: '7i', targetDistanceM: 150 },
+      ],
+    } as any;
+
+    vi.mocked(missionStorage.loadRangeMissionState).mockResolvedValue({
+      completedMissionIds: [],
+      pinnedMissionId: 'mission-pinned',
+    });
+
+    render(<RangeQuickPracticeSessionScreen navigation={navigation} route={createRoute(session)} />);
+
+    fireEvent.click(screen.getByTestId('end-session'));
+
+    await vi.runAllTimersAsync();
+
+    expect(logQuickPracticeSessionStart).toHaveBeenCalledTimes(1);
+    expect(logQuickPracticeSessionComplete).toHaveBeenCalledWith(
+      expect.objectContaining({
+        surface: 'mobile',
+        hasRecommendation: false,
+        swingsCount: 1,
+      }),
+    );
+
+    vi.useRealTimers();
+  });
+
+  it('skips quick practice analytics for mission sessions', async () => {
+    const navigation = createNavigation();
+    const session: RangeSession = {
+      id: 'mission-session-1',
+      mode: 'quick',
+      startedAt: '2024-01-01T00:00:00.000Z',
+      club: '7i',
+      targetDistanceM: 150,
+      cameraAngle: 'face_on',
+      shots: [
+        { id: 'shot-1', timestamp: '2024-01-01T00:05:00.000Z', club: '7i', targetDistanceM: 150 },
+      ],
+    } as any;
+
+    render(<RangeQuickPracticeSessionScreen navigation={navigation} route={createRoute(session, 'mission-1')} />);
+
+    expect(logQuickPracticeSessionStart).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByTestId('end-session'));
+
+    await waitFor(() => {
+      expect(logQuickPracticeSessionComplete).not.toHaveBeenCalled();
+    });
   });
 
   it('shows angle label and logs shot with camera angle', async () => {

@@ -165,6 +165,7 @@ describe('RangePracticeScreen', () => {
 
     expect(navigation.navigate).toHaveBeenCalledWith('RangeQuickPracticeStart', {
       practiceRecommendation: recommendation,
+      entrySource: 'range_home',
     });
   });
 

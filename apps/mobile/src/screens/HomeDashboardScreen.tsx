@@ -264,7 +264,7 @@ export default function HomeDashboardScreen({ navigation }: Props): JSX.Element 
     if (practiceProgressModel?.hasData) {
       navigation.navigate('PracticeHistory');
     } else {
-      navigation.navigate('RangeQuickPracticeStart');
+      navigation.navigate('RangeQuickPracticeStart', { entrySource: 'range_home' });
     }
   }, [navigation, practiceProgressModel?.hasData]);
 
@@ -490,7 +490,10 @@ export default function HomeDashboardScreen({ navigation }: Props): JSX.Element 
     if (!practiceRecommendation) return;
 
     try {
-      navigation.navigate('RangeQuickPracticeStart', { practiceRecommendation });
+      navigation.navigate('RangeQuickPracticeStart', {
+        practiceRecommendation,
+        entrySource: 'range_home',
+      });
     } catch (err) {
       console.warn('[home] Unable to start recommended practice from home', err);
       navigation.navigate('RangePractice');
