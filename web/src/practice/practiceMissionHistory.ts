@@ -5,6 +5,7 @@ import {
   normalizePracticeHistoryEntries,
   recordMissionOutcome,
 } from "@shared/practice/practiceHistory";
+import { trackPracticeMissionComplete } from "@/practice/analytics";
 import type {
   PracticeMissionHistoryEntry,
   PracticeMissionOutcome,
@@ -58,6 +59,10 @@ export async function recordPracticeMissionOutcome(
   const next = recordMissionOutcome(history, outcome);
   if (next !== history) {
     await persistHistory(next);
+    trackPracticeMissionComplete({
+      missionId: outcome.missionId,
+      samplesCount: outcome.completedSampleCount ?? null,
+    });
   }
   return next;
 }

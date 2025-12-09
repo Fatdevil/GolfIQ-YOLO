@@ -33,6 +33,13 @@ vi.mock("@/api/bagStatsClient", () => ({ fetchBagStats: vi.fn() }));
 vi.mock("@shared/caddie/bagPracticeRecommendations", () => ({
   buildBagPracticeRecommendations: vi.fn(),
 }));
+vi.mock("@/api", async () => {
+  const actual = await vi.importActual<typeof import("@/api")>("@/api");
+  return {
+    ...actual,
+    postTelemetryEvent: vi.fn(),
+  };
+});
 
 import { postRangeAnalyze } from "@/features/range/api";
 import RangePracticePage from "./RangePracticePage";
@@ -47,10 +54,12 @@ import { postRangeSessionSnapshots } from "@/user/historyApi";
 import { loadPracticeMissionHistory } from "@/practice/practiceMissionHistory";
 import { fetchBagStats } from "@/api/bagStatsClient";
 import { buildBagPracticeRecommendations } from "@shared/caddie/bagPracticeRecommendations";
+import { postTelemetryEvent } from "@/api";
 
 const mockedPostRangeAnalyze = vi.mocked(postRangeAnalyze);
 const mockedFetchBagStats = vi.mocked(fetchBagStats);
 const mockedBuildRecommendations = vi.mocked(buildBagPracticeRecommendations);
+const mockedTelemetry = vi.mocked(postTelemetryEvent);
 
 describe("RangePracticePage", () => {
   beforeEach(() => {
@@ -59,6 +68,7 @@ describe("RangePracticePage", () => {
     vi.mocked(loadPracticeMissionHistory).mockResolvedValue([]);
     mockedFetchBagStats.mockResolvedValue({});
     mockedBuildRecommendations.mockReturnValue([]);
+    mockedTelemetry.mockReset();
   });
 
   afterEach(() => {
@@ -178,6 +188,22 @@ describe("RangePracticePage", () => {
 
     const progressNode = screen.getByTestId("mission-history-progress");
     expect(progressNode).toHaveTextContent("Not practised yet");
+  });
+
+  it("emits a mission start event when a mission is pre-selected", async () => {
+    const missionId = RANGE_MISSIONS[0].id;
+
+    renderWithUnit("metric", <RangePracticePage />, `/range/practice?missionId=${missionId}`);
+
+    await waitFor(() =>
+      expect(mockedTelemetry).toHaveBeenCalledWith(
+        expect.objectContaining({
+          event: "practice_mission_start",
+          missionId,
+          sourceSurface: "range_practice",
+        }),
+      ),
+    );
   });
 
   it("renders recommendations in priority order with status labels", async () => {

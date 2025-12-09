@@ -283,7 +283,7 @@ export const HomeHubPage: React.FC = () => {
                 <GhostMatchBadge />
               </div>
               <Link
-                to="/practice/missions"
+                to={{ pathname: "/practice/missions", search: "?source=home_hub" }}
                 className="text-emerald-200 underline-offset-2 hover:text-emerald-100 hover:underline"
                 data-testid="home-practice-missions-link"
               >
