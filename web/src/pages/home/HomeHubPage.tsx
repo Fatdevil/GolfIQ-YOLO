@@ -268,7 +268,7 @@ export const HomeHubPage: React.FC = () => {
           subtitle={t("home.range.subtitle")}
           action={
             <Link
-              to="/range/practice"
+              to={{ pathname: "/range/practice", search: "?entrySource=range_home" }}
               className="inline-flex items-center justify-center rounded-lg bg-emerald-500 px-4 py-2 text-sm font-semibold text-white shadow hover:bg-emerald-400"
             >
               {t("home.range.button")}

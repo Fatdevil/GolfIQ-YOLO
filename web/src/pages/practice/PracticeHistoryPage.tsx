@@ -146,7 +146,7 @@ export default function PracticeHistoryPage(): JSX.Element {
           <h2 className="text-lg font-semibold text-slate-50">{t("practice.history.emptyTitle")}</h2>
           <p className="text-sm text-slate-400">{t("practice.history.emptyBody")}</p>
           <Link
-            to="/range/practice"
+            to="/range/practice?entrySource=missions"
             className="inline-flex w-full justify-center rounded-lg bg-emerald-500 px-4 py-2 text-sm font-semibold text-white shadow hover:bg-emerald-400 sm:w-auto"
             data-testid="practice-history-start"
           >

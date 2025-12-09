@@ -92,7 +92,12 @@ import { mapBagStateToPlayerBag } from "@/bag/utils";
 import { buildBagReadinessOverview } from "@shared/caddie/bagReadiness";
 import { type BagClubStatsMap } from "@shared/caddie/bagStats";
 import { buildBagPracticeRecommendations, type BagPracticeRecommendation } from "@shared/caddie/bagPracticeRecommendations";
-import { trackPracticeMissionStart } from "@/practice/analytics";
+import {
+  trackPracticeMissionStart,
+  trackQuickPracticeSessionComplete,
+  trackQuickPracticeSessionStart,
+  type QuickPracticeEntrySource,
+} from "@/practice/analytics";
 
 const DEFAULT_ANALYZE_FRAMES = 8;
 const DEFAULT_REF_LEN_PX = 100;
@@ -230,6 +235,7 @@ export default function RangePracticePage() {
   const [recommendations, setRecommendations] = React.useState<BagPracticeRecommendation[]>([]);
   const ghostCandidates = React.useMemo(() => loadRangeSessions(), []);
   const sessionStartRef = React.useRef<string>(new Date().toISOString());
+  const hasLoggedQuickPracticeStartRef = React.useRef(false);
   const ghostSessionOptions = React.useMemo(
     () => ghostCandidates.slice().reverse(),
     [ghostCandidates],
@@ -266,17 +272,29 @@ export default function RangePracticePage() {
     );
   }, [practiceHistory, recommendations]);
   const searchParams = React.useMemo(() => new URLSearchParams(location.search ?? ""), [location.search]);
-
+  const [missionPrefReady, setMissionPrefReady] = React.useState(false);
   const missionPrefInitialized = React.useRef(false);
+  const hasMissionSearchParam = React.useMemo(() => searchParams.has("missionId"), [searchParams]);
+  const quickPracticeEntrySource = React.useMemo<QuickPracticeEntrySource | undefined>(() => {
+    const source = searchParams.get("entrySource");
+    if (source === "range_home" || source === "recap" || source === "missions" || source === "other") {
+      return source;
+    }
+    return undefined;
+  }, [searchParams]);
 
   React.useEffect(() => {
     if (accessLoading) return;
     if (!isPro) {
       setMissionId(null);
       clearSelectedMissionId();
+      setMissionPrefReady(true);
       return;
     }
-    if (missionPrefInitialized.current) return;
+    if (missionPrefInitialized.current) {
+      setMissionPrefReady(true);
+      return;
+    }
 
     const missionParam = searchParams.get("missionId") as MissionId | null;
     const focusParam = searchParams.get("focus") as CoachCategory | null;
@@ -294,6 +312,7 @@ export default function RangePracticePage() {
       saveSelectedMissionId(nextMission);
     }
     missionPrefInitialized.current = true;
+    setMissionPrefReady(true);
   }, [accessLoading, isPro, searchParams]);
 
   React.useEffect(() => {
@@ -332,6 +351,24 @@ export default function RangePracticePage() {
     lastStartedMissionId.current = missionId;
     trackPracticeMissionStart({ missionId, sourceSurface: "range_practice" });
   }, [missionId]);
+
+  const emitQuickPracticeSessionStart = React.useCallback(() => {
+    if (!missionPrefReady) return;
+    if (missionId || hasMissionSearchParam) {
+      hasLoggedQuickPracticeStartRef.current = false;
+      return;
+    }
+    if (hasLoggedQuickPracticeStartRef.current) return;
+    trackQuickPracticeSessionStart({
+      surface: "web",
+      entrySource: quickPracticeEntrySource,
+    });
+    hasLoggedQuickPracticeStartRef.current = true;
+  }, [hasMissionSearchParam, missionId, missionPrefReady, quickPracticeEntrySource]);
+
+  React.useEffect(() => {
+    emitQuickPracticeSessionStart();
+  }, [emitQuickPracticeSessionStart]);
 
   React.useEffect(() => {
     let cancelled = false;
@@ -446,6 +483,7 @@ export default function RangePracticePage() {
 
     const nowIso = new Date().toISOString();
     const { shotCount, avgCarry_m, carryStd_m } = computeBasicStats(shots);
+    const isMissionSession = Boolean(mission?.id ?? missionId);
 
     let missionGoodReps: number | null = null;
     let missionTargetReps: number | null = null;
@@ -467,6 +505,9 @@ export default function RangePracticePage() {
     }
 
     const sessionStartMs = Date.parse(sessionStartRef.current);
+    const sessionDurationSeconds = Number.isFinite(sessionStartMs)
+      ? Math.max(0, Math.round((Date.parse(nowIso) - sessionStartMs) / 1000))
+      : undefined;
     const ghostSaved =
       ghost != null &&
       Number.isFinite(sessionStartMs) &&
@@ -530,6 +571,15 @@ export default function RangePracticePage() {
       missionTargetReps,
     });
 
+    if (!isMissionSession) {
+      trackQuickPracticeSessionComplete({
+        surface: "web",
+        entrySource: quickPracticeEntrySource,
+        swingsCount: shotCount,
+        durationSeconds: sessionDurationSeconds,
+      });
+    }
+
     if (userId) {
       const snapshot = mapRangeSessionToSnapshot(session);
       void Promise.resolve(postRangeSessionSnapshots([snapshot])).catch(() => {
@@ -547,6 +597,8 @@ export default function RangePracticePage() {
       setGhostStats(createGhostMatchStats(ghostSession));
     }
     setSaveStatus(t("range.session.saved"));
+    hasLoggedQuickPracticeStartRef.current = false;
+    emitQuickPracticeSessionStart();
   }, [
     shots,
     mission,
@@ -561,6 +613,8 @@ export default function RangePracticePage() {
     ghostSession,
     ghostStats,
     userId,
+    quickPracticeEntrySource,
+    emitQuickPracticeSessionStart,
     t,
   ]);
 

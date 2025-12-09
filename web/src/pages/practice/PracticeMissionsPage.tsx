@@ -216,7 +216,7 @@ export default function PracticeMissionsPage(): JSX.Element {
           <p className="text-sm text-slate-400">{t("practice.missions.empty.body")}</p>
           <button
             type="button"
-            onClick={() => navigate("/range/practice")}
+            onClick={() => navigate("/range/practice?entrySource=missions")}
             className="inline-flex w-full justify-center rounded-lg bg-emerald-500 px-4 py-2 text-sm font-semibold text-white shadow hover:bg-emerald-400 sm:w-auto"
           >
             {t("home.range.button")}

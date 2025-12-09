@@ -269,6 +269,7 @@ export default function QuickRoundPlayPage() {
     if (!practiceRecommendation) return "/range/practice";
     const [firstClub] = practiceRecommendation.targetClubs ?? [];
     const params = new URLSearchParams();
+    params.set("entrySource", "recap");
     if (firstClub) {
       params.set("club", firstClub);
     }

@@ -3,7 +3,11 @@ import { postTelemetryEvent } from "@/api";
 export type PracticeAnalyticsEvent =
   | "practice_missions_viewed"
   | "practice_mission_start"
-  | "practice_mission_complete";
+  | "practice_mission_complete"
+  | "practice_quick_session_start"
+  | "practice_quick_session_complete";
+
+export type QuickPracticeEntrySource = "range_home" | "recap" | "missions" | "other";
 
 type MissionViewedEvent = {
   surface: "web";
@@ -18,6 +22,21 @@ type MissionStartEvent = {
 type MissionCompleteEvent = {
   missionId?: string | null;
   samplesCount?: number | null;
+};
+
+type QuickPracticeSessionStartEvent = {
+  surface: "web";
+  entrySource?: QuickPracticeEntrySource;
+  hasRecommendation?: boolean;
+  targetClubsCount?: number;
+};
+
+type QuickPracticeSessionCompleteEvent = {
+  surface: "web";
+  entrySource?: QuickPracticeEntrySource;
+  hasRecommendation?: boolean;
+  swingsCount?: number;
+  durationSeconds?: number;
 };
 
 function sanitizePayload(payload: Record<string, unknown>): Record<string, unknown> {
@@ -59,4 +78,12 @@ export function trackPracticeMissionStart(payload: MissionStartEvent): void {
 
 export function trackPracticeMissionComplete(payload: MissionCompleteEvent): void {
   emitPracticeAnalytics("practice_mission_complete", payload);
+}
+
+export function trackQuickPracticeSessionStart(payload: QuickPracticeSessionStartEvent): void {
+  emitPracticeAnalytics("practice_quick_session_start", payload);
+}
+
+export function trackQuickPracticeSessionComplete(payload: QuickPracticeSessionCompleteEvent): void {
+  emitPracticeAnalytics("practice_quick_session_complete", payload);
 }

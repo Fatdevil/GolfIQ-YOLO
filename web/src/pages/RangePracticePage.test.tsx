@@ -69,6 +69,7 @@ describe("RangePracticePage", () => {
     mockedFetchBagStats.mockResolvedValue({});
     mockedBuildRecommendations.mockReturnValue([]);
     mockedTelemetry.mockReset();
+    window.localStorage.clear();
   });
 
   afterEach(() => {
@@ -260,6 +261,90 @@ describe("RangePracticePage", () => {
 
     const progress = await screen.findByTestId("range-practice-recommendation-progress");
     expect(progress).toHaveTextContent("Not practised yet");
+  });
+
+  it("emits a quick practice start event with entry source for non-mission sessions", async () => {
+    renderWithUnit("metric", <RangePracticePage />, "/range/practice?entrySource=range_home");
+
+    await waitFor(() =>
+      expect(mockedTelemetry).toHaveBeenCalledWith(
+        expect.objectContaining({
+          event: "practice_quick_session_start",
+          surface: "web",
+          entrySource: "range_home",
+        }),
+      )
+    );
+  });
+
+  it("emits quick practice completion analytics for non-mission sessions", async () => {
+    mockedPostRangeAnalyze.mockResolvedValue({
+      ball_speed_mps: 60,
+      ball_speed_mph: 134,
+      carry_m: 180,
+      launch_deg: 12,
+      side_deg: -3,
+      quality: { score: 0.9, level: "good", reasons: [] },
+    });
+
+    renderWithUnit("metric", <RangePracticePage />, "/range/practice?entrySource=recap");
+
+    const user = userEvent.setup();
+    const hitButtons = screen.getAllByRole("button", { name: /Hit & analyze/i });
+    await user.click(hitButtons[0]);
+
+    await waitFor(() => expect(mockedPostRangeAnalyze).toHaveBeenCalledTimes(1));
+
+    const endButtons = screen.getAllByRole("button", { name: /End session/i });
+    await user.click(endButtons[0]);
+
+    await waitFor(() =>
+      expect(
+        mockedTelemetry.mock.calls.find(([payload]) => payload.event === "practice_quick_session_complete")?.[0]
+      ).toEqual(
+        expect.objectContaining({
+          event: "practice_quick_session_complete",
+          surface: "web",
+          entrySource: "recap",
+        })
+      )
+    );
+
+    const completeCall = mockedTelemetry.mock.calls.find(([payload]) => payload.event === "practice_quick_session_complete");
+    expect(completeCall?.[0].swingsCount).toBeGreaterThanOrEqual(1);
+  });
+
+  it("skips quick practice analytics for mission-driven sessions", async () => {
+    mockedPostRangeAnalyze.mockResolvedValue({
+      ball_speed_mps: 60,
+      ball_speed_mph: 134,
+      carry_m: 180,
+      launch_deg: 12,
+      side_deg: -3,
+      quality: { score: 0.9, level: "good", reasons: [] },
+    });
+
+    const missionId = RANGE_MISSIONS[0].id;
+
+    renderWithUnit("metric", <RangePracticePage />, `/range/practice?missionId=${missionId}`);
+
+    const user = userEvent.setup();
+    const hitButtons = screen.getAllByRole("button", { name: /Hit & analyze/i });
+    await user.click(hitButtons[0]);
+
+    await waitFor(() => expect(mockedPostRangeAnalyze).toHaveBeenCalledTimes(1));
+
+    const endButtons = screen.getAllByRole("button", { name: /End session/i });
+    await user.click(endButtons[0]);
+
+    await waitFor(() => {
+      expect(
+        mockedTelemetry.mock.calls.some(([payload]) => payload.event === "practice_quick_session_start")
+      ).toBe(false);
+      expect(
+        mockedTelemetry.mock.calls.some(([payload]) => payload.event === "practice_quick_session_complete")
+      ).toBe(false);
+    });
   });
 });
 
