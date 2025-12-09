@@ -32,6 +32,7 @@ import EventTopShotsPage from "./pages/events/[id]/top-shots";
 import HomeFeed from "./pages/home/HomeFeed";
 import { HomeHubPage } from "@/pages/home/HomeHubPage";
 import PracticeHistoryPage from "@/pages/practice/PracticeHistoryPage";
+import PracticeMissionsPage from "@/pages/practice/PracticeMissionsPage";
 import PracticeMissionDetailPage from "@/pages/practice/PracticeMissionDetailPage";
 import { EventSessionBoundary } from "./session/EventSessionBoundary";
 import { useCdnPreconnect } from "./media/cdn";
@@ -128,6 +129,7 @@ export default function App() {
           <Route path="/accuracy" element={<AccuracyDashboardPage />} />
           <Route path="/admin/feedback" element={<FeedbackAdminPage />} />
           <Route path="/reels" element={<ReelsComposerPage />} />
+          <Route path="/practice/missions" element={<PracticeMissionsPage />} />
           <Route path="/practice/history" element={<PracticeHistoryPage />} />
           <Route path="/practice/history/:id" element={<PracticeMissionDetailPage />} />
           <Route path="/range/practice" element={<RangePracticePage />} />
