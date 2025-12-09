@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, FlatList, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -16,6 +16,7 @@ import {
   type PracticeMissionDefinition,
   type PracticeMissionListItem,
 } from '@shared/practice/practiceMissionsList';
+import { safeEmit } from '@app/telemetry';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'PracticeMissions'>;
 
@@ -103,8 +104,15 @@ function MissionRow({ item, onPress }: { item: PracticeMissionListItem; onPress:
   );
 }
 
-export default function PracticeMissionsScreen({ navigation }: Props): JSX.Element {
+export default function PracticeMissionsScreen({ navigation, route }: Props): JSX.Element {
   const [state, setState] = useState<ScreenState>({ loading: true, missions: [], history: [] });
+  const viewedRef = useRef(false);
+
+  useEffect(() => {
+    if (viewedRef.current) return;
+    viewedRef.current = true;
+    safeEmit('practice_missions_viewed', { surface: 'mobile', source: route.params?.source ?? 'other' });
+  }, [route.params?.source]);
 
   useEffect(() => {
     let cancelled = false;
@@ -158,6 +166,8 @@ export default function PracticeMissionsScreen({ navigation }: Props): JSX.Eleme
   }, []);
 
   const handleSelectMission = (missionId: string) => {
+    safeEmit('practice_mission_start', { missionId, sourceSurface: 'missions_list' });
+
     const latestEntry = [...state.history]
       .filter((entry) => entry.missionId === missionId)
       .sort((a, b) => new Date(b.endedAt ?? b.startedAt).getTime() - new Date(a.endedAt ?? a.startedAt).getTime())[0];

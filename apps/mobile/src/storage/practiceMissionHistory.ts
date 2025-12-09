@@ -8,6 +8,7 @@ import {
 
 import { getItem, setItem } from '@app/storage/asyncStorage';
 import type { PracticeMissionHistoryEntry, PracticeMissionOutcome } from '@shared/practice/practiceHistory';
+import { safeEmit } from '@app/telemetry';
 
 export type PracticeProgressOverview = {
   totalSessions: number;
@@ -52,6 +53,13 @@ export async function recordPracticeMissionOutcome(
   const next = recordMissionOutcome(history, outcome);
   if (next !== history) {
     await persistHistory(next);
+    const latestEntry = next[next.length - 1];
+    if (latestEntry?.status === 'completed') {
+      safeEmit('practice_mission_complete', {
+        missionId: latestEntry.missionId,
+        samplesCount: latestEntry.completedSampleCount,
+      });
+    }
   }
   return next;
 }
