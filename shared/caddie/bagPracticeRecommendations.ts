@@ -248,3 +248,12 @@ export function getTopPracticeRecommendation({
   const [first] = buildBagPracticeRecommendations(overview, suggestions, history, options ?? {});
   return first ?? null;
 }
+
+export function getTopPracticeRecommendationForRecap({
+  overview,
+  suggestions,
+  history,
+  options,
+}: PracticeRecommendationInput): BagPracticeRecommendation | null {
+  return getTopPracticeRecommendation({ overview, suggestions, history, options });
+}

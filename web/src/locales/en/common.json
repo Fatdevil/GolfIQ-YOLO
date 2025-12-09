@@ -60,6 +60,13 @@
   "bag.practice.status.new": "New mission",
   "bag.practice.status.due": "Due for tune-up",
   "bag.practice.status.fresh": "Keep it sharp",
+  "bag.practice.fill_gap.title": "Practice gapping {{lower}} & {{upper}}",
+  "bag.practice.fill_gap.description": "Alternate between these clubs to tighten the distance gap.",
+  "bag.practice.reduce_overlap.title": "Separate {{lower}} and {{upper}}",
+  "bag.practice.reduce_overlap.description": "Hit both clubs to decide which one stays in the bag.",
+  "bag.practice.calibrate.title": "Collect shots with {{club}}",
+  "bag.practice.calibrate.more_samples.description": "Add a small bucket to firm up this club’s carry distance.",
+  "bag.practice.calibrate.no_data.description": "Record a few swings so we can auto-calibrate this club.",
 
   "home.profile.title": "My GolfIQ",
   "home.profile.subtitle": "See your rounds, range sessions, caddie insights and SG preview.",
@@ -406,6 +413,9 @@
   "bag.readinessRecap.summary.overlaps_present": "Carries are overlapping; tighten your spacing.",
   "bag.readinessRecap.summary.ready": "Bag looks calibrated with balanced coverage.",
   "bag.readinessRecap.tuneCta": "Tune my bag",
+  "round.recap.nextPracticeTitle": "Next practice mission",
+  "round.recap.nextPracticeHelper": "Based on your bag and practice history, we recommend:",
+  "round.recap.nextPracticeCta": "Start mission",
   "units.label": "Units",
   "bag.notes": "Notes",
 

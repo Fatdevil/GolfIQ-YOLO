@@ -6,26 +6,27 @@ import {
   buildBagPracticeRecommendations,
   buildMissionCoverageByClub,
   getTopPracticeRecommendation,
+  getTopPracticeRecommendationForRecap,
 } from '../bagPracticeRecommendations';
 import type { PracticeMissionHistoryEntry } from '@shared/practice/practiceHistory';
 import type { BagSuggestion } from '../bagTuningSuggestions';
 
-describe('buildBagPracticeRecommendation', () => {
-  const baseOverview: BagReadinessOverview = {
-    readiness: {
-      score: 55,
-      grade: 'okay',
-      totalClubs: 2,
-      calibratedClubs: 0,
-      needsMoreSamplesCount: 0,
-      noDataCount: 0,
-      largeGapCount: 0,
-      overlapCount: 0,
-    },
-    suggestions: [],
-    dataStatusByClubId: {},
-  };
+const baseOverview: BagReadinessOverview = {
+  readiness: {
+    score: 55,
+    grade: 'okay',
+    totalClubs: 2,
+    calibratedClubs: 0,
+    needsMoreSamplesCount: 0,
+    noDataCount: 0,
+    largeGapCount: 0,
+    overlapCount: 0,
+  },
+  suggestions: [],
+  dataStatusByClubId: {},
+};
 
+describe('buildBagPracticeRecommendation', () => {
   it('returns recommendation for large gap suggestions', () => {
     const suggestions: BagSuggestion[] = [
       {
@@ -218,6 +219,23 @@ describe('buildBagPracticeRecommendation', () => {
 
   it('returns null when no recommendations are available', () => {
     const rec = getTopPracticeRecommendation({ overview: null, suggestions: [], history: [] });
+
+    expect(rec).toBeNull();
+  });
+});
+
+describe('getTopPracticeRecommendationForRecap', () => {
+  it('passes through the base helper result', () => {
+    const overview = baseOverview;
+    const history: PracticeMissionHistoryEntry[] = [];
+
+    const rec = getTopPracticeRecommendationForRecap({ overview, history });
+
+    expect(rec?.id).toBe('practice_fill_gap:9i:7i');
+  });
+
+  it('returns null when the base helper returns null', () => {
+    const rec = getTopPracticeRecommendationForRecap({ overview: null, history: [] });
 
     expect(rec).toBeNull();
   });

@@ -27,6 +27,12 @@ import {
 import type { PlayerBag } from '@shared/caddie/playerBag';
 import type { BagClubStatsMap } from '@shared/caddie/bagStats';
 import { formatBagSuggestion } from '@app/caddie/formatBagSuggestion';
+import { loadPracticeMissionHistory } from '@app/storage/practiceMissionHistory';
+import type { PracticeMissionHistoryEntry } from '@shared/practice/practiceHistory';
+import {
+  getTopPracticeRecommendationForRecap,
+  type BagPracticeRecommendation,
+} from '@shared/caddie/bagPracticeRecommendations';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'RoundRecap'>;
 
@@ -60,6 +66,7 @@ export default function RoundRecapScreen({ route, navigation }: Props): JSX.Elem
   const [shareLoading, setShareLoading] = useState(false);
   const [bag, setBag] = useState<PlayerBag | null>(null);
   const [bagStats, setBagStats] = useState<BagClubStatsMap | null>(null);
+  const [practiceHistory, setPracticeHistory] = useState<PracticeMissionHistoryEntry[]>([]);
 
   useEffect(() => {
     let cancelled = false;
@@ -135,6 +142,28 @@ export default function RoundRecapScreen({ route, navigation }: Props): JSX.Elem
     };
   }, [isDemo]);
 
+  useEffect(() => {
+    if (isDemo) return;
+    let cancelled = false;
+
+    loadPracticeMissionHistory()
+      .then((history) => {
+        if (!cancelled) {
+          setPracticeHistory(history ?? []);
+        }
+      })
+      .catch((err) => {
+        console.warn('[round] Failed to load practice history for recap', err);
+        if (!cancelled) {
+          setPracticeHistory([]);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isDemo]);
+
   const scoreLine = useMemo(() => {
     if (!recap) return '';
     const toPar = recap.toPar ?? t('round.recap.to_par_even');
@@ -184,6 +213,56 @@ export default function RoundRecapScreen({ route, navigation }: Props): JSX.Elem
       bagReadinessOverview.suggestions[0];
     return suggestion ? formatBagSuggestion(suggestion, clubLabels) : null;
   }, [bagReadinessOverview?.suggestions, bagReadinessRecap?.topSuggestionId, clubLabels]);
+
+  const topPracticeRecommendation = useMemo<BagPracticeRecommendation | null>(() => {
+    if (!bagReadinessOverview) return null;
+    try {
+      return getTopPracticeRecommendationForRecap({
+        overview: bagReadinessOverview,
+        history: practiceHistory,
+        suggestions: bagReadinessOverview.suggestions,
+      });
+    } catch (err) {
+      console.warn('[round] Failed to build recap practice recommendation', err);
+      return null;
+    }
+  }, [bagReadinessOverview, practiceHistory]);
+
+  const topPracticeCopy = useMemo(() => {
+    if (!topPracticeRecommendation) return null;
+    const [firstClubId, secondClubId] = topPracticeRecommendation.targetClubs;
+    const lower = firstClubId ? clubLabels[firstClubId] ?? firstClubId : undefined;
+    const upper = secondClubId ? clubLabels[secondClubId] ?? secondClubId : undefined;
+    const club = lower;
+
+    return {
+      title: t(topPracticeRecommendation.titleKey, { lower, upper, club }),
+      description: t(topPracticeRecommendation.descriptionKey, { lower, upper, club }),
+    };
+  }, [clubLabels, t, topPracticeRecommendation]);
+
+  const topPracticeStatusLabel = useMemo(() => {
+    if (!topPracticeRecommendation) return null;
+
+    if (topPracticeRecommendation.status === 'new') return t('bag.practice.status.new');
+    if (topPracticeRecommendation.status === 'due') return t('bag.practice.status.due');
+    return t('bag.practice.status.fresh');
+  }, [topPracticeRecommendation, t]);
+
+  const handleStartNextPractice = useCallback(() => {
+    if (!topPracticeRecommendation) {
+      navigation.navigate('RangePractice');
+      return;
+    }
+
+    if (!topPracticeRecommendation.targetClubs?.length) {
+      console.warn('[round] Missing target clubs for recap recommendation');
+      navigation.navigate('RangePractice');
+      return;
+    }
+
+    navigation.navigate('RangeQuickPracticeStart', { practiceRecommendation: topPracticeRecommendation });
+  }, [navigation, topPracticeRecommendation]);
 
   const strokesInsight = useMemo(() => {
     if (!strokesGained) return null;
@@ -312,6 +391,29 @@ export default function RoundRecapScreen({ route, navigation }: Props): JSX.Elem
               {t('bag.readinessTileSuggestionPrefix')} {readinessSuggestion}
             </Text>
           ) : null}
+        </View>
+      ) : null}
+
+      {topPracticeRecommendation && topPracticeCopy ? (
+        <View style={styles.card} testID="recap-practice-recommendation">
+          <View style={styles.cardHeader}>
+            <Text style={styles.cardTitle}>{t('round.recap.nextPracticeTitle')}</Text>
+            <TouchableOpacity style={styles.secondaryButton} onPress={handleStartNextPractice}>
+              <Text style={styles.secondaryButtonText}>{t('round.recap.nextPracticeCta')}</Text>
+            </TouchableOpacity>
+          </View>
+          <Text style={styles.cardHelper}>{t('round.recap.nextPracticeHelper')}</Text>
+          <View style={styles.practiceRow}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.practiceTitle}>{topPracticeCopy.title}</Text>
+              <Text style={styles.bodyText}>{topPracticeCopy.description}</Text>
+            </View>
+            {topPracticeStatusLabel ? (
+              <Text style={styles.statusChip} testID="recap-practice-status">
+                {topPracticeStatusLabel}
+              </Text>
+            ) : null}
+          </View>
         </View>
       ) : null}
 
@@ -448,11 +550,24 @@ const styles = StyleSheet.create({
   subtitle: { color: '#6b7280' },
   score: { fontSize: 20, fontWeight: '700', marginTop: 4 },
   helper: { color: '#6b7280' },
+  cardHelper: { color: '#6b7280', fontSize: 14 },
   muted: { color: '#6b7280', marginTop: 4, textAlign: 'center' },
   bodyText: { color: '#111827' },
   card: { borderWidth: 1, borderColor: '#e5e7eb', borderRadius: 12, padding: 12, gap: 12 },
   cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   cardTitle: { fontSize: 18, fontWeight: '700' },
+  practiceRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 12 },
+  practiceTitle: { fontSize: 16, fontWeight: '700', color: '#111827' },
+  statusChip: {
+    alignSelf: 'flex-start',
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: '#d1d5db',
+    color: '#111827',
+    fontWeight: '700',
+  },
   readinessRow: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between' },
   readinessScore: { fontSize: 24, fontWeight: '700', color: '#111827' },
   readinessGrade: { color: '#6b7280', fontWeight: '600' },

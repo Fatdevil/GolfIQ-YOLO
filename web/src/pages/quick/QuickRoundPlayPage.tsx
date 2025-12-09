@@ -32,6 +32,12 @@ import { syncQuickRoundToWatch } from "../../features/watch/api";
 import { computeHoleCaddieTargets } from "@shared/round/autoHoleCore";
 import type { BagClubStatsMap } from "@shared/caddie/bagStats";
 import { buildBagReadinessOverview, buildBagReadinessRecapInfo } from "@shared/caddie/bagReadiness";
+import { loadPracticeMissionHistory } from "@/practice/practiceMissionHistory";
+import type { PracticeMissionHistoryEntry } from "@shared/practice/practiceHistory";
+import {
+  getTopPracticeRecommendationForRecap,
+  type BagPracticeRecommendation,
+} from "@shared/caddie/bagPracticeRecommendations";
 
 export default function QuickRoundPlayPage() {
   const { roundId } = useParams<{ roundId: string }>();
@@ -61,6 +67,8 @@ export default function QuickRoundPlayPage() {
   const summaryCopyTimeout = useRef<number | null>(null);
   const [bag] = useState<BagState>(() => loadBag());
   const [bagStats, setBagStats] = useState<BagClubStatsMap | null>(null);
+  const [practiceHistory, setPracticeHistory] = useState<PracticeMissionHistoryEntry[]>([]);
+  const [practiceRecommendation, setPracticeRecommendation] = useState<BagPracticeRecommendation | null>(null);
   const geoState = useGeolocation(autoHoleEnabled);
   const { position, error: geoError } = geoState;
   const { data: bundle, loading: bundleLoading, error: bundleError } = useCourseBundle(
@@ -113,6 +121,27 @@ export default function QuickRoundPlayPage() {
       .catch(() => {
         if (!cancelled) {
           setBagStats(null);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    loadPracticeMissionHistory()
+      .then((history) => {
+        if (!cancelled) {
+          setPracticeHistory(history ?? []);
+        }
+      })
+      .catch((err) => {
+        console.warn("[quickround] Failed to load practice history", err);
+        if (!cancelled) {
+          setPracticeHistory([]);
         }
       });
 
@@ -214,6 +243,58 @@ export default function QuickRoundPlayPage() {
       bagReadinessOverview.suggestions[0];
     return suggestion ? formatBagSuggestion(suggestion, clubLabels, unit, t) : null;
   }, [bagReadinessOverview?.suggestions, bagReadinessRecap?.topSuggestionId, clubLabels, unit, t]);
+
+  const practiceRecommendationCopy = useMemo(() => {
+    if (!practiceRecommendation) return null;
+
+    const [lowerId, upperId] = practiceRecommendation.targetClubs;
+    const lower = lowerId ? clubLabels[lowerId] ?? lowerId : undefined;
+    const upper = upperId ? clubLabels[upperId] ?? upperId : undefined;
+    const club = lower;
+
+    return {
+      title: t(practiceRecommendation.titleKey, { lower, upper, club }),
+      description: t(practiceRecommendation.descriptionKey, { lower, upper, club }),
+    };
+  }, [clubLabels, practiceRecommendation, t]);
+
+  const practiceRecommendationStatus = useMemo(() => {
+    if (!practiceRecommendation) return null;
+    if (practiceRecommendation.status === "new") return t("bag.practice.status.new");
+    if (practiceRecommendation.status === "due") return t("bag.practice.status.due");
+    return t("bag.practice.status.fresh");
+  }, [practiceRecommendation, t]);
+
+  const practiceRecommendationLink = useMemo(() => {
+    if (!practiceRecommendation) return "/range/practice";
+    const [firstClub] = practiceRecommendation.targetClubs ?? [];
+    const params = new URLSearchParams();
+    if (firstClub) {
+      params.set("club", firstClub);
+    }
+
+    const query = params.toString();
+    return `/range/practice${query ? `?${query}` : ""}`;
+  }, [practiceRecommendation]);
+
+  useEffect(() => {
+    if (!bagReadinessOverview) {
+      setPracticeRecommendation(null);
+      return;
+    }
+
+    try {
+      const rec = getTopPracticeRecommendationForRecap({
+        overview: bagReadinessOverview,
+        history: practiceHistory,
+        suggestions: bagReadinessOverview.suggestions,
+      });
+      setPracticeRecommendation(rec);
+    } catch (err) {
+      console.warn("[quickround] Failed to build recap practice recommendation", err);
+      setPracticeRecommendation(null);
+    }
+  }, [bagReadinessOverview, practiceHistory]);
 
   const memberId = useMemo(
     () => round?.memberId ?? readStoredMemberId(),
@@ -662,6 +743,39 @@ export default function QuickRoundPlayPage() {
                 {t("bag.readinessTileSuggestionPrefix")} {bagReadinessSuggestion}
               </p>
             ) : null}
+          </div>
+        </section>
+      ) : null}
+      {practiceRecommendation && practiceRecommendationCopy ? (
+        <section
+          className="rounded-lg border border-emerald-800 bg-emerald-950/60 p-6 text-sm text-emerald-50"
+          data-testid="round-recap-practice-recommendation"
+        >
+          <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h3 className="text-base font-semibold text-emerald-50">
+                {t("round.recap.nextPracticeTitle")}
+              </h3>
+              <p className="text-xs text-emerald-100/80">{t("round.recap.nextPracticeHelper")}</p>
+            </div>
+            <Link
+              to={practiceRecommendationLink}
+              className="rounded-md border border-emerald-400/70 px-3 py-1 text-xs font-semibold text-emerald-50 hover:bg-emerald-500/10"
+              data-testid="round-recap-practice-cta"
+            >
+              {t("round.recap.nextPracticeCta")}
+            </Link>
+          </div>
+          <div className="mt-4 rounded-md border border-emerald-800/60 bg-emerald-900/50 p-4">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <p className="text-sm font-semibold text-emerald-50">{practiceRecommendationCopy.title}</p>
+              {practiceRecommendationStatus ? (
+                <span className="rounded-full border border-emerald-300/80 px-3 py-1 text-[11px] font-semibold text-emerald-50">
+                  {practiceRecommendationStatus}
+                </span>
+              ) : null}
+            </div>
+            <p className="mt-1 text-sm text-emerald-100/90">{practiceRecommendationCopy.description}</p>
           </div>
         </section>
       ) : null}
