@@ -101,6 +101,21 @@ export const en = {
         unknown: 'Unknown',
       },
     },
+    missions: {
+      title: 'Practice missions',
+      cta: { viewAll: 'View all missions' },
+      status: {
+        overdue: 'High priority',
+        recommended: 'Recommended',
+        dueSoon: 'Due soon',
+        onTrack: 'On track',
+        completedRecently: 'Completed recently',
+      },
+      empty: {
+        title: 'No missions yet',
+        body: 'Complete a few rounds or range sessions and we’ll build a tailored mission program for you.',
+      },
+    },
   },
   weeklySummary: {
     title: 'Weekly Summary',

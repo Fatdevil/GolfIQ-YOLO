@@ -41,6 +41,21 @@ export const sv = {
         unknown: 'Okänt',
       },
     },
+    missions: {
+      title: 'Träningsuppdrag',
+      cta: { viewAll: 'Visa alla missions' },
+      status: {
+        overdue: 'Hög prioritet',
+        recommended: 'Rekommenderad',
+        dueSoon: 'Snart dags',
+        onTrack: 'På rätt spår',
+        completedRecently: 'Nyligen klar',
+      },
+      empty: {
+        title: 'Inga missions ännu',
+        body: 'Spela några rundor eller rangepass så bygger vi ett anpassat träningsprogram åt dig.',
+      },
+    },
   },
   bag: {
     practice: {
