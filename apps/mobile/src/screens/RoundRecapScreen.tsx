@@ -33,6 +33,7 @@ import {
   getTopPracticeRecommendationForRecap,
   type BagPracticeRecommendation,
 } from '@shared/caddie/bagPracticeRecommendations';
+import { safeEmit } from '@app/telemetry';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'RoundRecap'>;
 
@@ -255,6 +256,11 @@ export default function RoundRecapScreen({ route, navigation }: Props): JSX.Elem
       return;
     }
 
+    safeEmit('practice_mission_start', {
+      missionId: topPracticeRecommendation.id,
+      sourceSurface: 'round_recap',
+    });
+
     if (!topPracticeRecommendation.targetClubs?.length) {
       console.warn('[round] Missing target clubs for recap recommendation');
       navigation.navigate('RangePractice');
@@ -398,7 +404,11 @@ export default function RoundRecapScreen({ route, navigation }: Props): JSX.Elem
         <View style={styles.card} testID="recap-practice-recommendation">
           <View style={styles.cardHeader}>
             <Text style={styles.cardTitle}>{t('round.recap.nextPracticeTitle')}</Text>
-            <TouchableOpacity style={styles.secondaryButton} onPress={handleStartNextPractice}>
+            <TouchableOpacity
+              style={styles.secondaryButton}
+              onPress={handleStartNextPractice}
+              testID="recap-start-next-practice"
+            >
               <Text style={styles.secondaryButtonText}>{t('round.recap.nextPracticeCta')}</Text>
             </TouchableOpacity>
           </View>

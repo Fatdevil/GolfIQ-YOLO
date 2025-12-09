@@ -11,6 +11,7 @@ import { fetchPlayerBag } from '@app/api/bagClient';
 import { fetchBagStats } from '@app/api/bagStatsClient';
 import { loadPracticeMissionHistory } from '@app/storage/practiceMissionHistory';
 import { getTopPracticeRecommendationForRecap } from '@shared/caddie/bagPracticeRecommendations';
+import { safeEmit } from '@app/telemetry';
 
 vi.mock('@app/api/roundClient');
 vi.mock('@app/api/strokesGainedClient');
@@ -23,6 +24,7 @@ vi.mock('@app/storage/practiceMissionHistory');
 vi.mock('@shared/caddie/bagPracticeRecommendations', () => ({
   getTopPracticeRecommendationForRecap: vi.fn(),
 }));
+vi.mock('@app/telemetry', () => ({ safeEmit: vi.fn() }));
 
 const mockFetchRecap = fetchRoundRecap as unknown as Mock;
 const mockFetchRoundStrokesGained = fetchRoundStrokesGained as unknown as Mock;
@@ -222,6 +224,28 @@ describe('RoundRecapScreen', () => {
     expect(navigate).toHaveBeenCalledWith('MyBag');
   });
 
+  it('fires analytics when starting a practice mission from the recap card', async () => {
+    mockFetchRecap.mockResolvedValue(sampleRecap);
+    mockFetchRoundStrokesGained.mockResolvedValue(sampleStrokes);
+    mockGetTopPracticeRecommendationForRecap.mockReturnValue(samplePracticeRecommendation);
+    const navigate = vi.fn();
+
+    const { getByTestId } = render(
+      <RoundRecapScreen navigation={{ navigate } as any} route={{ params: { roundId: 'r1' } } as any} />,
+    );
+
+    const cta = await waitFor(() => getByTestId('recap-start-next-practice'));
+    fireEvent.click(cta);
+
+    expect(vi.mocked(safeEmit)).toHaveBeenCalledWith('practice_mission_start', {
+      missionId: samplePracticeRecommendation.id,
+      sourceSurface: 'round_recap',
+    });
+    expect(navigate).toHaveBeenCalledWith('RangeQuickPracticeStart', {
+      practiceRecommendation: samplePracticeRecommendation,
+    });
+  });
+
   it('shows the next practice mission card and starts quick practice', async () => {
     mockFetchRecap.mockResolvedValue(sampleRecap);
     mockFetchRoundStrokesGained.mockResolvedValue(sampleStrokes);
@@ -237,7 +261,7 @@ describe('RoundRecapScreen', () => {
     expect(getByText(/Practice gapping PW & 8i/)).toBeTruthy();
     expect(getByTestId('recap-practice-status')).toBeTruthy();
 
-    fireEvent.press(getByText(/Start mission/i));
+    fireEvent.click(getByText(/Start mission/i));
     expect(navigate).toHaveBeenCalledWith('RangeQuickPracticeStart', {
       practiceRecommendation: samplePracticeRecommendation,
     });

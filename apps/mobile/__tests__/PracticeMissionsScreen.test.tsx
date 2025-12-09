@@ -10,6 +10,7 @@ import * as bagClient from '@app/api/bagClient';
 import * as bagStatsClient from '@app/api/bagStatsClient';
 import * as bagReadiness from '@shared/caddie/bagReadiness';
 import { buildPracticeMissionsList, type PracticeMissionListItem } from '@shared/practice/practiceMissionsList';
+import { safeEmit } from '@app/telemetry';
 
 vi.mock('@app/storage/practiceMissionHistory', () => ({
   loadPracticeMissionHistory: vi.fn(),
@@ -20,6 +21,7 @@ vi.mock('@app/api/bagClient', () => ({ fetchPlayerBag: vi.fn() }));
 vi.mock('@app/api/bagStatsClient', () => ({ fetchBagStats: vi.fn() }));
 vi.mock('@shared/caddie/bagReadiness', () => ({ buildBagReadinessOverview: vi.fn() }));
 vi.mock('@shared/practice/practiceMissionsList', () => ({ buildPracticeMissionsList: vi.fn() }));
+vi.mock('@app/telemetry', () => ({ safeEmit: vi.fn() }));
 
 function createNavigation(): NativeStackScreenProps<RootStackParamList, 'PracticeMissions'>['navigation'] {
   return {
@@ -29,8 +31,10 @@ function createNavigation(): NativeStackScreenProps<RootStackParamList, 'Practic
   } as any;
 }
 
-function createRoute(): NativeStackScreenProps<RootStackParamList, 'PracticeMissions'>['route'] {
-  return { key: 'PracticeMissions', name: 'PracticeMissions' } as any;
+function createRoute(
+  params?: RootStackParamList['PracticeMissions'],
+): NativeStackScreenProps<RootStackParamList, 'PracticeMissions'>['route'] {
+  return { key: 'PracticeMissions', name: 'PracticeMissions', params } as any;
 }
 
 describe('PracticeMissionsScreen', () => {
@@ -79,6 +83,31 @@ describe('PracticeMissionsScreen', () => {
     const items = await screen.findAllByTestId(/practice-mission-item-/);
     expect(items[0].textContent).toContain('High priority');
     expect(items[1].textContent).toContain('On track');
+  });
+
+  it('fires analytics when the missions screen is viewed', async () => {
+    render(<PracticeMissionsScreen navigation={createNavigation()} route={createRoute({ source: 'home' })} />);
+
+    await screen.findByTestId('practice-missions-list');
+
+    expect(vi.mocked(safeEmit)).toHaveBeenCalledWith('practice_missions_viewed', {
+      surface: 'mobile',
+      source: 'home',
+    });
+  });
+
+  it('fires analytics when a mission is started from the list', async () => {
+    const navigation = createNavigation();
+
+    render(<PracticeMissionsScreen navigation={navigation} route={createRoute()} />);
+
+    const row = await screen.findByTestId('practice-mission-item-mission-low');
+    fireEvent.click(row);
+
+    expect(vi.mocked(safeEmit)).toHaveBeenCalledWith('practice_mission_start', {
+      missionId: 'mission-low',
+      sourceSurface: 'missions_list',
+    });
   });
 
   it('navigates to mission detail when a matching history entry exists', async () => {

@@ -750,7 +750,10 @@ export default function HomeDashboardScreen({ navigation }: Props): JSX.Element 
             </TouchableOpacity>
           </View>
         ) : null}
-        <TouchableOpacity onPress={() => navigation.navigate('PracticeMissions')} testID="open-practice-missions">
+        <TouchableOpacity
+          onPress={() => navigation.navigate('PracticeMissions', { source: 'home' })}
+          testID="open-practice-missions"
+        >
           <Text style={styles.link}>{t('practice.missions.cta.viewAll')}</Text>
         </TouchableOpacity>
         <TouchableOpacity onPress={() => navigation.navigate('PracticePlanner')} testID="open-practice">
