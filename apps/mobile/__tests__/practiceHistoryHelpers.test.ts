@@ -15,6 +15,7 @@ describe('practice mission history telemetry', () => {
   const now = new Date('2024-02-08T12:00:00Z');
 
   beforeEach(() => {
+    vi.useFakeTimers();
     vi.clearAllMocks();
     vi.mocked(getItem).mockResolvedValue('[]');
     vi.mocked(setItem).mockResolvedValue();

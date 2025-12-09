@@ -21,6 +21,7 @@ describe("practice mission outcome telemetry", () => {
   const now = new Date("2024-02-08T12:00:00Z");
 
   beforeEach(() => {
+    vi.useFakeTimers();
     telemetry.mockReset();
     clearPracticeHistoryForTests();
     vi.setSystemTime(now);
