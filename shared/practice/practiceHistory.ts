@@ -249,6 +249,7 @@ export function selectRecentMissions(
     .filter((entry) => {
       const ts = entryTimestamp(entry);
       if (Number.isNaN(ts)) return false;
+      if (ts > nowMs) return false;
       return nowMs - ts <= windowMs;
     })
     .sort((a, b) => entryTimestamp(b) - entryTimestamp(a));

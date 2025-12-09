@@ -4,6 +4,7 @@ import {
   DEFAULT_WEEKLY_PRACTICE_MISSION_GOAL,
   PRACTICE_GOAL_WINDOW_DAYS,
   buildWeeklyPracticeGoalProgress,
+  buildWeeklyGoalStreak,
   didJustReachWeeklyGoal,
 } from '../practice/practiceGoals';
 import type { PracticeMissionHistoryEntry } from '../practice/practiceHistory';
@@ -59,7 +60,7 @@ describe('practiceGoals', () => {
       buildEntry({ id: 'e1', endedAt: '2024-02-05T18:00:00Z' }),
       buildEntry({ id: 'e2', endedAt: '2024-02-06T18:00:00Z' }),
       buildEntry({ id: 'e3', endedAt: '2024-02-07T18:00:00Z' }),
-      buildEntry({ id: 'e4', endedAt: '2024-02-08T18:00:00Z' }),
+      buildEntry({ id: 'e4', endedAt: '2024-02-08T10:00:00Z' }),
     ];
 
     const progress = buildWeeklyPracticeGoalProgress({ missionHistory, now, targetCompletions: 3 });
@@ -149,5 +150,53 @@ describe('practiceGoals', () => {
     });
 
     expect(didJustReachWeeklyGoal({ before, after })).toBe(false);
+  });
+
+  describe('buildWeeklyGoalStreak', () => {
+    it('counts consecutive weeks that meet the goal', () => {
+      const missionHistory = [
+        // Current week (week ending Feb 8)
+        buildEntry({ id: 'c1', endedAt: '2024-02-05T18:00:00Z' }),
+        buildEntry({ id: 'c2', endedAt: '2024-02-06T18:00:00Z' }),
+        buildEntry({ id: 'c3', endedAt: '2024-02-07T18:00:00Z' }),
+        // Previous week (week ending Feb 1)
+        buildEntry({ id: 'p1', endedAt: '2024-01-30T18:00:00Z' }),
+        buildEntry({ id: 'p2', endedAt: '2024-01-31T18:00:00Z' }),
+        buildEntry({ id: 'p3', endedAt: '2024-02-01T10:00:00Z' }),
+        // Two weeks ago (week ending Jan 25)
+        buildEntry({ id: 'o1', endedAt: '2024-01-23T18:00:00Z' }),
+        buildEntry({ id: 'o2', endedAt: '2024-01-24T18:00:00Z' }),
+        buildEntry({ id: 'o3', endedAt: '2024-01-25T10:00:00Z' }),
+      ];
+
+      const streak = buildWeeklyGoalStreak(missionHistory, now);
+
+      expect(streak.currentStreakWeeks).toBe(3);
+    });
+
+    it('stops counting when a week misses the goal', () => {
+      const missionHistory = [
+        // Current week meets the goal
+        buildEntry({ id: 'c1', endedAt: '2024-02-05T18:00:00Z' }),
+        buildEntry({ id: 'c2', endedAt: '2024-02-06T18:00:00Z' }),
+        buildEntry({ id: 'c3', endedAt: '2024-02-07T18:00:00Z' }),
+        // Previous week misses the goal
+        buildEntry({ id: 'p1', endedAt: '2024-01-31T18:00:00Z' }),
+      ];
+
+      const streak = buildWeeklyGoalStreak(missionHistory, now);
+
+      expect(streak.currentStreakWeeks).toBe(1);
+    });
+
+    it('returns zero when no week meets the goal', () => {
+      const missionHistory = [
+        buildEntry({ id: 'only', endedAt: '2024-02-07T18:00:00Z' }),
+      ];
+
+      const streak = buildWeeklyGoalStreak(missionHistory, now);
+
+      expect(streak.currentStreakWeeks).toBe(0);
+    });
   });
 });

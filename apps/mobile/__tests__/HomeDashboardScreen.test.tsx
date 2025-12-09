@@ -521,6 +521,101 @@ describe('HomeDashboardScreen', () => {
     expect(screen.getByTestId('practice-goal-status')).toHaveTextContent("You're ahead of your goal");
   });
 
+  it('shows a weekly streak label when streak spans multiple weeks', async () => {
+    vi.mocked(practiceHistory.loadPracticeMissionHistory).mockResolvedValue([
+      {
+        id: 'c1',
+        missionId: 'm1',
+        startedAt: '2024-02-05T10:00:00Z',
+        status: 'completed',
+        targetClubs: [],
+        completedSampleCount: 10,
+      },
+      {
+        id: 'c2',
+        missionId: 'm2',
+        startedAt: '2024-02-06T10:00:00Z',
+        status: 'completed',
+        targetClubs: [],
+        completedSampleCount: 10,
+      },
+      {
+        id: 'c3',
+        missionId: 'm3',
+        startedAt: '2024-02-07T10:00:00Z',
+        status: 'completed',
+        targetClubs: [],
+        completedSampleCount: 10,
+      },
+      {
+        id: 'p1',
+        missionId: 'm4',
+        startedAt: '2024-01-30T10:00:00Z',
+        status: 'completed',
+        targetClubs: [],
+        completedSampleCount: 10,
+      },
+      {
+        id: 'p2',
+        missionId: 'm5',
+        startedAt: '2024-01-31T10:00:00Z',
+        status: 'completed',
+        targetClubs: [],
+        completedSampleCount: 10,
+      },
+      {
+        id: 'p3',
+        missionId: 'm6',
+        startedAt: '2024-02-01T10:00:00Z',
+        status: 'completed',
+        targetClubs: [],
+        completedSampleCount: 10,
+      },
+    ]);
+
+    const navigation = createNavigation();
+
+    render(<HomeDashboardScreen navigation={navigation} route={createRoute()} />);
+
+    expect(await screen.findByTestId('practice-goal-streak')).toHaveTextContent('2-week streak');
+  });
+
+  it('omits the weekly streak label when streak is shorter than two weeks', async () => {
+    vi.mocked(practiceHistory.loadPracticeMissionHistory).mockResolvedValue([
+      {
+        id: 'c1',
+        missionId: 'm1',
+        startedAt: '2024-02-05T10:00:00Z',
+        status: 'completed',
+        targetClubs: [],
+        completedSampleCount: 10,
+      },
+      {
+        id: 'c2',
+        missionId: 'm2',
+        startedAt: '2024-02-06T10:00:00Z',
+        status: 'completed',
+        targetClubs: [],
+        completedSampleCount: 10,
+      },
+      {
+        id: 'c3',
+        missionId: 'm3',
+        startedAt: '2024-02-07T10:00:00Z',
+        status: 'completed',
+        targetClubs: [],
+        completedSampleCount: 10,
+      },
+    ]);
+
+    const navigation = createNavigation();
+
+    render(<HomeDashboardScreen navigation={navigation} route={createRoute()} />);
+
+    await screen.findByTestId('practice-goal-summary');
+    expect(screen.queryByTestId('practice-goal-streak')).toBeNull();
+  });
+
   it('surfaces streak copy when streak is active', async () => {
     vi.mocked(practiceHistory.summarizeRecentPracticeHistory).mockReturnValue({
       totalSessions: 4,

@@ -22,7 +22,11 @@ import type { BagSuggestion } from "@shared/caddie/bagTuningSuggestions";
 import { useUnits } from "@/preferences/UnitsContext";
 import { formatBagSuggestion } from "@/bag/formatBagSuggestion";
 import { loadPracticeMissionHistory } from "@/practice/practiceMissionHistory";
-import { buildWeeklyPracticeGoalProgress, type PracticeGoalStatus } from "@shared/practice/practiceGoals";
+import {
+  buildWeeklyGoalStreak,
+  buildWeeklyPracticeGoalProgress,
+  type PracticeGoalStatus,
+} from "@shared/practice/practiceGoals";
 import type { PracticeMissionHistoryEntry } from "@shared/practice/practiceHistory";
 
 const Card: React.FC<{
@@ -154,14 +158,24 @@ export const HomeHubPage: React.FC = () => {
         : null,
     [bagReadiness.suggestions, clubLabels, t, unit],
   );
+  const practiceGoalNow = new Date(Date.now());
   const practiceGoalProgress = useMemo(
     () =>
       buildWeeklyPracticeGoalProgress({
         missionHistory: practiceHistory,
-        now: new Date(Date.now()),
+        now: practiceGoalNow,
       }),
-    [practiceHistory],
+    [practiceGoalNow, practiceHistory],
   );
+  const practiceGoalStreak = useMemo(
+    () => buildWeeklyGoalStreak(practiceHistory, practiceGoalNow),
+    [practiceGoalNow, practiceHistory],
+  );
+  const practiceGoalStreakLabel = useMemo(() => {
+    const streakWeeks = practiceGoalStreak.currentStreakWeeks;
+    if (streakWeeks < 2) return null;
+    return t("practice.goal.streak.label", { count: streakWeeks });
+  }, [practiceGoalStreak.currentStreakWeeks, t]);
   const practiceGoalCopy = useMemo(() => {
     if (!practiceGoalProgress) return { summary: null, statusLabel: null };
 
@@ -370,6 +384,11 @@ export const HomeHubPage: React.FC = () => {
                 </span>
               ) : null}
             </div>
+            {practiceGoalStreakLabel ? (
+              <div className="text-[11px] text-slate-400" data-testid="practice-goal-streak">
+                {practiceGoalStreakLabel}
+              </div>
+            ) : null}
           </div>
         </Card>
 

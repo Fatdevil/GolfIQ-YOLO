@@ -87,6 +87,7 @@ describe('practice mission history telemetry', () => {
       windowDays: 7,
       platform: 'mobile',
       source: 'practice_mission',
+      streak_weeks: 1,
     });
   });
 

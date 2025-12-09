@@ -58,6 +58,7 @@
   "practice.goals.status.catchUp": "Catch up",
   "practice.goal.status.goal_reached_title": "Weekly goal complete 🎉",
   "practice.goal.status.exceeded_title": "You're ahead of your goal",
+  "practice.goal.streak.label": "{{count}}-week streak",
   "practice.missions.title": "Practice missions",
   "practice.missions.cta.viewAll": "View all missions",
   "practice.missions.status.overdue": "High priority",
