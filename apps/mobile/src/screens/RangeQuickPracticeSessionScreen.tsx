@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, ScrollView, StyleSheet, Switch, Text, TouchableOpacity, View } from 'react-native';
 
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
+import { logQuickPracticeSessionComplete, logQuickPracticeSessionStart } from '@app/analytics/practiceQuick';
 import { analyzeRangeShot } from '@app/api/range';
 import type { RootStackParamList } from '@app/navigation/types';
 import LastShotCard, { classifyDirection } from '@app/range/LastShotCard';
@@ -77,7 +78,11 @@ export default function RangeQuickPracticeSessionScreen({ navigation, route }: P
   const [isTempoTrainerEnabled, setIsTempoTrainerEnabled] = useState(false);
   const [pendingTrainerResult, setPendingTrainerResult] = useState<TempoTrainerResultMessage | null>(null);
   const practiceRecommendation = route?.params?.practiceRecommendation;
+  const entrySource = route?.params?.entrySource ?? 'other';
+  const hasRecommendation = Boolean(practiceRecommendation);
+  const targetClubsCount = practiceRecommendation?.targetClubs?.length;
   const sessionStartedAtRef = useRef<string>(session?.startedAt ?? new Date().toISOString());
+  const hasLoggedStartRef = useRef(false);
   const angleLabel = useMemo(() => {
     if (sessionState?.cameraAngle === 'down_the_line') return 'DTL';
     if (sessionState?.cameraAngle === 'face_on') return 'Face-on';
@@ -113,6 +118,19 @@ export default function RangeQuickPracticeSessionScreen({ navigation, route }: P
     });
     return unsubscribe;
   }, [isTempoTrainerEnabled]);
+
+  useEffect(() => {
+    if (hasLoggedStartRef.current) return;
+    if (!sessionState) return;
+    if (route?.params?.missionId) return;
+    hasLoggedStartRef.current = true;
+    logQuickPracticeSessionStart({
+      surface: 'mobile',
+      entrySource,
+      hasRecommendation,
+      targetClubsCount,
+    });
+  }, [entrySource, hasRecommendation, route?.params?.missionId, sessionState, targetClubsCount]);
 
   if (!sessionState) {
     return (
@@ -239,6 +257,21 @@ export default function RangeQuickPracticeSessionScreen({ navigation, route }: P
     const missionMeta = missionId ? { id: missionId, titleKey: mission?.titleKey } : undefined;
 
     const summary = buildSummary(sessionState, goal?.text ?? undefined, missionMeta);
+
+    if (!missionId) {
+      const startedAtMs = sessionStartedAtRef.current ? Date.parse(sessionStartedAtRef.current) : NaN;
+      const durationSeconds = Number.isFinite(startedAtMs)
+        ? Math.max(0, Math.round((Date.now() - startedAtMs) / 1000))
+        : undefined;
+
+      logQuickPracticeSessionComplete({
+        surface: 'mobile',
+        entrySource,
+        hasRecommendation,
+        swingsCount: sessionState.shots.length,
+        durationSeconds,
+      });
+    }
 
     if (practiceRecommendation) {
       const shotsForTargets = sessionState.shots.filter(

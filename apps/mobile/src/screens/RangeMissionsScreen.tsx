@@ -109,7 +109,9 @@ export default function RangeMissionsScreen({ navigation }: Props): JSX.Element 
 
         <TouchableOpacity
           accessibilityLabel={t('range.missions.start_with_mission')}
-          onPress={() => navigation.navigate('RangeQuickPracticeStart', { missionId: mission.id })}
+          onPress={() =>
+            navigation.navigate('RangeQuickPracticeStart', { missionId: mission.id, entrySource: 'missions' })
+          }
           style={styles.startButton}
           testID={`start-mission-${mission.id}`}
         >

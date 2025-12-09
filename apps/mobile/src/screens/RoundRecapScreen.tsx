@@ -267,7 +267,10 @@ export default function RoundRecapScreen({ route, navigation }: Props): JSX.Elem
       return;
     }
 
-    navigation.navigate('RangeQuickPracticeStart', { practiceRecommendation: topPracticeRecommendation });
+    navigation.navigate('RangeQuickPracticeStart', {
+      practiceRecommendation: topPracticeRecommendation,
+      entrySource: 'recap',
+    });
   }, [navigation, topPracticeRecommendation]);
 
   const strokesInsight = useMemo(() => {

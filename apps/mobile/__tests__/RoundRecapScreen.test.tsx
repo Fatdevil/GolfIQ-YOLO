@@ -243,6 +243,7 @@ describe('RoundRecapScreen', () => {
     });
     expect(navigate).toHaveBeenCalledWith('RangeQuickPracticeStart', {
       practiceRecommendation: samplePracticeRecommendation,
+      entrySource: 'recap',
     });
   });
 
@@ -264,6 +265,7 @@ describe('RoundRecapScreen', () => {
     fireEvent.click(getByText(/Start mission/i));
     expect(navigate).toHaveBeenCalledWith('RangeQuickPracticeStart', {
       practiceRecommendation: samplePracticeRecommendation,
+      entrySource: 'recap',
     });
   });
 

@@ -131,6 +131,7 @@ export default function PracticeMissionDetailScreen({ navigation, route }: Props
     navigation.navigate('RangeQuickPracticeStart', {
       practiceRecommendation: repeatConfig,
       missionId: detail.missionKind === 'recommended' ? detail.missionId : undefined,
+      entrySource: 'missions',
     });
   };
 

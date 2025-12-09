@@ -209,7 +209,10 @@ export default function RangePracticeScreen({ navigation }: Props): JSX.Element 
           <TouchableOpacity
             accessibilityLabel={t('bag.practice.startCta')}
             onPress={() =>
-              navigation.navigate('RangeQuickPracticeStart', { practiceRecommendation })
+              navigation.navigate('RangeQuickPracticeStart', {
+                practiceRecommendation,
+                entrySource: 'range_home',
+              })
             }
             testID="range-recommendation-cta"
           >
@@ -228,7 +231,7 @@ export default function RangePracticeScreen({ navigation }: Props): JSX.Element 
         <Text style={styles.cardSubtitle}>Hit a bucket with feedback and shot tracking.</Text>
         <TouchableOpacity
           accessibilityLabel="Start quick practice"
-          onPress={() => navigation.navigate('RangeQuickPracticeStart')}
+          onPress={() => navigation.navigate('RangeQuickPracticeStart', { entrySource: 'range_home' })}
           testID="range-quick-practice-cta"
         >
           <View style={styles.primaryButton}>

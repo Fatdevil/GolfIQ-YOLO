@@ -177,7 +177,7 @@ export default function PracticeMissionsScreen({ navigation, route }: Props): JS
       return;
     }
 
-    navigation.navigate('RangeQuickPracticeStart', { missionId });
+    navigation.navigate('RangeQuickPracticeStart', { missionId, entrySource: 'missions' });
   };
 
   if (state.loading) {

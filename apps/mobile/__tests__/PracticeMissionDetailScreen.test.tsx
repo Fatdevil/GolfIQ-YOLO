@@ -96,6 +96,7 @@ describe('PracticeMissionDetailScreen', () => {
     expect(vi.mocked(navigation.navigate)).toHaveBeenCalledWith('RangeQuickPracticeStart', {
       practiceRecommendation: expect.objectContaining({ targetClubs: ['7i'], targetSampleCount: 16 }),
       missionId: 'practice_calibrate:7i',
+      entrySource: 'missions',
     });
   });
 });

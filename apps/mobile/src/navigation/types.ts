@@ -6,6 +6,8 @@ export type ClipCommentaryParams = {
   video_url?: string | null;
 };
 
+export type QuickPracticeEntrySource = 'range_home' | 'recap' | 'missions' | 'other';
+
 export type RootStackParamList = {
   Onboarding: undefined;
   DemoExperience: undefined;
@@ -27,6 +29,7 @@ export type RootStackParamList = {
     | {
         missionId?: string;
         practiceRecommendation?: import('@shared/caddie/bagPracticeRecommendations').BagPracticeRecommendation;
+        entrySource?: QuickPracticeEntrySource;
       }
     | undefined;
   RangeCameraSetup: {
@@ -35,11 +38,13 @@ export type RootStackParamList = {
     cameraAngle: import('@app/range/rangeSession').RangeCameraAngle;
     missionId?: string;
     practiceRecommendation?: import('@shared/caddie/bagPracticeRecommendations').BagPracticeRecommendation;
+    entrySource?: QuickPracticeEntrySource;
   };
   RangeQuickPracticeSession: {
     session: import('@app/range/rangeSession').RangeSession;
     missionId?: string;
     practiceRecommendation?: import('@shared/caddie/bagPracticeRecommendations').BagPracticeRecommendation;
+    entrySource?: QuickPracticeEntrySource;
   };
   RangeQuickPracticeSummary: { summary: import('@app/range/rangeSession').RangeSessionSummary };
   RangeHistory: undefined;
