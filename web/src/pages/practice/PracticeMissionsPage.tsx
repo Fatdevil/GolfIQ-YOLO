@@ -1,6 +1,6 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 
 import { fetchBagStats } from "@/api/bagStatsClient";
 import { mapBagStateToPlayerBag } from "@/bag/utils";
@@ -18,6 +18,7 @@ import {
 } from "@shared/practice/practiceMissionsList";
 import { buildBagReadinessOverview, type BagReadinessOverview } from "@shared/caddie/bagReadiness";
 import type { BagSuggestion } from "@shared/caddie/bagTuningSuggestions";
+import { trackPracticeMissionStart, trackPracticeMissionsViewed } from "@/practice/analytics";
 
 function formatDate(value: number | null, locale: string): string | null {
   if (!value) return null;
@@ -126,8 +127,18 @@ type PageState = {
 export default function PracticeMissionsPage(): JSX.Element {
   const { t } = useTranslation();
   const navigate = useNavigate();
+  const location = useLocation();
   const [bag] = useState<BagState>(() => loadBag());
   const [{ missions, history, loading }, setState] = useState<PageState>({ loading: true, missions: [], history: [] });
+  const viewedRef = useRef(false);
+
+  useEffect(() => {
+    if (viewedRef.current) return;
+    viewedRef.current = true;
+    const sourceParam = new URLSearchParams(location.search).get("source");
+    const source = sourceParam === "home_hub" ? "home_hub" : "other";
+    trackPracticeMissionsViewed({ surface: "web", source });
+  }, [location.search]);
 
   useEffect(() => {
     let cancelled = false;
@@ -183,6 +194,7 @@ export default function PracticeMissionsPage(): JSX.Element {
 
     const params = new URLSearchParams();
     params.set("missionId", missionId);
+    trackPracticeMissionStart({ missionId, sourceSurface: "missions_page" });
     navigate(`/range/practice?${params.toString()}`);
   };
 

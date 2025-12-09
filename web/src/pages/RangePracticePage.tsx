@@ -92,6 +92,7 @@ import { mapBagStateToPlayerBag } from "@/bag/utils";
 import { buildBagReadinessOverview } from "@shared/caddie/bagReadiness";
 import { type BagClubStatsMap } from "@shared/caddie/bagStats";
 import { buildBagPracticeRecommendations, type BagPracticeRecommendation } from "@shared/caddie/bagPracticeRecommendations";
+import { trackPracticeMissionStart } from "@/practice/analytics";
 
 const DEFAULT_ANALYZE_FRAMES = 8;
 const DEFAULT_REF_LEN_PX = 100;
@@ -206,6 +207,7 @@ export default function RangePracticePage() {
     null
   );
   const [missionId, setMissionId] = React.useState<MissionId | null>(null);
+  const lastStartedMissionId = React.useRef<string | null>(null);
   const [practiceHistory, setPracticeHistory] = React.useState<PracticeMissionHistoryEntry[]>([]);
   const [bingoCfg, setBingoCfg] = React.useState<ClassicTargetBingoConfig>({
     target_m: 150,
@@ -323,6 +325,13 @@ export default function RangePracticePage() {
       setMissionId(null);
     }
   }, [missionId, mission]);
+
+  React.useEffect(() => {
+    if (!missionId) return;
+    if (lastStartedMissionId.current === missionId) return;
+    lastStartedMissionId.current = missionId;
+    trackPracticeMissionStart({ missionId, sourceSurface: "range_practice" });
+  }, [missionId]);
 
   React.useEffect(() => {
     let cancelled = false;
