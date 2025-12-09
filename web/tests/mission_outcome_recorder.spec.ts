@@ -109,6 +109,7 @@ describe("practice mission outcome telemetry", () => {
         windowDays: 7,
         platform: "web",
         source: "practice_mission",
+        streak_weeks: 1,
       }),
     );
   });

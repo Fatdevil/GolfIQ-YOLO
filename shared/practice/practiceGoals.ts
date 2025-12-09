@@ -19,6 +19,14 @@ export type PracticeGoalProgress = {
   isOnTrack: boolean;
 };
 
+export type WeeklyGoalStreak = {
+  currentStreakWeeks: number;
+};
+
+function isGoalComplete(status: PracticeGoalStatus): boolean {
+  return status === 'goal_reached' || status === 'exceeded';
+}
+
 export function buildWeeklyPracticeGoalProgress(args: {
   missionHistory: PracticeMissionHistoryEntry[];
   now?: Date;
@@ -64,8 +72,34 @@ export function didJustReachWeeklyGoal(args: {
 }): boolean {
   const { before, after } = args;
 
-  const wasComplete = before.status === 'goal_reached' || before.status === 'exceeded';
-  const isComplete = after.status === 'goal_reached' || after.status === 'exceeded';
+  const wasComplete = isGoalComplete(before.status);
+  const isComplete = isGoalComplete(after.status);
 
   return !wasComplete && isComplete;
+}
+
+export function buildWeeklyGoalStreak(
+  history: PracticeMissionHistoryEntry[],
+  now: Date = new Date(),
+): WeeklyGoalStreak {
+  const windowMs = PRACTICE_GOAL_WINDOW_DAYS * 24 * 60 * 60 * 1000;
+
+  let currentStreakWeeks = 0;
+  let weekIndex = 0;
+
+  const maxWeeksToCheck = 520;
+
+  while (weekIndex < maxWeeksToCheck) {
+    const weekEnd = new Date(now.getTime() - weekIndex * windowMs);
+    const progress = buildWeeklyPracticeGoalProgress({ missionHistory: history, now: weekEnd });
+
+    if (!isGoalComplete(progress.status)) {
+      break;
+    }
+
+    currentStreakWeeks += 1;
+    weekIndex += 1;
+  }
+
+  return { currentStreakWeeks };
 }

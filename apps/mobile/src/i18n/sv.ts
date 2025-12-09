@@ -71,6 +71,7 @@ export const sv = {
       },
     },
   },
+  practice_goal_streak_label: '{{count}} veckors svit',
   bag: {
     practice: {
       recommendedTitle: 'Rekommenderad träning',

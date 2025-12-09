@@ -163,6 +163,7 @@ export const en = {
     shareErrorTitle: 'Unable to share',
     shareErrorBody: 'We could not open the share sheet right now.',
   },
+  practice_goal_streak_label: '{{count}}-week streak',
   coach_report_title: 'Coach Report',
   coach_report_headline_label: 'Coach headline',
   coach_report_focus_title: 'Coach focus',

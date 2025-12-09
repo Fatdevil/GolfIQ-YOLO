@@ -45,7 +45,11 @@ import type { BagSuggestion } from '@shared/caddie/bagTuningSuggestions';
 import { formatDistance } from '@app/utils/distance';
 import { buildPracticeProgressTileModel } from '@app/home/practiceProgressHelpers';
 import { getTopPracticeRecommendation, type BagPracticeRecommendation } from '@shared/caddie/bagPracticeRecommendations';
-import { buildWeeklyPracticeGoalProgress, type PracticeGoalStatus } from '@shared/practice/practiceGoals';
+import {
+  buildWeeklyGoalStreak,
+  buildWeeklyPracticeGoalProgress,
+  type PracticeGoalStatus,
+} from '@shared/practice/practiceGoals';
 
 const CALIBRATION_SAMPLE_THRESHOLD = 5;
 const TARGET_ROUNDS_PER_WEEK = 3;
@@ -233,10 +237,22 @@ export default function HomeDashboardScreen({ navigation }: Props): JSX.Element 
     [practiceOverview],
   );
 
+  const practiceGoalNow = new Date(Date.now());
   const practiceGoalProgress = useMemo(
-    () => buildWeeklyPracticeGoalProgress({ missionHistory: practiceHistory, now: new Date(Date.now()) }),
-    [practiceHistory],
+    () => buildWeeklyPracticeGoalProgress({ missionHistory: practiceHistory, now: practiceGoalNow }),
+    [practiceHistory, practiceGoalNow],
   );
+
+  const practiceGoalStreak = useMemo(
+    () => buildWeeklyGoalStreak(practiceHistory, practiceGoalNow),
+    [practiceHistory, practiceGoalNow],
+  );
+
+  const practiceGoalStreakLabel = useMemo(() => {
+    const streakWeeks = practiceGoalStreak.currentStreakWeeks;
+    if (streakWeeks < 2) return null;
+    return t('practice_goal_streak_label', { count: streakWeeks });
+  }, [practiceGoalStreak.currentStreakWeeks, t]);
 
   const practiceGoalCopy = useMemo(() => {
     const summary = practiceGoalProgress
@@ -784,6 +800,11 @@ export default function HomeDashboardScreen({ navigation }: Props): JSX.Element 
                   </View>
                 ) : null}
               </View>
+            ) : null}
+            {practiceGoalStreakLabel ? (
+              <Text style={styles.muted} testID="practice-goal-streak">
+                {practiceGoalStreakLabel}
+              </Text>
             ) : null}
           </View>
           <TouchableOpacity onPress={handleOpenPracticeProgress} testID="open-practice-progress">

@@ -9,6 +9,7 @@ export type PracticeGoalReachedEvent = {
   windowDays: number;
   platform: 'mobile' | 'web';
   source: 'practice_mission' | 'quick_practice' | 'round_recap';
+  streak_weeks?: number;
 };
 
 export function trackPracticeGoalReached(

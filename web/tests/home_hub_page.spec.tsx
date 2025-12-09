@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Mock } from "vitest";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 
 import { HomeHubPage } from "@/pages/home/HomeHubPage";
@@ -39,6 +39,7 @@ import {
   type OnboardingChecklist,
 } from "@/onboarding/checklist";
 import { seedDemoData } from "@/demo/demoData";
+import { buildWeeklyGoalStreak } from "@shared/practice/practiceGoals";
 
 const mockUseAccessPlan = useAccessPlan as unknown as Mock;
 const mockUseAccessFeatures = useAccessFeatures as unknown as Mock;
@@ -109,6 +110,7 @@ describe("HomeHubPage", () => {
   afterEach(() => {
     dateNowSpy?.mockRestore();
     vi.clearAllMocks();
+    cleanup();
   });
 
   it("renders home hub with entry cards and free plan badge", () => {
@@ -296,5 +298,137 @@ describe("HomeHubPage", () => {
 
     expect(summaries.length).toBeGreaterThan(0);
     expect(statuses.length).toBeGreaterThan(0);
+  });
+
+  it("shows a weekly streak label when consecutive weeks meet the goal", async () => {
+    mockLoadPracticeHistory.mockImplementation(async () => [
+      {
+        id: "c1",
+        missionId: "m1",
+        startedAt: "2024-02-05T10:00:00Z",
+        endedAt: "2024-02-05T10:20:00Z",
+        status: "completed",
+        targetClubs: [],
+        completedSampleCount: 10,
+      },
+      {
+        id: "c2",
+        missionId: "m2",
+        startedAt: "2024-02-06T10:00:00Z",
+        endedAt: "2024-02-06T10:20:00Z",
+        status: "completed",
+        targetClubs: [],
+        completedSampleCount: 10,
+      },
+      {
+        id: "c3",
+        missionId: "m3",
+        startedAt: "2024-02-07T10:00:00Z",
+        endedAt: "2024-02-07T10:20:00Z",
+        status: "completed",
+        targetClubs: [],
+        completedSampleCount: 10,
+      },
+      {
+        id: "p1",
+        missionId: "m4",
+        startedAt: "2024-01-30T10:00:00Z",
+        endedAt: "2024-01-30T10:20:00Z",
+        status: "completed",
+        targetClubs: [],
+        completedSampleCount: 10,
+      },
+      {
+        id: "p2",
+        missionId: "m5",
+        startedAt: "2024-01-31T10:00:00Z",
+        endedAt: "2024-01-31T10:20:00Z",
+        status: "completed",
+        targetClubs: [],
+        completedSampleCount: 10,
+      },
+      {
+        id: "p3",
+        missionId: "m6",
+        startedAt: "2024-02-01T10:00:00Z",
+        endedAt: "2024-02-01T10:20:00Z",
+        status: "completed",
+        targetClubs: [],
+        completedSampleCount: 10,
+      },
+    ]);
+
+    renderHome();
+
+    expect(await screen.findByText(/week streak/i)).toBeTruthy();
+  });
+
+  it("hides the streak label when the run is shorter than two weeks", async () => {
+    mockLoadPracticeHistory.mockImplementation(async () => [
+      {
+        id: "c1",
+        missionId: "m1",
+        startedAt: "2024-02-05T10:00:00Z",
+        endedAt: "2024-02-05T10:20:00Z",
+        status: "completed",
+        targetClubs: [],
+        completedSampleCount: 10,
+      },
+      {
+        id: "c2",
+        missionId: "m2",
+        startedAt: "2024-02-06T10:00:00Z",
+        endedAt: "2024-02-06T10:20:00Z",
+        status: "completed",
+        targetClubs: [],
+        completedSampleCount: 10,
+      },
+      {
+        id: "c3",
+        missionId: "m3",
+        startedAt: "2024-02-07T10:00:00Z",
+        endedAt: "2024-02-07T10:20:00Z",
+        status: "completed",
+        targetClubs: [],
+        completedSampleCount: 10,
+      },
+    ]);
+
+    renderHome();
+
+    const loadedHistory = await mockLoadPracticeHistory.mock.results[0].value;
+    expect(loadedHistory).toEqual([
+      {
+        id: "c1",
+        missionId: "m1",
+        startedAt: "2024-02-05T10:00:00Z",
+        endedAt: "2024-02-05T10:20:00Z",
+        status: "completed",
+        targetClubs: [],
+        completedSampleCount: 10,
+      },
+      {
+        id: "c2",
+        missionId: "m2",
+        startedAt: "2024-02-06T10:00:00Z",
+        endedAt: "2024-02-06T10:20:00Z",
+        status: "completed",
+        targetClubs: [],
+        completedSampleCount: 10,
+      },
+      {
+        id: "c3",
+        missionId: "m3",
+        startedAt: "2024-02-07T10:00:00Z",
+        endedAt: "2024-02-07T10:20:00Z",
+        status: "completed",
+        targetClubs: [],
+        completedSampleCount: 10,
+      },
+    ]);
+    expect(buildWeeklyGoalStreak(loadedHistory, new Date(Date.now())).currentStreakWeeks).toBe(1);
+
+    await screen.findAllByTestId("practice-goal-summary");
+    expect(screen.queryByText(/week streak/i)).toBeNull();
   });
 });
