@@ -166,12 +166,52 @@ describe('RangeQuickPracticeSessionScreen', () => {
 
     await vi.runAllTimersAsync();
 
+    expect(logQuickPracticeSessionStart).toHaveBeenCalledTimes(1);
     expect(logQuickPracticeSessionComplete).toHaveBeenCalledWith(
       expect.objectContaining({
         surface: 'mobile',
         entrySource: 'range_home',
         hasRecommendation: false,
         swingsCount: 2,
+      }),
+    );
+
+    vi.useRealTimers();
+  });
+
+  it('logs quick practice analytics when a pinned mission exists without route missionId', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2024-01-01T00:10:00.000Z'));
+    const navigation = createNavigation();
+    const session: RangeSession = {
+      id: 'session-pinned-1',
+      mode: 'quick',
+      startedAt: '2024-01-01T00:00:00.000Z',
+      club: '7i',
+      targetDistanceM: 150,
+      cameraAngle: 'face_on',
+      shots: [
+        { id: 'shot-1', timestamp: '2024-01-01T00:05:00.000Z', club: '7i', targetDistanceM: 150 },
+      ],
+    } as any;
+
+    vi.mocked(missionStorage.loadRangeMissionState).mockResolvedValue({
+      completedMissionIds: [],
+      pinnedMissionId: 'mission-pinned',
+    });
+
+    render(<RangeQuickPracticeSessionScreen navigation={navigation} route={createRoute(session)} />);
+
+    fireEvent.click(screen.getByTestId('end-session'));
+
+    await vi.runAllTimersAsync();
+
+    expect(logQuickPracticeSessionStart).toHaveBeenCalledTimes(1);
+    expect(logQuickPracticeSessionComplete).toHaveBeenCalledWith(
+      expect.objectContaining({
+        surface: 'mobile',
+        hasRecommendation: false,
+        swingsCount: 1,
       }),
     );
 

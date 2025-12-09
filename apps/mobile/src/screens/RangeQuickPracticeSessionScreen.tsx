@@ -81,6 +81,7 @@ export default function RangeQuickPracticeSessionScreen({ navigation, route }: P
   const entrySource = route?.params?.entrySource ?? 'other';
   const hasRecommendation = Boolean(practiceRecommendation);
   const targetClubsCount = practiceRecommendation?.targetClubs?.length;
+  const isMissionSession = !!route?.params?.missionId;
   const sessionStartedAtRef = useRef<string>(session?.startedAt ?? new Date().toISOString());
   const hasLoggedStartRef = useRef(false);
   const angleLabel = useMemo(() => {
@@ -122,7 +123,7 @@ export default function RangeQuickPracticeSessionScreen({ navigation, route }: P
   useEffect(() => {
     if (hasLoggedStartRef.current) return;
     if (!sessionState) return;
-    if (route?.params?.missionId) return;
+    if (isMissionSession) return;
     hasLoggedStartRef.current = true;
     logQuickPracticeSessionStart({
       surface: 'mobile',
@@ -130,7 +131,7 @@ export default function RangeQuickPracticeSessionScreen({ navigation, route }: P
       hasRecommendation,
       targetClubsCount,
     });
-  }, [entrySource, hasRecommendation, route?.params?.missionId, sessionState, targetClubsCount]);
+  }, [entrySource, hasRecommendation, isMissionSession, sessionState, targetClubsCount]);
 
   if (!sessionState) {
     return (
@@ -258,7 +259,7 @@ export default function RangeQuickPracticeSessionScreen({ navigation, route }: P
 
     const summary = buildSummary(sessionState, goal?.text ?? undefined, missionMeta);
 
-    if (!missionId) {
+    if (!isMissionSession) {
       const startedAtMs = sessionStartedAtRef.current ? Date.parse(sessionStartedAtRef.current) : NaN;
       const durationSeconds = Number.isFinite(startedAtMs)
         ? Math.max(0, Math.round((Date.now() - startedAtMs) / 1000))
