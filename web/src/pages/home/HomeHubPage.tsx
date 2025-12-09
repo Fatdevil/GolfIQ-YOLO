@@ -283,6 +283,13 @@ export const HomeHubPage: React.FC = () => {
                 <GhostMatchBadge />
               </div>
               <Link
+                to="/practice/missions"
+                className="text-emerald-200 underline-offset-2 hover:text-emerald-100 hover:underline"
+                data-testid="home-practice-missions-link"
+              >
+                {t("practice.missions.cta.viewAll")}
+              </Link>
+              <Link
                 to="/practice/history"
                 className="text-emerald-200 underline-offset-2 hover:text-emerald-100 hover:underline"
                 data-testid="home-practice-history-link"
