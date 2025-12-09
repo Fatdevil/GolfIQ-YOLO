@@ -25,6 +25,7 @@ import TripsScreen from '@app/screens/TripsScreen';
 import CaddieApproachScreen from '@app/screens/CaddieApproachScreen';
 import CaddieSetupScreen from '@app/screens/CaddieSetupScreen';
 import PracticeHistoryScreen from '@app/screens/PracticeHistoryScreen';
+import PracticeMissionsScreen from '@app/screens/PracticeMissionsScreen';
 import PracticeMissionDetailScreen from '@app/screens/PracticeMissionDetailScreen';
 import RoundHistoryScreen from '@app/screens/RoundHistoryScreen';
 import PlayerStatsScreen from '@app/screens/PlayerStatsScreen';
@@ -155,6 +156,11 @@ export default function App(): JSX.Element {
           name="PracticePlanner"
           component={PracticePlannerScreen}
           options={{ title: t('practice_planner_title') }}
+        />
+        <Stack.Screen
+          name="PracticeMissions"
+          component={PracticeMissionsScreen}
+          options={{ title: t('practice.missions.title') }}
         />
         <Stack.Screen
           name="PracticeHistory"

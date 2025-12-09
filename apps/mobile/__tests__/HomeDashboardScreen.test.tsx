@@ -174,6 +174,19 @@ describe('HomeDashboardScreen', () => {
     });
   });
 
+  it('links to practice missions from the home practice card', async () => {
+    const navigation = createNavigation();
+
+    render(<HomeDashboardScreen navigation={navigation} route={createRoute()} />);
+
+    const cta = await screen.findByTestId('open-practice-missions');
+    fireEvent.click(cta);
+
+    await waitFor(() => {
+      expect(navigation.navigate).toHaveBeenCalledWith('PracticeMissions');
+    });
+  });
+
   it('surfaces next practice mission and routes to quick start', async () => {
     const navigation = createNavigation();
     const recommendation: bagPracticeRecommendations.BagPracticeRecommendation = {

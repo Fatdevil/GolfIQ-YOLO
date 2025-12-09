@@ -73,6 +73,7 @@ export type RootStackParamList = {
         focusDrillIds?: string[];
       }
     | undefined;
+  PracticeMissions: undefined;
   PracticeHistory: undefined;
   PracticeMissionDetail: { entryId: string };
   EventJoin: { code?: string } | undefined;
