@@ -27,10 +27,7 @@ import {
 import type { PlayerBag } from '@shared/caddie/playerBag';
 import type { BagClubStatsMap } from '@shared/caddie/bagStats';
 import { formatBagSuggestion } from '@app/caddie/formatBagSuggestion';
-import {
-  PRACTICE_MISSION_WINDOW_DAYS,
-  loadPracticeMissionHistory,
-} from '@app/storage/practiceMissionHistory';
+import { loadPracticeMissionHistory } from '@app/storage/practiceMissionHistory';
 import type { PracticeMissionHistoryEntry } from '@shared/practice/practiceHistory';
 import {
   getTopPracticeRecommendationForRecap,
@@ -149,7 +146,7 @@ export default function RoundRecapScreen({ route, navigation }: Props): JSX.Elem
     if (isDemo) return;
     let cancelled = false;
 
-    loadPracticeMissionHistory({ daysBack: PRACTICE_MISSION_WINDOW_DAYS })
+    loadPracticeMissionHistory()
       .then((history) => {
         if (!cancelled) {
           setPracticeHistory(history ?? []);
