@@ -45,6 +45,7 @@ import type { BagSuggestion } from '@shared/caddie/bagTuningSuggestions';
 import { formatDistance } from '@app/utils/distance';
 import { buildPracticeProgressTileModel } from '@app/home/practiceProgressHelpers';
 import { getTopPracticeRecommendation, type BagPracticeRecommendation } from '@shared/caddie/bagPracticeRecommendations';
+import { buildWeeklyPracticeGoalProgress } from '@shared/practice/practiceGoals';
 
 const CALIBRATION_SAMPLE_THRESHOLD = 5;
 const TARGET_ROUNDS_PER_WEEK = 3;
@@ -231,6 +232,27 @@ export default function HomeDashboardScreen({ navigation }: Props): JSX.Element 
     () => buildPracticeProgressTileModel(practiceOverview),
     [practiceOverview],
   );
+
+  const practiceGoalProgress = useMemo(
+    () => buildWeeklyPracticeGoalProgress({ missionHistory: practiceHistory, now: new Date(Date.now()) }),
+    [practiceHistory],
+  );
+
+  const practiceGoalSummary = useMemo(() => {
+    if (!practiceGoalProgress) return null;
+    if (practiceHistory.length === 0) return t('practice.goals.emptyPrompt');
+    return t('practice.goals.summary', {
+      completed: practiceGoalProgress.completedInWindow,
+      target: practiceGoalProgress.targetCompletions,
+    });
+  }, [practiceGoalProgress, practiceHistory.length]);
+
+  const practiceGoalStatusLabel = useMemo(() => {
+    if (!practiceGoalProgress || practiceHistory.length === 0) return null;
+    return practiceGoalProgress.isOnTrack
+      ? t('practice.goals.status.onTrack')
+      : t('practice.goals.status.catchUp');
+  }, [practiceGoalProgress, practiceHistory.length]);
 
   const clubLabels = useMemo(() => {
     const labels: Record<string, string> = {};
@@ -724,6 +746,31 @@ export default function HomeDashboardScreen({ navigation }: Props): JSX.Element 
             <Text style={styles.muted} testID="practice-progress-subtitle">
               {t(practiceProgressModel.subtitleKey, practiceProgressModel.subtitleParams)}
             </Text>
+            {practiceGoalSummary ? (
+              <View style={[styles.rowSpaceBetween, styles.goalRow]}>
+                <Text style={styles.cardBody} testID="practice-goal-summary">
+                  {practiceGoalSummary}
+                </Text>
+                {practiceGoalStatusLabel ? (
+                  <View
+                    style={[
+                      styles.goalPill,
+                      practiceGoalProgress?.isOnTrack ? styles.goalPillOnTrack : styles.goalPillCatchUp,
+                    ]}
+                    testID="practice-goal-status"
+                  >
+                    <Text
+                      style={[
+                        styles.goalPillText,
+                        practiceGoalProgress?.isOnTrack ? styles.goalPillTextOnTrack : styles.goalPillTextCatchUp,
+                      ]}
+                    >
+                      {practiceGoalStatusLabel}
+                    </Text>
+                  </View>
+                ) : null}
+              </View>
+            ) : null}
           </View>
           <TouchableOpacity onPress={handleOpenPracticeProgress} testID="open-practice-progress">
             <Text style={styles.link}>{t('practice.progress.cta')}</Text>
@@ -934,5 +981,30 @@ const styles = StyleSheet.create({
   progressFill: {
     height: '100%',
     backgroundColor: '#22c55e',
+  },
+  goalRow: {
+    alignItems: 'center',
+    marginTop: 2,
+  },
+  goalPill: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 999,
+  },
+  goalPillOnTrack: {
+    backgroundColor: '#ecfdf3',
+  },
+  goalPillCatchUp: {
+    backgroundColor: '#fff7ed',
+  },
+  goalPillText: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  goalPillTextOnTrack: {
+    color: '#166534',
+  },
+  goalPillTextCatchUp: {
+    color: '#9a3412',
   },
 });

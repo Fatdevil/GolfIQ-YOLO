@@ -116,6 +116,14 @@ export const en = {
         body: 'Complete a few rounds or range sessions and we’ll build a tailored mission program for you.',
       },
     },
+    goals: {
+      summary: '{{completed}}/{{target}} missions this week',
+      emptyPrompt: 'Start your first practice mission this week.',
+      status: {
+        onTrack: 'On track',
+        catchUp: 'Catch up',
+      },
+    },
   },
   weeklySummary: {
     title: 'Weekly Summary',

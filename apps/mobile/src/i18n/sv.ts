@@ -56,6 +56,14 @@ export const sv = {
         body: 'Spela några rundor eller rangepass så bygger vi ett anpassat träningsprogram åt dig.',
       },
     },
+    goals: {
+      summary: '{{completed}}/{{target}} missions den här veckan',
+      emptyPrompt: 'Starta ditt första träningsmission den här veckan.',
+      status: {
+        onTrack: 'På rätt spår',
+        catchUp: 'Kom ikapp',
+      },
+    },
   },
   bag: {
     practice: {

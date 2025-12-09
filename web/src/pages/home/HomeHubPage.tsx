@@ -21,6 +21,9 @@ import type { BagClubStatsMap } from "@shared/caddie/bagStats";
 import type { BagSuggestion } from "@shared/caddie/bagTuningSuggestions";
 import { useUnits } from "@/preferences/UnitsContext";
 import { formatBagSuggestion } from "@/bag/formatBagSuggestion";
+import { loadPracticeMissionHistory } from "@/practice/practiceMissionHistory";
+import { buildWeeklyPracticeGoalProgress } from "@shared/practice/practiceGoals";
+import type { PracticeMissionHistoryEntry } from "@shared/practice/practiceHistory";
 
 const Card: React.FC<{
   title: string;
@@ -76,6 +79,9 @@ export const HomeHubPage: React.FC = () => {
   );
   const [bagStats, setBagStats] = useState<BagClubStatsMap | null>(null);
   const [bagStatsLoading, setBagStatsLoading] = useState(false);
+  const [practiceHistory, setPracticeHistory] = useState<
+    PracticeMissionHistoryEntry[]
+  >([]);
 
   useEffect(() => {
     markHomeSeen();
@@ -113,6 +119,22 @@ export const HomeHubPage: React.FC = () => {
     };
   }, []);
 
+  useEffect(() => {
+    let cancelled = false;
+
+    loadPracticeMissionHistory()
+      .then((history) => {
+        if (!cancelled) setPracticeHistory(history);
+      })
+      .catch(() => {
+        if (!cancelled) setPracticeHistory([]);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const playerBag = useMemo(() => mapBagStateToPlayerBag(bag), [bag]);
   const bagReadiness = useMemo(
     () => buildBagReadinessOverview(playerBag, bagStats ?? {}),
@@ -132,6 +154,28 @@ export const HomeHubPage: React.FC = () => {
         : null,
     [bagReadiness.suggestions, clubLabels, t, unit],
   );
+  const practiceGoalProgress = useMemo(
+    () =>
+      buildWeeklyPracticeGoalProgress({
+        missionHistory: practiceHistory,
+        now: new Date(Date.now()),
+      }),
+    [practiceHistory],
+  );
+  const practiceGoalSummary = useMemo(() => {
+    if (!practiceGoalProgress) return null;
+    if (practiceHistory.length === 0) return t("practice.goals.emptyPrompt");
+    return t("practice.goals.summary", {
+      completed: practiceGoalProgress.completedInWindow,
+      target: practiceGoalProgress.targetCompletions,
+    });
+  }, [practiceGoalProgress, practiceHistory.length, t]);
+  const practiceGoalStatusLabel = useMemo(() => {
+    if (!practiceGoalProgress || practiceHistory.length === 0) return null;
+    return practiceGoalProgress.isOnTrack
+      ? t("practice.goals.status.onTrack")
+      : t("practice.goals.status.catchUp");
+  }, [practiceGoalProgress, practiceHistory.length, t]);
 
   const effectivePlan = plan === "pro" ? "PRO" : "FREE";
 
@@ -298,7 +342,29 @@ export const HomeHubPage: React.FC = () => {
               </Link>
             </div>
           }
-        />
+        >
+          <div className="space-y-2 text-sm text-slate-200">
+            <div
+              className="flex items-center justify-between gap-3"
+              data-testid="practice-goal-row"
+            >
+              <div data-testid="practice-goal-summary">{practiceGoalSummary ?? ""}</div>
+              {practiceGoalStatusLabel ? (
+                <span
+                  className={
+                    "inline-flex items-center rounded-full px-3 py-1 text-[11px] font-semibold " +
+                    (practiceGoalProgress.isOnTrack
+                      ? "bg-emerald-500/10 text-emerald-200"
+                      : "bg-amber-500/10 text-amber-200")
+                  }
+                  data-testid="practice-goal-status"
+                >
+                  {practiceGoalStatusLabel}
+                </span>
+              ) : null}
+            </div>
+          </div>
+        </Card>
 
         <Card
           title={t("home.profile.title")}
