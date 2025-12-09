@@ -1,7 +1,7 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import React from 'react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import * as bagClient from '@app/api/bagClient';
 import * as bagStatsClient from '@app/api/bagStatsClient';
@@ -57,6 +57,7 @@ const mockBagStats: BagClubStatsMap = {
   '7i': { clubId: '7i', meanDistanceM: 150, sampleCount: 6 },
   '5w': { clubId: '5w', meanDistanceM: 190, sampleCount: 2 },
 };
+let dateNowSpy: ReturnType<typeof vi.spyOn>;
 
 function createNavigation(): Navigation {
   return {
@@ -93,6 +94,9 @@ vi.mock('@shared/caddie/bagPracticeRecommendations', () => ({
 
 describe('HomeDashboardScreen', () => {
   beforeEach(() => {
+    dateNowSpy = vi
+      .spyOn(Date, 'now')
+      .mockReturnValue(new Date('2024-02-08T12:00:00Z').getTime());
     vi.clearAllMocks();
     vi.mocked(playerApi.fetchPlayerProfile).mockResolvedValue(mockProfile);
     vi.mocked(roundClient.fetchCurrentRound).mockResolvedValue(null);
@@ -112,6 +116,11 @@ describe('HomeDashboardScreen', () => {
       lastStarted: undefined,
     });
     vi.mocked(bagPracticeRecommendations.getTopPracticeRecommendation).mockReturnValue(null);
+  });
+
+  afterEach(() => {
+    dateNowSpy?.mockRestore();
+    vi.clearAllMocks();
   });
 
   it('renders active round CTA and resumes on tap', async () => {
@@ -348,6 +357,17 @@ describe('HomeDashboardScreen', () => {
     );
   });
 
+  it('shows weekly practice goal encouragement when no missions exist', async () => {
+    const navigation = createNavigation();
+
+    render(<HomeDashboardScreen navigation={navigation} route={createRoute()} />);
+
+    expect(await screen.findByTestId('practice-goal-summary')).toHaveTextContent(
+      'Start your first practice mission this week.',
+    );
+    expect(screen.queryByTestId('practice-goal-status')).toBeNull();
+  });
+
   it('surfaces completed missions count in practice progress tile', async () => {
     vi.mocked(practiceHistory.summarizeRecentPracticeHistory).mockReturnValue({
       totalSessions: 3,
@@ -364,6 +384,87 @@ describe('HomeDashboardScreen', () => {
     expect(screen.getByTestId('practice-progress-summary')).toHaveTextContent(
       'Completed 2 of 3 recommended sessions',
     );
+  });
+
+  it('shows catch up status when behind weekly practice goal', async () => {
+    const navigation = createNavigation();
+    vi.mocked(practiceHistory.loadPracticeMissionHistory).mockResolvedValue([
+      {
+        id: 'e1',
+        missionId: 'm1',
+        startedAt: '2024-02-05T10:00:00Z',
+        endedAt: '2024-02-05T10:30:00Z',
+        status: 'completed',
+        targetClubs: [],
+        completedSampleCount: 10,
+      },
+      {
+        id: 'e2',
+        missionId: 'm2',
+        startedAt: '2024-02-07T10:00:00Z',
+        endedAt: '2024-02-07T10:30:00Z',
+        status: 'completed',
+        targetClubs: [],
+        completedSampleCount: 10,
+      },
+    ]);
+    vi.mocked(practiceHistory.summarizeRecentPracticeHistory).mockReturnValue({
+      totalSessions: 2,
+      completedSessions: 2,
+      windowDays: 14,
+      lastCompleted: undefined,
+      lastStarted: undefined,
+    });
+
+    render(<HomeDashboardScreen navigation={navigation} route={createRoute()} />);
+
+    expect(await screen.findByTestId('practice-goal-summary')).toHaveTextContent('2/3 missions this week');
+    expect(screen.getByTestId('practice-goal-status')).toHaveTextContent('Catch up');
+  });
+
+  it('shows on-track status when weekly practice goal is met', async () => {
+    const navigation = createNavigation();
+    vi.mocked(practiceHistory.loadPracticeMissionHistory).mockResolvedValue([
+      {
+        id: 'e1',
+        missionId: 'm1',
+        startedAt: '2024-02-04T10:00:00Z',
+        endedAt: '2024-02-04T10:30:00Z',
+        status: 'completed',
+        targetClubs: [],
+        completedSampleCount: 10,
+      },
+      {
+        id: 'e2',
+        missionId: 'm2',
+        startedAt: '2024-02-06T10:00:00Z',
+        endedAt: '2024-02-06T10:30:00Z',
+        status: 'completed',
+        targetClubs: [],
+        completedSampleCount: 10,
+      },
+      {
+        id: 'e3',
+        missionId: 'm3',
+        startedAt: '2024-02-07T10:00:00Z',
+        endedAt: '2024-02-07T10:30:00Z',
+        status: 'completed',
+        targetClubs: [],
+        completedSampleCount: 10,
+      },
+    ]);
+    vi.mocked(practiceHistory.summarizeRecentPracticeHistory).mockReturnValue({
+      totalSessions: 3,
+      completedSessions: 3,
+      windowDays: 14,
+      lastCompleted: undefined,
+      lastStarted: undefined,
+    });
+
+    render(<HomeDashboardScreen navigation={navigation} route={createRoute()} />);
+
+    expect(await screen.findByTestId('practice-goal-summary')).toHaveTextContent('3/3 missions this week');
+    expect(screen.getByTestId('practice-goal-status')).toHaveTextContent('On track');
   });
 
   it('surfaces streak copy when streak is active', async () => {
