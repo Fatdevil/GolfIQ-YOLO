@@ -34,6 +34,7 @@ import {
   summarizeRecentPracticeHistory,
   type PracticeProgressOverview,
 } from '@app/storage/practiceMissionHistory';
+import { loadWeeklyPracticeGoalSettings } from '@app/storage/practiceGoalSettings';
 import { safeEmit } from '@app/telemetry';
 import { buildMissionProgressById, type PracticeMissionHistoryEntry } from '@shared/practice/practiceHistory';
 import { useGeolocation } from '@app/hooks/useGeolocation';
@@ -57,6 +58,7 @@ import {
   type PracticeMissionListItem,
 } from '@shared/practice/practiceMissionsList';
 import { buildWeeklyPracticePlanHomeSummary } from '@shared/practice/practicePlan';
+import { getDefaultWeeklyPracticeGoalSettings } from '@shared/practice/practiceGoalSettings';
 
 const CALIBRATION_SAMPLE_THRESHOLD = 5;
 const TARGET_ROUNDS_PER_WEEK = 3;
@@ -196,6 +198,9 @@ export default function HomeDashboardScreen({ navigation }: Props): JSX.Element 
   const [quickStarting, setQuickStarting] = useState(false);
   const [practiceOverview, setPracticeOverview] = useState<PracticeProgressOverview | null>(null);
   const [practiceHistory, setPracticeHistory] = useState<PracticeMissionHistoryEntry[]>([]);
+  const [weeklyGoalSettings, setWeeklyGoalSettings] = useState(
+    getDefaultWeeklyPracticeGoalSettings(),
+  );
   const planCompletedViewedRef = useRef(false);
   const geo = useGeolocation();
 
@@ -262,10 +267,17 @@ export default function HomeDashboardScreen({ navigation }: Props): JSX.Element 
 
     const loadPracticeHistory = async () => {
       try {
-        const history = await loadPracticeMissionHistory();
+        const [history, settings] = await Promise.all([
+          loadPracticeMissionHistory(),
+          loadWeeklyPracticeGoalSettings().catch((err) => {
+            console.warn('[home] Failed to load weekly goal settings', err);
+            return getDefaultWeeklyPracticeGoalSettings();
+          }),
+        ]);
         if (cancelled) return;
         setPracticeOverview(summarizeRecentPracticeHistory(history, new Date()));
         setPracticeHistory(history);
+        setWeeklyGoalSettings(settings ?? getDefaultWeeklyPracticeGoalSettings());
       } catch (err) {
         if (!cancelled) {
           console.warn('Home dashboard practice history load failed', err);
@@ -275,6 +287,7 @@ export default function HomeDashboardScreen({ navigation }: Props): JSX.Element 
             windowDays: PRACTICE_MISSION_WINDOW_DAYS,
           });
           setPracticeHistory([]);
+          setWeeklyGoalSettings(getDefaultWeeklyPracticeGoalSettings());
         }
       }
     };
@@ -295,13 +308,18 @@ export default function HomeDashboardScreen({ navigation }: Props): JSX.Element 
 
   const practiceGoalNow = new Date(Date.now());
   const practiceGoalProgress = useMemo(
-    () => buildWeeklyPracticeGoalProgress({ missionHistory: practiceHistory, now: practiceGoalNow }),
-    [practiceHistory, practiceGoalNow],
+    () =>
+      buildWeeklyPracticeGoalProgress({
+        missionHistory: practiceHistory,
+        now: practiceGoalNow,
+        targetMissionsPerWeek: weeklyGoalSettings.targetMissionsPerWeek,
+      }),
+    [practiceHistory, practiceGoalNow, weeklyGoalSettings.targetMissionsPerWeek],
   );
 
   const practiceGoalStreak = useMemo(
-    () => buildWeeklyGoalStreak(practiceHistory, practiceGoalNow),
-    [practiceHistory, practiceGoalNow],
+    () => buildWeeklyGoalStreak(practiceHistory, practiceGoalNow, weeklyGoalSettings.targetMissionsPerWeek),
+    [practiceGoalNow, practiceHistory, weeklyGoalSettings.targetMissionsPerWeek],
   );
 
   const practiceGoalStreakLabel = useMemo(() => {
@@ -376,8 +394,9 @@ export default function HomeDashboardScreen({ navigation }: Props): JSX.Element 
         missions: practiceMissions,
         history: practiceHistory,
         now: practiceGoalNow,
+        targetMissionsPerWeek: weeklyGoalSettings.targetMissionsPerWeek,
       }),
-    [practiceGoalNow, practiceHistory, practiceMissions],
+    [practiceGoalNow, practiceHistory, practiceMissions, weeklyGoalSettings.targetMissionsPerWeek],
   );
 
   const practicePlanCopy = useMemo(() => {
@@ -906,6 +925,12 @@ export default function HomeDashboardScreen({ navigation }: Props): JSX.Element 
                 ) : null}
               </View>
             ) : null}
+            <TouchableOpacity
+              onPress={() => navigation.navigate('WeeklyPracticeGoalSettings')}
+              testID="edit-practice-goal"
+            >
+              <Text style={styles.link}>{t('practice.goal.settings.edit')}</Text>
+            </TouchableOpacity>
             {practiceGoalStreakLabel ? (
               <Text style={styles.muted} testID="practice-goal-streak">
                 {practiceGoalStreakLabel}

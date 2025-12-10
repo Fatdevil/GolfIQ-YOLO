@@ -15,6 +15,8 @@ import {
   didJustReachWeeklyGoal,
 } from '@shared/practice/practiceGoals';
 import { trackPracticeGoalReached } from '@shared/practice/practiceGoalAnalytics';
+import { getDefaultWeeklyPracticeGoalSettings } from '@shared/practice/practiceGoalSettings';
+import { loadWeeklyPracticeGoalSettings } from './practiceGoalSettings';
 
 export type PracticeProgressOverview = {
   totalSessions: number;
@@ -56,9 +58,16 @@ export async function recordPracticeMissionOutcome(
   outcome: PracticeMissionOutcome,
   options?: { source?: 'practice_mission' | 'quick_practice' | 'round_recap' },
 ): Promise<PracticeMissionHistoryEntry[]> {
-  const history = await loadPracticeMissionHistory();
+  const [history, weeklyGoalSettings] = await Promise.all([
+    loadPracticeMissionHistory(),
+    loadWeeklyPracticeGoalSettings().catch(() => getDefaultWeeklyPracticeGoalSettings()),
+  ]);
   const now = new Date(Date.now());
-  const goalBefore = buildWeeklyPracticeGoalProgress({ missionHistory: history, now });
+  const goalBefore = buildWeeklyPracticeGoalProgress({
+    missionHistory: history,
+    now,
+    targetMissionsPerWeek: weeklyGoalSettings.targetMissionsPerWeek,
+  });
   const next = recordMissionOutcome(history, outcome);
   if (next !== history) {
     await persistHistory(next);
@@ -69,9 +78,17 @@ export async function recordPracticeMissionOutcome(
         samplesCount: latestEntry.completedSampleCount,
       });
 
-      const goalAfter = buildWeeklyPracticeGoalProgress({ missionHistory: next, now });
+      const goalAfter = buildWeeklyPracticeGoalProgress({
+        missionHistory: next,
+        now,
+        targetMissionsPerWeek: weeklyGoalSettings.targetMissionsPerWeek,
+      });
       if (didJustReachWeeklyGoal({ before: goalBefore, after: goalAfter })) {
-        const streak = buildWeeklyGoalStreak(next, now);
+        const streak = buildWeeklyGoalStreak(
+          next,
+          now,
+          weeklyGoalSettings.targetMissionsPerWeek,
+        );
         trackPracticeGoalReached(
           { emit: safeEmit },
           {

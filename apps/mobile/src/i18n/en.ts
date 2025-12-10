@@ -132,6 +132,12 @@ export const en = {
         goal_reached_title: 'Weekly goal complete 🎉',
         exceeded_title: "You're ahead of your goal",
       },
+      settings: {
+        title: 'Weekly practice goal',
+        subtitle: 'Choose how many practice missions you aim to finish each week.',
+        optionLabel: '{{count}} missions per week',
+        edit: 'Edit goal',
+      },
     },
   },
   weeklySummary: {

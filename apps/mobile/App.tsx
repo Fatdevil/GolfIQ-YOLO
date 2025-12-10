@@ -27,6 +27,7 @@ import CaddieSetupScreen from '@app/screens/CaddieSetupScreen';
 import PracticeHistoryScreen from '@app/screens/PracticeHistoryScreen';
 import PracticeMissionsScreen from '@app/screens/PracticeMissionsScreen';
 import PracticeMissionDetailScreen from '@app/screens/PracticeMissionDetailScreen';
+import WeeklyPracticeGoalSettingsScreen from '@app/screens/WeeklyPracticeGoalSettingsScreen';
 import RoundHistoryScreen from '@app/screens/RoundHistoryScreen';
 import PlayerStatsScreen from '@app/screens/PlayerStatsScreen';
 import CategoryStatsScreen from '@app/screens/CategoryStatsScreen';
@@ -161,6 +162,11 @@ export default function App(): JSX.Element {
           name="PracticeMissions"
           component={PracticeMissionsScreen}
           options={{ title: t('practice.missions.title') }}
+        />
+        <Stack.Screen
+          name="WeeklyPracticeGoalSettings"
+          component={WeeklyPracticeGoalSettingsScreen}
+          options={{ title: t('practice.goal.settings.title') }}
         />
         <Stack.Screen
           name="PracticeHistory"
