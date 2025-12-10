@@ -7,7 +7,8 @@ export type PracticeAnalyticsEvent =
   | "practice_quick_session_start"
   | "practice_quick_session_complete"
   | "practice_plan_viewed"
-  | "practice_plan_mission_start";
+  | "practice_plan_mission_start"
+  | "practice_plan_completed_viewed";
 
 export type QuickPracticeEntrySource = "range_home" | "recap" | "missions" | "other";
 
@@ -19,6 +20,13 @@ type MissionViewedEvent = {
 type PlanViewedEvent = {
   entryPoint: "practice_missions";
   missionsInPlan: number;
+};
+
+type PlanCompletedViewedEvent = {
+  entryPoint: "practice_missions";
+  completedMissions: number;
+  totalMissions: number;
+  isPlanCompleted: boolean;
 };
 
 type MissionStartEvent = {
@@ -95,6 +103,10 @@ export function trackPracticePlanViewed(payload: PlanViewedEvent): void {
 
 export function trackPracticePlanMissionStart(payload: PlanMissionStartEvent): void {
   emitPracticeAnalytics("practice_plan_mission_start", payload);
+}
+
+export function trackPracticePlanCompletedViewed(payload: PlanCompletedViewedEvent): void {
+  emitPracticeAnalytics("practice_plan_completed_viewed", payload);
 }
 
 export function trackPracticeMissionComplete(payload: MissionCompleteEvent): void {

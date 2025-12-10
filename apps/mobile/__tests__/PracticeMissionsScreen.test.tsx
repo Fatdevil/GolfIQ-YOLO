@@ -101,6 +101,66 @@ describe('PracticeMissionsScreen', () => {
     });
   });
 
+  it('shows completed plan banner and emits completion analytics when all missions done', async () => {
+    vi.mocked(practiceHistoryStorage.loadPracticeMissionHistory).mockResolvedValue([
+      {
+        id: 'entry-complete-1',
+        missionId: 'mission-high',
+        startedAt: new Date().toISOString(),
+        status: 'completed',
+        targetClubs: [],
+        completedSampleCount: 5,
+      },
+      {
+        id: 'entry-complete-2',
+        missionId: 'mission-low',
+        startedAt: new Date().toISOString(),
+        status: 'completed',
+        targetClubs: [],
+        completedSampleCount: 5,
+      },
+    ] as any);
+
+    render(<PracticeMissionsScreen navigation={createNavigation()} route={createRoute()} />);
+
+    const banner = await screen.findByText(/completed this week’s practice plan/i);
+    expect(banner).toBeVisible();
+
+    const plan = await screen.findByTestId('practice-weekly-plan');
+    within(plan)
+      .getAllByTestId(/practice-mission-item-/)
+      .forEach((node) => expect(within(node).getByText(/Done this week/i)).toBeVisible());
+
+    expect(vi.mocked(safeEmit)).toHaveBeenCalledWith('practice_plan_completed_viewed', {
+      entryPoint: 'practice_missions',
+      completedMissions: 2,
+      totalMissions: 2,
+      isPlanCompleted: true,
+    });
+  });
+
+  it('shows partial progress banner and per-mission completion labels when only some are done', async () => {
+    vi.mocked(practiceHistoryStorage.loadPracticeMissionHistory).mockResolvedValue([
+      {
+        id: 'entry-partial-1',
+        missionId: 'mission-high',
+        startedAt: new Date().toISOString(),
+        status: 'completed',
+        targetClubs: [],
+        completedSampleCount: 5,
+      },
+    ] as any);
+
+    render(<PracticeMissionsScreen navigation={createNavigation()} route={createRoute()} />);
+
+    const progress = await screen.findByText(/1 of 2 missions done this week/i);
+    expect(progress).toBeVisible();
+
+    const plan = await screen.findByTestId('practice-weekly-plan');
+    expect(within(plan).getByText(/^Done this week$/i)).toBeVisible();
+    expect(within(plan).getByText(/Not done yet/i)).toBeVisible();
+  });
+
   it('fires analytics when a mission is started from the list', async () => {
     const navigation = createNavigation();
 

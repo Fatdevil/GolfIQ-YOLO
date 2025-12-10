@@ -74,6 +74,10 @@ export const sv = {
   practice_goal_streak_label: '{{count}} veckors svit',
   practice_plan_title: 'Veckans träningsplan',
   practice_plan_badge: 'Plan nr {{rank}}',
+  practice_plan_complete_label: 'Gjort den här veckan',
+  practice_plan_incomplete_label: 'Inte gjort än',
+  practice_plan_completed_banner: 'Du har slutfört veckans träningsplan! 🎉',
+  practice_plan_progress_banner: '{{completed}} av {{total}} uppdrag gjorda denna vecka',
   bag: {
     practice: {
       recommendedTitle: 'Rekommenderad träning',
