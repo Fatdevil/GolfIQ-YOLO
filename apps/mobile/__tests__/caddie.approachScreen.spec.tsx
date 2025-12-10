@@ -59,8 +59,8 @@ describe('CaddieApproachScreen', () => {
     vi.mocked(bagStatsClient.fetchBagStats).mockResolvedValue({});
     vi.mocked(bagClient.fetchPlayerBag).mockResolvedValue({
       clubs: [
-        { clubId: '7i', label: '7 Iron' },
-        { clubId: '9i', label: '9 Iron' },
+        { clubId: '7i', label: '7 Iron', avgCarryM: null, sampleCount: 0, active: true },
+        { clubId: '9i', label: '9 Iron', avgCarryM: null, sampleCount: 0, active: true },
       ],
     });
     vi.mocked(caddieHudBridge.isCaddieHudAvailable).mockReturnValue(false);

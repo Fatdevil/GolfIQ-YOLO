@@ -10,7 +10,7 @@ import {
 import type { CaddieSettings, RiskProfile } from '@app/caddie/caddieSettingsStorage';
 import type { CaddieDecision } from '@app/caddie/CaddieDecision';
 import type { HoleCaddieTargets } from '@shared/round/autoHoleCore';
-import type { BagClubStatsMap, DistanceSource } from '@shared/caddie/bagStats';
+import type { BagClubStats, BagClubStatsMap, DistanceSource } from '@shared/caddie/bagStats';
 import { MIN_AUTOCALIBRATED_SAMPLES, shouldUseBagStat } from '@shared/caddie/bagStats';
 import type { BagReadinessOverview, ClubReadinessLevel } from '@shared/caddie/bagReadiness';
 import { getClubReadiness } from '@shared/caddie/bagReadiness';
@@ -33,6 +33,8 @@ export interface CaddieClubCandidate {
   minSamples?: number;
   readiness?: ClubReadinessLevel;
 }
+
+type CaddieClubCandidateWithCarry = CaddieClubCandidate & { effectiveCarryM: number };
 
 export interface CaddieDecisionContext {
   conditions: CaddieConditions;
@@ -119,11 +121,11 @@ export function chooseClubForTargetDistance(
   targetDistanceM: number,
   safetyBufferM: number,
   clubStats: CaddieClubCandidate[],
-): CaddieClubCandidate | null {
+): CaddieClubCandidateWithCarry | null {
   if (!clubStats.length) return null;
 
   const effectiveTarget = targetDistanceM + safetyBufferM;
-  const withCarry = clubStats
+  const withCarry: CaddieClubCandidateWithCarry[] = clubStats
     .map((club) => ({
       ...club,
       readiness: club.readiness,
@@ -165,8 +167,14 @@ export function buildCaddieDecisionFromContext(
       : club,
   );
 
-  let selected = chooseClubForTargetDistance(playsLike.effectiveDistanceM, safetyBufferM, clubsWithReadiness);
-  if (!selected) return null;
+  const initialSelection = chooseClubForTargetDistance(
+    playsLike.effectiveDistanceM,
+    safetyBufferM,
+    clubsWithReadiness,
+  );
+  if (!initialSelection) return null;
+
+  let selected: CaddieClubCandidateWithCarry = initialSelection;
 
   if (ctx.bagReadinessOverview) {
     const comparable = clubsWithReadiness
@@ -299,7 +307,7 @@ function getClubCarryDetails(
   minSamples: number = MIN_AUTOCALIBRATED_SAMPLES,
 ): ClubCarryDetails {
   const manual = club.manualAvgCarryM;
-  const stat = club.clubId ? bagStats?.[club.clubId] : undefined;
+  const stat: BagClubStats | undefined = club.clubId && bagStats ? bagStats[club.clubId] : undefined;
 
   if (Number.isFinite(manual)) {
     return {
@@ -311,11 +319,13 @@ function getClubCarryDetails(
   }
 
   if (stat) {
-    if (shouldUseBagStat(stat, minSamples)) {
+    const useStat = shouldUseBagStat(stat, minSamples);
+    const sampleCount = (stat as BagClubStats).sampleCount;
+    if (useStat) {
       return {
         carry: stat.meanDistanceM,
         distanceSource: 'auto_calibrated',
-        sampleCount: stat.sampleCount,
+        sampleCount,
         minSamples,
       };
     }
@@ -323,7 +333,7 @@ function getClubCarryDetails(
     return {
       carry: Number.isFinite(club.avgCarryM) ? (club.avgCarryM as number) : null,
       distanceSource: 'partial_stats',
-      sampleCount: stat.sampleCount,
+      sampleCount,
       minSamples,
     };
   }

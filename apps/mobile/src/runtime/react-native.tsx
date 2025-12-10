@@ -82,6 +82,8 @@ export function FlatList<Item>({
 type TouchableOpacityProps = CommonProps & {
   onPress?: () => void;
   disabled?: boolean;
+  accessibilityRole?: string;
+  activeOpacity?: number;
 };
 
 export const TouchableOpacity: React.FC<TouchableOpacityProps> = ({

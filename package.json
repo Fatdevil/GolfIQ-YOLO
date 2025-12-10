@@ -5,6 +5,7 @@
   "version": "1.0.0",
   "scripts": {
     "typecheck:web": "npm --prefix web run typecheck",
+    "typecheck:mobile": "npm --prefix apps/mobile run typecheck",
     "test:unit": "npm --prefix web run test:unit",
     "test:web": "npm --prefix web run test:unit",
     "demo:sg": "node --loader ts-node/esm web/scripts/seedS16Demo.ts",

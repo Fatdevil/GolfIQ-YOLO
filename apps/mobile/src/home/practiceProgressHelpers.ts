@@ -38,8 +38,11 @@ export function buildPracticeProgressTileModel(
   const subtitleKey = overview.streakDays && overview.streakDays >= 2
     ? 'practice.progress.streak'
     : 'practice.progress.subtitleWindow';
-  const subtitleParams =
-    subtitleKey === 'practice.progress.subtitleWindow' ? { window: windowDays } : { days: overview.streakDays };
+  const subtitleParams: Record<string, number> | undefined = subtitleKey === 'practice.progress.subtitleWindow'
+    ? { window: windowDays }
+    : overview.streakDays != null
+      ? { days: overview.streakDays }
+      : undefined;
 
   return {
     completionRatio,

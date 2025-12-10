@@ -1,7 +1,7 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import React from 'react';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } from 'vitest';
 
 import * as bagClient from '@app/api/bagClient';
 import * as bagStatsClient from '@app/api/bagStatsClient';
@@ -60,7 +60,7 @@ const mockBagStats: BagClubStatsMap = {
   '7i': { clubId: '7i', meanDistanceM: 150, sampleCount: 6 },
   '5w': { clubId: '5w', meanDistanceM: 190, sampleCount: 2 },
 };
-let dateNowSpy: ReturnType<typeof vi.spyOn>;
+let dateNowSpy: MockInstance<[], number> | null = null;
 
 function createNavigation(): Navigation {
   return {
@@ -132,6 +132,7 @@ describe('HomeDashboardScreen', () => {
 
   afterEach(() => {
     dateNowSpy?.mockRestore();
+    dateNowSpy = null;
     vi.clearAllMocks();
     setTelemetryEmitter(null);
   });
