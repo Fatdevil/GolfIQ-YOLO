@@ -9,7 +9,10 @@ import type { BagState } from "@/bag/types";
 import { PRACTICE_MISSION_WINDOW_DAYS, loadPracticeMissionHistory } from "@/practice/practiceMissionHistory";
 import {
   buildMissionProgressById,
+  buildWeeklyPracticeHistory,
+  PRACTICE_WEEK_WINDOW_DAYS,
   type PracticeMissionHistoryEntry,
+  type WeeklyPracticeHistorySummary,
 } from "@shared/practice/practiceHistory";
 import {
   buildPracticeMissionsList,
@@ -27,6 +30,7 @@ import {
   trackPracticePlanMissionStart,
   trackPracticePlanViewed,
   trackWeeklyPracticeInsightsViewed,
+  trackPracticeWeeklyHistoryViewed,
 } from "@/practice/analytics";
 import { loadWeeklyPracticeGoalSettings } from "@/practice/practiceGoalSettings";
 
@@ -212,6 +216,63 @@ function WeeklyPracticeInsightsCard({
   );
 }
 
+function formatWeekRange(start: Date, locale: string): { from: string; to: string } {
+  const end = new Date(start);
+  end.setDate(end.getDate() + PRACTICE_WEEK_WINDOW_DAYS - 1);
+
+  return {
+    from: start.toLocaleDateString(locale || undefined, { month: "short", day: "numeric" }),
+    to: end.toLocaleDateString(locale || undefined, { month: "short", day: "numeric" }),
+  };
+}
+
+function WeeklyHistorySection({ summaries }: { summaries: WeeklyPracticeHistorySummary[] }): JSX.Element {
+  const { t, i18n } = useTranslation();
+  const locale = i18n.language || "en";
+
+  return (
+    <section className="space-y-3 rounded-xl border border-slate-800 bg-slate-900/60 p-4" data-testid="practice-weekly-history">
+      <p className="text-sm font-semibold text-slate-100">{t("practice.history.weekly.title")}</p>
+      {summaries.length === 0 ? (
+        <p className="text-sm text-slate-400">{t("practice.history.weekly.empty")}</p>
+      ) : (
+        <div className="grid gap-3 sm:grid-cols-2">
+          {summaries.map((summary, index) => {
+            const { from, to } = formatWeekRange(summary.weekStart, locale);
+            const label =
+              index === 0
+                ? t("practice.history.weekly.thisWeek")
+                : index === 1
+                  ? t("practice.history.weekly.lastWeek")
+                  : t("practice.history.weekly.range", { from, to });
+
+            return (
+              <div
+                key={summary.weekStart.getTime()}
+                className="space-y-1 rounded-lg border border-slate-800 bg-slate-900/40 p-3"
+                data-testid={`weekly-history-item-${index}`}
+              >
+                <p className="text-sm font-semibold text-slate-100">{label}</p>
+                <p className="text-xs font-semibold text-emerald-200">
+                  {t("practice.history.weekly.counts", {
+                    completed: summary.completedCount,
+                    target: summary.target,
+                  })}
+                </p>
+                <p className="text-xs font-semibold text-emerald-200">
+                  {summary.goalReached
+                    ? t("practice.history.weekly.goalReached")
+                    : t("practice.history.weekly.goalNotReached")}
+                </p>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </section>
+  );
+}
+
 export default function PracticeMissionsPage(): JSX.Element {
   const { t } = useTranslation();
   const navigate = useNavigate();
@@ -223,6 +284,7 @@ export default function PracticeMissionsPage(): JSX.Element {
   const planViewedRef = useRef(false);
   const planCompletedViewedRef = useRef(false);
   const insightsViewedRef = useRef(false);
+  const historyViewedRef = useRef(false);
 
   const targetMissionsPerWeek = weeklyGoalSettings.targetMissionsPerWeek;
 
@@ -239,6 +301,16 @@ export default function PracticeMissionsPage(): JSX.Element {
   const weeklyComparison = useMemo(
     () => buildWeeklyPracticeComparison({ history, missions, targetMissionsPerWeek }),
     [history, missions, targetMissionsPerWeek],
+  );
+
+  const weeklyHistory = useMemo(
+    () =>
+      buildWeeklyPracticeHistory({
+        history,
+        settings: weeklyGoalSettings,
+        now: new Date(),
+      }),
+    [history, weeklyGoalSettings],
   );
 
   const weeklyPlanMissions = weeklyPlanStatus.missions;
@@ -336,6 +408,13 @@ export default function PracticeMissionsPage(): JSX.Element {
     });
   }, [loading, targetMissionsPerWeek, weeklyComparison]);
 
+  useEffect(() => {
+    if (loading || historyViewedRef.current) return;
+    historyViewedRef.current = true;
+
+    trackPracticeWeeklyHistoryViewed({ surface: "web_practice_missions", weeks: weeklyHistory.length });
+  }, [loading, weeklyHistory.length]);
+
   const handleSelectMission = (missionId: string, planRank?: number) => {
     if (planRank != null) {
       trackPracticePlanMissionStart({
@@ -375,6 +454,7 @@ export default function PracticeMissionsPage(): JSX.Element {
       ) : (
         <div className="space-y-5">
           <WeeklyPracticeInsightsCard comparison={weeklyComparison} />
+          <WeeklyHistorySection summaries={weeklyHistory} />
           {missions.length === 0 ? (
             <div className="space-y-3 rounded-xl border border-dashed border-slate-800 bg-slate-900/60 p-6" data-testid="practice-missions-empty">
               <h2 className="text-lg font-semibold text-slate-50">{t("practice.missions.empty.title")}</h2>

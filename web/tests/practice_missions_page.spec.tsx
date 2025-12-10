@@ -83,7 +83,9 @@ import { useNotifications } from "@/notifications/NotificationContext";
 import { postTelemetryEvent } from "@/api";
 import * as practicePlan from "@shared/practice/practicePlan";
 import { loadWeeklyPracticeGoalSettings } from "@/practice/practiceGoalSettings";
+import * as practiceHistory from "@shared/practice/practiceHistory";
 
+const realBuildWeeklyHistory = practiceHistory.buildWeeklyPracticeHistory;
 const mockLoadHistory = loadPracticeMissionHistory as unknown as Mock;
 const mockLoadBag = loadBag as unknown as Mock;
 const mockMapBagToPlayer = mapBagStateToPlayerBag as unknown as Mock;
@@ -99,6 +101,7 @@ const mockMarkHomeSeen = markHomeSeen as unknown as Mock;
 const mockSeedDemoData = seedDemoData as unknown as Mock;
 const mockUseNotifications = useNotifications as unknown as Mock;
 const mockTelemetry = postTelemetryEvent as unknown as Mock;
+const mockBuildWeeklyHistory = vi.spyOn(practiceHistory, "buildWeeklyPracticeHistory");
 
 const baseChecklist = {
   allDone: false,
@@ -138,6 +141,8 @@ describe("PracticeMissionsPage", () => {
     mockBuildBagReadiness.mockReset();
     mockTelemetry.mockReset();
     mockLoadWeeklyGoalSettings.mockReset();
+    mockBuildWeeklyHistory.mockReset();
+    mockBuildWeeklyHistory.mockImplementation(realBuildWeeklyHistory as any);
     mockLoadBag.mockReturnValue(createDefaultBag());
     mockMapBagToPlayer.mockReturnValue({ clubs: [] });
     mockFetchBagStats.mockResolvedValue({});
@@ -176,6 +181,13 @@ describe("PracticeMissionsPage", () => {
           lastWeekGoalReached: false,
           thisWeekPlanCompleted: false,
           lastWeekPlanCompleted: false,
+        }),
+      );
+      expect(mockTelemetry).toHaveBeenCalledWith(
+        expect.objectContaining({
+          event: "practice_weekly_history_viewed",
+          surface: "web_practice_missions",
+          weeks: 0,
         }),
       );
       expect(mockTelemetry).toHaveBeenCalledWith(
@@ -262,6 +274,40 @@ describe("PracticeMissionsPage", () => {
     planStatusSpy.mockRestore();
   });
 
+  it("renders weekly history summaries and emits telemetry", async () => {
+    mockLoadHistory.mockResolvedValue([]);
+    mockBuildWeeklyHistory.mockImplementation(() => [
+      {
+        weekStart: new Date("2024-02-12T00:00:00Z"),
+        completedCount: 4,
+        target: 4,
+        goalReached: true,
+      },
+      {
+        weekStart: new Date("2024-02-05T00:00:00Z"),
+        completedCount: 1,
+        target: 4,
+        goalReached: false,
+      },
+    ] as any);
+
+    renderWithRouter();
+
+    const historySections = await screen.findAllByTestId("practice-weekly-history");
+    const history = historySections[historySections.length - 1];
+    await waitFor(() => {
+      expect(within(history).getAllByTestId(/weekly-history-item-/).length).toBeGreaterThanOrEqual(1);
+    });
+    expect(within(history).getByText(/This week/i)).toBeVisible();
+    const missionCountLabel = within(history).getByText(/missions/);
+    expect(missionCountLabel.textContent).toContain("/");
+
+    await waitFor(() => {
+      const telemetry = mockTelemetry.mock.calls.find((call) => call[0].event === "practice_weekly_history_viewed");
+      expect(telemetry?.[0].weeks).toBeGreaterThan(0);
+    });
+  });
+
   it("shows progress banner and completion labels when only some missions are done", async () => {
     const now = new Date();
     mockBuildBagReadiness.mockReturnValue({
@@ -285,8 +331,8 @@ describe("PracticeMissionsPage", () => {
 
     renderWithRouter();
 
-    const progress = await screen.findByText(/missions done this week/i);
-    expect(progress).toBeVisible();
+    const progressNodes = await screen.findAllByText(/missions done this week/i);
+    expect(progressNodes.length).toBeGreaterThan(0);
 
     const plan = (await screen.findAllByTestId("practice-weekly-plan"))[0];
     expect(within(plan).getByText(/Not done yet/i)).toBeVisible();

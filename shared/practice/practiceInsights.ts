@@ -1,5 +1,9 @@
 import { PRACTICE_GOAL_WINDOW_DAYS, buildWeeklyPracticeGoalProgress } from './practiceGoals';
-import { computeRecentCompletionSummary, type PracticeMissionHistoryEntry } from './practiceHistory';
+import {
+  computeRecentCompletionSummary,
+  normalizePracticeWeekStart,
+  type PracticeMissionHistoryEntry,
+} from './practiceHistory';
 import { buildWeeklyPracticePlanStatus, type WeeklyPracticePlanStatus } from './practicePlan';
 import type { PracticeMissionListItem } from './practiceMissionsList';
 
@@ -15,13 +19,6 @@ export interface WeeklyPracticeSnapshot {
 export interface WeeklyPracticeComparison {
   thisWeek: WeeklyPracticeSnapshot;
   lastWeek: WeeklyPracticeSnapshot;
-}
-
-function normalizeWeekStart(anchor: Date): Date {
-  const start = new Date(anchor);
-  start.setHours(0, 0, 0, 0);
-  start.setDate(start.getDate() - PRACTICE_GOAL_WINDOW_DAYS);
-  return start;
 }
 
 function buildSnapshot({
@@ -49,7 +46,7 @@ function buildSnapshot({
   const summary = computeRecentCompletionSummary(history, PRACTICE_GOAL_WINDOW_DAYS, now);
 
   return {
-    weekStart: normalizeWeekStart(now),
+    weekStart: normalizePracticeWeekStart(now),
     missionsCompleted: summary.completed,
     goalReached: goal.status === 'goal_reached' || goal.status === 'exceeded',
     planCompleted: plan.isPlanCompleted,
