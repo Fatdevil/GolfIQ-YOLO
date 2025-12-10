@@ -16,7 +16,10 @@ import {
   type PracticeMissionDefinition,
   type PracticeMissionListItem,
 } from '@shared/practice/practiceMissionsList';
-import { buildWeeklyPracticePlan } from '@shared/practice/practicePlan';
+import {
+  buildWeeklyPracticePlanStatus,
+  type WeeklyPracticePlanStatus,
+} from '@shared/practice/practicePlan';
 import { safeEmit } from '@app/telemetry';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'PracticeMissions'>;
@@ -82,7 +85,17 @@ function buildMissionDefinitions(
   return Array.from(map.values());
 }
 
-function MissionRow({ item, onPress }: { item: PracticeMissionListItem; onPress: () => void }): JSX.Element {
+function MissionRow({
+  item,
+  onPress,
+  completionLabel,
+  completionLabelVariant,
+}: {
+  item: PracticeMissionListItem;
+  onPress: () => void;
+  completionLabel?: string;
+  completionLabelVariant?: 'complete' | 'incomplete';
+}): JSX.Element {
   const lastCompletedLabel = useMemo(() => formatDate(item.lastCompletedAt), [item.lastCompletedAt]);
 
   return (
@@ -99,6 +112,16 @@ function MissionRow({ item, onPress }: { item: PracticeMissionListItem; onPress:
         ) : (
           <Text style={styles.meta}>{t('practice.history.detail.unknown')}</Text>
         )}
+        {completionLabel ? (
+          <Text
+            style={[
+              styles.meta,
+              completionLabelVariant === 'complete' ? styles.completeLabel : styles.incompleteLabel,
+            ]}
+          >
+            {completionLabel}
+          </Text>
+        ) : null}
         {item.inStreak ? <Text style={styles.streak}>{t('practice.history.streakTag')}</Text> : null}
       </View>
     </TouchableOpacity>
@@ -109,6 +132,7 @@ export default function PracticeMissionsScreen({ navigation, route }: Props): JS
   const [state, setState] = useState<ScreenState>({ loading: true, missions: [], history: [] });
   const viewedRef = useRef(false);
   const planViewedRef = useRef(false);
+  const planCompletedViewedRef = useRef(false);
 
   useEffect(() => {
     if (viewedRef.current) return;
@@ -167,7 +191,16 @@ export default function PracticeMissionsScreen({ navigation, route }: Props): JS
     };
   }, []);
 
-  const weeklyPlanMissions = useMemo(() => buildWeeklyPracticePlan(state.missions), [state.missions]);
+  const weeklyPlanStatus: WeeklyPracticePlanStatus = useMemo(
+    () =>
+      buildWeeklyPracticePlanStatus({
+        missions: state.missions,
+        history: state.history,
+      }),
+    [state.history, state.missions],
+  );
+
+  const weeklyPlanMissions = weeklyPlanStatus.missions;
   const weeklyPlanIds = useMemo(() => new Set(weeklyPlanMissions.map((mission) => mission.id)), [weeklyPlanMissions]);
   const remainingMissions = useMemo(
     () => state.missions.filter((mission) => !weeklyPlanIds.has(mission.id)),
@@ -175,13 +208,24 @@ export default function PracticeMissionsScreen({ navigation, route }: Props): JS
   );
 
   useEffect(() => {
-    if (state.loading || weeklyPlanMissions.length === 0 || planViewedRef.current) return;
+    if (state.loading || weeklyPlanStatus.totalCount === 0 || planViewedRef.current) return;
     planViewedRef.current = true;
     safeEmit('practice_plan_viewed', {
       entryPoint: 'practice_missions',
-      missionsInPlan: weeklyPlanMissions.length,
+      missionsInPlan: weeklyPlanStatus.totalCount,
     });
-  }, [state.loading, weeklyPlanMissions.length]);
+  }, [state.loading, weeklyPlanStatus.totalCount]);
+
+  useEffect(() => {
+    if (state.loading || !weeklyPlanStatus.isPlanCompleted || planCompletedViewedRef.current) return;
+    planCompletedViewedRef.current = true;
+    safeEmit('practice_plan_completed_viewed', {
+      entryPoint: 'practice_missions',
+      completedMissions: weeklyPlanStatus.completedCount,
+      totalMissions: weeklyPlanStatus.totalCount,
+      isPlanCompleted: weeklyPlanStatus.isPlanCompleted,
+    });
+  }, [state.loading, weeklyPlanStatus]);
 
   const handleSelectMission = (missionId: string, planRank?: number) => {
     if (planRank != null) {
@@ -236,6 +280,18 @@ export default function PracticeMissionsScreen({ navigation, route }: Props): JS
               <View style={styles.planSection} testID="practice-weekly-plan">
                 <Text style={styles.planTitle}>{t('practice_plan_title')}</Text>
                 <View style={styles.planList}>
+                  {weeklyPlanStatus.totalCount > 0 ? (
+                    <View style={styles.planBanner}>
+                      <Text style={styles.planBannerText}>
+                        {weeklyPlanStatus.isPlanCompleted
+                          ? t('practice_plan_completed_banner')
+                          : t('practice_plan_progress_banner', {
+                              completed: weeklyPlanStatus.completedCount,
+                              total: weeklyPlanStatus.totalCount,
+                            })}
+                      </Text>
+                    </View>
+                  ) : null}
                   {weeklyPlanMissions.map((mission) => (
                     <View key={mission.id} style={styles.planItem}>
                       <View style={styles.planBadge}>
@@ -243,6 +299,12 @@ export default function PracticeMissionsScreen({ navigation, route }: Props): JS
                       </View>
                       <MissionRow
                         item={mission}
+                        completionLabel={
+                          mission.isCompletedThisWeek
+                            ? t('practice_plan_complete_label')
+                            : t('practice_plan_incomplete_label')
+                        }
+                        completionLabelVariant={mission.isCompletedThisWeek ? 'complete' : 'incomplete'}
                         onPress={() => handleSelectMission(mission.id, mission.planRank)}
                       />
                     </View>
@@ -301,6 +363,15 @@ const styles = StyleSheet.create({
   planList: {
     gap: 12,
   },
+  planBanner: {
+    padding: 12,
+    borderRadius: 12,
+    backgroundColor: '#ECFDF3',
+  },
+  planBannerText: {
+    color: '#065F46',
+    fontWeight: '700',
+  },
   planItem: {
     gap: 8,
   },
@@ -352,6 +423,13 @@ const styles = StyleSheet.create({
   },
   meta: {
     color: '#374151',
+  },
+  completeLabel: {
+    color: '#065F46',
+    fontWeight: '700',
+  },
+  incompleteLabel: {
+    color: '#6B7280',
   },
   streak: {
     color: '#2563EB',

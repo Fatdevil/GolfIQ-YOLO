@@ -1,7 +1,11 @@
 import { describe, expect, it } from 'vitest';
 
 import { buildPracticeMissionsList, type PracticeMissionDefinition } from '@shared/practice/practiceMissionsList';
-import { buildWeeklyPracticePlan } from '@shared/practice/practicePlan';
+import {
+  buildWeeklyPracticePlan,
+  buildWeeklyPracticePlanStatus,
+  type WeeklyPracticePlanStatus,
+} from '@shared/practice/practicePlan';
 
 function buildMissions(count: number): ReturnType<typeof buildPracticeMissionsList> {
   const missions: PracticeMissionDefinition[] = Array.from({ length: count }).map((_, index) => ({
@@ -41,5 +45,64 @@ describe('buildWeeklyPracticePlan', () => {
     const plan = buildWeeklyPracticePlan([]);
 
     expect(plan).toEqual([]);
+  });
+});
+
+describe('buildWeeklyPracticePlanStatus', () => {
+  const now = new Date('2024-01-08T12:00:00Z');
+
+  function buildHistory(ids: string[]): any[] {
+    return ids.map((missionId, index) => ({
+      id: `entry-${missionId}-${index}`,
+      missionId,
+      startedAt: new Date(now.getTime() - 2 * 24 * 60 * 60 * 1000).toISOString(),
+      status: 'completed',
+      targetClubs: [],
+      completedSampleCount: 10,
+    }));
+  }
+
+  function evaluate(idsCompleted: string[], idsAll: string[], options?: { historyOffsetDays?: number }): WeeklyPracticePlanStatus {
+    const missions = buildMissions(idsAll.length);
+    const history = buildHistory(idsCompleted).map((entry) => ({
+      ...entry,
+      startedAt: new Date(now.getTime() - (options?.historyOffsetDays ?? 2) * 24 * 60 * 60 * 1000).toISOString(),
+    }));
+
+    return buildWeeklyPracticePlanStatus({ missions, history, now });
+  }
+
+  it('returns completed plan status when all missions have completions this week', () => {
+    const status = evaluate(['mission-1', 'mission-2', 'mission-3'], ['mission-1', 'mission-2', 'mission-3', 'mission-4']);
+
+    expect(status.isPlanCompleted).toBe(true);
+    expect(status.completedCount).toBe(status.totalCount);
+    expect(status.totalCount).toBe(3);
+    expect(status.missions.every((mission) => mission.isCompletedThisWeek)).toBe(true);
+  });
+
+  it('marks only missions with completions as done when partially complete', () => {
+    const status = evaluate(['mission-1'], ['mission-1', 'mission-2', 'mission-3']);
+
+    expect(status.isPlanCompleted).toBe(false);
+    expect(status.completedCount).toBe(1);
+    expect(status.totalCount).toBe(3);
+    expect(status.missions.find((m) => m.id === 'mission-1')?.isCompletedThisWeek).toBe(true);
+    expect(status.missions.filter((m) => m.id !== 'mission-1').every((m) => !m.isCompletedThisWeek)).toBe(true);
+  });
+
+  it('returns no completions when history is outside the current week', () => {
+    const status = evaluate(['mission-1', 'mission-2'], ['mission-1', 'mission-2', 'mission-3'], { historyOffsetDays: 10 });
+
+    expect(status.isPlanCompleted).toBe(false);
+    expect(status.completedCount).toBe(0);
+    expect(status.missions.every((mission) => !mission.isCompletedThisWeek)).toBe(true);
+  });
+
+  it('returns an incomplete plan when there are no missions', () => {
+    const status = buildWeeklyPracticePlanStatus({ missions: [], history: [], now });
+
+    expect(status.totalCount).toBe(0);
+    expect(status.isPlanCompleted).toBe(false);
   });
 });

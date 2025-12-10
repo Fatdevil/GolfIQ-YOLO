@@ -16,12 +16,13 @@ import {
   type PracticeMissionDefinition,
   type PracticeMissionListItem,
 } from "@shared/practice/practiceMissionsList";
-import { buildWeeklyPracticePlan } from "@shared/practice/practicePlan";
+import { buildWeeklyPracticePlanStatus } from "@shared/practice/practicePlan";
 import { buildBagReadinessOverview, type BagReadinessOverview } from "@shared/caddie/bagReadiness";
 import type { BagSuggestion } from "@shared/caddie/bagTuningSuggestions";
 import {
   trackPracticeMissionStart,
   trackPracticeMissionsViewed,
+  trackPracticePlanCompletedViewed,
   trackPracticePlanMissionStart,
   trackPracticePlanViewed,
 } from "@/practice/analytics";
@@ -81,7 +82,17 @@ function buildMissionDefinitions(
   return Array.from(map.values());
 }
 
-function MissionCard({ item, onSelect }: { item: PracticeMissionListItem; onSelect: () => void }): JSX.Element {
+function MissionCard({
+  item,
+  onSelect,
+  completionLabel,
+  completionVariant,
+}: {
+  item: PracticeMissionListItem;
+  onSelect: () => void;
+  completionLabel?: string;
+  completionVariant?: "complete" | "incomplete";
+}): JSX.Element {
   const { t, i18n } = useTranslation();
   const locale = i18n.language || "en";
   const lastCompletedLabel = useMemo(() => formatDate(item.lastCompletedAt, locale), [item.lastCompletedAt, locale]);
@@ -112,6 +123,15 @@ function MissionCard({ item, onSelect }: { item: PracticeMissionListItem; onSele
           ) : (
             <p className="text-xs text-slate-500">{t("practice.history.detail.unknown")}</p>
           )}
+          {completionLabel ? (
+            <p
+              className={`text-xs font-semibold ${
+                completionVariant === "complete" ? "text-emerald-200" : "text-slate-400"
+              }`}
+            >
+              {completionLabel}
+            </p>
+          ) : null}
           {item.inStreak ? (
             <p className="text-xs font-semibold text-emerald-200">{t("practice.missionProgress.streak")}</p>
           ) : null}
@@ -138,8 +158,18 @@ export default function PracticeMissionsPage(): JSX.Element {
   const [{ missions, history, loading }, setState] = useState<PageState>({ loading: true, missions: [], history: [] });
   const viewedRef = useRef(false);
   const planViewedRef = useRef(false);
+  const planCompletedViewedRef = useRef(false);
 
-  const weeklyPlanMissions = useMemo(() => buildWeeklyPracticePlan(missions), [missions]);
+  const weeklyPlanStatus = useMemo(
+    () =>
+      buildWeeklyPracticePlanStatus({
+        missions,
+        history,
+      }),
+    [history, missions],
+  );
+
+  const weeklyPlanMissions = weeklyPlanStatus.missions;
   const weeklyPlanIds = useMemo(() => new Set(weeklyPlanMissions.map((mission) => mission.id)), [weeklyPlanMissions]);
   const remainingMissions = useMemo(
     () => missions.filter((mission) => !weeklyPlanIds.has(mission.id)),
@@ -180,17 +210,6 @@ export default function PracticeMissionsPage(): JSX.Element {
           missions,
         });
 
-        if (prioritizedMissions.length > 0 && !planViewedRef.current) {
-          const planMissions = buildWeeklyPracticePlan(prioritizedMissions);
-          if (planMissions.length > 0) {
-            planViewedRef.current = true;
-            trackPracticePlanViewed({
-              entryPoint: "practice_missions",
-              missionsInPlan: planMissions.length,
-            });
-          }
-        }
-
         setState({ loading: false, missions: prioritizedMissions, history: historyEntries });
       } catch (err) {
         if (!cancelled) {
@@ -206,6 +225,23 @@ export default function PracticeMissionsPage(): JSX.Element {
       cancelled = true;
     };
   }, [bag]);
+
+  useEffect(() => {
+    if (loading || weeklyPlanStatus.totalCount === 0 || planViewedRef.current) return;
+    planViewedRef.current = true;
+    trackPracticePlanViewed({ entryPoint: "practice_missions", missionsInPlan: weeklyPlanStatus.totalCount });
+  }, [loading, weeklyPlanStatus.totalCount]);
+
+  useEffect(() => {
+    if (loading || !weeklyPlanStatus.isPlanCompleted || planCompletedViewedRef.current) return;
+    planCompletedViewedRef.current = true;
+    trackPracticePlanCompletedViewed({
+      entryPoint: "practice_missions",
+      completedMissions: weeklyPlanStatus.completedCount,
+      totalMissions: weeklyPlanStatus.totalCount,
+      isPlanCompleted: weeklyPlanStatus.isPlanCompleted,
+    });
+  }, [loading, weeklyPlanStatus]);
 
   const handleSelectMission = (missionId: string, planRank?: number) => {
     if (planRank != null) {
@@ -271,12 +307,37 @@ export default function PracticeMissionsPage(): JSX.Element {
                 </span>
               </header>
               <div className="space-y-3">
+                {weeklyPlanStatus.totalCount > 0 ? (
+                  <div
+                    className={`rounded-lg border px-3 py-2 text-sm ${
+                      weeklyPlanStatus.isPlanCompleted
+                        ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-100"
+                        : "border-slate-800 bg-slate-800/60 text-slate-200"
+                    }`}
+                  >
+                    {weeklyPlanStatus.isPlanCompleted
+                      ? t("practice.plan.completedBanner")
+                      : t("practice.plan.progressBanner", {
+                          completed: weeklyPlanStatus.completedCount,
+                          total: weeklyPlanStatus.totalCount,
+                        })}
+                  </div>
+                ) : null}
                 {weeklyPlanMissions.map((mission) => (
                   <div key={mission.id} className="space-y-2" data-testid="practice-plan-item">
                     <span className="inline-flex items-center rounded-full bg-emerald-500/10 px-3 py-1 text-xs font-semibold text-emerald-200">
                       {t("practice.plan.badge", { rank: mission.planRank })}
                     </span>
-                    <MissionCard item={mission} onSelect={() => handleSelectMission(mission.id, mission.planRank)} />
+                    <MissionCard
+                      item={mission}
+                      completionLabel={
+                        mission.isCompletedThisWeek
+                          ? t("practice.plan.completeLabel")
+                          : t("practice.plan.incompleteLabel")
+                      }
+                      completionVariant={mission.isCompletedThisWeek ? "complete" : "incomplete"}
+                      onSelect={() => handleSelectMission(mission.id, mission.planRank)}
+                    />
                   </div>
                 ))}
               </div>
