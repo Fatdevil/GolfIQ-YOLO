@@ -177,6 +177,8 @@ export const en = {
   coach_report_close_button: 'Close',
   coach_report_cta_from_recap: 'View full coach report',
   coach_report_start_practice_button: 'Start practice for this round',
+  practice_plan_title: 'This week’s practice plan',
+  practice_plan_badge: 'Plan #{{rank}}',
   practice_planner_title: 'Practice Planner',
   practice_planner_subtitle: "Today’s plan based on your recent rounds",
   practice_planner_focus_title: 'Focus areas',
