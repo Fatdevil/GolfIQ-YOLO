@@ -8,7 +8,7 @@ type TelemetryEvent = { event: string; payload: Record<string, unknown> };
 function createHarness(initialNow = 1000) {
   const events: TelemetryEvent[] = [];
   let currentNow = initialNow;
-  const postScoreMock = vi.fn<[PostScoreArgs], Promise<PostScoreResult>>();
+  const postScoreMock = vi.fn<(args: PostScoreArgs) => Promise<PostScoreResult>>();
   const queue = createScoreQueue({
     postScore: postScoreMock,
     now: () => currentNow,
