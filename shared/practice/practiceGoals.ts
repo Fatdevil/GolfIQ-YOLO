@@ -1,7 +1,7 @@
 import { computeRecentCompletionSummary, type PracticeMissionHistoryEntry } from './practiceHistory';
+import { DEFAULT_TARGET_MISSIONS_PER_WEEK } from './practiceGoalSettings';
 
 export const PRACTICE_GOAL_WINDOW_DAYS = 7;
-export const DEFAULT_WEEKLY_PRACTICE_MISSION_GOAL = 3;
 
 export type PracticeGoalStatus =
   | 'not_started'
@@ -27,21 +27,24 @@ function isGoalComplete(status: PracticeGoalStatus): boolean {
   return status === 'goal_reached' || status === 'exceeded';
 }
 
-export function buildWeeklyPracticeGoalProgress(args: {
+export interface BuildWeeklyPracticeGoalOptions {
   missionHistory: PracticeMissionHistoryEntry[];
   now?: Date;
-  targetCompletions?: number;
+  targetMissionsPerWeek?: number;
   windowDays?: number;
-}): PracticeGoalProgress {
+}
+
+export function buildWeeklyPracticeGoalProgress(options: BuildWeeklyPracticeGoalOptions): PracticeGoalProgress {
   const {
     missionHistory,
     now = new Date(),
-    targetCompletions = DEFAULT_WEEKLY_PRACTICE_MISSION_GOAL,
+    targetMissionsPerWeek = DEFAULT_TARGET_MISSIONS_PER_WEEK,
     windowDays = PRACTICE_GOAL_WINDOW_DAYS,
-  } = args;
+  } = options;
 
   const summary = computeRecentCompletionSummary(missionHistory, windowDays, now);
   const completedInWindow = summary.completed;
+  const targetCompletions = targetMissionsPerWeek;
   const remainingToTarget = Math.max(0, targetCompletions - completedInWindow);
 
   let status: PracticeGoalStatus = 'not_started';
@@ -81,6 +84,7 @@ export function didJustReachWeeklyGoal(args: {
 export function buildWeeklyGoalStreak(
   history: PracticeMissionHistoryEntry[],
   now: Date = new Date(),
+  targetMissionsPerWeek: number = DEFAULT_TARGET_MISSIONS_PER_WEEK,
 ): WeeklyGoalStreak {
   const windowMs = PRACTICE_GOAL_WINDOW_DAYS * 24 * 60 * 60 * 1000;
 
@@ -91,7 +95,11 @@ export function buildWeeklyGoalStreak(
 
   while (weekIndex < maxWeeksToCheck) {
     const weekEnd = new Date(now.getTime() - weekIndex * windowMs);
-    const progress = buildWeeklyPracticeGoalProgress({ missionHistory: history, now: weekEnd });
+    const progress = buildWeeklyPracticeGoalProgress({
+      missionHistory: history,
+      now: weekEnd,
+      targetMissionsPerWeek,
+    });
 
     if (!isGoalComplete(progress.status)) {
       break;

@@ -1,12 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
-import {
-  DEFAULT_WEEKLY_PRACTICE_MISSION_GOAL,
-  PRACTICE_GOAL_WINDOW_DAYS,
-  buildWeeklyPracticeGoalProgress,
-  buildWeeklyGoalStreak,
-  didJustReachWeeklyGoal,
-} from '../practice/practiceGoals';
+import { DEFAULT_TARGET_MISSIONS_PER_WEEK } from '../practice/practiceGoalSettings';
+import { PRACTICE_GOAL_WINDOW_DAYS, buildWeeklyPracticeGoalProgress, buildWeeklyGoalStreak, didJustReachWeeklyGoal } from '../practice/practiceGoals';
 import type { PracticeMissionHistoryEntry } from '../practice/practiceHistory';
 
 const baseMission: PracticeMissionHistoryEntry = {
@@ -31,9 +26,9 @@ describe('practiceGoals', () => {
 
     expect(progress).toEqual({
       goalId: 'weekly_mission_completions',
-      targetCompletions: DEFAULT_WEEKLY_PRACTICE_MISSION_GOAL,
+      targetCompletions: DEFAULT_TARGET_MISSIONS_PER_WEEK,
       completedInWindow: 0,
-      remainingToTarget: DEFAULT_WEEKLY_PRACTICE_MISSION_GOAL,
+      remainingToTarget: DEFAULT_TARGET_MISSIONS_PER_WEEK,
       windowDays: PRACTICE_GOAL_WINDOW_DAYS,
       status: 'not_started',
       isOnTrack: false,
@@ -47,7 +42,7 @@ describe('practiceGoals', () => {
       buildEntry({ id: 'e3', endedAt: '2024-02-07T18:00:00Z' }),
     ];
 
-    const progress = buildWeeklyPracticeGoalProgress({ missionHistory, now, targetCompletions: 3 });
+    const progress = buildWeeklyPracticeGoalProgress({ missionHistory, now, targetMissionsPerWeek: 3 });
 
     expect(progress.completedInWindow).toBe(3);
     expect(progress.remainingToTarget).toBe(0);
@@ -63,7 +58,7 @@ describe('practiceGoals', () => {
       buildEntry({ id: 'e4', endedAt: '2024-02-08T10:00:00Z' }),
     ];
 
-    const progress = buildWeeklyPracticeGoalProgress({ missionHistory, now, targetCompletions: 3 });
+    const progress = buildWeeklyPracticeGoalProgress({ missionHistory, now, targetMissionsPerWeek: 3 });
 
     expect(progress.completedInWindow).toBe(4);
     expect(progress.remainingToTarget).toBe(0);
@@ -77,7 +72,7 @@ describe('practiceGoals', () => {
       buildEntry({ id: 'recent', endedAt: '2024-02-06T10:00:00Z' }),
     ];
 
-    const progress = buildWeeklyPracticeGoalProgress({ missionHistory, now, targetCompletions: 2 });
+    const progress = buildWeeklyPracticeGoalProgress({ missionHistory, now, targetMissionsPerWeek: 2 });
 
     expect(progress.completedInWindow).toBe(1);
     expect(progress.remainingToTarget).toBe(1);
@@ -85,18 +80,39 @@ describe('practiceGoals', () => {
     expect(progress.isOnTrack).toBe(false);
   });
 
+  it('computes goal completion using a custom weekly target', () => {
+    const missionHistory = [
+      buildEntry({ id: 'e1', endedAt: '2024-02-05T18:00:00Z' }),
+      buildEntry({ id: 'e2', endedAt: '2024-02-06T18:00:00Z' }),
+      buildEntry({ id: 'e3', endedAt: '2024-02-07T18:00:00Z' }),
+      buildEntry({ id: 'e4', endedAt: '2024-02-07T20:00:00Z' }),
+      buildEntry({ id: 'e5', endedAt: '2024-02-08T10:00:00Z' }),
+    ];
+
+    const progress = buildWeeklyPracticeGoalProgress({
+      missionHistory,
+      now,
+      targetMissionsPerWeek: 5,
+    });
+
+    expect(progress.completedInWindow).toBe(5);
+    expect(progress.status).toBe('goal_reached');
+  });
+
   it('derives all goal statuses', () => {
     const baseEntry = buildEntry({ id: 'recent', endedAt: '2024-02-07T10:00:00Z' });
 
-    expect(buildWeeklyPracticeGoalProgress({ missionHistory: [], now, targetCompletions: 2 }).status).toBe('not_started');
     expect(
-      buildWeeklyPracticeGoalProgress({ missionHistory: [baseEntry], now, targetCompletions: 2 }).status,
+      buildWeeklyPracticeGoalProgress({ missionHistory: [], now, targetMissionsPerWeek: 2 }).status,
+    ).toBe('not_started');
+    expect(
+      buildWeeklyPracticeGoalProgress({ missionHistory: [baseEntry], now, targetMissionsPerWeek: 2 }).status,
     ).toBe('in_progress');
     expect(
       buildWeeklyPracticeGoalProgress({
         missionHistory: [baseEntry, buildEntry({ id: 'recent-2', endedAt: '2024-02-06T10:00:00Z' })],
         now,
-        targetCompletions: 2,
+        targetMissionsPerWeek: 2,
       }).status,
     ).toBe('goal_reached');
     expect(
@@ -107,7 +123,7 @@ describe('practiceGoals', () => {
           buildEntry({ id: 'recent-3', endedAt: '2024-02-05T10:00:00Z' }),
         ],
         now,
-        targetCompletions: 2,
+        targetMissionsPerWeek: 2,
       }).status,
     ).toBe('exceeded');
   });
@@ -116,7 +132,7 @@ describe('practiceGoals', () => {
     const before = buildWeeklyPracticeGoalProgress({
       missionHistory: [buildEntry({ endedAt: '2024-02-07T08:00:00Z' })],
       now,
-      targetCompletions: 2,
+      targetMissionsPerWeek: 2,
     });
     const after = buildWeeklyPracticeGoalProgress({
       missionHistory: [
@@ -124,7 +140,7 @@ describe('practiceGoals', () => {
         buildEntry({ id: 'a2', endedAt: '2024-02-07T10:00:00Z' }),
       ],
       now,
-      targetCompletions: 2,
+      targetMissionsPerWeek: 2,
     });
 
     expect(didJustReachWeeklyGoal({ before, after })).toBe(true);
@@ -137,7 +153,7 @@ describe('practiceGoals', () => {
         buildEntry({ id: 'a2', endedAt: '2024-02-07T10:00:00Z' }),
       ],
       now,
-      targetCompletions: 2,
+      targetMissionsPerWeek: 2,
     });
     const after = buildWeeklyPracticeGoalProgress({
       missionHistory: [
@@ -146,13 +162,24 @@ describe('practiceGoals', () => {
         buildEntry({ id: 'a3', endedAt: '2024-02-06T10:00:00Z' }),
       ],
       now,
-      targetCompletions: 2,
+      targetMissionsPerWeek: 2,
     });
 
     expect(didJustReachWeeklyGoal({ before, after })).toBe(false);
   });
 
   describe('buildWeeklyGoalStreak', () => {
+    it('uses a custom target when computing streaks', () => {
+      const missionHistory = [
+        buildEntry({ id: 'c1', endedAt: '2024-02-05T18:00:00Z' }),
+        buildEntry({ id: 'c2', endedAt: '2024-02-06T18:00:00Z' }),
+      ];
+
+      const streak = buildWeeklyGoalStreak(missionHistory, now, 2);
+
+      expect(streak.currentStreakWeeks).toBe(1);
+    });
+
     it('counts consecutive weeks that meet the goal', () => {
       const missionHistory = [
         // Current week (week ending Feb 8)

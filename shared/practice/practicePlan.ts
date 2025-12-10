@@ -1,4 +1,5 @@
 import { PRACTICE_GOAL_WINDOW_DAYS } from './practiceGoals';
+import { DEFAULT_TARGET_MISSIONS_PER_WEEK } from './practiceGoalSettings';
 import { buildMissionProgressById, type PracticeMissionHistoryEntry } from './practiceHistory';
 import type { PracticeMissionListItem } from './practiceMissionsList';
 
@@ -27,9 +28,10 @@ export interface WeeklyPracticePlanHomeSummary {
 
 export function buildWeeklyPracticePlan(
   missions: PracticeMissionListItem[],
-  options?: { maxMissions?: number },
+  options?: { maxMissions?: number; targetMissionsPerWeek?: number },
 ): WeeklyPracticePlanMission[] {
-  const maxMissions = options?.maxMissions ?? 3;
+  const maxMissions =
+    options?.maxMissions ?? options?.targetMissionsPerWeek ?? DEFAULT_TARGET_MISSIONS_PER_WEEK;
   if (maxMissions <= 0 || missions.length === 0) return [];
 
   return missions.slice(0, maxMissions).map((mission, index) => ({
@@ -43,10 +45,14 @@ export function buildWeeklyPracticePlanStatus(options: {
   history: PracticeMissionHistoryEntry[];
   now?: Date;
   maxMissionsInPlan?: number;
+  targetMissionsPerWeek?: number;
 }): WeeklyPracticePlanStatus {
-  const { missions, history, now = new Date(), maxMissionsInPlan } = options;
+  const { missions, history, now = new Date(), maxMissionsInPlan, targetMissionsPerWeek } = options;
 
-  const planMissions = buildWeeklyPracticePlan(missions, { maxMissions: maxMissionsInPlan });
+  const planMissions = buildWeeklyPracticePlan(missions, {
+    maxMissions: maxMissionsInPlan,
+    targetMissionsPerWeek,
+  });
   if (planMissions.length === 0) {
     return { missions: [], completedCount: 0, totalCount: 0, isPlanCompleted: false };
   }
@@ -84,6 +90,7 @@ export function buildWeeklyPracticePlanHomeSummary(options: {
   missions: PracticeMissionListItem[] | null | undefined;
   history: PracticeMissionHistoryEntry[] | null | undefined;
   now?: Date;
+  targetMissionsPerWeek?: number;
 }): WeeklyPracticePlanHomeSummary {
   if (!options.missions || !options.history) {
     return { completedCount: 0, totalCount: 0, isPlanCompleted: false, hasPlan: false };
@@ -93,6 +100,7 @@ export function buildWeeklyPracticePlanHomeSummary(options: {
     missions: options.missions,
     history: options.history,
     now: options.now,
+    targetMissionsPerWeek: options.targetMissionsPerWeek,
   });
 
   return {

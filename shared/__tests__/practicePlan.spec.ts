@@ -43,6 +43,15 @@ describe('buildWeeklyPracticePlan', () => {
     expect(plan.map((mission) => mission.id)).toEqual(['mission-1', 'mission-2']);
   });
 
+  it('uses a custom target to size the plan when maxMissions is not provided', () => {
+    const missions = buildMissions(5);
+
+    const plan = buildWeeklyPracticePlan(missions, { targetMissionsPerWeek: 5 });
+
+    expect(plan).toHaveLength(5);
+    expect(plan.map((mission) => mission.planRank)).toEqual([1, 2, 3, 4, 5]);
+  });
+
   it('returns an empty array when no missions are available', () => {
     const plan = buildWeeklyPracticePlan([]);
 

@@ -81,4 +81,19 @@ describe('buildWeeklyPracticeComparison', () => {
     expect(comparison.thisWeek.planCompleted).toBe(false);
     expect(comparison.lastWeek.planCompleted).toBe(false);
   });
+
+  it('evaluates goal completion against a custom weekly target', () => {
+    const history = [buildEntry('mission-a', 1), buildEntry('mission-b', 2), buildEntry('mission-b', 3)];
+
+    const comparison = buildWeeklyPracticeComparison({
+      history,
+      missions: baseMissions,
+      now,
+      targetMissionsPerWeek: 5,
+    });
+
+    expect(comparison.thisWeek.missionsCompleted).toBe(3);
+    expect(comparison.thisWeek.goalReached).toBe(false);
+    expect(comparison.lastWeek.goalReached).toBe(false);
+  });
 });
