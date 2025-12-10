@@ -25,6 +25,7 @@ type MissionViewedEvent = {
 type PlanViewedEvent = {
   entryPoint: "practice_missions";
   missionsInPlan: number;
+  targetMissionsPerWeek?: number;
 };
 
 type PlanCompletedViewedEvent = {
@@ -32,6 +33,7 @@ type PlanCompletedViewedEvent = {
   completedMissions: number;
   totalMissions: number;
   isPlanCompleted: boolean;
+  targetMissionsPerWeek?: number;
 };
 
 type MissionStartEvent = {

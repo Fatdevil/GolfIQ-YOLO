@@ -28,6 +28,7 @@ import {
   trackPracticePlanViewed,
   trackWeeklyPracticeInsightsViewed,
 } from "@/practice/analytics";
+import { loadWeeklyPracticeGoalSettings } from "@/practice/practiceGoalSettings";
 
 function formatDate(value: number | null, locale: string): string | null {
   if (!value) return null;
@@ -217,23 +218,27 @@ export default function PracticeMissionsPage(): JSX.Element {
   const location = useLocation();
   const [bag] = useState<BagState>(() => loadBag());
   const [{ missions, history, loading }, setState] = useState<PageState>({ loading: true, missions: [], history: [] });
+  const [weeklyGoalSettings] = useState(loadWeeklyPracticeGoalSettings);
   const viewedRef = useRef(false);
   const planViewedRef = useRef(false);
   const planCompletedViewedRef = useRef(false);
   const insightsViewedRef = useRef(false);
+
+  const targetMissionsPerWeek = weeklyGoalSettings.targetMissionsPerWeek;
 
   const weeklyPlanStatus = useMemo(
     () =>
       buildWeeklyPracticePlanStatus({
         missions,
         history,
+        targetMissionsPerWeek,
       }),
-    [history, missions],
+    [history, missions, targetMissionsPerWeek],
   );
 
   const weeklyComparison = useMemo(
-    () => buildWeeklyPracticeComparison({ history, missions }),
-    [history, missions],
+    () => buildWeeklyPracticeComparison({ history, missions, targetMissionsPerWeek }),
+    [history, missions, targetMissionsPerWeek],
   );
 
   const weeklyPlanMissions = weeklyPlanStatus.missions;
@@ -296,8 +301,12 @@ export default function PracticeMissionsPage(): JSX.Element {
   useEffect(() => {
     if (loading || weeklyPlanStatus.totalCount === 0 || planViewedRef.current) return;
     planViewedRef.current = true;
-    trackPracticePlanViewed({ entryPoint: "practice_missions", missionsInPlan: weeklyPlanStatus.totalCount });
-  }, [loading, weeklyPlanStatus.totalCount]);
+    trackPracticePlanViewed({
+      entryPoint: "practice_missions",
+      missionsInPlan: weeklyPlanStatus.totalCount,
+      targetMissionsPerWeek,
+    });
+  }, [loading, targetMissionsPerWeek, weeklyPlanStatus.totalCount]);
 
   useEffect(() => {
     if (loading || !weeklyPlanStatus.isPlanCompleted || planCompletedViewedRef.current) return;
@@ -307,8 +316,9 @@ export default function PracticeMissionsPage(): JSX.Element {
       completedMissions: weeklyPlanStatus.completedCount,
       totalMissions: weeklyPlanStatus.totalCount,
       isPlanCompleted: weeklyPlanStatus.isPlanCompleted,
+      targetMissionsPerWeek,
     });
-  }, [loading, weeklyPlanStatus]);
+  }, [loading, targetMissionsPerWeek, weeklyPlanStatus]);
 
   useEffect(() => {
     if (loading || insightsViewedRef.current) return;
@@ -322,8 +332,9 @@ export default function PracticeMissionsPage(): JSX.Element {
       thisWeekPlanCompleted: weeklyComparison.thisWeek.planCompleted,
       lastWeekPlanCompleted: weeklyComparison.lastWeek.planCompleted,
       surface: "practice_missions_web",
+      targetMissionsPerWeek,
     });
-  }, [loading, weeklyComparison]);
+  }, [loading, targetMissionsPerWeek, weeklyComparison]);
 
   const handleSelectMission = (missionId: string, planRank?: number) => {
     if (planRank != null) {
