@@ -34,6 +34,13 @@ import {
   type PracticeMissionListItem,
 } from "@shared/practice/practiceMissionsList";
 import { trackPracticePlanCompletedViewed } from "@/practice/analytics";
+import {
+  loadWeeklyPracticeGoalSettings,
+  saveWeeklyPracticeGoalSettings,
+} from "@/practice/practiceGoalSettings";
+import { getDefaultWeeklyPracticeGoalSettings, type WeeklyPracticeGoalSettings } from "@shared/practice/practiceGoalSettings";
+
+const WEEKLY_GOAL_OPTIONS = [1, 3, 5];
 
 const Card: React.FC<{
   title: string;
@@ -142,6 +149,10 @@ export const HomeHubPage: React.FC = () => {
   const [practiceHistory, setPracticeHistory] = useState<
     PracticeMissionHistoryEntry[]
   >([]);
+  const [weeklyGoalSettings, setWeeklyGoalSettings] = useState<WeeklyPracticeGoalSettings>(
+    () => getDefaultWeeklyPracticeGoalSettings(),
+  );
+  const [editingPracticeGoal, setEditingPracticeGoal] = useState(false);
   const planCompletedViewedRef = useRef(false);
 
   useEffect(() => {
@@ -196,6 +207,17 @@ export const HomeHubPage: React.FC = () => {
     };
   }, []);
 
+  useEffect(() => {
+    try {
+      const settings = loadWeeklyPracticeGoalSettings();
+      setWeeklyGoalSettings(settings);
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.warn("[practiceGoalSettings] Failed to load weekly goal settings", err);
+      setWeeklyGoalSettings(getDefaultWeeklyPracticeGoalSettings());
+    }
+  }, []);
+
   const playerBag = useMemo(() => mapBagStateToPlayerBag(bag), [bag]);
   const bagReadiness = useMemo(
     () => buildBagReadinessOverview(playerBag, bagStats ?? {}),
@@ -216,6 +238,15 @@ export const HomeHubPage: React.FC = () => {
     [bagReadiness.suggestions, clubLabels, t, unit],
   );
   const practiceGoalNow = new Date(Date.now());
+  const targetMissionsPerWeek = weeklyGoalSettings.targetMissionsPerWeek;
+  const handleSelectWeeklyGoal = (target: number) => {
+    const nextSettings: WeeklyPracticeGoalSettings = {
+      targetMissionsPerWeek: target,
+    };
+    setWeeklyGoalSettings(nextSettings);
+    saveWeeklyPracticeGoalSettings(nextSettings);
+    setEditingPracticeGoal(false);
+  };
   const practiceMissions = useMemo<PracticeMissionListItem[]>(() => {
     const missions = buildMissionDefinitions(bagReadiness, practiceHistory);
     if (missions.length === 0) return [];
@@ -237,12 +268,13 @@ export const HomeHubPage: React.FC = () => {
       buildWeeklyPracticeGoalProgress({
         missionHistory: practiceHistory,
         now: practiceGoalNow,
+        targetMissionsPerWeek,
       }),
-    [practiceGoalNow, practiceHistory],
+    [practiceGoalNow, practiceHistory, targetMissionsPerWeek],
   );
   const practiceGoalStreak = useMemo(
-    () => buildWeeklyGoalStreak(practiceHistory, practiceGoalNow),
-    [practiceGoalNow, practiceHistory],
+    () => buildWeeklyGoalStreak(practiceHistory, practiceGoalNow, targetMissionsPerWeek),
+    [practiceGoalNow, practiceHistory, targetMissionsPerWeek],
   );
   const practiceGoalStreakLabel = useMemo(() => {
     const streakWeeks = practiceGoalStreak.currentStreakWeeks;
@@ -280,8 +312,9 @@ export const HomeHubPage: React.FC = () => {
         missions: practiceMissions,
         history: practiceHistory,
         now: practiceGoalNow,
+        targetMissionsPerWeek,
       }),
-    [practiceGoalNow, practiceHistory, practiceMissions],
+    [practiceGoalNow, practiceHistory, practiceMissions, targetMissionsPerWeek],
   );
 
   const practicePlanCopy = useMemo(() => {
@@ -303,8 +336,9 @@ export const HomeHubPage: React.FC = () => {
       completedMissions: practicePlanSummary.completedCount,
       totalMissions: practicePlanSummary.totalCount,
       isPlanCompleted: true,
+      targetMissionsPerWeek,
     });
-  }, [practicePlanSummary]);
+  }, [practicePlanSummary, targetMissionsPerWeek]);
 
   const effectivePlan = plan === "pro" ? "PRO" : "FREE";
 
@@ -472,9 +506,19 @@ export const HomeHubPage: React.FC = () => {
             </div>
           }
         >
-          <div className="space-y-2 text-sm text-slate-200">
-            <div className="flex items-center justify-between gap-3" data-testid="practice-goal-row">
-              <div data-testid="practice-goal-summary">{practiceGoalCopy.summary ?? ""}</div>
+            <div className="space-y-2 text-sm text-slate-200">
+            <div className="flex items-start justify-between gap-3" data-testid="practice-goal-row">
+              <div className="space-y-1">
+                <div data-testid="practice-goal-summary">{practiceGoalCopy.summary ?? ""}</div>
+                <button
+                  type="button"
+                  onClick={() => setEditingPracticeGoal((prev) => !prev)}
+                  className="text-[11px] font-semibold text-emerald-200 underline-offset-2 hover:text-emerald-100 hover:underline"
+                  data-testid="practice-goal-edit"
+                >
+                  {t("practice.goal.edit")}
+                </button>
+              </div>
               {practiceGoalCopy.statusLabel ? (
                 <span
                   className={
@@ -489,6 +533,40 @@ export const HomeHubPage: React.FC = () => {
                 </span>
               ) : null}
             </div>
+            {editingPracticeGoal ? (
+              <div className="space-y-2" data-testid="practice-goal-options">
+                <p className="text-[11px] text-slate-400">{t("practice.goal.settings.subtitle")}</p>
+                <div className="flex flex-wrap gap-2">
+                  {WEEKLY_GOAL_OPTIONS.map((target) => {
+                    const selected = target === targetMissionsPerWeek;
+                    return (
+                      <button
+                        key={target}
+                        type="button"
+                        onClick={() => handleSelectWeeklyGoal(target)}
+                        className={`inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-xs font-semibold transition ${
+                          selected
+                            ? "border-emerald-400 bg-emerald-500/10 text-emerald-100"
+                            : "border-slate-700 bg-slate-800/60 text-slate-200 hover:border-emerald-400/60"
+                        }`}
+                        data-testid={`practice-goal-option-${target}`}
+                      >
+                        <span
+                          className={`flex h-4 w-4 items-center justify-center rounded-full border text-[10px] ${
+                            selected
+                              ? "border-emerald-300 bg-emerald-500/30 text-slate-900"
+                              : "border-slate-600 text-transparent"
+                          }`}
+                        >
+                          ●
+                        </span>
+                        <span>{t("practice.goal.settings.optionLabel", { count: target })}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            ) : null}
             {practiceGoalStreakLabel ? (
               <div className="text-[11px] text-slate-400" data-testid="practice-goal-streak">
                 {practiceGoalStreakLabel}

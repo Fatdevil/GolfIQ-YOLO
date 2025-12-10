@@ -10,6 +10,7 @@ export type WeeklyPracticeInsightsViewedEvent = {
   thisWeekPlanCompleted: boolean;
   lastWeekPlanCompleted: boolean;
   surface: WeeklyPracticeInsightsSurface;
+  targetMissionsPerWeek?: number;
 };
 
 export function emitWeeklyPracticeInsightsViewed(

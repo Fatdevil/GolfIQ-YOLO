@@ -40,6 +40,10 @@ vi.mock("@/practice/practiceMissionHistory", () => ({
 vi.mock("@/practice/analytics", () => ({
   trackPracticePlanCompletedViewed: vi.fn(),
 }));
+vi.mock("@/practice/practiceGoalSettings", () => ({
+  loadWeeklyPracticeGoalSettings: vi.fn(),
+  saveWeeklyPracticeGoalSettings: vi.fn(),
+}));
 
 import { useAccessFeatures, useAccessPlan, useFeatureFlag } from "@/access/UserAccessContext";
 import {
@@ -50,6 +54,10 @@ import {
 import { seedDemoData } from "@/demo/demoData";
 import { buildWeeklyGoalStreak } from "@shared/practice/practiceGoals";
 import { trackPracticePlanCompletedViewed } from "@/practice/analytics";
+import {
+  loadWeeklyPracticeGoalSettings,
+  saveWeeklyPracticeGoalSettings,
+} from "@/practice/practiceGoalSettings";
 
 const mockUseAccessPlan = useAccessPlan as unknown as Mock;
 const mockUseAccessFeatures = useAccessFeatures as unknown as Mock;
@@ -64,6 +72,10 @@ const mockLoadPracticeHistory =
   loadPracticeMissionHistory as unknown as Mock;
 const mockTrackPlanCompletedViewed =
   trackPracticePlanCompletedViewed as unknown as Mock;
+const mockLoadWeeklyGoalSettings =
+  loadWeeklyPracticeGoalSettings as unknown as Mock;
+const mockSaveWeeklyGoalSettings =
+  saveWeeklyPracticeGoalSettings as unknown as Mock;
 let dateNowSpy: ReturnType<typeof vi.spyOn>;
 
 const mockBagStats: BagClubStatsMap = {
@@ -120,6 +132,8 @@ describe("HomeHubPage", () => {
     mockFetchBagStats.mockResolvedValue(mockBagStats);
     mockLoadPracticeHistory.mockResolvedValue([]);
     mockTrackPlanCompletedViewed.mockClear();
+    mockLoadWeeklyGoalSettings.mockReturnValue({ targetMissionsPerWeek: 3 });
+    mockSaveWeeklyGoalSettings.mockClear();
   });
 
   afterEach(() => {
@@ -248,6 +262,7 @@ describe("HomeHubPage", () => {
         completedMissions: 2,
         totalMissions: 2,
         isPlanCompleted: true,
+        targetMissionsPerWeek: 3,
       });
     });
   });
@@ -334,6 +349,62 @@ describe("HomeHubPage", () => {
 
     expect(summaries.length).toBeGreaterThan(0);
     expect(statuses.length).toBeGreaterThan(0);
+  });
+
+  it("uses stored weekly goal target on the practice tile", async () => {
+    mockLoadWeeklyGoalSettings.mockReturnValue({ targetMissionsPerWeek: 5 });
+    mockLoadPracticeHistory.mockResolvedValue([
+      {
+        id: "g1",
+        missionId: "m1",
+        startedAt: "2024-02-05T10:00:00Z",
+        endedAt: "2024-02-05T10:20:00Z",
+        status: "completed",
+        targetClubs: [],
+        completedSampleCount: 10,
+      },
+      {
+        id: "g2",
+        missionId: "m2",
+        startedAt: "2024-02-06T10:00:00Z",
+        endedAt: "2024-02-06T10:20:00Z",
+        status: "completed",
+        targetClubs: [],
+        completedSampleCount: 10,
+      },
+    ]);
+
+    renderHome();
+
+    expect(await screen.findByTestId("practice-goal-summary")).toHaveTextContent(
+      "2/5 missions this week",
+    );
+  });
+
+  it("lets players edit their weekly goal from home", async () => {
+    mockLoadWeeklyGoalSettings.mockReturnValue({ targetMissionsPerWeek: 3 });
+    mockLoadPracticeHistory.mockResolvedValue([
+      {
+        id: "g1",
+        missionId: "m1",
+        startedAt: "2024-02-05T10:00:00Z",
+        endedAt: "2024-02-05T10:20:00Z",
+        status: "completed",
+        targetClubs: [],
+        completedSampleCount: 10,
+      },
+    ]);
+
+    renderHome();
+
+    fireEvent.click(await screen.findByTestId("practice-goal-edit"));
+    const option = await screen.findByTestId("practice-goal-option-5");
+    fireEvent.click(option);
+
+    expect(mockSaveWeeklyGoalSettings).toHaveBeenCalledWith({ targetMissionsPerWeek: 5 });
+    expect(await screen.findByTestId("practice-goal-summary")).toHaveTextContent(
+      "1/5 missions this week",
+    );
   });
 
   it("shows on-track status when weekly goal is met", async () => {

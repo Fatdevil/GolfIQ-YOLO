@@ -17,6 +17,7 @@ import type {
   PracticeMissionHistoryEntry,
   PracticeMissionOutcome,
 } from "@shared/practice/practiceHistory";
+import { loadWeeklyPracticeGoalSettings } from "@/practice/practiceGoalSettings";
 
 export type PracticeProgressOverview = {
   totalSessions: number;
@@ -65,7 +66,12 @@ export async function recordPracticeMissionOutcome(
 ): Promise<PracticeMissionHistoryEntry[]> {
   const history = await loadPracticeMissionHistory();
   const now = new Date(Date.now());
-  const goalBefore = buildWeeklyPracticeGoalProgress({ missionHistory: history, now });
+  const weeklyGoalSettings = loadWeeklyPracticeGoalSettings();
+  const goalBefore = buildWeeklyPracticeGoalProgress({
+    missionHistory: history,
+    now,
+    targetMissionsPerWeek: weeklyGoalSettings.targetMissionsPerWeek,
+  });
   const next = recordMissionOutcome(history, outcome);
   if (next !== history) {
     await persistHistory(next);
@@ -74,9 +80,17 @@ export async function recordPracticeMissionOutcome(
       samplesCount: outcome.completedSampleCount ?? null,
     });
 
-    const goalAfter = buildWeeklyPracticeGoalProgress({ missionHistory: next, now });
+    const goalAfter = buildWeeklyPracticeGoalProgress({
+      missionHistory: next,
+      now,
+      targetMissionsPerWeek: weeklyGoalSettings.targetMissionsPerWeek,
+    });
     if (didJustReachWeeklyGoal({ before: goalBefore, after: goalAfter })) {
-      const streak = buildWeeklyGoalStreak(next, now);
+      const streak = buildWeeklyGoalStreak(
+        next,
+        now,
+        weeklyGoalSettings.targetMissionsPerWeek,
+      );
       trackPracticeGoalReached(
         { emit: (event, payload) => postTelemetryEvent({ event, ...payload }) },
         {

@@ -25,6 +25,10 @@ vi.mock("@/practice/practiceMissionHistory", async () => {
   };
 });
 
+vi.mock("@/practice/practiceGoalSettings", () => ({
+  loadWeeklyPracticeGoalSettings: vi.fn(),
+}));
+
 vi.mock("@/bag/storage", () => ({
   loadBag: vi.fn(),
 }));
@@ -78,12 +82,15 @@ import { fetchBagStats } from "@/api/bagStatsClient";
 import { useNotifications } from "@/notifications/NotificationContext";
 import { postTelemetryEvent } from "@/api";
 import * as practicePlan from "@shared/practice/practicePlan";
+import { loadWeeklyPracticeGoalSettings } from "@/practice/practiceGoalSettings";
 
 const mockLoadHistory = loadPracticeMissionHistory as unknown as Mock;
 const mockLoadBag = loadBag as unknown as Mock;
 const mockMapBagToPlayer = mapBagStateToPlayerBag as unknown as Mock;
 const mockBuildBagReadiness = buildBagReadinessOverview as unknown as Mock;
 const mockFetchBagStats = fetchBagStats as unknown as Mock;
+const mockLoadWeeklyGoalSettings =
+  loadWeeklyPracticeGoalSettings as unknown as Mock;
 const mockUseAccessPlan = useAccessPlan as unknown as Mock;
 const mockUseAccessFeatures = useAccessFeatures as unknown as Mock;
 const mockUseFeatureFlag = useFeatureFlag as unknown as Mock;
@@ -130,6 +137,7 @@ describe("PracticeMissionsPage", () => {
     mockFetchBagStats.mockReset();
     mockBuildBagReadiness.mockReset();
     mockTelemetry.mockReset();
+    mockLoadWeeklyGoalSettings.mockReset();
     mockLoadBag.mockReturnValue(createDefaultBag());
     mockMapBagToPlayer.mockReturnValue({ clubs: [] });
     mockFetchBagStats.mockResolvedValue({});
@@ -140,6 +148,7 @@ describe("PracticeMissionsPage", () => {
       ],
       dataStatusByClubId: {},
     });
+    mockLoadWeeklyGoalSettings.mockReturnValue({ targetMissionsPerWeek: 3 });
   });
 
   it("fires practice_missions_viewed when the page mounts", async () => {
@@ -324,6 +333,48 @@ describe("PracticeMissionsPage", () => {
     expect(within(insights as HTMLElement).getByText(/Last week: 0 missions/i)).toBeVisible();
     expect(within(insights as HTMLElement).getByText(/Goal not reached/i)).toBeVisible();
     expect(within(insights as HTMLElement).getAllByText(/Plan completed/i)[1]).toBeVisible();
+  });
+
+  it("uses stored weekly goal for insights", async () => {
+    const now = new Date();
+    mockLoadWeeklyGoalSettings.mockReturnValue({ targetMissionsPerWeek: 5 });
+    mockLoadHistory.mockResolvedValue([
+      {
+        id: "entry-a",
+        missionId: "practice_fill_gap:7i:8i",
+        startedAt: now.toISOString(),
+        status: "completed",
+        targetClubs: [],
+        completedSampleCount: 5,
+      },
+      {
+        id: "entry-b",
+        missionId: "practice_fill_gap:7i:8i",
+        startedAt: new Date(now.getTime() - 24 * 60 * 60 * 1000).toISOString(),
+        status: "completed",
+        targetClubs: [],
+        completedSampleCount: 5,
+      },
+      {
+        id: "entry-c",
+        missionId: "practice_fill_gap:9i:pw",
+        startedAt: new Date(now.getTime() - 2 * 24 * 60 * 60 * 1000).toISOString(),
+        status: "completed",
+        targetClubs: [],
+        completedSampleCount: 5,
+      },
+    ] as PracticeMissionHistoryEntry[]);
+
+    renderWithRouter();
+
+    const insightsSections = await screen.findAllByTestId("practice-weekly-insights");
+    const insights =
+      insightsSections.find((section: HTMLElement) =>
+        within(section).queryByText(/This week: 2 missions/i),
+      ) ?? insightsSections[insightsSections.length - 1];
+
+    const goalLabels = within(insights).getAllByText(/Goal not reached/i);
+    expect(goalLabels[0]).toBeVisible();
   });
 
   it("shows insights empty state when there is no practice history", async () => {
