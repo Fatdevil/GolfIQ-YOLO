@@ -65,6 +65,8 @@
   "practice.plan.incompleteLabel": "Not done yet",
   "practice.plan.completedBanner": "You’ve completed this week’s practice plan! 🎉",
   "practice.plan.progressBanner": "{{completed}} of {{total}} missions done this week",
+  "practice.home.planDone": "Weekly plan: done 🎉",
+  "practice.home.planProgress": "Weekly plan: {{completed}} of {{total}} missions done",
   "practice.missions.title": "Practice missions",
   "practice.missions.cta.viewAll": "View all missions",
   "practice.missions.status.overdue": "High priority",

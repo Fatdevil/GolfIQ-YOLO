@@ -15,6 +15,7 @@ import * as engagementStorage from '@app/storage/engagement';
 import * as practiceHistory from '@app/storage/practiceMissionHistory';
 import type { BagClubStatsMap } from '@shared/caddie/bagStats';
 import * as bagPracticeRecommendations from '@shared/caddie/bagPracticeRecommendations';
+import { setTelemetryEmitter } from '@app/telemetry';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'HomeDashboard'>;
 
@@ -85,11 +86,13 @@ vi.mock('@app/storage/engagement', () => ({
   saveEngagementState: vi.fn(),
 }));
 vi.mock('@app/storage/practiceMissionHistory', () => ({
+  PRACTICE_MISSION_WINDOW_DAYS: 7,
   loadPracticeMissionHistory: vi.fn(),
   summarizeRecentPracticeHistory: vi.fn(),
 }));
 vi.mock('@shared/caddie/bagPracticeRecommendations', () => ({
   getTopPracticeRecommendation: vi.fn(),
+  buildBagPracticeRecommendations: vi.fn().mockReturnValue([]),
 }));
 
 describe('HomeDashboardScreen', () => {
@@ -116,11 +119,13 @@ describe('HomeDashboardScreen', () => {
       lastStarted: undefined,
     });
     vi.mocked(bagPracticeRecommendations.getTopPracticeRecommendation).mockReturnValue(null);
+    setTelemetryEmitter(null);
   });
 
   afterEach(() => {
     dateNowSpy?.mockRestore();
     vi.clearAllMocks();
+    setTelemetryEmitter(null);
   });
 
   it('renders active round CTA and resumes on tap', async () => {
@@ -383,6 +388,81 @@ describe('HomeDashboardScreen', () => {
     expect(await screen.findByTestId('practice-progress-card')).toBeVisible();
     expect(screen.getByTestId('practice-progress-summary')).toHaveTextContent(
       'Completed 2 of 3 recommended sessions',
+    );
+  });
+
+  it('shows a completed weekly plan on the practice tile and tracks analytics', async () => {
+    const navigation = createNavigation();
+    vi.mocked(bagClient.fetchPlayerBag).mockResolvedValue({ clubs: [] } as bagClient.PlayerBag);
+    vi.mocked(bagStatsClient.fetchBagStats).mockResolvedValue({});
+    const telemetryMock = vi.fn();
+    setTelemetryEmitter(telemetryMock);
+    vi.mocked(practiceHistory.loadPracticeMissionHistory).mockResolvedValue([
+      {
+        id: 'p1',
+        missionId: 'mission-1',
+        startedAt: '2024-02-05T10:00:00Z',
+        endedAt: '2024-02-05T10:30:00Z',
+        status: 'completed',
+        targetClubs: [],
+        completedSampleCount: 10,
+      },
+      {
+        id: 'p2',
+        missionId: 'mission-2',
+        startedAt: '2024-02-06T10:00:00Z',
+        endedAt: '2024-02-06T10:30:00Z',
+        status: 'completed',
+        targetClubs: [],
+        completedSampleCount: 10,
+      },
+    ]);
+
+    render(<HomeDashboardScreen navigation={navigation} route={createRoute()} />);
+
+    expect(await screen.findByTestId('practice-plan-summary')).toHaveTextContent('Weekly plan: done 🎉');
+
+    await waitFor(() => {
+      expect(telemetryMock).toHaveBeenCalledWith(
+        'practice_plan_completed_viewed',
+        expect.objectContaining({
+          entryPoint: 'home',
+          completedMissions: 2,
+          totalMissions: 2,
+          isPlanCompleted: true,
+        }),
+      );
+    });
+  });
+
+  it('surfaces partial weekly plan progress on the practice tile', async () => {
+    const navigation = createNavigation();
+    vi.mocked(bagClient.fetchPlayerBag).mockResolvedValue({ clubs: [] } as bagClient.PlayerBag);
+    vi.mocked(bagStatsClient.fetchBagStats).mockResolvedValue({});
+    vi.mocked(practiceHistory.loadPracticeMissionHistory).mockResolvedValue([
+      {
+        id: 'p1',
+        missionId: 'mission-1',
+        startedAt: '2024-02-05T10:00:00Z',
+        endedAt: '2024-02-05T10:30:00Z',
+        status: 'completed',
+        targetClubs: [],
+        completedSampleCount: 10,
+      },
+      {
+        id: 'p2',
+        missionId: 'mission-2',
+        startedAt: '2024-02-06T10:00:00Z',
+        status: 'abandoned',
+        targetClubs: [],
+        completedSampleCount: 0,
+      },
+    ]);
+
+    render(<HomeDashboardScreen navigation={navigation} route={createRoute()} />);
+
+    expect(await screen.findByTestId('practice-plan-summary')).toHaveTextContent(
+      'Weekly plan: 1 of 2 missions done',
     );
   });
 

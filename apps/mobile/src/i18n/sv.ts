@@ -97,6 +97,9 @@ export const sv = {
   },
   home_dashboard_practice_next_title: 'Nästa mission',
   home_dashboard_practice_next_cta: 'Starta mission',
+  practice_home_plan_header: 'Veckoplan',
+  practice_home_plan_done: 'Veckoplan: klar 🎉',
+  practice_home_plan_progress: 'Veckoplan: {{completed}} av {{total}} uppdrag gjorda',
   round: {
     recap: {
       nextPracticeTitle: 'Nästa träningsmission',

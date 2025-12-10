@@ -5,6 +5,8 @@ import { MemoryRouter } from "react-router-dom";
 
 import { HomeHubPage } from "@/pages/home/HomeHubPage";
 import * as bagStatsApi from "@/api/bagStatsClient";
+import { loadBag } from "@web/bag/storage";
+import { createDefaultBag } from "@web/bag/types";
 import { UnitsProvider } from "@/preferences/UnitsContext";
 import type { BagClubStatsMap } from "@shared/caddie/bagStats";
 import { loadPracticeMissionHistory } from "@/practice/practiceMissionHistory";
@@ -28,8 +30,15 @@ vi.mock("@/notifications/NotificationContext", () => ({
   useNotifications: () => ({ notify: vi.fn() }),
 }));
 vi.mock("@/api/bagStatsClient", () => ({ fetchBagStats: vi.fn() }));
+vi.mock("@web/bag/storage", () => ({
+  loadBag: vi.fn(),
+}));
 vi.mock("@/practice/practiceMissionHistory", () => ({
+  PRACTICE_MISSION_WINDOW_DAYS: 7,
   loadPracticeMissionHistory: vi.fn(),
+}));
+vi.mock("@/practice/analytics", () => ({
+  trackPracticePlanCompletedViewed: vi.fn(),
 }));
 
 import { useAccessFeatures, useAccessPlan, useFeatureFlag } from "@/access/UserAccessContext";
@@ -40,6 +49,7 @@ import {
 } from "@/onboarding/checklist";
 import { seedDemoData } from "@/demo/demoData";
 import { buildWeeklyGoalStreak } from "@shared/practice/practiceGoals";
+import { trackPracticePlanCompletedViewed } from "@/practice/analytics";
 
 const mockUseAccessPlan = useAccessPlan as unknown as Mock;
 const mockUseAccessFeatures = useAccessFeatures as unknown as Mock;
@@ -49,8 +59,11 @@ const mockComputeOnboardingChecklist =
 const mockMarkHomeSeen = markHomeSeen as unknown as Mock;
 const mockSeedDemoData = seedDemoData as unknown as Mock;
 const mockFetchBagStats = bagStatsApi.fetchBagStats as unknown as Mock;
+const mockLoadBag = loadBag as unknown as Mock;
 const mockLoadPracticeHistory =
   loadPracticeMissionHistory as unknown as Mock;
+const mockTrackPlanCompletedViewed =
+  trackPracticePlanCompletedViewed as unknown as Mock;
 let dateNowSpy: ReturnType<typeof vi.spyOn>;
 
 const mockBagStats: BagClubStatsMap = {
@@ -103,8 +116,10 @@ describe("HomeHubPage", () => {
     mockComputeOnboardingChecklist.mockReturnValue({ ...baseChecklist });
     mockMarkHomeSeen.mockClear();
     mockSeedDemoData.mockClear();
+    mockLoadBag.mockReturnValue(createDefaultBag());
     mockFetchBagStats.mockResolvedValue(mockBagStats);
     mockLoadPracticeHistory.mockResolvedValue([]);
+    mockTrackPlanCompletedViewed.mockClear();
   });
 
   afterEach(() => {
@@ -197,6 +212,74 @@ describe("HomeHubPage", () => {
     const tiles = await screen.findAllByTestId("home-bag-readiness");
     expect(tiles[0]).toBeVisible();
     expect((await screen.findAllByText(/Bag readiness/i))[0]).toBeVisible();
+  });
+
+  it("shows a completed weekly practice plan on the home tile and emits analytics", async () => {
+    const now = new Date("2024-02-06T10:00:00Z");
+    mockLoadBag.mockReturnValue({ updatedAt: now.getTime(), clubs: [] });
+    mockLoadPracticeHistory.mockResolvedValue([
+      {
+        id: "entry-1",
+        missionId: "mission-1",
+        startedAt: now.toISOString(),
+        status: "completed",
+        targetClubs: [],
+        completedSampleCount: 10,
+      },
+      {
+        id: "entry-2",
+        missionId: "mission-2",
+        startedAt: now.toISOString(),
+        status: "completed",
+        targetClubs: [],
+        completedSampleCount: 8,
+      },
+    ]);
+
+    renderHome();
+
+    expect(await screen.findByTestId("practice-plan-summary")).toHaveTextContent(
+      "Weekly plan: done 🎉",
+    );
+
+    await waitFor(() => {
+      expect(mockTrackPlanCompletedViewed).toHaveBeenCalledWith({
+        entryPoint: "home",
+        completedMissions: 2,
+        totalMissions: 2,
+        isPlanCompleted: true,
+      });
+    });
+  });
+
+  it("shows partial weekly plan progress on the home practice tile", async () => {
+    const now = new Date("2024-02-06T10:00:00Z");
+    mockLoadBag.mockReturnValue({ updatedAt: now.getTime(), clubs: [] });
+    mockLoadPracticeHistory.mockResolvedValue([
+      {
+        id: "entry-1",
+        missionId: "mission-1",
+        startedAt: now.toISOString(),
+        status: "completed",
+        targetClubs: [],
+        completedSampleCount: 10,
+      },
+      {
+        id: "entry-2",
+        missionId: "mission-2",
+        startedAt: now.toISOString(),
+        status: "abandoned",
+        targetClubs: [],
+        completedSampleCount: 0,
+      },
+    ]);
+
+    renderHome();
+
+    expect(await screen.findByTestId("practice-plan-summary")).toHaveTextContent(
+      "Weekly plan: 1 of 2 missions done",
+    );
+    expect(mockTrackPlanCompletedViewed).not.toHaveBeenCalled();
   });
 
   it("shows weekly practice goal prompt when no history exists", async () => {

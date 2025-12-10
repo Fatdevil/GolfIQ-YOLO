@@ -3,7 +3,9 @@ import { describe, expect, it } from 'vitest';
 import { buildPracticeMissionsList, type PracticeMissionDefinition } from '@shared/practice/practiceMissionsList';
 import {
   buildWeeklyPracticePlan,
+  buildWeeklyPracticePlanHomeSummary,
   buildWeeklyPracticePlanStatus,
+  type WeeklyPracticePlanHomeSummary,
   type WeeklyPracticePlanStatus,
 } from '@shared/practice/practicePlan';
 
@@ -104,5 +106,60 @@ describe('buildWeeklyPracticePlanStatus', () => {
 
     expect(status.totalCount).toBe(0);
     expect(status.isPlanCompleted).toBe(false);
+  });
+});
+
+describe('buildWeeklyPracticePlanHomeSummary', () => {
+  const now = new Date('2024-01-08T12:00:00Z');
+
+  function buildHistory(ids: string[]): any[] {
+    return ids.map((missionId, index) => ({
+      id: `entry-${missionId}-${index}`,
+      missionId,
+      startedAt: new Date(now.getTime() - 2 * 24 * 60 * 60 * 1000).toISOString(),
+      status: 'completed',
+      targetClubs: [],
+      completedSampleCount: 10,
+    }));
+  }
+
+  function evaluate(idsCompleted: string[], idsAll: string[]): WeeklyPracticePlanHomeSummary {
+    const missions = buildMissions(idsAll.length);
+    const history = buildHistory(idsCompleted);
+
+    return buildWeeklyPracticePlanHomeSummary({ missions, history, now });
+  }
+
+  it('summarizes a fully completed plan', () => {
+    const summary = evaluate(['mission-1', 'mission-2'], ['mission-1', 'mission-2']);
+
+    expect(summary.hasPlan).toBe(true);
+    expect(summary.isPlanCompleted).toBe(true);
+    expect(summary.completedCount).toBe(summary.totalCount);
+  });
+
+  it('summarizes a partially completed plan', () => {
+    const summary = evaluate(['mission-1'], ['mission-1', 'mission-2', 'mission-3']);
+
+    expect(summary.hasPlan).toBe(true);
+    expect(summary.isPlanCompleted).toBe(false);
+    expect(summary.completedCount).toBe(1);
+    expect(summary.totalCount).toBe(3);
+  });
+
+  it('returns an empty summary when no missions exist', () => {
+    const summary = buildWeeklyPracticePlanHomeSummary({ missions: [], history: [], now });
+
+    expect(summary.hasPlan).toBe(false);
+    expect(summary.totalCount).toBe(0);
+    expect(summary.isPlanCompleted).toBe(false);
+  });
+
+  it('handles missing inputs defensively', () => {
+    const summary = buildWeeklyPracticePlanHomeSummary({ missions: null, history: null, now });
+
+    expect(summary.hasPlan).toBe(false);
+    expect(summary.totalCount).toBe(0);
+    expect(summary.isPlanCompleted).toBe(false);
   });
 });
