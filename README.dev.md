@@ -10,3 +10,5 @@ When you need to share videos, weights, fonts, or similar assets, push them to t
 
 - `npm --prefix apps/mobile test -- <filePattern>` runs the React Native Vitest suite (for example `PracticeMissionsScreen.test.tsx`).
 - `npm --prefix apps/mobile run typecheck` verifies the mobile app and test TypeScript types, including Vitest globals.
+
+These mobile commands now run in CI alongside the web checks. You can mirror the pipeline locally via `npm run test:mobile:vitest` and `npm run typecheck:mobile` from the repo root.

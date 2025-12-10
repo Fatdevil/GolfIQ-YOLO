@@ -16,12 +16,19 @@ jobs:
       - uses: actions/checkout@v5
       - uses: actions/setup-node@v5
         with:
-          node-version: "20"
-      - name: Install dependencies (web)
-        run: npm --prefix web ci || npm --prefix web install
+          node-version-file: ".nvmrc"
+      - name: Install dependencies (web + mobile)
+        run: |
+          npm ci || npm install
+          npm --prefix web ci || npm --prefix web install
+          npm --prefix apps/mobile ci --legacy-peer-deps || npm --prefix apps/mobile install --legacy-peer-deps
       - name: Web typecheck
         run: npm --prefix web run typecheck
       - name: Build (web)
         run: npm --prefix web run build
       - name: Web unit tests
         run: npm --prefix web run test
+      - name: Run mobile Vitest suite
+        run: npm run test:mobile:vitest
+      - name: Run mobile typecheck
+        run: npm run typecheck:mobile
