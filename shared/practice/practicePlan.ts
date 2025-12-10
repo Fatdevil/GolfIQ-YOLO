@@ -18,6 +18,13 @@ export interface WeeklyPracticePlanStatus {
   isPlanCompleted: boolean;
 }
 
+export interface WeeklyPracticePlanHomeSummary {
+  completedCount: number;
+  totalCount: number;
+  isPlanCompleted: boolean;
+  hasPlan: boolean;
+}
+
 export function buildWeeklyPracticePlan(
   missions: PracticeMissionListItem[],
   options?: { maxMissions?: number },
@@ -70,5 +77,28 @@ export function buildWeeklyPracticePlanStatus(options: {
     completedCount,
     totalCount,
     isPlanCompleted: totalCount > 0 && completedCount === totalCount,
+  };
+}
+
+export function buildWeeklyPracticePlanHomeSummary(options: {
+  missions: PracticeMissionListItem[] | null | undefined;
+  history: PracticeMissionHistoryEntry[] | null | undefined;
+  now?: Date;
+}): WeeklyPracticePlanHomeSummary {
+  if (!options.missions || !options.history) {
+    return { completedCount: 0, totalCount: 0, isPlanCompleted: false, hasPlan: false };
+  }
+
+  const status = buildWeeklyPracticePlanStatus({
+    missions: options.missions,
+    history: options.history,
+    now: options.now,
+  });
+
+  return {
+    completedCount: status.completedCount,
+    totalCount: status.totalCount,
+    isPlanCompleted: status.isPlanCompleted,
+    hasPlan: status.totalCount > 0,
   };
 }

@@ -23,7 +23,7 @@ type PlanViewedEvent = {
 };
 
 type PlanCompletedViewedEvent = {
-  entryPoint: "practice_missions";
+  entryPoint?: "practice_missions" | "home";
   completedMissions: number;
   totalMissions: number;
   isPlanCompleted: boolean;
@@ -106,7 +106,10 @@ export function trackPracticePlanMissionStart(payload: PlanMissionStartEvent): v
 }
 
 export function trackPracticePlanCompletedViewed(payload: PlanCompletedViewedEvent): void {
-  emitPracticeAnalytics("practice_plan_completed_viewed", payload);
+  emitPracticeAnalytics("practice_plan_completed_viewed", {
+    ...payload,
+    entryPoint: payload.entryPoint ?? "practice_missions",
+  });
 }
 
 export function trackPracticeMissionComplete(payload: MissionCompleteEvent): void {

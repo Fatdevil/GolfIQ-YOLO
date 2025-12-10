@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Link } from "react-router-dom";
 
@@ -16,18 +16,24 @@ import { useNotifications } from "@/notifications/NotificationContext";
 import { mapBagStateToPlayerBag } from "@web/bag/utils";
 import { loadBag } from "@web/bag/storage";
 import type { BagState } from "@web/bag/types";
-import { buildBagReadinessOverview } from "@shared/caddie/bagReadiness";
+import { buildBagReadinessOverview, type BagReadinessOverview } from "@shared/caddie/bagReadiness";
 import type { BagClubStatsMap } from "@shared/caddie/bagStats";
 import type { BagSuggestion } from "@shared/caddie/bagTuningSuggestions";
 import { useUnits } from "@/preferences/UnitsContext";
 import { formatBagSuggestion } from "@/bag/formatBagSuggestion";
-import { loadPracticeMissionHistory } from "@/practice/practiceMissionHistory";
 import {
-  buildWeeklyGoalStreak,
-  buildWeeklyPracticeGoalProgress,
-  type PracticeGoalStatus,
-} from "@shared/practice/practiceGoals";
-import type { PracticeMissionHistoryEntry } from "@shared/practice/practiceHistory";
+  PRACTICE_MISSION_WINDOW_DAYS,
+  loadPracticeMissionHistory,
+} from "@/practice/practiceMissionHistory";
+import { buildMissionProgressById, type PracticeMissionHistoryEntry } from "@shared/practice/practiceHistory";
+import { buildWeeklyGoalStreak, buildWeeklyPracticeGoalProgress, type PracticeGoalStatus } from "@shared/practice/practiceGoals";
+import { buildWeeklyPracticePlanHomeSummary } from "@shared/practice/practicePlan";
+import {
+  buildPracticeMissionsList,
+  type PracticeMissionDefinition,
+  type PracticeMissionListItem,
+} from "@shared/practice/practiceMissionsList";
+import { trackPracticePlanCompletedViewed } from "@/practice/analytics";
 
 const Card: React.FC<{
   title: string;
@@ -72,6 +78,56 @@ const GhostMatchBadge: React.FC = () => {
   );
 };
 
+function mapSuggestionToMissionDefinition(
+  suggestion: BagSuggestion,
+): PracticeMissionDefinition | null {
+  if (suggestion.type === "fill_gap" && suggestion.lowerClubId && suggestion.upperClubId) {
+    return {
+      id: `practice_fill_gap:${suggestion.lowerClubId}:${suggestion.upperClubId}`,
+      titleKey: "bag.practice.fill_gap.title",
+      descriptionKey: "bag.practice.fill_gap.description",
+    };
+  }
+
+  if (suggestion.type === "reduce_overlap" && suggestion.lowerClubId && suggestion.upperClubId) {
+    return {
+      id: `practice_reduce_overlap:${suggestion.lowerClubId}:${suggestion.upperClubId}`,
+      titleKey: "bag.practice.reduce_overlap.title",
+      descriptionKey: "bag.practice.reduce_overlap.description",
+    };
+  }
+
+  if (suggestion.type === "calibrate" && suggestion.clubId) {
+    return {
+      id: `practice_calibrate:${suggestion.clubId}`,
+      titleKey: "bag.practice.calibrate.title",
+      descriptionKey: "bag.practice.calibrate.more_samples.description",
+    };
+  }
+
+  return null;
+}
+
+function buildMissionDefinitions(
+  bagReadiness: BagReadinessOverview | null,
+  history: PracticeMissionHistoryEntry[],
+): PracticeMissionDefinition[] {
+  const map = new Map<string, PracticeMissionDefinition>();
+
+  bagReadiness?.suggestions?.forEach((suggestion: BagSuggestion) => {
+    const def = mapSuggestionToMissionDefinition(suggestion);
+    if (def) map.set(def.id, def);
+  });
+
+  history.forEach((entry) => {
+    if (!map.has(entry.missionId)) {
+      map.set(entry.missionId, { id: entry.missionId, title: entry.missionId });
+    }
+  });
+
+  return Array.from(map.values());
+}
+
 export const HomeHubPage: React.FC = () => {
   const { t } = useTranslation();
   const { plan, isPro } = useAccessPlan();
@@ -86,6 +142,7 @@ export const HomeHubPage: React.FC = () => {
   const [practiceHistory, setPracticeHistory] = useState<
     PracticeMissionHistoryEntry[]
   >([]);
+  const planCompletedViewedRef = useRef(false);
 
   useEffect(() => {
     markHomeSeen();
@@ -159,6 +216,22 @@ export const HomeHubPage: React.FC = () => {
     [bagReadiness.suggestions, clubLabels, t, unit],
   );
   const practiceGoalNow = new Date(Date.now());
+  const practiceMissions = useMemo<PracticeMissionListItem[]>(() => {
+    const missions = buildMissionDefinitions(bagReadiness, practiceHistory);
+    if (missions.length === 0) return [];
+
+    const missionProgressById = buildMissionProgressById(
+      practiceHistory,
+      missions.map((mission) => mission.id),
+      { windowDays: PRACTICE_MISSION_WINDOW_DAYS, now: practiceGoalNow },
+    );
+
+    return buildPracticeMissionsList({
+      bagReadiness,
+      missionProgressById,
+      missions,
+    });
+  }, [bagReadiness, practiceGoalNow, practiceHistory]);
   const practiceGoalProgress = useMemo(
     () =>
       buildWeeklyPracticeGoalProgress({
@@ -200,6 +273,38 @@ export const HomeHubPage: React.FC = () => {
 
     return { summary, statusLabel: t("practice.goals.status.catchUp") };
   }, [practiceGoalProgress, t]);
+
+  const practicePlanSummary = useMemo(
+    () =>
+      buildWeeklyPracticePlanHomeSummary({
+        missions: practiceMissions,
+        history: practiceHistory,
+        now: practiceGoalNow,
+      }),
+    [practiceGoalNow, practiceHistory, practiceMissions],
+  );
+
+  const practicePlanCopy = useMemo(() => {
+    if (!practicePlanSummary.hasPlan) return null;
+    if (practicePlanSummary.isPlanCompleted) return t("practice.home.planDone");
+    return t("practice.home.planProgress", {
+      completed: practicePlanSummary.completedCount,
+      total: practicePlanSummary.totalCount,
+    });
+  }, [practicePlanSummary, t]);
+
+  useEffect(() => {
+    if (planCompletedViewedRef.current) return;
+    if (!practicePlanSummary.hasPlan || !practicePlanSummary.isPlanCompleted) return;
+
+    planCompletedViewedRef.current = true;
+    trackPracticePlanCompletedViewed({
+      entryPoint: "home",
+      completedMissions: practicePlanSummary.completedCount,
+      totalMissions: practicePlanSummary.totalCount,
+      isPlanCompleted: true,
+    });
+  }, [practicePlanSummary]);
 
   const effectivePlan = plan === "pro" ? "PRO" : "FREE";
 
@@ -387,6 +492,11 @@ export const HomeHubPage: React.FC = () => {
             {practiceGoalStreakLabel ? (
               <div className="text-[11px] text-slate-400" data-testid="practice-goal-streak">
                 {practiceGoalStreakLabel}
+              </div>
+            ) : null}
+            {practicePlanCopy ? (
+              <div className="text-[11px] text-slate-400" data-testid="practice-plan-summary">
+                {practicePlanCopy}
               </div>
             ) : null}
           </div>

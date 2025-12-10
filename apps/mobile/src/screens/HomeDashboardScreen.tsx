@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -34,7 +34,8 @@ import {
   summarizeRecentPracticeHistory,
   type PracticeProgressOverview,
 } from '@app/storage/practiceMissionHistory';
-import type { PracticeMissionHistoryEntry } from '@shared/practice/practiceHistory';
+import { safeEmit } from '@app/telemetry';
+import { buildMissionProgressById, type PracticeMissionHistoryEntry } from '@shared/practice/practiceHistory';
 import { useGeolocation } from '@app/hooks/useGeolocation';
 import { saveActiveRoundState } from '@app/round/roundState';
 import { computeNearestCourse } from '@shared/round/autoHoleCore';
@@ -50,6 +51,12 @@ import {
   buildWeeklyPracticeGoalProgress,
   type PracticeGoalStatus,
 } from '@shared/practice/practiceGoals';
+import {
+  buildPracticeMissionsList,
+  type PracticeMissionDefinition,
+  type PracticeMissionListItem,
+} from '@shared/practice/practiceMissionsList';
+import { buildWeeklyPracticePlanHomeSummary } from '@shared/practice/practicePlan';
 
 const CALIBRATION_SAMPLE_THRESHOLD = 5;
 const TARGET_ROUNDS_PER_WEEK = 3;
@@ -125,6 +132,54 @@ function formatBagSuggestion(
   return null;
 }
 
+function mapSuggestionToMissionDefinition(suggestion: BagSuggestion): PracticeMissionDefinition | null {
+  if (suggestion.type === 'fill_gap' && suggestion.lowerClubId && suggestion.upperClubId) {
+    return {
+      id: `practice_fill_gap:${suggestion.lowerClubId}:${suggestion.upperClubId}`,
+      titleKey: 'bag.practice.fill_gap.title',
+      descriptionKey: 'bag.practice.fill_gap.description',
+    };
+  }
+
+  if (suggestion.type === 'reduce_overlap' && suggestion.lowerClubId && suggestion.upperClubId) {
+    return {
+      id: `practice_reduce_overlap:${suggestion.lowerClubId}:${suggestion.upperClubId}`,
+      titleKey: 'bag.practice.reduce_overlap.title',
+      descriptionKey: 'bag.practice.reduce_overlap.description',
+    };
+  }
+
+  if (suggestion.type === 'calibrate' && suggestion.clubId) {
+    return {
+      id: `practice_calibrate:${suggestion.clubId}`,
+      titleKey: 'bag.practice.calibrate.title',
+      descriptionKey: 'bag.practice.calibrate.more_samples.description',
+    };
+  }
+
+  return null;
+}
+
+function buildMissionDefinitions(
+  bagReadiness: ReturnType<typeof buildBagReadinessOverview> | null,
+  history: PracticeMissionHistoryEntry[],
+): PracticeMissionDefinition[] {
+  const map = new Map<string, PracticeMissionDefinition>();
+
+  bagReadiness?.suggestions?.forEach((suggestion) => {
+    const def = mapSuggestionToMissionDefinition(suggestion);
+    if (def) map.set(def.id, def);
+  });
+
+  history.forEach((entry) => {
+    if (!map.has(entry.missionId)) {
+      map.set(entry.missionId, { id: entry.missionId, title: entry.missionId });
+    }
+  });
+
+  return Array.from(map.values());
+}
+
 export default function HomeDashboardScreen({ navigation }: Props): JSX.Element {
   const [state, setState] = useState<DashboardState>({
     loading: true,
@@ -141,6 +196,7 @@ export default function HomeDashboardScreen({ navigation }: Props): JSX.Element 
   const [quickStarting, setQuickStarting] = useState(false);
   const [practiceOverview, setPracticeOverview] = useState<PracticeProgressOverview | null>(null);
   const [practiceHistory, setPracticeHistory] = useState<PracticeMissionHistoryEntry[]>([]);
+  const planCompletedViewedRef = useRef(false);
   const geo = useGeolocation();
 
   useEffect(() => {
@@ -296,6 +352,55 @@ export default function HomeDashboardScreen({ navigation }: Props): JSX.Element 
     if (!bag || !bag.clubs?.length) return null;
     return buildBagReadinessOverview(bag, bagStats ?? {});
   }, [bag, bagStats]);
+
+  const practiceMissions = useMemo<PracticeMissionListItem[]>(() => {
+    const missions = buildMissionDefinitions(bagReadinessOverview, practiceHistory);
+    if (missions.length === 0) return [];
+
+    const missionProgressById = buildMissionProgressById(
+      practiceHistory,
+      missions.map((mission) => mission.id),
+      { windowDays: PRACTICE_MISSION_WINDOW_DAYS, now: practiceGoalNow },
+    );
+
+    return buildPracticeMissionsList({
+      bagReadiness: bagReadinessOverview,
+      missionProgressById,
+      missions,
+    });
+  }, [bagReadinessOverview, practiceGoalNow, practiceHistory]);
+
+  const weeklyPracticePlanSummary = useMemo(
+    () =>
+      buildWeeklyPracticePlanHomeSummary({
+        missions: practiceMissions,
+        history: practiceHistory,
+        now: practiceGoalNow,
+      }),
+    [practiceGoalNow, practiceHistory, practiceMissions],
+  );
+
+  const practicePlanCopy = useMemo(() => {
+    if (!weeklyPracticePlanSummary.hasPlan) return null;
+    if (weeklyPracticePlanSummary.isPlanCompleted) return t('practice_home_plan_done');
+    return t('practice_home_plan_progress', {
+      completed: weeklyPracticePlanSummary.completedCount,
+      total: weeklyPracticePlanSummary.totalCount,
+    });
+  }, [weeklyPracticePlanSummary]);
+
+  useEffect(() => {
+    if (planCompletedViewedRef.current) return;
+    if (!weeklyPracticePlanSummary.hasPlan || !weeklyPracticePlanSummary.isPlanCompleted) return;
+
+    planCompletedViewedRef.current = true;
+    safeEmit('practice_plan_completed_viewed', {
+      entryPoint: 'home',
+      completedMissions: weeklyPracticePlanSummary.completedCount,
+      totalMissions: weeklyPracticePlanSummary.totalCount,
+      isPlanCompleted: true,
+    });
+  }, [weeklyPracticePlanSummary]);
 
   const readinessSuggestion = useMemo(() => {
     if (!bagReadinessOverview?.suggestions.length) return null;
@@ -804,6 +909,11 @@ export default function HomeDashboardScreen({ navigation }: Props): JSX.Element 
             {practiceGoalStreakLabel ? (
               <Text style={styles.muted} testID="practice-goal-streak">
                 {practiceGoalStreakLabel}
+              </Text>
+            ) : null}
+            {practicePlanCopy ? (
+              <Text style={styles.muted} testID="practice-plan-summary">
+                {practicePlanCopy}
               </Text>
             ) : null}
           </View>

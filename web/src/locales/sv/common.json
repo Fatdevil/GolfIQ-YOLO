@@ -65,6 +65,8 @@
   "practice.plan.incompleteLabel": "Inte gjort än",
   "practice.plan.completedBanner": "Du har slutfört veckans träningsplan! 🎉",
   "practice.plan.progressBanner": "{{completed}} av {{total}} uppdrag gjorda denna vecka",
+  "practice.home.planDone": "Veckoplan: klar 🎉",
+  "practice.home.planProgress": "Veckoplan: {{completed}} av {{total}} uppdrag gjorda",
   "practice.missions.title": "Träningsuppdrag",
   "practice.missions.cta.viewAll": "Visa alla missions",
   "practice.missions.status.overdue": "Hög prioritet",
