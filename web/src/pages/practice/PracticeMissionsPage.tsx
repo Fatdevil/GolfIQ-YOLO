@@ -17,6 +17,7 @@ import {
   type PracticeMissionListItem,
 } from "@shared/practice/practiceMissionsList";
 import { buildWeeklyPracticePlanStatus } from "@shared/practice/practicePlan";
+import { buildWeeklyPracticeComparison } from "@shared/practice/practiceInsights";
 import { buildBagReadinessOverview, type BagReadinessOverview } from "@shared/caddie/bagReadiness";
 import type { BagSuggestion } from "@shared/caddie/bagTuningSuggestions";
 import {
@@ -25,6 +26,7 @@ import {
   trackPracticePlanCompletedViewed,
   trackPracticePlanMissionStart,
   trackPracticePlanViewed,
+  trackWeeklyPracticeInsightsViewed,
 } from "@/practice/analytics";
 
 function formatDate(value: number | null, locale: string): string | null {
@@ -150,6 +152,65 @@ type PageState = {
   history: PracticeMissionHistoryEntry[];
 };
 
+function WeeklyPracticeInsightsCard({
+  comparison,
+}: {
+  comparison: ReturnType<typeof buildWeeklyPracticeComparison>;
+}): JSX.Element {
+  const { t } = useTranslation();
+  const hasHistory =
+    comparison.thisWeek.missionsCompleted > 0 || comparison.lastWeek.missionsCompleted > 0;
+
+  if (!hasHistory) {
+    return (
+      <section
+        className="space-y-2 rounded-xl border border-slate-800 bg-slate-900/60 p-4"
+        data-testid="practice-weekly-insights"
+      >
+        <p className="text-sm font-semibold text-slate-100">{t("practice.insights.title")}</p>
+        <p className="text-sm text-slate-400">{t("practice.insights.empty")}</p>
+      </section>
+    );
+  }
+
+  const renderRow = (label: string, snapshot: typeof comparison.thisWeek, testId: string) => (
+    <div className="space-y-1 rounded-lg border border-slate-800 bg-slate-900/40 p-3" data-testid={testId}>
+      <p className="text-sm font-semibold text-slate-100">{label}</p>
+      <p className="text-xs font-semibold text-emerald-200">
+        {snapshot.goalReached
+          ? t("practice.insights.goalReached")
+          : t("practice.insights.goalNotReached")}
+      </p>
+      <p className="text-xs font-semibold text-emerald-200">
+        {snapshot.planCompleted
+          ? t("practice.insights.planCompleted")
+          : t("practice.insights.planNotCompleted")}
+      </p>
+    </div>
+  );
+
+  return (
+    <section
+      className="space-y-3 rounded-xl border border-slate-800 bg-slate-900/60 p-4"
+      data-testid="practice-weekly-insights"
+    >
+      <p className="text-sm font-semibold text-slate-100">{t("practice.insights.title")}</p>
+      <div className="grid gap-3 sm:grid-cols-2">
+        {renderRow(
+          t("practice.insights.thisWeek", { missions: comparison.thisWeek.missionsCompleted }),
+          comparison.thisWeek,
+          "weekly-insights-this-week",
+        )}
+        {renderRow(
+          t("practice.insights.lastWeek", { missions: comparison.lastWeek.missionsCompleted }),
+          comparison.lastWeek,
+          "weekly-insights-last-week",
+        )}
+      </div>
+    </section>
+  );
+}
+
 export default function PracticeMissionsPage(): JSX.Element {
   const { t } = useTranslation();
   const navigate = useNavigate();
@@ -159,6 +220,7 @@ export default function PracticeMissionsPage(): JSX.Element {
   const viewedRef = useRef(false);
   const planViewedRef = useRef(false);
   const planCompletedViewedRef = useRef(false);
+  const insightsViewedRef = useRef(false);
 
   const weeklyPlanStatus = useMemo(
     () =>
@@ -166,6 +228,11 @@ export default function PracticeMissionsPage(): JSX.Element {
         missions,
         history,
       }),
+    [history, missions],
+  );
+
+  const weeklyComparison = useMemo(
+    () => buildWeeklyPracticeComparison({ history, missions }),
     [history, missions],
   );
 
@@ -243,6 +310,21 @@ export default function PracticeMissionsPage(): JSX.Element {
     });
   }, [loading, weeklyPlanStatus]);
 
+  useEffect(() => {
+    if (loading || insightsViewedRef.current) return;
+    insightsViewedRef.current = true;
+
+    trackWeeklyPracticeInsightsViewed({
+      thisWeekMissions: weeklyComparison.thisWeek.missionsCompleted,
+      lastWeekMissions: weeklyComparison.lastWeek.missionsCompleted,
+      thisWeekGoalReached: weeklyComparison.thisWeek.goalReached,
+      lastWeekGoalReached: weeklyComparison.lastWeek.goalReached,
+      thisWeekPlanCompleted: weeklyComparison.thisWeek.planCompleted,
+      lastWeekPlanCompleted: weeklyComparison.lastWeek.planCompleted,
+      surface: "practice_missions_web",
+    });
+  }, [loading, weeklyComparison]);
+
   const handleSelectMission = (missionId: string, planRank?: number) => {
     if (planRank != null) {
       trackPracticePlanMissionStart({
@@ -279,77 +361,82 @@ export default function PracticeMissionsPage(): JSX.Element {
         <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-4 text-sm text-slate-300" data-testid="practice-missions-loading">
           {t("practice.history.loading")}
         </div>
-      ) : missions.length === 0 ? (
-        <div className="space-y-3 rounded-xl border border-dashed border-slate-800 bg-slate-900/60 p-6" data-testid="practice-missions-empty">
-          <h2 className="text-lg font-semibold text-slate-50">{t("practice.missions.empty.title")}</h2>
-          <p className="text-sm text-slate-400">{t("practice.missions.empty.body")}</p>
-          <button
-            type="button"
-            onClick={() => navigate("/range/practice?entrySource=missions")}
-            className="inline-flex w-full justify-center rounded-lg bg-emerald-500 px-4 py-2 text-sm font-semibold text-white shadow hover:bg-emerald-400 sm:w-auto"
-          >
-            {t("home.range.button")}
-          </button>
-        </div>
       ) : (
-        <div className="space-y-5" data-testid="practice-missions-list">
-          {weeklyPlanMissions.length > 0 ? (
-            <section className="space-y-3 rounded-xl border border-slate-800 bg-slate-900/60 p-4" data-testid="practice-weekly-plan">
-              <header className="flex items-center justify-between gap-3">
-                <div className="space-y-1">
-                  <p className="text-sm font-semibold uppercase tracking-wide text-emerald-200/70">
-                    {t("practice.plan.title")}
-                  </p>
-                  <p className="text-xs text-slate-400">{t("practice.history.subtitle")}</p>
-                </div>
-                <span className="rounded-full border border-emerald-500/40 bg-emerald-500/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-emerald-100">
-                  {t("practice.plan.title")}
-                </span>
-              </header>
-              <div className="space-y-3">
-                {weeklyPlanStatus.totalCount > 0 ? (
-                  <div
-                    className={`rounded-lg border px-3 py-2 text-sm ${
-                      weeklyPlanStatus.isPlanCompleted
-                        ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-100"
-                        : "border-slate-800 bg-slate-800/60 text-slate-200"
-                    }`}
-                  >
-                    {weeklyPlanStatus.isPlanCompleted
-                      ? t("practice.plan.completedBanner")
-                      : t("practice.plan.progressBanner", {
-                          completed: weeklyPlanStatus.completedCount,
-                          total: weeklyPlanStatus.totalCount,
-                        })}
-                  </div>
-                ) : null}
-                {weeklyPlanMissions.map((mission) => (
-                  <div key={mission.id} className="space-y-2" data-testid="practice-plan-item">
-                    <span className="inline-flex items-center rounded-full bg-emerald-500/10 px-3 py-1 text-xs font-semibold text-emerald-200">
-                      {t("practice.plan.badge", { rank: mission.planRank })}
+        <div className="space-y-5">
+          <WeeklyPracticeInsightsCard comparison={weeklyComparison} />
+          {missions.length === 0 ? (
+            <div className="space-y-3 rounded-xl border border-dashed border-slate-800 bg-slate-900/60 p-6" data-testid="practice-missions-empty">
+              <h2 className="text-lg font-semibold text-slate-50">{t("practice.missions.empty.title")}</h2>
+              <p className="text-sm text-slate-400">{t("practice.missions.empty.body")}</p>
+              <button
+                type="button"
+                onClick={() => navigate("/range/practice?entrySource=missions")}
+                className="inline-flex w-full justify-center rounded-lg bg-emerald-500 px-4 py-2 text-sm font-semibold text-white shadow hover:bg-emerald-400 sm:w-auto"
+              >
+                {t("home.range.button")}
+              </button>
+            </div>
+          ) : (
+            <div className="space-y-5" data-testid="practice-missions-list">
+              {weeklyPlanMissions.length > 0 ? (
+                <section className="space-y-3 rounded-xl border border-slate-800 bg-slate-900/60 p-4" data-testid="practice-weekly-plan">
+                  <header className="flex items-center justify-between gap-3">
+                    <div className="space-y-1">
+                      <p className="text-sm font-semibold uppercase tracking-wide text-emerald-200/70">
+                        {t("practice.plan.title")}
+                      </p>
+                      <p className="text-xs text-slate-400">{t("practice.history.subtitle")}</p>
+                    </div>
+                    <span className="rounded-full border border-emerald-500/40 bg-emerald-500/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-emerald-100">
+                      {t("practice.plan.title")}
                     </span>
-                    <MissionCard
-                      item={mission}
-                      completionLabel={
-                        mission.isCompletedThisWeek
-                          ? t("practice.plan.completeLabel")
-                          : t("practice.plan.incompleteLabel")
-                      }
-                      completionVariant={mission.isCompletedThisWeek ? "complete" : "incomplete"}
-                      onSelect={() => handleSelectMission(mission.id, mission.planRank)}
-                    />
+                  </header>
+                  <div className="space-y-3">
+                    {weeklyPlanStatus.totalCount > 0 ? (
+                      <div
+                        className={`rounded-lg border px-3 py-2 text-sm ${
+                          weeklyPlanStatus.isPlanCompleted
+                            ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-100"
+                            : "border-slate-800 bg-slate-800/60 text-slate-200"
+                        }`}
+                      >
+                        {weeklyPlanStatus.isPlanCompleted
+                          ? t("practice.plan.completedBanner")
+                          : t("practice.plan.progressBanner", {
+                              completed: weeklyPlanStatus.completedCount,
+                              total: weeklyPlanStatus.totalCount,
+                            })}
+                      </div>
+                    ) : null}
+                    {weeklyPlanMissions.map((mission) => (
+                      <div key={mission.id} className="space-y-2" data-testid="practice-plan-item">
+                        <span className="inline-flex items-center rounded-full bg-emerald-500/10 px-3 py-1 text-xs font-semibold text-emerald-200">
+                          {t("practice.plan.badge", { rank: mission.planRank })}
+                        </span>
+                        <MissionCard
+                          item={mission}
+                          completionLabel={
+                            mission.isCompletedThisWeek
+                              ? t("practice.plan.completeLabel")
+                              : t("practice.plan.incompleteLabel")
+                          }
+                          completionVariant={mission.isCompletedThisWeek ? "complete" : "incomplete"}
+                          onSelect={() => handleSelectMission(mission.id, mission.planRank)}
+                        />
+                      </div>
+                    ))}
                   </div>
+                  <p className="text-sm font-semibold uppercase tracking-wide text-slate-300">{t("practice.missions.title")}</p>
+                </section>
+              ) : null}
+
+              <div className="space-y-3" data-testid="practice-missions-remaining">
+                {remainingMissions.map((mission) => (
+                  <MissionCard key={mission.id} item={mission} onSelect={() => handleSelectMission(mission.id)} />
                 ))}
               </div>
-              <p className="text-sm font-semibold uppercase tracking-wide text-slate-300">{t("practice.missions.title")}</p>
-            </section>
-          ) : null}
-
-          <div className="space-y-3" data-testid="practice-missions-remaining">
-            {remainingMissions.map((mission) => (
-              <MissionCard key={mission.id} item={mission} onSelect={() => handleSelectMission(mission.id)} />
-            ))}
-          </div>
+            </div>
+          )}
         </div>
       )}
     </div>

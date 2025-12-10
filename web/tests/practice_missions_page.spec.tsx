@@ -159,6 +159,18 @@ describe("PracticeMissionsPage", () => {
       );
       expect(mockTelemetry).toHaveBeenCalledWith(
         expect.objectContaining({
+          event: "weekly_practice_insights_viewed",
+          surface: "practice_missions_web",
+          thisWeekMissions: 0,
+          lastWeekMissions: 0,
+          thisWeekGoalReached: false,
+          lastWeekGoalReached: false,
+          thisWeekPlanCompleted: false,
+          lastWeekPlanCompleted: false,
+        }),
+      );
+      expect(mockTelemetry).toHaveBeenCalledWith(
+        expect.objectContaining({
           event: "practice_plan_viewed",
           entryPoint: "practice_missions",
         }),
@@ -271,6 +283,58 @@ describe("PracticeMissionsPage", () => {
     expect(within(plan).getByText(/Not done yet/i)).toBeVisible();
   });
 
+  it("renders weekly practice insights with comparison and statuses", async () => {
+    const now = Date.now();
+    mockLoadHistory.mockResolvedValue([
+      {
+        id: "entry-this-1",
+        missionId: "practice_fill_gap:7i:8i",
+        startedAt: new Date(now - 24 * 60 * 60 * 1000).toISOString(),
+        status: "completed",
+        targetClubs: [],
+        completedSampleCount: 5,
+      },
+      {
+        id: "entry-this-2",
+        missionId: "practice_fill_gap:7i:8i",
+        startedAt: new Date(now - 2 * 24 * 60 * 60 * 1000).toISOString(),
+        status: "completed",
+        targetClubs: [],
+        completedSampleCount: 5,
+      },
+      {
+        id: "entry-this-3",
+        missionId: "mission-extra",
+        startedAt: new Date(now - 3 * 24 * 60 * 60 * 1000).toISOString(),
+        status: "completed",
+        targetClubs: [],
+        completedSampleCount: 5,
+      },
+    ] as PracticeMissionHistoryEntry[]);
+
+    renderWithRouter();
+
+    const thisWeekLabel = await screen.findByText(/This week: 3 missions/i);
+    const insights = thisWeekLabel.closest('[data-testid="practice-weekly-insights"]');
+
+    expect(insights).not.toBeNull();
+    expect(within(insights as HTMLElement).getByText(/This week: 3 missions/i)).toBeVisible();
+    expect(within(insights as HTMLElement).getAllByText(/Goal reached/i)[0]).toBeVisible();
+    expect(within(insights as HTMLElement).getAllByText(/Plan completed/i)[0]).toBeVisible();
+    expect(within(insights as HTMLElement).getByText(/Last week: 0 missions/i)).toBeVisible();
+    expect(within(insights as HTMLElement).getByText(/Goal not reached/i)).toBeVisible();
+    expect(within(insights as HTMLElement).getAllByText(/Plan completed/i)[1]).toBeVisible();
+  });
+
+  it("shows insights empty state when there is no practice history", async () => {
+    mockLoadHistory.mockResolvedValue([]);
+
+    renderWithRouter();
+
+    const insights = (await screen.findAllByTestId("practice-weekly-insights"))[0];
+    expect(within(insights).getByText(/No missions yet/i)).toBeVisible();
+  });
+
   it("tracks mission start when a mission CTA is clicked", async () => {
     mockLoadHistory.mockResolvedValue([]);
 
@@ -373,7 +437,7 @@ describe("PracticeMissionsPage", () => {
     renderWithRouter();
 
     expect(await screen.findByTestId("practice-missions-empty")).toBeVisible();
-    expect(screen.getByText(/No missions yet/i)).toBeVisible();
+    expect(screen.getAllByText(/No missions yet/i).length).toBeGreaterThan(0);
   });
 
   it("navigates to mission detail when a mission is selected", async () => {

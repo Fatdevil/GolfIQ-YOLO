@@ -20,6 +20,8 @@ import {
   buildWeeklyPracticePlanStatus,
   type WeeklyPracticePlanStatus,
 } from '@shared/practice/practicePlan';
+import { buildWeeklyPracticeComparison } from '@shared/practice/practiceInsights';
+import { emitWeeklyPracticeInsightsViewed } from '@shared/practice/practiceInsightsAnalytics';
 import { safeEmit } from '@app/telemetry';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'PracticeMissions'>;
@@ -29,6 +31,60 @@ type ScreenState = {
   missions: PracticeMissionListItem[];
   history: PracticeMissionHistoryEntry[];
 };
+
+type WeeklyPracticeInsightsCardProps = {
+  comparison: ReturnType<typeof buildWeeklyPracticeComparison>;
+};
+
+function WeeklyPracticeInsightsCard({ comparison }: WeeklyPracticeInsightsCardProps): JSX.Element {
+  const hasHistory =
+    comparison.thisWeek.missionsCompleted > 0 || comparison.lastWeek.missionsCompleted > 0;
+
+  if (!hasHistory) {
+    return (
+      <View style={styles.insightsCard} testID="practice-weekly-insights">
+        <Text style={styles.insightsTitle}>{t('weekly_insights_title')}</Text>
+        <Text style={styles.insightsEmpty}>{t('weekly_insights_empty')}</Text>
+      </View>
+    );
+  }
+
+  const renderRow = (
+    label: string,
+    snapshot: ReturnType<typeof buildWeeklyPracticeComparison>['thisWeek'],
+    testId: string,
+  ) => (
+    <View style={styles.insightsRow} testID={testId}>
+      <Text style={styles.insightsLabel}>{label}</Text>
+      <Text style={snapshot.goalReached ? styles.insightsPositive : styles.insightsNeutral}>
+        {snapshot.goalReached
+          ? t('weekly_insights_goal_reached')
+          : t('weekly_insights_goal_not_reached')}
+      </Text>
+      <Text style={snapshot.planCompleted ? styles.insightsPositive : styles.insightsNeutral}>
+        {snapshot.planCompleted
+          ? t('weekly_insights_plan_completed')
+          : t('weekly_insights_plan_not_completed')}
+      </Text>
+    </View>
+  );
+
+  return (
+    <View style={styles.insightsCard} testID="practice-weekly-insights">
+      <Text style={styles.insightsTitle}>{t('weekly_insights_title')}</Text>
+      {renderRow(
+        t('weekly_insights_this_week', { missions: comparison.thisWeek.missionsCompleted }),
+        comparison.thisWeek,
+        'weekly-insights-this-week',
+      )}
+      {renderRow(
+        t('weekly_insights_last_week', { missions: comparison.lastWeek.missionsCompleted }),
+        comparison.lastWeek,
+        'weekly-insights-last-week',
+      )}
+    </View>
+  );
+}
 
 function formatDate(value: number | null): string | null {
   if (!value) return null;
@@ -133,6 +189,7 @@ export default function PracticeMissionsScreen({ navigation, route }: Props): JS
   const viewedRef = useRef(false);
   const planViewedRef = useRef(false);
   const planCompletedViewedRef = useRef(false);
+  const insightsViewedRef = useRef(false);
 
   useEffect(() => {
     if (viewedRef.current) return;
@@ -200,6 +257,11 @@ export default function PracticeMissionsScreen({ navigation, route }: Props): JS
     [state.history, state.missions],
   );
 
+  const weeklyComparison = useMemo(
+    () => buildWeeklyPracticeComparison({ history: state.history, missions: state.missions }),
+    [state.history, state.missions],
+  );
+
   const weeklyPlanMissions = weeklyPlanStatus.missions;
   const weeklyPlanIds = useMemo(() => new Set(weeklyPlanMissions.map((mission) => mission.id)), [weeklyPlanMissions]);
   const remainingMissions = useMemo(
@@ -215,6 +277,24 @@ export default function PracticeMissionsScreen({ navigation, route }: Props): JS
       missionsInPlan: weeklyPlanStatus.totalCount,
     });
   }, [state.loading, weeklyPlanStatus.totalCount]);
+
+  useEffect(() => {
+    if (state.loading || insightsViewedRef.current) return;
+    insightsViewedRef.current = true;
+
+    emitWeeklyPracticeInsightsViewed(
+      { emit: safeEmit },
+      {
+        thisWeekMissions: weeklyComparison.thisWeek.missionsCompleted,
+        lastWeekMissions: weeklyComparison.lastWeek.missionsCompleted,
+        thisWeekGoalReached: weeklyComparison.thisWeek.goalReached,
+        lastWeekGoalReached: weeklyComparison.lastWeek.goalReached,
+        thisWeekPlanCompleted: weeklyComparison.thisWeek.planCompleted,
+        lastWeekPlanCompleted: weeklyComparison.lastWeek.planCompleted,
+        surface: 'practice_missions_mobile',
+      },
+    );
+  }, [state.loading, weeklyComparison]);
 
   useEffect(() => {
     if (state.loading || !weeklyPlanStatus.isPlanCompleted || planCompletedViewedRef.current) return;
@@ -262,6 +342,7 @@ export default function PracticeMissionsScreen({ navigation, route }: Props): JS
   return (
     <View style={styles.container}>
       <Text style={styles.title}>{t('practice.missions.title')}</Text>
+      <WeeklyPracticeInsightsCard comparison={weeklyComparison} />
       {state.missions.length === 0 ? (
         <View style={styles.empty} testID="practice-missions-empty">
           <Text style={styles.emptyTitle}>{t('practice.missions.empty.title')}</Text>
@@ -331,6 +412,39 @@ const styles = StyleSheet.create({
     fontSize: 24,
     fontWeight: '700',
     color: '#111827',
+  },
+  insightsCard: {
+    gap: 6,
+    padding: 14,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    backgroundColor: '#F8FAFC',
+  },
+  insightsTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#0F172A',
+  },
+  insightsRow: {
+    marginTop: 6,
+    gap: 2,
+  },
+  insightsLabel: {
+    fontWeight: '700',
+    color: '#1F2937',
+  },
+  insightsPositive: {
+    color: '#065F46',
+    fontWeight: '600',
+  },
+  insightsNeutral: {
+    color: '#6B7280',
+    fontWeight: '500',
+  },
+  insightsEmpty: {
+    color: '#4B5563',
+    marginTop: 4,
   },
   loading: {
     color: '#4B5563',

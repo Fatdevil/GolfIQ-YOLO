@@ -1,4 +1,8 @@
 import { postTelemetryEvent } from "@/api";
+import {
+  emitWeeklyPracticeInsightsViewed,
+  type WeeklyPracticeInsightsViewedEvent,
+} from "@shared/practice/practiceInsightsAnalytics";
 
 export type PracticeAnalyticsEvent =
   | "practice_missions_viewed"
@@ -8,7 +12,8 @@ export type PracticeAnalyticsEvent =
   | "practice_quick_session_complete"
   | "practice_plan_viewed"
   | "practice_plan_mission_start"
-  | "practice_plan_completed_viewed";
+  | "practice_plan_completed_viewed"
+  | "weekly_practice_insights_viewed";
 
 export type QuickPracticeEntrySource = "range_home" | "recap" | "missions" | "other";
 
@@ -122,4 +127,13 @@ export function trackQuickPracticeSessionStart(payload: QuickPracticeSessionStar
 
 export function trackQuickPracticeSessionComplete(payload: QuickPracticeSessionCompleteEvent): void {
   emitPracticeAnalytics("practice_quick_session_complete", payload);
+}
+
+export function trackWeeklyPracticeInsightsViewed(payload: WeeklyPracticeInsightsViewedEvent): void {
+  emitWeeklyPracticeInsightsViewed(
+    {
+      emit: (event, data) => emitPracticeAnalytics(event as PracticeAnalyticsEvent, data),
+    },
+    payload,
+  );
 }

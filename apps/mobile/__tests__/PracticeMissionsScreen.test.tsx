@@ -99,6 +99,15 @@ describe('PracticeMissionsScreen', () => {
       entryPoint: 'practice_missions',
       missionsInPlan: 2,
     });
+    expect(vi.mocked(safeEmit)).toHaveBeenCalledWith('weekly_practice_insights_viewed', {
+      thisWeekMissions: 0,
+      lastWeekMissions: 0,
+      thisWeekGoalReached: false,
+      lastWeekGoalReached: false,
+      thisWeekPlanCompleted: false,
+      lastWeekPlanCompleted: false,
+      surface: 'practice_missions_mobile',
+    });
   });
 
   it('shows completed plan banner and emits completion analytics when all missions done', async () => {
@@ -159,6 +168,63 @@ describe('PracticeMissionsScreen', () => {
     const plan = await screen.findByTestId('practice-weekly-plan');
     expect(within(plan).getByText(/^Done this week$/i)).toBeVisible();
     expect(within(plan).getByText(/Not done yet/i)).toBeVisible();
+  });
+
+  it('renders weekly insights comparison and statuses', async () => {
+    const now = Date.now();
+    vi.mocked(practiceHistoryStorage.loadPracticeMissionHistory).mockResolvedValue([
+      {
+        id: 'entry-this-1',
+        missionId: 'mission-high',
+        startedAt: new Date(now - 24 * 60 * 60 * 1000).toISOString(),
+        status: 'completed',
+        targetClubs: [],
+        completedSampleCount: 5,
+      },
+      {
+        id: 'entry-this-2',
+        missionId: 'mission-low',
+        startedAt: new Date(now - 2 * 24 * 60 * 60 * 1000).toISOString(),
+        status: 'completed',
+        targetClubs: [],
+        completedSampleCount: 5,
+      },
+      {
+        id: 'entry-this-3',
+        missionId: 'mission-high',
+        startedAt: new Date(now - 3 * 24 * 60 * 60 * 1000).toISOString(),
+        status: 'completed',
+        targetClubs: [],
+        completedSampleCount: 5,
+      },
+      {
+        id: 'entry-last',
+        missionId: 'mission-high',
+        startedAt: new Date(now - 9 * 24 * 60 * 60 * 1000).toISOString(),
+        status: 'completed',
+        targetClubs: [],
+        completedSampleCount: 5,
+      },
+    ] as any);
+
+    render(<PracticeMissionsScreen navigation={createNavigation()} route={createRoute()} />);
+
+    const insights = await screen.findByTestId('practice-weekly-insights');
+    expect(within(insights).getByText(/This week: 3 missions/i)).toBeVisible();
+    expect(within(insights).getByText(/Goal reached/i)).toBeVisible();
+    expect(within(insights).getAllByText(/Plan completed/i)[0]).toBeVisible();
+    expect(within(insights).getByText(/Last week: 1 missions/i)).toBeVisible();
+    expect(within(insights).getByText(/Goal not reached/i)).toBeVisible();
+    expect(within(insights).getAllByText(/Plan completed/i)[1]).toBeVisible();
+  });
+
+  it('shows empty insights state when there is no history', async () => {
+    vi.mocked(practiceHistoryStorage.loadPracticeMissionHistory).mockResolvedValue([]);
+
+    render(<PracticeMissionsScreen navigation={createNavigation()} route={createRoute()} />);
+
+    const insights = await screen.findByTestId('practice-weekly-insights');
+    expect(within(insights).getByText(/No missions yet/i)).toBeVisible();
   });
 
   it('fires analytics when a mission is started from the list', async () => {
