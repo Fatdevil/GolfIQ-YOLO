@@ -671,6 +671,52 @@ describe('HomeDashboardScreen', () => {
     expect(await screen.findByTestId('practice-goal-streak')).toHaveTextContent('2-week streak');
   });
 
+  it('computes streaks using the stored weekly goal target', async () => {
+    vi.mocked(practiceGoalSettingsStorage.loadWeeklyPracticeGoalSettings).mockResolvedValue({
+      targetMissionsPerWeek: 2,
+    });
+    vi.mocked(practiceHistory.loadPracticeMissionHistory).mockResolvedValue([
+      {
+        id: 'c1',
+        missionId: 'm1',
+        startedAt: '2024-02-06T10:00:00Z',
+        status: 'completed',
+        targetClubs: [],
+        completedSampleCount: 10,
+      },
+      {
+        id: 'c2',
+        missionId: 'm2',
+        startedAt: '2024-02-07T10:00:00Z',
+        status: 'completed',
+        targetClubs: [],
+        completedSampleCount: 10,
+      },
+      {
+        id: 'p1',
+        missionId: 'm3',
+        startedAt: '2024-01-30T10:00:00Z',
+        status: 'completed',
+        targetClubs: [],
+        completedSampleCount: 10,
+      },
+      {
+        id: 'p2',
+        missionId: 'm4',
+        startedAt: '2024-01-31T10:00:00Z',
+        status: 'completed',
+        targetClubs: [],
+        completedSampleCount: 10,
+      },
+    ]);
+
+    const navigation = createNavigation();
+
+    render(<HomeDashboardScreen navigation={navigation} route={createRoute()} />);
+
+    expect(await screen.findByTestId('practice-goal-streak')).toHaveTextContent('2-week streak');
+  });
+
   it('omits the weekly streak label when streak is shorter than two weeks', async () => {
     vi.mocked(practiceHistory.loadPracticeMissionHistory).mockResolvedValue([
       {

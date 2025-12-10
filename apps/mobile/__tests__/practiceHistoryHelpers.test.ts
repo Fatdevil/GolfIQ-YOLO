@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { recordPracticeMissionOutcome } from '@app/storage/practiceMissionHistory';
 import { getItem, setItem } from '@app/storage/asyncStorage';
 import { safeEmit } from '@app/telemetry';
+import { loadWeeklyPracticeGoalSettings } from '@app/storage/practiceGoalSettings';
 
 vi.mock('@app/storage/asyncStorage', () => ({
   getItem: vi.fn(),
@@ -92,6 +93,60 @@ describe('practice mission history telemetry', () => {
       platform: 'mobile',
       source: 'practice_mission',
       streak_weeks: 1,
+    });
+  });
+
+  it('uses the stored weekly goal target when emitting goal reached telemetry', async () => {
+    vi.mocked(getItem).mockResolvedValue(
+      JSON.stringify([
+        {
+          id: 'p1',
+          missionId: 'm1',
+          startedAt: '2024-01-30T10:00:00Z',
+          endedAt: '2024-01-30T10:00:00Z',
+          status: 'completed' as const,
+          targetClubs: ['7i'],
+          completedSampleCount: 8,
+        },
+        {
+          id: 'p2',
+          missionId: 'm2',
+          startedAt: '2024-01-31T10:00:00Z',
+          endedAt: '2024-01-31T10:00:00Z',
+          status: 'completed' as const,
+          targetClubs: ['7i'],
+          completedSampleCount: 8,
+        },
+        {
+          id: 'c1',
+          missionId: 'm3',
+          startedAt: '2024-02-06T10:00:00Z',
+          endedAt: '2024-02-06T10:00:00Z',
+          status: 'completed' as const,
+          targetClubs: ['7i'],
+          completedSampleCount: 8,
+        },
+      ]),
+    );
+    vi.mocked(loadWeeklyPracticeGoalSettings).mockResolvedValue({ targetMissionsPerWeek: 2 });
+
+    await recordPracticeMissionOutcome({
+      missionId: 'practice_fill_gap:pw:8i',
+      startedAt: new Date('2024-02-07T10:00:00Z').toISOString(),
+      endedAt: new Date('2024-02-07T10:30:00Z').toISOString(),
+      targetClubs: ['pw', '8i'],
+      targetSampleCount: 10,
+      completedSampleCount: 12,
+    });
+
+    expect(vi.mocked(safeEmit)).toHaveBeenCalledWith('practice_goal_reached', {
+      goalId: 'weekly_mission_completions',
+      targetCompletions: 2,
+      completedInWindow: 2,
+      windowDays: 7,
+      platform: 'mobile',
+      source: 'practice_mission',
+      streak_weeks: 2,
     });
   });
 

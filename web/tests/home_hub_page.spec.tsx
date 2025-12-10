@@ -517,6 +517,71 @@ describe("HomeHubPage", () => {
     expect(await screen.findByText(/week streak/i)).toBeTruthy();
   });
 
+  it("computes streaks based on the stored weekly goal target", async () => {
+    mockLoadWeeklyGoalSettings.mockReturnValue({ targetMissionsPerWeek: 5 });
+    mockLoadPracticeHistory.mockImplementation(async () => [
+      {
+        id: "c1",
+        missionId: "m1",
+        startedAt: "2024-02-05T10:00:00Z",
+        endedAt: "2024-02-05T10:20:00Z",
+        status: "completed",
+        targetClubs: [],
+        completedSampleCount: 10,
+      },
+      {
+        id: "c2",
+        missionId: "m2",
+        startedAt: "2024-02-06T10:00:00Z",
+        endedAt: "2024-02-06T10:20:00Z",
+        status: "completed",
+        targetClubs: [],
+        completedSampleCount: 10,
+      },
+      {
+        id: "c3",
+        missionId: "m3",
+        startedAt: "2024-02-07T10:00:00Z",
+        endedAt: "2024-02-07T10:20:00Z",
+        status: "completed",
+        targetClubs: [],
+        completedSampleCount: 10,
+      },
+      {
+        id: "p1",
+        missionId: "m4",
+        startedAt: "2024-01-30T10:00:00Z",
+        endedAt: "2024-01-30T10:20:00Z",
+        status: "completed",
+        targetClubs: [],
+        completedSampleCount: 10,
+      },
+      {
+        id: "p2",
+        missionId: "m5",
+        startedAt: "2024-01-31T10:00:00Z",
+        endedAt: "2024-01-31T10:20:00Z",
+        status: "completed",
+        targetClubs: [],
+        completedSampleCount: 10,
+      },
+      {
+        id: "p3",
+        missionId: "m6",
+        startedAt: "2024-02-01T10:00:00Z",
+        endedAt: "2024-02-01T10:20:00Z",
+        status: "completed",
+        targetClubs: [],
+        completedSampleCount: 10,
+      },
+    ]);
+
+    renderHome();
+
+    await screen.findAllByTestId("practice-goal-summary");
+    expect(screen.queryByText(/week streak/i)).toBeNull();
+  });
+
   it("hides the streak label when the run is shorter than two weeks", async () => {
     mockLoadPracticeHistory.mockImplementation(async () => [
       {
@@ -580,7 +645,9 @@ describe("HomeHubPage", () => {
         completedSampleCount: 10,
       },
     ]);
-    expect(buildWeeklyGoalStreak(loadedHistory, new Date(Date.now())).currentStreakWeeks).toBe(1);
+    expect(
+      buildWeeklyGoalStreak({ history: loadedHistory, now: new Date(Date.now()) }).currentStreakWeeks,
+    ).toBe(1);
 
     await screen.findAllByTestId("practice-goal-summary");
     expect(screen.queryByText(/week streak/i)).toBeNull();
