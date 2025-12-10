@@ -318,8 +318,13 @@ export default function HomeDashboardScreen({ navigation }: Props): JSX.Element 
   );
 
   const practiceGoalStreak = useMemo(
-    () => buildWeeklyGoalStreak(practiceHistory, practiceGoalNow, weeklyGoalSettings.targetMissionsPerWeek),
-    [practiceGoalNow, practiceHistory, weeklyGoalSettings.targetMissionsPerWeek],
+    () =>
+      buildWeeklyGoalStreak({
+        history: practiceHistory,
+        now: practiceGoalNow,
+        settings: weeklyGoalSettings,
+      }),
+    [practiceGoalNow, practiceHistory, weeklyGoalSettings],
   );
 
   const practiceGoalStreakLabel = useMemo(() => {

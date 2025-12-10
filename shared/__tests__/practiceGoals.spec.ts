@@ -169,13 +169,47 @@ describe('practiceGoals', () => {
   });
 
   describe('buildWeeklyGoalStreak', () => {
+    it('falls back to the default target when settings are omitted', () => {
+      const missionHistory = [
+        buildEntry({ id: 'c1', endedAt: '2024-02-06T18:00:00Z' }),
+        buildEntry({ id: 'c2', endedAt: '2024-02-07T18:00:00Z' }),
+      ];
+
+      const streak = buildWeeklyGoalStreak({ history: missionHistory, now });
+
+      expect(streak.currentStreakWeeks).toBe(0);
+    });
+
+    it('adjusts streak calculations based on provided settings', () => {
+      const missionHistory = [
+        buildEntry({ id: 'c1', endedAt: '2024-02-06T18:00:00Z' }),
+        buildEntry({ id: 'c2', endedAt: '2024-02-07T18:00:00Z' }),
+        buildEntry({ id: 'p1', endedAt: '2024-01-30T18:00:00Z' }),
+        buildEntry({ id: 'p2', endedAt: '2024-01-31T18:00:00Z' }),
+      ];
+
+      const defaultStreak = buildWeeklyGoalStreak({ history: missionHistory, now });
+      const customStreak = buildWeeklyGoalStreak({
+        history: missionHistory,
+        now,
+        settings: { targetMissionsPerWeek: 2 },
+      });
+
+      expect(defaultStreak.currentStreakWeeks).toBe(0);
+      expect(customStreak.currentStreakWeeks).toBe(2);
+    });
+
     it('uses a custom target when computing streaks', () => {
       const missionHistory = [
         buildEntry({ id: 'c1', endedAt: '2024-02-05T18:00:00Z' }),
         buildEntry({ id: 'c2', endedAt: '2024-02-06T18:00:00Z' }),
       ];
 
-      const streak = buildWeeklyGoalStreak(missionHistory, now, 2);
+      const streak = buildWeeklyGoalStreak({
+        history: missionHistory,
+        now,
+        settings: { targetMissionsPerWeek: 2 },
+      });
 
       expect(streak.currentStreakWeeks).toBe(1);
     });
@@ -196,7 +230,7 @@ describe('practiceGoals', () => {
         buildEntry({ id: 'o3', endedAt: '2024-01-25T10:00:00Z' }),
       ];
 
-      const streak = buildWeeklyGoalStreak(missionHistory, now);
+      const streak = buildWeeklyGoalStreak({ history: missionHistory, now });
 
       expect(streak.currentStreakWeeks).toBe(3);
     });
@@ -211,7 +245,7 @@ describe('practiceGoals', () => {
         buildEntry({ id: 'p1', endedAt: '2024-01-31T18:00:00Z' }),
       ];
 
-      const streak = buildWeeklyGoalStreak(missionHistory, now);
+      const streak = buildWeeklyGoalStreak({ history: missionHistory, now });
 
       expect(streak.currentStreakWeeks).toBe(1);
     });
@@ -221,7 +255,7 @@ describe('practiceGoals', () => {
         buildEntry({ id: 'only', endedAt: '2024-02-07T18:00:00Z' }),
       ];
 
-      const streak = buildWeeklyGoalStreak(missionHistory, now);
+      const streak = buildWeeklyGoalStreak({ history: missionHistory, now });
 
       expect(streak.currentStreakWeeks).toBe(0);
     });

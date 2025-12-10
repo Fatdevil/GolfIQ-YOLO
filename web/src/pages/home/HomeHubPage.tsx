@@ -273,8 +273,13 @@ export const HomeHubPage: React.FC = () => {
     [practiceGoalNow, practiceHistory, targetMissionsPerWeek],
   );
   const practiceGoalStreak = useMemo(
-    () => buildWeeklyGoalStreak(practiceHistory, practiceGoalNow, targetMissionsPerWeek),
-    [practiceGoalNow, practiceHistory, targetMissionsPerWeek],
+    () =>
+      buildWeeklyGoalStreak({
+        history: practiceHistory,
+        now: practiceGoalNow,
+        settings: weeklyGoalSettings,
+      }),
+    [practiceGoalNow, practiceHistory, weeklyGoalSettings],
   );
   const practiceGoalStreakLabel = useMemo(() => {
     const streakWeeks = practiceGoalStreak.currentStreakWeeks;

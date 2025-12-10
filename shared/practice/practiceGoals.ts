@@ -1,5 +1,10 @@
 import { computeRecentCompletionSummary, type PracticeMissionHistoryEntry } from './practiceHistory';
-import { DEFAULT_TARGET_MISSIONS_PER_WEEK } from './practiceGoalSettings';
+import {
+  DEFAULT_TARGET_MISSIONS_PER_WEEK,
+  getDefaultWeeklyPracticeGoalSettings,
+  normalizeWeeklyPracticeGoalSettings,
+  type WeeklyPracticeGoalSettings,
+} from './practiceGoalSettings';
 
 export const PRACTICE_GOAL_WINDOW_DAYS = 7;
 
@@ -22,6 +27,12 @@ export type PracticeGoalProgress = {
 export type WeeklyGoalStreak = {
   currentStreakWeeks: number;
 };
+
+export interface BuildWeeklyGoalStreakOptions {
+  history: PracticeMissionHistoryEntry[];
+  now?: Date;
+  settings?: WeeklyPracticeGoalSettings;
+}
 
 function isGoalComplete(status: PracticeGoalStatus): boolean {
   return status === 'goal_reached' || status === 'exceeded';
@@ -81,11 +92,13 @@ export function didJustReachWeeklyGoal(args: {
   return !wasComplete && isComplete;
 }
 
-export function buildWeeklyGoalStreak(
-  history: PracticeMissionHistoryEntry[],
-  now: Date = new Date(),
-  targetMissionsPerWeek: number = DEFAULT_TARGET_MISSIONS_PER_WEEK,
-): WeeklyGoalStreak {
+export function buildWeeklyGoalStreak(options: BuildWeeklyGoalStreakOptions): WeeklyGoalStreak {
+  const { history, now = new Date(), settings } = options;
+  const normalizedSettings = settings
+    ? normalizeWeeklyPracticeGoalSettings(settings)
+    : getDefaultWeeklyPracticeGoalSettings();
+  const targetMissionsPerWeek =
+    normalizedSettings.targetMissionsPerWeek ?? DEFAULT_TARGET_MISSIONS_PER_WEEK;
   const windowMs = PRACTICE_GOAL_WINDOW_DAYS * 24 * 60 * 60 * 1000;
 
   let currentStreakWeeks = 0;

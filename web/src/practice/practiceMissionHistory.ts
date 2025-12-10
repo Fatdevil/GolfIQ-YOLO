@@ -86,11 +86,11 @@ export async function recordPracticeMissionOutcome(
       targetMissionsPerWeek: weeklyGoalSettings.targetMissionsPerWeek,
     });
     if (didJustReachWeeklyGoal({ before: goalBefore, after: goalAfter })) {
-      const streak = buildWeeklyGoalStreak(
-        next,
+      const streak = buildWeeklyGoalStreak({
+        history: next,
         now,
-        weeklyGoalSettings.targetMissionsPerWeek,
-      );
+        settings: weeklyGoalSettings,
+      });
       trackPracticeGoalReached(
         { emit: (event, payload) => postTelemetryEvent({ event, ...payload }) },
         {
