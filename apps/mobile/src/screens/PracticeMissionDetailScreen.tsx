@@ -41,18 +41,23 @@ type ScreenState = {
 };
 
 export default function PracticeMissionDetailScreen({ navigation, route }: Props): JSX.Element {
-  const { entryId } = route.params;
+  const entryId = route.params?.entryId;
   const [state, setState] = useState<ScreenState>({ loading: true, detail: null });
 
   useEffect(() => {
     let cancelled = false;
 
     const load = async () => {
+      if (!entryId) {
+        setState({ loading: false, detail: null });
+        return;
+      }
+
       try {
-        const [history, bag] = await Promise.all<[
-          Awaited<ReturnType<typeof loadPracticeMissionHistory>>,
-          Awaited<ReturnType<typeof fetchPlayerBag>> | null,
-        ]>([loadPracticeMissionHistory(), fetchPlayerBag().catch(() => null)]);
+        const [history, bag] = await Promise.all([
+          loadPracticeMissionHistory(),
+          fetchPlayerBag().catch(() => null) as Promise<Awaited<ReturnType<typeof fetchPlayerBag>> | null>,
+        ]);
 
         if (cancelled) return;
 

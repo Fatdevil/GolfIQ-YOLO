@@ -1,6 +1,6 @@
 import React from 'react';
 import { cleanup, fireEvent, render, waitFor, within } from '@testing-library/react';
-import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi, type Mock, type MockInstance } from 'vitest';
 
 import MyBagScreen from '@app/screens/MyBagScreen';
 import { fetchPlayerBag, updatePlayerClubs } from '@app/api/bagClient';
@@ -8,6 +8,7 @@ import * as bagStatsClient from '@app/api/bagStatsClient';
 import * as apiClient from '@app/api/client';
 import * as bagStatsStorage from '@app/storage/bagStatsStorage';
 import * as bagTuning from '@shared/caddie/bagTuningSuggestions';
+import type { BagClubStatsMap } from '@shared/caddie/bagStats';
 
 vi.mock('@app/api/bagClient', () => ({
   fetchPlayerBag: vi.fn(),
@@ -18,7 +19,7 @@ const navigation = { navigate: vi.fn() } as any;
 
 const mockFetchBag = fetchPlayerBag as unknown as Mock;
 const mockUpdateClubs = updatePlayerClubs as unknown as Mock;
-let mockFetchBagStats: ReturnType<typeof vi.spyOn>;
+let mockFetchBagStats: MockInstance<[], Promise<BagClubStatsMap>>;
 
 const sampleBag = {
   clubs: [

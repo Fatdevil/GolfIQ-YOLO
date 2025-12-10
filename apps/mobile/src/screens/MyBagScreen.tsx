@@ -113,18 +113,20 @@ function ClubCard({ club, onUpdate, isSaving, status }: ClubCardProps): JSX.Elem
     await onUpdate({ clubId: club.clubId, active: value });
   };
 
-  const autoCarryLabel = shouldUseBagStat(club.bagStat)
-    ? formatDistance(club.bagStat.meanDistanceM, { withUnit: true })
-    : null;
+    const autoCarryLabel = shouldUseBagStat(club.bagStat)
+      ? formatDistance(club.bagStat.meanDistanceM, { withUnit: true })
+      : null;
 
-  const autoHint = club.bagStat
-    ? shouldUseBagStat(club.bagStat)
-      ? t('my_bag_auto_samples', { count: club.bagStat.sampleCount })
-      : t('my_bag_auto_need_more', {
-          count: club.bagStat.sampleCount,
-          min: MIN_AUTOCALIBRATED_SAMPLES,
-        })
-    : null;
+    const autoHint = (() => {
+      const stat: BagClubStats | undefined = club.bagStat;
+      if (!stat) return null;
+      const useStat = shouldUseBagStat(stat);
+      const sampleCount = (stat as BagClubStats).sampleCount;
+      if (useStat) {
+        return t('my_bag_auto_samples', { count: sampleCount });
+      }
+      return t('my_bag_auto_need_more', { count: sampleCount, min: MIN_AUTOCALIBRATED_SAMPLES });
+    })();
 
   return (
     <View style={styles.card} testID={`club-card-${club.clubId}`}>

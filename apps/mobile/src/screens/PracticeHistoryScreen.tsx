@@ -82,15 +82,11 @@ export default function PracticeHistoryScreen({ navigation }: Props): JSX.Elemen
 
     const load = async () => {
       try {
-        const [history, bag, bagStats] = await Promise.all<[
-          Awaited<ReturnType<typeof loadPracticeMissionHistory>>,
-          Awaited<ReturnType<typeof fetchPlayerBag>> | null,
-          BagClubStatsMap,
-        ]>([
-          loadPracticeMissionHistory(),
-          fetchPlayerBag().catch(() => null),
-          fetchBagStats().catch(() => ({} as BagClubStatsMap)),
-        ]);
+          const [history, bag, bagStats] = await Promise.all([
+            loadPracticeMissionHistory(),
+            fetchPlayerBag().catch(() => null) as Promise<Awaited<ReturnType<typeof fetchPlayerBag>> | null>,
+            fetchBagStats().catch(() => ({} as BagClubStatsMap)),
+          ]);
 
         if (cancelled) return;
 

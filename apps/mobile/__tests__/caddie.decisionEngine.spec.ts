@@ -132,8 +132,8 @@ describe('buildCaddieDecisionFromContext', () => {
       explicitIntent: 'straight',
       settings: DEFAULT_SETTINGS,
       clubs: [
-        { club: '8i', baselineCarryM: 148, samples: 8, source: 'auto', distanceSource: 'default' },
-        { club: '7i', baselineCarryM: 160, samples: 10, source: 'auto', distanceSource: 'default' },
+        { club: '8i', baselineCarryM: 148, samples: 8, source: 'auto' as const, distanceSource: 'default' as const },
+        { club: '7i', baselineCarryM: 160, samples: 10, source: 'auto' as const, distanceSource: 'default' as const },
       ],
       shotShapeProfile: sampleProfile,
     });
@@ -344,8 +344,8 @@ describe('buildCaddieDecisionFromContext', () => {
 
   it('applies risk profile buffers when choosing clubs', () => {
     const clubs = [
-      { club: '9i', baselineCarryM: 155, samples: 5, source: 'auto' as const, distanceSource: 'default' },
-      { club: '8i', baselineCarryM: 165, samples: 5, source: 'auto' as const, distanceSource: 'default' },
+      { club: '9i', baselineCarryM: 155, samples: 5, source: 'auto' as const, distanceSource: 'default' as const },
+      { club: '8i', baselineCarryM: 165, samples: 5, source: 'auto' as const, distanceSource: 'default' as const },
     ];
 
     const aggressive = buildCaddieDecisionFromContext({
@@ -374,8 +374,8 @@ describe('buildCaddieDecisionFromContext', () => {
       explicitIntent: 'straight',
       settings: DEFAULT_SETTINGS,
       clubs: [
-        { club: '9i', baselineCarryM: 150, samples: 5, source: 'auto' as const, distanceSource: 'default' },
-        { club: '8i', baselineCarryM: 160, samples: 5, source: 'auto' as const, distanceSource: 'default' },
+        { club: '9i', baselineCarryM: 150, samples: 5, source: 'auto' as const, distanceSource: 'default' as const },
+        { club: '8i', baselineCarryM: 160, samples: 5, source: 'auto' as const, distanceSource: 'default' as const },
       ],
       shotShapeProfile: sampleProfile,
     });
