@@ -4,6 +4,11 @@ export interface WeeklyPracticeGoalSettings {
 
 export const DEFAULT_TARGET_MISSIONS_PER_WEEK = 3;
 
+export function isDefaultWeeklyPracticeGoalTarget(target: number | null | undefined): boolean {
+  if (target == null) return true;
+  return target === DEFAULT_TARGET_MISSIONS_PER_WEEK;
+}
+
 export function getDefaultWeeklyPracticeGoalSettings(): WeeklyPracticeGoalSettings {
   return { targetMissionsPerWeek: DEFAULT_TARGET_MISSIONS_PER_WEEK };
 }

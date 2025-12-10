@@ -3,6 +3,10 @@ import {
   emitWeeklyPracticeInsightsViewed,
   type WeeklyPracticeInsightsViewedEvent,
 } from "@shared/practice/practiceInsightsAnalytics";
+import {
+  buildWeeklyPracticeGoalSettingsUpdatedEvent,
+  type WeeklyPracticeGoalSettingsUpdatedInput,
+} from "@shared/practice/practiceGoalAnalytics";
 
 export type PracticeAnalyticsEvent =
   | "practice_missions_viewed"
@@ -13,6 +17,7 @@ export type PracticeAnalyticsEvent =
   | "practice_plan_viewed"
   | "practice_plan_mission_start"
   | "practice_plan_completed_viewed"
+  | "practice_goal_settings_updated"
   | "weekly_practice_insights_viewed";
 
 export type QuickPracticeEntrySource = "range_home" | "recap" | "missions" | "other";
@@ -129,6 +134,13 @@ export function trackQuickPracticeSessionStart(payload: QuickPracticeSessionStar
 
 export function trackQuickPracticeSessionComplete(payload: QuickPracticeSessionCompleteEvent): void {
   emitPracticeAnalytics("practice_quick_session_complete", payload);
+}
+
+export function trackWeeklyPracticeGoalSettingsUpdated(
+  payload: WeeklyPracticeGoalSettingsUpdatedInput,
+): void {
+  const event = buildWeeklyPracticeGoalSettingsUpdatedEvent(payload);
+  emitPracticeAnalytics("practice_goal_settings_updated", event);
 }
 
 export function trackWeeklyPracticeInsightsViewed(payload: WeeklyPracticeInsightsViewedEvent): void {

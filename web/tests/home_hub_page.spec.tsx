@@ -10,6 +10,7 @@ import { createDefaultBag } from "@web/bag/types";
 import { UnitsProvider } from "@/preferences/UnitsContext";
 import type { BagClubStatsMap } from "@shared/caddie/bagStats";
 import { loadPracticeMissionHistory } from "@/practice/practiceMissionHistory";
+import { buildWeeklyPracticeGoalSettingsUpdatedEvent } from "@shared/practice/practiceGoalAnalytics";
 
 vi.mock("@/access/UserAccessContext", () => ({
   useAccessPlan: vi.fn(),
@@ -39,6 +40,9 @@ vi.mock("@/practice/practiceMissionHistory", () => ({
 }));
 vi.mock("@/practice/analytics", () => ({
   trackPracticePlanCompletedViewed: vi.fn(),
+  trackWeeklyPracticeGoalSettingsUpdated: vi.fn((payload) =>
+    buildWeeklyPracticeGoalSettingsUpdatedEvent(payload),
+  ),
 }));
 vi.mock("@/practice/practiceGoalSettings", () => ({
   loadWeeklyPracticeGoalSettings: vi.fn(),
@@ -53,7 +57,10 @@ import {
 } from "@/onboarding/checklist";
 import { seedDemoData } from "@/demo/demoData";
 import { buildWeeklyGoalStreak } from "@shared/practice/practiceGoals";
-import { trackPracticePlanCompletedViewed } from "@/practice/analytics";
+import {
+  trackPracticePlanCompletedViewed,
+  trackWeeklyPracticeGoalSettingsUpdated,
+} from "@/practice/analytics";
 import {
   loadWeeklyPracticeGoalSettings,
   saveWeeklyPracticeGoalSettings,
@@ -72,6 +79,8 @@ const mockLoadPracticeHistory =
   loadPracticeMissionHistory as unknown as Mock;
 const mockTrackPlanCompletedViewed =
   trackPracticePlanCompletedViewed as unknown as Mock;
+const mockTrackGoalSettingsUpdated =
+  trackWeeklyPracticeGoalSettingsUpdated as unknown as Mock;
 const mockLoadWeeklyGoalSettings =
   loadWeeklyPracticeGoalSettings as unknown as Mock;
 const mockSaveWeeklyGoalSettings =
@@ -376,9 +385,11 @@ describe("HomeHubPage", () => {
 
     renderHome();
 
-    expect(await screen.findByTestId("practice-goal-summary")).toHaveTextContent(
-      "2/5 missions this week",
-    );
+    await waitFor(() => {
+      expect(screen.getByTestId("practice-goal-summary")).toHaveTextContent(
+        "2/5 missions this week",
+      );
+    });
   });
 
   it("lets players edit their weekly goal from home", async () => {
@@ -405,6 +416,31 @@ describe("HomeHubPage", () => {
     expect(await screen.findByTestId("practice-goal-summary")).toHaveTextContent(
       "1/5 missions this week",
     );
+    expect(mockTrackGoalSettingsUpdated).toHaveBeenCalledWith({
+      previousTarget: 3,
+      newTarget: 5,
+      source: "web_home_inline",
+    });
+    expect(mockTrackGoalSettingsUpdated.mock.results[0]?.value).toEqual({
+      previousTarget: 3,
+      newTarget: 5,
+      source: "web_home_inline",
+      isDefaultBefore: true,
+      isDefaultAfter: false,
+    });
+  });
+
+  it("does not emit goal settings analytics on no-op edits", async () => {
+    mockLoadWeeklyGoalSettings.mockReturnValue({ targetMissionsPerWeek: 5 });
+    mockLoadPracticeHistory.mockResolvedValue([]);
+
+    renderHome();
+
+    fireEvent.click(await screen.findByTestId("practice-goal-edit"));
+    const option = await screen.findByTestId("practice-goal-option-5");
+    fireEvent.click(option);
+
+    expect(mockTrackGoalSettingsUpdated).not.toHaveBeenCalled();
   });
 
   it("shows on-track status when weekly goal is met", async () => {
