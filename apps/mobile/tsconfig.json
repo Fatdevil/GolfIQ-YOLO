@@ -10,7 +10,7 @@
     "forceConsistentCasingInFileNames": true,
     "skipLibCheck": true,
     "baseUrl": ".",
-    "types": ["vitest", "node"],
+    "types": ["node"],
     "paths": {
       "react-native": ["./src/runtime/react-native"],
       "@react-navigation/native": ["./src/runtime/react-navigation-native"],
@@ -21,6 +21,6 @@
       "expo-av": ["./src/runtime/expo-av"]
     }
   },
-  "include": ["src", "__tests__", "vitest.config.ts", "vitest.setup.ts"],
+  "include": ["src"],
   "exclude": ["node_modules"]
 }

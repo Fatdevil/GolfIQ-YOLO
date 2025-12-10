@@ -60,7 +60,7 @@ const mockBagStats: BagClubStatsMap = {
   '7i': { clubId: '7i', meanDistanceM: 150, sampleCount: 6 },
   '5w': { clubId: '5w', meanDistanceM: 190, sampleCount: 2 },
 };
-let dateNowSpy: MockInstance<[], number> | null = null;
+let dateNowSpy: MockInstance<() => number> | null = null;
 
 function createNavigation(): Navigation {
   return {

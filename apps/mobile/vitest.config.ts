@@ -5,17 +5,17 @@ import { defineConfig } from 'vitest/config';
 const rootDir = dirname(fileURLToPath(import.meta.url));
 const srcDir = resolve(rootDir, 'src');
 const repoRoot = resolve(rootDir, '..', '..');
+const setupFile = resolve(rootDir, 'vitest.setup.ts');
 
 export default defineConfig({
+  root: rootDir,
   test: {
     environment: 'jsdom',
-    setupFiles: ['./vitest.setup.ts'],
+    setupFiles: [setupFile],
     css: false,
     include: [
-      '__tests__/**/*.spec.ts',
-      '__tests__/**/*.spec.tsx',
-      '__tests__/**/*.test.ts',
-      '__tests__/**/*.test.tsx',
+      '__tests__/**/*.{spec,test}.ts',
+      '__tests__/**/*.{spec,test}.tsx',
     ],
   },
   resolve: {

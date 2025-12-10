@@ -19,7 +19,7 @@ const navigation = { navigate: vi.fn() } as any;
 
 const mockFetchBag = fetchPlayerBag as unknown as Mock;
 const mockUpdateClubs = updatePlayerClubs as unknown as Mock;
-let mockFetchBagStats: MockInstance<[], Promise<BagClubStatsMap>>;
+let mockFetchBagStats: MockInstance<() => Promise<BagClubStatsMap>>;
 
 const sampleBag = {
   clubs: [
