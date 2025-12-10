@@ -8,6 +8,8 @@ import {
   loadWeeklyPracticeGoalSettings,
   saveWeeklyPracticeGoalSettings,
 } from '@app/storage/practiceGoalSettings';
+import { safeEmit } from '@app/telemetry';
+import { trackWeeklyPracticeGoalSettingsUpdated } from '@shared/practice/practiceGoalAnalytics';
 import { getDefaultWeeklyPracticeGoalSettings } from '@shared/practice/practiceGoalSettings';
 
 const TARGET_OPTIONS = [1, 3, 5];
@@ -39,10 +41,25 @@ export default function WeeklyPracticeGoalSettingsScreen({ navigation }: Props):
   }, []);
 
   const handleSelect = async (target: number) => {
+    if (target === selectedTarget) {
+      navigation.goBack();
+      return;
+    }
+
+    const previousTarget = selectedTarget;
     setSelectedTarget(target);
     setSavingTarget(target);
     try {
-      await saveWeeklyPracticeGoalSettings({ targetMissionsPerWeek: target });
+      const nextSettings = { targetMissionsPerWeek: target };
+      await saveWeeklyPracticeGoalSettings(nextSettings);
+      trackWeeklyPracticeGoalSettingsUpdated(
+        { emit: safeEmit },
+        {
+          previousTarget,
+          newTarget: nextSettings.targetMissionsPerWeek,
+          source: 'mobile_settings_screen',
+        },
+      );
       navigation.goBack();
     } catch (err) {
       console.warn('[practiceGoalSettings] Failed to save from settings screen', err);

@@ -33,7 +33,10 @@ import {
   type PracticeMissionDefinition,
   type PracticeMissionListItem,
 } from "@shared/practice/practiceMissionsList";
-import { trackPracticePlanCompletedViewed } from "@/practice/analytics";
+import {
+  trackPracticePlanCompletedViewed,
+  trackWeeklyPracticeGoalSettingsUpdated,
+} from "@/practice/analytics";
 import {
   loadWeeklyPracticeGoalSettings,
   saveWeeklyPracticeGoalSettings,
@@ -240,11 +243,22 @@ export const HomeHubPage: React.FC = () => {
   const practiceGoalNow = new Date(Date.now());
   const targetMissionsPerWeek = weeklyGoalSettings.targetMissionsPerWeek;
   const handleSelectWeeklyGoal = (target: number) => {
+    if (target === targetMissionsPerWeek) {
+      setEditingPracticeGoal(false);
+      return;
+    }
+
+    const previousTarget = targetMissionsPerWeek;
     const nextSettings: WeeklyPracticeGoalSettings = {
       targetMissionsPerWeek: target,
     };
     setWeeklyGoalSettings(nextSettings);
     saveWeeklyPracticeGoalSettings(nextSettings);
+    trackWeeklyPracticeGoalSettingsUpdated({
+      previousTarget,
+      newTarget: nextSettings.targetMissionsPerWeek,
+      source: "web_home_inline",
+    });
     setEditingPracticeGoal(false);
   };
   const practiceMissions = useMemo<PracticeMissionListItem[]>(() => {
