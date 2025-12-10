@@ -9,6 +9,10 @@ vi.mock('@app/storage/asyncStorage', () => ({
   setItem: vi.fn(),
 }));
 
+vi.mock('@app/storage/practiceGoalSettings', () => ({
+  loadWeeklyPracticeGoalSettings: vi.fn().mockResolvedValue({ targetMissionsPerWeek: 3 }),
+}));
+
 vi.mock('@app/telemetry', () => ({ safeEmit: vi.fn() }));
 
 describe('practice mission history telemetry', () => {

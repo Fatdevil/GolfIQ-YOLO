@@ -12,10 +12,12 @@ import * as weeklyApi from '@app/api/weeklySummary';
 import type { RootStackParamList } from '@app/navigation/types';
 import HomeDashboardScreen from '@app/screens/HomeDashboardScreen';
 import * as engagementStorage from '@app/storage/engagement';
+import * as practiceGoalSettingsStorage from '@app/storage/practiceGoalSettings';
 import * as practiceHistory from '@app/storage/practiceMissionHistory';
 import type { BagClubStatsMap } from '@shared/caddie/bagStats';
 import * as bagPracticeRecommendations from '@shared/caddie/bagPracticeRecommendations';
 import { setTelemetryEmitter } from '@app/telemetry';
+import { getDefaultWeeklyPracticeGoalSettings } from '@shared/practice/practiceGoalSettings';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'HomeDashboard'>;
 
@@ -90,6 +92,9 @@ vi.mock('@app/storage/practiceMissionHistory', () => ({
   loadPracticeMissionHistory: vi.fn(),
   summarizeRecentPracticeHistory: vi.fn(),
 }));
+vi.mock('@app/storage/practiceGoalSettings', () => ({
+  loadWeeklyPracticeGoalSettings: vi.fn(),
+}));
 vi.mock('@shared/caddie/bagPracticeRecommendations', () => ({
   getTopPracticeRecommendation: vi.fn(),
   buildBagPracticeRecommendations: vi.fn().mockReturnValue([]),
@@ -118,6 +123,9 @@ describe('HomeDashboardScreen', () => {
       lastCompleted: undefined,
       lastStarted: undefined,
     });
+    vi.mocked(practiceGoalSettingsStorage.loadWeeklyPracticeGoalSettings).mockResolvedValue(
+      getDefaultWeeklyPracticeGoalSettings(),
+    );
     vi.mocked(bagPracticeRecommendations.getTopPracticeRecommendation).mockReturnValue(null);
     setTelemetryEmitter(null);
   });
@@ -467,6 +475,9 @@ describe('HomeDashboardScreen', () => {
   });
 
   it('shows catch up status when behind weekly practice goal', async () => {
+    vi.mocked(practiceGoalSettingsStorage.loadWeeklyPracticeGoalSettings).mockResolvedValue({
+      targetMissionsPerWeek: 5,
+    });
     const navigation = createNavigation();
     vi.mocked(practiceHistory.loadPracticeMissionHistory).mockResolvedValue([
       {
@@ -498,7 +509,7 @@ describe('HomeDashboardScreen', () => {
 
     render(<HomeDashboardScreen navigation={navigation} route={createRoute()} />);
 
-    expect(await screen.findByTestId('practice-goal-summary')).toHaveTextContent('2/3 missions this week');
+    expect(await screen.findByTestId('practice-goal-summary')).toHaveTextContent('2/5 missions this week');
     expect(screen.getByTestId('practice-goal-status')).toHaveTextContent('Catch up');
   });
 
@@ -713,6 +724,17 @@ describe('HomeDashboardScreen', () => {
     expect(await screen.findByTestId('practice-progress-subtitle')).toHaveTextContent(
       'Practice streak: 3 days in a row',
     );
+  });
+
+  it('navigates to weekly practice goal settings from the practice tile', async () => {
+    const navigation = createNavigation();
+
+    render(<HomeDashboardScreen navigation={navigation} route={createRoute()} />);
+
+    const editButton = await screen.findByTestId('edit-practice-goal');
+    fireEvent.click(editButton);
+
+    expect(navigation.navigate).toHaveBeenCalledWith('WeeklyPracticeGoalSettings');
   });
 
   it('navigates to practice history when progress tile is tapped with history', async () => {

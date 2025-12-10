@@ -8,6 +8,7 @@ import { fetchBagStats } from '@app/api/bagStatsClient';
 import { t } from '@app/i18n';
 import type { RootStackParamList } from '@app/navigation/types';
 import { PRACTICE_MISSION_WINDOW_DAYS, loadPracticeMissionHistory } from '@app/storage/practiceMissionHistory';
+import { loadWeeklyPracticeGoalSettings } from '@app/storage/practiceGoalSettings';
 import { buildBagReadinessOverview, type BagReadinessOverview } from '@shared/caddie/bagReadiness';
 import type { BagSuggestion } from '@shared/caddie/bagTuningSuggestions';
 import { buildMissionProgressById, type PracticeMissionHistoryEntry } from '@shared/practice/practiceHistory';
@@ -23,6 +24,7 @@ import {
 import { buildWeeklyPracticeComparison } from '@shared/practice/practiceInsights';
 import { emitWeeklyPracticeInsightsViewed } from '@shared/practice/practiceInsightsAnalytics';
 import { safeEmit } from '@app/telemetry';
+import { getDefaultWeeklyPracticeGoalSettings } from '@shared/practice/practiceGoalSettings';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'PracticeMissions'>;
 
@@ -190,6 +192,9 @@ export default function PracticeMissionsScreen({ navigation, route }: Props): JS
   const planViewedRef = useRef(false);
   const planCompletedViewedRef = useRef(false);
   const insightsViewedRef = useRef(false);
+  const [weeklyGoalSettings, setWeeklyGoalSettings] = useState(
+    getDefaultWeeklyPracticeGoalSettings(),
+  );
 
   useEffect(() => {
     if (viewedRef.current) return;
@@ -210,10 +215,14 @@ export default function PracticeMissionsScreen({ navigation, route }: Props): JS
           () => null as Awaited<ReturnType<typeof fetchBagStats>> | null,
         );
 
-        const [history, bag, bagStats] = await Promise.all([
+        const [history, bag, bagStats, settings] = await Promise.all([
           historyPromise,
           bagPromise,
           bagStatsPromise,
+          loadWeeklyPracticeGoalSettings().catch((err) => {
+            console.warn('[practice] Failed to load weekly goal settings', err);
+            return getDefaultWeeklyPracticeGoalSettings();
+          }),
         ] as const);
 
         if (cancelled) return;
@@ -233,10 +242,12 @@ export default function PracticeMissionsScreen({ navigation, route }: Props): JS
         });
 
         setState({ loading: false, missions: prioritizedMissions, history });
+        setWeeklyGoalSettings(settings ?? getDefaultWeeklyPracticeGoalSettings());
       } catch (err) {
         if (!cancelled) {
           console.warn('[practice] Failed to load missions screen', err);
           setState({ loading: false, missions: [], history: [] });
+          setWeeklyGoalSettings(getDefaultWeeklyPracticeGoalSettings());
         }
       }
     };
@@ -253,13 +264,19 @@ export default function PracticeMissionsScreen({ navigation, route }: Props): JS
       buildWeeklyPracticePlanStatus({
         missions: state.missions,
         history: state.history,
+        targetMissionsPerWeek: weeklyGoalSettings.targetMissionsPerWeek,
       }),
-    [state.history, state.missions],
+    [state.history, state.missions, weeklyGoalSettings.targetMissionsPerWeek],
   );
 
   const weeklyComparison = useMemo(
-    () => buildWeeklyPracticeComparison({ history: state.history, missions: state.missions }),
-    [state.history, state.missions],
+    () =>
+      buildWeeklyPracticeComparison({
+        history: state.history,
+        missions: state.missions,
+        targetMissionsPerWeek: weeklyGoalSettings.targetMissionsPerWeek,
+      }),
+    [state.history, state.missions, weeklyGoalSettings.targetMissionsPerWeek],
   );
 
   const weeklyPlanMissions = weeklyPlanStatus.missions;

@@ -69,6 +69,12 @@ export const sv = {
         goal_reached_title: 'Veckomål klart 🎉',
         exceeded_title: 'Du ligger före ditt mål',
       },
+      settings: {
+        title: 'Veckans träningsmål',
+        subtitle: 'Välj hur många missions du vill slutföra varje vecka.',
+        optionLabel: '{{count}} missions per vecka',
+        edit: 'Ändra mål',
+      },
     },
   },
   practice_goal_streak_label: '{{count}} veckors svit',

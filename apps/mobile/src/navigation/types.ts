@@ -79,6 +79,7 @@ export type RootStackParamList = {
       }
     | undefined;
   PracticeMissions: { source?: 'home' | 'other' } | undefined;
+  WeeklyPracticeGoalSettings: undefined;
   PracticeHistory: undefined;
   PracticeMissionDetail: { entryId: string };
   EventJoin: { code?: string } | undefined;
