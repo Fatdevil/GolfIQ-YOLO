@@ -16,6 +16,7 @@ import {
   type PracticeMissionDefinition,
   type PracticeMissionListItem,
 } from '@shared/practice/practiceMissionsList';
+import { buildWeeklyPracticePlan } from '@shared/practice/practicePlan';
 import { safeEmit } from '@app/telemetry';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'PracticeMissions'>;
@@ -107,6 +108,7 @@ function MissionRow({ item, onPress }: { item: PracticeMissionListItem; onPress:
 export default function PracticeMissionsScreen({ navigation, route }: Props): JSX.Element {
   const [state, setState] = useState<ScreenState>({ loading: true, missions: [], history: [] });
   const viewedRef = useRef(false);
+  const planViewedRef = useRef(false);
 
   useEffect(() => {
     if (viewedRef.current) return;
@@ -165,7 +167,31 @@ export default function PracticeMissionsScreen({ navigation, route }: Props): JS
     };
   }, []);
 
-  const handleSelectMission = (missionId: string) => {
+  const weeklyPlanMissions = useMemo(() => buildWeeklyPracticePlan(state.missions), [state.missions]);
+  const weeklyPlanIds = useMemo(() => new Set(weeklyPlanMissions.map((mission) => mission.id)), [weeklyPlanMissions]);
+  const remainingMissions = useMemo(
+    () => state.missions.filter((mission) => !weeklyPlanIds.has(mission.id)),
+    [state.missions, weeklyPlanIds],
+  );
+
+  useEffect(() => {
+    if (state.loading || weeklyPlanMissions.length === 0 || planViewedRef.current) return;
+    planViewedRef.current = true;
+    safeEmit('practice_plan_viewed', {
+      entryPoint: 'practice_missions',
+      missionsInPlan: weeklyPlanMissions.length,
+    });
+  }, [state.loading, weeklyPlanMissions.length]);
+
+  const handleSelectMission = (missionId: string, planRank?: number) => {
+    if (planRank != null) {
+      safeEmit('practice_plan_mission_start', {
+        entryPoint: 'practice_missions',
+        missionId,
+        planRank,
+      });
+    }
+
     safeEmit('practice_mission_start', { missionId, sourceSurface: 'missions_list' });
 
     const latestEntry = [...state.history]
@@ -199,12 +225,33 @@ export default function PracticeMissionsScreen({ navigation, route }: Props): JS
         </View>
       ) : (
         <FlatList
-          data={state.missions}
+          data={remainingMissions}
           keyExtractor={(item) => item.id}
           contentContainerStyle={styles.list}
           renderItem={({ item }) => (
             <MissionRow item={item} onPress={() => handleSelectMission(item.id)} />
           )}
+          ListHeaderComponent={
+            weeklyPlanMissions.length > 0 ? (
+              <View style={styles.planSection} testID="practice-weekly-plan">
+                <Text style={styles.planTitle}>{t('practice_plan_title')}</Text>
+                <View style={styles.planList}>
+                  {weeklyPlanMissions.map((mission) => (
+                    <View key={mission.id} style={styles.planItem}>
+                      <View style={styles.planBadge}>
+                        <Text style={styles.planBadgeText}>{t('practice_plan_badge', { rank: mission.planRank })}</Text>
+                      </View>
+                      <MissionRow
+                        item={mission}
+                        onPress={() => handleSelectMission(mission.id, mission.planRank)}
+                      />
+                    </View>
+                  ))}
+                </View>
+                <Text style={styles.sectionLabel}>{t('practice.missions.title')}</Text>
+              </View>
+            ) : undefined
+          }
           testID="practice-missions-list"
         />
       )}
@@ -241,6 +288,37 @@ const styles = StyleSheet.create({
   list: {
     gap: 12,
     paddingTop: 8,
+  },
+  planSection: {
+    gap: 12,
+    paddingBottom: 8,
+  },
+  planTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#0F172A',
+  },
+  planList: {
+    gap: 12,
+  },
+  planItem: {
+    gap: 8,
+  },
+  planBadge: {
+    alignSelf: 'flex-start',
+    backgroundColor: '#E0F2FE',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 999,
+  },
+  planBadgeText: {
+    color: '#0C4A6E',
+    fontWeight: '700',
+  },
+  sectionLabel: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#111827',
   },
   item: {
     padding: 14,

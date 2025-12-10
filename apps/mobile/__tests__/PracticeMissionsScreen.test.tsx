@@ -1,5 +1,5 @@
 import React from 'react';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -83,6 +83,7 @@ describe('PracticeMissionsScreen', () => {
     const items = await screen.findAllByTestId(/practice-mission-item-/);
     expect(items[0].textContent).toContain('High priority');
     expect(items[1].textContent).toContain('On track');
+    expect(screen.getAllByText(/Plan #/i).length).toBeGreaterThanOrEqual(2);
   });
 
   it('fires analytics when the missions screen is viewed', async () => {
@@ -94,6 +95,10 @@ describe('PracticeMissionsScreen', () => {
       surface: 'mobile',
       source: 'home',
     });
+    expect(vi.mocked(safeEmit)).toHaveBeenCalledWith('practice_plan_viewed', {
+      entryPoint: 'practice_missions',
+      missionsInPlan: 2,
+    });
   });
 
   it('fires analytics when a mission is started from the list', async () => {
@@ -104,6 +109,11 @@ describe('PracticeMissionsScreen', () => {
     const row = await screen.findByTestId('practice-mission-item-mission-low');
     fireEvent.click(row);
 
+    expect(vi.mocked(safeEmit)).toHaveBeenCalledWith('practice_plan_mission_start', {
+      entryPoint: 'practice_missions',
+      missionId: 'mission-low',
+      planRank: 2,
+    });
     expect(vi.mocked(safeEmit)).toHaveBeenCalledWith('practice_mission_start', {
       missionId: 'mission-low',
       sourceSurface: 'missions_list',
@@ -132,5 +142,57 @@ describe('PracticeMissionsScreen', () => {
     fireEvent.click(row);
 
     expect(vi.mocked(navigation.navigate)).toHaveBeenCalledWith('PracticeMissionDetail', { entryId: 'entry-123' });
+  });
+
+  it('renders weekly plan header and excludes plan missions from remaining list', async () => {
+    const richMissions: PracticeMissionListItem[] = [
+      ...missions,
+      {
+        id: 'mission-mid',
+        title: 'Medium priority mission',
+        subtitleKey: 'practice.missions.status.dueSoon',
+        status: 'dueSoon',
+        priorityScore: 20,
+        lastCompletedAt: null,
+        completionCount: 0,
+        inStreak: false,
+      },
+      {
+        id: 'mission-extra',
+        title: 'Extra mission',
+        subtitleKey: 'practice.missions.status.dueSoon',
+        status: 'dueSoon',
+        priorityScore: 15,
+        lastCompletedAt: null,
+        completionCount: 0,
+        inStreak: false,
+      },
+    ];
+
+    vi.mocked(buildPracticeMissionsList).mockReturnValue(richMissions);
+
+    render(<PracticeMissionsScreen navigation={createNavigation()} route={createRoute()} />);
+
+    const plan = await screen.findByTestId('practice-weekly-plan');
+    expect(plan).toBeVisible();
+    expect(within(plan).getAllByTestId(/practice-mission-item-/)).toHaveLength(3);
+
+    const list = await screen.findByTestId('practice-missions-list');
+    const allRendered = within(list).getAllByTestId(/practice-mission-item-/);
+    expect(allRendered.map((node) => node.getAttribute('data-testid'))).toEqual([
+      'practice-mission-item-mission-high',
+      'practice-mission-item-mission-low',
+      'practice-mission-item-mission-mid',
+      'practice-mission-item-mission-extra',
+    ]);
+  });
+
+  it('does not render plan section when there are no missions', async () => {
+    vi.mocked(buildPracticeMissionsList).mockReturnValue([]);
+
+    render(<PracticeMissionsScreen navigation={createNavigation()} route={createRoute()} />);
+
+    expect(await screen.findByTestId('practice-missions-empty')).toBeVisible();
+    expect(screen.queryByTestId('practice-weekly-plan')).toBeNull();
   });
 });

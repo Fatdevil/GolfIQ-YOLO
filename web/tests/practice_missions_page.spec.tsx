@@ -1,7 +1,7 @@
 import React from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Mock } from "vitest";
-import { render, screen, within } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter, Route, Routes, useParams } from "react-router-dom";
 import userEvent from "@testing-library/user-event";
 
@@ -148,13 +148,21 @@ describe("PracticeMissionsPage", () => {
 
     await screen.findByTestId("practice-missions-page");
 
-    expect(mockTelemetry).toHaveBeenCalledWith(
-      expect.objectContaining({
-        event: "practice_missions_viewed",
-        surface: "web",
-        source: "home_hub",
-      }),
-    );
+    await waitFor(() => {
+      expect(mockTelemetry).toHaveBeenCalledWith(
+        expect.objectContaining({
+          event: "practice_missions_viewed",
+          surface: "web",
+          source: "home_hub",
+        }),
+      );
+      expect(mockTelemetry).toHaveBeenCalledWith(
+        expect.objectContaining({
+          event: "practice_plan_viewed",
+          entryPoint: "practice_missions",
+        }),
+      );
+    });
   });
 
   it("tracks mission start when a mission CTA is clicked", async () => {
@@ -169,11 +177,42 @@ describe("PracticeMissionsPage", () => {
 
     expect(mockTelemetry).toHaveBeenCalledWith(
       expect.objectContaining({
+        event: "practice_plan_mission_start",
+        missionId: "practice_fill_gap:7i:8i",
+        planRank: 1,
+      }),
+    );
+    expect(mockTelemetry).toHaveBeenCalledWith(
+      expect.objectContaining({
         event: "practice_mission_start",
         missionId: "practice_fill_gap:7i:8i",
         sourceSurface: "missions_page",
       }),
     );
+  });
+
+  it("renders a weekly plan and separates remaining missions", async () => {
+    mockLoadHistory.mockResolvedValue([
+      { id: "entry-1", missionId: "mission-a", startedAt: "2024-02-01T00:00:00Z", status: "completed" },
+      { id: "entry-2", missionId: "mission-b", startedAt: "2024-02-02T00:00:00Z", status: "completed" },
+      { id: "entry-3", missionId: "mission-c", startedAt: "2024-02-03T00:00:00Z", status: "completed" },
+      { id: "entry-4", missionId: "mission-d", startedAt: "2024-02-04T00:00:00Z", status: "completed" },
+    ] as PracticeMissionHistoryEntry[]);
+
+    renderWithRouter();
+
+    const plan = await screen.findByTestId("practice-weekly-plan");
+    expect(plan).toBeVisible();
+    expect(within(plan).getAllByTestId("practice-plan-item").length).toBeGreaterThanOrEqual(1);
+
+    const [remaining] = await screen.findAllByTestId("practice-missions-remaining");
+    const remainingItems = within(remaining).queryAllByTestId("practice-mission-item");
+
+    const [list] = await screen.findAllByTestId("practice-missions-list");
+    const all = within(list).getAllByTestId("practice-mission-item");
+    const uniqueIds = new Set(all.map((item: HTMLElement) => item.getAttribute("data-testid")));
+    expect(uniqueIds.size).toEqual(all.length);
+    expect(all.length).toEqual(within(plan).getAllByTestId("practice-mission-item").length + remainingItems.length);
   });
 
   it("renders prioritized missions with status labels", async () => {
@@ -217,7 +256,7 @@ describe("PracticeMissionsPage", () => {
 
     renderWithRouter();
 
-    const list = await screen.findByTestId("practice-missions-list");
+    const [list] = await screen.findAllByTestId("practice-missions-list");
     const rows = within(list).getAllByTestId("practice-mission-item");
     expect(rows.length).toBeGreaterThan(0);
 

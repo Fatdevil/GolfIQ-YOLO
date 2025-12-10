@@ -59,6 +59,8 @@
   "practice.goal.status.goal_reached_title": "Veckomål klart 🎉",
   "practice.goal.status.exceeded_title": "Du ligger före ditt mål",
   "practice.goal.streak.label": "{{count}} veckors svit",
+  "practice.plan.title": "Veckans träningsplan",
+  "practice.plan.badge": "Plan nr {{rank}}",
   "practice.missions.title": "Träningsuppdrag",
   "practice.missions.cta.viewAll": "Visa alla missions",
   "practice.missions.status.overdue": "Hög prioritet",

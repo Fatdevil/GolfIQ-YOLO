@@ -56,11 +56,22 @@ type FlatListProps<Item> = CommonProps & {
   contentContainerStyle?: Record<string, unknown>;
   horizontal?: boolean;
   showsHorizontalScrollIndicator?: boolean;
+  ListHeaderComponent?: React.ComponentType | React.ReactElement | null;
 };
 
-export function FlatList<Item>({ data, renderItem, keyExtractor, testID }: FlatListProps<Item>): JSX.Element {
+export function FlatList<Item>({
+  data,
+  renderItem,
+  keyExtractor,
+  testID,
+  ListHeaderComponent,
+}: FlatListProps<Item>): JSX.Element {
+  const header =
+    typeof ListHeaderComponent === 'function' ? <ListHeaderComponent /> : ListHeaderComponent ?? null;
+
   return (
     <div data-testid={testID}>
+      {header}
       {data.map((item, index) => (
         <div key={keyExtractor ? keyExtractor(item, index) : index}>{renderItem({ item, index })}</div>
       ))}
