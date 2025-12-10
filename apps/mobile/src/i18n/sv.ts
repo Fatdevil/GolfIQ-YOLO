@@ -78,6 +78,14 @@ export const sv = {
   practice_plan_incomplete_label: 'Inte gjort än',
   practice_plan_completed_banner: 'Du har slutfört veckans träningsplan! 🎉',
   practice_plan_progress_banner: '{{completed}} av {{total}} uppdrag gjorda denna vecka',
+  weekly_insights_title: 'Veckans träningsinsikter',
+  weekly_insights_this_week: 'Den här veckan: {{missions}} uppdrag',
+  weekly_insights_last_week: 'Förra veckan: {{missions}} uppdrag',
+  weekly_insights_goal_reached: 'Mål uppnått',
+  weekly_insights_goal_not_reached: 'Mål ej uppnått',
+  weekly_insights_plan_completed: 'Plan klar',
+  weekly_insights_plan_not_completed: 'Plan ej klar',
+  weekly_insights_empty: 'Inga uppdrag ännu – starta ett uppdrag för att kicka igång veckoplanen.',
   bag: {
     practice: {
       recommendedTitle: 'Rekommenderad träning',
