@@ -28,13 +28,24 @@ function buildSnapshot({
   history,
   missions,
   now,
+  targetMissionsPerWeek,
 }: {
   history: PracticeMissionHistoryEntry[];
   missions: PracticeMissionListItem[];
   now: Date;
+  targetMissionsPerWeek?: number;
 }): WeeklyPracticeSnapshot {
-  const goal = buildWeeklyPracticeGoalProgress({ missionHistory: history, now });
-  const plan: WeeklyPracticePlanStatus = buildWeeklyPracticePlanStatus({ missions, history, now });
+  const goal = buildWeeklyPracticeGoalProgress({
+    missionHistory: history,
+    now,
+    targetMissionsPerWeek,
+  });
+  const plan: WeeklyPracticePlanStatus = buildWeeklyPracticePlanStatus({
+    missions,
+    history,
+    now,
+    targetMissionsPerWeek,
+  });
   const summary = computeRecentCompletionSummary(history, PRACTICE_GOAL_WINDOW_DAYS, now);
 
   return {
@@ -49,14 +60,25 @@ export function buildWeeklyPracticeComparison(options: {
   history: PracticeMissionHistoryEntry[];
   missions: PracticeMissionListItem[];
   now?: Date;
+  targetMissionsPerWeek?: number;
 }): WeeklyPracticeComparison {
-  const { history, missions, now = new Date() } = options;
+  const { history, missions, now = new Date(), targetMissionsPerWeek } = options;
   const safeHistory = history ?? [];
   const safeMissions = missions ?? [];
 
-  const thisWeek = buildSnapshot({ history: safeHistory, missions: safeMissions, now });
+  const thisWeek = buildSnapshot({
+    history: safeHistory,
+    missions: safeMissions,
+    now,
+    targetMissionsPerWeek,
+  });
   const lastWeekEnd = new Date(thisWeek.weekStart.getTime() - 1);
-  const lastWeek = buildSnapshot({ history: safeHistory, missions: safeMissions, now: lastWeekEnd });
+  const lastWeek = buildSnapshot({
+    history: safeHistory,
+    missions: safeMissions,
+    now: lastWeekEnd,
+    targetMissionsPerWeek,
+  });
 
   return { thisWeek, lastWeek };
 }
