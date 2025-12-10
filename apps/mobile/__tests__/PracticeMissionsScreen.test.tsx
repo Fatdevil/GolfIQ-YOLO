@@ -11,6 +11,7 @@ import * as bagStatsClient from '@app/api/bagStatsClient';
 import * as bagReadiness from '@shared/caddie/bagReadiness';
 import { buildPracticeMissionsList, type PracticeMissionListItem } from '@shared/practice/practiceMissionsList';
 import { safeEmit } from '@app/telemetry';
+import * as practiceHistory from '@shared/practice/practiceHistory';
 
 vi.mock('@app/storage/practiceMissionHistory', () => ({
   loadPracticeMissionHistory: vi.fn(),
@@ -61,8 +62,11 @@ describe('PracticeMissionsScreen', () => {
     },
   ];
 
+  const buildWeeklyHistorySpy = vi.spyOn(practiceHistory, 'buildWeeklyPracticeHistory');
+
   beforeEach(() => {
     vi.clearAllMocks();
+    buildWeeklyHistorySpy.mockReturnValue([] as any);
     vi.mocked(practiceHistoryStorage.loadPracticeMissionHistory).mockResolvedValue([]);
     vi.mocked(bagClient.fetchPlayerBag).mockResolvedValue(null as any);
     vi.mocked(bagStatsClient.fetchBagStats).mockResolvedValue(null as any);
@@ -108,6 +112,51 @@ describe('PracticeMissionsScreen', () => {
       lastWeekPlanCompleted: false,
       surface: 'practice_missions_mobile',
     });
+    expect(vi.mocked(safeEmit)).toHaveBeenCalledWith('practice_weekly_history_viewed', {
+      surface: 'mobile_practice_missions',
+      weeks: 0,
+    });
+  });
+
+  it('renders weekly history summaries and emits telemetry', async () => {
+    buildWeeklyHistorySpy.mockReturnValue([
+      {
+        weekStart: new Date('2024-02-12T00:00:00Z'),
+        completedCount: 3,
+        target: 3,
+        goalReached: true,
+      },
+      {
+        weekStart: new Date('2024-02-05T00:00:00Z'),
+        completedCount: 1,
+        target: 3,
+        goalReached: false,
+      },
+    ] as any);
+
+    render(<PracticeMissionsScreen navigation={createNavigation()} route={createRoute()} />);
+
+    const history = await screen.findByTestId('practice-weekly-history');
+    const items = within(history).getAllByTestId(/weekly-history-item-/);
+    expect(items).toHaveLength(2);
+    expect(within(items[0]).getByText(/This week/i)).toBeVisible();
+    expect(within(items[0]).getByText('3 / 3 missions')).toBeVisible();
+    expect(within(items[1]).getByText(/Last week/i)).toBeVisible();
+    expect(within(items[1]).getByText('1 / 3 missions')).toBeVisible();
+
+    expect(vi.mocked(safeEmit)).toHaveBeenCalledWith('practice_weekly_history_viewed', {
+      surface: 'mobile_practice_missions',
+      weeks: 2,
+    });
+  });
+
+  it('shows an empty weekly history state when no summaries are available', async () => {
+    buildWeeklyHistorySpy.mockReturnValue([] as any);
+
+    render(<PracticeMissionsScreen navigation={createNavigation()} route={createRoute()} />);
+
+    const history = await screen.findByTestId('practice-weekly-history');
+    expect(within(history).getByText(/No recent practice weeks yet/i)).toBeVisible();
   });
 
   it('shows completed plan banner and emits completion analytics when all missions done', async () => {

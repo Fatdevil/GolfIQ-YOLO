@@ -11,7 +11,13 @@ import { PRACTICE_MISSION_WINDOW_DAYS, loadPracticeMissionHistory } from '@app/s
 import { loadWeeklyPracticeGoalSettings } from '@app/storage/practiceGoalSettings';
 import { buildBagReadinessOverview, type BagReadinessOverview } from '@shared/caddie/bagReadiness';
 import type { BagSuggestion } from '@shared/caddie/bagTuningSuggestions';
-import { buildMissionProgressById, type PracticeMissionHistoryEntry } from '@shared/practice/practiceHistory';
+import {
+  PRACTICE_WEEK_WINDOW_DAYS,
+  buildMissionProgressById,
+  buildWeeklyPracticeHistory,
+  type PracticeMissionHistoryEntry,
+  type WeeklyPracticeHistorySummary,
+} from '@shared/practice/practiceHistory';
 import {
   buildPracticeMissionsList,
   type PracticeMissionDefinition,
@@ -23,6 +29,7 @@ import {
 } from '@shared/practice/practicePlan';
 import { buildWeeklyPracticeComparison } from '@shared/practice/practiceInsights';
 import { emitWeeklyPracticeInsightsViewed } from '@shared/practice/practiceInsightsAnalytics';
+import { emitWeeklyPracticeHistoryViewed } from '@shared/practice/practiceHistoryAnalytics';
 import { safeEmit } from '@app/telemetry';
 import { getDefaultWeeklyPracticeGoalSettings } from '@shared/practice/practiceGoalSettings';
 
@@ -36,6 +43,10 @@ type ScreenState = {
 
 type WeeklyPracticeInsightsCardProps = {
   comparison: ReturnType<typeof buildWeeklyPracticeComparison>;
+};
+
+type WeeklyHistorySectionProps = {
+  summaries: WeeklyPracticeHistorySummary[];
 };
 
 function WeeklyPracticeInsightsCard({ comparison }: WeeklyPracticeInsightsCardProps): JSX.Element {
@@ -83,6 +94,51 @@ function WeeklyPracticeInsightsCard({ comparison }: WeeklyPracticeInsightsCardPr
         t('weekly_insights_last_week', { missions: comparison.lastWeek.missionsCompleted }),
         comparison.lastWeek,
         'weekly-insights-last-week',
+      )}
+    </View>
+  );
+}
+
+function formatWeekRange(start: Date): { from: string; to: string } {
+  const end = new Date(start);
+  end.setDate(end.getDate() + PRACTICE_WEEK_WINDOW_DAYS - 1);
+
+  return {
+    from: start.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }),
+    to: end.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }),
+  };
+}
+
+function WeeklyHistorySection({ summaries }: WeeklyHistorySectionProps): JSX.Element {
+  return (
+    <View style={styles.historySection} testID="practice-weekly-history">
+      <Text style={styles.historyTitle}>{t('weekly_history_title')}</Text>
+      {summaries.length === 0 ? (
+        <Text style={styles.historyEmpty}>{t('weekly_history_empty')}</Text>
+      ) : (
+        <View style={styles.historyList}>
+          {summaries.map((summary, index) => {
+            const { from, to } = formatWeekRange(summary.weekStart);
+            const label =
+              index === 0
+                ? t('weekly_history_this_week')
+                : index === 1
+                  ? t('weekly_history_last_week')
+                  : t('weekly_history_range', { from, to });
+
+            return (
+              <View style={styles.historyCard} key={summary.weekStart.getTime()} testID={`weekly-history-item-${index}`}>
+                <Text style={styles.historyLabel}>{label}</Text>
+                <Text style={styles.historyCounts}>
+                  {t('weekly_history_counts', { completed: summary.completedCount, target: summary.target })}
+                </Text>
+                <Text style={summary.goalReached ? styles.historyPositive : styles.historyNeutral}>
+                  {summary.goalReached ? t('weekly_history_goal_reached') : t('weekly_history_goal_not_reached')}
+                </Text>
+              </View>
+            );
+          })}
+        </View>
       )}
     </View>
   );
@@ -192,6 +248,7 @@ export default function PracticeMissionsScreen({ navigation, route }: Props): JS
   const planViewedRef = useRef(false);
   const planCompletedViewedRef = useRef(false);
   const insightsViewedRef = useRef(false);
+  const historyViewedRef = useRef(false);
   const [weeklyGoalSettings, setWeeklyGoalSettings] = useState(
     getDefaultWeeklyPracticeGoalSettings(),
   );
@@ -279,6 +336,16 @@ export default function PracticeMissionsScreen({ navigation, route }: Props): JS
     [state.history, state.missions, weeklyGoalSettings.targetMissionsPerWeek],
   );
 
+  const weeklyHistory = useMemo(
+    () =>
+      buildWeeklyPracticeHistory({
+        history: state.history,
+        settings: weeklyGoalSettings,
+        now: new Date(),
+      }),
+    [state.history, weeklyGoalSettings],
+  );
+
   const weeklyPlanMissions = weeklyPlanStatus.missions;
   const weeklyPlanIds = useMemo(() => new Set(weeklyPlanMissions.map((mission) => mission.id)), [weeklyPlanMissions]);
   const remainingMissions = useMemo(
@@ -312,6 +379,16 @@ export default function PracticeMissionsScreen({ navigation, route }: Props): JS
       },
     );
   }, [state.loading, weeklyComparison]);
+
+  useEffect(() => {
+    if (state.loading || historyViewedRef.current) return;
+    historyViewedRef.current = true;
+
+    emitWeeklyPracticeHistoryViewed(
+      { emit: safeEmit },
+      { surface: 'mobile_practice_missions', weeks: weeklyHistory.length },
+    );
+  }, [state.loading, weeklyHistory.length]);
 
   useEffect(() => {
     if (state.loading || !weeklyPlanStatus.isPlanCompleted || planCompletedViewedRef.current) return;
@@ -360,6 +437,7 @@ export default function PracticeMissionsScreen({ navigation, route }: Props): JS
     <View style={styles.container}>
       <Text style={styles.title}>{t('practice.missions.title')}</Text>
       <WeeklyPracticeInsightsCard comparison={weeklyComparison} />
+      <WeeklyHistorySection summaries={weeklyHistory} />
       {state.missions.length === 0 ? (
         <View style={styles.empty} testID="practice-missions-empty">
           <Text style={styles.emptyTitle}>{t('practice.missions.empty.title')}</Text>
@@ -462,6 +540,48 @@ const styles = StyleSheet.create({
   insightsEmpty: {
     color: '#4B5563',
     marginTop: 4,
+  },
+  historySection: {
+    gap: 10,
+    padding: 14,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    backgroundColor: '#FFFFFF',
+  },
+  historyTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#0F172A',
+  },
+  historyEmpty: {
+    color: '#4B5563',
+  },
+  historyList: {
+    gap: 10,
+  },
+  historyCard: {
+    gap: 4,
+    padding: 12,
+    borderRadius: 10,
+    backgroundColor: '#F8FAFC',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+  },
+  historyLabel: {
+    fontWeight: '700',
+    color: '#111827',
+  },
+  historyCounts: {
+    color: '#1F2937',
+  },
+  historyPositive: {
+    color: '#065F46',
+    fontWeight: '700',
+  },
+  historyNeutral: {
+    color: '#6B7280',
+    fontWeight: '600',
   },
   loading: {
     color: '#4B5563',

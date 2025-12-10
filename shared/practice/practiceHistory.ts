@@ -1,3 +1,10 @@
+import {
+  DEFAULT_TARGET_MISSIONS_PER_WEEK,
+  getDefaultWeeklyPracticeGoalSettings,
+  normalizeWeeklyPracticeGoalSettings,
+  type WeeklyPracticeGoalSettings,
+} from './practiceGoalSettings';
+
 export type PracticeMissionStatus = 'completed' | 'abandoned';
 
 export type PracticeMissionHistoryEntry = {
@@ -52,6 +59,13 @@ export type CompletionSummary = {
   attempted: number;
 };
 
+export type WeeklyPracticeHistorySummary = {
+  weekStart: Date;
+  completedCount: number;
+  target: number;
+  goalReached: boolean;
+};
+
 export type PracticeMissionDetail = {
   id: string;
   missionId: string;
@@ -68,6 +82,8 @@ export type PracticeMissionDetail = {
 
 export const MAX_PRACTICE_HISTORY_ENTRIES = 100;
 export const DEFAULT_HISTORY_WINDOW_DAYS = 14;
+// Keep in sync with PRACTICE_GOAL_WINDOW_DAYS in practiceGoals.ts
+export const PRACTICE_WEEK_WINDOW_DAYS = 7;
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 function isFiniteDate(value?: string): boolean {
@@ -88,6 +104,13 @@ function normalizeDay(value: Date): string {
   const normalized = new Date(value);
   normalized.setHours(0, 0, 0, 0);
   return normalized.toISOString();
+}
+
+export function normalizePracticeWeekStart(anchor: Date): Date {
+  const start = new Date(anchor);
+  start.setHours(0, 0, 0, 0);
+  start.setDate(start.getDate() - PRACTICE_WEEK_WINDOW_DAYS);
+  return start;
 }
 
 function normalizeMissionId(raw: unknown): string | null {
@@ -307,6 +330,54 @@ export function computeRecentCompletionSummary(
   const recent = selectRecentMissions(state, { daysBack: windowDays, limit: MAX_PRACTICE_HISTORY_ENTRIES }, now);
   const completed = recent.filter((entry) => entry.status === 'completed').length;
   return { completed, attempted: recent.length };
+}
+
+export function buildWeeklyPracticeHistory(options: {
+  history: PracticeMissionHistoryEntry[];
+  weeks?: number;
+  now?: Date;
+  settings?: WeeklyPracticeGoalSettings;
+}): WeeklyPracticeHistorySummary[] {
+  const { history, weeks = 8, now = new Date(), settings } = options;
+  const safeHistory = Array.isArray(history) ? history : [];
+  if (safeHistory.length === 0) return [];
+
+  const normalizedSettings = settings
+    ? normalizeWeeklyPracticeGoalSettings(settings)
+    : getDefaultWeeklyPracticeGoalSettings();
+  const target = normalizedSettings.targetMissionsPerWeek ?? DEFAULT_TARGET_MISSIONS_PER_WEEK;
+
+  const timestamps = safeHistory
+    .map((entry) => entryTimestamp(entry))
+    .filter((ts) => Number.isFinite(ts))
+    .sort((a, b) => a - b);
+
+  if (timestamps.length === 0 || weeks <= 0) return [];
+
+  const earliestWeekStart = normalizePracticeWeekStart(new Date(timestamps[0]));
+  const summaries: WeeklyPracticeHistorySummary[] = [];
+  const windowMs = PRACTICE_WEEK_WINDOW_DAYS * DAY_MS;
+
+  let weekIndex = 0;
+  while (weekIndex < weeks) {
+    const weekEnd = new Date(now.getTime() - weekIndex * windowMs);
+    const weekStart = normalizePracticeWeekStart(weekEnd);
+    if (weekStart < earliestWeekStart) break;
+
+    const summary = computeRecentCompletionSummary(
+      safeHistory,
+      PRACTICE_WEEK_WINDOW_DAYS,
+      weekEnd,
+    );
+
+    const completedCount = summary.completed;
+    const goalReached = completedCount >= target;
+
+    summaries.push({ weekStart, completedCount, target, goalReached });
+    weekIndex += 1;
+  }
+
+  return summaries;
 }
 
 export function buildMissionProgressById(

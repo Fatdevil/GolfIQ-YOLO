@@ -92,6 +92,14 @@ export const sv = {
   weekly_insights_plan_completed: 'Plan klar',
   weekly_insights_plan_not_completed: 'Plan ej klar',
   weekly_insights_empty: 'Inga uppdrag ännu – starta ett uppdrag för att kicka igång veckoplanen.',
+  weekly_history_title: 'Veckovis historik',
+  weekly_history_empty: 'Ingen veckoträning ännu.',
+  weekly_history_this_week: 'Den här veckan',
+  weekly_history_last_week: 'Förra veckan',
+  weekly_history_range: '{{from}} – {{to}}',
+  weekly_history_counts: '{{completed}} / {{target}} uppdrag',
+  weekly_history_goal_reached: 'Mål uppnått',
+  weekly_history_goal_not_reached: 'Under målet',
   bag: {
     practice: {
       recommendedTitle: 'Rekommenderad träning',

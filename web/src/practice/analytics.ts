@@ -18,7 +18,8 @@ export type PracticeAnalyticsEvent =
   | "practice_plan_mission_start"
   | "practice_plan_completed_viewed"
   | "practice_goal_settings_updated"
-  | "weekly_practice_insights_viewed";
+  | "weekly_practice_insights_viewed"
+  | "practice_weekly_history_viewed";
 
 export type QuickPracticeEntrySource = "range_home" | "recap" | "missions" | "other";
 
@@ -70,6 +71,11 @@ type QuickPracticeSessionCompleteEvent = {
   hasRecommendation?: boolean;
   swingsCount?: number;
   durationSeconds?: number;
+};
+
+type WeeklyPracticeHistoryViewedEvent = {
+  surface: "web_practice_missions";
+  weeks: number;
 };
 
 function sanitizePayload(payload: Record<string, unknown>): Record<string, unknown> {
@@ -150,4 +156,8 @@ export function trackWeeklyPracticeInsightsViewed(payload: WeeklyPracticeInsight
     },
     payload,
   );
+}
+
+export function trackPracticeWeeklyHistoryViewed(payload: WeeklyPracticeHistoryViewedEvent): void {
+  emitPracticeAnalytics("practice_weekly_history_viewed", payload);
 }
