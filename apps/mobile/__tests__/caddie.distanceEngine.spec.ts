@@ -79,6 +79,55 @@ describe('suggestClubForTarget', () => {
 
     expect(club?.club).toBe('8i');
   });
+
+  it('uses practice profile when confident and emits telemetry', () => {
+    const telemetry: any[] = [];
+
+    const club = suggestClubForTarget(
+      [
+        { club: '8i', baselineCarryM: 145, samples: 5, source: 'auto' },
+        { club: '7i', baselineCarryM: 158, samples: 4, source: 'auto' },
+      ],
+      { targetDistanceM: 150, windSpeedMps: 0, windDirectionDeg: 0, elevationDeltaM: 0 },
+      {
+        practiceProfile: {
+          '8i': { avgCarryM: 155, sampleCount: 12, confidence: 'high' },
+        },
+        onPracticeDistanceUsed: (payload) => telemetry.push(payload),
+      },
+    );
+
+    expect(club?.club).toBe('8i');
+    expect(telemetry).toEqual([
+      {
+        clubId: '8i',
+        practiceAvgCarryM: 155,
+        baselineCarryM: 145,
+        source: 'practice_profile',
+      },
+    ]);
+  });
+
+  it('falls back to baseline when practice profile is low confidence', () => {
+    const telemetry: any[] = [];
+
+    const club = suggestClubForTarget(
+      [
+        { club: '8i', baselineCarryM: 145, samples: 5, source: 'auto' },
+        { club: '7i', baselineCarryM: 158, samples: 4, source: 'auto' },
+      ],
+      { targetDistanceM: 150, windSpeedMps: 0, windDirectionDeg: 0, elevationDeltaM: 0 },
+      {
+        practiceProfile: {
+          '8i': { avgCarryM: 160, sampleCount: 2, confidence: 'low' },
+        },
+        onPracticeDistanceUsed: (payload) => telemetry.push(payload),
+      },
+    );
+
+    expect(club?.club).toBe('7i');
+    expect(telemetry).toEqual([]);
+  });
 });
 
 describe('computeRiskZonesFromProfile', () => {

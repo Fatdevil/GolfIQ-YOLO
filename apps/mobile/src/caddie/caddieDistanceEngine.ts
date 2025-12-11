@@ -1,4 +1,5 @@
 import type { ShotShapeProfile } from '@app/api/caddieApi';
+import type { PracticeDistanceProfile } from '@shared/caddie/practiceDistanceProfile';
 import { computeEffectiveDistance } from './playsLike';
 
 export interface PlaysLikeInput {
@@ -22,6 +23,19 @@ export interface ClubCandidate {
   samples?: number;
 }
 
+export interface PracticeDistanceTelemetryPayload {
+  clubId: string;
+  practiceAvgCarryM: number;
+  baselineCarryM: number;
+  source: 'practice_profile' | 'baseline';
+}
+
+export interface SuggestClubOptions {
+  practiceProfile?: PracticeDistanceProfile | null;
+  minPracticeSamples?: number;
+  onPracticeDistanceUsed?: (payload: PracticeDistanceTelemetryPayload) => void;
+}
+
 export interface RiskZone {
   carryMinM: number;
   carryMaxM: number;
@@ -36,7 +50,8 @@ export interface ShotShapeRiskSummary {
   tailRightProb: number;
 }
 
-type ClubCandidateWithCarry = ClubCandidate & { effectiveCarry: number };
+type CarrySource = 'baseline' | 'manual' | 'practice_profile';
+type ClubCandidateWithCarry = ClubCandidate & { effectiveCarry: number; carrySource: CarrySource };
 
 export function computePlaysLikeDetails(input: PlaysLikeInput): PlaysLikeDetails {
   const { effectiveDistance, breakdown } = computeEffectiveDistance(
@@ -62,18 +77,43 @@ function filterBySamples<T extends ClubCandidate>(clubs: T[]): T[] {
   return withSamples.length > 0 ? withSamples : clubs;
 }
 
+function resolveCarry(
+  club: ClubCandidate,
+  options: { practiceProfile?: PracticeDistanceProfile | null; minPracticeSamples?: number },
+): { effectiveCarry: number; carrySource: CarrySource } {
+  const manualCarry = club.source === 'manual' ? club.manualCarryM : null;
+  if (manualCarry != null && Number.isFinite(manualCarry)) {
+    return { effectiveCarry: manualCarry, carrySource: 'manual' };
+  }
+
+  const profileEntry = options.practiceProfile?.[club.club];
+  const minPracticeSamples = options.minPracticeSamples ?? 5;
+  if (
+    profileEntry &&
+    Number.isFinite(profileEntry.avgCarryM) &&
+    profileEntry.avgCarryM > 0 &&
+    profileEntry.sampleCount >= minPracticeSamples &&
+    profileEntry.confidence === 'high'
+  ) {
+    return { effectiveCarry: profileEntry.avgCarryM, carrySource: 'practice_profile' };
+  }
+
+  return { effectiveCarry: club.baselineCarryM, carrySource: 'baseline' };
+}
+
 export function suggestClubForTarget(
   clubs: ClubCandidate[],
   input: PlaysLikeInput,
+  options: SuggestClubOptions = {},
 ): ClubCandidate | null {
   if (!clubs.length) return null;
 
   const withEffectiveCarry: ClubCandidateWithCarry[] = clubs.map((club) => ({
     ...club,
-    effectiveCarry:
-      club.source === 'manual' && club.manualCarryM != null
-        ? club.manualCarryM
-        : club.baselineCarryM,
+    ...resolveCarry(club, {
+      practiceProfile: options.practiceProfile,
+      minPracticeSamples: options.minPracticeSamples,
+    }),
   }));
 
   const validClubs = filterBySamples(
@@ -84,10 +124,21 @@ export function suggestClubForTarget(
 
   const playsLike = computePlaysLikeDistance(input);
   const atOrAbove = validClubs.filter((club) => club.effectiveCarry >= playsLike);
-  if (atOrAbove.length > 0) {
-    return atOrAbove[0];
+  const selected = atOrAbove.length > 0 ? atOrAbove[0] : validClubs[validClubs.length - 1];
+
+  if (selected && selected.carrySource === 'practice_profile' && options.onPracticeDistanceUsed) {
+    const practiceAvgCarryM = options.practiceProfile?.[selected.club]?.avgCarryM;
+    if (practiceAvgCarryM != null) {
+      options.onPracticeDistanceUsed({
+        clubId: selected.club,
+        practiceAvgCarryM,
+        baselineCarryM: selected.baselineCarryM,
+        source: 'practice_profile',
+      });
+    }
   }
-  return validClubs[validClubs.length - 1];
+
+  return selected;
 }
 
 const CORE_INTERVAL = 1.28;
