@@ -379,12 +379,6 @@ export default function PracticeMissionsScreen({ navigation, route }: Props): JS
   ]);
 
   useEffect(() => {
-    if (viewedRef.current) return;
-    viewedRef.current = true;
-    safeEmit('practice_missions_viewed', { surface: 'mobile', source: route.params?.source ?? 'other' });
-  }, [route.params?.source]);
-
-  useEffect(() => {
     let cancelled = false;
 
     const load = async () => {
@@ -470,6 +464,16 @@ export default function PracticeMissionsScreen({ navigation, route }: Props): JS
       }),
     [state.history, weeklyGoalSettings],
   );
+
+  useEffect(() => {
+    if (viewedRef.current || state.loading) return;
+    viewedRef.current = true;
+    safeEmit('practice_missions_viewed', {
+      surface: 'mobile',
+      source: route.params?.source ?? 'other',
+      weeks: weeklyHistory.length,
+    });
+  }, [route.params?.source, state.loading, weeklyHistory.length]);
 
   const weeklyPlanMissions = weeklyPlanStatus.missions;
   const weeklyPlanIds = useMemo(() => new Set(weeklyPlanMissions.map((mission) => mission.id)), [weeklyPlanMissions]);
