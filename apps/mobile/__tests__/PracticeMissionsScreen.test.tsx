@@ -1,5 +1,5 @@
 import React from 'react';
-import { fireEvent, render, screen, within } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -319,6 +319,55 @@ describe('PracticeMissionsScreen', () => {
     await screen.findByTestId('practice-missions-list');
     expect(screen.queryByText(/Recommended for this week’s focus area/i)).toBeNull();
     expect(screen.queryByText(/Recommended based on your recent practice/i)).toBeNull();
+  });
+
+  it('emits recommendation impression and click analytics', async () => {
+    recommendPracticeMissionsMock.mockReturnValue([
+      { id: 'mission-high', rank: 1, reason: 'focus_area' },
+    ] as any);
+
+    render(<PracticeMissionsScreen navigation={createNavigation()} route={createRoute()} />);
+
+    await waitFor(() => {
+      expect(vi.mocked(safeEmit)).toHaveBeenCalledWith(
+        'practice_mission_recommendation_shown',
+        expect.objectContaining({
+          missionId: 'mission-high',
+          reason: 'focus_area',
+          rank: 1,
+          surface: 'mobile_practice_missions',
+        }),
+      );
+    });
+
+    const row = await screen.findByTestId('practice-mission-item-mission-high');
+    fireEvent.click(row);
+
+    await waitFor(() => {
+      expect(vi.mocked(safeEmit)).toHaveBeenCalledWith(
+        'practice_mission_recommendation_clicked',
+        expect.objectContaining({
+          missionId: 'mission-high',
+          reason: 'focus_area',
+          rank: 1,
+          surface: 'mobile_practice_missions',
+          entryPoint: 'weekly_plan',
+        }),
+      );
+    });
+  });
+
+  it('does not emit recommendation analytics when none are available', async () => {
+    recommendPracticeMissionsMock.mockReturnValue([] as any);
+
+    render(<PracticeMissionsScreen navigation={createNavigation()} route={createRoute()} />);
+
+    await screen.findByTestId('practice-missions-list');
+
+    const recommendationCalls = vi.mocked(safeEmit).mock.calls.filter((call) =>
+      String(call[0]).startsWith('practice_mission_recommendation_'),
+    );
+    expect(recommendationCalls).toHaveLength(0);
   });
 
   it('navigates to mission detail when a matching history entry exists', async () => {

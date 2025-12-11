@@ -248,6 +248,57 @@ describe("PracticeMissionsPage", () => {
     expect(screen.queryByText(/^Recommended$/i)).toBeNull();
   });
 
+  it("emits recommendation impression and click analytics", async () => {
+    mockRecommendPracticeMissions.mockReturnValue([
+      { id: "practice_fill_gap:7i:8i", rank: 1, reason: "goal_progress" },
+    ] as any);
+    mockLoadHistory.mockResolvedValue([]);
+
+    renderWithRouter();
+
+    await waitFor(() => {
+      expect(mockTelemetry).toHaveBeenCalledWith(
+        expect.objectContaining({
+          event: "practice_mission_recommendation_shown",
+          missionId: "practice_fill_gap:7i:8i",
+          reason: "goal_progress",
+          rank: 1,
+          surface: "web_practice_missions",
+        }),
+      );
+    });
+
+    const row = await screen.findByTestId("practice-mission-item");
+    await userEvent.click(row);
+
+    await waitFor(() => {
+      expect(mockTelemetry).toHaveBeenCalledWith(
+        expect.objectContaining({
+          event: "practice_mission_recommendation_clicked",
+          missionId: "practice_fill_gap:7i:8i",
+          reason: "goal_progress",
+          rank: 1,
+          surface: "web_practice_missions",
+          entryPoint: "weekly_plan",
+        }),
+      );
+    });
+  });
+
+  it("does not emit recommendation analytics when none are returned", async () => {
+    mockRecommendPracticeMissions.mockReturnValue([] as any);
+    mockLoadHistory.mockResolvedValue([]);
+
+    renderWithRouter();
+
+    await screen.findByTestId("practice-missions-list");
+
+    const recommendationCalls = mockTelemetry.mock.calls.filter((call) =>
+      String(call?.[0]?.event ?? "").startsWith("practice_mission_recommendation_"),
+    );
+    expect(recommendationCalls).toHaveLength(0);
+  });
+
   it("shows completed plan banner, labels, and emits completion analytics", async () => {
     const now = new Date();
     const planStatusSpy = vi.spyOn(practicePlan, "buildWeeklyPracticePlanStatus");
