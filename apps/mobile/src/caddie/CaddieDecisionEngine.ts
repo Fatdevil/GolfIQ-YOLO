@@ -14,6 +14,8 @@ import type { BagClubStats, BagClubStatsMap, DistanceSource } from '@shared/cadd
 import { MIN_AUTOCALIBRATED_SAMPLES, shouldUseBagStat } from '@shared/caddie/bagStats';
 import type { BagReadinessOverview, ClubReadinessLevel } from '@shared/caddie/bagReadiness';
 import { getClubReadiness } from '@shared/caddie/bagReadiness';
+import type { PracticeDecisionContext } from '@shared/practice/practiceDecisionContext';
+import { safeEmit, type TelemetryEmitter } from '@app/telemetry';
 
 export interface CaddieConditions {
   targetDistanceM: number;
@@ -272,6 +274,7 @@ export type TargetAwareCaddieDecisionContext = {
   playerBag: PlayerBag | null;
   bagStats?: BagClubStatsMap | null;
   bagReadinessOverview?: BagReadinessOverview | null;
+  practiceContext?: PracticeDecisionContext | null;
   riskPreference: CaddieRiskPreference | RiskProfile | null;
   playsLikeDistanceFn: (
     flatDistanceM: number,
@@ -280,6 +283,7 @@ export type TargetAwareCaddieDecisionContext = {
   ) => number;
   elevationDiffM: number;
   wind: WindConditions;
+  telemetryEmitter?: TelemetryEmitter;
 };
 
 type DistanceClub = { id: string; carry: number };
@@ -396,8 +400,10 @@ function chooseTargetType(
   risk: CaddieRiskPreference,
   maxCarry: number,
   hasLayup: boolean,
-): 'green' | 'layup' {
+  practiceContext?: PracticeDecisionContext | null,
+): { targetType: 'green' | 'layup'; influencedByPractice: boolean } {
   let targetType: 'green' | 'layup' = 'green';
+  let influencedByPractice = false;
 
   if (risk === 'safe') {
     if (totalDistanceM > maxCarry * 0.9 || par === 5) {
@@ -411,11 +417,24 @@ function chooseTargetType(
     }
   }
 
-  if (targetType === 'layup' && !hasLayup) {
-    return 'green';
+  if (targetType === 'layup' && hasLayup && practiceContext) {
+    const focusAreas = practiceContext.recentFocusAreas ?? [];
+    const focusOnApproach = focusAreas.includes('approach');
+    const goalReached = Boolean(practiceContext.goalReached);
+    const practiceConfidence = Math.min(1, Math.max(0, practiceContext.practiceConfidence ?? 0));
+    const reachableWithBestClub = totalDistanceM <= maxCarry * 1.05;
+
+    if (par === 5 && focusOnApproach && goalReached && practiceConfidence >= 0.6 && reachableWithBestClub) {
+      targetType = 'green';
+      influencedByPractice = true;
+    }
   }
 
-  return targetType;
+  if (targetType === 'layup' && !hasLayup) {
+    return { targetType: 'green', influencedByPractice };
+  }
+
+  return { targetType, influencedByPractice };
 }
 
 function buildExplanation(options: {
@@ -442,7 +461,14 @@ export function computeCaddieDecision(ctx: TargetAwareCaddieDecisionContext): Ca
   const maxCarry = getMaxCarryFromBag(ctx.playerBag, ctx.bagStats);
   const total = ctx.holeYardageM ?? 0;
   const hasLayup = Boolean(ctx.targets.layup?.carryDistanceM);
-  const targetType = chooseTargetType(total, ctx.holePar, risk, maxCarry, hasLayup);
+  const { targetType, influencedByPractice } = chooseTargetType(
+    total,
+    ctx.holePar,
+    risk,
+    maxCarry,
+    hasLayup,
+    ctx.practiceContext,
+  );
 
   const rawDistanceM = targetType === 'layup'
     ? ctx.targets.layup?.carryDistanceM ?? ctx.holeYardageM ?? null
@@ -468,6 +494,26 @@ export function computeCaddieDecision(ctx: TargetAwareCaddieDecisionContext): Ca
   const recommendedReadiness = recommendedClubId
     ? getClubReadiness(recommendedClubId, ctx.bagReadinessOverview)
     : undefined;
+
+  const emit = ctx.telemetryEmitter ?? safeEmit;
+  emit('caddie_target_decision_context', {
+    holeNumber: ctx.holeNumber,
+    holePar: ctx.holePar,
+    holeYardageM: ctx.holeYardageM,
+    targetType,
+    scenario: ctx.holePar === 5 ? 'par5_target' : ctx.holePar === 3 ? 'par3_target' : 'par4_target',
+    hasLayup,
+    practiceContext: ctx.practiceContext
+      ? {
+          goalReached: Boolean(ctx.practiceContext.goalReached),
+          recentFocusAreas: ctx.practiceContext.recentFocusAreas,
+          practiceConfidence: Math.round((ctx.practiceContext.practiceConfidence ?? 0) * 100) / 100,
+        }
+      : null,
+    influencedByPractice,
+    riskProfile: risk,
+    recommendedClubId,
+  });
 
   return {
     holeNumber: ctx.holeNumber,

@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import { type PlayerBag } from '@app/api/bagClient';
 import { computeCaddieDecision, normalizeRiskPreference } from '@app/caddie/CaddieDecisionEngine';
@@ -105,5 +105,69 @@ describe('caddieDecisionEngine (target-aware)', () => {
 
   it('maps existing risk profile to balanced', () => {
     expect(normalizeRiskPreference('normal')).toBe('balanced');
+  });
+
+  it('adapts par 5 aggression when practice focus is on approach and goals are reached', () => {
+    const emit = vi.fn();
+    const decision = computeCaddieDecision({
+      holeNumber: 6,
+      holePar: 5,
+      holeYardageM: 240,
+      targets,
+      playerBag: bag,
+      riskPreference: 'safe',
+      playsLikeDistanceFn: playsLikePlusTen,
+      elevationDiffM: 0,
+      wind: { speedMps: 0, angleDeg: 0 },
+      practiceContext: {
+        goalReached: true,
+        practiceConfidence: 0.8,
+        recentFocusAreas: ['approach'],
+      },
+      telemetryEmitter: emit,
+    });
+
+    expect(decision?.strategy).toBe('attack');
+    expect(decision?.targetType).toBe('green');
+    expect(emit).toHaveBeenCalledWith(
+      'caddie_target_decision_context',
+      expect.objectContaining({
+        holePar: 5,
+        targetType: 'green',
+        influencedByPractice: true,
+        practiceContext: {
+          goalReached: true,
+          recentFocusAreas: ['approach'],
+          practiceConfidence: 0.8,
+        },
+      }),
+    );
+  });
+
+  it('keeps default behavior when practice context is missing', () => {
+    const emit = vi.fn();
+    const decision = computeCaddieDecision({
+      holeNumber: 7,
+      holePar: 5,
+      holeYardageM: 240,
+      targets,
+      playerBag: bag,
+      riskPreference: 'safe',
+      playsLikeDistanceFn: playsLikePlusTen,
+      elevationDiffM: 0,
+      wind: { speedMps: 0, angleDeg: 0 },
+      telemetryEmitter: emit,
+    });
+
+    expect(decision?.strategy).toBe('layup');
+    expect(decision?.targetType).toBe('layup');
+    expect(emit).toHaveBeenCalledWith(
+      'caddie_target_decision_context',
+      expect.objectContaining({
+        practiceContext: null,
+        influencedByPractice: false,
+        targetType: 'layup',
+      }),
+    );
   });
 });
