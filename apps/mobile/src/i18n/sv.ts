@@ -148,6 +148,8 @@ export const sv = {
       practiceGoalReached: 'Veckomål uppnått',
       practiceGoalProgress: 'Veckomål: {{progress}}/{{target}}',
       practiceGoalUnavailable: 'Veckomål ej satt',
+      highlightsUnavailable: 'Inga slag-för-slag-höjdpunkter tillgängliga för den här rundan.',
+      coachInsightsUnavailable: 'Vi kunde inte hämta detaljerade coach-insikter den här gången, men här är dina siffror.',
     },
   },
 };
