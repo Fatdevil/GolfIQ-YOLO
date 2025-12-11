@@ -395,6 +395,7 @@ describe('RangeQuickPracticeSessionScreen', () => {
         targetClubs: recommendation.targetClubs,
         startedAt: session.startedAt,
       }),
+      expect.objectContaining({ source: 'quick_practice' }),
     );
 
     vi.useRealTimers();
