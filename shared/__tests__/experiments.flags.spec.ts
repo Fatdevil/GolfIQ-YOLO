@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 
-import { getExperimentBucket, getExperimentVariant, isInExperiment } from '../experiments/flags';
+import {
+  getExperimentBucket,
+  getExperimentVariant,
+  getPracticeRecommendationsExperiment,
+  isInExperiment,
+} from '../experiments/flags';
 
 describe('experiments/flags', () => {
   it('returns a stable bucket for the same user', () => {
@@ -26,5 +31,15 @@ describe('experiments/flags', () => {
 
     expect(variant === 'treatment').toBe(bucket < 50);
     expect(isInExperiment('weekly_goal_nudge', userId)).toBe(variant === 'treatment');
+  });
+
+  it('enables practice recommendations by default', () => {
+    const experiment = getPracticeRecommendationsExperiment('user-practice');
+
+    expect(experiment.experimentKey).toBe('practice_recommendations');
+    expect(experiment.experimentBucket).toBeGreaterThanOrEqual(0);
+    expect(experiment.experimentBucket).toBeLessThan(100);
+    expect(experiment.experimentVariant).toBe('enabled');
+    expect(experiment.enabled).toBe(true);
   });
 });
