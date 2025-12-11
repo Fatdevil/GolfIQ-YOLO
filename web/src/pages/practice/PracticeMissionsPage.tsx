@@ -323,6 +323,10 @@ export default function PracticeMissionsPage(): JSX.Element {
     [experimentUserId],
   );
 
+  const recommendationsSuppressed =
+    practiceRecommendationsExperiment.experimentVariant === "disabled" ||
+    !practiceRecommendationsExperiment.enabled;
+
   const targetMissionsPerWeek = weeklyGoalSettings.targetMissionsPerWeek;
 
   const practiceReadinessSummary = useMemo(
@@ -337,28 +341,38 @@ export default function PracticeMissionsPage(): JSX.Element {
 
   const practiceRecommendations = useMemo(
     () =>
-      loading || !practiceRecommendationsExperiment.enabled
+      loading || recommendationsSuppressed
         ? []
         : recommendPracticeMissions({
             context: practiceDecisionContext,
-            missions: missions.map((mission) => ({ id: mission.id, focusArea: (mission as any).focusArea })),
+            missions: missions.map((mission) => ({
+              id: mission.id,
+              focusArea: (mission as any).focusArea,
+              priorityScore: mission.priorityScore,
+              estimatedMinutes: (mission as any).estimatedMinutes,
+              difficulty: (mission as any).difficulty,
+              completionCount: mission.completionCount,
+              lastCompletedAt: mission.lastCompletedAt,
+            })),
             maxResults: 3,
+            experimentVariant: practiceRecommendationsExperiment.experimentVariant,
           }),
     [
       loading,
       missions,
       practiceDecisionContext,
-      practiceRecommendationsExperiment.enabled,
+      practiceRecommendationsExperiment.experimentVariant,
+      recommendationsSuppressed,
     ],
   );
 
   const recommendationByMissionId = useMemo(() => {
     const map = new Map<string, RecommendedMission>();
-    if (practiceRecommendationsExperiment.enabled) {
+    if (!recommendationsSuppressed) {
       practiceRecommendations.forEach((rec) => map.set(rec.id, rec));
     }
     return map;
-  }, [practiceRecommendations, practiceRecommendationsExperiment.enabled, missions]);
+  }, [practiceRecommendations, recommendationsSuppressed, missions]);
 
   const recommendationImpressionsSentRef = useRef(new Set<string>());
 
@@ -395,18 +409,20 @@ export default function PracticeMissionsPage(): JSX.Element {
   );
 
   useEffect(() => {
-    if (loading || practiceRecommendations.length === 0 || !practiceRecommendationsExperiment.enabled) return;
+    if (loading || practiceRecommendations.length === 0 || recommendationsSuppressed) return;
 
     practiceRecommendations.forEach((rec) => {
       if (recommendationImpressionsSentRef.current.has(rec.id)) return;
       const mission = missions.find((candidate) => candidate.id === rec.id);
+      const algorithmVersion = rec.algorithmVersion ?? "v1";
+      const focusArea = rec.focusArea ?? (mission as any)?.focusArea;
       trackPracticeMissionRecommendationShown({
         missionId: rec.id,
         reason: rec.reason,
         rank: rec.rank,
         surface: "web_practice_missions",
-        focusArea: (mission as any)?.focusArea,
-        algorithmVersion: "v1",
+        focusArea,
+        algorithmVersion,
         experiment: {
           experimentKey: practiceRecommendationsExperiment.experimentKey,
           experimentBucket: practiceRecommendationsExperiment.experimentBucket,
@@ -419,10 +435,10 @@ export default function PracticeMissionsPage(): JSX.Element {
     loading,
     missions,
     practiceRecommendations,
-    practiceRecommendationsExperiment.enabled,
     practiceRecommendationsExperiment.experimentBucket,
     practiceRecommendationsExperiment.experimentKey,
     practiceRecommendationsExperiment.experimentVariant,
+    recommendationsSuppressed,
   ]);
 
   useEffect(() => {
@@ -525,13 +541,16 @@ export default function PracticeMissionsPage(): JSX.Element {
     const mission = missions.find((candidate) => candidate.id === missionId);
     let recommendationContext: PracticeRecommendationContext | undefined;
 
+    const algorithmVersion = recommendation?.algorithmVersion ?? "v1";
+    const focusArea = recommendation?.focusArea ?? (mission as any)?.focusArea;
+
     if (recommendation && practiceRecommendationsExperiment.enabled) {
       recommendationContext = {
         source: "practice_recommendations",
         rank: recommendation.rank,
-        focusArea: (mission as any)?.focusArea,
+        focusArea,
         reasonKey: recommendation.reason,
-        algorithmVersion: "v1",
+        algorithmVersion,
         experiment: {
           experimentKey: practiceRecommendationsExperiment.experimentKey,
           experimentBucket: practiceRecommendationsExperiment.experimentBucket,
@@ -547,8 +566,8 @@ export default function PracticeMissionsPage(): JSX.Element {
         rank: recommendation.rank,
         surface: "web_practice_missions",
         entryPoint: planRank != null ? "weekly_plan" : "missions_list",
-        focusArea: (mission as any)?.focusArea,
-        algorithmVersion: "v1",
+        focusArea,
+        algorithmVersion,
         experiment: {
           experimentKey: practiceRecommendationsExperiment.experimentKey,
           experimentBucket: practiceRecommendationsExperiment.experimentBucket,

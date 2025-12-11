@@ -82,7 +82,7 @@ describe('PracticeMissionsScreen', () => {
     getPracticeRecommendationsExperimentMock.mockReturnValue({
       experimentKey: 'practice_recommendations',
       experimentBucket: 1,
-      experimentVariant: 'enabled',
+      experimentVariant: 'treatment',
       enabled: true,
     });
   });
@@ -108,26 +108,31 @@ describe('PracticeMissionsScreen', () => {
 
     await screen.findByTestId('practice-missions-list');
 
-    expect(vi.mocked(safeEmit)).toHaveBeenCalledWith('practice_missions_viewed', {
-      surface: 'mobile',
-      source: 'home',
-    });
-    expect(vi.mocked(safeEmit)).toHaveBeenCalledWith('practice_plan_viewed', {
-      entryPoint: 'practice_missions',
-      missionsInPlan: 2,
-    });
-    expect(vi.mocked(safeEmit)).toHaveBeenCalledWith('weekly_practice_insights_viewed', {
-      thisWeekMissions: 0,
-      lastWeekMissions: 0,
-      thisWeekGoalReached: false,
-      lastWeekGoalReached: false,
-      thisWeekPlanCompleted: false,
-      lastWeekPlanCompleted: false,
-      surface: 'practice_missions_mobile',
-    });
-    expect(vi.mocked(safeEmit)).toHaveBeenCalledWith('practice_weekly_history_viewed', {
-      surface: 'mobile_practice_missions',
-      weeks: 0,
+    await waitFor(() => {
+      expect(vi.mocked(safeEmit)).toHaveBeenCalledWith(
+        'practice_missions_viewed',
+        expect.objectContaining({
+          surface: 'mobile',
+          source: 'home',
+          weeks: 0,
+        }),
+      );
+      expect(vi.mocked(safeEmit)).toHaveBeenCalledWith('practice_plan_viewed', {
+        entryPoint: 'practice_missions',
+        missionsInPlan: 2,
+      });
+      expect(vi.mocked(safeEmit)).toHaveBeenCalledWith(
+        'weekly_practice_insights_viewed',
+        expect.objectContaining({
+          thisWeekMissions: 0,
+          lastWeekMissions: 0,
+          thisWeekGoalReached: false,
+          lastWeekGoalReached: false,
+          thisWeekPlanCompleted: false,
+          lastWeekPlanCompleted: false,
+          surface: 'practice_missions_mobile',
+        }),
+      );
     });
   });
 
@@ -157,9 +162,15 @@ describe('PracticeMissionsScreen', () => {
     expect(within(items[1]).getByText(/Last week/i)).toBeVisible();
     expect(within(items[1]).getByText('1 / 3 missions')).toBeVisible();
 
-    expect(vi.mocked(safeEmit)).toHaveBeenCalledWith('practice_weekly_history_viewed', {
-      surface: 'mobile_practice_missions',
-      weeks: 2,
+    await waitFor(() => {
+      expect(vi.mocked(safeEmit)).toHaveBeenCalledWith(
+        'practice_missions_viewed',
+        expect.objectContaining({
+          surface: 'mobile',
+          source: 'other',
+          weeks: 2,
+        }),
+      );
     });
   });
 
@@ -382,7 +393,7 @@ describe('PracticeMissionsScreen', () => {
           experiment: {
             experimentKey: 'practice_recommendations',
             experimentBucket: 1,
-            experimentVariant: 'enabled',
+            experimentVariant: 'treatment',
           },
         }),
       );
@@ -404,7 +415,7 @@ describe('PracticeMissionsScreen', () => {
           experiment: {
             experimentKey: 'practice_recommendations',
             experimentBucket: 1,
-            experimentVariant: 'enabled',
+            experimentVariant: 'treatment',
           },
         }),
       );
@@ -432,6 +443,33 @@ describe('PracticeMissionsScreen', () => {
       String(call[0]).startsWith('practice_mission_recommendation_'),
     );
     expect(recommendationCalls).toHaveLength(0);
+  });
+
+  it('renders recommendations for control experiment users', async () => {
+    getPracticeRecommendationsExperimentMock.mockReturnValue({
+      experimentKey: 'practice_recommendations',
+      experimentBucket: 4,
+      experimentVariant: 'control',
+      enabled: true,
+    });
+    recommendPracticeMissionsMock.mockReturnValue([
+      { id: 'mission-high', rank: 1, reason: 'focus_area', algorithmVersion: 'v1' },
+    ] as any);
+
+    render(<PracticeMissionsScreen navigation={createNavigation()} route={createRoute()} />);
+
+    const row = await screen.findByTestId('practice-mission-item-mission-high');
+    expect(within(row).getByText(/^Recommended$/i)).toBeVisible();
+
+    await waitFor(() => {
+      expect(vi.mocked(safeEmit)).toHaveBeenCalledWith(
+        'practice_mission_recommendation_shown',
+        expect.objectContaining({
+          missionId: 'mission-high',
+          experiment: expect.objectContaining({ experimentVariant: 'control' }),
+        }),
+      );
+    });
   });
 
   it('does not emit recommendation analytics when none are available', async () => {

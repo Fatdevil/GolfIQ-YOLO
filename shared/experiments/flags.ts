@@ -7,7 +7,7 @@ type ExperimentConfig = {
 
 const EXPERIMENT_CONFIG: Record<ExperimentKey, ExperimentConfig> = {
   weekly_goal_nudge: { rollout: 50, bucketCount: 100 },
-  practice_recommendations: { rollout: 100, bucketCount: 100 },
+  practice_recommendations: { rollout: 50, bucketCount: 100 },
 };
 
 function hashUserId(value: string): number {
@@ -43,7 +43,7 @@ export function isInExperiment(key: ExperimentKey, userId: string | number): boo
   return getExperimentVariant(key, userId) === 'treatment';
 }
 
-export type PracticeRecommendationsExperimentVariant = 'enabled' | 'disabled';
+export type PracticeRecommendationsExperimentVariant = 'control' | 'treatment' | 'disabled';
 
 export function getPracticeRecommendationsExperiment(
   userId: string | number,
@@ -54,14 +54,15 @@ export function getPracticeRecommendationsExperiment(
   enabled: boolean;
 } {
   const bucket = getExperimentBucket('practice_recommendations', userId);
-  const variant = getExperimentVariant('practice_recommendations', userId);
+  const baseVariant = getExperimentVariant('practice_recommendations', userId);
+  const config = EXPERIMENT_CONFIG.practice_recommendations;
   const normalizedVariant: PracticeRecommendationsExperimentVariant =
-    variant === 'treatment' ? 'enabled' : 'disabled';
+    config.rollout <= 0 ? 'disabled' : baseVariant;
 
   return {
     experimentKey: 'practice_recommendations',
     experimentBucket: bucket,
     experimentVariant: normalizedVariant,
-    enabled: normalizedVariant === 'enabled',
+    enabled: normalizedVariant !== 'disabled',
   };
 }

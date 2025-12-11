@@ -31,7 +31,7 @@ describe('practice session analytics', () => {
         experiment: {
           experimentKey: 'practice_recommendations',
           experimentBucket: 7,
-          experimentVariant: 'enabled',
+          experimentVariant: 'treatment',
         },
       },
     });
@@ -45,7 +45,7 @@ describe('practice session analytics', () => {
       experiment: {
         experimentKey: 'practice_recommendations',
         experimentBucket: 7,
-        experimentVariant: 'enabled',
+        experimentVariant: 'treatment',
       },
     });
   });
@@ -63,7 +63,7 @@ describe('practice session analytics', () => {
         experiment: {
           experimentKey: 'practice_recommendations',
           experimentBucket: 3,
-          experimentVariant: 'enabled',
+          experimentVariant: 'treatment',
         },
       },
     });
@@ -80,7 +80,7 @@ describe('practice session analytics', () => {
         experiment: {
           experimentKey: 'practice_recommendations',
           experimentBucket: 3,
-          experimentVariant: 'enabled',
+          experimentVariant: 'treatment',
         },
       },
     });

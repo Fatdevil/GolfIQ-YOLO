@@ -39,7 +39,19 @@ describe('experiments/flags', () => {
     expect(experiment.experimentKey).toBe('practice_recommendations');
     expect(experiment.experimentBucket).toBeGreaterThanOrEqual(0);
     expect(experiment.experimentBucket).toBeLessThan(100);
-    expect(experiment.experimentVariant).toBe('enabled');
+    expect(experiment.experimentVariant === 'treatment' || experiment.experimentVariant === 'control').toBe(true);
+    const expectedVariant = experiment.experimentBucket < 50 ? 'treatment' : 'control';
+    expect(experiment.experimentVariant).toBe(expectedVariant);
     expect(experiment.enabled).toBe(true);
+  });
+
+  it('maps control buckets to a control variant while keeping recommendations enabled', () => {
+    const candidates = Array.from({ length: 200 }, (_, index) => `control-user-${index}`);
+    const experiment = candidates
+      .map((user) => getPracticeRecommendationsExperiment(user))
+      .find((candidate) => candidate.experimentVariant === 'control');
+
+    expect(experiment?.experimentVariant).toBe('control');
+    expect(experiment?.enabled).toBe(true);
   });
 });
