@@ -341,14 +341,24 @@ export default function PracticeMissionsPage(): JSX.Element {
         ? []
         : recommendPracticeMissions({
             context: practiceDecisionContext,
-            missions: missions.map((mission) => ({ id: mission.id, focusArea: (mission as any).focusArea })),
+            missions: missions.map((mission) => ({
+              id: mission.id,
+              focusArea: (mission as any).focusArea,
+              priorityScore: mission.priorityScore,
+              estimatedMinutes: (mission as any).estimatedMinutes,
+              difficulty: (mission as any).difficulty,
+              completionCount: mission.completionCount,
+              lastCompletedAt: mission.lastCompletedAt,
+            })),
             maxResults: 3,
+            experimentVariant: practiceRecommendationsExperiment.experimentVariant,
           }),
     [
       loading,
       missions,
       practiceDecisionContext,
       practiceRecommendationsExperiment.enabled,
+      practiceRecommendationsExperiment.experimentVariant,
     ],
   );
 
@@ -400,13 +410,15 @@ export default function PracticeMissionsPage(): JSX.Element {
     practiceRecommendations.forEach((rec) => {
       if (recommendationImpressionsSentRef.current.has(rec.id)) return;
       const mission = missions.find((candidate) => candidate.id === rec.id);
+      const algorithmVersion = rec.algorithmVersion ?? "v1";
+      const focusArea = rec.focusArea ?? (mission as any)?.focusArea;
       trackPracticeMissionRecommendationShown({
         missionId: rec.id,
         reason: rec.reason,
         rank: rec.rank,
         surface: "web_practice_missions",
-        focusArea: (mission as any)?.focusArea,
-        algorithmVersion: "v1",
+        focusArea,
+        algorithmVersion,
         experiment: {
           experimentKey: practiceRecommendationsExperiment.experimentKey,
           experimentBucket: practiceRecommendationsExperiment.experimentBucket,
@@ -525,13 +537,16 @@ export default function PracticeMissionsPage(): JSX.Element {
     const mission = missions.find((candidate) => candidate.id === missionId);
     let recommendationContext: PracticeRecommendationContext | undefined;
 
+    const algorithmVersion = recommendation?.algorithmVersion ?? "v1";
+    const focusArea = recommendation?.focusArea ?? (mission as any)?.focusArea;
+
     if (recommendation && practiceRecommendationsExperiment.enabled) {
       recommendationContext = {
         source: "practice_recommendations",
         rank: recommendation.rank,
-        focusArea: (mission as any)?.focusArea,
+        focusArea,
         reasonKey: recommendation.reason,
-        algorithmVersion: "v1",
+        algorithmVersion,
         experiment: {
           experimentKey: practiceRecommendationsExperiment.experimentKey,
           experimentBucket: practiceRecommendationsExperiment.experimentBucket,
@@ -547,8 +562,8 @@ export default function PracticeMissionsPage(): JSX.Element {
         rank: recommendation.rank,
         surface: "web_practice_missions",
         entryPoint: planRank != null ? "weekly_plan" : "missions_list",
-        focusArea: (mission as any)?.focusArea,
-        algorithmVersion: "v1",
+        focusArea,
+        algorithmVersion,
         experiment: {
           experimentKey: practiceRecommendationsExperiment.experimentKey,
           experimentBucket: practiceRecommendationsExperiment.experimentBucket,

@@ -308,12 +308,19 @@ export default function PracticeMissionsScreen({ navigation, route }: Props): JS
             missions: state.missions.map((mission) => ({
               id: mission.id,
               focusArea: (mission as any).focusArea,
+              priorityScore: mission.priorityScore,
+              estimatedMinutes: (mission as any).estimatedMinutes,
+              difficulty: (mission as any).difficulty,
+              completionCount: mission.completionCount,
+              lastCompletedAt: mission.lastCompletedAt,
             })),
             maxResults: 3,
+            experimentVariant: practiceRecommendationsExperiment.experimentVariant,
           }),
     [
       practiceDecisionContext,
       practiceRecommendationsExperiment.enabled,
+      practiceRecommendationsExperiment.experimentVariant,
       state.loading,
       state.missions,
     ],
@@ -342,6 +349,8 @@ export default function PracticeMissionsScreen({ navigation, route }: Props): JS
     practiceRecommendations.forEach((rec) => {
       if (recommendationImpressionsSentRef.current.has(rec.id)) return;
       const mission = state.missions.find((candidate) => candidate.id === rec.id);
+      const algorithmVersion = rec.algorithmVersion ?? 'v1';
+      const focusArea = rec.focusArea ?? (mission as any)?.focusArea;
       emitPracticeMissionRecommendationShown(
         { emit: safeEmit },
         {
@@ -349,8 +358,8 @@ export default function PracticeMissionsScreen({ navigation, route }: Props): JS
           reason: rec.reason,
           rank: rec.rank,
           surface: 'mobile_practice_missions',
-          focusArea: (mission as any)?.focusArea,
-          algorithmVersion: 'v1',
+          focusArea,
+          algorithmVersion,
           experiment: {
             experimentKey: practiceRecommendationsExperiment.experimentKey,
             experimentBucket: practiceRecommendationsExperiment.experimentBucket,
@@ -523,13 +532,16 @@ export default function PracticeMissionsScreen({ navigation, route }: Props): JS
     const mission = state.missions.find((candidate) => candidate.id === missionId);
     let recommendationContext: PracticeRecommendationContext | undefined;
 
+    const algorithmVersion = recommendation?.algorithmVersion ?? 'v1';
+    const focusArea = recommendation?.focusArea ?? (mission as any)?.focusArea;
+
     if (recommendation && practiceRecommendationsExperiment.enabled) {
       recommendationContext = {
         source: 'practice_recommendations',
         rank: recommendation.rank,
-        focusArea: (mission as any)?.focusArea,
+        focusArea,
         reasonKey: recommendation.reason,
-        algorithmVersion: 'v1',
+        algorithmVersion,
         experiment: {
           experimentKey: practiceRecommendationsExperiment.experimentKey,
           experimentBucket: practiceRecommendationsExperiment.experimentBucket,
@@ -547,8 +559,8 @@ export default function PracticeMissionsScreen({ navigation, route }: Props): JS
           rank: recommendation.rank,
           surface: 'mobile_practice_missions',
           entryPoint: planRank != null ? 'weekly_plan' : 'missions_list',
-          focusArea: (mission as any)?.focusArea,
-          algorithmVersion: 'v1',
+          focusArea,
+          algorithmVersion,
           experiment: {
             experimentKey: practiceRecommendationsExperiment.experimentKey,
             experimentBucket: practiceRecommendationsExperiment.experimentBucket,

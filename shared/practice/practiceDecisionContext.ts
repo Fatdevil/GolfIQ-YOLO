@@ -5,6 +5,10 @@ export type PracticeFocusArea = 'driving' | 'approach' | 'short_game' | 'putting
 export type PracticeDecisionContext = {
   /** Whether the current weekly practice goal has been reached. */
   goalReached: boolean;
+  /** Target weekly goal (null when no goal is configured). */
+  goalTarget?: number | null;
+  /** Current progress toward the active weekly goal. */
+  goalProgress?: number | null;
   /** Normalized focus areas practiced most recently. */
   recentFocusAreas: PracticeFocusArea[];
   /** A lightweight confidence proxy derived from recent practice progress (0–1). */
@@ -61,10 +65,11 @@ export function buildPracticeDecisionContext(
   if (!summary && focusAreas.length === 0) return null;
 
   const goalTarget = summary?.goalTarget ?? null;
-  const goalProgress = summary?.goalProgress ?? 0;
+  const goalProgress = summary?.goalProgress ?? null;
   const sessionsCompleted = summary?.sessionsCompleted ?? 0;
 
-  const confidenceFromGoal = goalTarget && goalTarget > 0 ? goalProgress / goalTarget : null;
+  const confidenceFromGoal =
+    goalTarget && goalTarget > 0 && goalProgress != null ? goalProgress / goalTarget : null;
   const confidenceFallback = sessionsCompleted / 3;
 
   const practiceConfidence = clamp01(
@@ -75,6 +80,8 @@ export function buildPracticeDecisionContext(
 
   return {
     goalReached: Boolean(summary?.goalReached),
+    goalTarget,
+    goalProgress,
     recentFocusAreas: focusAreas,
     practiceConfidence,
   };
