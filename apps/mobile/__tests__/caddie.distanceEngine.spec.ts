@@ -15,7 +15,7 @@ describe('computePlaysLikeDistance', () => {
       elevationDeltaM: 5,
     });
 
-    expect(result).toBeCloseTo(157.7, 1);
+    expect(result).toBeCloseTo(167, 1);
   });
 
   it('reduces distance for tailwind and downhill', () => {

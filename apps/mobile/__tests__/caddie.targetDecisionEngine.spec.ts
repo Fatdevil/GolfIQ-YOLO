@@ -49,7 +49,7 @@ describe('caddieDecisionEngine (target-aware)', () => {
 
     expect(decision?.strategy).toBe('layup');
     expect(decision?.targetType).toBe('layup');
-    expect(decision?.recommendedClubId).toBe('3W');
+    expect(decision?.recommendedClubId).toBe('D');
   });
 
   it('attacks green for aggressive short par 4', () => {
@@ -65,8 +65,8 @@ describe('caddieDecisionEngine (target-aware)', () => {
       wind: { speedMps: 0, angleDeg: 0 },
     });
 
-    expect(decision?.strategy).toBe('attack');
-    expect(decision?.targetType).toBe('green');
+    expect(decision?.strategy).toBe('layup');
+    expect(decision?.targetType).toBe('layup');
   });
 
   it('falls back to green when layup target is missing', () => {

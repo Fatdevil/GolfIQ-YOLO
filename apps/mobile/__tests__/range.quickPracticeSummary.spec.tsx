@@ -118,7 +118,10 @@ describe('RangeQuickPracticeSummaryScreen', () => {
     await waitFor(() => {
       expect(historyStorage.appendRangeHistoryEntry).toHaveBeenCalledTimes(1);
       expect(summaryStorage.saveLastRangeSessionSummary).toHaveBeenCalledTimes(1);
-      expect(navigation.navigate).toHaveBeenCalledWith('PlayerHome');
+      expect(navigation.navigate).toHaveBeenCalledWith('RangeSessionDetail', {
+        summary: expect.objectContaining({ sessionRating: 5, reflectionNotes: 'Great focus on tempo' }),
+      });
+      expect(navigation.navigate).toHaveBeenCalledWith('HomeDashboard');
     });
   });
 

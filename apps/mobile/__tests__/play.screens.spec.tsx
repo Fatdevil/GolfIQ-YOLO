@@ -248,8 +248,17 @@ describe('InRoundScreen', () => {
       expect(navigation.reset).toHaveBeenCalledWith({
         index: 1,
         routes: [
-          { name: 'PlayerHome' },
-          { name: 'RoundStory', params: expect.objectContaining({ runId: 'run-1' }) },
+          { name: 'HomeDashboard' },
+          {
+            name: 'RoundStory',
+            params: expect.objectContaining({
+              runId: 'run-1',
+              summary: expect.objectContaining({
+                runId: 'run-1',
+                totalStrokes: expect.any(Number),
+              }),
+            }),
+          },
         ],
       });
     });

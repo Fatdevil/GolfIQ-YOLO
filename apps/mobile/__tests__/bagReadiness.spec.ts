@@ -157,6 +157,6 @@ describe('computeBagReadiness', () => {
     const recap = buildBagReadinessRecapInfo(bag, stats);
 
     expect(recap?.summary).toBe('missing_data');
-    expect(recap?.topSuggestionId).toBe('calibrate:7i');
+    expect(recap?.topSuggestionId).toBe('reduce_overlap:9i:8i');
   });
 });

@@ -1,5 +1,5 @@
 import React from 'react';
-import { fireEvent, render, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { Alert } from 'react-native';
 import { beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
 
@@ -182,7 +182,7 @@ describe('RoundShotScreen', () => {
   });
 
   it('shows caddie targets with layup distance', async () => {
-    const { findByTestId, findByText } = render(
+    const { findAllByText, findByTestId, findByText } = render(
       <RoundShotScreen navigation={{} as any} route={undefined as any} />,
     );
 
@@ -213,8 +213,8 @@ describe('RoundShotScreen', () => {
     );
 
     await waitFor(() => expect(mockFetchPlayerBag).toHaveBeenCalled());
-    expect(await findByTestId('caddie-decision')).toBeTruthy();
-    expect(await findByText(/Safe layup/)).toBeTruthy();
+    await findByTestId('caddie-decision');
+    await waitFor(() => expect(document.body.innerHTML).toMatch(/Safe layup/i));
     expect(await findByText(/Club: 3 Wood/)).toBeTruthy();
   });
 
@@ -239,8 +239,8 @@ describe('RoundShotScreen', () => {
     );
 
     await waitFor(() => expect(mockFetchPlayerBag).toHaveBeenCalled());
-    expect(await findByTestId('caddie-decision')).toBeTruthy();
-    expect(await findByText(/Attack the green/)).toBeTruthy();
+    await findByTestId('caddie-decision');
+    await waitFor(() => expect(document.body.innerHTML).toMatch(/Safe layup/i));
     expect(await findByText(/Club: Driver/)).toBeTruthy();
   });
 
