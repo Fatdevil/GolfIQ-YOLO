@@ -7,6 +7,14 @@ import { fetchAccessPlan, type AccessPlan } from '@app/api/player';
 import type { RootStackParamList } from '@app/navigation/types';
 import { buildHighlights, buildRoundStoryViewModel } from '@app/roundStory/model';
 import { loadLastRoundSummary, type LastRoundSummary } from '@app/run/lastRound';
+import { loadPracticeMissionHistory } from '@app/storage/practiceMissionHistory';
+import { loadWeeklyPracticeGoalSettings } from '@app/storage/practiceGoalSettings';
+import { safeEmit } from '@app/telemetry';
+import { t } from '@app/i18n';
+import { buildPracticeReadinessSummary } from '@shared/practice/practiceReadiness';
+import { emitPracticeReadinessViewed } from '@shared/practice/practiceReadinessAnalytics';
+import { getDefaultWeeklyPracticeGoalSettings } from '@shared/practice/practiceGoalSettings';
+import type { PracticeMissionHistoryEntry } from '@shared/practice/practiceHistory';
 
 const PRO_TEASER = 'Unlock full analysis (SG and swing insights) with GolfIQ Pro.';
 
@@ -61,6 +69,9 @@ export default function RoundStoryScreen({ route, navigation }: Props): JSX.Elem
   const [sg, setSg] = useState<Awaited<ReturnType<typeof fetchRoundSg>> | null>(null);
   const [highlights, setHighlights] = useState<string[]>([]);
   const [coach, setCoach] = useState<Awaited<ReturnType<typeof fetchCoachRoundSummary>>>(null);
+  const [practiceHistory, setPracticeHistory] = useState<PracticeMissionHistoryEntry[]>([]);
+  const [weeklyGoalSettings, setWeeklyGoalSettings] = useState(getDefaultWeeklyPracticeGoalSettings());
+  const [loadingPractice, setLoadingPractice] = useState(true);
   const [loadingPlan, setLoadingPlan] = useState(true);
   const [loadingSg, setLoadingSg] = useState(false);
   const [loadingAnalytics, setLoadingAnalytics] = useState(false);
@@ -100,6 +111,36 @@ export default function RoundStoryScreen({ route, navigation }: Props): JSX.Elem
         }
       }
     })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoadingPractice(true);
+
+    Promise.all([
+      loadPracticeMissionHistory().catch(() => []),
+      loadWeeklyPracticeGoalSettings().catch(() => getDefaultWeeklyPracticeGoalSettings()),
+    ])
+      .then(([history, settings]) => {
+        if (cancelled) return;
+        setPracticeHistory(history ?? []);
+        setWeeklyGoalSettings(settings ?? getDefaultWeeklyPracticeGoalSettings());
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        console.warn('[round-story] Failed to load practice readiness', err);
+        setPracticeHistory([]);
+        setWeeklyGoalSettings(getDefaultWeeklyPracticeGoalSettings());
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setLoadingPractice(false);
+        }
+      });
+
     return () => {
       cancelled = true;
     };
@@ -206,6 +247,29 @@ export default function RoundStoryScreen({ route, navigation }: Props): JSX.Elem
     if (bestCategory) return `Best area this round: ${bestCategory}.`;
     return 'Keep the ball in play and trust your routine next round.';
   }, [bestCategory, isPro]);
+
+  const practiceReadiness = useMemo(
+    () =>
+      buildPracticeReadinessSummary({
+        history: practiceHistory,
+        goalSettings: weeklyGoalSettings,
+        now: new Date(),
+      }),
+    [practiceHistory, weeklyGoalSettings],
+  );
+
+  useEffect(() => {
+    if (loadingPractice || !practiceReadiness) return;
+    emitPracticeReadinessViewed(
+      { emit: safeEmit },
+      {
+        surface: 'round_story',
+        platform: 'mobile',
+        roundId: runId,
+        summary: practiceReadiness,
+      },
+    );
+  }, [loadingPractice, practiceReadiness, runId]);
 
   const onRetry = useCallback(() => {
     setReloadToken((value) => value + 1);
@@ -342,6 +406,32 @@ export default function RoundStoryScreen({ route, navigation }: Props): JSX.Elem
           )}
         </View>
       </View>
+
+      {!loadingPractice ? (
+        <View style={styles.section} testID="practice-readiness">
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>{t('round.story.practiceTitle')}</Text>
+          </View>
+          <View style={styles.card}>
+            <Text style={styles.statLabel}>
+              {t('round.story.practiceSessions', { count: practiceReadiness.sessionsCompleted })}
+            </Text>
+            <Text style={styles.meta}>
+              {t('round.story.practiceShots', { count: practiceReadiness.shotsCompleted })}
+            </Text>
+            <Text style={practiceReadiness.goalReached ? styles.successText : styles.meta}>
+              {practiceReadiness.goalTarget == null
+                ? t('round.story.practiceGoalUnavailable')
+                : practiceReadiness.goalReached
+                  ? t('round.story.practiceGoalReached')
+                  : t('round.story.practiceGoalProgress', {
+                      progress: practiceReadiness.goalProgress,
+                      target: practiceReadiness.goalTarget,
+                    })}
+            </Text>
+          </View>
+        </View>
+      ) : null}
 
       <View style={styles.section}>
         <View style={styles.sectionHeader}>
@@ -515,6 +605,10 @@ const styles = StyleSheet.create({
   },
   meta: {
     color: '#64748b',
+  },
+  successText: {
+    color: '#15803d',
+    fontWeight: '700',
   },
   listItem: {
     color: '#0f172a',

@@ -28,11 +28,15 @@ import type { PlayerBag } from '@shared/caddie/playerBag';
 import type { BagClubStatsMap } from '@shared/caddie/bagStats';
 import { formatBagSuggestion } from '@app/caddie/formatBagSuggestion';
 import { loadPracticeMissionHistory } from '@app/storage/practiceMissionHistory';
+import { loadWeeklyPracticeGoalSettings } from '@app/storage/practiceGoalSettings';
 import type { PracticeMissionHistoryEntry } from '@shared/practice/practiceHistory';
 import {
   getTopPracticeRecommendationForRecap,
   type BagPracticeRecommendation,
 } from '@shared/caddie/bagPracticeRecommendations';
+import { buildPracticeReadinessSummary } from '@shared/practice/practiceReadiness';
+import { emitPracticeReadinessViewed } from '@shared/practice/practiceReadinessAnalytics';
+import { getDefaultWeeklyPracticeGoalSettings } from '@shared/practice/practiceGoalSettings';
 import { safeEmit } from '@app/telemetry';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'RoundRecap'>;
@@ -68,6 +72,8 @@ export default function RoundRecapScreen({ route, navigation }: Props): JSX.Elem
   const [bag, setBag] = useState<PlayerBag | null>(null);
   const [bagStats, setBagStats] = useState<BagClubStatsMap | null>(null);
   const [practiceHistory, setPracticeHistory] = useState<PracticeMissionHistoryEntry[]>([]);
+  const [weeklyGoalSettings, setWeeklyGoalSettings] = useState(getDefaultWeeklyPracticeGoalSettings());
+  const [loadingPractice, setLoadingPractice] = useState(true);
 
   useEffect(() => {
     let cancelled = false;
@@ -144,20 +150,32 @@ export default function RoundRecapScreen({ route, navigation }: Props): JSX.Elem
   }, [isDemo]);
 
   useEffect(() => {
-    if (isDemo) return;
+    if (isDemo) {
+      setLoadingPractice(false);
+      return;
+    }
     let cancelled = false;
+    setLoadingPractice(true);
 
-    loadPracticeMissionHistory()
-      .then((history) => {
+    Promise.all([
+      loadPracticeMissionHistory().catch(() => []),
+      loadWeeklyPracticeGoalSettings().catch(() => getDefaultWeeklyPracticeGoalSettings()),
+    ])
+      .then(([history, settings]) => {
         if (!cancelled) {
           setPracticeHistory(history ?? []);
+          setWeeklyGoalSettings(settings ?? getDefaultWeeklyPracticeGoalSettings());
         }
       })
       .catch((err) => {
         console.warn('[round] Failed to load practice history for recap', err);
         if (!cancelled) {
           setPracticeHistory([]);
+          setWeeklyGoalSettings(getDefaultWeeklyPracticeGoalSettings());
         }
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingPractice(false);
       });
 
     return () => {
@@ -194,6 +212,16 @@ export default function RoundRecapScreen({ route, navigation }: Props): JSX.Elem
     return buildBagReadinessRecapInfo(bag, bagStats);
   }, [bag, bagStats]);
 
+  const practiceReadiness = useMemo(
+    () =>
+      buildPracticeReadinessSummary({
+        history: practiceHistory,
+        goalSettings: weeklyGoalSettings,
+        now: new Date(),
+      }),
+    [practiceHistory, weeklyGoalSettings],
+  );
+
   const clubLabels = useMemo(() => {
     const labels: Record<string, string> = {};
     bag?.clubs?.forEach((club) => {
@@ -214,6 +242,24 @@ export default function RoundRecapScreen({ route, navigation }: Props): JSX.Elem
       bagReadinessOverview.suggestions[0];
     return suggestion ? formatBagSuggestion(suggestion, clubLabels) : null;
   }, [bagReadinessOverview?.suggestions, bagReadinessRecap?.topSuggestionId, clubLabels]);
+
+  const practiceReadinessLine = useMemo(
+    () =>
+      t('bag.readinessRecap.practiceLine', {
+        sessions: practiceReadiness.sessionsCompleted,
+        shots: practiceReadiness.shotsCompleted,
+      }),
+    [practiceReadiness.sessionsCompleted, practiceReadiness.shotsCompleted, t],
+  );
+
+  const practiceGoalLine = useMemo(() => {
+    if (practiceReadiness.goalTarget == null) return null;
+    if (practiceReadiness.goalReached) return t('bag.readinessRecap.practiceGoalReached');
+    return t('bag.readinessRecap.practiceGoalLine', {
+      progress: practiceReadiness.goalProgress,
+      target: practiceReadiness.goalTarget,
+    });
+  }, [practiceReadiness.goalProgress, practiceReadiness.goalReached, practiceReadiness.goalTarget, t]);
 
   const topPracticeRecommendation = useMemo<BagPracticeRecommendation | null>(() => {
     if (!bagReadinessOverview) return null;
@@ -249,6 +295,14 @@ export default function RoundRecapScreen({ route, navigation }: Props): JSX.Elem
     if (topPracticeRecommendation.status === 'due') return t('bag.practice.status.due');
     return t('bag.practice.status.fresh');
   }, [topPracticeRecommendation, t]);
+
+  useEffect(() => {
+    if (loadingPractice || !bagReadinessRecap) return;
+    emitPracticeReadinessViewed(
+      { emit: safeEmit },
+      { surface: 'bag_recap', platform: 'mobile', roundId, summary: practiceReadiness },
+    );
+  }, [bagReadinessRecap, loadingPractice, practiceReadiness, roundId]);
 
   const handleStartNextPractice = useCallback(() => {
     if (!topPracticeRecommendation) {
@@ -399,6 +453,12 @@ export default function RoundRecapScreen({ route, navigation }: Props): JSX.Elem
             <Text style={styles.suggestionLine} numberOfLines={2} testID="recap-bag-suggestion">
               {t('bag.readinessTileSuggestionPrefix')} {readinessSuggestion}
             </Text>
+          ) : null}
+          {!loadingPractice ? (
+            <View style={{ gap: 4 }}>
+              <Text style={styles.bodyText}>{practiceReadinessLine}</Text>
+              {practiceGoalLine ? <Text style={styles.meta}>{practiceGoalLine}</Text> : null}
+            </View>
           ) : null}
         </View>
       ) : null}
@@ -565,6 +625,7 @@ const styles = StyleSheet.create({
   helper: { color: '#6b7280' },
   cardHelper: { color: '#6b7280', fontSize: 14 },
   muted: { color: '#6b7280', marginTop: 4, textAlign: 'center' },
+  meta: { color: '#6b7280' },
   bodyText: { color: '#111827' },
   card: { borderWidth: 1, borderColor: '#e5e7eb', borderRadius: 12, padding: 12, gap: 12 },
   cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },

@@ -1,8 +1,11 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import React from 'react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
 
 import RoundStoryScreen from '@app/screens/RoundStoryScreen';
+import { loadPracticeMissionHistory } from '@app/storage/practiceMissionHistory';
+import { loadWeeklyPracticeGoalSettings } from '@app/storage/practiceGoalSettings';
+import { safeEmit } from '@app/telemetry';
 
 vi.mock('@app/api/player', () => ({
   fetchAccessPlan: vi.fn(),
@@ -12,6 +15,15 @@ vi.mock('@app/api/roundStory', () => ({
   fetchRoundSg: vi.fn(),
   fetchSessionTimeline: vi.fn(),
   fetchCoachRoundSummary: vi.fn(),
+}));
+vi.mock('@app/storage/practiceMissionHistory', () => ({
+  loadPracticeMissionHistory: vi.fn(),
+}));
+vi.mock('@app/storage/practiceGoalSettings', () => ({
+  loadWeeklyPracticeGoalSettings: vi.fn(),
+}));
+vi.mock('@app/telemetry', () => ({
+  safeEmit: vi.fn(),
 }));
 
 const summary = {
@@ -28,9 +40,15 @@ const navigation = { navigate: vi.fn() } as any;
 
 const PRO_TEASER = 'Unlock full analysis (SG and swing insights) with GolfIQ Pro.';
 
+const mockLoadPracticeHistory = loadPracticeMissionHistory as unknown as Mock;
+const mockLoadWeeklyPracticeGoalSettings = loadWeeklyPracticeGoalSettings as unknown as Mock;
+const mockSafeEmit = safeEmit as unknown as Mock;
+
 describe('RoundStoryScreen', () => {
   beforeEach(() => {
     vi.resetAllMocks();
+    mockLoadPracticeHistory.mockResolvedValue([]);
+    mockLoadWeeklyPracticeGoalSettings.mockResolvedValue({ targetMissionsPerWeek: 3 });
   });
 
   it('shows structured analytics for pro users', async () => {
@@ -92,6 +110,42 @@ describe('RoundStoryScreen', () => {
     expect(screen.getByTestId('timeline-highlights')).toHaveTextContent(PRO_TEASER);
     expect(screen.getByTestId('coach-insights')).toHaveTextContent('Quick note');
     expect(screen.queryAllByText(PRO_TEASER)).toHaveLength(1);
+  });
+
+  it('surfaces practice readiness summary and emits telemetry', async () => {
+    const { fetchAccessPlan } = await import('@app/api/player');
+    vi.mocked(fetchAccessPlan).mockResolvedValue({ plan: 'free' } as any);
+    mockLoadPracticeHistory.mockResolvedValue([
+      {
+        id: 'p1',
+        missionId: 'mission-1',
+        startedAt: new Date().toISOString(),
+        status: 'completed',
+        targetClubs: ['7i'],
+        completedSampleCount: 25,
+      },
+    ]);
+    mockLoadWeeklyPracticeGoalSettings.mockResolvedValue({ targetMissionsPerWeek: 1 });
+
+    render(
+      <RoundStoryScreen
+        navigation={navigation}
+        route={{ key: 'RoundStory', name: 'RoundStory', params: { runId: 'run-1', summary } }}
+      />,
+    );
+
+    const readinessCard = await screen.findByTestId('practice-readiness');
+    expect(readinessCard).toHaveTextContent('Practice this week');
+    expect(readinessCard).toHaveTextContent('1 practice sessions');
+    expect(readinessCard).toHaveTextContent('25 shots logged');
+
+    await waitFor(() => expect(mockSafeEmit).toHaveBeenCalledWith('practice_readiness_viewed', expect.any(Object)));
+    const payload = vi.mocked(mockSafeEmit).mock.calls.find(([event]) => event === 'practice_readiness_viewed')?.[1] as
+      | any
+      | undefined;
+    expect(payload?.surface).toBe('round_story');
+    expect(payload?.roundId).toBe('run-1');
+    expect(payload?.goalReached).toBe(true);
   });
 
   it('handles partial analytics data safely', async () => {
