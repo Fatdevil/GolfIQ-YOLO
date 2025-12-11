@@ -14,6 +14,7 @@ import { useAccessFeatures, useAccessPlan, useFeatureFlag } from "@/access/UserA
 import { computeOnboardingChecklist, markHomeSeen } from "@/onboarding/checklist";
 import { seedDemoData } from "@/demo/demoData";
 import * as practiceRecommendations from "@shared/practice/recommendPracticeMissions";
+import { getPracticeRecommendationsExperiment } from "@shared/experiments/flags";
 
 vi.mock("@/practice/practiceMissionHistory", async () => {
   const actual = await vi.importActual<typeof import("@/practice/practiceMissionHistory")>(
@@ -74,6 +75,16 @@ vi.mock("@/demo/demoData", () => ({
 vi.mock("@shared/practice/recommendPracticeMissions", () => ({
   recommendPracticeMissions: vi.fn(),
 }));
+vi.mock("@shared/experiments/flags", async () => {
+  const actual = await vi.importActual<typeof import("@shared/experiments/flags")>(
+    "@shared/experiments/flags",
+  );
+
+  return {
+    ...actual,
+    getPracticeRecommendationsExperiment: vi.fn(),
+  };
+});
 
 vi.mock("@/notifications/NotificationContext", () => ({
   useNotifications: vi.fn(() => ({ notify: vi.fn() })),
@@ -112,6 +123,7 @@ const mockUseNotifications = useNotifications as unknown as Mock;
 const mockTelemetry = postTelemetryEvent as unknown as Mock;
 const mockBuildWeeklyHistory = vi.spyOn(practiceHistory, "buildWeeklyPracticeHistory");
 const mockRecommendPracticeMissions = vi.mocked(practiceRecommendations.recommendPracticeMissions);
+const mockPracticeRecommendationsExperiment = vi.mocked(getPracticeRecommendationsExperiment);
 
 const baseChecklist = {
   allDone: false,
@@ -155,6 +167,12 @@ describe("PracticeMissionsPage", () => {
     mockBuildWeeklyHistory.mockImplementation(realBuildWeeklyHistory as any);
     mockRecommendPracticeMissions.mockReset();
     mockRecommendPracticeMissions.mockReturnValue([]);
+    mockPracticeRecommendationsExperiment.mockReturnValue({
+      experimentKey: "practice_recommendations",
+      experimentBucket: 7,
+      experimentVariant: "enabled",
+      enabled: true,
+    });
     mockLoadBag.mockReturnValue(createDefaultBag());
     mockMapBagToPlayer.mockReturnValue({ clubs: [] });
     mockFetchBagStats.mockResolvedValue({});
@@ -264,6 +282,12 @@ describe("PracticeMissionsPage", () => {
           reason: "goal_progress",
           rank: 1,
           surface: "web_practice_missions",
+          algorithmVersion: "v1",
+          experiment: {
+            experimentKey: "practice_recommendations",
+            experimentBucket: 7,
+            experimentVariant: "enabled",
+          },
         }),
       );
     });
@@ -280,9 +304,39 @@ describe("PracticeMissionsPage", () => {
           rank: 1,
           surface: "web_practice_missions",
           entryPoint: "weekly_plan",
+          algorithmVersion: "v1",
+          experiment: {
+            experimentKey: "practice_recommendations",
+            experimentBucket: 7,
+            experimentVariant: "enabled",
+          },
         }),
       );
     });
+  });
+
+  it("disables recommendation UI and telemetry when experiment is off", async () => {
+    mockPracticeRecommendationsExperiment.mockReturnValue({
+      experimentKey: "practice_recommendations",
+      experimentBucket: 12,
+      experimentVariant: "disabled",
+      enabled: false,
+    });
+    mockRecommendPracticeMissions.mockReturnValue([
+      { id: "practice_fill_gap:7i:8i", rank: 1, reason: "goal_progress" },
+    ] as any);
+    mockLoadHistory.mockResolvedValue([]);
+
+    renderWithRouter();
+
+    await screen.findByTestId("practice-missions-page");
+    expect(mockRecommendPracticeMissions).not.toHaveBeenCalled();
+    expect(screen.queryByText(/Recommended to help reach this week’s practice goal/i)).toBeNull();
+
+    const recommendationCalls = mockTelemetry.mock.calls.filter((call) =>
+      String(call?.[0]?.event ?? "").startsWith("practice_mission_recommendation_"),
+    );
+    expect(recommendationCalls).toHaveLength(0);
   });
 
   it("does not emit recommendation analytics when none are returned", async () => {

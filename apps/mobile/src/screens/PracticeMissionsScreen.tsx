@@ -39,6 +39,7 @@ import {
   emitPracticeMissionRecommendationClicked,
   emitPracticeMissionRecommendationShown,
 } from '@shared/practice/practiceRecommendationsAnalytics';
+import { getPracticeRecommendationsExperiment } from '@shared/experiments/flags';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'PracticeMissions'>;
 
@@ -281,6 +282,11 @@ export default function PracticeMissionsScreen({ navigation, route }: Props): JS
     getDefaultWeeklyPracticeGoalSettings(),
   );
 
+  const practiceRecommendationsExperiment = useMemo(
+    () => getPracticeRecommendationsExperiment('anonymous'),
+    [],
+  );
+
   const practiceReadinessSummary = useMemo(
     () => buildPracticeReadinessSummary({ history: state.history, goalSettings: weeklyGoalSettings }),
     [state.history, weeklyGoalSettings],
@@ -293,7 +299,7 @@ export default function PracticeMissionsScreen({ navigation, route }: Props): JS
 
   const practiceRecommendations = useMemo(
     () =>
-      state.loading
+      state.loading || !practiceRecommendationsExperiment.enabled
         ? []
         : recommendPracticeMissions({
             context: practiceDecisionContext,
@@ -303,21 +309,33 @@ export default function PracticeMissionsScreen({ navigation, route }: Props): JS
             })),
             maxResults: 3,
           }),
-    [practiceDecisionContext, state.loading, state.missions],
+    [
+      practiceDecisionContext,
+      practiceRecommendationsExperiment.enabled,
+      state.loading,
+      state.missions,
+    ],
   );
 
   const recommendationByMissionId = useMemo(() => {
     const map = new Map<string, RecommendedMission>();
-    practiceRecommendations.forEach((rec) => {
-      map.set(rec.id, rec);
-    });
+    if (practiceRecommendationsExperiment.enabled) {
+      practiceRecommendations.forEach((rec) => {
+        map.set(rec.id, rec);
+      });
+    }
     return map;
-  }, [practiceRecommendations, state.missions]);
+  }, [practiceRecommendations, practiceRecommendationsExperiment.enabled, state.missions]);
 
   const recommendationImpressionsSentRef = useRef(new Set<string>());
 
   useEffect(() => {
-    if (state.loading || practiceRecommendations.length === 0) return;
+    if (
+      state.loading ||
+      practiceRecommendations.length === 0 ||
+      !practiceRecommendationsExperiment.enabled
+    )
+      return;
 
     practiceRecommendations.forEach((rec) => {
       if (recommendationImpressionsSentRef.current.has(rec.id)) return;
@@ -330,11 +348,25 @@ export default function PracticeMissionsScreen({ navigation, route }: Props): JS
           rank: rec.rank,
           surface: 'mobile_practice_missions',
           focusArea: (mission as any)?.focusArea,
+          algorithmVersion: 'v1',
+          experiment: {
+            experimentKey: practiceRecommendationsExperiment.experimentKey,
+            experimentBucket: practiceRecommendationsExperiment.experimentBucket,
+            experimentVariant: practiceRecommendationsExperiment.experimentVariant,
+          },
         },
       );
       recommendationImpressionsSentRef.current.add(rec.id);
     });
-  }, [practiceRecommendations, state.loading, state.missions]);
+  }, [
+    practiceRecommendations,
+    practiceRecommendationsExperiment.experimentBucket,
+    practiceRecommendationsExperiment.experimentKey,
+    practiceRecommendationsExperiment.experimentVariant,
+    practiceRecommendationsExperiment.enabled,
+    state.loading,
+    state.missions,
+  ]);
 
   useEffect(() => {
     if (viewedRef.current) return;
@@ -488,7 +520,7 @@ export default function PracticeMissionsScreen({ navigation, route }: Props): JS
     const recommendation = recommendationByMissionId.get(missionId);
     const mission = state.missions.find((candidate) => candidate.id === missionId);
 
-    if (recommendation) {
+    if (recommendation && practiceRecommendationsExperiment.enabled) {
       emitPracticeMissionRecommendationClicked(
         { emit: safeEmit },
         {
@@ -498,6 +530,12 @@ export default function PracticeMissionsScreen({ navigation, route }: Props): JS
           surface: 'mobile_practice_missions',
           entryPoint: planRank != null ? 'weekly_plan' : 'missions_list',
           focusArea: (mission as any)?.focusArea,
+          algorithmVersion: 'v1',
+          experiment: {
+            experimentKey: practiceRecommendationsExperiment.experimentKey,
+            experimentBucket: practiceRecommendationsExperiment.experimentBucket,
+            experimentVariant: practiceRecommendationsExperiment.experimentVariant,
+          },
         },
       );
     }

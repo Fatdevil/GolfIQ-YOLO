@@ -28,6 +28,7 @@ describe('practiceRecommendationsAnalytics', () => {
       focusAreas: undefined,
       weeklyGoalId: undefined,
       weekId: undefined,
+      algorithmVersion: undefined,
       experiment: undefined,
     };
 
@@ -55,6 +56,7 @@ describe('practiceRecommendationsAnalytics', () => {
       focusAreas: ['approach', 'putting'],
       weeklyGoalId: null,
       weekId: null,
+      algorithmVersion: undefined,
       experiment: undefined,
     });
   });
@@ -66,7 +68,11 @@ describe('practiceRecommendationsAnalytics', () => {
       rank: 3,
       surface: 'web_practice_missions',
       entryPoint: 'mission_row',
-      experiment: { experimentKey: 'rec_experiment', experimentBucket: 12, experimentVariant: 'treatment' },
+      experiment: {
+        experimentKey: 'practice_recommendations',
+        experimentBucket: 12,
+        experimentVariant: 'enabled',
+      },
     });
 
     const expected: PracticeMissionRecommendationClickedEvent = {
@@ -79,7 +85,12 @@ describe('practiceRecommendationsAnalytics', () => {
       focusAreas: undefined,
       weeklyGoalId: undefined,
       weekId: undefined,
-      experiment: { experimentKey: 'rec_experiment', experimentBucket: 12, experimentVariant: 'treatment' },
+      algorithmVersion: undefined,
+      experiment: {
+        experimentKey: 'practice_recommendations',
+        experimentBucket: 12,
+        experimentVariant: 'enabled',
+      },
     };
 
     expect(payload).toEqual(expected);
@@ -113,6 +124,7 @@ describe('practiceRecommendationsAnalytics', () => {
       focusAreas: undefined,
       weeklyGoalId: undefined,
       weekId: undefined,
+      algorithmVersion: undefined,
       experiment: undefined,
     });
 
@@ -126,7 +138,40 @@ describe('practiceRecommendationsAnalytics', () => {
       focusAreas: undefined,
       weeklyGoalId: undefined,
       weekId: undefined,
+      algorithmVersion: undefined,
       experiment: undefined,
+    });
+  });
+
+  it('sanitizes experiment metadata and algorithm version', () => {
+    const payload = buildPracticeMissionRecommendationShownEvent({
+      missionId: 'mission-123',
+      reason: 'fallback',
+      rank: 1,
+      surface: 'mobile_practice_missions',
+      algorithmVersion: ' v1 ',
+      experiment: {
+        experimentKey: 'practice_recommendations',
+        experimentBucket: 101.9,
+        experimentVariant: 'disabled' as any,
+      },
+    });
+
+    expect(payload).toEqual({
+      missionId: 'mission-123',
+      reason: 'fallback',
+      rank: 1,
+      surface: 'mobile_practice_missions',
+      focusArea: undefined,
+      focusAreas: undefined,
+      weeklyGoalId: undefined,
+      weekId: undefined,
+      algorithmVersion: 'v1',
+      experiment: {
+        experimentKey: 'practice_recommendations',
+        experimentBucket: 101,
+        experimentVariant: 'disabled',
+      },
     });
   });
 });

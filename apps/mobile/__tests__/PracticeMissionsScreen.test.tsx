@@ -13,6 +13,7 @@ import { buildPracticeMissionsList, type PracticeMissionListItem } from '@shared
 import { safeEmit } from '@app/telemetry';
 import * as practiceHistory from '@shared/practice/practiceHistory';
 import * as practiceRecommendations from '@shared/practice/recommendPracticeMissions';
+import { getPracticeRecommendationsExperiment } from '@shared/experiments/flags';
 
 vi.mock('@app/storage/practiceMissionHistory', () => ({
   loadPracticeMissionHistory: vi.fn(),
@@ -25,6 +26,7 @@ vi.mock('@shared/caddie/bagReadiness', () => ({ buildBagReadinessOverview: vi.fn
 vi.mock('@shared/practice/practiceMissionsList', () => ({ buildPracticeMissionsList: vi.fn() }));
 vi.mock('@app/telemetry', () => ({ safeEmit: vi.fn() }));
 vi.mock('@shared/practice/recommendPracticeMissions', () => ({ recommendPracticeMissions: vi.fn() }));
+vi.mock('@shared/experiments/flags', () => ({ getPracticeRecommendationsExperiment: vi.fn() }));
 
 function createNavigation(): NativeStackScreenProps<RootStackParamList, 'PracticeMissions'>['navigation'] {
   return {
@@ -66,6 +68,7 @@ describe('PracticeMissionsScreen', () => {
 
   const buildWeeklyHistorySpy = vi.spyOn(practiceHistory, 'buildWeeklyPracticeHistory');
   const recommendPracticeMissionsMock = vi.mocked(practiceRecommendations.recommendPracticeMissions);
+  const getPracticeRecommendationsExperimentMock = vi.mocked(getPracticeRecommendationsExperiment);
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -76,6 +79,12 @@ describe('PracticeMissionsScreen', () => {
     vi.mocked(bagReadiness.buildBagReadinessOverview).mockReturnValue(null as any);
     vi.mocked(buildPracticeMissionsList).mockReturnValue(missions);
     recommendPracticeMissionsMock.mockReturnValue([]);
+    getPracticeRecommendationsExperimentMock.mockReturnValue({
+      experimentKey: 'practice_recommendations',
+      experimentBucket: 1,
+      experimentVariant: 'enabled',
+      enabled: true,
+    });
   });
 
   it('renders missions in provided order with status labels', async () => {
@@ -336,6 +345,12 @@ describe('PracticeMissionsScreen', () => {
           reason: 'focus_area',
           rank: 1,
           surface: 'mobile_practice_missions',
+          algorithmVersion: 'v1',
+          experiment: {
+            experimentKey: 'practice_recommendations',
+            experimentBucket: 1,
+            experimentVariant: 'enabled',
+          },
         }),
       );
     });
@@ -352,9 +367,38 @@ describe('PracticeMissionsScreen', () => {
           rank: 1,
           surface: 'mobile_practice_missions',
           entryPoint: 'weekly_plan',
+          algorithmVersion: 'v1',
+          experiment: {
+            experimentKey: 'practice_recommendations',
+            experimentBucket: 1,
+            experimentVariant: 'enabled',
+          },
         }),
       );
     });
+  });
+
+  it('hides recommendation UI and telemetry when experiment is disabled', async () => {
+    getPracticeRecommendationsExperimentMock.mockReturnValue({
+      experimentKey: 'practice_recommendations',
+      experimentBucket: 3,
+      experimentVariant: 'disabled',
+      enabled: false,
+    });
+    recommendPracticeMissionsMock.mockReturnValue([
+      { id: 'mission-high', rank: 1, reason: 'focus_area' },
+    ] as any);
+
+    render(<PracticeMissionsScreen navigation={createNavigation()} route={createRoute()} />);
+
+    await screen.findByTestId('practice-missions-list');
+    expect(recommendPracticeMissionsMock).not.toHaveBeenCalled();
+    expect(screen.queryByText(/Recommended for this week’s focus area/i)).toBeNull();
+
+    const recommendationCalls = vi.mocked(safeEmit).mock.calls.filter((call) =>
+      String(call[0]).startsWith('practice_mission_recommendation_'),
+    );
+    expect(recommendationCalls).toHaveLength(0);
   });
 
   it('does not emit recommendation analytics when none are available', async () => {

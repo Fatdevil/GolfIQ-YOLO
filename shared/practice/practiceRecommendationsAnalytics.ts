@@ -1,3 +1,4 @@
+import type { PracticeRecommendationsExperimentVariant } from '../experiments/flags';
 import type { TelemetryClient } from './practiceGoalAnalytics';
 
 export type PracticeMissionRecommendationReason = 'focus_area' | 'goal_progress' | 'fallback';
@@ -7,9 +8,9 @@ export type PracticeMissionRecommendationSurface =
   | 'web_practice_missions';
 
 export type PracticeMissionRecommendationExperiment = {
-  experimentKey: string;
+  experimentKey: 'practice_recommendations';
   experimentBucket: number;
-  experimentVariant: string;
+  experimentVariant: PracticeRecommendationsExperimentVariant;
 };
 
 type PracticeMissionRecommendationBase = {
@@ -22,6 +23,7 @@ type PracticeMissionRecommendationBase = {
   weeklyGoalId?: string | null;
   weekId?: string | null;
   experiment?: PracticeMissionRecommendationExperiment;
+  algorithmVersion?: string;
 };
 
 export type PracticeMissionRecommendationShownEvent = PracticeMissionRecommendationBase;
@@ -47,6 +49,22 @@ function sanitizeStringArray(values?: string[] | null): string[] | undefined {
   return cleaned.length > 0 ? cleaned : undefined;
 }
 
+function sanitizeExperiment(
+  experiment?: PracticeMissionRecommendationExperiment,
+): PracticeMissionRecommendationExperiment | undefined {
+  if (!experiment) return undefined;
+  const bucket = Number.isFinite(experiment.experimentBucket)
+    ? Math.max(0, Math.floor(experiment.experimentBucket))
+    : 0;
+  const variant: PracticeRecommendationsExperimentVariant =
+    experiment.experimentVariant === 'enabled' ? 'enabled' : 'disabled';
+  return {
+    experimentKey: 'practice_recommendations',
+    experimentBucket: bucket,
+    experimentVariant: variant,
+  };
+}
+
 export function buildPracticeMissionRecommendationShownEvent(
   input: PracticeMissionRecommendationBase,
 ): PracticeMissionRecommendationShownEvent {
@@ -59,7 +77,8 @@ export function buildPracticeMissionRecommendationShownEvent(
     focusAreas: sanitizeStringArray(input.focusAreas),
     weeklyGoalId: sanitizeNullableString(input.weeklyGoalId),
     weekId: sanitizeNullableString(input.weekId),
-    experiment: input.experiment,
+    experiment: sanitizeExperiment(input.experiment),
+    algorithmVersion: sanitizeString(input.algorithmVersion),
   };
 }
 
