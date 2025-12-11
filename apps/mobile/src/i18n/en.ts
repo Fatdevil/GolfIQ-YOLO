@@ -119,6 +119,14 @@ export const en = {
         body: 'Complete a few rounds or range sessions and we’ll build a tailored mission program for you.',
       },
     },
+    missionRecommendations: {
+      badge: 'Recommended',
+      reason: {
+        focus_area: 'Recommended for this week’s focus area',
+        goal_progress: 'Recommended to help reach this week’s practice goal',
+        fallback: 'Recommended based on your recent practice',
+      },
+    },
     goals: {
       summary: '{{completed}}/{{target}} missions this week',
       emptyPrompt: 'Start your first practice mission this week.',

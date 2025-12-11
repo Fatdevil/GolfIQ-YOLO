@@ -56,6 +56,14 @@ export const sv = {
         body: 'Spela några rundor eller rangepass så bygger vi ett anpassat träningsprogram åt dig.',
       },
     },
+    missionRecommendations: {
+      badge: 'Rekommenderad',
+      reason: {
+        focus_area: 'Rekommenderad för veckans fokusområde',
+        goal_progress: 'Rekommenderad för att nå veckans träningsmål',
+        fallback: 'Rekommenderad baserat på din senaste träning',
+      },
+    },
     goals: {
       summary: '{{completed}}/{{target}} missions den här veckan',
       emptyPrompt: 'Starta ditt första träningsmission den här veckan.',

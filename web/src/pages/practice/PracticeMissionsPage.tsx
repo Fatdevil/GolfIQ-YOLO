@@ -19,6 +19,7 @@ import {
   type PracticeMissionDefinition,
   type PracticeMissionListItem,
 } from "@shared/practice/practiceMissionsList";
+import { buildPracticeReadinessSummary } from "@shared/practice/practiceReadiness";
 import { buildWeeklyPracticePlanStatus } from "@shared/practice/practicePlan";
 import { buildWeeklyPracticeComparison } from "@shared/practice/practiceInsights";
 import { buildBagReadinessOverview, type BagReadinessOverview } from "@shared/caddie/bagReadiness";
@@ -33,6 +34,8 @@ import {
   trackPracticeWeeklyHistoryViewed,
 } from "@/practice/analytics";
 import { loadWeeklyPracticeGoalSettings } from "@/practice/practiceGoalSettings";
+import { buildPracticeDecisionContext } from "@shared/practice/practiceDecisionContext";
+import { recommendPracticeMissions, type RecommendedMission } from "@shared/practice/recommendPracticeMissions";
 
 function formatDate(value: number | null, locale: string): string | null {
   if (!value) return null;
@@ -94,11 +97,13 @@ function MissionCard({
   onSelect,
   completionLabel,
   completionVariant,
+  recommendedReason,
 }: {
   item: PracticeMissionListItem;
   onSelect: () => void;
   completionLabel?: string;
   completionVariant?: "complete" | "incomplete";
+  recommendedReason?: RecommendedMission["reason"];
 }): JSX.Element {
   const { t, i18n } = useTranslation();
   const locale = i18n.language || "en";
@@ -111,6 +116,17 @@ function MissionCard({
         })
       : t("practice.missionProgress.empty");
   const title = t(item.title);
+  const recommendedReasonLabel = useMemo(() => {
+    if (!recommendedReason) return null;
+    switch (recommendedReason) {
+      case "focus_area":
+        return t("practice.missionRecommendations.reason.focus_area");
+      case "goal_progress":
+        return t("practice.missionRecommendations.reason.goal_progress");
+      default:
+        return t("practice.missionRecommendations.reason.fallback");
+    }
+  }, [recommendedReason, t]);
 
   return (
     <button
@@ -130,6 +146,9 @@ function MissionCard({
           ) : (
             <p className="text-xs text-slate-500">{t("practice.history.detail.unknown")}</p>
           )}
+          {recommendedReasonLabel ? (
+            <p className="text-xs font-semibold text-emerald-200">{recommendedReasonLabel}</p>
+          ) : null}
           {completionLabel ? (
             <p
               className={`text-xs font-semibold ${
@@ -143,9 +162,16 @@ function MissionCard({
             <p className="text-xs font-semibold text-emerald-200">{t("practice.missionProgress.streak")}</p>
           ) : null}
         </div>
-        <span className="inline-flex items-center rounded-full border border-indigo-500/40 bg-indigo-500/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-indigo-100">
-          {t(item.subtitleKey)}
-        </span>
+        <div className="flex flex-col items-end gap-2">
+          {recommendedReason ? (
+            <span className="inline-flex items-center rounded-full border border-emerald-500/40 bg-emerald-500/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-emerald-100">
+              {t("practice.missionRecommendations.badge")}
+            </span>
+          ) : null}
+          <span className="inline-flex items-center rounded-full border border-indigo-500/40 bg-indigo-500/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-indigo-100">
+            {t(item.subtitleKey)}
+          </span>
+        </div>
       </div>
     </button>
   );
@@ -287,6 +313,32 @@ export default function PracticeMissionsPage(): JSX.Element {
   const historyViewedRef = useRef(false);
 
   const targetMissionsPerWeek = weeklyGoalSettings.targetMissionsPerWeek;
+
+  const practiceReadinessSummary = useMemo(
+    () => buildPracticeReadinessSummary({ history, goalSettings: weeklyGoalSettings }),
+    [history, weeklyGoalSettings],
+  );
+
+  const practiceDecisionContext = useMemo(
+    () => buildPracticeDecisionContext({ summary: practiceReadinessSummary }),
+    [practiceReadinessSummary],
+  );
+
+  const practiceRecommendations = useMemo(
+    () =>
+      recommendPracticeMissions({
+        context: practiceDecisionContext,
+        missions: missions.map((mission) => ({ id: mission.id, focusArea: (mission as any).focusArea })),
+        maxResults: 3,
+      }),
+    [missions, practiceDecisionContext],
+  );
+
+  const recommendationReasonByMissionId = useMemo(() => {
+    const map = new Map<string, RecommendedMission["reason"]>();
+    practiceRecommendations.forEach((rec) => map.set(rec.id, rec.reason));
+    return map;
+  }, [practiceRecommendations, missions]);
 
   const weeklyPlanStatus = useMemo(
     () =>
@@ -512,6 +564,7 @@ export default function PracticeMissionsPage(): JSX.Element {
                               : t("practice.plan.incompleteLabel")
                           }
                           completionVariant={mission.isCompletedThisWeek ? "complete" : "incomplete"}
+                          recommendedReason={recommendationReasonByMissionId.get(mission.id)}
                           onSelect={() => handleSelectMission(mission.id, mission.planRank)}
                         />
                       </div>
@@ -523,7 +576,12 @@ export default function PracticeMissionsPage(): JSX.Element {
 
               <div className="space-y-3" data-testid="practice-missions-remaining">
                 {remainingMissions.map((mission) => (
-                  <MissionCard key={mission.id} item={mission} onSelect={() => handleSelectMission(mission.id)} />
+                  <MissionCard
+                    key={mission.id}
+                    item={mission}
+                    onSelect={() => handleSelectMission(mission.id)}
+                    recommendedReason={recommendationReasonByMissionId.get(mission.id)}
+                  />
                 ))}
               </div>
             </div>

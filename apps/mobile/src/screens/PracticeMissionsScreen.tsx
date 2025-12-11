@@ -23,6 +23,7 @@ import {
   type PracticeMissionDefinition,
   type PracticeMissionListItem,
 } from '@shared/practice/practiceMissionsList';
+import { buildPracticeReadinessSummary } from '@shared/practice/practiceReadiness';
 import {
   buildWeeklyPracticePlanStatus,
   type WeeklyPracticePlanStatus,
@@ -32,6 +33,8 @@ import { emitWeeklyPracticeInsightsViewed } from '@shared/practice/practiceInsig
 import { emitWeeklyPracticeHistoryViewed } from '@shared/practice/practiceHistoryAnalytics';
 import { safeEmit } from '@app/telemetry';
 import { getDefaultWeeklyPracticeGoalSettings } from '@shared/practice/practiceGoalSettings';
+import { buildPracticeDecisionContext } from '@shared/practice/practiceDecisionContext';
+import { recommendPracticeMissions, type RecommendedMission } from '@shared/practice/recommendPracticeMissions';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'PracticeMissions'>;
 
@@ -204,21 +207,41 @@ function MissionRow({
   onPress,
   completionLabel,
   completionLabelVariant,
+  recommendedReason,
 }: {
   item: PracticeMissionListItem;
   onPress: () => void;
   completionLabel?: string;
   completionLabelVariant?: 'complete' | 'incomplete';
+  recommendedReason?: RecommendedMission['reason'];
 }): JSX.Element {
   const lastCompletedLabel = useMemo(() => formatDate(item.lastCompletedAt), [item.lastCompletedAt]);
+  const recommendedReasonLabel = useMemo(() => {
+    if (!recommendedReason) return null;
+    switch (recommendedReason) {
+      case 'focus_area':
+        return t('practice.missionRecommendations.reason.focus_area');
+      case 'goal_progress':
+        return t('practice.missionRecommendations.reason.goal_progress');
+      default:
+        return t('practice.missionRecommendations.reason.fallback');
+    }
+  }, [recommendedReason]);
 
   return (
     <TouchableOpacity onPress={onPress} testID={`practice-mission-item-${item.id}`}>
       <View style={styles.item}>
         <View style={styles.itemHeader}>
           <Text style={styles.itemTitle}>{item.title}</Text>
-          <View style={styles.statusPill}>
-            <Text style={styles.statusText}>{t(item.subtitleKey)}</Text>
+          <View style={styles.itemHeaderRight}>
+            {recommendedReason ? (
+              <View style={styles.recommendedBadge}>
+                <Text style={styles.recommendedBadgeText}>{t('practice.missionRecommendations.badge')}</Text>
+              </View>
+            ) : null}
+            <View style={styles.statusPill}>
+              <Text style={styles.statusText}>{t(item.subtitleKey)}</Text>
+            </View>
           </View>
         </View>
         {lastCompletedLabel ? (
@@ -226,6 +249,7 @@ function MissionRow({
         ) : (
           <Text style={styles.meta}>{t('practice.history.detail.unknown')}</Text>
         )}
+        {recommendedReasonLabel ? <Text style={styles.recommendedReason}>{recommendedReasonLabel}</Text> : null}
         {completionLabel ? (
           <Text
             style={[
@@ -252,6 +276,37 @@ export default function PracticeMissionsScreen({ navigation, route }: Props): JS
   const [weeklyGoalSettings, setWeeklyGoalSettings] = useState(
     getDefaultWeeklyPracticeGoalSettings(),
   );
+
+  const practiceReadinessSummary = useMemo(
+    () => buildPracticeReadinessSummary({ history: state.history, goalSettings: weeklyGoalSettings }),
+    [state.history, weeklyGoalSettings],
+  );
+
+  const practiceDecisionContext = useMemo(
+    () => buildPracticeDecisionContext({ summary: practiceReadinessSummary }),
+    [practiceReadinessSummary],
+  );
+
+  const practiceRecommendations = useMemo(
+    () =>
+      recommendPracticeMissions({
+        context: practiceDecisionContext,
+        missions: state.missions.map((mission) => ({
+          id: mission.id,
+          focusArea: (mission as any).focusArea,
+        })),
+        maxResults: 3,
+      }),
+    [practiceDecisionContext, state.missions],
+  );
+
+  const recommendationReasonByMissionId = useMemo(() => {
+    const map = new Map<string, RecommendedMission['reason']>();
+    practiceRecommendations.forEach((rec) => {
+      map.set(rec.id, rec.reason);
+    });
+    return map;
+  }, [practiceRecommendations, state.missions]);
 
   useEffect(() => {
     if (viewedRef.current) return;
@@ -449,7 +504,11 @@ export default function PracticeMissionsScreen({ navigation, route }: Props): JS
           keyExtractor={(item) => item.id}
           contentContainerStyle={styles.list}
           renderItem={({ item }) => (
-            <MissionRow item={item} onPress={() => handleSelectMission(item.id)} />
+            <MissionRow
+              item={item}
+              onPress={() => handleSelectMission(item.id)}
+              recommendedReason={recommendationReasonByMissionId.get(item.id)}
+            />
           )}
           ListHeaderComponent={
             weeklyPlanMissions.length > 0 ? (
@@ -481,6 +540,7 @@ export default function PracticeMissionsScreen({ navigation, route }: Props): JS
                             : t('practice_plan_incomplete_label')
                         }
                         completionLabelVariant={mission.isCompletedThisWeek ? 'complete' : 'incomplete'}
+                        recommendedReason={recommendationReasonByMissionId.get(mission.id)}
                         onPress={() => handleSelectMission(mission.id, mission.planRank)}
                       />
                     </View>
@@ -656,6 +716,11 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     gap: 8,
   },
+  itemHeaderRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
   itemTitle: {
     fontWeight: '700',
     color: '#111827',
@@ -671,6 +736,23 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#312E81',
     fontSize: 12,
+  },
+  recommendedBadge: {
+    backgroundColor: '#ECFDF3',
+    borderColor: '#10B981',
+    borderWidth: 1,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 999,
+  },
+  recommendedBadgeText: {
+    fontWeight: '700',
+    color: '#065F46',
+    fontSize: 12,
+  },
+  recommendedReason: {
+    color: '#065F46',
+    fontWeight: '600',
   },
   meta: {
     color: '#374151',
