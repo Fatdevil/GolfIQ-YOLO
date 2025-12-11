@@ -26,6 +26,8 @@ import { buildBagReadinessOverview, type BagReadinessOverview } from "@shared/ca
 import type { BagSuggestion } from "@shared/caddie/bagTuningSuggestions";
 import {
   trackPracticeMissionStart,
+  trackPracticeMissionRecommendationClicked,
+  trackPracticeMissionRecommendationShown,
   trackPracticeMissionsViewed,
   trackPracticePlanCompletedViewed,
   trackPracticePlanMissionStart,
@@ -326,19 +328,23 @@ export default function PracticeMissionsPage(): JSX.Element {
 
   const practiceRecommendations = useMemo(
     () =>
-      recommendPracticeMissions({
-        context: practiceDecisionContext,
-        missions: missions.map((mission) => ({ id: mission.id, focusArea: (mission as any).focusArea })),
-        maxResults: 3,
-      }),
-    [missions, practiceDecisionContext],
+      loading
+        ? []
+        : recommendPracticeMissions({
+            context: practiceDecisionContext,
+            missions: missions.map((mission) => ({ id: mission.id, focusArea: (mission as any).focusArea })),
+            maxResults: 3,
+          }),
+    [loading, missions, practiceDecisionContext],
   );
 
-  const recommendationReasonByMissionId = useMemo(() => {
-    const map = new Map<string, RecommendedMission["reason"]>();
-    practiceRecommendations.forEach((rec) => map.set(rec.id, rec.reason));
+  const recommendationByMissionId = useMemo(() => {
+    const map = new Map<string, RecommendedMission>();
+    practiceRecommendations.forEach((rec) => map.set(rec.id, rec));
     return map;
   }, [practiceRecommendations, missions]);
+
+  const recommendationImpressionsSentRef = useRef(new Set<string>());
 
   const weeklyPlanStatus = useMemo(
     () =>
@@ -371,6 +377,23 @@ export default function PracticeMissionsPage(): JSX.Element {
     () => missions.filter((mission) => !weeklyPlanIds.has(mission.id)),
     [missions, weeklyPlanIds],
   );
+
+  useEffect(() => {
+    if (loading || practiceRecommendations.length === 0) return;
+
+    practiceRecommendations.forEach((rec) => {
+      if (recommendationImpressionsSentRef.current.has(rec.id)) return;
+      const mission = missions.find((candidate) => candidate.id === rec.id);
+      trackPracticeMissionRecommendationShown({
+        missionId: rec.id,
+        reason: rec.reason,
+        rank: rec.rank,
+        surface: "web_practice_missions",
+        focusArea: (mission as any)?.focusArea,
+      });
+      recommendationImpressionsSentRef.current.add(rec.id);
+    });
+  }, [loading, missions, practiceRecommendations]);
 
   useEffect(() => {
     if (viewedRef.current) return;
@@ -468,6 +491,20 @@ export default function PracticeMissionsPage(): JSX.Element {
   }, [loading, weeklyHistory.length]);
 
   const handleSelectMission = (missionId: string, planRank?: number) => {
+    const recommendation = recommendationByMissionId.get(missionId);
+    const mission = missions.find((candidate) => candidate.id === missionId);
+
+    if (recommendation) {
+      trackPracticeMissionRecommendationClicked({
+        missionId,
+        reason: recommendation.reason,
+        rank: recommendation.rank,
+        surface: "web_practice_missions",
+        entryPoint: planRank != null ? "weekly_plan" : "missions_list",
+        focusArea: (mission as any)?.focusArea,
+      });
+    }
+
     if (planRank != null) {
       trackPracticePlanMissionStart({
         entryPoint: "practice_missions",
@@ -564,7 +601,7 @@ export default function PracticeMissionsPage(): JSX.Element {
                               : t("practice.plan.incompleteLabel")
                           }
                           completionVariant={mission.isCompletedThisWeek ? "complete" : "incomplete"}
-                          recommendedReason={recommendationReasonByMissionId.get(mission.id)}
+                          recommendedReason={recommendationByMissionId.get(mission.id)?.reason}
                           onSelect={() => handleSelectMission(mission.id, mission.planRank)}
                         />
                       </div>
@@ -580,7 +617,7 @@ export default function PracticeMissionsPage(): JSX.Element {
                     key={mission.id}
                     item={mission}
                     onSelect={() => handleSelectMission(mission.id)}
-                    recommendedReason={recommendationReasonByMissionId.get(mission.id)}
+                    recommendedReason={recommendationByMissionId.get(mission.id)?.reason}
                   />
                 ))}
               </div>

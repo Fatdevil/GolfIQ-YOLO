@@ -510,6 +510,8 @@ export const en = {
       practiceGoalReached: 'Weekly goal reached',
       practiceGoalProgress: 'Weekly goal: {{progress}}/{{target}}',
       practiceGoalUnavailable: 'Weekly goal not set',
+      highlightsUnavailable: 'No shot-by-shot highlights available for this round.',
+      coachInsightsUnavailable: 'We couldn’t load detailed coach insights this time, but here are your stats.',
     },
   },
   strokesGained: {

@@ -9,6 +9,12 @@ import {
   type WeeklyPracticeGoalSettingsUpdatedInput,
   type PracticeGoalNudgeContext,
 } from "@shared/practice/practiceGoalAnalytics";
+import {
+  buildPracticeMissionRecommendationClickedEvent,
+  buildPracticeMissionRecommendationShownEvent,
+  type PracticeMissionRecommendationClickedEvent,
+  type PracticeMissionRecommendationShownEvent,
+} from "@shared/practice/practiceRecommendationsAnalytics";
 
 export type PracticeAnalyticsEvent =
   | "practice_missions_viewed"
@@ -23,7 +29,9 @@ export type PracticeAnalyticsEvent =
   | "practice_goal_nudge_shown"
   | "practice_goal_nudge_clicked"
   | "weekly_practice_insights_viewed"
-  | "practice_weekly_history_viewed";
+  | "practice_weekly_history_viewed"
+  | "practice_mission_recommendation_shown"
+  | "practice_mission_recommendation_clicked";
 
 export type QuickPracticeEntrySource = "range_home" | "recap" | "missions" | "other";
 
@@ -161,6 +169,20 @@ export function trackPracticeGoalNudgeShown(payload: PracticeGoalNudgeContext): 
 export function trackPracticeGoalNudgeClicked(payload: PracticeGoalNudgeContext): void {
   const event = buildPracticeGoalNudgeEventPayload(payload);
   emitPracticeAnalytics("practice_goal_nudge_clicked", event);
+}
+
+export function trackPracticeMissionRecommendationShown(
+  payload: PracticeMissionRecommendationShownEvent,
+): void {
+  const event = buildPracticeMissionRecommendationShownEvent(payload);
+  emitPracticeAnalytics("practice_mission_recommendation_shown", event);
+}
+
+export function trackPracticeMissionRecommendationClicked(
+  payload: PracticeMissionRecommendationClickedEvent,
+): void {
+  const event = buildPracticeMissionRecommendationClickedEvent(payload);
+  emitPracticeAnalytics("practice_mission_recommendation_clicked", event);
 }
 
 export function trackWeeklyPracticeInsightsViewed(payload: WeeklyPracticeInsightsViewedEvent): void {

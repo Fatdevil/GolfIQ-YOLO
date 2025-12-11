@@ -354,7 +354,7 @@ export default function RoundStoryScreen({ route, navigation }: Props): JSX.Elem
           <View style={styles.card}>
             {analyticsError && <Text style={styles.meta}>We could not load highlights right now.</Text>}
             {!loadingAnalytics && !highlights.length && !analyticsError && (
-              <Text style={styles.meta}>No shot-by-shot highlights available for this round.</Text>
+              <Text style={styles.meta}>{t('round.story.highlightsUnavailable')}</Text>
             )}
             {highlights.map((line, idx) => (
               <Text key={idx} style={styles.listItem}>
@@ -379,9 +379,7 @@ export default function RoundStoryScreen({ route, navigation }: Props): JSX.Elem
           {isPro ? (
             <>
               {!loadingAnalytics && !viewModel.strengths.length && !viewModel.focus.length && (
-                <Text style={styles.meta}>
-                  We couldn’t load detailed coach insights this time, but here are your stats.
-                </Text>
+                <Text style={styles.meta}>{t('round.story.coachInsightsUnavailable')}</Text>
               )}
               <Text style={styles.blockTitle}>Strengths</Text>
               {(viewModel.strengths.length ? viewModel.strengths : ['Solid ball striking overall.']).map(

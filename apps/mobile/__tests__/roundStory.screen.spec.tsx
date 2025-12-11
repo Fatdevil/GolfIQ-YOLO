@@ -6,6 +6,7 @@ import RoundStoryScreen from '@app/screens/RoundStoryScreen';
 import { loadPracticeMissionHistory } from '@app/storage/practiceMissionHistory';
 import { loadWeeklyPracticeGoalSettings } from '@app/storage/practiceGoalSettings';
 import { safeEmit } from '@app/telemetry';
+import { t } from '@app/i18n';
 
 vi.mock('@app/api/player', () => ({
   fetchAccessPlan: vi.fn(),
@@ -173,8 +174,8 @@ describe('RoundStoryScreen', () => {
     );
 
     expect(await screen.findByText('+1.0')).toBeInTheDocument();
-    expect(await screen.findByText('No shot-by-shot highlights available for this round.')).toBeInTheDocument();
-    expect(screen.getByTestId('coach-insights')).toHaveTextContent('We couldn’t load detailed coach insights');
+    expect(await screen.findByText(t('round.story.highlightsUnavailable'))).toBeInTheDocument();
+    expect(screen.getByTestId('coach-insights')).toHaveTextContent(t('round.story.coachInsightsUnavailable'));
   });
 
   it('shows retry on analysis errors', async () => {

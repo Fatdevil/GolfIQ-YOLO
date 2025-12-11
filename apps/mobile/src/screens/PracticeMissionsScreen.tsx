@@ -35,6 +35,10 @@ import { safeEmit } from '@app/telemetry';
 import { getDefaultWeeklyPracticeGoalSettings } from '@shared/practice/practiceGoalSettings';
 import { buildPracticeDecisionContext } from '@shared/practice/practiceDecisionContext';
 import { recommendPracticeMissions, type RecommendedMission } from '@shared/practice/recommendPracticeMissions';
+import {
+  emitPracticeMissionRecommendationClicked,
+  emitPracticeMissionRecommendationShown,
+} from '@shared/practice/practiceRecommendationsAnalytics';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'PracticeMissions'>;
 
@@ -289,24 +293,48 @@ export default function PracticeMissionsScreen({ navigation, route }: Props): JS
 
   const practiceRecommendations = useMemo(
     () =>
-      recommendPracticeMissions({
-        context: practiceDecisionContext,
-        missions: state.missions.map((mission) => ({
-          id: mission.id,
-          focusArea: (mission as any).focusArea,
-        })),
-        maxResults: 3,
-      }),
-    [practiceDecisionContext, state.missions],
+      state.loading
+        ? []
+        : recommendPracticeMissions({
+            context: practiceDecisionContext,
+            missions: state.missions.map((mission) => ({
+              id: mission.id,
+              focusArea: (mission as any).focusArea,
+            })),
+            maxResults: 3,
+          }),
+    [practiceDecisionContext, state.loading, state.missions],
   );
 
-  const recommendationReasonByMissionId = useMemo(() => {
-    const map = new Map<string, RecommendedMission['reason']>();
+  const recommendationByMissionId = useMemo(() => {
+    const map = new Map<string, RecommendedMission>();
     practiceRecommendations.forEach((rec) => {
-      map.set(rec.id, rec.reason);
+      map.set(rec.id, rec);
     });
     return map;
   }, [practiceRecommendations, state.missions]);
+
+  const recommendationImpressionsSentRef = useRef(new Set<string>());
+
+  useEffect(() => {
+    if (state.loading || practiceRecommendations.length === 0) return;
+
+    practiceRecommendations.forEach((rec) => {
+      if (recommendationImpressionsSentRef.current.has(rec.id)) return;
+      const mission = state.missions.find((candidate) => candidate.id === rec.id);
+      emitPracticeMissionRecommendationShown(
+        { emit: safeEmit },
+        {
+          missionId: rec.id,
+          reason: rec.reason,
+          rank: rec.rank,
+          surface: 'mobile_practice_missions',
+          focusArea: (mission as any)?.focusArea,
+        },
+      );
+      recommendationImpressionsSentRef.current.add(rec.id);
+    });
+  }, [practiceRecommendations, state.loading, state.missions]);
 
   useEffect(() => {
     if (viewedRef.current) return;
@@ -457,6 +485,23 @@ export default function PracticeMissionsScreen({ navigation, route }: Props): JS
   }, [state.loading, weeklyPlanStatus]);
 
   const handleSelectMission = (missionId: string, planRank?: number) => {
+    const recommendation = recommendationByMissionId.get(missionId);
+    const mission = state.missions.find((candidate) => candidate.id === missionId);
+
+    if (recommendation) {
+      emitPracticeMissionRecommendationClicked(
+        { emit: safeEmit },
+        {
+          missionId,
+          reason: recommendation.reason,
+          rank: recommendation.rank,
+          surface: 'mobile_practice_missions',
+          entryPoint: planRank != null ? 'weekly_plan' : 'missions_list',
+          focusArea: (mission as any)?.focusArea,
+        },
+      );
+    }
+
     if (planRank != null) {
       safeEmit('practice_plan_mission_start', {
         entryPoint: 'practice_missions',
@@ -507,7 +552,7 @@ export default function PracticeMissionsScreen({ navigation, route }: Props): JS
             <MissionRow
               item={item}
               onPress={() => handleSelectMission(item.id)}
-              recommendedReason={recommendationReasonByMissionId.get(item.id)}
+              recommendedReason={recommendationByMissionId.get(item.id)?.reason}
             />
           )}
           ListHeaderComponent={
@@ -540,7 +585,7 @@ export default function PracticeMissionsScreen({ navigation, route }: Props): JS
                             : t('practice_plan_incomplete_label')
                         }
                         completionLabelVariant={mission.isCompletedThisWeek ? 'complete' : 'incomplete'}
-                        recommendedReason={recommendationReasonByMissionId.get(mission.id)}
+                        recommendedReason={recommendationByMissionId.get(mission.id)?.reason}
                         onPress={() => handleSelectMission(mission.id, mission.planRank)}
                       />
                     </View>
