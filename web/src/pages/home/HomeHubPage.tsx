@@ -27,6 +27,7 @@ import {
 } from "@/practice/practiceMissionHistory";
 import { buildMissionProgressById, type PracticeMissionHistoryEntry } from "@shared/practice/practiceHistory";
 import { buildWeeklyGoalStreak, buildWeeklyPracticeGoalProgress, type PracticeGoalStatus } from "@shared/practice/practiceGoals";
+import { shouldShowWeeklyGoalNudge } from "@shared/practice/practiceGoalNudge";
 import { buildWeeklyPracticePlanHomeSummary } from "@shared/practice/practicePlan";
 import {
   buildPracticeMissionsList,
@@ -35,6 +36,8 @@ import {
 } from "@shared/practice/practiceMissionsList";
 import {
   trackPracticePlanCompletedViewed,
+  trackPracticeGoalNudgeClicked,
+  trackPracticeGoalNudgeShown,
   trackWeeklyPracticeGoalSettingsUpdated,
 } from "@/practice/analytics";
 import {
@@ -42,6 +45,8 @@ import {
   saveWeeklyPracticeGoalSettings,
 } from "@/practice/practiceGoalSettings";
 import { getDefaultWeeklyPracticeGoalSettings, type WeeklyPracticeGoalSettings } from "@shared/practice/practiceGoalSettings";
+import { getExperimentBucket, getExperimentVariant, isInExperiment } from "@shared/experiments/flags";
+import { getCurrentUserId } from "@/user/currentUserId";
 
 const WEEKLY_GOAL_OPTIONS = [1, 3, 5];
 
@@ -157,6 +162,7 @@ export const HomeHubPage: React.FC = () => {
   );
   const [editingPracticeGoal, setEditingPracticeGoal] = useState(false);
   const planCompletedViewedRef = useRef(false);
+  const goalNudgeShownRef = useRef<string | null>(null);
 
   useEffect(() => {
     markHomeSeen();
@@ -241,6 +247,7 @@ export const HomeHubPage: React.FC = () => {
     [bagReadiness.suggestions, clubLabels, t, unit],
   );
   const practiceGoalNow = new Date(Date.now());
+  const experimentUserId = getCurrentUserId() ?? "anonymous";
   const targetMissionsPerWeek = weeklyGoalSettings.targetMissionsPerWeek;
   const handleSelectWeeklyGoal = (target: number) => {
     if (target === targetMissionsPerWeek) {
@@ -295,6 +302,30 @@ export const HomeHubPage: React.FC = () => {
       }),
     [practiceGoalNow, practiceHistory, weeklyGoalSettings],
   );
+  const weeklyGoalNudge = useMemo(
+    () => shouldShowWeeklyGoalNudge(practiceHistory, weeklyGoalSettings, practiceGoalNow),
+    [practiceGoalNow, practiceHistory, weeklyGoalSettings],
+  );
+  const experimentBucket = useMemo(
+    () => getExperimentBucket("weekly_goal_nudge", experimentUserId),
+    [experimentUserId],
+  );
+  const experimentVariant = useMemo(
+    () => getExperimentVariant("weekly_goal_nudge", experimentUserId),
+    [experimentUserId],
+  );
+  const shouldRenderWeeklyGoalNudge = useMemo(
+    () => isInExperiment("weekly_goal_nudge", experimentUserId) && weeklyGoalNudge.shouldShow,
+    [experimentUserId, weeklyGoalNudge.shouldShow],
+  );
+  const weeklyGoalNudgeCopy = useMemo(() => {
+    if (!shouldRenderWeeklyGoalNudge) return null;
+    if (weeklyGoalNudge.remainingMissions <= 1) {
+      return "One session left to hit this week's practice goal";
+    }
+    const percent = Math.round(weeklyGoalNudge.completionPercent * 100);
+    return `You're ${percent}% to your weekly goal – finish strong!`;
+  }, [shouldRenderWeeklyGoalNudge, weeklyGoalNudge.completionPercent, weeklyGoalNudge.remainingMissions]);
   const practiceGoalStreakLabel = useMemo(() => {
     const streakWeeks = practiceGoalStreak.currentStreakWeeks;
     if (streakWeeks < 2) return null;
@@ -358,6 +389,37 @@ export const HomeHubPage: React.FC = () => {
       targetMissionsPerWeek,
     });
   }, [practicePlanSummary, targetMissionsPerWeek]);
+
+  useEffect(() => {
+    if (!shouldRenderWeeklyGoalNudge) return;
+    const nudgeKey = `${practiceGoalProgress.completedInWindow}/${practiceGoalProgress.targetCompletions}/${experimentBucket}`;
+    if (goalNudgeShownRef.current === nudgeKey) return;
+
+    trackPracticeGoalNudgeShown({
+      progress: practiceGoalProgress,
+      surface: "web_home",
+      experimentKey: "weekly_goal_nudge",
+      experimentBucket,
+      experimentVariant,
+    });
+    goalNudgeShownRef.current = nudgeKey;
+  }, [
+    experimentBucket,
+    experimentVariant,
+    practiceGoalProgress,
+    shouldRenderWeeklyGoalNudge,
+  ]);
+
+  const handleGoalNudgeClick = () => {
+    trackPracticeGoalNudgeClicked({
+      progress: practiceGoalProgress,
+      surface: "web_home",
+      experimentKey: "weekly_goal_nudge",
+      experimentBucket,
+      experimentVariant,
+      cta: "practice_missions",
+    });
+  };
 
   const effectivePlan = plan === "pro" ? "PRO" : "FREE";
 
@@ -594,6 +656,22 @@ export const HomeHubPage: React.FC = () => {
             {practicePlanCopy ? (
               <div className="text-[11px] text-slate-400" data-testid="practice-plan-summary">
                 {practicePlanCopy}
+              </div>
+            ) : null}
+            {shouldRenderWeeklyGoalNudge && weeklyGoalNudgeCopy ? (
+              <div
+                className="space-y-2 rounded-lg border border-emerald-500/30 bg-emerald-500/5 p-3 text-sm text-emerald-50"
+                data-testid="practice-goal-nudge"
+              >
+                <div className="font-semibold text-emerald-100">{weeklyGoalNudgeCopy}</div>
+                <Link
+                  to={{ pathname: "/practice/missions", search: "?source=home_goal_nudge" }}
+                  className="text-emerald-200 underline-offset-2 hover:text-emerald-100 hover:underline"
+                  onClick={handleGoalNudgeClick}
+                  data-testid="practice-goal-nudge-cta"
+                >
+                  {t("practice.missions.cta.viewAll")}
+                </Link>
               </div>
             ) : null}
           </div>

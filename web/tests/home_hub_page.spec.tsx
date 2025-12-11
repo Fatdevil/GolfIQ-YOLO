@@ -11,6 +11,7 @@ import { UnitsProvider } from "@/preferences/UnitsContext";
 import type { BagClubStatsMap } from "@shared/caddie/bagStats";
 import { loadPracticeMissionHistory } from "@/practice/practiceMissionHistory";
 import { buildWeeklyPracticeGoalSettingsUpdatedEvent } from "@shared/practice/practiceGoalAnalytics";
+import * as experiments from "@shared/experiments/flags";
 
 vi.mock("@/access/UserAccessContext", () => ({
   useAccessPlan: vi.fn(),
@@ -43,10 +44,17 @@ vi.mock("@/practice/analytics", () => ({
   trackWeeklyPracticeGoalSettingsUpdated: vi.fn((payload) =>
     buildWeeklyPracticeGoalSettingsUpdatedEvent(payload),
   ),
+  trackPracticeGoalNudgeShown: vi.fn(),
+  trackPracticeGoalNudgeClicked: vi.fn(),
 }));
 vi.mock("@/practice/practiceGoalSettings", () => ({
   loadWeeklyPracticeGoalSettings: vi.fn(),
   saveWeeklyPracticeGoalSettings: vi.fn(),
+}));
+vi.mock("@shared/experiments/flags", () => ({
+  isInExperiment: vi.fn().mockReturnValue(true),
+  getExperimentBucket: vi.fn().mockReturnValue(24),
+  getExperimentVariant: vi.fn().mockReturnValue("treatment"),
 }));
 
 import { useAccessFeatures, useAccessPlan, useFeatureFlag } from "@/access/UserAccessContext";
@@ -59,6 +67,8 @@ import { seedDemoData } from "@/demo/demoData";
 import { buildWeeklyGoalStreak } from "@shared/practice/practiceGoals";
 import {
   trackPracticePlanCompletedViewed,
+  trackPracticeGoalNudgeClicked,
+  trackPracticeGoalNudgeShown,
   trackWeeklyPracticeGoalSettingsUpdated,
 } from "@/practice/analytics";
 import {
@@ -81,10 +91,17 @@ const mockTrackPlanCompletedViewed =
   trackPracticePlanCompletedViewed as unknown as Mock;
 const mockTrackGoalSettingsUpdated =
   trackWeeklyPracticeGoalSettingsUpdated as unknown as Mock;
+const mockTrackGoalNudgeShown =
+  trackPracticeGoalNudgeShown as unknown as Mock;
+const mockTrackGoalNudgeClicked =
+  trackPracticeGoalNudgeClicked as unknown as Mock;
 const mockLoadWeeklyGoalSettings =
   loadWeeklyPracticeGoalSettings as unknown as Mock;
 const mockSaveWeeklyGoalSettings =
   saveWeeklyPracticeGoalSettings as unknown as Mock;
+const mockIsInExperiment = experiments.isInExperiment as unknown as Mock;
+const mockGetExperimentBucket = experiments.getExperimentBucket as unknown as Mock;
+const mockGetExperimentVariant = experiments.getExperimentVariant as unknown as Mock;
 let dateNowSpy: ReturnType<typeof vi.spyOn>;
 
 const mockBagStats: BagClubStatsMap = {
@@ -141,8 +158,13 @@ describe("HomeHubPage", () => {
     mockFetchBagStats.mockResolvedValue(mockBagStats);
     mockLoadPracticeHistory.mockResolvedValue([]);
     mockTrackPlanCompletedViewed.mockClear();
+    mockTrackGoalNudgeShown.mockClear();
+    mockTrackGoalNudgeClicked.mockClear();
     mockLoadWeeklyGoalSettings.mockReturnValue({ targetMissionsPerWeek: 3 });
     mockSaveWeeklyGoalSettings.mockClear();
+    mockIsInExperiment.mockReturnValue(true);
+    mockGetExperimentBucket.mockReturnValue(24);
+    mockGetExperimentVariant.mockReturnValue("treatment");
   });
 
   afterEach(() => {
@@ -687,5 +709,79 @@ describe("HomeHubPage", () => {
 
     await screen.findAllByTestId("practice-goal-summary");
     expect(screen.queryByText(/week streak/i)).toBeNull();
+  });
+
+  it("shows a weekly goal nudge when close to completion and in experiment", async () => {
+    mockLoadPracticeHistory.mockResolvedValue([
+      {
+        id: "n1",
+        missionId: "m1",
+        startedAt: "2024-02-05T10:00:00Z",
+        endedAt: "2024-02-05T10:20:00Z",
+        status: "completed",
+        targetClubs: [],
+        completedSampleCount: 10,
+      },
+      {
+        id: "n2",
+        missionId: "m2",
+        startedAt: "2024-02-06T10:00:00Z",
+        endedAt: "2024-02-06T10:20:00Z",
+        status: "completed",
+        targetClubs: [],
+        completedSampleCount: 10,
+      },
+    ]);
+
+    renderHome();
+
+    expect(await screen.findByTestId("practice-goal-nudge")).toBeTruthy();
+    expect(mockTrackGoalNudgeShown).toHaveBeenCalledWith(
+      expect.objectContaining({ experimentBucket: 24, surface: "web_home" }),
+    );
+
+    fireEvent.click(screen.getByTestId("practice-goal-nudge-cta"));
+
+    expect(mockTrackGoalNudgeClicked).toHaveBeenCalledWith(
+      expect.objectContaining({ cta: "practice_missions" }),
+    );
+  });
+
+  it("hides the nudge when the goal is already complete", async () => {
+    mockLoadPracticeHistory.mockResolvedValue([
+      {
+        id: "n1",
+        missionId: "m1",
+        startedAt: "2024-02-05T10:00:00Z",
+        endedAt: "2024-02-05T10:20:00Z",
+        status: "completed",
+        targetClubs: [],
+        completedSampleCount: 10,
+      },
+      {
+        id: "n2",
+        missionId: "m2",
+        startedAt: "2024-02-06T10:00:00Z",
+        endedAt: "2024-02-06T10:20:00Z",
+        status: "completed",
+        targetClubs: [],
+        completedSampleCount: 10,
+      },
+      {
+        id: "n3",
+        missionId: "m3",
+        startedAt: "2024-02-07T10:00:00Z",
+        endedAt: "2024-02-07T10:20:00Z",
+        status: "completed",
+        targetClubs: [],
+        completedSampleCount: 10,
+      },
+    ]);
+
+    renderHome();
+
+    await screen.findAllByTestId("practice-goal-summary");
+    expect(screen.queryByTestId("practice-goal-nudge")).toBeNull();
+    expect(mockTrackGoalNudgeShown).not.toHaveBeenCalled();
   });
 });

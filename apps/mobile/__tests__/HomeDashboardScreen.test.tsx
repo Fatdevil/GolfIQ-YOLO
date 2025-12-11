@@ -1,7 +1,7 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import React from 'react';
-import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi, type Mock, type MockInstance } from 'vitest';
 
 import * as bagClient from '@app/api/bagClient';
 import * as bagStatsClient from '@app/api/bagStatsClient';
@@ -18,6 +18,7 @@ import type { BagClubStatsMap } from '@shared/caddie/bagStats';
 import * as bagPracticeRecommendations from '@shared/caddie/bagPracticeRecommendations';
 import { setTelemetryEmitter } from '@app/telemetry';
 import { getDefaultWeeklyPracticeGoalSettings } from '@shared/practice/practiceGoalSettings';
+import * as experiments from '@shared/experiments/flags';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'HomeDashboard'>;
 
@@ -61,6 +62,9 @@ const mockBagStats: BagClubStatsMap = {
   '5w': { clubId: '5w', meanDistanceM: 190, sampleCount: 2 },
 };
 let dateNowSpy: MockInstance<() => number> | null = null;
+const mockIsInExperiment = experiments.isInExperiment as unknown as Mock;
+const mockGetExperimentBucket = experiments.getExperimentBucket as unknown as Mock;
+const mockGetExperimentVariant = experiments.getExperimentVariant as unknown as Mock;
 
 function createNavigation(): Navigation {
   return {
@@ -99,6 +103,11 @@ vi.mock('@shared/caddie/bagPracticeRecommendations', () => ({
   getTopPracticeRecommendation: vi.fn(),
   buildBagPracticeRecommendations: vi.fn().mockReturnValue([]),
 }));
+vi.mock('@shared/experiments/flags', () => ({
+  isInExperiment: vi.fn().mockReturnValue(true),
+  getExperimentBucket: vi.fn().mockReturnValue(42),
+  getExperimentVariant: vi.fn().mockReturnValue('treatment'),
+}));
 
 describe('HomeDashboardScreen', () => {
   beforeEach(() => {
@@ -127,6 +136,9 @@ describe('HomeDashboardScreen', () => {
       getDefaultWeeklyPracticeGoalSettings(),
     );
     vi.mocked(bagPracticeRecommendations.getTopPracticeRecommendation).mockReturnValue(null);
+    mockIsInExperiment.mockReturnValue(true);
+    mockGetExperimentBucket.mockReturnValue(42);
+    mockGetExperimentVariant.mockReturnValue('treatment');
     setTelemetryEmitter(null);
   });
 
@@ -380,6 +392,95 @@ describe('HomeDashboardScreen', () => {
       'Start your first practice mission this week.',
     );
     expect(screen.queryByTestId('practice-goal-status')).toBeNull();
+  });
+
+  it('shows a weekly goal nudge when close to completion and logs telemetry', async () => {
+    const navigation = createNavigation();
+    const telemetryMock = vi.fn();
+    setTelemetryEmitter(telemetryMock);
+    mockIsInExperiment.mockReturnValue(true);
+    mockGetExperimentBucket.mockReturnValue(7);
+    mockGetExperimentVariant.mockReturnValue('treatment');
+    vi.mocked(practiceHistory.loadPracticeMissionHistory).mockResolvedValue([
+      {
+        id: 'p1',
+        missionId: 'mission-1',
+        startedAt: '2024-02-05T10:00:00Z',
+        endedAt: '2024-02-05T10:30:00Z',
+        status: 'completed',
+        targetClubs: [],
+        completedSampleCount: 12,
+      },
+      {
+        id: 'p2',
+        missionId: 'mission-2',
+        startedAt: '2024-02-06T10:00:00Z',
+        endedAt: '2024-02-06T10:30:00Z',
+        status: 'completed',
+        targetClubs: [],
+        completedSampleCount: 10,
+      },
+    ]);
+
+    render(<HomeDashboardScreen navigation={navigation} route={createRoute()} />);
+
+    expect(await screen.findByTestId('practice-goal-nudge')).toBeVisible();
+
+    await waitFor(() => {
+      expect(telemetryMock).toHaveBeenCalledWith(
+        'practice_goal_nudge_shown',
+        expect.objectContaining({ experimentBucket: 7, targetCompletions: 3, completedInWindow: 2 }),
+      );
+    });
+
+    fireEvent.click(screen.getByTestId('practice-goal-nudge-cta'));
+
+    await waitFor(() => {
+      expect(telemetryMock).toHaveBeenCalledWith(
+        'practice_goal_nudge_clicked',
+        expect.objectContaining({ cta: 'practice_missions' }),
+      );
+    });
+    expect(navigation.navigate).toHaveBeenCalledWith('PracticeMissions', { source: 'home' });
+  });
+
+  it('hides the weekly goal nudge when the goal is completed', async () => {
+    const navigation = createNavigation();
+    mockIsInExperiment.mockReturnValue(true);
+    vi.mocked(practiceHistory.loadPracticeMissionHistory).mockResolvedValue([
+      {
+        id: 'p1',
+        missionId: 'mission-1',
+        startedAt: '2024-02-05T10:00:00Z',
+        endedAt: '2024-02-05T10:30:00Z',
+        status: 'completed',
+        targetClubs: [],
+        completedSampleCount: 10,
+      },
+      {
+        id: 'p2',
+        missionId: 'mission-2',
+        startedAt: '2024-02-06T10:00:00Z',
+        endedAt: '2024-02-06T10:30:00Z',
+        status: 'completed',
+        targetClubs: [],
+        completedSampleCount: 10,
+      },
+      {
+        id: 'p3',
+        missionId: 'mission-3',
+        startedAt: '2024-02-07T10:00:00Z',
+        endedAt: '2024-02-07T10:30:00Z',
+        status: 'completed',
+        targetClubs: [],
+        completedSampleCount: 10,
+      },
+    ]);
+
+    render(<HomeDashboardScreen navigation={navigation} route={createRoute()} />);
+
+    expect(await screen.findByTestId('practice-progress-card')).toBeVisible();
+    expect(screen.queryByTestId('practice-goal-nudge')).toBeNull();
   });
 
   it('surfaces completed missions count in practice progress tile', async () => {

@@ -3,6 +3,7 @@ import {
   isDefaultWeeklyPracticeGoalTarget,
   normalizeWeeklyPracticeGoalSettings,
 } from './practiceGoalSettings';
+import type { PracticeGoalProgress } from './practiceGoals';
 
 export type TelemetryClient = {
   emit: (event: string, payload: Record<string, unknown>) => void;
@@ -68,4 +69,48 @@ export function trackWeeklyPracticeGoalSettingsUpdated(
     'practice_goal_settings_updated',
     buildWeeklyPracticeGoalSettingsUpdatedEvent(input),
   );
+}
+
+export type PracticeGoalNudgeContext = {
+  progress: PracticeGoalProgress;
+  surface: 'mobile_home' | 'web_home';
+  experimentKey: 'weekly_goal_nudge';
+  experimentBucket: number;
+  experimentVariant: 'control' | 'treatment';
+  cta?: 'practice_missions' | 'practice_progress';
+};
+
+export function buildPracticeGoalNudgeEventPayload(
+  context: PracticeGoalNudgeContext,
+): Record<string, unknown> {
+  const completionPercent = context.progress.targetCompletions
+    ? Math.min(context.progress.completedInWindow / context.progress.targetCompletions, 1)
+    : 0;
+
+  return {
+    goalId: context.progress.goalId,
+    targetCompletions: context.progress.targetCompletions,
+    completedInWindow: context.progress.completedInWindow,
+    remainingToTarget: context.progress.remainingToTarget,
+    completionPercent,
+    surface: context.surface,
+    experimentKey: context.experimentKey,
+    experimentBucket: context.experimentBucket,
+    experimentVariant: context.experimentVariant,
+    cta: context.cta,
+  };
+}
+
+export function trackPracticeGoalNudgeShown(
+  client: TelemetryClient,
+  context: PracticeGoalNudgeContext,
+): void {
+  client.emit('practice_goal_nudge_shown', buildPracticeGoalNudgeEventPayload(context));
+}
+
+export function trackPracticeGoalNudgeClicked(
+  client: TelemetryClient,
+  context: PracticeGoalNudgeContext,
+): void {
+  client.emit('practice_goal_nudge_clicked', buildPracticeGoalNudgeEventPayload(context));
 }
