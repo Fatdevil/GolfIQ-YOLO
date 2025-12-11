@@ -1,3 +1,5 @@
+import type { PracticeRecommendationContext } from '@shared/practice/practiceRecommendationsAnalytics';
+
 export type ClipCommentaryParams = {
   id: string;
   ai_title?: string | null;
@@ -30,6 +32,7 @@ export type RootStackParamList = {
         missionId?: string;
         practiceRecommendation?: import('@shared/caddie/bagPracticeRecommendations').BagPracticeRecommendation;
         entrySource?: QuickPracticeEntrySource;
+        practiceRecommendationContext?: PracticeRecommendationContext;
       }
     | undefined;
   RangeCameraSetup: {
@@ -39,12 +42,14 @@ export type RootStackParamList = {
     missionId?: string;
     practiceRecommendation?: import('@shared/caddie/bagPracticeRecommendations').BagPracticeRecommendation;
     entrySource?: QuickPracticeEntrySource;
+    practiceRecommendationContext?: PracticeRecommendationContext;
   };
   RangeQuickPracticeSession: {
     session: import('@app/range/rangeSession').RangeSession;
     missionId?: string;
     practiceRecommendation?: import('@shared/caddie/bagPracticeRecommendations').BagPracticeRecommendation;
     entrySource?: QuickPracticeEntrySource;
+    practiceRecommendationContext?: PracticeRecommendationContext;
   };
   RangeQuickPracticeSummary: { summary: import('@app/range/rangeSession').RangeSessionSummary };
   RangeHistory: undefined;

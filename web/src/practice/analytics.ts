@@ -4,11 +4,18 @@ import {
   type WeeklyPracticeInsightsViewedEvent,
 } from "@shared/practice/practiceInsightsAnalytics";
 import {
+  buildPracticeMissionCompleteEvent,
+  buildPracticeMissionStartEvent,
+  type PracticeMissionCompleteEvent,
+  type PracticeMissionStartEvent,
+} from "@shared/practice/practiceSessionAnalytics";
+import {
   buildWeeklyPracticeGoalSettingsUpdatedEvent,
   buildPracticeGoalNudgeEventPayload,
   type WeeklyPracticeGoalSettingsUpdatedInput,
   type PracticeGoalNudgeContext,
 } from "@shared/practice/practiceGoalAnalytics";
+import type { PracticeRecommendationContext } from "@shared/practice/practiceRecommendationsAnalytics";
 import {
   buildPracticeMissionRecommendationClickedEvent,
   buildPracticeMissionRecommendationShownEvent,
@@ -57,6 +64,7 @@ type PlanCompletedViewedEvent = {
 type MissionStartEvent = {
   missionId?: string | null;
   sourceSurface: "missions_page" | "range_practice" | "round_recap";
+  recommendation?: PracticeRecommendationContext;
 };
 
 type PlanMissionStartEvent = {
@@ -68,6 +76,7 @@ type PlanMissionStartEvent = {
 type MissionCompleteEvent = {
   missionId?: string | null;
   samplesCount?: number | null;
+  recommendation?: PracticeRecommendationContext;
 };
 
 type QuickPracticeSessionStartEvent = {
@@ -124,7 +133,8 @@ export function trackPracticeMissionsViewed(payload: MissionViewedEvent): void {
 }
 
 export function trackPracticeMissionStart(payload: MissionStartEvent): void {
-  emitPracticeAnalytics("practice_mission_start", payload);
+  const event = buildPracticeMissionStartEvent(payload);
+  emitPracticeAnalytics("practice_mission_start", event);
 }
 
 export function trackPracticePlanViewed(payload: PlanViewedEvent): void {
@@ -143,7 +153,8 @@ export function trackPracticePlanCompletedViewed(payload: PlanCompletedViewedEve
 }
 
 export function trackPracticeMissionComplete(payload: MissionCompleteEvent): void {
-  emitPracticeAnalytics("practice_mission_complete", payload);
+  const event = buildPracticeMissionCompleteEvent(payload);
+  emitPracticeAnalytics("practice_mission_complete", event);
 }
 
 export function trackQuickPracticeSessionStart(payload: QuickPracticeSessionStartEvent): void {

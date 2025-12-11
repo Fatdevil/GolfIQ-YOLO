@@ -38,6 +38,7 @@ import {
 import { loadWeeklyPracticeGoalSettings } from "@/practice/practiceGoalSettings";
 import { buildPracticeDecisionContext } from "@shared/practice/practiceDecisionContext";
 import { recommendPracticeMissions, type RecommendedMission } from "@shared/practice/recommendPracticeMissions";
+import type { PracticeRecommendationContext } from "@shared/practice/practiceRecommendationsAnalytics";
 import { getPracticeRecommendationsExperiment } from "@shared/experiments/flags";
 import { getCurrentUserId } from "@/user/currentUserId";
 
@@ -522,6 +523,22 @@ export default function PracticeMissionsPage(): JSX.Element {
   const handleSelectMission = (missionId: string, planRank?: number) => {
     const recommendation = recommendationByMissionId.get(missionId);
     const mission = missions.find((candidate) => candidate.id === missionId);
+    let recommendationContext: PracticeRecommendationContext | undefined;
+
+    if (recommendation && practiceRecommendationsExperiment.enabled) {
+      recommendationContext = {
+        source: "practice_recommendations",
+        rank: recommendation.rank,
+        focusArea: (mission as any)?.focusArea,
+        reasonKey: recommendation.reason,
+        algorithmVersion: "v1",
+        experiment: {
+          experimentKey: practiceRecommendationsExperiment.experimentKey,
+          experimentBucket: practiceRecommendationsExperiment.experimentBucket,
+          experimentVariant: practiceRecommendationsExperiment.experimentVariant,
+        },
+      };
+    }
 
     if (recommendation && practiceRecommendationsExperiment.enabled) {
       trackPracticeMissionRecommendationClicked({
@@ -559,7 +576,10 @@ export default function PracticeMissionsPage(): JSX.Element {
 
     const params = new URLSearchParams();
     params.set("missionId", missionId);
-    trackPracticeMissionStart({ missionId, sourceSurface: "missions_page" });
+    if (recommendationContext) {
+      params.set("recommendation", JSON.stringify(recommendationContext));
+    }
+    trackPracticeMissionStart({ missionId, sourceSurface: "missions_page", recommendation: recommendationContext });
     navigate(`/range/practice?${params.toString()}`);
   };
 

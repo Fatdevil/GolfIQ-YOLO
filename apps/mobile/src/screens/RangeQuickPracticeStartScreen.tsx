@@ -18,6 +18,7 @@ export default function RangeQuickPracticeStartScreen({ navigation, route }: Pro
   const missionId = route.params?.missionId;
   const practiceRecommendation = route.params?.practiceRecommendation;
   const entrySource = route.params?.entrySource;
+  const practiceRecommendationContext = route.params?.practiceRecommendationContext;
   const mission = missionId ? getMissionById(missionId) : undefined;
   const [club, setClub] = useState(() => practiceRecommendation?.targetClubs?.[0] ?? '');
   const [targetDistance, setTargetDistance] = useState('');
@@ -75,6 +76,7 @@ export default function RangeQuickPracticeStartScreen({ navigation, route }: Pro
       missionId,
       practiceRecommendation,
       entrySource,
+      practiceRecommendationContext,
     });
   };
 

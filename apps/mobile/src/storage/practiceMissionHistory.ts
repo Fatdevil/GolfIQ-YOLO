@@ -16,6 +16,8 @@ import {
 } from '@shared/practice/practiceGoals';
 import { trackPracticeGoalReached } from '@shared/practice/practiceGoalAnalytics';
 import { getDefaultWeeklyPracticeGoalSettings } from '@shared/practice/practiceGoalSettings';
+import type { PracticeRecommendationContext } from '@shared/practice/practiceRecommendationsAnalytics';
+import { emitPracticeMissionComplete } from '@shared/practice/practiceSessionAnalytics';
 import { loadWeeklyPracticeGoalSettings } from './practiceGoalSettings';
 
 export type PracticeProgressOverview = {
@@ -56,7 +58,10 @@ async function persistHistory(history: PracticeMissionHistoryEntry[]): Promise<v
 
 export async function recordPracticeMissionOutcome(
   outcome: PracticeMissionOutcome,
-  options?: { source?: 'practice_mission' | 'quick_practice' | 'round_recap' },
+  options?: {
+    source?: 'practice_mission' | 'quick_practice' | 'round_recap';
+    recommendation?: PracticeRecommendationContext;
+  },
 ): Promise<PracticeMissionHistoryEntry[]> {
   const [history, weeklyGoalSettings] = await Promise.all([
     loadPracticeMissionHistory(),
@@ -73,10 +78,14 @@ export async function recordPracticeMissionOutcome(
     await persistHistory(next);
     const latestEntry = next[next.length - 1];
     if (latestEntry?.status === 'completed') {
-      safeEmit('practice_mission_complete', {
-        missionId: latestEntry.missionId,
-        samplesCount: latestEntry.completedSampleCount,
-      });
+      emitPracticeMissionComplete(
+        { emit: safeEmit },
+        {
+          missionId: latestEntry.missionId,
+          samplesCount: latestEntry.completedSampleCount,
+          recommendation: options?.recommendation,
+        },
+      );
 
       const goalAfter = buildWeeklyPracticeGoalProgress({
         missionHistory: next,

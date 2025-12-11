@@ -78,6 +78,7 @@ export default function RangeQuickPracticeSessionScreen({ navigation, route }: P
   const [isTempoTrainerEnabled, setIsTempoTrainerEnabled] = useState(false);
   const [pendingTrainerResult, setPendingTrainerResult] = useState<TempoTrainerResultMessage | null>(null);
   const practiceRecommendation = route?.params?.practiceRecommendation;
+  const practiceRecommendationContext = route?.params?.practiceRecommendationContext;
   const entrySource = route?.params?.entrySource ?? 'other';
   const hasRecommendation = Boolean(practiceRecommendation);
   const targetClubsCount = practiceRecommendation?.targetClubs?.length;
@@ -292,7 +293,10 @@ export default function RangeQuickPracticeSessionScreen({ navigation, route }: P
             completedSampleCount: totalTargetShots,
           };
 
-          await recordPracticeMissionOutcome(missionOutcome, { source: 'quick_practice' });
+          await recordPracticeMissionOutcome(missionOutcome, {
+            source: 'quick_practice',
+            recommendation: practiceRecommendationContext,
+          });
         } catch (err) {
           console.warn('[range] Failed to persist practice mission session', err);
         }

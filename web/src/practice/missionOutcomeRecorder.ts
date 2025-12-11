@@ -2,6 +2,7 @@ import type { RangeMission } from "@/features/range/missions";
 import type { RangeShot } from "@/range/types";
 import { recordPracticeMissionOutcome } from "@/practice/practiceMissionHistory";
 import type { PracticeMissionOutcome } from "@shared/practice/practiceHistory";
+import type { PracticeRecommendationContext } from "@shared/practice/practiceRecommendationsAnalytics";
 
 export type MissionSessionMeta = {
   sessionId: string;
@@ -14,6 +15,7 @@ export async function persistMissionOutcomeFromSession(
   mission: RangeMission | null,
   shots: RangeShot[],
   meta: MissionSessionMeta,
+  recommendationContext?: PracticeRecommendationContext,
 ): Promise<void> {
   if (!mission || !mission.suggestedClubs?.length) return;
 
@@ -37,7 +39,7 @@ export async function persistMissionOutcomeFromSession(
   };
 
   try {
-    await recordPracticeMissionOutcome(outcome);
+    await recordPracticeMissionOutcome(outcome, { recommendation: recommendationContext });
   } catch (err) {
     console.warn("[practice] Failed to persist practice mission session", err);
   }
