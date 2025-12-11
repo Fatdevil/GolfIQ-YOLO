@@ -12,6 +12,7 @@ import * as bagReadiness from '@shared/caddie/bagReadiness';
 import { buildPracticeMissionsList, type PracticeMissionListItem } from '@shared/practice/practiceMissionsList';
 import { safeEmit } from '@app/telemetry';
 import * as practiceHistory from '@shared/practice/practiceHistory';
+import * as practiceRecommendations from '@shared/practice/recommendPracticeMissions';
 
 vi.mock('@app/storage/practiceMissionHistory', () => ({
   loadPracticeMissionHistory: vi.fn(),
@@ -23,6 +24,7 @@ vi.mock('@app/api/bagStatsClient', () => ({ fetchBagStats: vi.fn() }));
 vi.mock('@shared/caddie/bagReadiness', () => ({ buildBagReadinessOverview: vi.fn() }));
 vi.mock('@shared/practice/practiceMissionsList', () => ({ buildPracticeMissionsList: vi.fn() }));
 vi.mock('@app/telemetry', () => ({ safeEmit: vi.fn() }));
+vi.mock('@shared/practice/recommendPracticeMissions', () => ({ recommendPracticeMissions: vi.fn() }));
 
 function createNavigation(): NativeStackScreenProps<RootStackParamList, 'PracticeMissions'>['navigation'] {
   return {
@@ -63,6 +65,7 @@ describe('PracticeMissionsScreen', () => {
   ];
 
   const buildWeeklyHistorySpy = vi.spyOn(practiceHistory, 'buildWeeklyPracticeHistory');
+  const recommendPracticeMissionsMock = vi.mocked(practiceRecommendations.recommendPracticeMissions);
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -72,6 +75,7 @@ describe('PracticeMissionsScreen', () => {
     vi.mocked(bagStatsClient.fetchBagStats).mockResolvedValue(null as any);
     vi.mocked(bagReadiness.buildBagReadinessOverview).mockReturnValue(null as any);
     vi.mocked(buildPracticeMissionsList).mockReturnValue(missions);
+    recommendPracticeMissionsMock.mockReturnValue([]);
   });
 
   it('renders missions in provided order with status labels', async () => {
@@ -293,6 +297,28 @@ describe('PracticeMissionsScreen', () => {
       missionId: 'mission-low',
       sourceSurface: 'missions_list',
     });
+  });
+
+  it('shows recommended badge and reason when available', async () => {
+    recommendPracticeMissionsMock.mockReturnValue([
+      { id: 'mission-high', rank: 1, reason: 'focus_area' },
+    ] as any);
+
+    render(<PracticeMissionsScreen navigation={createNavigation()} route={createRoute()} />);
+
+    const row = await screen.findByTestId('practice-mission-item-mission-high');
+    expect(within(row).getByText(/Recommended$/i)).toBeVisible();
+    expect(within(row).getByText(/Recommended for this week’s focus area/i)).toBeVisible();
+  });
+
+  it('does not render recommendation UI when helper returns none', async () => {
+    recommendPracticeMissionsMock.mockReturnValue([] as any);
+
+    render(<PracticeMissionsScreen navigation={createNavigation()} route={createRoute()} />);
+
+    await screen.findByTestId('practice-missions-list');
+    expect(screen.queryByText(/Recommended for this week’s focus area/i)).toBeNull();
+    expect(screen.queryByText(/Recommended based on your recent practice/i)).toBeNull();
   });
 
   it('navigates to mission detail when a matching history entry exists', async () => {

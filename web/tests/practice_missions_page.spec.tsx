@@ -1,7 +1,7 @@
 import React from "react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Mock } from "vitest";
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter, Route, Routes, useParams } from "react-router-dom";
 import userEvent from "@testing-library/user-event";
 
@@ -13,6 +13,7 @@ import { UnitsProvider } from "@/preferences/UnitsContext";
 import { useAccessFeatures, useAccessPlan, useFeatureFlag } from "@/access/UserAccessContext";
 import { computeOnboardingChecklist, markHomeSeen } from "@/onboarding/checklist";
 import { seedDemoData } from "@/demo/demoData";
+import * as practiceRecommendations from "@shared/practice/recommendPracticeMissions";
 
 vi.mock("@/practice/practiceMissionHistory", async () => {
   const actual = await vi.importActual<typeof import("@/practice/practiceMissionHistory")>(
@@ -70,6 +71,10 @@ vi.mock("@/demo/demoData", () => ({
   seedDemoData: vi.fn(),
 }));
 
+vi.mock("@shared/practice/recommendPracticeMissions", () => ({
+  recommendPracticeMissions: vi.fn(),
+}));
+
 vi.mock("@/notifications/NotificationContext", () => ({
   useNotifications: vi.fn(() => ({ notify: vi.fn() })),
 }));
@@ -84,6 +89,10 @@ import { postTelemetryEvent } from "@/api";
 import * as practicePlan from "@shared/practice/practicePlan";
 import { loadWeeklyPracticeGoalSettings } from "@/practice/practiceGoalSettings";
 import * as practiceHistory from "@shared/practice/practiceHistory";
+
+afterEach(() => {
+  cleanup();
+});
 
 const realBuildWeeklyHistory = practiceHistory.buildWeeklyPracticeHistory;
 const mockLoadHistory = loadPracticeMissionHistory as unknown as Mock;
@@ -102,6 +111,7 @@ const mockSeedDemoData = seedDemoData as unknown as Mock;
 const mockUseNotifications = useNotifications as unknown as Mock;
 const mockTelemetry = postTelemetryEvent as unknown as Mock;
 const mockBuildWeeklyHistory = vi.spyOn(practiceHistory, "buildWeeklyPracticeHistory");
+const mockRecommendPracticeMissions = vi.mocked(practiceRecommendations.recommendPracticeMissions);
 
 const baseChecklist = {
   allDone: false,
@@ -143,6 +153,8 @@ describe("PracticeMissionsPage", () => {
     mockLoadWeeklyGoalSettings.mockReset();
     mockBuildWeeklyHistory.mockReset();
     mockBuildWeeklyHistory.mockImplementation(realBuildWeeklyHistory as any);
+    mockRecommendPracticeMissions.mockReset();
+    mockRecommendPracticeMissions.mockReturnValue([]);
     mockLoadBag.mockReturnValue(createDefaultBag());
     mockMapBagToPlayer.mockReturnValue({ clubs: [] });
     mockFetchBagStats.mockResolvedValue({});
@@ -197,6 +209,43 @@ describe("PracticeMissionsPage", () => {
         }),
       );
     });
+  });
+
+  it("decorates recommended missions with a badge and reason", async () => {
+    mockRecommendPracticeMissions.mockReturnValue([
+      { id: "practice_fill_gap:7i:8i", rank: 1, reason: "goal_progress" },
+    ] as any);
+    mockLoadHistory.mockResolvedValue([]);
+
+    renderWithRouter();
+
+    await waitFor(() => expect(mockRecommendPracticeMissions).toHaveBeenCalled());
+    expect(mockRecommendPracticeMissions.mock.results.at(-1)?.value).toEqual([
+      { id: "practice_fill_gap:7i:8i", rank: 1, reason: "goal_progress" },
+    ]);
+    const latestCall = mockRecommendPracticeMissions.mock.calls.at(-1)?.[0];
+    expect(latestCall?.missions?.map((mission: any) => mission.id)).toContain(
+      "practice_fill_gap:7i:8i",
+    );
+
+    await screen.findByText(/Recommended to help reach this week’s practice goal/i);
+    const badges = await screen.findAllByText(/^Recommended$/i);
+    expect(badges.length).toBeGreaterThan(0);
+  });
+
+  it("omits recommendation UI when there are no recommendations", async () => {
+    mockRecommendPracticeMissions.mockImplementation(() => [] as any);
+    mockLoadHistory.mockResolvedValue([]);
+
+    renderWithRouter();
+
+    await waitFor(() => {
+      expect(screen.getAllByTestId("practice-missions-list").length).toBeGreaterThan(0);
+    });
+    await waitFor(() => expect(mockRecommendPracticeMissions).toHaveBeenCalled());
+    expect(mockRecommendPracticeMissions.mock.results.at(-1)?.value).toEqual([]);
+    expect(screen.queryByText(/Recommended to help reach this week’s practice goal/i)).toBeNull();
+    expect(screen.queryByText(/^Recommended$/i)).toBeNull();
   });
 
   it("shows completed plan banner, labels, and emits completion analytics", async () => {
@@ -299,7 +348,7 @@ describe("PracticeMissionsPage", () => {
       expect(within(history).getAllByTestId(/weekly-history-item-/).length).toBeGreaterThanOrEqual(1);
     });
     expect(within(history).getByText(/This week/i)).toBeVisible();
-    const missionCountLabel = within(history).getByText(/missions/);
+    const missionCountLabel = within(history).getAllByText(/missions/)[0];
     expect(missionCountLabel.textContent).toContain("/");
 
     await waitFor(() => {
