@@ -52,6 +52,7 @@ import {
   buildWeeklyPracticeGoalProgress,
   type PracticeGoalStatus,
 } from '@shared/practice/practiceGoals';
+import { shouldShowWeeklyGoalNudge } from '@shared/practice/practiceGoalNudge';
 import {
   buildPracticeMissionsList,
   type PracticeMissionDefinition,
@@ -59,6 +60,11 @@ import {
 } from '@shared/practice/practiceMissionsList';
 import { buildWeeklyPracticePlanHomeSummary } from '@shared/practice/practicePlan';
 import { getDefaultWeeklyPracticeGoalSettings } from '@shared/practice/practiceGoalSettings';
+import {
+  trackPracticeGoalNudgeClicked,
+  trackPracticeGoalNudgeShown,
+} from '@shared/practice/practiceGoalAnalytics';
+import { getExperimentBucket, getExperimentVariant, isInExperiment } from '@shared/experiments/flags';
 
 const CALIBRATION_SAMPLE_THRESHOLD = 5;
 const TARGET_ROUNDS_PER_WEEK = 3;
@@ -202,6 +208,7 @@ export default function HomeDashboardScreen({ navigation }: Props): JSX.Element 
     getDefaultWeeklyPracticeGoalSettings(),
   );
   const planCompletedViewedRef = useRef(false);
+  const goalNudgeShownRef = useRef<string | null>(null);
   const geo = useGeolocation();
 
   useEffect(() => {
@@ -300,6 +307,9 @@ export default function HomeDashboardScreen({ navigation }: Props): JSX.Element 
   }, []);
 
   const { loading, profile, currentRound, latestRound, weeklySummary, practicePlan, bag, bagStats, engagement } = state;
+  const telemetryClient = useMemo(() => ({ emit: safeEmit }), []);
+
+  const userIdForExperiments = profile?.memberId ?? 'anonymous';
 
   const practiceProgressModel = useMemo(
     () => buildPracticeProgressTileModel(practiceOverview),
@@ -317,6 +327,11 @@ export default function HomeDashboardScreen({ navigation }: Props): JSX.Element 
     [practiceHistory, practiceGoalNow, weeklyGoalSettings.targetMissionsPerWeek],
   );
 
+  const weeklyGoalNudge = useMemo(
+    () => shouldShowWeeklyGoalNudge(practiceHistory, weeklyGoalSettings, practiceGoalNow),
+    [practiceGoalNow, practiceHistory, weeklyGoalSettings],
+  );
+
   const practiceGoalStreak = useMemo(
     () =>
       buildWeeklyGoalStreak({
@@ -325,6 +340,21 @@ export default function HomeDashboardScreen({ navigation }: Props): JSX.Element 
         settings: weeklyGoalSettings,
       }),
     [practiceGoalNow, practiceHistory, weeklyGoalSettings],
+  );
+
+  const experimentBucket = useMemo(
+    () => getExperimentBucket('weekly_goal_nudge', userIdForExperiments),
+    [userIdForExperiments],
+  );
+
+  const experimentVariant = useMemo(
+    () => getExperimentVariant('weekly_goal_nudge', userIdForExperiments),
+    [userIdForExperiments],
+  );
+
+  const shouldRenderWeeklyGoalNudge = useMemo(
+    () => isInExperiment('weekly_goal_nudge', userIdForExperiments) && weeklyGoalNudge.shouldShow,
+    [userIdForExperiments, weeklyGoalNudge.shouldShow],
   );
 
   const practiceGoalStreakLabel = useMemo(() => {
@@ -362,6 +392,15 @@ export default function HomeDashboardScreen({ navigation }: Props): JSX.Element 
       statusLabel: t('practice.goals.status.catchUp'),
     };
   }, [practiceGoalProgress]);
+
+  const weeklyGoalNudgeCopy = useMemo(() => {
+    if (!shouldRenderWeeklyGoalNudge) return null;
+    if (weeklyGoalNudge.remainingMissions <= 1) {
+      return "One session left to hit this week's practice goal";
+    }
+    const percent = Math.round(weeklyGoalNudge.completionPercent * 100);
+    return `You're ${percent}% to your weekly goal – finish strong!`;
+  }, [shouldRenderWeeklyGoalNudge, weeklyGoalNudge.completionPercent, weeklyGoalNudge.remainingMissions]);
 
   const clubLabels = useMemo(() => {
     const labels: Record<string, string> = {};
@@ -426,6 +465,27 @@ export default function HomeDashboardScreen({ navigation }: Props): JSX.Element 
     });
   }, [weeklyPracticePlanSummary]);
 
+  useEffect(() => {
+    if (!shouldRenderWeeklyGoalNudge || !practiceGoalProgress) return;
+    const nudgeKey = `${practiceGoalProgress.completedInWindow}/${practiceGoalProgress.targetCompletions}/${experimentBucket}`;
+    if (goalNudgeShownRef.current === nudgeKey) return;
+
+    trackPracticeGoalNudgeShown(telemetryClient, {
+      progress: practiceGoalProgress,
+      surface: 'mobile_home',
+      experimentKey: 'weekly_goal_nudge',
+      experimentBucket,
+      experimentVariant,
+    });
+    goalNudgeShownRef.current = nudgeKey;
+  }, [
+    experimentBucket,
+    experimentVariant,
+    practiceGoalProgress,
+    shouldRenderWeeklyGoalNudge,
+    telemetryClient,
+  ]);
+
   const readinessSuggestion = useMemo(() => {
     if (!bagReadinessOverview?.suggestions.length) return null;
     return formatBagSuggestion(bagReadinessOverview.suggestions[0], clubLabels);
@@ -440,6 +500,25 @@ export default function HomeDashboardScreen({ navigation }: Props): JSX.Element 
       history: practiceHistory,
     });
   }, [bagReadinessOverview, practiceHistory]);
+
+  const handleWeeklyGoalNudgePress = useCallback(() => {
+    if (!practiceGoalProgress) return;
+    trackPracticeGoalNudgeClicked(telemetryClient, {
+      progress: practiceGoalProgress,
+      surface: 'mobile_home',
+      experimentKey: 'weekly_goal_nudge',
+      experimentBucket,
+      experimentVariant,
+      cta: 'practice_missions',
+    });
+    navigation.navigate('PracticeMissions', { source: 'home' });
+  }, [
+    experimentBucket,
+    experimentVariant,
+    navigation,
+    practiceGoalProgress,
+    telemetryClient,
+  ]);
 
   const handleOpenPracticeProgress = useCallback(() => {
     if (practiceProgressModel?.hasData) {
@@ -946,6 +1025,14 @@ export default function HomeDashboardScreen({ navigation }: Props): JSX.Element 
                 {practicePlanCopy}
               </Text>
             ) : null}
+            {shouldRenderWeeklyGoalNudge && weeklyGoalNudgeCopy ? (
+              <View style={styles.goalNudge} testID="practice-goal-nudge">
+                <Text style={styles.goalNudgeText}>{weeklyGoalNudgeCopy}</Text>
+                <TouchableOpacity onPress={handleWeeklyGoalNudgePress} testID="practice-goal-nudge-cta">
+                  <Text style={styles.link}>{t('practice.missions.cta.viewAll')}</Text>
+                </TouchableOpacity>
+              </View>
+            ) : null}
           </View>
           <TouchableOpacity onPress={handleOpenPracticeProgress} testID="open-practice-progress">
             <Text style={styles.link}>{t('practice.progress.cta')}</Text>
@@ -1160,6 +1247,17 @@ const styles = StyleSheet.create({
   goalRow: {
     alignItems: 'center',
     marginTop: 2,
+  },
+  goalNudge: {
+    backgroundColor: '#ecfeff',
+    borderRadius: 10,
+    padding: 10,
+    gap: 6,
+    marginTop: 6,
+  },
+  goalNudgeText: {
+    color: '#0f172a',
+    fontWeight: '700',
   },
   goalPill: {
     paddingHorizontal: 10,

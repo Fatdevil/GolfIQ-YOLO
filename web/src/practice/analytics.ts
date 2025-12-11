@@ -5,7 +5,9 @@ import {
 } from "@shared/practice/practiceInsightsAnalytics";
 import {
   buildWeeklyPracticeGoalSettingsUpdatedEvent,
+  buildPracticeGoalNudgeEventPayload,
   type WeeklyPracticeGoalSettingsUpdatedInput,
+  type PracticeGoalNudgeContext,
 } from "@shared/practice/practiceGoalAnalytics";
 
 export type PracticeAnalyticsEvent =
@@ -18,6 +20,8 @@ export type PracticeAnalyticsEvent =
   | "practice_plan_mission_start"
   | "practice_plan_completed_viewed"
   | "practice_goal_settings_updated"
+  | "practice_goal_nudge_shown"
+  | "practice_goal_nudge_clicked"
   | "weekly_practice_insights_viewed"
   | "practice_weekly_history_viewed";
 
@@ -147,6 +151,16 @@ export function trackWeeklyPracticeGoalSettingsUpdated(
 ): void {
   const event = buildWeeklyPracticeGoalSettingsUpdatedEvent(payload);
   emitPracticeAnalytics("practice_goal_settings_updated", event);
+}
+
+export function trackPracticeGoalNudgeShown(payload: PracticeGoalNudgeContext): void {
+  const event = buildPracticeGoalNudgeEventPayload(payload);
+  emitPracticeAnalytics("practice_goal_nudge_shown", event);
+}
+
+export function trackPracticeGoalNudgeClicked(payload: PracticeGoalNudgeContext): void {
+  const event = buildPracticeGoalNudgeEventPayload(payload);
+  emitPracticeAnalytics("practice_goal_nudge_clicked", event);
 }
 
 export function trackWeeklyPracticeInsightsViewed(payload: WeeklyPracticeInsightsViewedEvent): void {
