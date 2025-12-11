@@ -1,7 +1,9 @@
-import '@testing-library/jest-dom/vitest';
+import { expect, afterEach } from 'vitest';
+import * as matchers from '@testing-library/jest-dom/matchers';
 import '@testing-library/react';
 import { cleanup } from '@testing-library/react';
-import { afterEach } from 'vitest';
+
+expect.extend(matchers);
 
 // Ensure fetch exists in tests.
 if (typeof globalThis.fetch !== 'function') {
