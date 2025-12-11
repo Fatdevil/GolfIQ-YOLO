@@ -18,7 +18,9 @@ import type { BagClubStatsMap } from '@shared/caddie/bagStats';
 import * as bagPracticeRecommendations from '@shared/caddie/bagPracticeRecommendations';
 import { setTelemetryEmitter } from '@app/telemetry';
 import { getDefaultWeeklyPracticeGoalSettings } from '@shared/practice/practiceGoalSettings';
+import type { PracticeMissionHistoryEntry } from '@shared/practice/practiceHistory';
 import * as experiments from '@shared/experiments/flags';
+import * as practiceRecommendations from '@shared/practice/recommendPracticeMissions';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'HomeDashboard'>;
 
@@ -65,6 +67,11 @@ let dateNowSpy: MockInstance<() => number> | null = null;
 const mockIsInExperiment = experiments.isInExperiment as unknown as Mock;
 const mockGetExperimentBucket = experiments.getExperimentBucket as unknown as Mock;
 const mockGetExperimentVariant = experiments.getExperimentVariant as unknown as Mock;
+const mockGetPracticeRecommendationsExperiment =
+  experiments.getPracticeRecommendationsExperiment as unknown as Mock;
+const mockRecommendPracticeMissions =
+  practiceRecommendations.recommendPracticeMissions as unknown as Mock;
+let practiceRecommendationsVariant: 'control' | 'treatment' | 'disabled' = 'treatment';
 
 function createNavigation(): Navigation {
   return {
@@ -107,6 +114,10 @@ vi.mock('@shared/experiments/flags', () => ({
   isInExperiment: vi.fn().mockReturnValue(true),
   getExperimentBucket: vi.fn().mockReturnValue(42),
   getExperimentVariant: vi.fn().mockReturnValue('treatment'),
+  getPracticeRecommendationsExperiment: vi.fn(),
+}));
+vi.mock('@shared/practice/recommendPracticeMissions', () => ({
+  recommendPracticeMissions: vi.fn(),
 }));
 
 describe('HomeDashboardScreen', () => {
@@ -115,6 +126,7 @@ describe('HomeDashboardScreen', () => {
       .spyOn(Date, 'now')
       .mockReturnValue(new Date('2024-02-08T12:00:00Z').getTime());
     vi.clearAllMocks();
+    practiceRecommendationsVariant = 'treatment';
     vi.mocked(playerApi.fetchPlayerProfile).mockResolvedValue(mockProfile);
     vi.mocked(roundClient.fetchCurrentRound).mockResolvedValue(null);
     vi.mocked(roundClient.fetchLatestCompletedRound).mockResolvedValue(null);
@@ -138,7 +150,16 @@ describe('HomeDashboardScreen', () => {
     vi.mocked(bagPracticeRecommendations.getTopPracticeRecommendation).mockReturnValue(null);
     mockIsInExperiment.mockReturnValue(true);
     mockGetExperimentBucket.mockReturnValue(42);
-    mockGetExperimentVariant.mockReturnValue('treatment');
+    mockGetExperimentVariant.mockImplementation((key: string) =>
+      key === 'practice_recommendations' ? practiceRecommendationsVariant : 'treatment',
+    );
+    mockGetPracticeRecommendationsExperiment.mockImplementation((userId: string) => ({
+      experimentKey: 'practice_recommendations',
+      experimentBucket: mockGetExperimentBucket('practice_recommendations', userId),
+      experimentVariant: practiceRecommendationsVariant,
+      enabled: practiceRecommendationsVariant !== 'disabled',
+    }));
+    mockRecommendPracticeMissions.mockReturnValue([]);
     setTelemetryEmitter(null);
   });
 
@@ -903,5 +924,83 @@ describe('HomeDashboardScreen', () => {
     fireEvent.click(card);
 
     expect(navigation.navigate).toHaveBeenCalledWith('PracticeHistory');
+  });
+
+  it('hides home practice recommendation when experiment is disabled', async () => {
+    practiceRecommendationsVariant = 'disabled';
+    mockRecommendPracticeMissions.mockReturnValue([
+      { id: 'mission-home', rank: 1, reason: 'focus_area', algorithmVersion: 'v2', focusArea: 'driving' },
+    ]);
+    const telemetry = vi.fn();
+    setTelemetryEmitter(telemetry);
+    const navigation = createNavigation();
+
+    render(<HomeDashboardScreen navigation={navigation} route={createRoute()} />);
+
+    await waitFor(() => {
+      expect(screen.queryByTestId('home-practice-recommendation')).toBeNull();
+    });
+
+    expect(telemetry).not.toHaveBeenCalledWith(
+      'practice_mission_recommendation_shown',
+      expect.anything(),
+    );
+  });
+
+  it('renders and tracks the home practice recommendation when enabled', async () => {
+    const practiceHistoryEntry: PracticeMissionHistoryEntry = {
+      id: 'entry-1',
+      missionId: 'mission-home',
+      startedAt: '2024-02-01T00:00:00Z',
+      endedAt: '2024-02-01T00:10:00Z',
+      status: 'completed',
+    } as PracticeMissionHistoryEntry;
+    vi.mocked(practiceHistory.loadPracticeMissionHistory).mockResolvedValueOnce([practiceHistoryEntry]);
+    mockRecommendPracticeMissions.mockReturnValue([
+      { id: 'mission-home', rank: 1, reason: 'focus_area', algorithmVersion: 'v2', focusArea: 'driving' },
+    ]);
+    const navigation = createNavigation();
+    const telemetry = vi.fn();
+    setTelemetryEmitter(telemetry);
+
+    render(<HomeDashboardScreen navigation={navigation} route={createRoute()} />);
+
+    const card = await screen.findByTestId('home-practice-recommendation');
+    expect(card).toHaveTextContent('mission-home');
+
+    fireEvent.click(screen.getByTestId('home-practice-recommendation-cta'));
+
+    await waitFor(() => {
+      expect(telemetry).toHaveBeenCalledWith(
+        'practice_mission_recommendation_shown',
+        expect.objectContaining({ surface: 'mobile_home_practice', missionId: 'mission-home' }),
+      );
+      expect(telemetry).toHaveBeenCalledWith(
+        'practice_mission_recommendation_clicked',
+        expect.objectContaining({ surface: 'mobile_home_practice', missionId: 'mission-home' }),
+      );
+    });
+
+    expect(navigation.navigate).toHaveBeenCalledWith(
+      'RangeQuickPracticeStart',
+      expect.objectContaining({ missionId: 'mission-home' }),
+    );
+  });
+
+  it('does not render the home practice recommendation when none are available', async () => {
+    mockRecommendPracticeMissions.mockReturnValue([]);
+    const telemetry = vi.fn();
+    setTelemetryEmitter(telemetry);
+
+    render(<HomeDashboardScreen navigation={createNavigation()} route={createRoute()} />);
+
+    await waitFor(() => {
+      expect(screen.queryByTestId('home-practice-recommendation')).toBeNull();
+    });
+
+    expect(telemetry).not.toHaveBeenCalledWith(
+      'practice_mission_recommendation_shown',
+      expect.anything(),
+    );
   });
 });

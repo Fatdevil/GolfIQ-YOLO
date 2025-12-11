@@ -60,11 +60,20 @@ import {
 } from '@shared/practice/practiceMissionsList';
 import { buildWeeklyPracticePlanHomeSummary } from '@shared/practice/practicePlan';
 import { getDefaultWeeklyPracticeGoalSettings } from '@shared/practice/practiceGoalSettings';
+import { buildPracticeReadinessSummary } from '@shared/practice/practiceReadiness';
+import { buildPracticeDecisionContext } from '@shared/practice/practiceDecisionContext';
 import {
   trackPracticeGoalNudgeClicked,
   trackPracticeGoalNudgeShown,
 } from '@shared/practice/practiceGoalAnalytics';
-import { getExperimentBucket, getExperimentVariant, isInExperiment } from '@shared/experiments/flags';
+import { recommendPracticeMissions, type RecommendedMission } from '@shared/practice/recommendPracticeMissions';
+import {
+  emitPracticeMissionRecommendationClicked,
+  emitPracticeMissionRecommendationShown,
+  type PracticeRecommendationContext,
+} from '@shared/practice/practiceRecommendationsAnalytics';
+import { emitPracticeMissionStart } from '@shared/practice/practiceSessionAnalytics';
+import { getExperimentBucket, getExperimentVariant, getPracticeRecommendationsExperiment, isInExperiment } from '@shared/experiments/flags';
 
 const CALIBRATION_SAMPLE_THRESHOLD = 5;
 const TARGET_ROUNDS_PER_WEEK = 3;
@@ -209,6 +218,7 @@ export default function HomeDashboardScreen({ navigation }: Props): JSX.Element 
   );
   const planCompletedViewedRef = useRef(false);
   const goalNudgeShownRef = useRef<string | null>(null);
+  const practiceRecommendationImpressionsRef = useRef(new Set<string>());
   const geo = useGeolocation();
 
   useEffect(() => {
@@ -432,6 +442,64 @@ export default function HomeDashboardScreen({ navigation }: Props): JSX.Element 
     });
   }, [bagReadinessOverview, practiceGoalNow, practiceHistory]);
 
+  const practiceReadinessSummary = useMemo(
+    () => buildPracticeReadinessSummary({ history: practiceHistory, goalSettings: weeklyGoalSettings }),
+    [practiceHistory, weeklyGoalSettings],
+  );
+
+  const practiceDecisionContext = useMemo(
+    () => buildPracticeDecisionContext({ summary: practiceReadinessSummary }),
+    [practiceReadinessSummary],
+  );
+
+  const practiceRecommendationsExperiment = useMemo(
+    () => getPracticeRecommendationsExperiment(userIdForExperiments),
+    [userIdForExperiments],
+  );
+
+  const practiceRecommendationsSuppressed =
+    practiceRecommendationsExperiment.experimentVariant === 'disabled' ||
+    !practiceRecommendationsExperiment.enabled;
+
+  const practiceRecommendations = useMemo(
+    () =>
+      loading || practiceRecommendationsSuppressed
+        ? []
+        : recommendPracticeMissions({
+            context: practiceDecisionContext,
+            missions: practiceMissions.map((mission) => ({
+              id: mission.id,
+              focusArea: (mission as any).focusArea,
+              priorityScore: mission.priorityScore,
+              estimatedMinutes: (mission as any).estimatedMinutes,
+              difficulty: (mission as any).difficulty,
+              completionCount: mission.completionCount,
+              lastCompletedAt: mission.lastCompletedAt,
+            })),
+            experimentVariant: practiceRecommendationsExperiment.experimentVariant,
+          }),
+    [
+      loading,
+      practiceDecisionContext,
+      practiceMissions,
+      practiceRecommendationsExperiment.experimentVariant,
+      practiceRecommendationsSuppressed,
+    ],
+  );
+
+  const homePracticeRecommendation = useMemo<RecommendedMission | null>(
+    () => practiceRecommendations[0] ?? null,
+    [practiceRecommendations],
+  );
+
+  const homePracticeMission = useMemo(
+    () =>
+      homePracticeRecommendation
+        ? practiceMissions.find((mission) => mission.id === homePracticeRecommendation.id) ?? null
+        : null,
+    [homePracticeRecommendation, practiceMissions],
+  );
+
   const weeklyPracticePlanSummary = useMemo(
     () =>
       buildWeeklyPracticePlanHomeSummary({
@@ -442,6 +510,45 @@ export default function HomeDashboardScreen({ navigation }: Props): JSX.Element 
       }),
     [practiceGoalNow, practiceHistory, practiceMissions, weeklyGoalSettings.targetMissionsPerWeek],
   );
+
+  const homePracticeRecommendationReason = useMemo(() => {
+    if (!homePracticeRecommendation) return null;
+    switch (homePracticeRecommendation.reason) {
+      case 'focus_area':
+        return t('practice.missionRecommendations.reason.focus_area');
+      case 'goal_progress':
+        return t('practice.missionRecommendations.reason.goal_progress');
+      default:
+        return t('practice.missionRecommendations.reason.fallback');
+    }
+  }, [homePracticeRecommendation, t]);
+
+  const homePracticeRecommendationContext = useMemo<PracticeRecommendationContext | null>(() => {
+    if (!homePracticeRecommendation || !homePracticeMission || practiceRecommendationsSuppressed) return null;
+    const algorithmVersion = homePracticeRecommendation.algorithmVersion ?? 'v1';
+    const focusArea = homePracticeRecommendation.focusArea ?? (homePracticeMission as any)?.focusArea;
+
+    return {
+      source: 'practice_recommendations',
+      surface: 'mobile_home_practice',
+      rank: homePracticeRecommendation.rank,
+      focusArea,
+      reasonKey: homePracticeRecommendation.reason,
+      algorithmVersion,
+      experiment: {
+        experimentKey: practiceRecommendationsExperiment.experimentKey,
+        experimentBucket: practiceRecommendationsExperiment.experimentBucket,
+        experimentVariant: practiceRecommendationsExperiment.experimentVariant,
+      },
+    };
+  }, [
+    homePracticeMission,
+    homePracticeRecommendation,
+    practiceRecommendationsExperiment.experimentBucket,
+    practiceRecommendationsExperiment.experimentKey,
+    practiceRecommendationsExperiment.experimentVariant,
+    practiceRecommendationsSuppressed,
+  ]);
 
   const practicePlanCopy = useMemo(() => {
     if (!weeklyPracticePlanSummary.hasPlan) return null;
@@ -483,6 +590,46 @@ export default function HomeDashboardScreen({ navigation }: Props): JSX.Element 
     experimentVariant,
     practiceGoalProgress,
     shouldRenderWeeklyGoalNudge,
+    telemetryClient,
+  ]);
+
+  useEffect(() => {
+    if (
+      loading ||
+      !homePracticeRecommendation ||
+      !homePracticeMission ||
+      practiceRecommendationsSuppressed ||
+      practiceRecommendationImpressionsRef.current.has(homePracticeRecommendation.id)
+    )
+      return;
+
+    const algorithmVersion = homePracticeRecommendation.algorithmVersion ?? 'v1';
+    const focusArea = homePracticeRecommendation.focusArea ?? (homePracticeMission as any)?.focusArea;
+
+    emitPracticeMissionRecommendationShown(telemetryClient, {
+      missionId: homePracticeRecommendation.id,
+      reason: homePracticeRecommendation.reason,
+      rank: homePracticeRecommendation.rank,
+      surface: 'mobile_home_practice',
+      focusArea,
+      algorithmVersion,
+      experiment: {
+        experimentKey: practiceRecommendationsExperiment.experimentKey,
+        experimentBucket: practiceRecommendationsExperiment.experimentBucket,
+        experimentVariant: practiceRecommendationsExperiment.experimentVariant,
+      },
+    });
+
+    practiceRecommendationImpressionsRef.current.add(homePracticeRecommendation.id);
+  }, [
+    homePracticeMission,
+    homePracticeRecommendation,
+    loading,
+    practiceRecommendationImpressionsRef,
+    practiceRecommendationsExperiment.experimentBucket,
+    practiceRecommendationsExperiment.experimentKey,
+    practiceRecommendationsExperiment.experimentVariant,
+    practiceRecommendationsSuppressed,
     telemetryClient,
   ]);
 
@@ -745,6 +892,52 @@ export default function HomeDashboardScreen({ navigation }: Props): JSX.Element 
       setSharingWeekly(false);
     }
   }, [weeklySummary, weeklyTopCategory]);
+
+  const handleStartHomePracticeRecommendation = useCallback(() => {
+    if (!homePracticeRecommendation || !homePracticeMission) return;
+
+    const algorithmVersion = homePracticeRecommendation.algorithmVersion ?? 'v1';
+    const focusArea = homePracticeRecommendation.focusArea ?? (homePracticeMission as any)?.focusArea;
+
+    if (!practiceRecommendationsSuppressed) {
+      emitPracticeMissionRecommendationClicked(telemetryClient, {
+        missionId: homePracticeRecommendation.id,
+        reason: homePracticeRecommendation.reason,
+        rank: homePracticeRecommendation.rank,
+        surface: 'mobile_home_practice',
+        entryPoint: 'home_card',
+        focusArea,
+        algorithmVersion,
+        experiment: {
+          experimentKey: practiceRecommendationsExperiment.experimentKey,
+          experimentBucket: practiceRecommendationsExperiment.experimentBucket,
+          experimentVariant: practiceRecommendationsExperiment.experimentVariant,
+        },
+      });
+    }
+
+    emitPracticeMissionStart(telemetryClient, {
+      missionId: homePracticeRecommendation.id,
+      sourceSurface: 'mobile_home_practice',
+      recommendation: homePracticeRecommendationContext ?? undefined,
+    });
+
+    navigation.navigate('RangeQuickPracticeStart', {
+      missionId: homePracticeRecommendation.id,
+      entrySource: 'range_home',
+      practiceRecommendationContext: homePracticeRecommendationContext ?? undefined,
+    });
+  }, [
+    homePracticeMission,
+    homePracticeRecommendation,
+    homePracticeRecommendationContext,
+    navigation,
+    practiceRecommendationsExperiment.experimentBucket,
+    practiceRecommendationsExperiment.experimentKey,
+    practiceRecommendationsExperiment.experimentVariant,
+    practiceRecommendationsSuppressed,
+    telemetryClient,
+  ]);
 
   const handleStartPracticeRecommendation = useCallback(() => {
     if (!practiceRecommendation) return;
@@ -1045,6 +1238,21 @@ export default function HomeDashboardScreen({ navigation }: Props): JSX.Element 
         <Text style={styles.cardBody} testID="practice-snippet">
           {practiceHeadline}
         </Text>
+        {homePracticeRecommendation && homePracticeMission ? (
+          <View style={[styles.recommendationBlock, styles.homeRecommendation]} testID="home-practice-recommendation">
+            <Text style={styles.cardOverline}>{t('practice.missionRecommendations.badge')}</Text>
+            <Text style={styles.cardTitle}>{t(homePracticeMission.title)}</Text>
+            {homePracticeRecommendationReason ? (
+              <Text style={styles.muted}>{homePracticeRecommendationReason}</Text>
+            ) : null}
+            <TouchableOpacity
+              onPress={handleStartHomePracticeRecommendation}
+              testID="home-practice-recommendation-cta"
+            >
+              <Text style={styles.link}>{t('home_dashboard_practice_next_cta')}</Text>
+            </TouchableOpacity>
+          </View>
+        ) : null}
         {practiceRecommendationCopy ? (
           <View style={styles.recommendationBlock} testID="practice-next-mission">
             <View style={styles.rowSpaceBetween}>
@@ -1230,6 +1438,11 @@ const styles = StyleSheet.create({
   recommendationBlock: {
     gap: 6,
     paddingVertical: 4,
+  },
+  homeRecommendation: {
+    backgroundColor: '#f8fafc',
+    padding: 12,
+    borderRadius: 10,
   },
   progressBlock: {
     gap: 6,
