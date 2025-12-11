@@ -109,7 +109,7 @@ describe('recommendPracticeMissions', () => {
     ]);
   });
 
-  it('uses v2 ranking for enabled experiment users', () => {
+  it('uses v2 ranking for treatment experiment users', () => {
     const recommendations = recommendPracticeMissions({
       context: {
         ...baseContext,
@@ -137,7 +137,7 @@ describe('recommendPracticeMissions', () => {
         },
         { id: 'mission-3', focusArea: 'driving', priorityScore: 30 },
       ],
-      experimentVariant: 'enabled',
+      experimentVariant: 'treatment',
     });
 
     expect(recommendations).toEqual([
@@ -173,7 +173,7 @@ describe('recommendPracticeMissions', () => {
         { id: 'mission-2', focusArea: 'approach' },
         { id: 'mission-3', focusArea: 'driving' },
       ],
-      experimentVariant: 'enabled',
+      experimentVariant: 'treatment',
     });
 
     expect(recommendations).toEqual([
@@ -191,6 +191,21 @@ describe('recommendPracticeMissions', () => {
         { id: 'mission-2', focusArea: 'approach' },
       ],
       experimentVariant: 'disabled',
+    });
+
+    expect(recommendations).toEqual([
+      { id: 'mission-1', rank: 1, reason: 'goal_progress', algorithmVersion: 'v1', focusArea: 'driving' },
+    ]);
+  });
+
+  it('uses v1 ranking for control experiment users', () => {
+    const recommendations = recommendPracticeMissions({
+      context: baseContext,
+      missions: [
+        { id: 'mission-1', focusArea: 'driving' },
+        { id: 'mission-2', focusArea: 'approach' },
+      ],
+      experimentVariant: 'control',
     });
 
     expect(recommendations).toEqual([

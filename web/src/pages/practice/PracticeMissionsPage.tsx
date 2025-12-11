@@ -323,6 +323,10 @@ export default function PracticeMissionsPage(): JSX.Element {
     [experimentUserId],
   );
 
+  const recommendationsSuppressed =
+    practiceRecommendationsExperiment.experimentVariant === "disabled" ||
+    !practiceRecommendationsExperiment.enabled;
+
   const targetMissionsPerWeek = weeklyGoalSettings.targetMissionsPerWeek;
 
   const practiceReadinessSummary = useMemo(
@@ -337,7 +341,7 @@ export default function PracticeMissionsPage(): JSX.Element {
 
   const practiceRecommendations = useMemo(
     () =>
-      loading || !practiceRecommendationsExperiment.enabled
+      loading || recommendationsSuppressed
         ? []
         : recommendPracticeMissions({
             context: practiceDecisionContext,
@@ -357,18 +361,18 @@ export default function PracticeMissionsPage(): JSX.Element {
       loading,
       missions,
       practiceDecisionContext,
-      practiceRecommendationsExperiment.enabled,
       practiceRecommendationsExperiment.experimentVariant,
+      recommendationsSuppressed,
     ],
   );
 
   const recommendationByMissionId = useMemo(() => {
     const map = new Map<string, RecommendedMission>();
-    if (practiceRecommendationsExperiment.enabled) {
+    if (!recommendationsSuppressed) {
       practiceRecommendations.forEach((rec) => map.set(rec.id, rec));
     }
     return map;
-  }, [practiceRecommendations, practiceRecommendationsExperiment.enabled, missions]);
+  }, [practiceRecommendations, recommendationsSuppressed, missions]);
 
   const recommendationImpressionsSentRef = useRef(new Set<string>());
 
@@ -405,7 +409,7 @@ export default function PracticeMissionsPage(): JSX.Element {
   );
 
   useEffect(() => {
-    if (loading || practiceRecommendations.length === 0 || !practiceRecommendationsExperiment.enabled) return;
+    if (loading || practiceRecommendations.length === 0 || recommendationsSuppressed) return;
 
     practiceRecommendations.forEach((rec) => {
       if (recommendationImpressionsSentRef.current.has(rec.id)) return;
@@ -431,10 +435,10 @@ export default function PracticeMissionsPage(): JSX.Element {
     loading,
     missions,
     practiceRecommendations,
-    practiceRecommendationsExperiment.enabled,
     practiceRecommendationsExperiment.experimentBucket,
     practiceRecommendationsExperiment.experimentKey,
     practiceRecommendationsExperiment.experimentVariant,
+    recommendationsSuppressed,
   ]);
 
   useEffect(() => {

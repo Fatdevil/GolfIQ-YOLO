@@ -289,6 +289,10 @@ export default function PracticeMissionsScreen({ navigation, route }: Props): JS
     [],
   );
 
+  const recommendationsSuppressed =
+    practiceRecommendationsExperiment.experimentVariant === 'disabled' ||
+    !practiceRecommendationsExperiment.enabled;
+
   const practiceReadinessSummary = useMemo(
     () => buildPracticeReadinessSummary({ history: state.history, goalSettings: weeklyGoalSettings }),
     [state.history, weeklyGoalSettings],
@@ -301,7 +305,7 @@ export default function PracticeMissionsScreen({ navigation, route }: Props): JS
 
   const practiceRecommendations = useMemo(
     () =>
-      state.loading || !practiceRecommendationsExperiment.enabled
+      state.loading || recommendationsSuppressed
         ? []
         : recommendPracticeMissions({
             context: practiceDecisionContext,
@@ -319,8 +323,8 @@ export default function PracticeMissionsScreen({ navigation, route }: Props): JS
           }),
     [
       practiceDecisionContext,
-      practiceRecommendationsExperiment.enabled,
       practiceRecommendationsExperiment.experimentVariant,
+      recommendationsSuppressed,
       state.loading,
       state.missions,
     ],
@@ -328,23 +332,18 @@ export default function PracticeMissionsScreen({ navigation, route }: Props): JS
 
   const recommendationByMissionId = useMemo(() => {
     const map = new Map<string, RecommendedMission>();
-    if (practiceRecommendationsExperiment.enabled) {
+    if (!recommendationsSuppressed) {
       practiceRecommendations.forEach((rec) => {
         map.set(rec.id, rec);
       });
     }
     return map;
-  }, [practiceRecommendations, practiceRecommendationsExperiment.enabled, state.missions]);
+  }, [practiceRecommendations, recommendationsSuppressed, state.missions]);
 
   const recommendationImpressionsSentRef = useRef(new Set<string>());
 
   useEffect(() => {
-    if (
-      state.loading ||
-      practiceRecommendations.length === 0 ||
-      !practiceRecommendationsExperiment.enabled
-    )
-      return;
+    if (state.loading || practiceRecommendations.length === 0 || recommendationsSuppressed) return;
 
     practiceRecommendations.forEach((rec) => {
       if (recommendationImpressionsSentRef.current.has(rec.id)) return;
@@ -374,7 +373,7 @@ export default function PracticeMissionsScreen({ navigation, route }: Props): JS
     practiceRecommendationsExperiment.experimentBucket,
     practiceRecommendationsExperiment.experimentKey,
     practiceRecommendationsExperiment.experimentVariant,
-    practiceRecommendationsExperiment.enabled,
+    recommendationsSuppressed,
     state.loading,
     state.missions,
   ]);

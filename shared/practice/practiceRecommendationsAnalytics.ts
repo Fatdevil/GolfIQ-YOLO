@@ -66,7 +66,11 @@ function sanitizeExperiment(
     ? Math.max(0, Math.floor(experiment.experimentBucket))
     : 0;
   const variant: PracticeRecommendationsExperimentVariant =
-    experiment.experimentVariant === 'enabled' ? 'enabled' : 'disabled';
+    experiment.experimentVariant === 'treatment'
+      ? 'treatment'
+      : experiment.experimentVariant === 'disabled'
+        ? 'disabled'
+        : 'control';
   return {
     experimentKey: 'practice_recommendations',
     experimentBucket: bucket,

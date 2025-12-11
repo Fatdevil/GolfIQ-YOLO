@@ -39,6 +39,7 @@ function rankMissionsV1({
   missions,
   maxResults,
 }: RecommendPracticeMissionsOptions & { context: PracticeDecisionContext }): RecommendedMission[] {
+  const limit = maxResults ?? missions.length;
   const focusArea = context.recentFocusAreas?.[0] ?? null;
   const normalizedFocusArea = normalizeFocusArea(focusArea);
 
@@ -48,7 +49,7 @@ function rankMissionsV1({
     const reason: RecommendedMission['reason'] = context.goalReached ? 'focus_area' : 'goal_progress';
     missions.forEach((mission) => {
       const missionFocus = normalizeFocusArea(mission.focusArea);
-      if (missionFocus === normalizedFocusArea && filtered.length < maxResults) {
+      if (missionFocus === normalizedFocusArea && filtered.length < limit) {
         filtered.push({
           id: mission.id,
           rank: filtered.length + 1,
@@ -61,7 +62,7 @@ function rankMissionsV1({
   }
 
   if (filtered.length === 0) {
-    missions.slice(0, maxResults).forEach((mission, index) => {
+    missions.slice(0, limit).forEach((mission, index) => {
       filtered.push({
         id: mission.id,
         rank: index + 1,
@@ -72,7 +73,7 @@ function rankMissionsV1({
     });
   }
 
-  return filtered.slice(0, maxResults);
+  return filtered.slice(0, limit);
 }
 
 function toTimestamp(value?: number | string | Date | null): number | null {
@@ -93,12 +94,13 @@ function rankMissionsV2({
   missions,
   maxResults,
 }: RecommendPracticeMissionsOptions & { context: PracticeDecisionContext }): RecommendedMission[] {
+  const limit = maxResults ?? missions.length;
   const focusAreas = Array.isArray(context.recentFocusAreas) ? context.recentFocusAreas : [];
   const primaryFocus = focusAreas[0] ?? null;
   const hasFocusSignals = Boolean(primaryFocus);
 
   if (!hasFocusSignals) {
-    return rankMissionsV1({ context, missions, maxResults });
+    return rankMissionsV1({ context, missions, maxResults: limit });
   }
 
   const now = Date.now();
@@ -165,7 +167,7 @@ function rankMissionsV2({
       if (a.matchesAnyFocus !== b.matchesAnyFocus) return Number(b.matchesAnyFocus) - Number(a.matchesAnyFocus);
       return a.mission.id.localeCompare(b.mission.id);
     })
-    .slice(0, maxResults);
+    .slice(0, limit);
 
   return sorted.map((entry, index) => {
     const reason: RecommendedMission['reason'] = entry.matchesAnyFocus
@@ -192,14 +194,20 @@ export function recommendPracticeMissions({
 }: RecommendPracticeMissionsOptions): RecommendedMission[] {
   if (!context) return [];
 
-  const normalizedVariant: PracticeRecommendationsExperimentVariant =
-    experimentVariant === 'enabled' ? 'enabled' : 'disabled';
+  const limit = maxResults ?? missions.length;
 
-  const useV2 = normalizedVariant === 'enabled';
+  const normalizedVariant: PracticeRecommendationsExperimentVariant =
+    experimentVariant === 'treatment'
+      ? 'treatment'
+      : experimentVariant === 'disabled'
+        ? 'disabled'
+        : 'control';
+
+  const useV2 = normalizedVariant === 'treatment';
 
   const ranked = useV2
-    ? rankMissionsV2({ context, missions, maxResults, experimentVariant: normalizedVariant })
-    : rankMissionsV1({ context, missions, maxResults, experimentVariant: normalizedVariant });
+    ? rankMissionsV2({ context, missions, maxResults: limit, experimentVariant: normalizedVariant })
+    : rankMissionsV1({ context, missions, maxResults: limit, experimentVariant: normalizedVariant });
 
-  return ranked.slice(0, maxResults);
+  return ranked.slice(0, limit);
 }

@@ -71,7 +71,7 @@ describe('practiceRecommendationsAnalytics', () => {
       experiment: {
         experimentKey: 'practice_recommendations',
         experimentBucket: 12,
-        experimentVariant: 'enabled',
+        experimentVariant: 'treatment',
       },
     });
 
@@ -89,7 +89,7 @@ describe('practiceRecommendationsAnalytics', () => {
       experiment: {
         experimentKey: 'practice_recommendations',
         experimentBucket: 12,
-        experimentVariant: 'enabled',
+        experimentVariant: 'treatment',
       },
     };
 

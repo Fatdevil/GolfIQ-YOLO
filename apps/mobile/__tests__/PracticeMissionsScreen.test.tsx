@@ -82,7 +82,7 @@ describe('PracticeMissionsScreen', () => {
     getPracticeRecommendationsExperimentMock.mockReturnValue({
       experimentKey: 'practice_recommendations',
       experimentBucket: 1,
-      experimentVariant: 'enabled',
+      experimentVariant: 'treatment',
       enabled: true,
     });
   });
@@ -382,7 +382,7 @@ describe('PracticeMissionsScreen', () => {
           experiment: {
             experimentKey: 'practice_recommendations',
             experimentBucket: 1,
-            experimentVariant: 'enabled',
+            experimentVariant: 'treatment',
           },
         }),
       );
@@ -404,7 +404,7 @@ describe('PracticeMissionsScreen', () => {
           experiment: {
             experimentKey: 'practice_recommendations',
             experimentBucket: 1,
-            experimentVariant: 'enabled',
+            experimentVariant: 'treatment',
           },
         }),
       );
@@ -432,6 +432,33 @@ describe('PracticeMissionsScreen', () => {
       String(call[0]).startsWith('practice_mission_recommendation_'),
     );
     expect(recommendationCalls).toHaveLength(0);
+  });
+
+  it('renders recommendations for control experiment users', async () => {
+    getPracticeRecommendationsExperimentMock.mockReturnValue({
+      experimentKey: 'practice_recommendations',
+      experimentBucket: 4,
+      experimentVariant: 'control',
+      enabled: true,
+    });
+    recommendPracticeMissionsMock.mockReturnValue([
+      { id: 'mission-high', rank: 1, reason: 'focus_area', algorithmVersion: 'v1' },
+    ] as any);
+
+    render(<PracticeMissionsScreen navigation={createNavigation()} route={createRoute()} />);
+
+    const row = await screen.findByTestId('practice-mission-item-mission-high');
+    expect(within(row).getByText(/^Recommended$/i)).toBeVisible();
+
+    await waitFor(() => {
+      expect(vi.mocked(safeEmit)).toHaveBeenCalledWith(
+        'practice_mission_recommendation_shown',
+        expect.objectContaining({
+          missionId: 'mission-high',
+          experiment: expect.objectContaining({ experimentVariant: 'control' }),
+        }),
+      );
+    });
   });
 
   it('does not emit recommendation analytics when none are available', async () => {

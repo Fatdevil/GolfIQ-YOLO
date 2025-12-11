@@ -170,7 +170,7 @@ describe("PracticeMissionsPage", () => {
     mockPracticeRecommendationsExperiment.mockReturnValue({
       experimentKey: "practice_recommendations",
       experimentBucket: 7,
-      experimentVariant: "enabled",
+      experimentVariant: "treatment",
       enabled: true,
     });
     mockLoadBag.mockReturnValue(createDefaultBag());
@@ -286,7 +286,7 @@ describe("PracticeMissionsPage", () => {
           experiment: {
             experimentKey: "practice_recommendations",
             experimentBucket: 7,
-            experimentVariant: "enabled",
+            experimentVariant: "treatment",
           },
         }),
       );
@@ -308,7 +308,7 @@ describe("PracticeMissionsPage", () => {
           experiment: {
             experimentKey: "practice_recommendations",
             experimentBucket: 7,
-            experimentVariant: "enabled",
+            experimentVariant: "treatment",
           },
         }),
       );
@@ -337,6 +337,33 @@ describe("PracticeMissionsPage", () => {
       String(call?.[0]?.event ?? "").startsWith("practice_mission_recommendation_"),
     );
     expect(recommendationCalls).toHaveLength(0);
+  });
+
+  it("renders recommendations for control experiment users", async () => {
+    mockPracticeRecommendationsExperiment.mockReturnValue({
+      experimentKey: "practice_recommendations",
+      experimentBucket: 9,
+      experimentVariant: "control",
+      enabled: true,
+    });
+    mockRecommendPracticeMissions.mockReturnValue([
+      { id: "practice_fill_gap:7i:8i", rank: 1, reason: "goal_progress", algorithmVersion: "v1" },
+    ] as any);
+    mockLoadHistory.mockResolvedValue([]);
+
+    renderWithRouter();
+
+    await waitFor(() => expect(mockRecommendPracticeMissions).toHaveBeenCalled());
+    await screen.findByText(/Recommended to help reach this week’s practice goal/i);
+
+    await waitFor(() => {
+      expect(mockTelemetry).toHaveBeenCalledWith(
+        expect.objectContaining({
+          event: "practice_mission_recommendation_shown",
+          experiment: expect.objectContaining({ experimentVariant: "control" }),
+        }),
+      );
+    });
   });
 
   it("does not emit recommendation analytics when none are returned", async () => {
