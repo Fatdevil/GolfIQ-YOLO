@@ -495,6 +495,14 @@ export const en = {
       nextPracticeHelper: 'Based on your bag readiness and practice history, we recommend:',
       nextPracticeCta: 'Start mission',
     },
+    story: {
+      practiceTitle: 'Practice this week',
+      practiceSessions: '{{count}} practice sessions',
+      practiceShots: '{{count}} shots logged',
+      practiceGoalReached: 'Weekly goal reached',
+      practiceGoalProgress: 'Weekly goal: {{progress}}/{{target}}',
+      practiceGoalUnavailable: 'Weekly goal not set',
+    },
   },
   strokesGained: {
     title: 'Strokes Gained v1',
@@ -717,6 +725,9 @@ export const en = {
         ready: 'Bag looks calibrated with balanced coverage.',
       },
       tuneCta: 'Tune my bag',
+      practiceLine: 'This week: {{sessions}} sessions · {{shots}} shots',
+      practiceGoalLine: 'Weekly goal: {{progress}}/{{target}}',
+      practiceGoalReached: 'Weekly goal reached',
     },
     practice: {
       recommendedTitle: 'Recommended practice',

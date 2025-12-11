@@ -10,6 +10,7 @@ import { createRoundShareLink } from '@app/api/shareClient';
 import { fetchPlayerBag } from '@app/api/bagClient';
 import { fetchBagStats } from '@app/api/bagStatsClient';
 import { loadPracticeMissionHistory } from '@app/storage/practiceMissionHistory';
+import { loadWeeklyPracticeGoalSettings } from '@app/storage/practiceGoalSettings';
 import { getTopPracticeRecommendationForRecap } from '@shared/caddie/bagPracticeRecommendations';
 import { safeEmit } from '@app/telemetry';
 
@@ -21,6 +22,9 @@ vi.mock('@app/api/shareClient', () => ({
 vi.mock('@app/api/bagClient');
 vi.mock('@app/api/bagStatsClient');
 vi.mock('@app/storage/practiceMissionHistory');
+vi.mock('@app/storage/practiceGoalSettings', () => ({
+  loadWeeklyPracticeGoalSettings: vi.fn(),
+}));
 vi.mock('@shared/caddie/bagPracticeRecommendations', () => ({
   getTopPracticeRecommendationForRecap: vi.fn(),
 }));
@@ -32,6 +36,7 @@ const mockCreateRoundShareLink = createRoundShareLink as unknown as Mock;
 const mockFetchPlayerBag = fetchPlayerBag as unknown as Mock;
 const mockFetchBagStats = fetchBagStats as unknown as Mock;
 const mockLoadPracticeHistory = loadPracticeMissionHistory as unknown as Mock;
+const mockLoadWeeklyPracticeGoalSettings = loadWeeklyPracticeGoalSettings as unknown as Mock;
 const mockGetTopPracticeRecommendationForRecap = getTopPracticeRecommendationForRecap as unknown as Mock;
 
 const sampleRecap = {
@@ -102,6 +107,7 @@ describe('RoundRecapScreen', () => {
     mockFetchPlayerBag.mockResolvedValue(sampleBag);
     mockFetchBagStats.mockResolvedValue(sampleBagStats);
     mockLoadPracticeHistory.mockResolvedValue([]);
+    mockLoadWeeklyPracticeGoalSettings.mockResolvedValue({ targetMissionsPerWeek: 3 });
     mockGetTopPracticeRecommendationForRecap.mockReturnValue(null);
   });
 
@@ -207,6 +213,7 @@ describe('RoundRecapScreen', () => {
     expect(readinessCard).toBeTruthy();
     expect(getByText(/Bag readiness/)).toBeTruthy();
     expect(getByText(/Suggestion:/)).toBeTruthy();
+    expect(getByText(/This week: 0 sessions · 0 shots/)).toBeTruthy();
   });
 
   it('navigates to My Bag from the recap panel', async () => {

@@ -116,6 +116,11 @@ export const sv = {
         streak: 'På en streak',
       },
     },
+    readinessRecap: {
+      practiceLine: 'Den här veckan: {{sessions}} pass · {{shots}} slag',
+      practiceGoalLine: 'Veckomål: {{progress}}/{{target}}',
+      practiceGoalReached: 'Veckomål uppnått',
+    },
   },
   home_dashboard_practice_next_title: 'Nästa mission',
   home_dashboard_practice_next_cta: 'Starta mission',
@@ -127,6 +132,14 @@ export const sv = {
       nextPracticeTitle: 'Nästa träningsmission',
       nextPracticeHelper: 'Baserat på din bag och träningshistorik rekommenderar vi:',
       nextPracticeCta: 'Starta mission',
+    },
+    story: {
+      practiceTitle: 'Träning den här veckan',
+      practiceSessions: '{{count}} träningspass',
+      practiceShots: '{{count}} slag loggade',
+      practiceGoalReached: 'Veckomål uppnått',
+      practiceGoalProgress: 'Veckomål: {{progress}}/{{target}}',
+      practiceGoalUnavailable: 'Veckomål ej satt',
     },
   },
 };
