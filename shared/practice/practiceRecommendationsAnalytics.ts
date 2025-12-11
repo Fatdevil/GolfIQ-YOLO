@@ -13,6 +13,15 @@ export type PracticeMissionRecommendationExperiment = {
   experimentVariant: PracticeRecommendationsExperimentVariant;
 };
 
+export type PracticeRecommendationContext = {
+  source: 'practice_recommendations';
+  rank?: number | null;
+  focusArea?: string | null;
+  reasonKey?: PracticeMissionRecommendationReason | string | null;
+  experiment?: PracticeMissionRecommendationExperiment;
+  algorithmVersion?: string | null;
+};
+
 type PracticeMissionRecommendationBase = {
   missionId: string;
   reason: PracticeMissionRecommendationReason;
@@ -62,6 +71,24 @@ function sanitizeExperiment(
     experimentKey: 'practice_recommendations',
     experimentBucket: bucket,
     experimentVariant: variant,
+  };
+}
+
+export function sanitizePracticeRecommendationContext(
+  context?: PracticeRecommendationContext,
+): PracticeRecommendationContext | undefined {
+  if (!context) return undefined;
+
+  return {
+    source: 'practice_recommendations',
+    rank:
+      typeof context.rank === 'number' && Number.isFinite(context.rank)
+        ? Math.max(1, Math.round(context.rank))
+        : undefined,
+    focusArea: sanitizeNullableString(context.focusArea),
+    reasonKey: sanitizeNullableString(context.reasonKey),
+    experiment: sanitizeExperiment(context.experiment),
+    algorithmVersion: sanitizeNullableString(context.algorithmVersion),
   };
 }
 

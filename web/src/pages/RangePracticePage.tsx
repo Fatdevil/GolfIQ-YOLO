@@ -87,6 +87,7 @@ import {
   type MissionProgress,
   type PracticeMissionHistoryEntry,
 } from "@shared/practice/practiceHistory";
+import type { PracticeRecommendationContext } from "@shared/practice/practiceRecommendationsAnalytics";
 import { fetchBagStats } from "@/api/bagStatsClient";
 import { mapBagStateToPlayerBag } from "@/bag/utils";
 import { buildBagReadinessOverview } from "@shared/caddie/bagReadiness";
@@ -282,6 +283,16 @@ export default function RangePracticePage() {
     }
     return undefined;
   }, [searchParams]);
+  const recommendationContext = React.useMemo<PracticeRecommendationContext | undefined>(() => {
+    const raw = searchParams.get("recommendation");
+    if (!raw) return undefined;
+    try {
+      const parsed = JSON.parse(raw) as PracticeRecommendationContext;
+      return parsed ?? undefined;
+    } catch {
+      return undefined;
+    }
+  }, [searchParams]);
 
   React.useEffect(() => {
     if (accessLoading) return;
@@ -349,8 +360,12 @@ export default function RangePracticePage() {
     if (!missionId) return;
     if (lastStartedMissionId.current === missionId) return;
     lastStartedMissionId.current = missionId;
-    trackPracticeMissionStart({ missionId, sourceSurface: "range_practice" });
-  }, [missionId]);
+    trackPracticeMissionStart({
+      missionId,
+      sourceSurface: "range_practice",
+      recommendation: recommendationContext,
+    });
+  }, [missionId, recommendationContext]);
 
   const emitQuickPracticeSessionStart = React.useCallback(() => {
     if (!missionPrefReady) return;
@@ -569,7 +584,7 @@ export default function RangePracticePage() {
       startedAt: session.startedAt,
       endedAt: session.endedAt,
       missionTargetReps,
-    });
+    }, recommendationContext);
 
     if (!isMissionSession) {
       trackQuickPracticeSessionComplete({

@@ -308,6 +308,39 @@ describe('PracticeMissionsScreen', () => {
     });
   });
 
+  it('threads recommendation context into mission start telemetry and navigation', async () => {
+    const navigation = createNavigation();
+    recommendPracticeMissionsMock.mockReturnValue([
+      { id: 'mission-high', rank: 2, reason: 'goal_progress' },
+    ] as any);
+
+    render(<PracticeMissionsScreen navigation={navigation} route={createRoute()} />);
+
+    const row = await screen.findByTestId('practice-mission-item-mission-high');
+    fireEvent.click(row);
+
+    expect(vi.mocked(safeEmit)).toHaveBeenCalledWith(
+      'practice_mission_start',
+      expect.objectContaining({
+        missionId: 'mission-high',
+        sourceSurface: 'missions_list',
+        recommendation: expect.objectContaining({
+          source: 'practice_recommendations',
+          rank: 2,
+          reasonKey: 'goal_progress',
+          algorithmVersion: 'v1',
+          experiment: expect.objectContaining({ experimentKey: 'practice_recommendations' }),
+        }),
+      }),
+    );
+    expect(navigation.navigate).toHaveBeenCalledWith(
+      'RangeQuickPracticeStart',
+      expect.objectContaining({
+        practiceRecommendationContext: expect.objectContaining({ rank: 2, reasonKey: 'goal_progress' }),
+      }),
+    );
+  });
+
   it('shows recommended badge and reason when available', async () => {
     recommendPracticeMissionsMock.mockReturnValue([
       { id: 'mission-high', rank: 1, reason: 'focus_area' },

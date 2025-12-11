@@ -612,6 +612,35 @@ describe("PracticeMissionsPage", () => {
     );
   });
 
+  it("threads recommendation context into mission start telemetry", async () => {
+    mockRecommendPracticeMissions.mockReturnValue([
+      { id: "practice_fill_gap:7i:8i", rank: 1, reason: "goal_progress" },
+    ] as any);
+    mockLoadHistory.mockResolvedValue([]);
+
+    renderWithRouter();
+
+    const [list] = await screen.findAllByTestId("practice-missions-list");
+    const rows = within(list).getAllByTestId("practice-mission-item");
+
+    await userEvent.click(rows[0]);
+
+    await waitFor(() => {
+      expect(mockTelemetry).toHaveBeenCalledWith(
+        expect.objectContaining({
+          event: "practice_mission_start",
+          missionId: "practice_fill_gap:7i:8i",
+          recommendation: expect.objectContaining({
+            source: "practice_recommendations",
+            rank: 1,
+            reasonKey: "goal_progress",
+            experiment: expect.objectContaining({ experimentKey: "practice_recommendations" }),
+          }),
+        }),
+      );
+    });
+  });
+
   it("renders a weekly plan and separates remaining missions", async () => {
     mockLoadHistory.mockResolvedValue([
       { id: "entry-1", missionId: "mission-a", startedAt: "2024-02-01T00:00:00Z", status: "completed" },

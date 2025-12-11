@@ -38,7 +38,9 @@ import { recommendPracticeMissions, type RecommendedMission } from '@shared/prac
 import {
   emitPracticeMissionRecommendationClicked,
   emitPracticeMissionRecommendationShown,
+  type PracticeRecommendationContext,
 } from '@shared/practice/practiceRecommendationsAnalytics';
+import { emitPracticeMissionStart } from '@shared/practice/practiceSessionAnalytics';
 import { getPracticeRecommendationsExperiment } from '@shared/experiments/flags';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'PracticeMissions'>;
@@ -519,6 +521,22 @@ export default function PracticeMissionsScreen({ navigation, route }: Props): JS
   const handleSelectMission = (missionId: string, planRank?: number) => {
     const recommendation = recommendationByMissionId.get(missionId);
     const mission = state.missions.find((candidate) => candidate.id === missionId);
+    let recommendationContext: PracticeRecommendationContext | undefined;
+
+    if (recommendation && practiceRecommendationsExperiment.enabled) {
+      recommendationContext = {
+        source: 'practice_recommendations',
+        rank: recommendation.rank,
+        focusArea: (mission as any)?.focusArea,
+        reasonKey: recommendation.reason,
+        algorithmVersion: 'v1',
+        experiment: {
+          experimentKey: practiceRecommendationsExperiment.experimentKey,
+          experimentBucket: practiceRecommendationsExperiment.experimentBucket,
+          experimentVariant: practiceRecommendationsExperiment.experimentVariant,
+        },
+      };
+    }
 
     if (recommendation && practiceRecommendationsExperiment.enabled) {
       emitPracticeMissionRecommendationClicked(
@@ -548,7 +566,10 @@ export default function PracticeMissionsScreen({ navigation, route }: Props): JS
       });
     }
 
-    safeEmit('practice_mission_start', { missionId, sourceSurface: 'missions_list' });
+    emitPracticeMissionStart(
+      { emit: safeEmit },
+      { missionId, sourceSurface: 'missions_list', recommendation: recommendationContext },
+    );
 
     const latestEntry = [...state.history]
       .filter((entry) => entry.missionId === missionId)
@@ -559,7 +580,11 @@ export default function PracticeMissionsScreen({ navigation, route }: Props): JS
       return;
     }
 
-    navigation.navigate('RangeQuickPracticeStart', { missionId, entrySource: 'missions' });
+    navigation.navigate('RangeQuickPracticeStart', {
+      missionId,
+      entrySource: 'missions',
+      practiceRecommendationContext: recommendationContext,
+    });
   };
 
   if (state.loading) {

@@ -17,6 +17,7 @@ import type {
   PracticeMissionHistoryEntry,
   PracticeMissionOutcome,
 } from "@shared/practice/practiceHistory";
+import type { PracticeRecommendationContext } from "@shared/practice/practiceRecommendationsAnalytics";
 import { loadWeeklyPracticeGoalSettings } from "@/practice/practiceGoalSettings";
 
 export type PracticeProgressOverview = {
@@ -62,7 +63,10 @@ async function persistHistory(history: PracticeMissionHistoryEntry[]): Promise<v
 
 export async function recordPracticeMissionOutcome(
   outcome: PracticeMissionOutcome,
-  options?: { source?: "practice_mission" | "quick_practice" | "round_recap" },
+  options?: {
+    source?: "practice_mission" | "quick_practice" | "round_recap";
+    recommendation?: PracticeRecommendationContext;
+  },
 ): Promise<PracticeMissionHistoryEntry[]> {
   const history = await loadPracticeMissionHistory();
   const now = new Date(Date.now());
@@ -78,6 +82,7 @@ export async function recordPracticeMissionOutcome(
     trackPracticeMissionComplete({
       missionId: outcome.missionId,
       samplesCount: outcome.completedSampleCount ?? null,
+      recommendation: options?.recommendation,
     });
 
     const goalAfter = buildWeeklyPracticeGoalProgress({
