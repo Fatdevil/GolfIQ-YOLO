@@ -16,6 +16,7 @@ import { fetchBagStats } from '@app/api/bagStatsClient';
 import {
   fetchCurrentRound,
   fetchLatestCompletedRound,
+  fetchRoundRecap,
   startRound,
   type RoundInfo,
   type RoundSummaryWithRoundInfo,
@@ -74,6 +75,10 @@ import {
 } from '@shared/practice/practiceRecommendationsAnalytics';
 import { emitPracticeMissionStart } from '@shared/practice/practiceSessionAnalytics';
 import { getExperimentBucket, getExperimentVariant, getPracticeRecommendationsExperiment, isInExperiment } from '@shared/experiments/flags';
+import {
+  findLatestStrokesGainedLightFocus,
+  type StrokesGainedLightFocusInsight,
+} from '@shared/stats/strokesGainedLightFocus';
 
 const CALIBRATION_SAMPLE_THRESHOLD = 5;
 const TARGET_ROUNDS_PER_WEEK = 3;
@@ -216,6 +221,7 @@ export default function HomeDashboardScreen({ navigation }: Props): JSX.Element 
   const [weeklyGoalSettings, setWeeklyGoalSettings] = useState(
     getDefaultWeeklyPracticeGoalSettings(),
   );
+  const [sgLightFocus, setSgLightFocus] = useState<StrokesGainedLightFocusInsight | null>(null);
   const planCompletedViewedRef = useRef(false);
   const goalNudgeShownRef = useRef<string | null>(null);
   const practiceRecommendationImpressionsRef = useRef(new Set<string>());
@@ -373,6 +379,14 @@ export default function HomeDashboardScreen({ navigation }: Props): JSX.Element 
     return t('practice_goal_streak_label', { count: streakWeeks });
   }, [practiceGoalStreak.currentStreakWeeks, t]);
 
+  useEffect(() => {
+    if (!sgLightFocus) return;
+    safeEmit('practice_focus_entry_shown', {
+      surface: 'mobile_home_sg_light_focus',
+      focusCategory: sgLightFocus.focusCategory,
+    });
+  }, [sgLightFocus]);
+
   const practiceGoalCopy = useMemo(() => {
     const summary = practiceGoalProgress
       ? t('practice.goals.summary', {
@@ -460,6 +474,38 @@ export default function HomeDashboardScreen({ navigation }: Props): JSX.Element 
   const practiceRecommendationsSuppressed =
     practiceRecommendationsExperiment.experimentVariant === 'disabled' ||
     !practiceRecommendationsExperiment.enabled;
+
+  useEffect(() => {
+    let cancelled = false;
+
+    if (practiceRecommendationsSuppressed || !latestRound) {
+      setSgLightFocus(null);
+      return;
+    }
+
+    fetchRoundRecap(latestRound.roundId)
+      .then((recap) => {
+        if (cancelled) return;
+        const focus = findLatestStrokesGainedLightFocus([
+          {
+            roundId: recap.roundId,
+            finishedAt: latestRound.endedAt ?? recap.date,
+            strokesGainedLight: recap.strokesGainedLight ?? null,
+          },
+        ]);
+        setSgLightFocus(focus);
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          console.warn('Home dashboard SG Light focus load failed', err);
+          setSgLightFocus(null);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [latestRound, practiceRecommendationsSuppressed]);
 
   const practiceRecommendations = useMemo(
     () =>
@@ -953,6 +999,19 @@ export default function HomeDashboardScreen({ navigation }: Props): JSX.Element 
     }
   }, [navigation, practiceRecommendation]);
 
+  const handlePracticeFromSgFocus = useCallback(() => {
+    if (!sgLightFocus) return;
+    safeEmit('practice_focus_entry_clicked', {
+      surface: 'mobile_home_sg_light_focus',
+      focusCategory: sgLightFocus.focusCategory,
+    });
+    navigation.navigate('PracticeMissions', {
+      source: 'mobile_home_sg_light_focus',
+      practiceRecommendationSource: 'mobile_home_sg_light_focus',
+      strokesGainedLightFocusCategory: sgLightFocus.focusCategory,
+    });
+  }, [navigation, sgLightFocus]);
+
   if (loading) {
     return (
       <View style={styles.center}>
@@ -1153,6 +1212,19 @@ export default function HomeDashboardScreen({ navigation }: Props): JSX.Element 
           <Text style={styles.cardBody}>{t('home_dashboard_weekly_empty')}</Text>
         )}
       </View>
+
+      {sgLightFocus ? (
+        <View style={styles.card} testID="home-sg-focus-card">
+          <Text style={styles.cardTitle}>{t('home_dashboard_focus_title')}</Text>
+          <Text style={styles.cardBody} testID="home-sg-focus-label">
+            {t(sgLightFocus.labelKey)}
+          </Text>
+          <Text style={styles.muted}>{t('home_dashboard_focus_helper')}</Text>
+          <TouchableOpacity onPress={handlePracticeFromSgFocus} testID="home-sg-focus-cta">
+            <Text style={styles.link}>{t('home_dashboard_focus_cta')}</Text>
+          </TouchableOpacity>
+        </View>
+      ) : null}
 
       {practiceProgressModel ? (
         <TouchableOpacity

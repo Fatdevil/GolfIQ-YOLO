@@ -7,6 +7,8 @@ export type PracticeRecommendationSource =
   | 'home'
   | 'range'
   | 'round_recap_sg_light'
+  | 'mobile_home_sg_light_focus'
+  | 'mobile_round_story_sg_light_focus'
   | 'practice_missions'
   | 'other';
 

@@ -145,14 +145,14 @@ function categoryForShot(shot: ShotEvent, distanceStart: number | null): SgCateg
   return 'approach';
 }
 
-const MIN_CONFIDENCE = 0.3;
-const MIN_ABSOLUTE_DELTA = 0.2;
+export const STROKES_GAINED_LIGHT_MIN_CONFIDENCE = 0.3;
+export const STROKES_GAINED_LIGHT_MIN_ABSOLUTE_DELTA = 0.2;
 
 export function deriveStrokesGainedLightFocusCategory(
   summary: StrokesGainedLightSummary,
 ): StrokesGainedLightCategory | null {
   const eligible = summary?.byCategory?.filter(
-    (entry) => entry.confidence >= MIN_CONFIDENCE && Number.isFinite(entry.delta),
+    (entry) => entry.confidence >= STROKES_GAINED_LIGHT_MIN_CONFIDENCE && Number.isFinite(entry.delta),
   );
 
   if (!eligible?.length) {
@@ -161,7 +161,7 @@ export function deriveStrokesGainedLightFocusCategory(
 
   const worst = eligible.reduce((acc, curr) => (curr.delta < acc.delta ? curr : acc), eligible[0]);
 
-  if (worst.delta <= -MIN_ABSOLUTE_DELTA) {
+  if (worst.delta <= -STROKES_GAINED_LIGHT_MIN_ABSOLUTE_DELTA) {
     return worst.category;
   }
 

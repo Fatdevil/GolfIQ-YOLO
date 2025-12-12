@@ -86,8 +86,18 @@ export type RootStackParamList = {
     | undefined;
   PracticeMissions:
     | {
-        source?: 'home' | 'other' | 'round_recap_sg_light';
-        practiceRecommendationSource?: 'home' | 'other' | 'round_recap_sg_light';
+        source?:
+          | 'home'
+          | 'other'
+          | 'round_recap_sg_light'
+          | 'mobile_home_sg_light_focus'
+          | 'mobile_round_story_sg_light_focus';
+        practiceRecommendationSource?:
+          | 'home'
+          | 'other'
+          | 'round_recap_sg_light'
+          | 'mobile_home_sg_light_focus'
+          | 'mobile_round_story_sg_light_focus';
         strokesGainedLightFocusCategory?: StrokesGainedLightCategory;
       }
     | undefined;
