@@ -15,13 +15,14 @@ from pydantic import BaseModel, Field
 from server.api.user_header import UserIdHeader
 from server.features import is_clip_public
 from server.security import require_api_key
-from server.rounds.models import compute_round_summary
+from server.rounds.models import compute_round_category_stats, compute_round_summary
 from server.rounds.service import (
     RoundNotFound,
     RoundOwnershipError,
     RoundService,
     get_round_service,
 )
+from server.rounds.recap import StrokesGainedLightSummary, _build_strokes_gained_light
 from server.rounds.weekly_summary import (
     _select_completed_rounds,
     build_weekly_summary_response,
@@ -53,6 +54,7 @@ class RoundSharePayload(BaseModel):
     date: str | None = None
     headline: str | None = None
     highlights: list[str] = Field(default_factory=list)
+    strokesGainedLight: StrokesGainedLightSummary | None = None
 
     model_config = {"populate_by_name": True}
 
@@ -151,6 +153,16 @@ def _round_share_from_payload(shortlink: ShortLink) -> RoundSharePayload:
     score = summary.get("totalStrokes") or summary.get("total_strokes")
     to_par = summary.get("totalToPar") or summary.get("total_to_par")
 
+    sg_light_raw = payload.get("strokes_gained_light") or payload.get(
+        "strokesGainedLight"
+    )
+    sg_light = None
+    if sg_light_raw:
+        try:
+            sg_light = StrokesGainedLightSummary.model_validate(sg_light_raw)
+        except Exception:
+            sg_light = None
+
     return RoundSharePayload(
         roundId=payload.get("round_id") or payload.get("roundId"),
         courseName=payload.get("course_name")
@@ -161,6 +173,7 @@ def _round_share_from_payload(shortlink: ShortLink) -> RoundSharePayload:
         date=_format_date(date_value),
         headline=headline,
         highlights=[str(item) for item in highlights if item],
+        strokesGainedLight=sg_light,
     )
 
 
@@ -249,6 +262,13 @@ def create_round_share_link(
         ) from None
 
     summary = compute_round_summary(scores)
+    sg_light_summary = None
+    try:
+        category_stats = compute_round_category_stats(scores)
+        sg_light_summary = _build_strokes_gained_light(summary, category_stats)
+    except Exception:
+        sg_light_summary = None
+
     payload = {
         "kind": "round_recap",
         "round_id": round_id,
@@ -257,6 +277,11 @@ def create_round_share_link(
         "course_name": info.course_name or info.course_id,
         "ended_at": (info.ended_at or info.started_at).isoformat(),
     }
+
+    if sg_light_summary:
+        payload["strokes_gained_light"] = sg_light_summary.model_dump(
+            by_alias=True
+        )
 
     description = "Shared round recap"
     if info.course_id:
