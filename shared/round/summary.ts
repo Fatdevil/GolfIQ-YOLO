@@ -132,6 +132,7 @@ export function buildRoundSummary(round: RoundState, baselines: BaselineSet): Ro
   const clubMap = new Map<string, ClubAccumulator>();
   const holes: HoleRow[] = [];
   const allShots: ShotEvent[] = [];
+  const holePars: Record<number, number | undefined> = {};
 
   let strokesTotal = 0;
   let puttsTotal = 0;
@@ -171,7 +172,9 @@ export function buildRoundSummary(round: RoundState, baselines: BaselineSet): Ro
     if (!Number.isFinite(derived.par ?? NaN)) {
       toParKnown = false;
     } else {
-      toParSum += strokes - Number(derived.par);
+      const parNumber = Number(derived.par);
+      holePars[holeNo] = parNumber;
+      toParSum += strokes - parNumber;
     }
 
     const gir = derived.metrics?.gir ?? null;
@@ -198,7 +201,7 @@ export function buildRoundSummary(round: RoundState, baselines: BaselineSet): Ro
         const phase = resolvePhase(shot);
         phaseTotals[phase] += sgValue;
       }
-      allShots.push({ ...shot, par: derived.par });
+      allShots.push(shot);
       const clubName = normaliseClubName(shot.club);
       if (clubName) {
         const entry = clubMap.get(clubName) ?? {
@@ -237,7 +240,7 @@ export function buildRoundSummary(round: RoundState, baselines: BaselineSet): Ro
     phases: phaseTotals,
     clubs: computeClubRows(clubMap),
     holes,
-    strokesGainedLight: computeStrokesGainedLight(allShots, DEFAULT_STROKES_GAINED_BASELINE),
+    strokesGainedLight: computeStrokesGainedLight(allShots, DEFAULT_STROKES_GAINED_BASELINE, holePars),
   };
 }
 

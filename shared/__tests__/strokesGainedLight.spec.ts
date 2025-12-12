@@ -21,11 +21,14 @@ describe('computeStrokesGainedLight', () => {
 
   it('buckets tee shots by par', () => {
     const shots: ShotEvent[] = [
-      { ...baseShot, par: 4, toPinStart_m: 380 },
-      { ...baseShot, id: 's2', par: 5, toPinStart_m: 520 },
+      { ...baseShot, toPinStart_m: 380 },
+      { ...baseShot, id: 's2', hole: 2, seq: 1, toPinStart_m: 520 },
     ];
 
-    const result = computeStrokesGainedLight(shots, DEFAULT_STROKES_GAINED_BASELINE);
+    const result = computeStrokesGainedLight(shots, DEFAULT_STROKES_GAINED_BASELINE, {
+      1: 4,
+      2: 5,
+    });
 
     const tee = result.byCategory.find((c) => c.category === 'tee');
     expect(tee?.shots).toBe(2);
@@ -67,6 +70,76 @@ describe('computeStrokesGainedLight', () => {
     expect(app?.shots).toBe(1);
     expect(shortGame?.shots).toBe(1);
     expect(putting?.shots).toBe(1);
+  });
+
+  it('counts penalty strokes as losses instead of skipping them', () => {
+    const holePars = { 1: 4 };
+    const baselineShots: ShotEvent[] = [
+      { ...baseShot, toPinStart_m: 380, toPinEnd_m: 150 },
+      {
+        ...baseShot,
+        id: 'app',
+        seq: 2,
+        startLie: 'Fairway',
+        toPinStart_m: 150,
+        toPinEnd_m: 5,
+      },
+      {
+        ...baseShot,
+        id: 'putt',
+        seq: 3,
+        startLie: 'Green',
+        toPinStart_m: 5,
+        toPinEnd_m: 0,
+        kind: 'Putt',
+      },
+    ];
+
+    const withPenalty: ShotEvent[] = [
+      { ...baseShot, toPinStart_m: 380, toPinEnd_m: 200 },
+      {
+        ...baseShot,
+        id: 'pen',
+        seq: 2,
+        startLie: 'Penalty',
+        endLie: 'Fairway',
+        kind: 'Penalty',
+        toPinStart_m: 200,
+        toPinEnd_m: 180,
+      },
+      {
+        ...baseShot,
+        id: 'app_after_pen',
+        seq: 3,
+        startLie: 'Fairway',
+        toPinStart_m: 180,
+        toPinEnd_m: 5,
+      },
+      {
+        ...baseShot,
+        id: 'putt_after_pen',
+        seq: 4,
+        startLie: 'Green',
+        toPinStart_m: 5,
+        toPinEnd_m: 0,
+        kind: 'Putt',
+      },
+    ];
+
+    const baseResult = computeStrokesGainedLight(
+      baselineShots,
+      DEFAULT_STROKES_GAINED_BASELINE,
+      holePars,
+    );
+    const penaltyResult = computeStrokesGainedLight(
+      withPenalty,
+      DEFAULT_STROKES_GAINED_BASELINE,
+      holePars,
+    );
+
+    expect(penaltyResult.totalDelta).toBeLessThan(baseResult.totalDelta);
+    const approachDelta = penaltyResult.byCategory.find((c) => c.category === 'approach')?.delta;
+    expect(approachDelta).toBeLessThan(0);
   });
 });
 

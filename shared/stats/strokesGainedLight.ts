@@ -28,6 +28,7 @@ export const DEFAULT_STROKES_GAINED_BASELINE: StrokesGainedBaseline = {
     { bucket: 'tee_par4', expectedStrokes: 3.7 },
     { bucket: 'tee_par5', expectedStrokes: 4.6 },
     { bucket: 'tee_other', expectedStrokes: 3.2 },
+    { bucket: 'penalty', expectedStrokes: 2 },
     { bucket: 'fairway_150_plus', expectedStrokes: 3.6 },
     { bucket: 'fairway_80_150', expectedStrokes: 2.8 },
     { bucket: 'fairway_30_80', expectedStrokes: 2.2 },
@@ -45,15 +46,22 @@ export const DEFAULT_STROKES_GAINED_BASELINE: StrokesGainedBaseline = {
   ],
 };
 
-function bucketForShot(shot: ShotEvent): string | null {
+function bucketForShot(
+  shot: ShotEvent,
+  holePars?: Record<number, number | undefined>,
+): string | null {
   const distanceStart = shot.toPinStart_m ?? null;
   const distanceEnd = shot.toPinEnd_m ?? null;
-  const par = (shot as any).par as number | undefined;
+  const par = holePars?.[shot.hole];
 
   if (shot.startLie === 'Tee') {
     if (par === 4) return 'tee_par4';
     if (par === 5) return 'tee_par5';
     return 'tee_other';
+  }
+
+  if (shot.startLie === 'Penalty') {
+    return 'penalty';
   }
 
   if (shot.startLie === 'Green' || shot.kind === 'Putt') {
@@ -97,7 +105,10 @@ function bucketForShot(shot: ShotEvent): string | null {
   return null;
 }
 
-function bucketForEnd(shot: ShotEvent): string | null {
+function bucketForEnd(
+  shot: ShotEvent,
+  holePars?: Record<number, number | undefined>,
+): string | null {
   if (shot.endLie === 'Green' || shot.kind === 'Putt') {
     const distanceEnd = shot.toPinEnd_m ?? null;
     if (distanceEnd == null) return 'green_10_plus';
@@ -108,11 +119,14 @@ function bucketForEnd(shot: ShotEvent): string | null {
   }
 
   if (shot.endLie === 'Penalty') {
-    return null;
+    return 'penalty';
   }
 
   if (shot.toPinEnd_m === 0) return 'holed';
-  return bucketForShot({ ...shot, startLie: shot.endLie ?? shot.startLie, toPinStart_m: shot.toPinEnd_m });
+  return bucketForShot(
+    { ...shot, startLie: shot.endLie ?? shot.startLie, toPinStart_m: shot.toPinEnd_m },
+    holePars,
+  );
 }
 
 function lookupExpected(baseline: StrokesGainedBaseline, bucket: string | null): number | null {
@@ -131,6 +145,7 @@ function categoryForShot(shot: ShotEvent, distanceStart: number | null): SgCateg
 export function computeStrokesGainedLight(
   shots: ShotEvent[],
   baseline: StrokesGainedBaseline,
+  holePars?: Record<number, number | undefined>,
 ): StrokesGainedLightSummary {
   if (!baseline?.expectedStrokesByBucket?.length || !shots.length) {
     return { totalDelta: 0, byCategory: [] };
@@ -145,8 +160,8 @@ export function computeStrokesGainedLight(
 
   for (const shot of shots) {
     const distanceStart = shot.toPinStart_m ?? null;
-    const startBucket = bucketForShot(shot);
-    const endBucket = bucketForEnd(shot);
+    const startBucket = bucketForShot(shot, holePars);
+    const endBucket = bucketForEnd(shot, holePars);
     const expectedStart = lookupExpected(baseline, startBucket);
     const expectedEnd = lookupExpected(baseline, endBucket ?? 'holed');
 

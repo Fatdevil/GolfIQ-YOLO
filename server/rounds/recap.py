@@ -6,6 +6,7 @@ from pydantic import AliasChoices, BaseModel, ConfigDict, Field
 
 from server.rounds.models import (
     CaddieDecisionTelemetry,
+    RoundCategoryStats,
     RoundInfo,
     RoundScores,
     RoundSummary,
