@@ -1,4 +1,13 @@
 import { apiFetch } from "@/api";
+import type {
+  StrokesGainedLightSummary,
+  StrokesGainedLightTrend,
+} from "@shared/stats/strokesGainedLight";
+
+export type StrokesGainedLightRound = StrokesGainedLightSummary & {
+  roundId: string;
+  playedAt: string;
+};
 
 export type AnalyticsCategory = "tee" | "approach" | "short" | "putt" | "sequence";
 export type Trend = "improving" | "stable" | "worsening";
@@ -33,6 +42,8 @@ export interface PlayerAnalytics {
   missionStats: MissionStats;
   bestRoundId?: string | null;
   worstRoundId?: string | null;
+  strokesGainedLightTrend?: StrokesGainedLightTrend | null;
+  strokesGainedLightRounds?: StrokesGainedLightRound[];
 }
 
 export async function fetchPlayerAnalytics(): Promise<PlayerAnalytics> {

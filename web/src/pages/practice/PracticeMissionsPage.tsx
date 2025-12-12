@@ -40,6 +40,7 @@ import { buildPracticeDecisionContext } from "@shared/practice/practiceDecisionC
 import { recommendPracticeMissions, type RecommendedMission } from "@shared/practice/recommendPracticeMissions";
 import type { PracticeRecommendationContext } from "@shared/practice/practiceRecommendationsAnalytics";
 import { getPracticeRecommendationsExperiment } from "@shared/experiments/flags";
+import type { StrokesGainedLightCategory } from "@shared/stats/strokesGainedLight";
 import { getCurrentUserId } from "@/user/currentUserId";
 
 function formatDate(value: number | null, locale: string): string | null {
@@ -332,6 +333,7 @@ export default function PracticeMissionsPage(): JSX.Element {
 
   const sourceParams = useMemo(() => new URLSearchParams(location.search), [location.search]);
   const preselectedMissionId = sourceParams.get("mission");
+  const preselectedSourceParam = sourceParams.get("source");
   const preselectedRecommendationParam = sourceParams.get("recommendation");
 
   const preselectedRecommendationContext = useMemo<PracticeRecommendationContext | undefined>(() => {
@@ -350,9 +352,24 @@ export default function PracticeMissionsPage(): JSX.Element {
     [history, weeklyGoalSettings],
   );
 
+  const preselectedFocusArea = preselectedRecommendationContext?.focusArea ?? undefined;
+  const preselectedSource =
+    typeof preselectedSourceParam === "string" && preselectedSourceParam.length > 0
+      ? preselectedSourceParam
+      : undefined;
+  const preselectedSgLightFocus =
+    (preselectedRecommendationContext?.strokesGainedLightFocusCategory as StrokesGainedLightCategory | undefined) ??
+    undefined;
+
   const practiceDecisionContext = useMemo(
-    () => buildPracticeDecisionContext({ summary: practiceReadinessSummary, source: 'practice_missions' }),
-    [practiceReadinessSummary],
+    () =>
+      buildPracticeDecisionContext({
+        summary: practiceReadinessSummary,
+        source: preselectedSource ?? "practice_missions",
+        focusAreas: preselectedFocusArea ? [preselectedFocusArea] : undefined,
+        strokesGainedLightFocusCategory: preselectedSgLightFocus,
+      }),
+    [practiceReadinessSummary, preselectedFocusArea, preselectedSource, preselectedSgLightFocus],
   );
 
   const practiceRecommendations = useMemo(

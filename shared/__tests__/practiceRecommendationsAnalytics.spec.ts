@@ -138,6 +138,21 @@ describe('practiceRecommendationsAnalytics', () => {
     expect(clicked.experiment?.experimentVariant).toBe('disabled');
   });
 
+  it('normalizes SG Light stats surfaces', () => {
+    const shown = buildPracticeMissionRecommendationShownEvent({
+      missionId: 'sg-light',
+      reason: 'focus_area',
+      rank: 1,
+      surface: 'web_stats_sg_light_trend',
+      focusArea: 'approach',
+      origin: 'stats_card',
+      strokesGainedLightFocusCategory: 'approach',
+    });
+
+    expect(shown.surface).toBe('web_stats_sg_light_trend');
+    expect(shown.strokesGainedLightFocusCategory).toBe('approach');
+  });
+
   it('emits the correct events', () => {
     const emit = vi.fn();
     const client = { emit };

@@ -10,6 +10,7 @@ export type PracticeRecommendationSource =
   | 'mobile_home_sg_light_focus'
   | 'mobile_stats_sg_light_trend'
   | 'mobile_round_story_sg_light_focus'
+  | 'web_stats_sg_light_trend'
   | 'practice_missions'
   | 'other';
 
