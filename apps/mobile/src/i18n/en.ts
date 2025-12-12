@@ -46,6 +46,9 @@ export const en = {
   home_dashboard_weekly_empty: 'Play a round this week to see your highlights.',
   home_dashboard_weekly_progress: '{{current}}/{{target}} rounds this week',
   home_dashboard_weekly_first_round: 'Play your first round this week',
+  home_dashboard_focus_title: 'Your current focus',
+  home_dashboard_focus_helper: 'Biggest opportunity from your last round',
+  home_dashboard_focus_cta: 'Practice this',
   home_dashboard_badge_new: 'New',
   home_dashboard_badge_new_coach_report: 'New coach report',
   home_dashboard_practice_title: "Today's practice",
@@ -770,6 +773,14 @@ export const en = {
         empty: 'Not practised yet',
         streak: 'On a streak',
       },
+    },
+  },
+  sg_light: {
+    focus: {
+      off_the_tee: 'Off the tee',
+      approach: 'Approach shots',
+      short_game: 'Short game',
+      putting: 'Putting',
     },
   },
 } as const;

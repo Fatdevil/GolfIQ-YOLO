@@ -132,6 +132,9 @@ export const sv = {
   },
   home_dashboard_practice_next_title: 'Nästa mission',
   home_dashboard_practice_next_cta: 'Starta mission',
+  home_dashboard_focus_title: 'Ditt nuvarande fokus',
+  home_dashboard_focus_helper: 'Största möjligheten från din senaste runda',
+  home_dashboard_focus_cta: 'Träna på detta',
   practice_home_plan_header: 'Veckoplan',
   practice_home_plan_done: 'Veckoplan: klar 🎉',
   practice_home_plan_progress: 'Veckoplan: {{completed}} av {{total}} uppdrag gjorda',
@@ -150,6 +153,14 @@ export const sv = {
       practiceGoalUnavailable: 'Veckomål ej satt',
       highlightsUnavailable: 'Inga slag-för-slag-höjdpunkter tillgängliga för den här rundan.',
       coachInsightsUnavailable: 'Vi kunde inte hämta detaljerade coach-insikter den här gången, men här är dina siffror.',
+    },
+  },
+  sg_light: {
+    focus: {
+      off_the_tee: 'Från tee',
+      approach: 'Inspel',
+      short_game: 'Närspel',
+      putting: 'Puttning',
     },
   },
 };

@@ -63,6 +63,27 @@ const mockBagStats: BagClubStatsMap = {
   '7i': { clubId: '7i', meanDistanceM: 150, sampleCount: 6 },
   '5w': { clubId: '5w', meanDistanceM: 190, sampleCount: 2 },
 };
+
+const mockRoundRecap: roundClient.RoundRecap = {
+  roundId: 'round-1',
+  courseName: 'Evergreen',
+  date: '2024-02-01T00:00:00Z',
+  score: 72,
+  toPar: 'E',
+  holesPlayed: 18,
+  categories: {},
+  focusHints: [],
+  strokesGainedLight: {
+    totalDelta: -1.2,
+    byCategory: [
+      { category: 'approach', shots: 10, delta: -0.6, confidence: 0.6 },
+      { category: 'tee', shots: 10, delta: -0.2, confidence: 0.4 },
+      { category: 'short_game', shots: 5, delta: -0.2, confidence: 0.4 },
+      { category: 'putting', shots: 5, delta: -0.2, confidence: 0.5 },
+    ],
+    focusCategory: 'approach',
+  },
+};
 let dateNowSpy: MockInstance<() => number> | null = null;
 const mockIsInExperiment = experiments.isInExperiment as unknown as Mock;
 const mockGetExperimentBucket = experiments.getExperimentBucket as unknown as Mock;
@@ -89,6 +110,7 @@ vi.mock('@app/api/player', () => ({ fetchPlayerProfile: vi.fn() }));
 vi.mock('@app/api/roundClient', () => ({
   fetchCurrentRound: vi.fn(),
   fetchLatestCompletedRound: vi.fn(),
+  fetchRoundRecap: vi.fn(),
 }));
 vi.mock('@app/api/weeklySummary', () => ({ fetchWeeklySummary: vi.fn() }));
 vi.mock('@app/api/practiceClient', () => ({ fetchPracticePlan: vi.fn() }));
@@ -130,6 +152,7 @@ describe('HomeDashboardScreen', () => {
     vi.mocked(playerApi.fetchPlayerProfile).mockResolvedValue(mockProfile);
     vi.mocked(roundClient.fetchCurrentRound).mockResolvedValue(null);
     vi.mocked(roundClient.fetchLatestCompletedRound).mockResolvedValue(null);
+    vi.mocked(roundClient.fetchRoundRecap).mockResolvedValue(mockRoundRecap);
     vi.mocked(weeklyApi.fetchWeeklySummary).mockResolvedValue(mockWeekly);
     vi.mocked(practiceClient.fetchPracticePlan).mockResolvedValue(mockPracticePlan);
     vi.mocked(bagClient.fetchPlayerBag).mockResolvedValue(mockBag);
@@ -985,6 +1008,35 @@ describe('HomeDashboardScreen', () => {
       'RangeQuickPracticeStart',
       expect.objectContaining({ missionId: 'mission-home' }),
     );
+  });
+
+  it('surfaces SG Light focus card and navigates to practice', async () => {
+    vi.mocked(roundClient.fetchLatestCompletedRound).mockResolvedValue({
+      roundId: 'round-1',
+      holes: 18,
+      startedAt: '2024-02-01T00:00:00Z',
+      endedAt: '2024-02-01T02:00:00Z',
+      holesPlayed: 18,
+    } as roundClient.RoundSummaryWithRoundInfo);
+    vi.mocked(roundClient.fetchRoundRecap).mockResolvedValue(mockRoundRecap);
+
+    const navigation = createNavigation();
+
+    render(<HomeDashboardScreen navigation={navigation} route={createRoute()} />);
+
+    const focusCard = await screen.findByTestId('home-sg-focus-card');
+    expect(focusCard).toBeTruthy();
+    expect(screen.getByTestId('home-sg-focus-label').textContent).toContain('Approach');
+
+    fireEvent.click(screen.getByTestId('home-sg-focus-cta'));
+
+    await waitFor(() => {
+      expect(navigation.navigate).toHaveBeenCalledWith('PracticeMissions', {
+        source: 'mobile_home_sg_light_focus',
+        practiceRecommendationSource: 'mobile_home_sg_light_focus',
+        strokesGainedLightFocusCategory: 'approach',
+      });
+    });
   });
 
   it('does not render the home practice recommendation when none are available', async () => {
