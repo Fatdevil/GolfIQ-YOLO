@@ -284,6 +284,9 @@ export default function PracticeMissionsScreen({ navigation, route }: Props): JS
     getDefaultWeeklyPracticeGoalSettings(),
   );
 
+  const recommendationOrigin = route.params?.practiceRecommendationSource ?? route.params?.source;
+  const sgLightFocusCategory = route.params?.strokesGainedLightFocusCategory;
+
   const practiceRecommendationsExperiment = useMemo(
     () => getPracticeRecommendationsExperiment('anonymous'),
     [],
@@ -299,8 +302,13 @@ export default function PracticeMissionsScreen({ navigation, route }: Props): JS
   );
 
   const practiceDecisionContext = useMemo(
-    () => buildPracticeDecisionContext({ summary: practiceReadinessSummary }),
-    [practiceReadinessSummary],
+    () =>
+      buildPracticeDecisionContext({
+        summary: practiceReadinessSummary,
+        source: recommendationOrigin ?? 'practice_missions',
+        strokesGainedLightFocusCategory: sgLightFocusCategory ?? null,
+      }),
+    [practiceReadinessSummary, recommendationOrigin, sgLightFocusCategory],
   );
 
   const practiceRecommendations = useMemo(
@@ -358,6 +366,8 @@ export default function PracticeMissionsScreen({ navigation, route }: Props): JS
           rank: rec.rank,
           surface: 'mobile_practice_missions',
           focusArea,
+          origin: recommendationOrigin,
+          strokesGainedLightFocusCategory: sgLightFocusCategory,
           algorithmVersion,
           experiment: {
             experimentKey: practiceRecommendationsExperiment.experimentKey,
@@ -373,7 +383,9 @@ export default function PracticeMissionsScreen({ navigation, route }: Props): JS
     practiceRecommendationsExperiment.experimentBucket,
     practiceRecommendationsExperiment.experimentKey,
     practiceRecommendationsExperiment.experimentVariant,
+    recommendationOrigin,
     recommendationsSuppressed,
+    sgLightFocusCategory,
     state.loading,
     state.missions,
   ]);
@@ -470,10 +482,10 @@ export default function PracticeMissionsScreen({ navigation, route }: Props): JS
     viewedRef.current = true;
     safeEmit('practice_missions_viewed', {
       surface: 'mobile',
-      source: route.params?.source ?? 'other',
+      source: recommendationOrigin ?? 'other',
       weeks: weeklyHistory.length,
     });
-  }, [route.params?.source, state.loading, weeklyHistory.length]);
+  }, [recommendationOrigin, state.loading, weeklyHistory.length]);
 
   const weeklyPlanMissions = weeklyPlanStatus.missions;
   const weeklyPlanIds = useMemo(() => new Set(weeklyPlanMissions.map((mission) => mission.id)), [weeklyPlanMissions]);
@@ -545,6 +557,8 @@ export default function PracticeMissionsScreen({ navigation, route }: Props): JS
         focusArea,
         reasonKey: recommendation.reason,
         algorithmVersion,
+        origin: recommendationOrigin,
+        strokesGainedLightFocusCategory: sgLightFocusCategory,
         experiment: {
           experimentKey: practiceRecommendationsExperiment.experimentKey,
           experimentBucket: practiceRecommendationsExperiment.experimentBucket,
@@ -563,6 +577,8 @@ export default function PracticeMissionsScreen({ navigation, route }: Props): JS
           surface: 'mobile_practice_missions',
           entryPoint: planRank != null ? 'weekly_plan' : 'missions_list',
           focusArea,
+          origin: recommendationOrigin,
+          strokesGainedLightFocusCategory: sgLightFocusCategory,
           algorithmVersion,
           experiment: {
             experimentKey: practiceRecommendationsExperiment.experimentKey,

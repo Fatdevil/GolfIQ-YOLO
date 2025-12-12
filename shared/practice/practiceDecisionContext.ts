@@ -1,6 +1,14 @@
 import type { PracticeReadinessSummary } from './practiceReadiness';
+import type { StrokesGainedLightCategory } from '../stats/strokesGainedLight';
 
 export type PracticeFocusArea = 'driving' | 'approach' | 'short_game' | 'putting';
+
+export type PracticeRecommendationSource =
+  | 'home'
+  | 'range'
+  | 'round_recap_sg_light'
+  | 'practice_missions'
+  | 'other';
 
 export type PracticeDecisionContext = {
   /** Whether the current weekly practice goal has been reached. */
@@ -13,6 +21,10 @@ export type PracticeDecisionContext = {
   recentFocusAreas: PracticeFocusArea[];
   /** A lightweight confidence proxy derived from recent practice progress (0–1). */
   practiceConfidence: number;
+  /** Where the practice flow was launched from. */
+  source?: PracticeRecommendationSource | string;
+  /** Weakest SG Light category, if available. */
+  strokesGainedLightFocusCategory?: StrokesGainedLightCategory;
 };
 
 const FOCUS_AREA_MAP: Record<string, PracticeFocusArea> = {
@@ -54,6 +66,8 @@ function clamp01(value: number): number {
 export interface BuildPracticeDecisionContextOptions {
   summary?: PracticeReadinessSummary | null;
   focusAreas?: string[] | null;
+  source?: PracticeRecommendationSource | string | null;
+  strokesGainedLightFocusCategory?: StrokesGainedLightCategory | null;
 }
 
 export function buildPracticeDecisionContext(
@@ -78,11 +92,21 @@ export function buildPracticeDecisionContext(
       : confidenceFallback,
   );
 
-  return {
+  const context: PracticeDecisionContext = {
     goalReached: Boolean(summary?.goalReached),
     goalTarget,
     goalProgress,
     recentFocusAreas: focusAreas,
     practiceConfidence,
   };
+
+  if (options.source) {
+    context.source = options.source;
+  }
+
+  if (options.strokesGainedLightFocusCategory) {
+    context.strokesGainedLightFocusCategory = options.strokesGainedLightFocusCategory;
+  }
+
+  return context;
 }

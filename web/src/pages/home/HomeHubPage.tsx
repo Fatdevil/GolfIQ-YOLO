@@ -298,7 +298,7 @@ export const HomeHubPage: React.FC = () => {
   );
 
   const practiceDecisionContext = useMemo(
-    () => buildPracticeDecisionContext({ summary: practiceReadinessSummary }),
+    () => buildPracticeDecisionContext({ summary: practiceReadinessSummary, source: 'home' }),
     [practiceReadinessSummary],
   );
 

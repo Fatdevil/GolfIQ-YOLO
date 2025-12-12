@@ -1,4 +1,5 @@
 import type { PracticeRecommendationContext } from '@shared/practice/practiceRecommendationsAnalytics';
+import type { StrokesGainedLightCategory } from '@shared/stats/strokesGainedLight';
 
 export type ClipCommentaryParams = {
   id: string;
@@ -83,7 +84,13 @@ export type RootStackParamList = {
         focusDrillIds?: string[];
       }
     | undefined;
-  PracticeMissions: { source?: 'home' | 'other' } | undefined;
+  PracticeMissions:
+    | {
+        source?: 'home' | 'other' | 'round_recap_sg_light';
+        practiceRecommendationSource?: 'home' | 'other' | 'round_recap_sg_light';
+        strokesGainedLightFocusCategory?: StrokesGainedLightCategory;
+      }
+    | undefined;
   WeeklyPracticeGoalSettings: undefined;
   PracticeHistory: undefined;
   PracticeMissionDetail: { entryId: string };

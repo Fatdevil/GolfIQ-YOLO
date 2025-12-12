@@ -351,7 +351,7 @@ export default function PracticeMissionsPage(): JSX.Element {
   );
 
   const practiceDecisionContext = useMemo(
-    () => buildPracticeDecisionContext({ summary: practiceReadinessSummary }),
+    () => buildPracticeDecisionContext({ summary: practiceReadinessSummary, source: 'practice_missions' }),
     [practiceReadinessSummary],
   );
 

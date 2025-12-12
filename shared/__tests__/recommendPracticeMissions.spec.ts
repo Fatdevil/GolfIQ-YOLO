@@ -198,6 +198,32 @@ describe('recommendPracticeMissions', () => {
     ]);
   });
 
+  it('biases ranking toward SG Light focus categories while keeping order', () => {
+    const recommendations = recommendPracticeMissions({
+      context: {
+        goalReached: false,
+        goalTarget: 3,
+        goalProgress: 0,
+        practiceConfidence: 0.2,
+        recentFocusAreas: [],
+        strokesGainedLightFocusCategory: 'approach',
+      },
+      missions: [
+        { id: 'mission-1', focusArea: 'driving' },
+        { id: 'mission-2', focusArea: 'approach' },
+        { id: 'mission-3', focusArea: 'approach' },
+        { id: 'mission-4', focusArea: 'short_game' },
+      ],
+      experimentVariant: 'control',
+    });
+
+    expect(recommendations).toEqual([
+      { id: 'mission-2', rank: 1, reason: 'fallback', algorithmVersion: 'v1', focusArea: 'approach' },
+      { id: 'mission-3', rank: 2, reason: 'fallback', algorithmVersion: 'v1', focusArea: 'approach' },
+      { id: 'mission-1', rank: 3, reason: 'fallback', algorithmVersion: 'v1', focusArea: 'driving' },
+    ]);
+  });
+
   it('uses v1 ranking for control experiment users', () => {
     const recommendations = recommendPracticeMissions({
       context: baseContext,

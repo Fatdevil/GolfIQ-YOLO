@@ -26,6 +26,8 @@ describe('practiceRecommendationsAnalytics', () => {
       surface: 'mobile_practice_missions',
       focusArea: 'Driving',
       focusAreas: undefined,
+      origin: undefined,
+      strokesGainedLightFocusCategory: undefined,
       weeklyGoalId: undefined,
       weekId: undefined,
       algorithmVersion: undefined,
@@ -54,6 +56,8 @@ describe('practiceRecommendationsAnalytics', () => {
       surface: 'web_practice_missions',
       focusArea: 'Approach',
       focusAreas: ['approach', 'putting'],
+      origin: undefined,
+      strokesGainedLightFocusCategory: undefined,
       weeklyGoalId: null,
       weekId: null,
       algorithmVersion: undefined,
@@ -83,6 +87,8 @@ describe('practiceRecommendationsAnalytics', () => {
       entryPoint: 'mission_row',
       focusArea: undefined,
       focusAreas: undefined,
+      origin: undefined,
+      strokesGainedLightFocusCategory: undefined,
       weeklyGoalId: undefined,
       weekId: undefined,
       algorithmVersion: undefined,
@@ -158,6 +164,8 @@ describe('practiceRecommendationsAnalytics', () => {
       surface: 'mobile_practice_missions',
       focusArea: undefined,
       focusAreas: undefined,
+      origin: undefined,
+      strokesGainedLightFocusCategory: undefined,
       weeklyGoalId: undefined,
       weekId: undefined,
       algorithmVersion: undefined,
@@ -172,6 +180,8 @@ describe('practiceRecommendationsAnalytics', () => {
       entryPoint: 'mission_row',
       focusArea: undefined,
       focusAreas: undefined,
+      origin: undefined,
+      strokesGainedLightFocusCategory: undefined,
       weeklyGoalId: undefined,
       weekId: undefined,
       algorithmVersion: undefined,
@@ -200,6 +210,8 @@ describe('practiceRecommendationsAnalytics', () => {
       surface: 'mobile_practice_missions',
       focusArea: undefined,
       focusAreas: undefined,
+      origin: undefined,
+      strokesGainedLightFocusCategory: undefined,
       weeklyGoalId: undefined,
       weekId: undefined,
       algorithmVersion: 'v1',
@@ -209,5 +221,20 @@ describe('practiceRecommendationsAnalytics', () => {
         experimentVariant: 'disabled',
       },
     });
+  });
+
+  it('includes SG Light and origin metadata when provided', () => {
+    const payload = buildPracticeMissionRecommendationShownEvent({
+      missionId: 'mission-sg',
+      reason: 'focus_area',
+      rank: 1,
+      surface: 'mobile_practice_missions',
+      focusArea: 'Driving',
+      origin: 'round_recap_sg_light',
+      strokesGainedLightFocusCategory: 'tee',
+    });
+
+    expect(payload.origin).toBe('round_recap_sg_light');
+    expect(payload.strokesGainedLightFocusCategory).toBe('tee');
   });
 });

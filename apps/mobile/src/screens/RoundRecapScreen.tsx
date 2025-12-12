@@ -380,6 +380,38 @@ export default function RoundRecapScreen({ route, navigation }: Props): JSX.Elem
     return focus.delta >= 0 ? `You gained ${deltaLabel} on ${label}` : `You lost ${deltaLabel} on ${label}`;
   }, [recap?.strokesGainedLight]);
 
+  const sgLightFocusCategory = recap?.strokesGainedLight?.focusCategory ?? null;
+
+  const sgLightFocusLabel = useMemo(() => {
+    if (!sgLightFocusCategory) return null;
+    const map: Record<string, string> = {
+      tee: 'Off the tee',
+      approach: 'Approach shots',
+      short_game: 'Short game',
+      putting: 'Putting',
+    };
+    return map[sgLightFocusCategory] ?? sgLightFocusCategory;
+  }, [sgLightFocusCategory]);
+
+  const sgLightOpportunityLine = useMemo(() => {
+    if (!sgLightFocusLabel) return null;
+    return `Biggest opportunity: ${sgLightFocusLabel}`;
+  }, [sgLightFocusLabel]);
+
+  const sgLightPracticeCtaLabel = useMemo(() => {
+    if (!sgLightFocusLabel) return null;
+    const lower = sgLightFocusLabel.charAt(0).toLowerCase() + sgLightFocusLabel.slice(1);
+    return `Practice ${lower}`;
+  }, [sgLightFocusLabel]);
+
+  const handlePracticeFromSgLight = useCallback(() => {
+    if (!sgLightFocusCategory) return;
+    navigation.navigate('PracticeMissions', {
+      practiceRecommendationSource: 'round_recap_sg_light',
+      strokesGainedLightFocusCategory: sgLightFocusCategory,
+    });
+  }, [navigation, sgLightFocusCategory]);
+
   const handleShare = useCallback(async () => {
     if (isDemo || !recap) return;
     const categories = recap.categories || {};
@@ -559,6 +591,11 @@ export default function RoundRecapScreen({ route, navigation }: Props): JSX.Elem
               <Text style={styles.sgValue}>{formatSgValue(recap.strokesGainedLight.totalDelta)}</Text>
             </View>
             {sgLightHeadline ? <Text style={styles.muted}>{sgLightHeadline}</Text> : null}
+            {sgLightOpportunityLine ? (
+              <Text style={styles.bodyText} testID="sg-light-opportunity">
+                {sgLightOpportunityLine}
+              </Text>
+            ) : null}
             <View style={styles.grid}>
               {SG_LIGHT_ORDER.map((key) => {
                 const entry = recap.strokesGainedLight?.byCategory?.find((c) => c.category === key);
@@ -589,6 +626,15 @@ export default function RoundRecapScreen({ route, navigation }: Props): JSX.Elem
                 );
               })}
             </View>
+            {sgLightPracticeCtaLabel ? (
+              <TouchableOpacity
+                style={styles.primaryCta}
+                onPress={handlePracticeFromSgLight}
+                testID="sg-light-practice-cta"
+              >
+                <Text style={styles.primaryCtaText}>{sgLightPracticeCtaLabel}</Text>
+              </TouchableOpacity>
+            ) : null}
           </View>
         ) : null}
         {strokesGained ? (

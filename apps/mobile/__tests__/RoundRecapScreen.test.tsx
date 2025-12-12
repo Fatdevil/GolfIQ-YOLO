@@ -70,6 +70,7 @@ const sampleRecap = {
       { category: 'short_game', shots: 8, delta: 0.5, confidence: 0.8 },
       { category: 'putting', shots: 30, delta: 0, confidence: 1 },
     ],
+    focusCategory: 'approach',
   },
 };
 
@@ -151,6 +152,7 @@ describe('RoundRecapScreen', () => {
       strokesGainedLight: {
         totalDelta: 0,
         byCategory: [{ category: 'approach', shots: 1, delta: 0.1, confidence: 0.1 }],
+        focusCategory: null,
       },
     });
     mockFetchRoundStrokesGained.mockResolvedValue(sampleStrokes);
@@ -160,8 +162,28 @@ describe('RoundRecapScreen', () => {
     );
 
     await waitFor(() => expect(mockFetchRecap).toHaveBeenCalled());
-    const approachTile = getByTestId('recap-sg-light-approach');
+    const approachTile = await waitFor(() => getByTestId('recap-sg-light-approach'));
     expect(within(approachTile).getByText('Not enough data yet')).toBeTruthy();
+  });
+
+  it('shows SG Light focus and practice CTA when a focus category exists', async () => {
+    mockFetchRecap.mockResolvedValue(sampleRecap);
+    mockFetchRoundStrokesGained.mockResolvedValue(sampleStrokes);
+    const navigate = vi.fn();
+
+    const { getByTestId, getByText } = render(
+      <RoundRecapScreen navigation={{ navigate } as any} route={{ params: { roundId: 'r1' } } as any} />,
+    );
+
+    await waitFor(() => expect(getByTestId('sg-light-opportunity')).toBeTruthy());
+    expect(getByText(/Approach shots/)).toBeTruthy();
+
+    fireEvent.click(getByTestId('sg-light-practice-cta'));
+
+    expect(navigate).toHaveBeenCalledWith('PracticeMissions', {
+      practiceRecommendationSource: 'round_recap_sg_light',
+      strokesGainedLightFocusCategory: 'approach',
+    });
   });
 
   it('shares summary text', async () => {
