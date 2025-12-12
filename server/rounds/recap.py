@@ -12,6 +12,9 @@ from server.rounds.models import (
     RoundSummary,
 )
 
+STROKES_GAINED_LIGHT_MIN_CONFIDENCE = 0.3
+STROKES_GAINED_LIGHT_MIN_ABSOLUTE_DELTA = 0.2
+
 
 class RoundRecapCategory(BaseModel):
     label: str
@@ -37,6 +40,13 @@ class RoundRecap(BaseModel):
         default=None,
         serialization_alias="strokesGainedLight",
         validation_alias=AliasChoices("strokesGainedLight", "strokes_gained_light"),
+    )
+    strokes_gained_light_trend: "StrokesGainedLightTrend | None" = Field(
+        default=None,
+        serialization_alias="strokesGainedLightTrend",
+        validation_alias=AliasChoices(
+            "strokesGainedLightTrend", "strokes_gained_light_trend"
+        ),
     )
 
     model_config = ConfigDict(populate_by_name=True)
@@ -69,6 +79,33 @@ class StrokesGainedLightSummary(BaseModel):
         default=None,
         serialization_alias="focusCategory",
         validation_alias=AliasChoices("focusCategory", "focus_category"),
+    )
+
+    model_config = ConfigDict(populate_by_name=True)
+
+
+class StrokesGainedLightTrendCategoryDelta(BaseModel):
+    avg_delta: float = Field(serialization_alias="avgDelta")
+    rounds: int
+
+    model_config = ConfigDict(populate_by_name=True)
+
+
+class StrokesGainedLightFocusHistoryEntry(BaseModel):
+    round_id: str = Field(serialization_alias="roundId")
+    played_at: str = Field(serialization_alias="playedAt")
+    focus_category: str = Field(serialization_alias="focusCategory")
+
+    model_config = ConfigDict(populate_by_name=True)
+
+
+class StrokesGainedLightTrend(BaseModel):
+    window_size: int = Field(serialization_alias="windowSize")
+    per_category: dict[str, StrokesGainedLightTrendCategoryDelta] = Field(
+        serialization_alias="perCategory"
+    )
+    focus_history: list[StrokesGainedLightFocusHistoryEntry] = Field(
+        serialization_alias="focusHistory"
     )
 
     model_config = ConfigDict(populate_by_name=True)
@@ -238,15 +275,84 @@ def _build_strokes_gained_light(
             )
         )
 
-    focus_category: str | None = None
-    eligible = [entry for entry in by_category if entry.confidence >= 0.3]
-    if eligible:
-        worst = min(eligible, key=lambda entry: entry.delta)
-        if worst.delta <= -0.2:
-            focus_category = worst.category
+    focus_category: str | None = _derive_focus_category(by_category)
 
     return StrokesGainedLightSummary(
         total_delta=total_delta, by_category=by_category, focus_category=focus_category
+    )
+
+
+def _derive_focus_category(
+    by_category: list[StrokesGainedLightCategory],
+) -> str | None:
+    eligible = [
+        entry
+        for entry in by_category
+        if entry.confidence >= STROKES_GAINED_LIGHT_MIN_CONFIDENCE
+    ]
+    if not eligible:
+        return None
+
+    worst = min(eligible, key=lambda entry: entry.delta)
+    if worst.delta <= -STROKES_GAINED_LIGHT_MIN_ABSOLUTE_DELTA:
+        return worst.category
+    return None
+
+
+def _round_played_at(info: RoundInfo) -> str:
+    return (info.ended_at or info.started_at).date().isoformat()
+
+
+def _build_strokes_gained_light_trend(
+    rounds: list[tuple[RoundInfo, StrokesGainedLightSummary]], window: int = 5
+) -> StrokesGainedLightTrend | None:
+    ordered = [
+        (info, summary)
+        for info, summary in rounds
+        if summary.by_category
+        and all(
+            entry.confidence >= STROKES_GAINED_LIGHT_MIN_CONFIDENCE
+            for entry in summary.by_category
+        )
+    ]
+
+    samples = ordered[: max(1, window)]
+
+    if len(samples) < 2:
+        return None
+
+    categories = ["tee", "approach", "short_game", "putting"]
+    totals = {category: 0.0 for category in categories}
+
+    for _, summary in samples:
+        entries = {entry.category: entry for entry in summary.by_category}
+        for category in categories:
+            delta = entries.get(category).delta if entries.get(category) else None
+            if delta is not None:
+                totals[category] += delta
+
+    per_category = {
+        category: StrokesGainedLightTrendCategoryDelta(
+            avg_delta=(totals[category] / len(samples)) if samples else 0,
+            rounds=len(samples),
+        )
+        for category in categories
+    }
+
+    focus_history: list[StrokesGainedLightFocusHistoryEntry] = []
+    for info, summary in samples:
+        focus = summary.focus_category or _derive_focus_category(summary.by_category)
+        if focus:
+            focus_history.append(
+                StrokesGainedLightFocusHistoryEntry(
+                    round_id=info.id,
+                    played_at=_round_played_at(info),
+                    focus_category=focus,
+                )
+            )
+
+    return StrokesGainedLightTrend(
+        window_size=len(samples), per_category=per_category, focus_history=focus_history
     )
 
 
@@ -307,7 +413,12 @@ def _build_focus_hints(
 
 
 def build_round_recap(
-    round_info: RoundInfo, summary: RoundSummary, scores: RoundScores | None = None
+    round_info: RoundInfo,
+    summary: RoundSummary,
+    scores: RoundScores | None = None,
+    *,
+    strokes_gained_light: StrokesGainedLightSummary | None = None,
+    strokes_gained_light_trend: StrokesGainedLightTrend | None = None,
 ) -> RoundRecap:
     holes = max(summary.holes_played, 0)
     driving_pct = None
@@ -387,14 +498,15 @@ def build_round_recap(
             focus_hints.append(f"Most 3-putts started from {label} looks ({count}).")
 
     caddie_summary = _compute_caddie_summary(scores)
-    sg_light = None
-    try:
-        from server.rounds.models import compute_round_category_stats
+    sg_light = strokes_gained_light
+    if sg_light is None:
+        try:
+            from server.rounds.models import compute_round_category_stats
 
-        stats = compute_round_category_stats(scores) if scores else None
-        sg_light = _build_strokes_gained_light(summary, stats)
-    except Exception:
-        sg_light = None
+            stats = compute_round_category_stats(scores) if scores else None
+            sg_light = _build_strokes_gained_light(summary, stats)
+        except Exception:
+            sg_light = None
 
     return RoundRecap(
         round_id=summary.round_id,
@@ -407,6 +519,7 @@ def build_round_recap(
         focus_hints=focus_hints,
         caddie_summary=caddie_summary,
         strokes_gained_light=sg_light,
+        strokes_gained_light_trend=strokes_gained_light_trend,
     )
 
 
@@ -416,5 +529,8 @@ __all__ = [
     "CaddieTelemetrySummary",
     "StrokesGainedLightCategory",
     "StrokesGainedLightSummary",
+    "StrokesGainedLightTrend",
+    "StrokesGainedLightTrendCategoryDelta",
+    "StrokesGainedLightFocusHistoryEntry",
     "build_round_recap",
 ]

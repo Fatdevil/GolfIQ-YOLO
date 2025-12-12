@@ -23,7 +23,13 @@ from server.rounds.models import (
     compute_round_category_stats,
     compute_round_summary,
 )
-from server.rounds.recap import RoundRecap, build_round_recap
+from server.rounds.recap import (
+    RoundRecap,
+    StrokesGainedLightSummary,
+    _build_strokes_gained_light,
+    _build_strokes_gained_light_trend,
+    build_round_recap,
+)
 from server.rounds.strokes_gained import compute_strokes_gained_for_round
 from server.rounds.service import (
     RoundNotFound,
@@ -253,7 +259,32 @@ def get_round_recap(
         round_info = service.get_round_info(player_id=player_id, round_id=round_id)
         scores = service.get_scores(player_id=player_id, round_id=round_id)
         summary = compute_round_summary(scores)
-        return build_round_recap(round_info, summary, scores)
+        category_stats = compute_round_category_stats(scores)
+        sg_light_summary = _build_strokes_gained_light(summary, category_stats)
+
+        recent_rounds: list[tuple[RoundInfo, StrokesGainedLightSummary]] = []
+        for info in service.list_rounds(player_id=player_id, limit=8):
+            try:
+                if info.id == round_info.id:
+                    recent_rounds.append((info, sg_light_summary))
+                    continue
+                other_scores = service.get_scores(player_id=player_id, round_id=info.id)
+                other_summary = compute_round_summary(other_scores)
+                other_stats = compute_round_category_stats(other_scores)
+                other_sg_light = _build_strokes_gained_light(other_summary, other_stats)
+                recent_rounds.append((info, other_sg_light))
+            except Exception:
+                continue
+
+        sg_light_trend = _build_strokes_gained_light_trend(recent_rounds)
+
+        return build_round_recap(
+            round_info,
+            summary,
+            scores,
+            strokes_gained_light=sg_light_summary,
+            strokes_gained_light_trend=sg_light_trend,
+        )
     except RoundNotFound:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="round not found"

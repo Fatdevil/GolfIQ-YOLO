@@ -4,6 +4,7 @@ import {
   DEFAULT_STROKES_GAINED_BASELINE,
   computeStrokesGainedLight,
   type StrokesGainedLightSummary,
+  type StrokesGainedLightTrend,
 } from '../stats/strokesGainedLight';
 import type { BaselineSet } from '../sg/baseline';
 
@@ -43,6 +44,10 @@ export interface RoundSummary {
   clubs: ClubRow[];
   holes: HoleRow[];
   strokesGainedLight?: StrokesGainedLightSummary;
+}
+
+export interface RoundStorySummary extends RoundSummary {
+  strokesGainedLightTrend?: StrokesGainedLightTrend | null;
 }
 
 type PhaseKey = keyof Pick<PhaseSG, 'ott' | 'app' | 'arg' | 'putt'>;

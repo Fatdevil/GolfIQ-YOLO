@@ -4,6 +4,8 @@ import {
   DEFAULT_STROKES_GAINED_BASELINE,
   computeStrokesGainedLight,
   deriveStrokesGainedLightFocusCategory,
+  buildStrokesGainedLightTrend,
+  type StrokesGainedLightCategory,
 } from '../stats/strokesGainedLight';
 import type { ShotEvent } from '../round/types';
 
@@ -236,6 +238,86 @@ describe('deriveStrokesGainedLightFocusCategory', () => {
     });
 
     expect(focus).toBe('approach');
+  });
+});
+
+describe('buildStrokesGainedLightTrend', () => {
+  const baseByCategory = (
+    values: Partial<Record<StrokesGainedLightCategory, { delta?: number; confidence?: number }>> = {},
+  ) => (
+    ['tee', 'approach', 'short_game', 'putting'] as StrokesGainedLightCategory[]
+  ).map((category) => ({
+    category,
+    shots: 4,
+    delta: values[category]?.delta ?? 0.2,
+    confidence: values[category]?.confidence ?? 0.8,
+  }));
+
+  const makeRound = (overrides: {
+    id: string;
+    date: string;
+    byCategory?: ReturnType<typeof baseByCategory>;
+    focusCategory?: StrokesGainedLightCategory | null;
+  }) => ({
+    roundId: overrides.id,
+    playedAt: overrides.date,
+    totalDelta: 0,
+    byCategory: overrides.byCategory ?? baseByCategory(),
+    focusCategory: overrides.focusCategory,
+  });
+
+  it('averages per-category deltas across the window', () => {
+    const rounds = [
+      makeRound({ id: 'r1', date: '2024-01-05', byCategory: baseByCategory({ tee: { delta: 0.6 } }) }),
+      makeRound({ id: 'r2', date: '2024-01-02', byCategory: baseByCategory({ tee: { delta: -0.3 } }) }),
+      makeRound({ id: 'r3', date: '2023-12-20', byCategory: baseByCategory({ tee: { delta: 0 } }) }),
+    ];
+
+    const trend = buildStrokesGainedLightTrend(rounds, { windowSize: 5 });
+
+    expect(trend?.windowSize).toBe(3);
+    expect(trend?.perCategory.tee.avgDelta).toBeCloseTo((0.6 - 0.3 + 0) / 3, 6);
+    expect(trend?.perCategory.approach.rounds).toBe(3);
+  });
+
+  it('derives focus history using the focus selector', () => {
+    const rounds = [
+      makeRound({
+        id: 'latest',
+        date: '2024-02-10',
+        byCategory: baseByCategory({ approach: { delta: -0.5 } }),
+        focusCategory: null,
+      }),
+      makeRound({
+        id: 'older',
+        date: '2024-02-03',
+        byCategory: baseByCategory({ tee: { delta: -0.4 }, putting: { delta: 0.8 } }),
+        focusCategory: 'tee',
+      }),
+    ];
+
+    const trend = buildStrokesGainedLightTrend(rounds, { windowSize: 3 });
+
+    expect(trend?.focusHistory[0]).toEqual(
+      expect.objectContaining({ roundId: 'latest', focusCategory: 'approach' }),
+    );
+    expect(trend?.focusHistory[1]).toEqual(
+      expect.objectContaining({ roundId: 'older', focusCategory: 'tee' }),
+    );
+  });
+
+  it('returns null when fewer than two valid rounds are present', () => {
+    const rounds = [
+      makeRound({
+        id: 'low-confidence',
+        date: '2024-01-10',
+        byCategory: baseByCategory({ tee: { confidence: 0.1 } }),
+      }),
+      makeRound({ id: 'only-one', date: '2024-01-08' }),
+    ];
+
+    const trend = buildStrokesGainedLightTrend(rounds, { windowSize: 2 });
+    expect(trend).toBeNull();
   });
 });
 

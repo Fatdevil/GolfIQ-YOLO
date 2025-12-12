@@ -17,6 +17,21 @@ export interface StrokesGainedLightSummary {
   focusCategory?: StrokesGainedLightCategory | null;
 }
 
+export type StrokesGainedLightTrendCategoryDelta = {
+  avgDelta: number;
+  rounds: number;
+};
+
+export type StrokesGainedLightTrend = {
+  windowSize: number;
+  perCategory: Record<StrokesGainedLightCategory, StrokesGainedLightTrendCategoryDelta>;
+  focusHistory: {
+    roundId: string;
+    playedAt: string;
+    focusCategory: StrokesGainedLightCategory;
+  }[];
+};
+
 export interface StrokesGainedBaselineBucket {
   bucket: string;
   expectedStrokes: number;
@@ -166,6 +181,92 @@ export function deriveStrokesGainedLightFocusCategory(
   }
 
   return null;
+}
+
+type StrokesGainedLightRoundSample = StrokesGainedLightSummary & {
+  roundId: string;
+  playedAt: string;
+};
+
+function isValidRoundSummary(summary: StrokesGainedLightSummary): boolean {
+  if (!summary?.byCategory?.length) return false;
+  const eligible = summary.byCategory.filter(
+    (entry) =>
+      entry.confidence >= STROKES_GAINED_LIGHT_MIN_CONFIDENCE && Number.isFinite(entry.delta),
+  );
+
+  return eligible.length === summary.byCategory.length && eligible.length > 0;
+}
+
+function normaliseRoundSamples(
+  rounds: Array<StrokesGainedLightSummary & { roundId?: string; playedAt?: string }>,
+): StrokesGainedLightRoundSample[] {
+  return rounds
+    .map((round, index) => ({
+      ...round,
+      roundId: round.roundId ?? `round-${index}`,
+      playedAt: round.playedAt ?? new Date().toISOString(),
+    }))
+    .filter(isValidRoundSummary);
+}
+
+const TREND_CATEGORIES: StrokesGainedLightCategory[] = ['tee', 'approach', 'short_game', 'putting'];
+
+/**
+ * Builds a Strokes Gained Light trend over the provided rounds.
+ *
+ * Expects rounds ordered from most recent to oldest. Returns null when fewer than
+ * two valid rounds are available after filtering out low-confidence entries.
+ */
+export function buildStrokesGainedLightTrend(
+  rounds: Array<StrokesGainedLightSummary & { roundId?: string; playedAt?: string }>,
+  options?: { windowSize?: number },
+): StrokesGainedLightTrend | null {
+  const windowSize = Math.max(1, options?.windowSize ?? 5);
+  const samples = normaliseRoundSamples(rounds).slice(0, windowSize);
+
+  if (samples.length < 2) {
+    return null;
+  }
+
+  const totals: Record<StrokesGainedLightCategory, number> = {
+    tee: 0,
+    approach: 0,
+    short_game: 0,
+    putting: 0,
+  };
+
+  for (const sample of samples) {
+    for (const category of TREND_CATEGORIES) {
+      const entry = sample.byCategory.find((c) => c.category === category);
+      if (entry && Number.isFinite(entry.delta)) {
+        totals[category] += entry.delta;
+      }
+    }
+  }
+
+  const perCategory: Record<StrokesGainedLightCategory, StrokesGainedLightTrendCategoryDelta> =
+    TREND_CATEGORIES.reduce((acc, category) => {
+      acc[category] = {
+        avgDelta: samples.length ? totals[category] / samples.length : 0,
+        rounds: samples.length,
+      };
+      return acc;
+    }, {} as Record<StrokesGainedLightCategory, StrokesGainedLightTrendCategoryDelta>);
+
+  const focusHistory = samples
+    .map((sample) => ({
+      roundId: sample.roundId,
+      playedAt: sample.playedAt,
+      focusCategory: sample.focusCategory ?? deriveStrokesGainedLightFocusCategory(sample),
+    }))
+    .filter((entry): entry is StrokesGainedLightTrend['focusHistory'][number] => Boolean(entry.focusCategory));
+
+  return {
+    windowSize: samples.length,
+    perCategory,
+    focusHistory,
+  };
 }
 
 export function computeStrokesGainedLight(
