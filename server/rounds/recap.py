@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field
 
 from server.rounds.models import (
     CaddieDecisionTelemetry,
@@ -32,6 +32,11 @@ class RoundRecap(BaseModel):
     caddie_summary: "CaddieTelemetrySummary | None" = Field(  # type: ignore
         default=None, serialization_alias="caddieSummary"
     )
+    strokes_gained_light: "StrokesGainedLightSummary | None" = Field(
+        default=None,
+        serialization_alias="strokesGainedLight",
+        validation_alias=AliasChoices("strokesGainedLight", "strokes_gained_light"),
+    )
 
     model_config = ConfigDict(populate_by_name=True)
 
@@ -41,6 +46,24 @@ class CaddieTelemetrySummary(BaseModel):
     followed_decisions: int = Field(serialization_alias="followedDecisions")
     follow_rate: float | None = Field(default=None, serialization_alias="followRate")
     notes: list[str] = Field(default_factory=list)
+
+    model_config = ConfigDict(populate_by_name=True)
+
+
+class StrokesGainedLightCategory(BaseModel):
+    category: str
+    shots: int
+    delta: float
+    confidence: float
+
+    model_config = ConfigDict(populate_by_name=True)
+
+
+class StrokesGainedLightSummary(BaseModel):
+    total_delta: float = Field(serialization_alias="totalDelta")
+    by_category: list[StrokesGainedLightCategory] = Field(
+        serialization_alias="byCategory"
+    )
 
     model_config = ConfigDict(populate_by_name=True)
 
@@ -167,6 +190,47 @@ def _compute_caddie_summary(
         follow_rate=follow_rate,
         notes=notes,
     )
+
+
+def _build_strokes_gained_light(
+    summary: RoundSummary, category_stats: "RoundCategoryStats | None"
+) -> StrokesGainedLightSummary:
+    if category_stats is None or not summary.holes_played:
+        return StrokesGainedLightSummary(total_delta=0, by_category=[])
+
+    holes = max(summary.holes_played, 0)
+    baseline_per_hole = {
+        "tee": 1.0,
+        "approach": 2.2,
+        "short_game": 0.8,
+        "putting": 1.8,
+    }
+
+    actual = {
+        "tee": category_stats.tee_shots,
+        "approach": category_stats.approach_shots,
+        "short_game": category_stats.short_game_shots,
+        "putting": category_stats.putts,
+    }
+
+    by_category = []
+    total_delta = 0.0
+    for key, expected_per_hole in baseline_per_hole.items():
+        shots = int(actual.get(key, 0) or 0)
+        expected = expected_per_hole * holes
+        delta = expected - shots
+        confidence = min(1.0, shots / 10) if shots else 0.0
+        total_delta += delta
+        by_category.append(
+            StrokesGainedLightCategory(
+                category=key,
+                shots=shots,
+                delta=delta,
+                confidence=confidence,
+            )
+        )
+
+    return StrokesGainedLightSummary(total_delta=total_delta, by_category=by_category)
 
 
 def _build_focus_hints(
@@ -306,6 +370,14 @@ def build_round_recap(
             focus_hints.append(f"Most 3-putts started from {label} looks ({count}).")
 
     caddie_summary = _compute_caddie_summary(scores)
+    sg_light = None
+    try:
+        from server.rounds.models import compute_round_category_stats
+
+        stats = compute_round_category_stats(scores) if scores else None
+        sg_light = _build_strokes_gained_light(summary, stats)
+    except Exception:
+        sg_light = None
 
     return RoundRecap(
         round_id=summary.round_id,
@@ -317,6 +389,7 @@ def build_round_recap(
         categories=categories,
         focus_hints=focus_hints,
         caddie_summary=caddie_summary,
+        strokes_gained_light=sg_light,
     )
 
 
@@ -324,5 +397,7 @@ __all__ = [
     "RoundRecap",
     "RoundRecapCategory",
     "CaddieTelemetrySummary",
+    "StrokesGainedLightCategory",
+    "StrokesGainedLightSummary",
     "build_round_recap",
 ]
