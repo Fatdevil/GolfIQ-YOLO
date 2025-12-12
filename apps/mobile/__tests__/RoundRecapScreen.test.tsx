@@ -155,12 +155,13 @@ describe('RoundRecapScreen', () => {
     });
     mockFetchRoundStrokesGained.mockResolvedValue(sampleStrokes);
 
-    const { getByText } = render(
+    const { getByText, getByTestId } = render(
       <RoundRecapScreen navigation={{} as any} route={{ params: { roundId: 'r1' } } as any} />,
     );
 
     await waitFor(() => expect(mockFetchRecap).toHaveBeenCalled());
-    expect(getByText('Not enough data yet')).toBeTruthy();
+    const approachTile = getByTestId('recap-sg-light-approach');
+    expect(within(approachTile).getByText('Not enough data yet')).toBeTruthy();
   });
 
   it('shares summary text', async () => {
