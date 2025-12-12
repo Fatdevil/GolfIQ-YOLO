@@ -93,6 +93,7 @@ function bucketForShot(
 
   if (distanceStart <= 30) {
     if (distanceStart <= 5) return 'short_5_15';
+    if (distanceStart <= 15) return 'short_5_15';
     return 'short_15_30';
   }
 
@@ -117,7 +118,7 @@ function bucketForShot(
     return 'rough_150_plus';
   }
 
-  if (distanceStart <= 10) return 'short_5_15';
+  if (distanceStart <= 15) return 'short_5_15';
   if (distanceStart <= 30) return 'short_15_30';
 
   return null;

@@ -78,6 +78,42 @@ describe('computeStrokesGainedLight', () => {
     expect(putting?.shots).toBe(1);
   });
 
+  it('assigns short-game shots to the correct distance buckets', () => {
+    const shotAt4m: ShotEvent = {
+      ...baseShot,
+      id: 'chip-4m',
+      startLie: 'Rough',
+      toPinStart_m: 4,
+      toPinEnd_m: 0,
+    };
+    const shotAt10m: ShotEvent = {
+      ...baseShot,
+      id: 'chip-10m',
+      startLie: 'Rough',
+      toPinStart_m: 10,
+      toPinEnd_m: 0,
+    };
+    const shotAt18m: ShotEvent = {
+      ...baseShot,
+      id: 'chip-18m',
+      startLie: 'Rough',
+      toPinStart_m: 18,
+      toPinEnd_m: 0,
+    };
+
+    const deltaForShot = (shot: ShotEvent) => {
+      const result = computeStrokesGainedLight([shot], DEFAULT_STROKES_GAINED_BASELINE);
+      return result.byCategory.find((c) => c.category === 'short_game')?.delta ?? 0;
+    };
+
+    // Expected strokes for 0-15m short game shots is 1.5
+    expect(deltaForShot(shotAt4m)).toBeCloseTo(0.5, 5);
+    expect(deltaForShot(shotAt10m)).toBeCloseTo(0.5, 5);
+
+    // Expected strokes for 15-30m short game shots is 1.8
+    expect(deltaForShot(shotAt18m)).toBeCloseTo(0.8, 5);
+  });
+
   it('counts penalty strokes as losses instead of skipping them', () => {
     const holePars = { 1: 4 };
     const baselineShots: ShotEvent[] = [
