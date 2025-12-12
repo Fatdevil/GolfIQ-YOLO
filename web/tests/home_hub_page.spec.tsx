@@ -871,9 +871,20 @@ describe("HomeHubPage", () => {
     expect(mockTrackPracticeRecommendationClicked).toHaveBeenCalledWith(
       expect.objectContaining({ missionId: "mission-home", surface: "web_home_practice" }),
     );
-    expect(mockNavigate).toHaveBeenCalledWith(
-      expect.objectContaining({ pathname: "/practice/missions", search: expect.stringContaining("mission-home") }),
-    );
+    const navArgs = mockNavigate.mock.calls.at(-1)?.[0];
+    expect(navArgs?.pathname).toBe("/practice/missions");
+
+    const params = new URLSearchParams(String(navArgs?.search));
+    expect(params.get("mission")).toBe("mission-home");
+    expect(params.get("source")).toBe("home_hub");
+
+    const parsedRecommendation = JSON.parse(params.get("recommendation") ?? "null");
+    expect(parsedRecommendation).toMatchObject({
+      source: "practice_recommendations",
+      surface: "web_home_practice",
+      rank: 1,
+      reasonKey: "goal_progress",
+    });
   });
 
   it("does not render a home recommendation when none are returned", async () => {
