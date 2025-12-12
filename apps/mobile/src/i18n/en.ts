@@ -634,6 +634,14 @@ export const en = {
       empty_title: 'No stats yet',
       empty_body: 'Play and log a few rounds to see your stats here.',
       view_rounds: 'View rounds',
+      sg_light: {
+        trend_title: 'Performance trend',
+        trend_subtitle: 'Across your last {{rounds}} rounds',
+        trend_focus: 'Focus: {{focus}}',
+        trend_empty: 'Not enough strokes gained data yet. Play a few more rounds to unlock your trend.',
+        focus_history: 'Recent focus areas',
+        practice_cta: 'Practice this focus',
+      },
       categories: {
         title: 'Shot categories',
         subtitle: 'Average strokes per round and share of total',

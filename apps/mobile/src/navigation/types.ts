@@ -91,12 +91,14 @@ export type RootStackParamList = {
           | 'other'
           | 'round_recap_sg_light'
           | 'mobile_home_sg_light_focus'
+          | 'mobile_stats_sg_light_trend'
           | 'mobile_round_story_sg_light_focus';
         practiceRecommendationSource?:
           | 'home'
           | 'other'
           | 'round_recap_sg_light'
           | 'mobile_home_sg_light_focus'
+          | 'mobile_stats_sg_light_trend'
           | 'mobile_round_story_sg_light_focus';
         strokesGainedLightFocusCategory?: StrokesGainedLightCategory;
       }
