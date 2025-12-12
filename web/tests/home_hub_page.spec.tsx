@@ -12,6 +12,17 @@ import type { BagClubStatsMap } from "@shared/caddie/bagStats";
 import { loadPracticeMissionHistory } from "@/practice/practiceMissionHistory";
 import { buildWeeklyPracticeGoalSettingsUpdatedEvent } from "@shared/practice/practiceGoalAnalytics";
 import * as experiments from "@shared/experiments/flags";
+import * as practiceRecommendations from "@shared/practice/recommendPracticeMissions";
+
+const mockNavigate = vi.fn();
+
+vi.mock("react-router-dom", async () => {
+  const actual = await vi.importActual<typeof import("react-router-dom")>("react-router-dom");
+  return {
+    ...actual,
+    useNavigate: () => mockNavigate,
+  };
+});
 
 vi.mock("@/access/UserAccessContext", () => ({
   useAccessPlan: vi.fn(),
@@ -46,6 +57,8 @@ vi.mock("@/practice/analytics", () => ({
   ),
   trackPracticeGoalNudgeShown: vi.fn(),
   trackPracticeGoalNudgeClicked: vi.fn(),
+  trackPracticeMissionRecommendationShown: vi.fn(),
+  trackPracticeMissionRecommendationClicked: vi.fn(),
 }));
 vi.mock("@/practice/practiceGoalSettings", () => ({
   loadWeeklyPracticeGoalSettings: vi.fn(),
@@ -55,6 +68,10 @@ vi.mock("@shared/experiments/flags", () => ({
   isInExperiment: vi.fn().mockReturnValue(true),
   getExperimentBucket: vi.fn().mockReturnValue(24),
   getExperimentVariant: vi.fn().mockReturnValue("treatment"),
+  getPracticeRecommendationsExperiment: vi.fn(),
+}));
+vi.mock("@shared/practice/recommendPracticeMissions", () => ({
+  recommendPracticeMissions: vi.fn(),
 }));
 
 import { useAccessFeatures, useAccessPlan, useFeatureFlag } from "@/access/UserAccessContext";
@@ -69,6 +86,8 @@ import {
   trackPracticePlanCompletedViewed,
   trackPracticeGoalNudgeClicked,
   trackPracticeGoalNudgeShown,
+  trackPracticeMissionRecommendationClicked,
+  trackPracticeMissionRecommendationShown,
   trackWeeklyPracticeGoalSettingsUpdated,
 } from "@/practice/analytics";
 import {
@@ -95,6 +114,10 @@ const mockTrackGoalNudgeShown =
   trackPracticeGoalNudgeShown as unknown as Mock;
 const mockTrackGoalNudgeClicked =
   trackPracticeGoalNudgeClicked as unknown as Mock;
+const mockTrackPracticeRecommendationShown =
+  trackPracticeMissionRecommendationShown as unknown as Mock;
+const mockTrackPracticeRecommendationClicked =
+  trackPracticeMissionRecommendationClicked as unknown as Mock;
 const mockLoadWeeklyGoalSettings =
   loadWeeklyPracticeGoalSettings as unknown as Mock;
 const mockSaveWeeklyGoalSettings =
@@ -102,6 +125,11 @@ const mockSaveWeeklyGoalSettings =
 const mockIsInExperiment = experiments.isInExperiment as unknown as Mock;
 const mockGetExperimentBucket = experiments.getExperimentBucket as unknown as Mock;
 const mockGetExperimentVariant = experiments.getExperimentVariant as unknown as Mock;
+const mockGetPracticeRecommendationsExperiment =
+  experiments.getPracticeRecommendationsExperiment as unknown as Mock;
+const mockRecommendPracticeMissions =
+  practiceRecommendations.recommendPracticeMissions as unknown as Mock;
+let practiceRecommendationsVariant: 'control' | 'treatment' | 'disabled' = 'treatment';
 let dateNowSpy: ReturnType<typeof vi.spyOn>;
 
 const mockBagStats: BagClubStatsMap = {
@@ -135,6 +163,8 @@ describe("HomeHubPage", () => {
     dateNowSpy = vi
       .spyOn(Date, "now")
       .mockReturnValue(new Date("2024-02-08T12:00:00Z").getTime());
+    practiceRecommendationsVariant = "treatment";
+    mockNavigate.mockReset();
     mockUseAccessPlan.mockReturnValue({
       plan: "free",
       isPro: false,
@@ -160,11 +190,22 @@ describe("HomeHubPage", () => {
     mockTrackPlanCompletedViewed.mockClear();
     mockTrackGoalNudgeShown.mockClear();
     mockTrackGoalNudgeClicked.mockClear();
+    mockTrackPracticeRecommendationShown.mockClear();
+    mockTrackPracticeRecommendationClicked.mockClear();
+    mockRecommendPracticeMissions.mockReturnValue([]);
     mockLoadWeeklyGoalSettings.mockReturnValue({ targetMissionsPerWeek: 3 });
     mockSaveWeeklyGoalSettings.mockClear();
     mockIsInExperiment.mockReturnValue(true);
     mockGetExperimentBucket.mockReturnValue(24);
-    mockGetExperimentVariant.mockReturnValue("treatment");
+    mockGetExperimentVariant.mockImplementation((key: string) =>
+      key === "practice_recommendations" ? practiceRecommendationsVariant : "treatment",
+    );
+    mockGetPracticeRecommendationsExperiment.mockImplementation((userId: string) => ({
+      experimentKey: "practice_recommendations",
+      experimentBucket: mockGetExperimentBucket("practice_recommendations", userId),
+      experimentVariant: practiceRecommendationsVariant,
+      enabled: practiceRecommendationsVariant !== "disabled",
+    }));
   });
 
   afterEach(() => {
@@ -783,5 +824,78 @@ describe("HomeHubPage", () => {
     await screen.findAllByTestId("practice-goal-summary");
     expect(screen.queryByTestId("practice-goal-nudge")).toBeNull();
     expect(mockTrackGoalNudgeShown).not.toHaveBeenCalled();
+  });
+
+  it("suppresses home recommendation when experiment is disabled", async () => {
+    practiceRecommendationsVariant = "disabled";
+    mockRecommendPracticeMissions.mockReturnValue([
+      { id: "mission-home", rank: 1, reason: "focus_area", algorithmVersion: "v2", focusArea: "driving" },
+    ]);
+
+    renderHome();
+
+    await waitFor(() => {
+      expect(screen.queryByTestId("home-practice-recommendation")).toBeNull();
+    });
+
+    expect(mockTrackPracticeRecommendationShown).not.toHaveBeenCalled();
+    expect(mockTrackPracticeRecommendationClicked).not.toHaveBeenCalled();
+  });
+
+  it("renders and tracks the home recommendation when available", async () => {
+    mockLoadPracticeHistory.mockResolvedValue([
+      {
+        id: "entry-1",
+        missionId: "mission-home",
+        startedAt: "2024-02-05T10:00:00Z",
+        endedAt: "2024-02-05T10:15:00Z",
+        status: "completed",
+        completedSampleCount: 8,
+      },
+    ]);
+    mockRecommendPracticeMissions.mockReturnValue([
+      { id: "mission-home", rank: 1, reason: "goal_progress", algorithmVersion: "v2", focusArea: "driving" },
+    ]);
+
+    renderHome();
+
+    const card = await screen.findByTestId("home-practice-recommendation");
+    expect(card).toHaveTextContent("mission-home");
+
+    expect(mockTrackPracticeRecommendationShown).toHaveBeenCalledWith(
+      expect.objectContaining({ missionId: "mission-home", surface: "web_home_practice" }),
+    );
+
+    fireEvent.click(screen.getByTestId("home-practice-recommendation-cta"));
+
+    expect(mockTrackPracticeRecommendationClicked).toHaveBeenCalledWith(
+      expect.objectContaining({ missionId: "mission-home", surface: "web_home_practice" }),
+    );
+    const navArgs = mockNavigate.mock.calls.at(-1)?.[0];
+    expect(navArgs?.pathname).toBe("/practice/missions");
+
+    const params = new URLSearchParams(String(navArgs?.search));
+    expect(params.get("mission")).toBe("mission-home");
+    expect(params.get("source")).toBe("home_hub");
+
+    const parsedRecommendation = JSON.parse(params.get("recommendation") ?? "null");
+    expect(parsedRecommendation).toMatchObject({
+      source: "practice_recommendations",
+      surface: "web_home_practice",
+      rank: 1,
+      reasonKey: "goal_progress",
+    });
+  });
+
+  it("does not render a home recommendation when none are returned", async () => {
+    mockRecommendPracticeMissions.mockReturnValue([]);
+
+    renderHome();
+
+    await waitFor(() => {
+      expect(screen.queryByTestId("home-practice-recommendation")).toBeNull();
+    });
+
+    expect(mockTrackPracticeRecommendationShown).not.toHaveBeenCalled();
   });
 });

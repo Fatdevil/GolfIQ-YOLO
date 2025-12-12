@@ -380,6 +380,70 @@ describe("PracticeMissionsPage", () => {
     expect(recommendationCalls).toHaveLength(0);
   });
 
+  it("preselects a mission when navigated with recommendation params", async () => {
+    mockBuildBagReadiness.mockReturnValue({
+      readiness: { grade: "poor", score: 20, calibratedClubs: 0, needsMoreSamplesCount: 0, noDataCount: 0, totalClubs: 0, largeGapCount: 0, overlapCount: 0 },
+      suggestions: [
+        { id: "practice_fill_gap:7i:8i", type: "fill_gap", lowerClubId: "7i", upperClubId: "8i", severity: "high" },
+      ],
+      dataStatusByClubId: {},
+    });
+    mockLoadHistory.mockResolvedValue([]);
+
+    const recommendationContext = {
+      source: "web_home_practice",
+      rank: 1,
+      reasonKey: "goal_progress",
+      focusArea: "driving",
+      algorithmVersion: "v2",
+      surface: "web_home_practice",
+      experiment: {
+        experimentKey: "practice_recommendations",
+        experimentBucket: 7,
+        experimentVariant: "treatment",
+      },
+    } as any;
+
+    const params = new URLSearchParams({
+      source: "home_hub",
+      mission: "practice_fill_gap:7i:8i",
+      recommendation: JSON.stringify(recommendationContext),
+    });
+
+    renderWithRouter([`/practice/missions?${params.toString()}`]);
+
+    await waitFor(() => {
+      const startTelemetry = mockTelemetry.mock.calls.find((call) => call[0].event === "practice_mission_start");
+      expect(startTelemetry?.[0]).toMatchObject({
+        missionId: "practice_fill_gap:7i:8i",
+        recommendation: expect.objectContaining({
+          source: "practice_recommendations",
+          surface: "web_home_practice",
+          algorithmVersion: "v2",
+          rank: 1,
+        }),
+      });
+    });
+  });
+
+  it("falls back gracefully when recommendation param is missing or invalid", async () => {
+    mockBuildBagReadiness.mockReturnValue({
+      readiness: { grade: "poor", score: 20, calibratedClubs: 0, needsMoreSamplesCount: 0, noDataCount: 0, totalClubs: 0, largeGapCount: 0, overlapCount: 0 },
+      suggestions: [
+        { id: "practice_fill_gap:7i:8i", type: "fill_gap", lowerClubId: "7i", upperClubId: "8i", severity: "high" },
+      ],
+      dataStatusByClubId: {},
+    });
+    mockLoadHistory.mockResolvedValue([]);
+
+    renderWithRouter(["/practice/missions?mission=practice_fill_gap:7i:8i&recommendation=%7Binvalid%7D"]);
+
+    await screen.findByTestId("practice-missions-list");
+
+    const startTelemetry = mockTelemetry.mock.calls.find((call) => call[0].event === "practice_mission_start");
+    expect(startTelemetry).toBeUndefined();
+  });
+
   it("shows completed plan banner, labels, and emits completion analytics", async () => {
     const now = new Date();
     const planStatusSpy = vi.spyOn(practicePlan, "buildWeeklyPracticePlanStatus");

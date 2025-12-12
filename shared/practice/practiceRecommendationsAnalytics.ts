@@ -5,7 +5,9 @@ export type PracticeMissionRecommendationReason = 'focus_area' | 'goal_progress'
 
 export type PracticeMissionRecommendationSurface =
   | 'mobile_practice_missions'
-  | 'web_practice_missions';
+  | 'web_practice_missions'
+  | 'mobile_home_practice'
+  | 'web_home_practice';
 
 export type PracticeMissionRecommendationExperiment = {
   experimentKey: 'practice_recommendations';
@@ -20,6 +22,7 @@ export type PracticeRecommendationContext = {
   reasonKey?: PracticeMissionRecommendationReason | string | null;
   experiment?: PracticeMissionRecommendationExperiment;
   algorithmVersion?: string | null;
+  surface?: PracticeMissionRecommendationSurface | string | null;
 };
 
 type PracticeMissionRecommendationBase = {
@@ -78,6 +81,18 @@ function sanitizeExperiment(
   };
 }
 
+function sanitizeSurface(value?: PracticeMissionRecommendationSurface | string | null):
+  | PracticeMissionRecommendationSurface
+  | undefined {
+  if (!value) return undefined;
+  const normalized = value.trim();
+  if (normalized === 'mobile_home_practice') return 'mobile_home_practice';
+  if (normalized === 'web_home_practice') return 'web_home_practice';
+  if (normalized === 'mobile_practice_missions') return 'mobile_practice_missions';
+  if (normalized === 'web_practice_missions') return 'web_practice_missions';
+  return undefined;
+}
+
 export function sanitizePracticeRecommendationContext(
   context?: PracticeRecommendationContext,
 ): PracticeRecommendationContext | undefined {
@@ -93,6 +108,7 @@ export function sanitizePracticeRecommendationContext(
     reasonKey: sanitizeNullableString(context.reasonKey),
     experiment: sanitizeExperiment(context.experiment),
     algorithmVersion: sanitizeNullableString(context.algorithmVersion),
+    surface: sanitizeSurface(context.surface),
   };
 }
 

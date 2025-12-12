@@ -316,6 +316,7 @@ export default function PracticeMissionsPage(): JSX.Element {
   const planCompletedViewedRef = useRef(false);
   const insightsViewedRef = useRef(false);
   const historyViewedRef = useRef(false);
+  const preselectedRecommendationHandledRef = useRef(false);
 
   const experimentUserId = getCurrentUserId() ?? "anonymous";
   const practiceRecommendationsExperiment = useMemo(
@@ -328,6 +329,21 @@ export default function PracticeMissionsPage(): JSX.Element {
     !practiceRecommendationsExperiment.enabled;
 
   const targetMissionsPerWeek = weeklyGoalSettings.targetMissionsPerWeek;
+
+  const sourceParams = useMemo(() => new URLSearchParams(location.search), [location.search]);
+  const preselectedMissionId = sourceParams.get("mission");
+  const preselectedRecommendationParam = sourceParams.get("recommendation");
+
+  const preselectedRecommendationContext = useMemo<PracticeRecommendationContext | undefined>(() => {
+    if (!practiceRecommendationsExperiment.enabled || !preselectedRecommendationParam) return undefined;
+    try {
+      const parsed = JSON.parse(preselectedRecommendationParam);
+      return typeof parsed === "object" && parsed ? (parsed as PracticeRecommendationContext) : undefined;
+    } catch (err) {
+      console.warn("[practice] invalid recommendation query param", err);
+      return undefined;
+    }
+  }, [practiceRecommendationsExperiment.enabled, preselectedRecommendationParam]);
 
   const practiceReadinessSummary = useMemo(
     () => buildPracticeReadinessSummary({ history, goalSettings: weeklyGoalSettings }),
@@ -444,10 +460,10 @@ export default function PracticeMissionsPage(): JSX.Element {
   useEffect(() => {
     if (viewedRef.current) return;
     viewedRef.current = true;
-    const sourceParam = new URLSearchParams(location.search).get("source");
+    const sourceParam = sourceParams.get("source");
     const source = sourceParam === "home_hub" ? "home_hub" : "other";
     trackPracticeMissionsViewed({ surface: "web", source });
-  }, [location.search]);
+  }, [sourceParams]);
 
   useEffect(() => {
     let cancelled = false;
@@ -536,15 +552,21 @@ export default function PracticeMissionsPage(): JSX.Element {
     trackPracticeWeeklyHistoryViewed({ surface: "web_practice_missions", weeks: weeklyHistory.length });
   }, [loading, weeklyHistory.length]);
 
-  const handleSelectMission = (missionId: string, planRank?: number) => {
+  const handleSelectMission = (
+    missionId: string,
+    planRank?: number,
+    recommendationContextOverride?: PracticeRecommendationContext,
+  ) => {
     const recommendation = recommendationByMissionId.get(missionId);
     const mission = missions.find((candidate) => candidate.id === missionId);
-    let recommendationContext: PracticeRecommendationContext | undefined;
+    let recommendationContext: PracticeRecommendationContext | undefined =
+      practiceRecommendationsExperiment.enabled ? recommendationContextOverride : undefined;
 
-    const algorithmVersion = recommendation?.algorithmVersion ?? "v1";
-    const focusArea = recommendation?.focusArea ?? (mission as any)?.focusArea;
+    const algorithmVersion =
+      recommendation?.algorithmVersion ?? recommendationContextOverride?.algorithmVersion ?? "v1";
+    const focusArea = recommendation?.focusArea ?? recommendationContextOverride?.focusArea ?? (mission as any)?.focusArea;
 
-    if (recommendation && practiceRecommendationsExperiment.enabled) {
+    if (!recommendationContext && recommendation && practiceRecommendationsExperiment.enabled) {
       recommendationContext = {
         source: "practice_recommendations",
         rank: recommendation.rank,
@@ -559,7 +581,7 @@ export default function PracticeMissionsPage(): JSX.Element {
       };
     }
 
-    if (recommendation && practiceRecommendationsExperiment.enabled) {
+    if (recommendation && practiceRecommendationsExperiment.enabled && !recommendationContextOverride) {
       trackPracticeMissionRecommendationClicked({
         missionId,
         reason: recommendation.reason,
@@ -601,6 +623,29 @@ export default function PracticeMissionsPage(): JSX.Element {
     trackPracticeMissionStart({ missionId, sourceSurface: "missions_page", recommendation: recommendationContext });
     navigate(`/range/practice?${params.toString()}`);
   };
+
+  useEffect(() => {
+    if (
+      loading ||
+      preselectedRecommendationHandledRef.current ||
+      !preselectedMissionId ||
+      !preselectedRecommendationContext
+    ) {
+      return;
+    }
+
+    const missionExists = missions.some((mission) => mission.id === preselectedMissionId);
+    if (!missionExists) return;
+
+    preselectedRecommendationHandledRef.current = true;
+    handleSelectMission(preselectedMissionId, undefined, preselectedRecommendationContext);
+  }, [
+    handleSelectMission,
+    loading,
+    missions,
+    preselectedMissionId,
+    preselectedRecommendationContext,
+  ]);
 
   return (
     <div className="space-y-4" data-testid="practice-missions-page">

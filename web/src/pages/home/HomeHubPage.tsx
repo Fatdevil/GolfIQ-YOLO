@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 
 import { FeatureGate } from "@/access/FeatureGate";
 import { UpgradeGate } from "@/access/UpgradeGate";
@@ -34,18 +34,24 @@ import {
   type PracticeMissionDefinition,
   type PracticeMissionListItem,
 } from "@shared/practice/practiceMissionsList";
+import { buildPracticeReadinessSummary } from "@shared/practice/practiceReadiness";
 import {
   trackPracticePlanCompletedViewed,
   trackPracticeGoalNudgeClicked,
   trackPracticeGoalNudgeShown,
   trackWeeklyPracticeGoalSettingsUpdated,
+  trackPracticeMissionRecommendationClicked,
+  trackPracticeMissionRecommendationShown,
 } from "@/practice/analytics";
 import {
   loadWeeklyPracticeGoalSettings,
   saveWeeklyPracticeGoalSettings,
 } from "@/practice/practiceGoalSettings";
 import { getDefaultWeeklyPracticeGoalSettings, type WeeklyPracticeGoalSettings } from "@shared/practice/practiceGoalSettings";
-import { getExperimentBucket, getExperimentVariant, isInExperiment } from "@shared/experiments/flags";
+import { buildPracticeDecisionContext } from "@shared/practice/practiceDecisionContext";
+import { recommendPracticeMissions, type RecommendedMission } from "@shared/practice/recommendPracticeMissions";
+import type { PracticeRecommendationContext } from "@shared/practice/practiceRecommendationsAnalytics";
+import { getExperimentBucket, getExperimentVariant, getPracticeRecommendationsExperiment, isInExperiment } from "@shared/experiments/flags";
 import { getCurrentUserId } from "@/user/currentUserId";
 
 const WEEKLY_GOAL_OPTIONS = [1, 3, 5];
@@ -145,6 +151,7 @@ function buildMissionDefinitions(
 
 export const HomeHubPage: React.FC = () => {
   const { t } = useTranslation();
+  const navigate = useNavigate();
   const { plan, isPro } = useAccessPlan();
   const { notify } = useNotifications();
   const { unit } = useUnits();
@@ -163,6 +170,7 @@ export const HomeHubPage: React.FC = () => {
   const [editingPracticeGoal, setEditingPracticeGoal] = useState(false);
   const planCompletedViewedRef = useRef(false);
   const goalNudgeShownRef = useRef<string | null>(null);
+  const practiceRecommendationImpressionsRef = useRef(new Set<string>());
 
   useEffect(() => {
     markHomeSeen();
@@ -284,6 +292,62 @@ export const HomeHubPage: React.FC = () => {
       missions,
     });
   }, [bagReadiness, practiceGoalNow, practiceHistory]);
+  const practiceReadinessSummary = useMemo(
+    () => buildPracticeReadinessSummary({ history: practiceHistory, goalSettings: weeklyGoalSettings }),
+    [practiceHistory, weeklyGoalSettings],
+  );
+
+  const practiceDecisionContext = useMemo(
+    () => buildPracticeDecisionContext({ summary: practiceReadinessSummary }),
+    [practiceReadinessSummary],
+  );
+
+  const practiceRecommendationsExperiment = useMemo(
+    () => getPracticeRecommendationsExperiment(experimentUserId),
+    [experimentUserId],
+  );
+
+  const practiceRecommendationsSuppressed =
+    practiceRecommendationsExperiment.experimentVariant === "disabled" ||
+    !practiceRecommendationsExperiment.enabled;
+
+  const practiceRecommendations = useMemo(
+    () =>
+      practiceRecommendationsSuppressed
+        ? []
+        : recommendPracticeMissions({
+            context: practiceDecisionContext,
+            missions: practiceMissions.map((mission) => ({
+              id: mission.id,
+              focusArea: (mission as any).focusArea,
+              priorityScore: mission.priorityScore,
+              estimatedMinutes: (mission as any).estimatedMinutes,
+              difficulty: (mission as any).difficulty,
+              completionCount: mission.completionCount,
+              lastCompletedAt: mission.lastCompletedAt,
+            })),
+            experimentVariant: practiceRecommendationsExperiment.experimentVariant,
+          }),
+    [
+      practiceDecisionContext,
+      practiceMissions,
+      practiceRecommendationsExperiment.experimentVariant,
+      practiceRecommendationsSuppressed,
+    ],
+  );
+
+  const homePracticeRecommendation = useMemo<RecommendedMission | null>(
+    () => practiceRecommendations[0] ?? null,
+    [practiceRecommendations],
+  );
+
+  const homePracticeMission = useMemo(
+    () =>
+      homePracticeRecommendation
+        ? practiceMissions.find((mission) => mission.id === homePracticeRecommendation.id) ?? null
+        : null,
+    [homePracticeRecommendation, practiceMissions],
+  );
   const practiceGoalProgress = useMemo(
     () =>
       buildWeeklyPracticeGoalProgress({
@@ -302,6 +366,44 @@ export const HomeHubPage: React.FC = () => {
       }),
     [practiceGoalNow, practiceHistory, weeklyGoalSettings],
   );
+  const homePracticeRecommendationReason = useMemo(() => {
+    if (!homePracticeRecommendation) return null;
+    switch (homePracticeRecommendation.reason) {
+      case "focus_area":
+        return t("practice.missionRecommendations.reason.focus_area");
+      case "goal_progress":
+        return t("practice.missionRecommendations.reason.goal_progress");
+      default:
+        return t("practice.missionRecommendations.reason.fallback");
+    }
+  }, [homePracticeRecommendation, t]);
+
+  const homePracticeRecommendationContext = useMemo<PracticeRecommendationContext | null>(() => {
+    if (!homePracticeRecommendation || !homePracticeMission || practiceRecommendationsSuppressed) return null;
+    const algorithmVersion = homePracticeRecommendation.algorithmVersion ?? "v1";
+    const focusArea = homePracticeRecommendation.focusArea ?? (homePracticeMission as any)?.focusArea;
+
+    return {
+      source: "practice_recommendations",
+      surface: "web_home_practice",
+      rank: homePracticeRecommendation.rank,
+      focusArea,
+      reasonKey: homePracticeRecommendation.reason,
+      algorithmVersion,
+      experiment: {
+        experimentKey: practiceRecommendationsExperiment.experimentKey,
+        experimentBucket: practiceRecommendationsExperiment.experimentBucket,
+        experimentVariant: practiceRecommendationsExperiment.experimentVariant,
+      },
+    };
+  }, [
+    homePracticeMission,
+    homePracticeRecommendation,
+    practiceRecommendationsExperiment.experimentBucket,
+    practiceRecommendationsExperiment.experimentKey,
+    practiceRecommendationsExperiment.experimentVariant,
+    practiceRecommendationsSuppressed,
+  ]);
   const weeklyGoalNudge = useMemo(
     () => shouldShowWeeklyGoalNudge(practiceHistory, weeklyGoalSettings, practiceGoalNow),
     [practiceGoalNow, practiceHistory, weeklyGoalSettings],
@@ -410,6 +512,43 @@ export const HomeHubPage: React.FC = () => {
     shouldRenderWeeklyGoalNudge,
   ]);
 
+  useEffect(() => {
+    if (
+      !homePracticeRecommendation ||
+      !homePracticeMission ||
+      practiceRecommendationsSuppressed ||
+      practiceRecommendationImpressionsRef.current.has(homePracticeRecommendation.id)
+    )
+      return;
+
+    const algorithmVersion = homePracticeRecommendation.algorithmVersion ?? "v1";
+    const focusArea = homePracticeRecommendation.focusArea ?? (homePracticeMission as any)?.focusArea;
+
+    trackPracticeMissionRecommendationShown({
+      missionId: homePracticeRecommendation.id,
+      reason: homePracticeRecommendation.reason,
+      rank: homePracticeRecommendation.rank,
+      surface: "web_home_practice",
+      focusArea,
+      algorithmVersion,
+      experiment: {
+        experimentKey: practiceRecommendationsExperiment.experimentKey,
+        experimentBucket: practiceRecommendationsExperiment.experimentBucket,
+        experimentVariant: practiceRecommendationsExperiment.experimentVariant,
+      },
+    });
+
+    practiceRecommendationImpressionsRef.current.add(homePracticeRecommendation.id);
+  }, [
+    homePracticeMission,
+    homePracticeRecommendation,
+    practiceRecommendationImpressionsRef,
+    practiceRecommendationsExperiment.experimentBucket,
+    practiceRecommendationsExperiment.experimentKey,
+    practiceRecommendationsExperiment.experimentVariant,
+    practiceRecommendationsSuppressed,
+  ]);
+
   const handleGoalNudgeClick = () => {
     trackPracticeGoalNudgeClicked({
       progress: practiceGoalProgress,
@@ -419,6 +558,37 @@ export const HomeHubPage: React.FC = () => {
       experimentVariant,
       cta: "practice_missions",
     });
+  };
+
+  const handlePracticeRecommendationClick = () => {
+    if (!homePracticeRecommendation || !homePracticeMission) return;
+
+    const algorithmVersion = homePracticeRecommendation.algorithmVersion ?? "v1";
+    const focusArea = homePracticeRecommendation.focusArea ?? (homePracticeMission as any)?.focusArea;
+
+    if (!practiceRecommendationsSuppressed) {
+      trackPracticeMissionRecommendationClicked({
+        missionId: homePracticeRecommendation.id,
+        reason: homePracticeRecommendation.reason,
+        rank: homePracticeRecommendation.rank,
+        surface: "web_home_practice",
+        entryPoint: "home_card",
+        focusArea,
+        algorithmVersion,
+        experiment: {
+          experimentKey: practiceRecommendationsExperiment.experimentKey,
+          experimentBucket: practiceRecommendationsExperiment.experimentBucket,
+          experimentVariant: practiceRecommendationsExperiment.experimentVariant,
+        },
+      });
+    }
+
+    const params = new URLSearchParams({ mission: homePracticeRecommendation.id, source: "home_hub" });
+    if (homePracticeRecommendationContext) {
+      params.set("recommendation", JSON.stringify(homePracticeRecommendationContext));
+    }
+
+    navigate({ pathname: "/practice/missions", search: `?${params.toString()}` });
   };
 
   const effectivePlan = plan === "pro" ? "PRO" : "FREE";
@@ -656,6 +826,28 @@ export const HomeHubPage: React.FC = () => {
             {practicePlanCopy ? (
               <div className="text-[11px] text-slate-400" data-testid="practice-plan-summary">
                 {practicePlanCopy}
+              </div>
+            ) : null}
+            {homePracticeRecommendation && homePracticeMission ? (
+              <div
+                className="space-y-1 rounded-lg border border-emerald-500/30 bg-emerald-500/5 p-3"
+                data-testid="home-practice-recommendation"
+              >
+                <p className="text-[11px] font-semibold uppercase tracking-wide text-emerald-200">
+                  {t("practice.missionRecommendations.badge")}
+                </p>
+                <p className="text-base font-semibold text-slate-100">{t(homePracticeMission.title)}</p>
+                {homePracticeRecommendationReason ? (
+                  <p className="text-sm text-emerald-200">{homePracticeRecommendationReason}</p>
+                ) : null}
+                <button
+                  type="button"
+                  onClick={handlePracticeRecommendationClick}
+                  className="mt-2 inline-flex items-center rounded-md bg-emerald-500 px-3 py-2 text-sm font-semibold text-slate-900 transition hover:bg-emerald-400"
+                  data-testid="home-practice-recommendation-cta"
+                >
+                  {t("home_dashboard_practice_next_cta")}
+                </button>
               </div>
             ) : null}
             {shouldRenderWeeklyGoalNudge && weeklyGoalNudgeCopy ? (

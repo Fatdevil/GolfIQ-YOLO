@@ -96,6 +96,42 @@ describe('practiceRecommendationsAnalytics', () => {
     expect(payload).toEqual(expected);
   });
 
+  it('builds events for home recommendation surfaces', () => {
+    const shown = buildPracticeMissionRecommendationShownEvent({
+      missionId: 'mission-home',
+      reason: 'focus_area',
+      rank: 1,
+      surface: 'mobile_home_practice',
+      focusArea: 'Putting',
+      algorithmVersion: 'v2',
+      experiment: {
+        experimentKey: 'practice_recommendations',
+        experimentBucket: 7,
+        experimentVariant: 'control',
+      },
+    });
+
+    const clicked = buildPracticeMissionRecommendationClickedEvent({
+      missionId: 'mission-home',
+      reason: 'focus_area',
+      rank: 1,
+      surface: 'web_home_practice',
+      entryPoint: 'home_card',
+      focusArea: 'Putting',
+      algorithmVersion: 'v1',
+      experiment: {
+        experimentKey: 'practice_recommendations',
+        experimentBucket: 9,
+        experimentVariant: 'disabled',
+      },
+    });
+
+    expect(shown.surface).toBe('mobile_home_practice');
+    expect(clicked.surface).toBe('web_home_practice');
+    expect(shown.experiment?.experimentVariant).toBe('control');
+    expect(clicked.experiment?.experimentVariant).toBe('disabled');
+  });
+
   it('emits the correct events', () => {
     const emit = vi.fn();
     const client = { emit };
