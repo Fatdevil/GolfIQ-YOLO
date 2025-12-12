@@ -1,6 +1,18 @@
 import { Link } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 
 import type { CategoryStatus, PlayerAnalytics } from "@/api/analytics";
+import type {
+  StrokesGainedLightCategory,
+  StrokesGainedLightTrend,
+} from "@shared/stats/strokesGainedLight";
+
+type Props = {
+  analytics: PlayerAnalytics;
+  sgLightTrend?: StrokesGainedLightTrend | null;
+  sgLightPracticeHref?: string;
+  onSgLightPracticeClick?: () => void;
+};
 
 const CATEGORY_LABELS: Record<CategoryStatus["category"], string> = {
   tee: "Tee",
@@ -22,12 +34,97 @@ const TREND_LABELS: Record<CategoryStatus["recentTrend"], string> = {
   worsening: "Worsening",
 };
 
-export function PlayerAnalyticsDashboard({ analytics }: { analytics: PlayerAnalytics }) {
+export function PlayerAnalyticsDashboard({
+  analytics,
+  sgLightTrend,
+  sgLightPracticeHref,
+  onSgLightPracticeClick,
+}: Props) {
+  const { t } = useTranslation();
   const bestRun = analytics.bestRoundId;
   const worstRun = analytics.worstRoundId;
+  const sgLightFocusCategory = sgLightTrend?.focusHistory?.[0]?.focusCategory ?? null;
+  const hasSgLightData = Boolean(sgLightTrend);
 
   return (
     <div className="space-y-4">
+      <div className="rounded-lg border border-slate-800 bg-slate-900/60 p-4 space-y-3">
+        <div className="flex items-center justify-between">
+          <p className="text-sm font-semibold text-slate-100">{t("stats.player.sg_light.trend_title")}</p>
+          <span className="text-[11px] text-slate-500">
+            {hasSgLightData
+              ? t("stats.player.sg_light.trend_subtitle", { rounds: sgLightTrend?.windowSize ?? 0 })
+              : null}
+          </span>
+        </div>
+        {!hasSgLightData ? (
+          <p className="text-xs text-slate-400">{t("stats.player.sg_light.trend_empty")}</p>
+        ) : (
+          <div className="space-y-3" data-testid="player-analytics-sg-light-card">
+            {sgLightFocusCategory ? (
+              <div className="flex items-start justify-between gap-3">
+                <div className="space-y-1">
+                  <p className="text-sm font-semibold text-slate-100" data-testid="player-analytics-sg-light-headline">
+                    {t("stats.player.sg_light.trend_focus", {
+                      focus: labelForSgLightCategory(sgLightFocusCategory, t),
+                    })}
+                  </p>
+                  <p className="text-xs text-slate-400">
+                    {t("stats.player.sg_light.trend_subtitle", { rounds: sgLightTrend?.windowSize ?? 0 })}
+                  </p>
+                </div>
+                <p className="text-sm font-semibold text-emerald-200">
+                  {formatSgDelta(sgLightTrend?.perCategory?.[sgLightFocusCategory]?.avgDelta)}
+                </p>
+              </div>
+            ) : null}
+
+            <div className="grid gap-2 sm:grid-cols-2">
+              {Object.entries(sgLightTrend?.perCategory ?? {}).map(([key, entry]) => (
+                <div
+                  key={key}
+                  className="rounded-md border border-slate-800 bg-slate-950/50 px-3 py-2 flex items-center justify-between"
+                >
+                  <p className="text-xs font-semibold text-slate-100">
+                    {labelForSgLightCategory(key as StrokesGainedLightCategory, t)}
+                  </p>
+                  <p className="text-xs font-semibold text-slate-200">{formatSgDelta(entry.avgDelta)}</p>
+                </div>
+              ))}
+            </div>
+
+            {sgLightTrend?.focusHistory?.length ? (
+              <div className="space-y-2">
+                <p className="text-[11px] text-slate-400">{t("stats.player.sg_light.focus_history")}</p>
+                <div className="flex flex-wrap gap-2">
+                  {sgLightTrend.focusHistory.slice(0, 4).map((entry) => (
+                    <span
+                      key={entry.roundId}
+                      className="rounded-full border border-slate-700 bg-slate-900 px-3 py-1 text-[11px] font-semibold text-slate-100"
+                    >
+                      {labelForSgLightCategory(entry.focusCategory, t)}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+
+            {sgLightFocusCategory && sgLightPracticeHref ? (
+              <div>
+                <Link
+                  to={sgLightPracticeHref}
+                  onClick={onSgLightPracticeClick}
+                  className="inline-flex items-center rounded-md bg-emerald-600 px-3 py-2 text-xs font-semibold text-white shadow-sm hover:bg-emerald-500"
+                  data-testid="player-analytics-sg-light-cta"
+                >
+                  {t("stats.player.sg_light.practice_cta")}
+                </Link>
+              </div>
+            ) : null}
+          </div>
+        )}
+      </div>
+
       <div className="grid gap-3 sm:grid-cols-2">
         {analytics.categoryStatus.map((status) => (
           <div
@@ -115,4 +212,16 @@ function formatDate(value: string | number | Date): string {
 function formatPercent(value: number): string {
   const pct = Math.round((value || 0) * 1000) / 10;
   return `${pct.toFixed(1)}%`;
+}
+
+function formatSgDelta(value?: number | null): string {
+  if (value == null || Number.isNaN(value)) return "—";
+  const rounded = Number(value.toFixed(1));
+  const sign = rounded > 0 ? "+" : "";
+  return `${sign}${rounded}`;
+}
+
+function labelForSgLightCategory(category: StrokesGainedLightCategory, t: ReturnType<typeof useTranslation>["t"]): string {
+  const key = category === "tee" ? "sg_light.focus.off_the_tee" : `sg_light.focus.${category}`;
+  return t(key);
 }

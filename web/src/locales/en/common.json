@@ -477,6 +477,18 @@
   "access.upgradeTeaser": "Unlock this feature and more by upgrading to GolfIQ Pro (coming soon).",
   "access.upgradeCta": "Learn more",
 
+  "stats.player.sg_light.trend_title": "Performance trend",
+  "stats.player.sg_light.trend_subtitle": "Across your last {{rounds}} rounds",
+  "stats.player.sg_light.trend_focus": "Focus: {{focus}}",
+  "stats.player.sg_light.trend_empty": "Not enough strokes gained data yet. Play a few more rounds to unlock your trend.",
+  "stats.player.sg_light.focus_history": "Recent focus areas",
+  "stats.player.sg_light.practice_cta": "Practice this focus",
+
+  "sg_light.focus.off_the_tee": "Off the tee",
+  "sg_light.focus.approach": "Approach",
+  "sg_light.focus.short_game": "Short game",
+  "sg_light.focus.putting": "Putting",
+
   "onboarding.title": "Get started with GolfIQ",
   "onboarding.subtitle": "Complete these steps or load demo data to see your insights.",
   "onboarding.seed.button": "Fill with demo data",

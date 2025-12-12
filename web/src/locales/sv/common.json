@@ -456,6 +456,18 @@
   "access.upgradeTeaser": "Lås upp denna funktion m.fl. genom att uppgradera till GolfIQ Pro (kommer snart).",
   "access.upgradeCta": "Läs mer",
 
+  "stats.player.sg_light.trend_title": "SG Light-trend",
+  "stats.player.sg_light.trend_subtitle": "Senaste {{rounds}} rundorna",
+  "stats.player.sg_light.trend_focus": "Fokus: {{focus}}",
+  "stats.player.sg_light.trend_empty": "För lite SG-data ännu. Spela några rundor till för att låsa upp trenden.",
+  "stats.player.sg_light.focus_history": "Senaste fokusområden",
+  "stats.player.sg_light.practice_cta": "Träna på detta",
+
+  "sg_light.focus.off_the_tee": "Från tee",
+  "sg_light.focus.approach": "Inspel",
+  "sg_light.focus.short_game": "Närspel",
+  "sg_light.focus.putting": "Puttning",
+
   "onboarding.title": "Kom igång med GolfIQ",
   "onboarding.subtitle": "Gör stegen nedan eller fyll med demo-data för att se dina insikter.",
   "onboarding.seed.button": "Fyll med demo-data",
