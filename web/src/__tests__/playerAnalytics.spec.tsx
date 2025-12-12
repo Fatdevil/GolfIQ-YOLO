@@ -1,8 +1,8 @@
 import React from "react";
-import { render, screen, waitFor } from "@testing-library/react";
+import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import userEvent from "@testing-library/user-event";
-import { expect, test, vi } from "vitest";
+import { afterEach, beforeEach, expect, test, vi } from "vitest";
 
 import "@/i18n";
 import type { PlayerAnalytics } from "@/api/analytics";
@@ -37,6 +37,10 @@ const mockTrackPracticeRecommendationClicked = vi.mocked(trackPracticeMissionRec
 
 beforeEach(() => {
   vi.clearAllMocks();
+});
+
+afterEach(() => {
+  cleanup();
 });
 
 const SAMPLE_ANALYTICS: PlayerAnalytics = {
