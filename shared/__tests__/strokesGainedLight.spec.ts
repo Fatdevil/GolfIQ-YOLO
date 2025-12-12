@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
 
-import { DEFAULT_STROKES_GAINED_BASELINE, computeStrokesGainedLight } from '../stats/strokesGainedLight';
+import {
+  DEFAULT_STROKES_GAINED_BASELINE,
+  computeStrokesGainedLight,
+  deriveStrokesGainedLightFocusCategory,
+} from '../stats/strokesGainedLight';
 import type { ShotEvent } from '../round/types';
 
 const baseShot: ShotEvent = {
@@ -140,6 +144,98 @@ describe('computeStrokesGainedLight', () => {
     expect(penaltyResult.totalDelta).toBeLessThan(baseResult.totalDelta);
     const approachDelta = penaltyResult.byCategory.find((c) => c.category === 'approach')?.delta;
     expect(approachDelta).toBeLessThan(0);
+  });
+
+  it('exposes a focus category when the worst delta is confident enough', () => {
+    const summary = computeStrokesGainedLight(
+      [
+        { ...baseShot, toPinStart_m: 380, toPinEnd_m: 180 },
+        {
+          ...baseShot,
+          id: 'app',
+          startLie: 'Fairway',
+          seq: 2,
+          toPinStart_m: 150,
+          // poor shot that ends farther from the hole
+          toPinEnd_m: 200,
+        },
+        {
+          ...baseShot,
+          id: 'app-2',
+          startLie: 'Fairway',
+          seq: 3,
+          toPinStart_m: 140,
+          toPinEnd_m: 190,
+        },
+        {
+          ...baseShot,
+          id: 'app-3',
+          startLie: 'Fairway',
+          seq: 4,
+          toPinStart_m: 130,
+          toPinEnd_m: 180,
+        },
+        { ...baseShot, id: 'chip', startLie: 'Rough', seq: 5, toPinStart_m: 10, toPinEnd_m: 2 },
+      ],
+      DEFAULT_STROKES_GAINED_BASELINE,
+    );
+
+    expect(summary.focusCategory).toBe('approach');
+  });
+});
+
+describe('deriveStrokesGainedLightFocusCategory', () => {
+  it('returns null when data is missing or below threshold', () => {
+    expect(
+      deriveStrokesGainedLightFocusCategory({ totalDelta: 0, byCategory: [] } as any),
+    ).toBeNull();
+
+    expect(
+      deriveStrokesGainedLightFocusCategory({
+        totalDelta: 0,
+        byCategory: [
+          { category: 'tee', shots: 1, delta: -0.1, confidence: 0.5 },
+          { category: 'approach', shots: 1, delta: 0.5, confidence: 0.2 },
+        ],
+      }),
+    ).toBeNull();
+  });
+
+  it('picks the most negative confident category', () => {
+    const focus = deriveStrokesGainedLightFocusCategory({
+      totalDelta: -0.4,
+      byCategory: [
+        { category: 'tee', shots: 5, delta: -0.25, confidence: 0.6 },
+        { category: 'approach', shots: 8, delta: -0.4, confidence: 0.7 },
+        { category: 'short_game', shots: 4, delta: 0.3, confidence: 0.9 },
+      ],
+    });
+
+    expect(focus).toBe('approach');
+  });
+
+  it('ignores small negatives when stronger positives exist', () => {
+    const focus = deriveStrokesGainedLightFocusCategory({
+      totalDelta: 0.6,
+      byCategory: [
+        { category: 'tee', shots: 10, delta: 0.6, confidence: 0.9 },
+        { category: 'putting', shots: 20, delta: -0.15, confidence: 0.8 },
+      ],
+    });
+
+    expect(focus).toBeNull();
+  });
+
+  it('ignores low-confidence categories', () => {
+    const focus = deriveStrokesGainedLightFocusCategory({
+      totalDelta: -0.3,
+      byCategory: [
+        { category: 'tee', shots: 1, delta: -0.5, confidence: 0.1 },
+        { category: 'approach', shots: 8, delta: -0.25, confidence: 0.9 },
+      ],
+    });
+
+    expect(focus).toBe('approach');
   });
 });
 

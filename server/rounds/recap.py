@@ -65,6 +65,11 @@ class StrokesGainedLightSummary(BaseModel):
     by_category: list[StrokesGainedLightCategory] = Field(
         serialization_alias="byCategory"
     )
+    focus_category: str | None = Field(
+        default=None,
+        serialization_alias="focusCategory",
+        validation_alias=AliasChoices("focusCategory", "focus_category"),
+    )
 
     model_config = ConfigDict(populate_by_name=True)
 
@@ -197,7 +202,9 @@ def _build_strokes_gained_light(
     summary: RoundSummary, category_stats: "RoundCategoryStats | None"
 ) -> StrokesGainedLightSummary:
     if category_stats is None or not summary.holes_played:
-        return StrokesGainedLightSummary(total_delta=0, by_category=[])
+        return StrokesGainedLightSummary(
+            total_delta=0, by_category=[], focus_category=None
+        )
 
     holes = max(summary.holes_played, 0)
     baseline_per_hole = {
@@ -231,7 +238,16 @@ def _build_strokes_gained_light(
             )
         )
 
-    return StrokesGainedLightSummary(total_delta=total_delta, by_category=by_category)
+    focus_category: str | None = None
+    eligible = [entry for entry in by_category if entry.confidence >= 0.3]
+    if eligible:
+        worst = min(eligible, key=lambda entry: entry.delta)
+        if worst.delta <= -0.2:
+            focus_category = worst.category
+
+    return StrokesGainedLightSummary(
+        total_delta=total_delta, by_category=by_category, focus_category=focus_category
+    )
 
 
 def _build_focus_hints(

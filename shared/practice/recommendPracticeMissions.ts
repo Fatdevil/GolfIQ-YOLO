@@ -1,4 +1,5 @@
 import type { PracticeRecommendationsExperimentVariant } from '../experiments/flags';
+import type { StrokesGainedLightCategory } from '../stats/strokesGainedLight';
 import type { PracticeDecisionContext, PracticeFocusArea } from './practiceDecisionContext';
 
 export type RecommendedMission = {
@@ -31,6 +32,16 @@ function normalizeFocusArea(value?: string | null): PracticeFocusArea | null {
   if (normalized === 'approach') return 'approach';
   if (normalized === 'short_game' || normalized === 'short game') return 'short_game';
   if (normalized === 'putting' || normalized === 'putts') return 'putting';
+  return null;
+}
+
+function focusAreaFromStrokesGainedLight(
+  value?: StrokesGainedLightCategory | null,
+): PracticeFocusArea | null {
+  if (value === 'tee') return 'driving';
+  if (value === 'approach') return 'approach';
+  if (value === 'short_game') return 'short_game';
+  if (value === 'putting') return 'putting';
   return null;
 }
 
@@ -209,5 +220,26 @@ export function recommendPracticeMissions({
     ? rankMissionsV2({ context, missions, maxResults: limit, experimentVariant: normalizedVariant })
     : rankMissionsV1({ context, missions, maxResults: limit, experimentVariant: normalizedVariant });
 
-  return ranked.slice(0, limit);
+  const focusAreaBias = focusAreaFromStrokesGainedLight(context.strokesGainedLightFocusCategory);
+  if (!focusAreaBias) {
+    return ranked.slice(0, limit);
+  }
+
+  const matches: RecommendedMission[] = [];
+  const nonMatches: RecommendedMission[] = [];
+
+  ranked.forEach((mission) => {
+    if (mission.focusArea === focusAreaBias) {
+      matches.push(mission);
+    } else {
+      nonMatches.push(mission);
+    }
+  });
+
+  const reordered = [...matches, ...nonMatches].slice(0, limit).map((mission, index) => ({
+    ...mission,
+    rank: index + 1,
+  }));
+
+  return reordered;
 }

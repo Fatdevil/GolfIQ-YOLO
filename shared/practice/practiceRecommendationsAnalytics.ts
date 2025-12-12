@@ -20,6 +20,8 @@ export type PracticeRecommendationContext = {
   rank?: number | null;
   focusArea?: string | null;
   reasonKey?: PracticeMissionRecommendationReason | string | null;
+  origin?: string | null;
+  strokesGainedLightFocusCategory?: string | null;
   experiment?: PracticeMissionRecommendationExperiment;
   algorithmVersion?: string | null;
   surface?: PracticeMissionRecommendationSurface | string | null;
@@ -32,6 +34,8 @@ type PracticeMissionRecommendationBase = {
   surface: PracticeMissionRecommendationSurface;
   focusArea?: string | null;
   focusAreas?: string[] | null;
+  origin?: string | null;
+  strokesGainedLightFocusCategory?: string | null;
   weeklyGoalId?: string | null;
   weekId?: string | null;
   experiment?: PracticeMissionRecommendationExperiment;
@@ -106,6 +110,10 @@ export function sanitizePracticeRecommendationContext(
         : undefined,
     focusArea: sanitizeNullableString(context.focusArea),
     reasonKey: sanitizeNullableString(context.reasonKey),
+    origin: sanitizeNullableString(context.origin),
+    strokesGainedLightFocusCategory: sanitizeNullableString(
+      context.strokesGainedLightFocusCategory,
+    ),
     experiment: sanitizeExperiment(context.experiment),
     algorithmVersion: sanitizeNullableString(context.algorithmVersion),
     surface: sanitizeSurface(context.surface),
@@ -122,6 +130,10 @@ export function buildPracticeMissionRecommendationShownEvent(
     surface: input.surface,
     focusArea: sanitizeNullableString(input.focusArea),
     focusAreas: sanitizeStringArray(input.focusAreas),
+    origin: sanitizeNullableString(input.origin),
+    strokesGainedLightFocusCategory: sanitizeNullableString(
+      input.strokesGainedLightFocusCategory,
+    ),
     weeklyGoalId: sanitizeNullableString(input.weeklyGoalId),
     weekId: sanitizeNullableString(input.weekId),
     experiment: sanitizeExperiment(input.experiment),

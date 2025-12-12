@@ -136,6 +136,7 @@ export type RoundRecap = {
       delta: number;
       confidence: number;
     }>;
+    focusCategory?: 'tee' | 'approach' | 'short_game' | 'putting' | null;
   } | null;
 };
 

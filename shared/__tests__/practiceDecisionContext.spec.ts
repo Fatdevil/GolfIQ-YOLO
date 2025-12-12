@@ -20,11 +20,15 @@ describe('buildPracticeDecisionContext', () => {
       focusAreas: ['Approach', 'putts', 'APPROACH'],
     });
 
-    expect(ctx).toEqual({
-      goalReached: false,
-      recentFocusAreas: ['approach', 'putting'],
-      practiceConfidence: 0.5,
-    });
+    expect(ctx).toEqual(
+      expect.objectContaining({
+        goalReached: false,
+        goalTarget: 6,
+        goalProgress: 3,
+        recentFocusAreas: ['approach', 'putting'],
+        practiceConfidence: 0.5,
+      }),
+    );
   });
 
   it('uses session count as a fallback when no goal exists', () => {
@@ -40,11 +44,15 @@ describe('buildPracticeDecisionContext', () => {
       focusAreas: ['driving'],
     });
 
-    expect(ctx).toEqual({
-      goalReached: false,
-      recentFocusAreas: ['driving'],
-      practiceConfidence: 2 / 3,
-    });
+    expect(ctx).toEqual(
+      expect.objectContaining({
+        goalReached: false,
+        goalTarget: null,
+        goalProgress: 0,
+        recentFocusAreas: ['driving'],
+        practiceConfidence: 2 / 3,
+      }),
+    );
   });
 
   it('clamps and sanitizes confidence', () => {
@@ -60,10 +68,37 @@ describe('buildPracticeDecisionContext', () => {
       focusAreas: ['unknown'],
     });
 
-    expect(ctx).toEqual({
-      goalReached: true,
-      recentFocusAreas: [],
-      practiceConfidence: 1,
+    expect(ctx).toEqual(
+      expect.objectContaining({
+        goalReached: true,
+        goalTarget: 4,
+        goalProgress: 10,
+        recentFocusAreas: [],
+        practiceConfidence: 1,
+      }),
+    );
+  });
+
+  it('includes SG Light focus hints when provided', () => {
+    const ctx = buildPracticeDecisionContext({
+      summary: {
+        sessionsCompleted: 1,
+        shotsCompleted: 20,
+        goalTarget: 2,
+        goalProgress: 1,
+        goalReached: false,
+        windowDays: 7,
+      },
+      focusAreas: ['short_game'],
+      source: 'round_recap_sg_light',
+      strokesGainedLightFocusCategory: 'tee',
     });
+
+    expect(ctx).toEqual(
+      expect.objectContaining({
+        source: 'round_recap_sg_light',
+        strokesGainedLightFocusCategory: 'tee',
+      }),
+    );
   });
 });

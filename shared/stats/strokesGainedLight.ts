@@ -2,7 +2,9 @@ import type { ShotEvent } from '../round/types';
 
 export type SgCategory = 'tee' | 'approach' | 'short_game' | 'putting';
 
-export interface StrokesGainedLightCategory {
+export type StrokesGainedLightCategory = SgCategory;
+
+export interface StrokesGainedLightCategoryBreakdown {
   category: SgCategory;
   shots: number;
   delta: number;
@@ -11,7 +13,8 @@ export interface StrokesGainedLightCategory {
 
 export interface StrokesGainedLightSummary {
   totalDelta: number;
-  byCategory: StrokesGainedLightCategory[];
+  byCategory: StrokesGainedLightCategoryBreakdown[];
+  focusCategory?: StrokesGainedLightCategory | null;
 }
 
 export interface StrokesGainedBaselineBucket {
@@ -142,6 +145,29 @@ function categoryForShot(shot: ShotEvent, distanceStart: number | null): SgCateg
   return 'approach';
 }
 
+const MIN_CONFIDENCE = 0.3;
+const MIN_ABSOLUTE_DELTA = 0.2;
+
+export function deriveStrokesGainedLightFocusCategory(
+  summary: StrokesGainedLightSummary,
+): StrokesGainedLightCategory | null {
+  const eligible = summary?.byCategory?.filter(
+    (entry) => entry.confidence >= MIN_CONFIDENCE && Number.isFinite(entry.delta),
+  );
+
+  if (!eligible?.length) {
+    return null;
+  }
+
+  const worst = eligible.reduce((acc, curr) => (curr.delta < acc.delta ? curr : acc), eligible[0]);
+
+  if (worst.delta <= -MIN_ABSOLUTE_DELTA) {
+    return worst.category;
+  }
+
+  return null;
+}
+
 export function computeStrokesGainedLight(
   shots: ShotEvent[],
   baseline: StrokesGainedBaseline,
@@ -151,7 +177,7 @@ export function computeStrokesGainedLight(
     return { totalDelta: 0, byCategory: [] };
   }
 
-  const byCategory: Record<SgCategory, StrokesGainedLightCategory> = {
+  const byCategory: Record<SgCategory, StrokesGainedLightCategoryBreakdown> = {
     tee: { category: 'tee', shots: 0, delta: 0, confidence: 0 },
     approach: { category: 'approach', shots: 0, delta: 0, confidence: 0 },
     short_game: { category: 'short_game', shots: 0, delta: 0, confidence: 0 },
@@ -182,6 +208,10 @@ export function computeStrokesGainedLight(
     totalDelta += entry.delta;
   }
 
-  return { totalDelta, byCategory: Object.values(byCategory) };
+  const baseSummary: StrokesGainedLightSummary = { totalDelta, byCategory: Object.values(byCategory) };
+  return {
+    ...baseSummary,
+    focusCategory: deriveStrokesGainedLightFocusCategory(baseSummary),
+  };
 }
 

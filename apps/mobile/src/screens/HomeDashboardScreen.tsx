@@ -448,7 +448,7 @@ export default function HomeDashboardScreen({ navigation }: Props): JSX.Element 
   );
 
   const practiceDecisionContext = useMemo(
-    () => buildPracticeDecisionContext({ summary: practiceReadinessSummary }),
+    () => buildPracticeDecisionContext({ summary: practiceReadinessSummary, source: 'home' }),
     [practiceReadinessSummary],
   );
 
