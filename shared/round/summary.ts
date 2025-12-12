@@ -1,5 +1,10 @@
 import { deriveHoleState } from './derive';
 import type { HoleState, RoundState, ShotEvent } from './types';
+import {
+  DEFAULT_STROKES_GAINED_BASELINE,
+  computeStrokesGainedLight,
+  type StrokesGainedLightSummary,
+} from '../stats/strokesGainedLight';
 import type { BaselineSet } from '../sg/baseline';
 
 export interface PhaseSG {
@@ -37,6 +42,7 @@ export interface RoundSummary {
   phases: PhaseSG;
   clubs: ClubRow[];
   holes: HoleRow[];
+  strokesGainedLight?: StrokesGainedLightSummary;
 }
 
 type PhaseKey = keyof Pick<PhaseSG, 'ott' | 'app' | 'arg' | 'putt'>;
@@ -125,6 +131,8 @@ export function buildRoundSummary(round: RoundState, baselines: BaselineSet): Ro
   const phaseTotals: PhaseSG = { ott: 0, app: 0, arg: 0, putt: 0, total: 0 };
   const clubMap = new Map<string, ClubAccumulator>();
   const holes: HoleRow[] = [];
+  const allShots: ShotEvent[] = [];
+  const holePars: Record<number, number | undefined> = {};
 
   let strokesTotal = 0;
   let puttsTotal = 0;
@@ -164,7 +172,9 @@ export function buildRoundSummary(round: RoundState, baselines: BaselineSet): Ro
     if (!Number.isFinite(derived.par ?? NaN)) {
       toParKnown = false;
     } else {
-      toParSum += strokes - Number(derived.par);
+      const parNumber = Number(derived.par);
+      holePars[holeNo] = parNumber;
+      toParSum += strokes - parNumber;
     }
 
     const gir = derived.metrics?.gir ?? null;
@@ -191,6 +201,7 @@ export function buildRoundSummary(round: RoundState, baselines: BaselineSet): Ro
         const phase = resolvePhase(shot);
         phaseTotals[phase] += sgValue;
       }
+      allShots.push(shot);
       const clubName = normaliseClubName(shot.club);
       if (clubName) {
         const entry = clubMap.get(clubName) ?? {
@@ -229,6 +240,7 @@ export function buildRoundSummary(round: RoundState, baselines: BaselineSet): Ro
     phases: phaseTotals,
     clubs: computeClubRows(clubMap),
     holes,
+    strokesGainedLight: computeStrokesGainedLight(allShots, DEFAULT_STROKES_GAINED_BASELINE, holePars),
   };
 }
 

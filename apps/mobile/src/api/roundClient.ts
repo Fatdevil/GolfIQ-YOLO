@@ -128,6 +128,15 @@ export type RoundRecap = {
     followRate?: number | null;
     notes: string[];
   } | null;
+  strokesGainedLight?: {
+    totalDelta: number;
+    byCategory: Array<{
+      category: 'tee' | 'approach' | 'short_game' | 'putting';
+      shots: number;
+      delta: number;
+      confidence: number;
+    }>;
+  } | null;
 };
 
 export interface RoundInfo {

@@ -48,6 +48,13 @@ const CATEGORY_ORDER: Array<keyof RoundRecap['categories']> = [
   'putting',
 ];
 
+const SG_LIGHT_ORDER: Array<'tee' | 'approach' | 'short_game' | 'putting'> = [
+  'tee',
+  'approach',
+  'short_game',
+  'putting',
+];
+
 function formatCategoryValue(key: keyof RoundRecap['categories'], value: number | null | undefined): string {
   if (value == null) return t('round.recap.missing_category');
   if (key === 'driving' || key === 'approach') {
@@ -352,6 +359,27 @@ export default function RoundRecapScreen({ route, navigation }: Props): JSX.Elem
     return best.label ?? null;
   }, [strokesGained]);
 
+  const sgLightHeadline = useMemo(() => {
+    const sgLight = recap?.strokesGainedLight;
+    if (!sgLight || !sgLight.byCategory?.length) return null;
+
+    const confident = sgLight.byCategory.filter((entry) => entry.confidence >= 0.3);
+    if (!confident.length) return 'Not enough data yet';
+
+    const focus = confident.reduce((acc, curr) =>
+      Math.abs(curr.delta) > Math.abs(acc.delta) ? curr : acc,
+    );
+    const labelMap: Record<string, string> = {
+      tee: 'Tee',
+      approach: 'Approach',
+      short_game: 'Short game',
+      putting: 'Putting',
+    };
+    const label = labelMap[focus.category] ?? focus.category;
+    const deltaLabel = formatSgValue(focus.delta);
+    return focus.delta >= 0 ? `You gained ${deltaLabel} on ${label}` : `You lost ${deltaLabel} on ${label}`;
+  }, [recap?.strokesGainedLight]);
+
   const handleShare = useCallback(async () => {
     if (isDemo || !recap) return;
     const categories = recap.categories || {};
@@ -524,6 +552,45 @@ export default function RoundRecapScreen({ route, navigation }: Props): JSX.Elem
 
       <View style={styles.card}>
         <Text style={styles.cardTitle}>{t('strokesGained.roundSectionTitle')}</Text>
+        {recap.strokesGainedLight ? (
+          <View style={styles.sgLightCard} testID="sg-light-card">
+            <View style={styles.sgHeaderRow}>
+              <Text style={styles.sgLabel}>Strokes Gained (Light)</Text>
+              <Text style={styles.sgValue}>{formatSgValue(recap.strokesGainedLight.totalDelta)}</Text>
+            </View>
+            {sgLightHeadline ? <Text style={styles.muted}>{sgLightHeadline}</Text> : null}
+            <View style={styles.grid}>
+              {SG_LIGHT_ORDER.map((key) => {
+                const entry = recap.strokesGainedLight?.byCategory?.find((c) => c.category === key);
+                const confident = (entry?.confidence ?? 0) >= 0.3;
+                return (
+                  <View key={`sg-light-${key}`} style={styles.tile} testID={`recap-sg-light-${key}`}>
+                    <Text style={styles.tileLabel}>{key.replace('_', ' ')}</Text>
+                    {entry ? (
+                      <>
+                        <Text
+                          style={[
+                            styles.tileValue,
+                            (entry.delta ?? 0) >= 0 ? styles.sgPositive : styles.sgNegative,
+                          ]}
+                        >
+                          {confident ? formatSgValue(entry.delta ?? 0) : '—'}
+                        </Text>
+                        <Text style={styles.muted}>
+                          {confident
+                            ? `${entry.shots} shots • ${(entry.confidence * 100).toFixed(0)}% confidence`
+                            : 'Not enough data yet'}
+                        </Text>
+                      </>
+                    ) : (
+                      <Text style={styles.muted}>No data</Text>
+                    )}
+                  </View>
+                );
+              })}
+            </View>
+          </View>
+        ) : null}
         {strokesGained ? (
           <>
             <View style={styles.sgHeaderRow}>
@@ -630,6 +697,7 @@ const styles = StyleSheet.create({
   card: { borderWidth: 1, borderColor: '#e5e7eb', borderRadius: 12, padding: 12, gap: 12 },
   cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   cardTitle: { fontSize: 18, fontWeight: '700' },
+  sgLightCard: { gap: 8 },
   practiceRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 12 },
   practiceTitle: { fontSize: 16, fontWeight: '700', color: '#111827' },
   statusChip: {

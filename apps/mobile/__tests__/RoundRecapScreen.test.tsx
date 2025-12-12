@@ -62,6 +62,15 @@ const sampleRecap = {
     followRate: 0.67,
     notes: ['You tended to follow the caddie and often scored better when you did.'],
   },
+  strokesGainedLight: {
+    totalDelta: 0.4,
+    byCategory: [
+      { category: 'tee', shots: 10, delta: 0.2, confidence: 1 },
+      { category: 'approach', shots: 14, delta: -0.3, confidence: 1 },
+      { category: 'short_game', shots: 8, delta: 0.5, confidence: 0.8 },
+      { category: 'putting', shots: 30, delta: 0, confidence: 1 },
+    ],
+  },
 };
 
 const sampleStrokes = {
@@ -134,6 +143,25 @@ describe('RoundRecapScreen', () => {
     expect(caddieSummary).toBeTruthy();
     expect(within(caddieSummary).getByText(/Decisions followed: 2\/3/)).toBeTruthy();
     expect(within(caddieSummary).getByText(/follow the caddie/)).toBeTruthy();
+  });
+
+  it('degrades sg light when confidence is low', async () => {
+    mockFetchRecap.mockResolvedValue({
+      ...sampleRecap,
+      strokesGainedLight: {
+        totalDelta: 0,
+        byCategory: [{ category: 'approach', shots: 1, delta: 0.1, confidence: 0.1 }],
+      },
+    });
+    mockFetchRoundStrokesGained.mockResolvedValue(sampleStrokes);
+
+    const { getByText, getByTestId } = render(
+      <RoundRecapScreen navigation={{} as any} route={{ params: { roundId: 'r1' } } as any} />,
+    );
+
+    await waitFor(() => expect(mockFetchRecap).toHaveBeenCalled());
+    const approachTile = getByTestId('recap-sg-light-approach');
+    expect(within(approachTile).getByText('Not enough data yet')).toBeTruthy();
   });
 
   it('shares summary text', async () => {
