@@ -10,7 +10,8 @@ export type PracticeMissionRecommendationSurface =
   | 'web_home_practice'
   | 'mobile_home_sg_light_focus'
   | 'web_home_sg_light_focus'
-  | 'mobile_round_story_sg_light_focus';
+  | 'mobile_round_story_sg_light_focus'
+  | 'mobile_stats_sg_light_trend';
 
 export type PracticeMissionRecommendationExperiment = {
   experimentKey: 'practice_recommendations';
@@ -100,6 +101,7 @@ function sanitizeSurface(value?: PracticeMissionRecommendationSurface | string |
   if (normalized === 'mobile_home_sg_light_focus') return 'mobile_home_sg_light_focus';
   if (normalized === 'web_home_sg_light_focus') return 'web_home_sg_light_focus';
   if (normalized === 'mobile_round_story_sg_light_focus') return 'mobile_round_story_sg_light_focus';
+  if (normalized === 'mobile_stats_sg_light_trend') return 'mobile_stats_sg_light_trend';
   return undefined;
 }
 

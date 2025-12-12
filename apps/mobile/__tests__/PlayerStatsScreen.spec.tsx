@@ -2,19 +2,24 @@ import React from 'react';
 import { fireEvent, render, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
 
-import { listRoundSummaries } from '@app/api/roundClient';
+import { fetchRoundRecap, listRoundSummaries } from '@app/api/roundClient';
 import { fetchPlayerCategoryStats } from '@app/api/statsClient';
 import PlayerStatsScreen from '@app/screens/PlayerStatsScreen';
+import { safeEmit } from '@app/telemetry';
 
 vi.mock('@app/api/roundClient');
 vi.mock('@app/api/statsClient');
+vi.mock('@app/telemetry', () => ({ safeEmit: vi.fn() }));
 
 const mockListSummaries = listRoundSummaries as unknown as Mock;
+const mockFetchRecap = fetchRoundRecap as unknown as Mock;
 const mockFetchCategoryStats = fetchPlayerCategoryStats as unknown as Mock;
+const mockSafeEmit = safeEmit as unknown as Mock;
 
 describe('PlayerStatsScreen', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockFetchRecap.mockResolvedValue({ strokesGainedLight: null, roundId: 'default', date: '2024-01-01' });
   });
 
   it('renders stats from summaries and categories when both requests succeed', async () => {
@@ -114,5 +119,111 @@ describe('PlayerStatsScreen', () => {
 
     fireEvent.click(getByTestId('player-stats-empty-cta'));
     expect(navigation.navigate).toHaveBeenCalledWith('RoundHistory');
+  });
+
+  it('renders SG Light trend and practice CTA when history is available', async () => {
+    mockListSummaries.mockResolvedValue([
+      { roundId: 'r1', totalStrokes: 72, holesPlayed: 18 },
+      { roundId: 'r2', totalStrokes: 70, holesPlayed: 18 },
+    ]);
+    mockFetchCategoryStats.mockResolvedValue({
+      playerId: 'p1',
+      roundsCount: 2,
+      teeShots: 18,
+      approachShots: 30,
+      shortGameShots: 8,
+      putts: 31,
+      penalties: 2,
+      avgTeeShotsPerRound: 18,
+      avgApproachShotsPerRound: 30,
+      avgShortGameShotsPerRound: 8,
+      avgPuttsPerRound: 31,
+      teePct: 25,
+      approachPct: 40,
+      shortGamePct: 10,
+      puttingPct: 25,
+    });
+    mockFetchRecap
+      .mockResolvedValueOnce({
+        roundId: 'r1',
+        date: '2024-03-01',
+        strokesGainedLight: {
+          totalDelta: -0.5,
+          byCategory: [
+            { category: 'tee', shots: 10, delta: -0.6, confidence: 0.9 },
+            { category: 'approach', shots: 10, delta: -0.2, confidence: 0.9 },
+            { category: 'short_game', shots: 6, delta: 0.1, confidence: 0.9 },
+            { category: 'putting', shots: 2, delta: 0.2, confidence: 0.9 },
+          ],
+          focusCategory: 'tee',
+        },
+      })
+      .mockResolvedValueOnce({
+        roundId: 'r2',
+        date: '2024-02-20',
+        strokesGainedLight: {
+          totalDelta: -0.2,
+          byCategory: [
+            { category: 'tee', shots: 12, delta: -0.2, confidence: 0.9 },
+            { category: 'approach', shots: 8, delta: -0.1, confidence: 0.9 },
+            { category: 'short_game', shots: 4, delta: 0.1, confidence: 0.9 },
+            { category: 'putting', shots: 3, delta: 0.1, confidence: 0.9 },
+          ],
+          focusCategory: 'tee',
+        },
+      });
+
+    const navigation = { navigate: vi.fn() } as any;
+    const { getByTestId, getByText } = render(
+      <PlayerStatsScreen navigation={navigation} route={undefined as any} />,
+    );
+
+    await waitFor(() => expect(getByTestId('player-stats-sg-trend-headline')).toBeTruthy());
+    expect(getByText(/Performance trend/)).toBeTruthy();
+    expect(mockSafeEmit).toHaveBeenCalledWith('practice_focus_entry_shown', {
+      focusCategory: 'tee',
+      surface: 'mobile_stats_sg_light_trend',
+    });
+
+    fireEvent.click(getByTestId('player-stats-sg-trend-cta'));
+    expect(navigation.navigate).toHaveBeenCalledWith('PracticeMissions', {
+      source: 'mobile_stats_sg_light_trend',
+      practiceRecommendationSource: 'mobile_stats_sg_light_trend',
+      strokesGainedLightFocusCategory: 'tee',
+    });
+    expect(mockSafeEmit).toHaveBeenCalledWith('practice_focus_entry_clicked', {
+      focusCategory: 'tee',
+      surface: 'mobile_stats_sg_light_trend',
+    });
+  });
+
+  it('shows placeholder when SG Light history is insufficient', async () => {
+    mockListSummaries.mockResolvedValue([{ roundId: 'r1', totalStrokes: 72, holesPlayed: 18 }]);
+    mockFetchCategoryStats.mockResolvedValue({
+      playerId: 'p1',
+      roundsCount: 1,
+      teeShots: 18,
+      approachShots: 30,
+      shortGameShots: 8,
+      putts: 31,
+      penalties: 2,
+      avgTeeShotsPerRound: 18,
+      avgApproachShotsPerRound: 30,
+      avgShortGameShotsPerRound: 8,
+      avgPuttsPerRound: 31,
+      teePct: 25,
+      approachPct: 40,
+      shortGamePct: 10,
+      puttingPct: 25,
+    });
+    mockFetchRecap.mockResolvedValue({ roundId: 'r1', date: '2024-03-01', strokesGainedLight: null });
+
+    const navigation = { navigate: vi.fn() } as any;
+    const { findByText, queryByTestId } = render(
+      <PlayerStatsScreen navigation={navigation} route={undefined as any} />,
+    );
+
+    expect(await findByText(/Not enough strokes gained data yet/)).toBeTruthy();
+    expect(queryByTestId('player-stats-sg-trend-cta')).toBeNull();
   });
 });

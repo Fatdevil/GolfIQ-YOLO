@@ -355,5 +355,20 @@ describe('buildStrokesGainedLightTrend', () => {
     const trend = buildStrokesGainedLightTrend(rounds, { windowSize: 2 });
     expect(trend).toBeNull();
   });
+
+  it('ignores rounds without SG Light data and signals no trend', () => {
+    const rounds = [
+      makeRound({ id: 'missing', date: '2024-03-01', byCategory: [] as any }),
+      makeRound({
+        id: 'valid',
+        date: '2024-02-20',
+        byCategory: baseByCategory({ approach: { delta: -0.4 } }),
+      }),
+    ];
+
+    const trend = buildStrokesGainedLightTrend(rounds, { windowSize: 5 });
+
+    expect(trend).toBeNull();
+  });
 });
 

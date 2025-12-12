@@ -1,12 +1,14 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 
-import { listRoundSummaries, type RoundSummary } from '@app/api/roundClient';
+import { fetchRoundRecap, listRoundSummaries, type RoundSummary } from '@app/api/roundClient';
 import { fetchPlayerCategoryStats, type PlayerCategoryStats } from '@app/api/statsClient';
 import { t } from '@app/i18n';
 import type { RootStackParamList } from '@app/navigation/types';
 import { computePlayerStats } from '@app/stats/playerStatsEngine';
+import { safeEmit } from '@app/telemetry';
+import { buildStrokesGainedLightTrend, type StrokesGainedLightTrend } from '@shared/stats/strokesGainedLight';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'PlayerStats'>;
 
@@ -29,6 +31,13 @@ function formatAverageScore(avgScore?: number | null, avgToPar?: number | null):
   return `${avgScore.toFixed(1)}${diffLabel}`;
 }
 
+function formatSgDelta(value?: number | null): string {
+  if (value == null || Number.isNaN(value)) return '—';
+  const rounded = Number(value.toFixed(1));
+  const sign = rounded > 0 ? '+' : '';
+  return `${sign}${rounded}`;
+}
+
 export default function PlayerStatsScreen({ navigation }: Props): JSX.Element {
   const [summaries, setSummaries] = useState<RoundSummary[]>([]);
   const [categoryStats, setCategoryStats] = useState<PlayerCategoryStats | null>(null);
@@ -36,6 +45,9 @@ export default function PlayerStatsScreen({ navigation }: Props): JSX.Element {
   const [categoryLoading, setCategoryLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [categoryError, setCategoryError] = useState<string | null>(null);
+  const [sgLightTrend, setSgLightTrend] = useState<StrokesGainedLightTrend | null>(null);
+  const [sgLightLoading, setSgLightLoading] = useState(true);
+  const trendImpressionSent = useRef(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -75,8 +87,75 @@ export default function PlayerStatsScreen({ navigation }: Props): JSX.Element {
     };
   }, []);
 
+  useEffect(() => {
+    let cancelled = false;
+    setSgLightLoading(true);
+    trendImpressionSent.current = false;
+
+    if (!summaries?.length) {
+      setSgLightTrend(null);
+      setSgLightLoading(false);
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    (async () => {
+      try {
+        const recaps = await Promise.all(
+          summaries
+            .slice(0, 8)
+            .map((summary) =>
+              fetchRoundRecap(summary.roundId).catch((err) => {
+                console.warn('[player-stats] failed to load recap for trend', err);
+                return null;
+              }),
+            ),
+        );
+
+        if (cancelled) return;
+
+        const sgRounds = recaps
+          .map((recap) =>
+            recap?.strokesGainedLight
+              ? {
+                  ...recap.strokesGainedLight,
+                  roundId: recap.roundId,
+                  playedAt: recap.date,
+                }
+              : null,
+          )
+          .filter((entry): entry is NonNullable<typeof entry> => Boolean(entry));
+
+        const trend = buildStrokesGainedLightTrend(sgRounds, { windowSize: 5 });
+        setSgLightTrend(trend);
+      } catch (err) {
+        console.warn('[player-stats] unable to build sg light trend', err);
+        setSgLightTrend(null);
+      } finally {
+        if (!cancelled) {
+          setSgLightLoading(false);
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [summaries]);
+
   const stats = useMemo(() => computePlayerStats(summaries), [summaries]);
   const hasRounds = stats.roundsPlayed > 0;
+  const sgLightFocusCategory = sgLightTrend?.focusHistory?.[0]?.focusCategory ?? null;
+
+  useEffect(() => {
+    if (!sgLightTrend || !sgLightFocusCategory || trendImpressionSent.current) return;
+    trendImpressionSent.current = true;
+    safeEmit('practice_focus_entry_shown', {
+      surface: 'mobile_stats_sg_light_trend',
+      focusCategory: sgLightFocusCategory,
+    });
+  }, [sgLightFocusCategory, sgLightTrend]);
 
   if (summariesLoading) {
     return (
@@ -121,6 +200,75 @@ export default function PlayerStatsScreen({ navigation }: Props): JSX.Element {
           <StatRow label={t('stats.player.gir')} value={formatPercentage(stats.girPct)} />
         </View>
       )}
+
+      <View style={styles.card} testID="player-stats-sg-trend-card">
+        <Text style={styles.cardTitle}>{t('stats.player.sg_light.trend_title')}</Text>
+        {sgLightLoading ? (
+          <ActivityIndicator />
+        ) : sgLightTrend ? (
+          <>
+            <Text style={styles.muted}>
+              {t('stats.player.sg_light.trend_subtitle', { rounds: sgLightTrend.windowSize })}
+            </Text>
+            {sgLightFocusCategory ? (
+              <View style={styles.statRow}>
+                <Text style={styles.statLabel} testID="player-stats-sg-trend-headline">
+                  {t('stats.player.sg_light.trend_focus', {
+                    focus: t(
+                      sgLightFocusCategory === 'tee'
+                        ? 'sg_light.focus.off_the_tee'
+                        : `sg_light.focus.${sgLightFocusCategory}`,
+                    ),
+                  })}
+                </Text>
+                <Text style={styles.statValue}>
+                  {formatSgDelta(sgLightTrend.perCategory?.[sgLightFocusCategory]?.avgDelta)}
+                </Text>
+              </View>
+            ) : null}
+
+            {sgLightTrend.focusHistory?.length ? (
+              <View style={styles.focusHistory}>
+                <Text style={styles.muted}>{t('stats.player.sg_light.focus_history')}</Text>
+                <View style={styles.focusBadges}>
+                  {sgLightTrend.focusHistory.slice(0, 4).map((entry) => (
+                    <Text key={entry.roundId} style={styles.focusBadge}>
+                      {t(
+                        entry.focusCategory === 'tee'
+                          ? 'sg_light.focus.off_the_tee'
+                          : `sg_light.focus.${entry.focusCategory}`,
+                      )}
+                    </Text>
+                  ))}
+                </View>
+              </View>
+            ) : null}
+
+            {sgLightFocusCategory ? (
+              <TouchableOpacity
+                style={[styles.primaryButton, styles.secondaryButton]}
+                onPress={() => {
+                  safeEmit('practice_focus_entry_clicked', {
+                    surface: 'mobile_stats_sg_light_trend',
+                    focusCategory: sgLightFocusCategory,
+                  });
+                  navigation.navigate('PracticeMissions', {
+                    source: 'mobile_stats_sg_light_trend',
+                    practiceRecommendationSource: 'mobile_stats_sg_light_trend',
+                    strokesGainedLightFocusCategory: sgLightFocusCategory,
+                  });
+                }}
+                accessibilityLabel={t('stats.player.sg_light.practice_cta')}
+                testID="player-stats-sg-trend-cta"
+              >
+                <Text style={styles.primaryButtonText}>{t('stats.player.sg_light.practice_cta')}</Text>
+              </TouchableOpacity>
+            ) : null}
+          </>
+        ) : (
+          <Text style={styles.muted}>{t('stats.player.sg_light.trend_empty')}</Text>
+        )}
+      </View>
 
       <View style={styles.card}>
         <Text style={styles.cardTitle}>{t('stats.player.categories.title')}</Text>
@@ -236,4 +384,14 @@ const styles = StyleSheet.create({
   statValue: { fontWeight: '700', fontSize: 16 },
   categoryValues: { alignItems: 'flex-end' },
   categoryPct: { color: '#6b7280' },
+  focusHistory: { gap: 4 },
+  focusBadges: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
+  focusBadge: {
+    backgroundColor: '#f3f4f6',
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    color: '#111827',
+    fontWeight: '600',
+  },
 });
