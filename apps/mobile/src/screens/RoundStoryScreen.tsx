@@ -1,8 +1,9 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { fetchCoachRoundSummary, fetchRoundSg, fetchSessionTimeline } from '@app/api/roundStory';
+import { fetchRoundRecap } from '@app/api/roundClient';
 import { fetchAccessPlan, type AccessPlan } from '@app/api/player';
 import type { RootStackParamList } from '@app/navigation/types';
 import { buildHighlights, buildRoundStoryViewModel } from '@app/roundStory/model';
@@ -15,6 +16,7 @@ import { buildPracticeReadinessSummary } from '@shared/practice/practiceReadines
 import { emitPracticeReadinessViewed } from '@shared/practice/practiceReadinessAnalytics';
 import { getDefaultWeeklyPracticeGoalSettings } from '@shared/practice/practiceGoalSettings';
 import type { PracticeMissionHistoryEntry } from '@shared/practice/practiceHistory';
+import type { StrokesGainedLightTrend } from '@shared/stats/strokesGainedLight';
 
 const PRO_TEASER = 'Unlock full analysis (SG and swing insights) with GolfIQ Pro.';
 
@@ -45,6 +47,17 @@ function formatSg(value?: number | null): string {
   return `${value >= 0 ? '+' : ''}${value.toFixed(1)}`;
 }
 
+function sgLightCategoryLabel(category: keyof StrokesGainedLightTrend['perCategory']): string {
+  const key = {
+    tee: 'round.story.sgLightTrendCategory.tee',
+    approach: 'round.story.sgLightTrendCategory.approach',
+    short_game: 'round.story.sgLightTrendCategory.short_game',
+    putting: 'round.story.sgLightTrendCategory.putting',
+  }[category];
+
+  return t(key);
+}
+
 function bestCategorySummary(sg?: { categories: { name: string; strokesGained: number }[] } | null): string | null {
   if (!sg?.categories?.length) return null;
   const sorted = [...sg.categories].sort((a, b) => b.strokesGained - a.strokesGained);
@@ -67,6 +80,7 @@ export default function RoundStoryScreen({ route, navigation }: Props): JSX.Elem
   const [summary, setSummary] = useState<LastRoundSummary | null>(initialSummary ?? null);
   const [plan, setPlan] = useState<AccessPlan | null>(null);
   const [sg, setSg] = useState<Awaited<ReturnType<typeof fetchRoundSg>> | null>(null);
+  const [sgLightTrend, setSgLightTrend] = useState<StrokesGainedLightTrend | null>(null);
   const [highlights, setHighlights] = useState<string[]>([]);
   const [coach, setCoach] = useState<Awaited<ReturnType<typeof fetchCoachRoundSummary>>>(null);
   const [practiceHistory, setPracticeHistory] = useState<PracticeMissionHistoryEntry[]>([]);
@@ -74,10 +88,16 @@ export default function RoundStoryScreen({ route, navigation }: Props): JSX.Elem
   const [loadingPractice, setLoadingPractice] = useState(true);
   const [loadingPlan, setLoadingPlan] = useState(true);
   const [loadingSg, setLoadingSg] = useState(false);
+  const [loadingTrend, setLoadingTrend] = useState(false);
   const [loadingAnalytics, setLoadingAnalytics] = useState(false);
   const [analyticsError, setAnalyticsError] = useState<string | null>(null);
   const [sgError, setSgError] = useState<string | null>(null);
   const [reloadToken, setReloadToken] = useState(0);
+  const trendImpressionSent = useRef(false);
+
+  useEffect(() => {
+    trendImpressionSent.current = false;
+  }, [runId, reloadToken]);
 
   useEffect(() => {
     let cancelled = false;
@@ -174,6 +194,30 @@ export default function RoundStoryScreen({ route, navigation }: Props): JSX.Elem
   }, [runId, reloadToken]);
 
   useEffect(() => {
+    let cancelled = false;
+    setLoadingTrend(true);
+    fetchRoundRecap(runId)
+      .then((recap) => {
+        if (cancelled) return;
+        setSgLightTrend(recap.strokesGainedLightTrend ?? null);
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setSgLightTrend(null);
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setLoadingTrend(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [runId, reloadToken]);
+
+  useEffect(() => {
     if (!plan || plan.plan !== 'pro') return;
     let cancelled = false;
     setLoadingAnalytics(true);
@@ -228,7 +272,29 @@ export default function RoundStoryScreen({ route, navigation }: Props): JSX.Elem
     : 'Range practice';
   const isGuest = Boolean((summary as LastRoundSummary & { isGuest?: boolean })?.isGuest);
   const showAnalysisError = Boolean((sgError && !sg) || (analyticsError && isPro));
-  const isLoadingAnything = loadingPlan || loadingSg || (isPro && loadingAnalytics);
+  const isLoadingAnything = loadingPlan || loadingSg || loadingTrend || (isPro && loadingAnalytics);
+  const sgLightFocusHistory = sgLightTrend?.focusHistory ?? [];
+  const currentSgLightFocus = sgLightFocusHistory[0]?.focusCategory ?? null;
+  const sgLightTrendSubtitle = sgLightTrend
+    ? t('round.story.sgLightTrendSubtitle', { rounds: sgLightTrend.windowSize })
+    : null;
+  const sgLightTrendCategories = useMemo(
+    () => {
+      if (!sgLightTrend) return [];
+      const categories: (keyof StrokesGainedLightTrend['perCategory'])[] = [
+        'tee',
+        'approach',
+        'short_game',
+        'putting',
+      ];
+      return categories.map((category) => ({
+        category,
+        label: sgLightCategoryLabel(category),
+        value: sgLightTrend.perCategory?.[category]?.avgDelta ?? null,
+      }));
+    },
+    [sgLightTrend],
+  );
 
   const keyStatsChips = useMemo(() => {
     if (!isPro || !sg) return [];
@@ -270,6 +336,18 @@ export default function RoundStoryScreen({ route, navigation }: Props): JSX.Elem
       },
     );
   }, [loadingPractice, practiceReadiness, runId]);
+
+  useEffect(() => {
+    if (!sgLightTrend || trendImpressionSent.current) return;
+    trendImpressionSent.current = true;
+    safeEmit('sg_light_trend_viewed', {
+      surface: 'round_story',
+      platform: 'mobile',
+      roundId: runId,
+      windowSize: sgLightTrend.windowSize,
+      focusCategory: sgLightTrend.focusHistory[0]?.focusCategory ?? null,
+    });
+  }, [runId, sgLightTrend]);
 
   const onRetry = useCallback(() => {
     setReloadToken((value) => value + 1);
@@ -341,6 +419,50 @@ export default function RoundStoryScreen({ route, navigation }: Props): JSX.Elem
           )}
           {!loadingSg && !sg && !sgError && (
             <Text style={styles.meta}>No strokes gained data available for this round.</Text>
+          )}
+        </View>
+      </View>
+
+      <View style={styles.section} testID="sg-light-trend">
+        <View style={styles.sectionHeader}>
+          <Text style={styles.sectionTitle}>{t('round.story.sgLightTrendTitle')}</Text>
+          {(loadingTrend || loadingSg) && <ActivityIndicator size="small" />}
+        </View>
+        <View style={styles.card}>
+          {sgLightTrend ? (
+            <>
+              {sgLightTrendSubtitle && <Text style={styles.meta}>{sgLightTrendSubtitle}</Text>}
+              <View style={styles.chipGrid}>
+                {sgLightTrendCategories.map((entry) => (
+                  <View
+                    key={entry.category}
+                    style={[styles.chip, currentSgLightFocus === entry.category && styles.focusChip]}
+                  >
+                    <View style={styles.chipHeaderRow}>
+                      <Text style={styles.chipLabel}>{entry.label}</Text>
+                      {currentSgLightFocus === entry.category && (
+                        <Text style={styles.focusBadge}>{t('round.story.sgLightTrendFocusBadge')}</Text>
+                      )}
+                    </View>
+                    <Text style={styles.chipValue}>{formatSg(entry.value)}</Text>
+                  </View>
+                ))}
+              </View>
+
+              {sgLightFocusHistory.length > 0 && (
+                <View style={styles.focusHistory}>
+                  <Text style={styles.meta}>{t('round.story.sgLightTrendFocusHistoryTitle')}</Text>
+                  {sgLightFocusHistory.map((entry, idx) => (
+                    <Text key={`${entry.roundId}-${idx}`} style={styles.listItem}>
+                      • {sgLightCategoryLabel(entry.focusCategory)} ·{' '}
+                      {formatDate(entry.playedAt) ?? entry.playedAt}
+                    </Text>
+                  ))}
+                </View>
+              )}
+            </>
+          ) : (
+            <Text style={styles.meta}>{t('weeklySummary.notEnough')}</Text>
           )}
         </View>
       </View>
@@ -582,12 +704,31 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#e2e8f0',
   },
+  focusChip: {
+    borderColor: '#0ea5e9',
+    backgroundColor: '#e0f2fe',
+  },
+  chipHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: 6,
+  },
   chipLabel: {
     fontWeight: '700',
     color: '#0f172a',
   },
   chipValue: {
     color: '#0f172a',
+  },
+  focusBadge: {
+    backgroundColor: '#0ea5e9',
+    color: '#0f172a',
+    fontWeight: '700',
+    fontSize: 12,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 999,
   },
   callout: {
     backgroundColor: '#f8fafc',
@@ -610,6 +751,10 @@ const styles = StyleSheet.create({
   },
   listItem: {
     color: '#0f172a',
+  },
+  focusHistory: {
+    marginTop: 10,
+    gap: 4,
   },
   previewCard: {
     backgroundColor: '#f8fafc',

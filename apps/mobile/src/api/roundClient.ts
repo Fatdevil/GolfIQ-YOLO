@@ -138,6 +138,18 @@ export type RoundRecap = {
     }>;
     focusCategory?: 'tee' | 'approach' | 'short_game' | 'putting' | null;
   } | null;
+  strokesGainedLightTrend?: {
+    windowSize: number;
+    perCategory: Record<
+      'tee' | 'approach' | 'short_game' | 'putting',
+      { avgDelta: number; rounds: number }
+    >;
+    focusHistory: Array<{
+      roundId: string;
+      playedAt: string;
+      focusCategory: 'tee' | 'approach' | 'short_game' | 'putting';
+    }>;
+  } | null;
 };
 
 export interface RoundInfo {

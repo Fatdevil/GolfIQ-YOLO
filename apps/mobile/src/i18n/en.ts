@@ -515,6 +515,16 @@ export const en = {
       practiceGoalUnavailable: 'Weekly goal not set',
       highlightsUnavailable: 'No shot-by-shot highlights available for this round.',
       coachInsightsUnavailable: 'We couldn’t load detailed coach insights this time, but here are your stats.',
+      sgLightTrendTitle: 'SG Light trend',
+      sgLightTrendSubtitle: 'Last {{rounds}} rounds',
+      sgLightTrendFocusBadge: 'Focus',
+      sgLightTrendFocusHistoryTitle: 'Focus history',
+      sgLightTrendCategory: {
+        tee: 'Off the tee',
+        approach: 'Approach',
+        short_game: 'Short game',
+        putting: 'Putting',
+      },
     },
   },
   strokesGained: {

@@ -153,6 +153,16 @@ export const sv = {
       practiceGoalUnavailable: 'Veckomål ej satt',
       highlightsUnavailable: 'Inga slag-för-slag-höjdpunkter tillgängliga för den här rundan.',
       coachInsightsUnavailable: 'Vi kunde inte hämta detaljerade coach-insikter den här gången, men här är dina siffror.',
+      sgLightTrendTitle: 'SG Light-trend',
+      sgLightTrendSubtitle: 'Senaste {{rounds}} rundorna',
+      sgLightTrendFocusBadge: 'Fokus',
+      sgLightTrendFocusHistoryTitle: 'Fokushistorik',
+      sgLightTrendCategory: {
+        tee: 'Från tee',
+        approach: 'Inspel',
+        short_game: 'Närspel',
+        putting: 'Puttning',
+      },
     },
   },
   sg_light: {
