@@ -202,7 +202,9 @@ def _build_strokes_gained_light(
     summary: RoundSummary, category_stats: "RoundCategoryStats | None"
 ) -> StrokesGainedLightSummary:
     if category_stats is None or not summary.holes_played:
-        return StrokesGainedLightSummary(total_delta=0, by_category=[], focus_category=None)
+        return StrokesGainedLightSummary(
+            total_delta=0, by_category=[], focus_category=None
+        )
 
     holes = max(summary.holes_played, 0)
     baseline_per_hole = {
