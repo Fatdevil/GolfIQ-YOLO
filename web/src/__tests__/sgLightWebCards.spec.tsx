@@ -105,7 +105,7 @@ describe("SG Light web cards", () => {
       />,
     );
 
-    expect(trackPracticeMissionRecommendationShown).toHaveBeenCalledTimes(2);
+    expect(trackPracticeMissionRecommendationShown).toHaveBeenCalledTimes(1);
   });
 
   it("opens explainer from summary card", async () => {
@@ -182,7 +182,7 @@ describe("SG Light web cards", () => {
     expect(trackPracticeMissionRecommendationShown).toHaveBeenCalledTimes(1);
   });
 
-  it("re-tracks SG Light trend impression when focus changes", async () => {
+  it("keeps SG Light trend impression deduped when focus changes", async () => {
     const builder = vi.fn().mockReturnValue("/range/practice?source=web_round_story");
 
     const { rerender } = render(
@@ -205,7 +205,7 @@ describe("SG Light web cards", () => {
       />,
     );
 
-    await waitFor(() => expect(trackPracticeMissionRecommendationShown).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(trackPracticeMissionRecommendationShown).toHaveBeenCalledTimes(1));
   });
 
   it("does not track SG Light trend impression without a focus", async () => {

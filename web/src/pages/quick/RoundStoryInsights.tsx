@@ -1,7 +1,6 @@
 import React, { useMemo } from "react";
 
-import { SgLightSummaryCardWeb } from "@/sg/SgLightSummaryCardWeb";
-import { SgLightTrendCardWeb } from "@/sg/SgLightTrendCardWeb";
+import { SgLightInsightsSectionWeb } from "@/sg/SgLightInsightsSectionWeb";
 import type {
   StrokesGainedLightCategory,
   StrokesGainedLightSummary,
@@ -34,24 +33,14 @@ export function RoundStoryInsights({
 
   return (
     <section className="space-y-3" data-testid="round-story-sg-light">
-      {hasSummary ? (
-        <SgLightSummaryCardWeb
-          summary={summary ?? null}
-          practiceSurface="web_round_story"
-          practiceHrefBuilder={practiceHrefBuilder}
-          explainerSurface="round_story"
-          roundId={roundId}
-        />
-      ) : null}
-      {hasTrend ? (
-        <SgLightTrendCardWeb
-          rounds={rounds ?? undefined}
-          trend={trend ?? undefined}
-          practiceSurface="web_round_story"
-          practiceHrefBuilder={practiceHrefBuilder}
-          roundId={roundId}
-        />
-      ) : null}
+      <SgLightInsightsSectionWeb
+        surface="round_story"
+        contextId={roundId ?? undefined}
+        sgLightSummary={summary}
+        sgLightTrend={trend}
+        rounds={rounds ?? null}
+        practiceHrefBuilder={practiceHrefBuilder}
+      />
     </section>
   );
 }
