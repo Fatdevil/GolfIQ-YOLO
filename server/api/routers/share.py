@@ -279,9 +279,7 @@ def create_round_share_link(
     }
 
     if sg_light_summary:
-        payload["strokes_gained_light"] = sg_light_summary.model_dump(
-            by_alias=True
-        )
+        payload["strokes_gained_light"] = sg_light_summary.model_dump()
 
     description = "Shared round recap"
     if info.course_id:
