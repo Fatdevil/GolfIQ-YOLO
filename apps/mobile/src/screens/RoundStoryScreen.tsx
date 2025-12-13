@@ -17,8 +17,7 @@ import { emitPracticeReadinessViewed } from '@shared/practice/practiceReadinessA
 import { getDefaultWeeklyPracticeGoalSettings } from '@shared/practice/practiceGoalSettings';
 import type { PracticeMissionHistoryEntry } from '@shared/practice/practiceHistory';
 import type { StrokesGainedLightTrend } from '@shared/stats/strokesGainedLight';
-import { SgLightExplainerModal } from '@app/components/SgLightExplainerModal';
-import { useTrackOncePerKey } from '@app/hooks/useTrackOncePerKey';
+import { SgLightInsightsSection } from '@app/components/sg/SgLightInsightsSection';
 
 const PRO_TEASER = 'Unlock full analysis (SG and swing insights) with GolfIQ Pro.';
 
@@ -47,17 +46,6 @@ function formatDate(value?: string | null): string | null {
 function formatSg(value?: number | null): string {
   if (typeof value !== 'number') return '—';
   return `${value >= 0 ? '+' : ''}${value.toFixed(1)}`;
-}
-
-function sgLightCategoryLabel(category: keyof StrokesGainedLightTrend['perCategory']): string {
-  const key = {
-    tee: 'round.story.sgLightTrendCategory.tee',
-    approach: 'round.story.sgLightTrendCategory.approach',
-    short_game: 'round.story.sgLightTrendCategory.short_game',
-    putting: 'round.story.sgLightTrendCategory.putting',
-  }[category];
-
-  return t(key);
 }
 
 function bestCategorySummary(sg?: { categories: { name: string; strokesGained: number }[] } | null): string | null {
@@ -95,7 +83,6 @@ export default function RoundStoryScreen({ route, navigation }: Props): JSX.Elem
   const [analyticsError, setAnalyticsError] = useState<string | null>(null);
   const [sgError, setSgError] = useState<string | null>(null);
   const [reloadToken, setReloadToken] = useState(0);
-  const [sgLightExplainerVisible, setSgLightExplainerVisible] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -271,41 +258,21 @@ export default function RoundStoryScreen({ route, navigation }: Props): JSX.Elem
   const isGuest = Boolean((summary as LastRoundSummary & { isGuest?: boolean })?.isGuest);
   const showAnalysisError = Boolean((sgError && !sg) || (analyticsError && isPro));
   const isLoadingAnything = loadingPlan || loadingSg || loadingTrend || (isPro && loadingAnalytics);
-  const sgLightFocusHistory = sgLightTrend?.focusHistory ?? [];
-  const currentSgLightFocus = sgLightFocusHistory[0]?.focusCategory ?? null;
-  const sgLightTrendImpressionKey = useMemo(() => {
-    if (!currentSgLightFocus) return null;
-    const trendRoundId = sgLightFocusHistory[0]?.roundId ?? runId ?? 'unknown';
-    return `sg_light:round_story:${trendRoundId}:trend:${currentSgLightFocus}`;
-  }, [currentSgLightFocus, runId, sgLightFocusHistory]);
-  const { fire: fireSgLightTrendImpression } = useTrackOncePerKey(sgLightTrendImpressionKey);
-  const sgLightTrendSubtitle = sgLightTrend
-    ? t('round.story.sgLightTrendSubtitle', { rounds: sgLightTrend.windowSize })
-    : null;
-  const sgLightTrendCategories = useMemo(
-    () => {
-      if (!sgLightTrend) return [];
-      const categories: (keyof StrokesGainedLightTrend['perCategory'])[] = [
-        'tee',
-        'approach',
-        'short_game',
-        'putting',
-      ];
-      return categories.map((category) => ({
-        category,
-        label: sgLightCategoryLabel(category),
-        value: sgLightTrend.perCategory?.[category]?.avgDelta ?? null,
-      }));
+  const trackTrendImpression = useCallback(
+    (
+      focusCategory: StrokesGainedLightTrend['focusHistory'][number]['focusCategory'],
+      trend: StrokesGainedLightTrend,
+    ) => {
+      safeEmit('sg_light_trend_viewed', {
+        surface: 'round_story',
+        platform: 'mobile',
+        roundId: runId,
+        windowSize: trend.windowSize,
+        focusCategory,
+      });
     },
-    [sgLightTrend],
+    [runId],
   );
-
-  const openSgLightExplainer = useCallback(() => {
-    safeEmit('sg_light_explainer_opened', { surface: 'round_story', roundId: runId });
-    setSgLightExplainerVisible(true);
-  }, [runId]);
-
-  const closeSgLightExplainer = useCallback(() => setSgLightExplainerVisible(false), []);
 
   const keyStatsChips = useMemo(() => {
     if (!isPro || !sg) return [];
@@ -347,20 +314,6 @@ export default function RoundStoryScreen({ route, navigation }: Props): JSX.Elem
       },
     );
   }, [loadingPractice, practiceReadiness, runId]);
-
-  useEffect(() => {
-    if (!sgLightTrend || !currentSgLightFocus) return;
-
-    fireSgLightTrendImpression(() => {
-      safeEmit('sg_light_trend_viewed', {
-        surface: 'round_story',
-        platform: 'mobile',
-        roundId: runId,
-        windowSize: sgLightTrend.windowSize,
-        focusCategory: currentSgLightFocus,
-      });
-    });
-  }, [currentSgLightFocus, fireSgLightTrendImpression, runId, sgLightTrend]);
 
   const onRetry = useCallback(() => {
     setReloadToken((value) => value + 1);
@@ -437,59 +390,13 @@ export default function RoundStoryScreen({ route, navigation }: Props): JSX.Elem
         </View>
       </View>
 
-      <View style={styles.section} testID="sg-light-trend">
-        <View style={styles.sectionHeader}>
-          <View style={styles.sectionTitleRow}>
-            <Text style={styles.sectionTitle}>{t('round.story.sgLightTrendTitle')}</Text>
-            <TouchableOpacity
-              onPress={openSgLightExplainer}
-              accessibilityLabel={t('sg_light.explainer.open_label')}
-              style={styles.infoButton}
-              testID="open-sg-light-explainer"
-            >
-              <Text style={styles.infoIcon}>i</Text>
-            </TouchableOpacity>
-          </View>
-          {(loadingTrend || loadingSg) && <ActivityIndicator size="small" />}
-        </View>
-        <View style={styles.card}>
-          {sgLightTrend ? (
-            <>
-              {sgLightTrendSubtitle && <Text style={styles.meta}>{sgLightTrendSubtitle}</Text>}
-              <View style={styles.chipGrid}>
-                {sgLightTrendCategories.map((entry) => (
-                  <View
-                    key={entry.category}
-                    style={[styles.chip, currentSgLightFocus === entry.category && styles.focusChip]}
-                  >
-                    <View style={styles.chipHeaderRow}>
-                      <Text style={styles.chipLabel}>{entry.label}</Text>
-                      {currentSgLightFocus === entry.category && (
-                        <Text style={styles.focusBadge}>{t('round.story.sgLightTrendFocusBadge')}</Text>
-                      )}
-                    </View>
-                    <Text style={styles.chipValue}>{formatSg(entry.value)}</Text>
-                  </View>
-                ))}
-              </View>
-
-              {sgLightFocusHistory.length > 0 && (
-                <View style={styles.focusHistory}>
-                  <Text style={styles.meta}>{t('round.story.sgLightTrendFocusHistoryTitle')}</Text>
-                  {sgLightFocusHistory.map((entry, idx) => (
-                    <Text key={`${entry.roundId}-${idx}`} style={styles.listItem}>
-                      • {sgLightCategoryLabel(entry.focusCategory)} ·{' '}
-                      {formatDate(entry.playedAt) ?? entry.playedAt}
-                    </Text>
-                  ))}
-                </View>
-              )}
-            </>
-          ) : (
-            <Text style={styles.meta}>{t('weeklySummary.notEnough')}</Text>
-          )}
-        </View>
-      </View>
+      <SgLightInsightsSection
+        surface="round_story"
+        contextId={runId}
+        trend={sgLightTrend}
+        loadingTrend={loadingTrend || loadingSg}
+        onTrackTrendImpression={trackTrendImpression}
+      />
 
       <View style={styles.section} testID="timeline-highlights">
         <View style={styles.sectionHeader}>
@@ -600,11 +507,6 @@ export default function RoundStoryScreen({ route, navigation }: Props): JSX.Elem
         </View>
       </View>
       </ScrollView>
-      <SgLightExplainerModal
-        visible={sgLightExplainerVisible}
-        onClose={closeSgLightExplainer}
-        t={t}
-      />
     </>
   );
 }
@@ -684,17 +586,6 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     color: '#0f172a',
   },
-  infoButton: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: '#cbd5e1',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#f8fafc',
-  },
-  infoIcon: { color: '#0f172a', fontWeight: '700' },
   card: {
     backgroundColor: '#fff',
     padding: 16,
