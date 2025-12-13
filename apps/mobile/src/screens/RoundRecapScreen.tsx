@@ -487,7 +487,8 @@ export default function RoundRecapScreen({ route, navigation }: Props): JSX.Elem
   }
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+    <>
+      <ScrollView style={styles.container} contentContainerStyle={styles.content}>
       <View style={styles.header}>
         <Text style={styles.title}>{courseName}</Text>
         <Text style={styles.subtitle}>{dateLabel}</Text>
@@ -728,27 +729,27 @@ export default function RoundRecapScreen({ route, navigation }: Props): JSX.Elem
         )}
       </View>
 
-      <TouchableOpacity
-        style={styles.primaryCta}
-        onPress={() =>
-          navigation.navigate('CoachReport', {
-            roundId,
-            courseName,
-            date: recap?.date,
-            isDemo,
-          })
-        }
-        testID="open-coach-report"
-      >
-        <Text style={styles.primaryCtaText}>{t('coach_report_cta_from_recap')}</Text>
-      </TouchableOpacity>
-    </ScrollView>
-    <SgLightExplainerModal
-      visible={sgLightExplainerVisible}
-      onClose={closeSgLightExplainer}
-      t={t}
-    />
-  </>
+        <TouchableOpacity
+          style={styles.primaryCta}
+          onPress={() =>
+            navigation.navigate('CoachReport', {
+              roundId,
+              courseName,
+              date: recap?.date,
+              isDemo,
+            })
+          }
+          testID="open-coach-report"
+        >
+          <Text style={styles.primaryCtaText}>{t('coach_report_cta_from_recap')}</Text>
+        </TouchableOpacity>
+      </ScrollView>
+      <SgLightExplainerModal
+        visible={sgLightExplainerVisible}
+        onClose={closeSgLightExplainer}
+        t={t}
+      />
+    </>
   );
 }
 
