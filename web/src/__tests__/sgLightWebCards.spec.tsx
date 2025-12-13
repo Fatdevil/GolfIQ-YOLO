@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { SgLightSummaryCardWeb } from "@/sg/SgLightSummaryCardWeb";
 import { SgLightTrendCardWeb } from "@/sg/SgLightTrendCardWeb";
+import { trackPracticeMissionRecommendationShown } from "@/practice/analytics";
 import type { StrokesGainedLightSummary, StrokesGainedLightTrend } from "@shared/stats/strokesGainedLight";
 
 vi.mock("react-i18next", () => ({
@@ -15,7 +16,10 @@ vi.mock("react-i18next", () => ({
   }),
 }));
 
-afterEach(() => cleanup());
+afterEach(() => {
+  cleanup();
+  vi.clearAllMocks();
+});
 
 vi.mock("@/practice/analytics", () => ({
   trackPracticeMissionRecommendationShown: vi.fn(),
@@ -79,5 +83,43 @@ describe("SG Light web cards", () => {
     const cta = screen.getByTestId("sg-light-trend-practice-cta");
     await userEvent.click(cta);
     expect(builder).toHaveBeenCalled();
+  });
+
+  it("tracks SG Light trend practice impression only once per display", async () => {
+    const builder = vi.fn().mockReturnValue("/range/practice?source=web_round_story");
+
+    const { rerender } = render(
+      <SgLightTrendCardWeb
+        trend={trend}
+        practiceHrefBuilder={builder}
+        practiceSurface="web_round_story"
+      />,
+    );
+
+    expect(await screen.findByTestId("sg-light-trend-card")).toBeInTheDocument();
+    expect(trackPracticeMissionRecommendationShown).toHaveBeenCalledTimes(1);
+
+    rerender(
+      <SgLightTrendCardWeb
+        trend={trend}
+        practiceHrefBuilder={builder}
+        practiceSurface="web_round_story"
+      />,
+    );
+
+    expect(trackPracticeMissionRecommendationShown).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not track SG Light trend impression without a focus", async () => {
+    render(
+      <SgLightTrendCardWeb
+        trend={{ ...trend, focusHistory: [] }}
+        practiceHrefBuilder={() => "/range/practice"}
+        practiceSurface="web_round_story"
+      />,
+    );
+
+    expect(await screen.findByTestId("sg-light-trend-card")).toBeInTheDocument();
+    expect(trackPracticeMissionRecommendationShown).not.toHaveBeenCalled();
   });
 });

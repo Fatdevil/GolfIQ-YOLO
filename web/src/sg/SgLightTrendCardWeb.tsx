@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import React, { useEffect, useMemo, useRef } from "react";
 import { useTranslation } from "react-i18next";
 
 import {
@@ -20,6 +20,7 @@ type Props = {
 
 export function SgLightTrendCardWeb({ rounds, trend, practiceSurface = "web_round_story", practiceHrefBuilder }: Props) {
   const { t } = useTranslation();
+  const hasTrackedImpressionRef = useRef(false);
 
   const resolvedTrend = useMemo(() => {
     if (trend) return trend;
@@ -34,7 +35,10 @@ export function SgLightTrendCardWeb({ rounds, trend, practiceSurface = "web_roun
     return practiceHrefBuilder(focusCategory);
   }, [focusCategory, practiceHrefBuilder]);
 
-  if (focusCategory && practiceHref) {
+  useEffect(() => {
+    if (!focusCategory || !practiceHref) return;
+    if (hasTrackedImpressionRef.current) return;
+
     trackPracticeMissionRecommendationShown({
       missionId: "sg_light_focus",
       reason: "focus_area",
@@ -44,7 +48,8 @@ export function SgLightTrendCardWeb({ rounds, trend, practiceSurface = "web_roun
       origin: practiceSurface,
       strokesGainedLightFocusCategory: focusCategory,
     });
-  }
+    hasTrackedImpressionRef.current = true;
+  }, [focusCategory, practiceHref, practiceSurface]);
 
   const handlePracticeClick = () => {
     if (!focusCategory) return;
