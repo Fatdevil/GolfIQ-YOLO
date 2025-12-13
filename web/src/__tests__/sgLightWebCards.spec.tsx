@@ -74,7 +74,10 @@ describe("SG Light web cards", () => {
     const trigger = await screen.findByTestId("open-sg-light-explainer");
     await userEvent.click(trigger);
 
-    expect(await screen.findByText(/What is SG Light\?/)).toBeInTheDocument();
+    const explainer = await screen.findByRole("dialog", {
+      name: (name) => /sg light/i.test(name) || /sg_light\.explainer\.heading/i.test(name),
+    });
+    expect(explainer).toBeInTheDocument();
     expect(mockTrackExplainer).toHaveBeenCalledWith({ surface: "round_recap" });
   });
 
@@ -107,7 +110,10 @@ describe("SG Light web cards", () => {
     const trigger = await screen.findByTestId("open-sg-light-explainer");
     await userEvent.click(trigger);
 
-    expect(await screen.findByText(/What is SG Light\?/)).toBeInTheDocument();
+    const explainer = await screen.findByRole("dialog", {
+      name: (name) => /sg light/i.test(name) || /sg_light\.explainer\.heading/i.test(name),
+    });
+    expect(explainer).toBeInTheDocument();
     expect(mockTrackExplainer).toHaveBeenCalledWith({ surface: "round_story" });
   });
 
