@@ -463,6 +463,12 @@
   "stats.player.sg_light.focus_history": "Senaste fokusområden",
   "stats.player.sg_light.practice_cta": "Träna på detta",
 
+  "share.sg_light.title": "Strokes Gained Light",
+  "share.sg_light.subtitle": "Fokus från denna runda",
+  "share.sg_light.empty": "För lite strokes gained-data ännu för denna runda.",
+  "share.sg_light.focus": "Fokus denna runda",
+  "share.sg_light.shots": "{{count}} slag",
+
   "sg_light.focus.off_the_tee": "Från tee",
   "sg_light.focus.approach": "Inspel",
   "sg_light.focus.short_game": "Närspel",

@@ -484,6 +484,12 @@
   "stats.player.sg_light.focus_history": "Recent focus areas",
   "stats.player.sg_light.practice_cta": "Practice this focus",
 
+  "share.sg_light.title": "Strokes Gained Light",
+  "share.sg_light.subtitle": "Focus from this round",
+  "share.sg_light.empty": "Not enough strokes gained data yet for this round.",
+  "share.sg_light.focus": "Focus this round",
+  "share.sg_light.shots": "{{count}} shots",
+
   "sg_light.focus.off_the_tee": "Off the tee",
   "sg_light.focus.approach": "Approach",
   "sg_light.focus.short_game": "Short game",

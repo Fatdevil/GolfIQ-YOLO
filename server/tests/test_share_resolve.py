@@ -91,6 +91,8 @@ def test_resolve_round_share_returns_payload(share_client: tuple[TestClient, obj
     assert payload["round"]["score"] == 12
     assert payload["round"]["toPar"] == "+1"
     assert payload["round"]["date"] == ended_at.date().isoformat()
+    assert payload["round"].get("strokesGainedLight") is not None
+    assert payload["round"]["strokesGainedLight"].get("byCategory")
 
 
 def test_resolve_unknown_sid_returns_404(share_client: tuple[TestClient, object]):
