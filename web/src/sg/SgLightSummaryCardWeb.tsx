@@ -24,7 +24,7 @@ import { useTrackOncePerKey } from "@/hooks/useTrackOncePerKey";
 
 type Props = {
   summary?: StrokesGainedLightSummary | null;
-  practiceSurface?: "web_round_recap" | "web_round_story";
+  practiceSurface?: "web_round_recap" | "web_round_story" | "web_round_share";
   practiceHrefBuilder?(focusCategory: StrokesGainedLightCategory): string | null;
   explainerSurface?: Extract<
     SgLightExplainerSurface,
@@ -32,6 +32,7 @@ type Props = {
   >;
   roundId?: string | null;
   shareId?: string | null;
+  impressionKey?: string | null;
 };
 
 export function SgLightSummaryCardWeb({
@@ -41,6 +42,7 @@ export function SgLightSummaryCardWeb({
   explainerSurface = "round_recap",
   roundId,
   shareId,
+  impressionKey,
 }: Props) {
   const { t } = useTranslation();
   const eligibleCategories = summary?.byCategory?.filter(
@@ -71,13 +73,14 @@ export function SgLightSummaryCardWeb({
     };
   }, [focusCategory, practiceHref, practiceSurface]);
 
-  const impressionKey = useMemo(() => {
+  const resolvedImpressionKey = useMemo(() => {
     if (!focusCategory || !practiceHref) return null;
+    if (impressionKey) return impressionKey;
     const contextId = roundId ?? shareId ?? "unknown";
-    return `sg_light:${practiceSurface}:${contextId}:summary:${focusCategory}`;
-  }, [focusCategory, practiceHref, practiceSurface, roundId, shareId]);
+    return `sg_light:${practiceSurface}:${contextId}:summary`;
+  }, [focusCategory, impressionKey, practiceHref, practiceSurface, roundId, shareId]);
 
-  const { fire: fireImpressionOnce } = useTrackOncePerKey(impressionKey);
+  const { fire: fireImpressionOnce } = useTrackOncePerKey(resolvedImpressionKey);
 
   useEffect(() => {
     if (!focusCategory || !recommendation) return;

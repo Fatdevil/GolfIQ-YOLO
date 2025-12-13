@@ -17,11 +17,12 @@ import { useTrackOncePerKey } from "@/hooks/useTrackOncePerKey";
 type Props = {
   rounds?: Array<StrokesGainedLightSummary & { roundId?: string; playedAt?: string }>;
   trend?: StrokesGainedLightTrend | null;
-  practiceSurface?: "web_round_recap" | "web_round_story";
+  practiceSurface?: "web_round_recap" | "web_round_story" | "web_round_share";
   practiceHrefBuilder?(focusCategory: StrokesGainedLightCategory): string | null;
   explainerSurface?: SgLightExplainerSurface;
   roundId?: string | null;
   shareId?: string | null;
+  impressionKey?: string | null;
 };
 
 export function SgLightTrendCardWeb({
@@ -32,6 +33,7 @@ export function SgLightTrendCardWeb({
   explainerSurface = "round_story",
   roundId,
   shareId,
+  impressionKey,
 }: Props) {
   const { t } = useTranslation();
 
@@ -52,13 +54,14 @@ export function SgLightTrendCardWeb({
     return resolvedTrend?.focusHistory?.[0]?.roundId ?? rounds?.[0]?.roundId ?? null;
   }, [resolvedTrend?.focusHistory, rounds]);
 
-  const impressionKey = useMemo(() => {
+  const resolvedImpressionKey = useMemo(() => {
     if (!focusCategory || !practiceHref) return null;
-    const contextId = trendRoundId ?? roundId ?? shareId ?? "unknown";
-    return `sg_light:${practiceSurface}:${contextId}:trend:${focusCategory}`;
-  }, [focusCategory, practiceHref, practiceSurface, roundId, shareId, trendRoundId]);
+    if (impressionKey) return impressionKey;
+    const contextId = roundId ?? shareId ?? trendRoundId ?? "unknown";
+    return `sg_light:${practiceSurface}:${contextId}:trend`;
+  }, [focusCategory, impressionKey, practiceHref, practiceSurface, roundId, shareId, trendRoundId]);
 
-  const { fire: fireImpressionOnce } = useTrackOncePerKey(impressionKey);
+  const { fire: fireImpressionOnce } = useTrackOncePerKey(resolvedImpressionKey);
 
   useEffect(() => {
     if (!focusCategory || !practiceHref) return;
