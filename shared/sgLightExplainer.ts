@@ -1,4 +1,6 @@
-export type Translator = (...args: unknown[]) => string;
+export type TranslationParams = Record<string, string | number | boolean | null | undefined>;
+
+export type Translator = (key: string, params?: TranslationParams) => string;
 
 export type SgLightExplainerCopy = {
   heading: string;
@@ -22,18 +24,10 @@ export const SG_LIGHT_EXPLAINER_KEYS = {
 
 export function buildSgLightExplainerCopy(t: Translator): SgLightExplainerCopy {
   return {
-    heading: t(SG_LIGHT_EXPLAINER_KEYS.heading, 'Strokes Gained Light'),
-    title: t(SG_LIGHT_EXPLAINER_KEYS.title, 'What is SG Light?'),
-    bullets: SG_LIGHT_EXPLAINER_KEYS.bullets.map((key) =>
-      t(key, 'Strokes gained vs players at your level'),
-    ),
-    categoriesLine: t(
-      SG_LIGHT_EXPLAINER_KEYS.categoriesLine,
-      'Covers Tee, Approach, Short Game, and Putting.',
-    ),
-    confidenceLine: t(
-      SG_LIGHT_EXPLAINER_KEYS.confidenceLine,
-      'Needs enough shots in each category to be confident.',
-    ),
+    heading: t(SG_LIGHT_EXPLAINER_KEYS.heading),
+    title: t(SG_LIGHT_EXPLAINER_KEYS.title),
+    bullets: SG_LIGHT_EXPLAINER_KEYS.bullets.map((key) => t(key)),
+    categoriesLine: t(SG_LIGHT_EXPLAINER_KEYS.categoriesLine),
+    confidenceLine: t(SG_LIGHT_EXPLAINER_KEYS.confidenceLine),
   };
 }
