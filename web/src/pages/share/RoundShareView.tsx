@@ -7,11 +7,13 @@ import {
   trackPracticeMissionRecommendationShown,
 } from "@/practice/analytics";
 import type { PracticeRecommendationContext } from "@shared/practice/practiceRecommendationsAnalytics";
+import { type StrokesGainedLightCategory, type StrokesGainedLightSummary } from "@shared/stats/strokesGainedLight";
 import {
-  STROKES_GAINED_LIGHT_MIN_CONFIDENCE,
-  type StrokesGainedLightCategory,
-  type StrokesGainedLightSummary,
-} from "@shared/stats/strokesGainedLight";
+  formatSgDelta,
+  isValidSgLightSummary,
+  labelForSgLightCategory,
+  mapSgLightCategoryToFocusArea,
+} from "@/sg/sgLightWebUtils";
 
 export type RoundShareData = {
   roundId?: string | null;
@@ -227,32 +229,3 @@ export function RoundShareView({ data }: { data: RoundShareData }) {
   );
 }
 
-function mapSgLightCategoryToFocusArea(category: StrokesGainedLightCategory): string {
-  if (category === "tee") return "driving";
-  if (category === "approach") return "approach";
-  if (category === "short_game") return "short_game";
-  if (category === "putting") return "putting";
-  return category;
-}
-
-function isValidSgLightSummary(summary?: StrokesGainedLightSummary | null): boolean {
-  if (!summary || !summary.byCategory?.length) return false;
-  return summary.byCategory.every(
-    (entry) => entry.confidence >= STROKES_GAINED_LIGHT_MIN_CONFIDENCE,
-  );
-}
-
-function formatSgDelta(value?: number | null): string {
-  if (value == null || Number.isNaN(value)) return "—";
-  const rounded = Number(value.toFixed(1));
-  const sign = rounded > 0 ? "+" : "";
-  return `${sign}${rounded}`;
-}
-
-function labelForSgLightCategory(
-  category: StrokesGainedLightCategory,
-  t: ReturnType<typeof useTranslation>["t"],
-): string {
-  const key = category === "tee" ? "sg_light.focus.off_the_tee" : `sg_light.focus.${category}`;
-  return t(key);
-}

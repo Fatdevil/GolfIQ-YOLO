@@ -18,4 +18,9 @@ export type QuickRound = {
   showPutts?: boolean;
   handicap?: number;
   memberId?: string | null;
+  strokesGainedLight?: import("@shared/stats/strokesGainedLight").StrokesGainedLightSummary | null;
+  strokesGainedLightTrend?: import("@shared/stats/strokesGainedLight").StrokesGainedLightTrend | null;
+  strokesGainedLightRounds?: Array<
+    import("@shared/stats/strokesGainedLight").StrokesGainedLightSummary & { roundId?: string; playedAt?: string }
+  >;
 };
