@@ -19,9 +19,8 @@ import { useUnits } from "@/preferences/UnitsContext";
 import { formatBagSuggestion } from "@/bag/formatBagSuggestion";
 
 import { buildStrokesGainedLightTrend } from "@shared/stats/strokesGainedLight";
-import { SgLightSummaryCardWeb } from "@/sg/SgLightSummaryCardWeb";
-import { SgLightTrendCardWeb } from "@/sg/SgLightTrendCardWeb";
 import { mapSgLightCategoryToFocusArea } from "@/sg/sgLightWebUtils";
+import { RoundStoryInsights } from "./RoundStoryInsights";
 
 import {
   loadRound,
@@ -238,11 +237,6 @@ export default function QuickRoundPlayPage() {
       return `/range/practice?${params.toString()}`;
     },
     [],
-  );
-
-  const sgLightRecapHrefBuilder = useCallback(
-    (focusCategory: StrokesGainedLightCategory) => buildSgLightPracticeHref(focusCategory, "web_round_recap"),
-    [buildSgLightPracticeHref],
   );
 
   const sgLightStoryHrefBuilder = useCallback(
@@ -754,27 +748,15 @@ export default function QuickRoundPlayPage() {
           </div>
         </section>
       )}
-      {(sgLightSummary || sgLightTrend) && (
-        <section className="space-y-3">
-            {sgLightSummary ? (
-              <SgLightSummaryCardWeb
-                summary={sgLightSummary}
-                practiceSurface="web_round_recap"
-                practiceHrefBuilder={sgLightRecapHrefBuilder}
-                roundId={round?.runId}
-              />
-            ) : null}
-            {sgLightTrend ? (
-              <SgLightTrendCardWeb
-                rounds={round?.strokesGainedLightRounds}
-                trend={sgLightTrend}
-                practiceSurface="web_round_story"
-                practiceHrefBuilder={sgLightStoryHrefBuilder}
-                roundId={round?.runId}
-              />
-            ) : null}
-          </section>
-        )}
+      {sgLightSummary || sgLightTrend ? (
+        <RoundStoryInsights
+          summary={sgLightSummary}
+          trend={sgLightTrend}
+          rounds={round?.strokesGainedLightRounds ?? null}
+          practiceHrefBuilder={sgLightStoryHrefBuilder}
+          roundId={round?.runId}
+        />
+      ) : null}
       {bagReadinessRecap ? (
         // TODO: send telemetry for recap bag readiness impressions
         <section

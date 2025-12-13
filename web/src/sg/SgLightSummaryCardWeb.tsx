@@ -26,7 +26,10 @@ type Props = {
   summary?: StrokesGainedLightSummary | null;
   practiceSurface?: "web_round_recap" | "web_round_story";
   practiceHrefBuilder?(focusCategory: StrokesGainedLightCategory): string | null;
-  explainerSurface?: Extract<SgLightExplainerSurface, "round_recap" | "round_share" | "player_stats">;
+  explainerSurface?: Extract<
+    SgLightExplainerSurface,
+    "round_recap" | "round_share" | "round_story" | "player_stats"
+  >;
   roundId?: string | null;
   shareId?: string | null;
 };
