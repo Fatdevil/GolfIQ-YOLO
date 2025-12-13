@@ -7,6 +7,7 @@ import { SgLightSummaryCardWeb } from "@/sg/SgLightSummaryCardWeb";
 import { SgLightTrendCardWeb } from "@/sg/SgLightTrendCardWeb";
 import { trackPracticeMissionRecommendationShown } from "@/practice/analytics";
 import type { StrokesGainedLightSummary, StrokesGainedLightTrend } from "@shared/stats/strokesGainedLight";
+import { trackSgLightExplainerOpenedWeb } from "@/sg/analytics";
 
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({
@@ -25,6 +26,11 @@ vi.mock("@/practice/analytics", () => ({
   trackPracticeMissionRecommendationShown: vi.fn(),
   trackPracticeMissionRecommendationClicked: vi.fn(),
 }));
+vi.mock("@/sg/analytics", () => ({
+  trackSgLightExplainerOpenedWeb: vi.fn(),
+}));
+
+const mockTrackExplainer = vi.mocked(trackSgLightExplainerOpenedWeb);
 
 describe("SG Light web cards", () => {
   const summary: StrokesGainedLightSummary = {
@@ -62,6 +68,16 @@ describe("SG Light web cards", () => {
     expect(builder).toHaveBeenCalled();
   });
 
+  it("opens explainer from summary card", async () => {
+    render(<SgLightSummaryCardWeb summary={summary} />);
+
+    const trigger = await screen.findByTestId("open-sg-light-explainer");
+    await userEvent.click(trigger);
+
+    expect(await screen.findByText(/What is SG Light\?/)).toBeInTheDocument();
+    expect(mockTrackExplainer).toHaveBeenCalledWith({ surface: "round_recap" });
+  });
+
   it("hides practice CTA when summary has low confidence", () => {
     render(<SgLightSummaryCardWeb summary={null} />);
 
@@ -83,6 +99,16 @@ describe("SG Light web cards", () => {
     const cta = screen.getByTestId("sg-light-trend-practice-cta");
     await userEvent.click(cta);
     expect(builder).toHaveBeenCalled();
+  });
+
+  it("opens explainer from trend card", async () => {
+    render(<SgLightTrendCardWeb trend={trend} />);
+
+    const trigger = await screen.findByTestId("open-sg-light-explainer");
+    await userEvent.click(trigger);
+
+    expect(await screen.findByText(/What is SG Light\?/)).toBeInTheDocument();
+    expect(mockTrackExplainer).toHaveBeenCalledWith({ surface: "round_story" });
   });
 
   it("tracks SG Light trend practice impression only once per display", async () => {

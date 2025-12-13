@@ -800,6 +800,19 @@ export const en = {
       short_game: 'Short game',
       putting: 'Putting',
     },
+    explainer: {
+      heading: 'Strokes Gained Light',
+      title: 'What is SG Light?',
+      points: {
+        performance: 'Measures how many shots you gained or lost vs. players at your level.',
+        delta_meaning: '+1.0 = you gained one shot this round, -1.0 = you lost one shot.',
+        confidence: 'Needs enough shots in each category to be confident.',
+      },
+      categories: 'Categories: Tee, Approach, Short Game, Putting.',
+      confidence: 'Low confidence? Collect more shots in that category to firm it up.',
+      open_label: 'Open SG Light explainer',
+      close_label: 'Close explainer',
+    },
   },
 } as const;
 

@@ -38,6 +38,7 @@ const mockFetchBagStats = fetchBagStats as unknown as Mock;
 const mockLoadPracticeHistory = loadPracticeMissionHistory as unknown as Mock;
 const mockLoadWeeklyPracticeGoalSettings = loadWeeklyPracticeGoalSettings as unknown as Mock;
 const mockGetTopPracticeRecommendationForRecap = getTopPracticeRecommendationForRecap as unknown as Mock;
+const mockSafeEmit = safeEmit as unknown as Mock;
 
 const sampleRecap = {
   roundId: 'r1',
@@ -164,6 +165,24 @@ describe('RoundRecapScreen', () => {
     await waitFor(() => expect(mockFetchRecap).toHaveBeenCalled());
     const approachTile = await waitFor(() => getByTestId('recap-sg-light-approach'));
     expect(within(approachTile).getByText('Not enough data yet')).toBeTruthy();
+  });
+
+  it('shows SG Light explainer and tracks open', async () => {
+    mockFetchRecap.mockResolvedValue(sampleRecap);
+    mockFetchRoundStrokesGained.mockResolvedValue(sampleStrokes);
+
+    const { getByTestId, getByText } = render(
+      <RoundRecapScreen navigation={{} as any} route={{ params: { roundId: 'r1' } } as any} />,
+    );
+
+    await waitFor(() => expect(getByTestId('sg-light-card')).toBeTruthy());
+    fireEvent.click(getByTestId('open-sg-light-explainer'));
+
+    expect(getByText('What is SG Light?')).toBeTruthy();
+    expect(mockSafeEmit).toHaveBeenCalledWith('sg_light_explainer_opened', {
+      surface: 'round_recap',
+      roundId: 'r1',
+    });
   });
 
   it('shows SG Light focus and practice CTA when a focus category exists', async () => {
