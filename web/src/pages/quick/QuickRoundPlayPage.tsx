@@ -18,6 +18,11 @@ import type { BagState } from "@/bag/types";
 import { useUnits } from "@/preferences/UnitsContext";
 import { formatBagSuggestion } from "@/bag/formatBagSuggestion";
 
+import { buildStrokesGainedLightTrend } from "@shared/stats/strokesGainedLight";
+import { SgLightSummaryCardWeb } from "@/sg/SgLightSummaryCardWeb";
+import { SgLightTrendCardWeb } from "@/sg/SgLightTrendCardWeb";
+import { mapSgLightCategoryToFocusArea } from "@/sg/sgLightWebUtils";
+
 import {
   loadRound,
   saveRound,
@@ -38,6 +43,8 @@ import {
   getTopPracticeRecommendationForRecap,
   type BagPracticeRecommendation,
 } from "@shared/caddie/bagPracticeRecommendations";
+import type { PracticeRecommendationContext } from "@shared/practice/practiceRecommendationsAnalytics";
+import type { StrokesGainedLightCategory } from "@shared/stats/strokesGainedLight";
 
 export default function QuickRoundPlayPage() {
   const { roundId } = useParams<{ roundId: string }>();
@@ -205,6 +212,43 @@ export default function QuickRoundPlayPage() {
     }
     return computeQuickRoundSummary(round);
   }, [round]);
+
+  const sgLightSummary = round?.strokesGainedLight ?? null;
+  const sgLightTrend = useMemo(() => {
+    if (round?.strokesGainedLightTrend) return round.strokesGainedLightTrend;
+    if (round?.strokesGainedLightRounds?.length)
+      return buildStrokesGainedLightTrend(round.strokesGainedLightRounds, { windowSize: 5 });
+    return null;
+  }, [round?.strokesGainedLightRounds, round?.strokesGainedLightTrend]);
+
+  const buildSgLightPracticeHref = useCallback(
+    (focusCategory: StrokesGainedLightCategory, surface: "web_round_recap" | "web_round_story") => {
+      const recommendation: PracticeRecommendationContext = {
+        source: "practice_recommendations",
+        focusArea: mapSgLightCategoryToFocusArea(focusCategory),
+        reasonKey: "sg_light_focus",
+        origin: surface,
+        strokesGainedLightFocusCategory: focusCategory,
+        surface,
+      };
+
+      const params = new URLSearchParams();
+      params.set("source", surface);
+      params.set("recommendation", JSON.stringify(recommendation));
+      return `/range/practice?${params.toString()}`;
+    },
+    [],
+  );
+
+  const sgLightRecapHrefBuilder = useCallback(
+    (focusCategory: StrokesGainedLightCategory) => buildSgLightPracticeHref(focusCategory, "web_round_recap"),
+    [buildSgLightPracticeHref],
+  );
+
+  const sgLightStoryHrefBuilder = useCallback(
+    (focusCategory: StrokesGainedLightCategory) => buildSgLightPracticeHref(focusCategory, "web_round_story"),
+    [buildSgLightPracticeHref],
+  );
 
   const playerBag = useMemo(() => mapBagStateToPlayerBag(bag), [bag]);
 
@@ -708,6 +752,25 @@ export default function QuickRoundPlayPage() {
               ) : null}
             </div>
           </div>
+        </section>
+      )}
+      {(sgLightSummary || sgLightTrend) && (
+        <section className="space-y-3">
+          {sgLightSummary ? (
+            <SgLightSummaryCardWeb
+              summary={sgLightSummary}
+              practiceSurface="web_round_recap"
+              practiceHrefBuilder={sgLightRecapHrefBuilder}
+            />
+          ) : null}
+          {sgLightTrend ? (
+            <SgLightTrendCardWeb
+              rounds={round?.strokesGainedLightRounds}
+              trend={sgLightTrend}
+              practiceSurface="web_round_story"
+              practiceHrefBuilder={sgLightStoryHrefBuilder}
+            />
+          ) : null}
         </section>
       )}
       {bagReadinessRecap ? (

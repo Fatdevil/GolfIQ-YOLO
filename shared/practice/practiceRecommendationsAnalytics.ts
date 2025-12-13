@@ -13,7 +13,9 @@ export type PracticeMissionRecommendationSurface =
   | 'mobile_round_story_sg_light_focus'
   | 'mobile_stats_sg_light_trend'
   | 'web_stats_sg_light_trend'
-  | 'web_round_share';
+  | 'web_round_share'
+  | 'web_round_recap'
+  | 'web_round_story';
 
 export type PracticeMissionRecommendationExperiment = {
   experimentKey: 'practice_recommendations';
@@ -106,6 +108,8 @@ function sanitizeSurface(value?: PracticeMissionRecommendationSurface | string |
   if (normalized === 'mobile_stats_sg_light_trend') return 'mobile_stats_sg_light_trend';
   if (normalized === 'web_stats_sg_light_trend') return 'web_stats_sg_light_trend';
   if (normalized === 'web_round_share') return 'web_round_share';
+  if (normalized === 'web_round_recap') return 'web_round_recap';
+  if (normalized === 'web_round_story') return 'web_round_story';
   return undefined;
 }
 
