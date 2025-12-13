@@ -756,23 +756,25 @@ export default function QuickRoundPlayPage() {
       )}
       {(sgLightSummary || sgLightTrend) && (
         <section className="space-y-3">
-          {sgLightSummary ? (
-            <SgLightSummaryCardWeb
-              summary={sgLightSummary}
-              practiceSurface="web_round_recap"
-              practiceHrefBuilder={sgLightRecapHrefBuilder}
-            />
-          ) : null}
-          {sgLightTrend ? (
-            <SgLightTrendCardWeb
-              rounds={round?.strokesGainedLightRounds}
-              trend={sgLightTrend}
-              practiceSurface="web_round_story"
-              practiceHrefBuilder={sgLightStoryHrefBuilder}
-            />
-          ) : null}
-        </section>
-      )}
+            {sgLightSummary ? (
+              <SgLightSummaryCardWeb
+                summary={sgLightSummary}
+                practiceSurface="web_round_recap"
+                practiceHrefBuilder={sgLightRecapHrefBuilder}
+                roundId={round?.runId}
+              />
+            ) : null}
+            {sgLightTrend ? (
+              <SgLightTrendCardWeb
+                rounds={round?.strokesGainedLightRounds}
+                trend={sgLightTrend}
+                practiceSurface="web_round_story"
+                practiceHrefBuilder={sgLightStoryHrefBuilder}
+                roundId={round?.runId}
+              />
+            ) : null}
+          </section>
+        )}
       {bagReadinessRecap ? (
         // TODO: send telemetry for recap bag readiness impressions
         <section

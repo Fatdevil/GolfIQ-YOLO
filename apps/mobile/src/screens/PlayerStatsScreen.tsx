@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 
@@ -10,6 +10,7 @@ import { computePlayerStats } from '@app/stats/playerStatsEngine';
 import { safeEmit } from '@app/telemetry';
 import { buildStrokesGainedLightTrend, type StrokesGainedLightTrend } from '@shared/stats/strokesGainedLight';
 import { SgLightExplainerModal } from '@app/components/SgLightExplainerModal';
+import { useTrackOncePerKey } from '@app/hooks/useTrackOncePerKey';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'PlayerStats'>;
 
@@ -49,7 +50,6 @@ export default function PlayerStatsScreen({ navigation }: Props): JSX.Element {
   const [sgLightTrend, setSgLightTrend] = useState<StrokesGainedLightTrend | null>(null);
   const [sgLightLoading, setSgLightLoading] = useState(true);
   const [sgLightExplainerVisible, setSgLightExplainerVisible] = useState(false);
-  const trendImpressionSent = useRef(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -92,7 +92,6 @@ export default function PlayerStatsScreen({ navigation }: Props): JSX.Element {
   useEffect(() => {
     let cancelled = false;
     setSgLightLoading(true);
-    trendImpressionSent.current = false;
 
     if (!summaries?.length) {
       setSgLightTrend(null);
@@ -149,6 +148,11 @@ export default function PlayerStatsScreen({ navigation }: Props): JSX.Element {
   const stats = useMemo(() => computePlayerStats(summaries), [summaries]);
   const hasRounds = stats.roundsPlayed > 0;
   const sgLightFocusCategory = sgLightTrend?.focusHistory?.[0]?.focusCategory ?? null;
+  const sgLightTrendImpressionKey = useMemo(() => {
+    if (!sgLightFocusCategory) return null;
+    return `sg_light:mobile_stats_sg_light_trend:trend:${sgLightFocusCategory}`;
+  }, [sgLightFocusCategory]);
+  const { fire: fireSgLightTrendImpression } = useTrackOncePerKey(sgLightTrendImpressionKey);
 
   const openSgLightExplainer = useCallback(() => {
     safeEmit('sg_light_explainer_opened', { surface: 'player_stats' });
@@ -158,13 +162,15 @@ export default function PlayerStatsScreen({ navigation }: Props): JSX.Element {
   const closeSgLightExplainer = useCallback(() => setSgLightExplainerVisible(false), []);
 
   useEffect(() => {
-    if (!sgLightTrend || !sgLightFocusCategory || trendImpressionSent.current) return;
-    trendImpressionSent.current = true;
-    safeEmit('practice_focus_entry_shown', {
-      surface: 'mobile_stats_sg_light_trend',
-      focusCategory: sgLightFocusCategory,
+    if (!sgLightTrend || !sgLightFocusCategory) return;
+
+    fireSgLightTrendImpression(() => {
+      safeEmit('practice_focus_entry_shown', {
+        surface: 'mobile_stats_sg_light_trend',
+        focusCategory: sgLightFocusCategory,
+      });
     });
-  }, [sgLightFocusCategory, sgLightTrend]);
+  }, [fireSgLightTrendImpression, sgLightFocusCategory, sgLightTrend]);
 
   if (summariesLoading) {
     return (

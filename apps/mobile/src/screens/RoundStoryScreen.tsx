@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -18,6 +18,7 @@ import { getDefaultWeeklyPracticeGoalSettings } from '@shared/practice/practiceG
 import type { PracticeMissionHistoryEntry } from '@shared/practice/practiceHistory';
 import type { StrokesGainedLightTrend } from '@shared/stats/strokesGainedLight';
 import { SgLightExplainerModal } from '@app/components/SgLightExplainerModal';
+import { useTrackOncePerKey } from '@app/hooks/useTrackOncePerKey';
 
 const PRO_TEASER = 'Unlock full analysis (SG and swing insights) with GolfIQ Pro.';
 
@@ -95,11 +96,6 @@ export default function RoundStoryScreen({ route, navigation }: Props): JSX.Elem
   const [sgError, setSgError] = useState<string | null>(null);
   const [reloadToken, setReloadToken] = useState(0);
   const [sgLightExplainerVisible, setSgLightExplainerVisible] = useState(false);
-  const trendImpressionSent = useRef(false);
-
-  useEffect(() => {
-    trendImpressionSent.current = false;
-  }, [runId, reloadToken]);
 
   useEffect(() => {
     let cancelled = false;
@@ -277,6 +273,12 @@ export default function RoundStoryScreen({ route, navigation }: Props): JSX.Elem
   const isLoadingAnything = loadingPlan || loadingSg || loadingTrend || (isPro && loadingAnalytics);
   const sgLightFocusHistory = sgLightTrend?.focusHistory ?? [];
   const currentSgLightFocus = sgLightFocusHistory[0]?.focusCategory ?? null;
+  const sgLightTrendImpressionKey = useMemo(() => {
+    if (!currentSgLightFocus) return null;
+    const trendRoundId = sgLightFocusHistory[0]?.roundId ?? runId ?? 'unknown';
+    return `sg_light:round_story:${trendRoundId}:trend:${currentSgLightFocus}`;
+  }, [currentSgLightFocus, runId, sgLightFocusHistory]);
+  const { fire: fireSgLightTrendImpression } = useTrackOncePerKey(sgLightTrendImpressionKey);
   const sgLightTrendSubtitle = sgLightTrend
     ? t('round.story.sgLightTrendSubtitle', { rounds: sgLightTrend.windowSize })
     : null;
@@ -347,16 +349,18 @@ export default function RoundStoryScreen({ route, navigation }: Props): JSX.Elem
   }, [loadingPractice, practiceReadiness, runId]);
 
   useEffect(() => {
-    if (!sgLightTrend || trendImpressionSent.current) return;
-    trendImpressionSent.current = true;
-    safeEmit('sg_light_trend_viewed', {
-      surface: 'round_story',
-      platform: 'mobile',
-      roundId: runId,
-      windowSize: sgLightTrend.windowSize,
-      focusCategory: sgLightTrend.focusHistory[0]?.focusCategory ?? null,
+    if (!sgLightTrend || !currentSgLightFocus) return;
+
+    fireSgLightTrendImpression(() => {
+      safeEmit('sg_light_trend_viewed', {
+        surface: 'round_story',
+        platform: 'mobile',
+        roundId: runId,
+        windowSize: sgLightTrend.windowSize,
+        focusCategory: currentSgLightFocus,
+      });
     });
-  }, [runId, sgLightTrend]);
+  }, [currentSgLightFocus, fireSgLightTrendImpression, runId, sgLightTrend]);
 
   const onRetry = useCallback(() => {
     setReloadToken((value) => value + 1);

@@ -1,4 +1,4 @@
-import { useMemo, useRef } from "react";
+import { useEffect, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 
 import {
@@ -20,12 +20,15 @@ import {
 import type { PracticeRecommendationContext } from "@shared/practice/practiceRecommendationsAnalytics";
 import { SgLightExplainer } from "./SgLightExplainer";
 import type { SgLightExplainerSurface } from "./analytics";
+import { useTrackOncePerKey } from "@/hooks/useTrackOncePerKey";
 
 type Props = {
   summary?: StrokesGainedLightSummary | null;
   practiceSurface?: "web_round_recap" | "web_round_story";
   practiceHrefBuilder?(focusCategory: StrokesGainedLightCategory): string | null;
   explainerSurface?: Extract<SgLightExplainerSurface, "round_recap" | "round_share" | "player_stats">;
+  roundId?: string | null;
+  shareId?: string | null;
 };
 
 export function SgLightSummaryCardWeb({
@@ -33,6 +36,8 @@ export function SgLightSummaryCardWeb({
   practiceSurface = "web_round_recap",
   practiceHrefBuilder,
   explainerSurface = "round_recap",
+  roundId,
+  shareId,
 }: Props) {
   const { t } = useTranslation();
   const eligibleCategories = summary?.byCategory?.filter(
@@ -50,7 +55,6 @@ export function SgLightSummaryCardWeb({
     if (!hasReliableFocus || !practiceHrefBuilder || !focusCategory) return null;
     return practiceHrefBuilder(focusCategory);
   }, [focusCategory, hasReliableFocus, practiceHrefBuilder]);
-  const impressionSent = useRef(false);
 
   const recommendation: PracticeRecommendationContext | null = useMemo(() => {
     if (!focusCategory || !practiceHref) return null;
@@ -64,18 +68,28 @@ export function SgLightSummaryCardWeb({
     };
   }, [focusCategory, practiceHref, practiceSurface]);
 
-  if (focusCategory && recommendation && !impressionSent.current) {
-    impressionSent.current = true;
-    trackPracticeMissionRecommendationShown({
-      missionId: "sg_light_focus",
-      reason: "focus_area",
-      rank: 1,
-      surface: practiceSurface,
-      focusArea: recommendation.focusArea,
-      origin: practiceSurface,
-      strokesGainedLightFocusCategory: focusCategory,
+  const impressionKey = useMemo(() => {
+    if (!focusCategory || !practiceHref) return null;
+    const contextId = roundId ?? shareId ?? "unknown";
+    return `sg_light:${practiceSurface}:${contextId}:summary:${focusCategory}`;
+  }, [focusCategory, practiceHref, practiceSurface, roundId, shareId]);
+
+  const { fire: fireImpressionOnce } = useTrackOncePerKey(impressionKey);
+
+  useEffect(() => {
+    if (!focusCategory || !recommendation) return;
+    fireImpressionOnce(() => {
+      trackPracticeMissionRecommendationShown({
+        missionId: "sg_light_focus",
+        reason: "focus_area",
+        rank: 1,
+        surface: practiceSurface,
+        focusArea: recommendation.focusArea,
+        origin: practiceSurface,
+        strokesGainedLightFocusCategory: focusCategory,
+      });
     });
-  }
+  }, [fireImpressionOnce, focusCategory, practiceSurface, recommendation]);
 
   const handlePracticeClick = () => {
     if (!focusCategory || !recommendation) return;

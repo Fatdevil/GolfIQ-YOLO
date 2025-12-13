@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef } from "react";
+import React, { useEffect, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 
 import {
@@ -12,6 +12,7 @@ import { formatSgDelta, labelForSgLightCategory, mapSgLightCategoryToFocusArea }
 import { trackPracticeMissionRecommendationClicked, trackPracticeMissionRecommendationShown } from "@/practice/analytics";
 import { SgLightExplainer } from "./SgLightExplainer";
 import type { SgLightExplainerSurface } from "./analytics";
+import { useTrackOncePerKey } from "@/hooks/useTrackOncePerKey";
 
 type Props = {
   rounds?: Array<StrokesGainedLightSummary & { roundId?: string; playedAt?: string }>;
@@ -19,6 +20,8 @@ type Props = {
   practiceSurface?: "web_round_recap" | "web_round_story";
   practiceHrefBuilder?(focusCategory: StrokesGainedLightCategory): string | null;
   explainerSurface?: SgLightExplainerSurface;
+  roundId?: string | null;
+  shareId?: string | null;
 };
 
 export function SgLightTrendCardWeb({
@@ -27,9 +30,10 @@ export function SgLightTrendCardWeb({
   practiceSurface = "web_round_story",
   practiceHrefBuilder,
   explainerSurface = "round_story",
+  roundId,
+  shareId,
 }: Props) {
   const { t } = useTranslation();
-  const hasTrackedImpressionRef = useRef(false);
 
   const resolvedTrend = useMemo(() => {
     if (trend) return trend;
@@ -44,21 +48,33 @@ export function SgLightTrendCardWeb({
     return practiceHrefBuilder(focusCategory);
   }, [focusCategory, practiceHrefBuilder]);
 
+  const trendRoundId = useMemo(() => {
+    return resolvedTrend?.focusHistory?.[0]?.roundId ?? rounds?.[0]?.roundId ?? null;
+  }, [resolvedTrend?.focusHistory, rounds]);
+
+  const impressionKey = useMemo(() => {
+    if (!focusCategory || !practiceHref) return null;
+    const contextId = trendRoundId ?? roundId ?? shareId ?? "unknown";
+    return `sg_light:${practiceSurface}:${contextId}:trend:${focusCategory}`;
+  }, [focusCategory, practiceHref, practiceSurface, roundId, shareId, trendRoundId]);
+
+  const { fire: fireImpressionOnce } = useTrackOncePerKey(impressionKey);
+
   useEffect(() => {
     if (!focusCategory || !practiceHref) return;
-    if (hasTrackedImpressionRef.current) return;
 
-    trackPracticeMissionRecommendationShown({
-      missionId: "sg_light_focus",
-      reason: "focus_area",
-      rank: 1,
-      surface: practiceSurface,
-      focusArea: mapSgLightCategoryToFocusArea(focusCategory),
-      origin: practiceSurface,
-      strokesGainedLightFocusCategory: focusCategory,
+    fireImpressionOnce(() => {
+      trackPracticeMissionRecommendationShown({
+        missionId: "sg_light_focus",
+        reason: "focus_area",
+        rank: 1,
+        surface: practiceSurface,
+        focusArea: mapSgLightCategoryToFocusArea(focusCategory),
+        origin: practiceSurface,
+        strokesGainedLightFocusCategory: focusCategory,
+      });
     });
-    hasTrackedImpressionRef.current = true;
-  }, [focusCategory, practiceHref, practiceSurface]);
+  }, [fireImpressionOnce, focusCategory, practiceHref, practiceSurface]);
 
   const handlePracticeClick = () => {
     if (!focusCategory) return;
