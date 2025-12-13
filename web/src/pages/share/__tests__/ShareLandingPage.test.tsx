@@ -12,7 +12,10 @@ const mockApiFetch = apiFetch as unknown as ReturnType<typeof vi.fn>;
 
 function renderWithRoute(path: string) {
   return render(
-    <MemoryRouter initialEntries={[path]}>
+    <MemoryRouter
+      initialEntries={[path]}
+      future={{ v7_startTransition: true, v7_relativeSplatPath: true }}
+    >
       <Routes>
         <Route path="/s/:sid" element={<ShareLandingPage />} />
       </Routes>

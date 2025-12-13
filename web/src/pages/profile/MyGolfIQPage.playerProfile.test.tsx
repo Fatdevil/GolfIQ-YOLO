@@ -82,7 +82,7 @@ describe("MyGolfIQPage player profile gating", () => {
 
   it("shows upgrade gate for free users", async () => {
     render(
-      <MemoryRouter>
+      <MemoryRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
         <MyGolfIQPage />
       </MemoryRouter>,
     );
@@ -95,7 +95,7 @@ describe("MyGolfIQPage player profile gating", () => {
     (accessState as any).isPro = true;
 
     render(
-      <MemoryRouter>
+      <MemoryRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
         <MyGolfIQPage />
       </MemoryRouter>,
     );

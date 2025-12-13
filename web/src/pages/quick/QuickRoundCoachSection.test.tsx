@@ -45,7 +45,7 @@ describe("QuickRoundCoachSection", () => {
     });
 
     render(
-      <MemoryRouter>
+      <MemoryRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
         <QuickRoundCoachSection runId="run-123" />
       </MemoryRouter>,
     );
@@ -60,7 +60,7 @@ describe("QuickRoundCoachSection", () => {
     useAccessFeatures.mockReturnValue({ hasPlanFeature: vi.fn().mockReturnValue(false) });
 
     render(
-      <MemoryRouter>
+      <MemoryRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
         <QuickRoundCoachSection runId="run-123" />
       </MemoryRouter>,
     );

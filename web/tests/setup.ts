@@ -1,6 +1,41 @@
+import React from 'react';
 import 'fake-indexeddb/auto';
 import { vi } from 'vitest';
 import '../src/i18n';
+
+const routerFutureFlags = { v7_startTransition: true, v7_relativeSplatPath: true } as const;
+
+vi.mock('react-router-dom', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('react-router-dom')>();
+
+  const withFutureComponent = <P extends { future?: Record<string, unknown> }>(
+    Component: React.ComponentType<P>,
+  ) =>
+    function RouterWithFuture(props: P) {
+      const future = { ...routerFutureFlags, ...(props.future ?? {}) };
+      return React.createElement(Component, { ...props, future });
+    };
+
+  const withFutureFactory = <Factory extends (routes: any, opts?: any) => any>(factory: Factory) =>
+    function routerFactory(routes: Parameters<Factory>[0], opts: Parameters<Factory>[1] = {}) {
+      return factory(routes, {
+        ...opts,
+        future: { ...routerFutureFlags, ...(opts?.future ?? {}) },
+      });
+    };
+
+  return {
+    ...actual,
+    BrowserRouter: withFutureComponent(actual.BrowserRouter),
+    MemoryRouter: withFutureComponent(actual.MemoryRouter),
+    HashRouter: actual.HashRouter ? withFutureComponent(actual.HashRouter) : actual.HashRouter,
+    createMemoryRouter: withFutureFactory(actual.createMemoryRouter),
+    createBrowserRouter: actual.createBrowserRouter
+      ? withFutureFactory(actual.createBrowserRouter)
+      : actual.createBrowserRouter,
+    createHashRouter: actual.createHashRouter ? withFutureFactory(actual.createHashRouter) : actual.createHashRouter,
+  };
+});
 
 vi.mock('hls.js', () => import('../src/test/mocks/hls'));
 
