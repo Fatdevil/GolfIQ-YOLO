@@ -1,4 +1,4 @@
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import React from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -69,6 +69,43 @@ describe("SG Light web cards", () => {
     const cta = screen.getByTestId("sg-light-practice-cta");
     await userEvent.click(cta);
     expect(builder).toHaveBeenCalled();
+  });
+
+  it("tracks summary impression once per display context", async () => {
+    const builder = vi.fn().mockReturnValue("/range/practice?source=web_round_recap");
+
+    const { rerender } = render(
+      <SgLightSummaryCardWeb
+        summary={summary}
+        practiceHrefBuilder={builder}
+        roundId="round-1"
+        practiceSurface="web_round_recap"
+      />,
+    );
+
+    await waitFor(() => expect(trackPracticeMissionRecommendationShown).toHaveBeenCalledTimes(1));
+
+    rerender(
+      <SgLightSummaryCardWeb
+        summary={summary}
+        practiceHrefBuilder={builder}
+        roundId="round-1"
+        practiceSurface="web_round_recap"
+      />,
+    );
+
+    expect(trackPracticeMissionRecommendationShown).toHaveBeenCalledTimes(1);
+
+    rerender(
+      <SgLightSummaryCardWeb
+        summary={{ ...summary, focusCategory: "tee" }}
+        practiceHrefBuilder={builder}
+        roundId="round-1"
+        practiceSurface="web_round_recap"
+      />,
+    );
+
+    expect(trackPracticeMissionRecommendationShown).toHaveBeenCalledTimes(2);
   });
 
   it("opens explainer from summary card", async () => {
@@ -143,6 +180,32 @@ describe("SG Light web cards", () => {
     );
 
     expect(trackPracticeMissionRecommendationShown).toHaveBeenCalledTimes(1);
+  });
+
+  it("re-tracks SG Light trend impression when focus changes", async () => {
+    const builder = vi.fn().mockReturnValue("/range/practice?source=web_round_story");
+
+    const { rerender } = render(
+      <SgLightTrendCardWeb
+        trend={trend}
+        practiceHrefBuilder={builder}
+        practiceSurface="web_round_story"
+        roundId="round-1"
+      />,
+    );
+
+    await waitFor(() => expect(trackPracticeMissionRecommendationShown).toHaveBeenCalledTimes(1));
+
+    rerender(
+      <SgLightTrendCardWeb
+        trend={{ ...trend, focusHistory: [{ roundId: "round-1", playedAt: "2024-02-01", focusCategory: "tee" }] }}
+        practiceHrefBuilder={builder}
+        practiceSurface="web_round_story"
+        roundId="round-1"
+      />,
+    );
+
+    await waitFor(() => expect(trackPracticeMissionRecommendationShown).toHaveBeenCalledTimes(2));
   });
 
   it("does not track SG Light trend impression without a focus", async () => {

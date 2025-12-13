@@ -136,6 +136,60 @@ describe('RoundStoryScreen', () => {
     await waitFor(() => expect(mockSafeEmit).toHaveBeenCalledWith('sg_light_trend_viewed', expect.any(Object)));
   });
 
+  it('dedupes SG Light trend impressions across rerenders and new contexts', async () => {
+    const { fetchAccessPlan } = await import('@app/api/player');
+    const { fetchRoundSg, fetchSessionTimeline, fetchCoachRoundSummary } = await import('@app/api/roundStory');
+
+    vi.mocked(fetchAccessPlan).mockResolvedValue({ plan: 'free' } as any);
+    vi.mocked(fetchRoundSg).mockResolvedValue({ total: 0, categories: [] });
+    vi.mocked(fetchSessionTimeline).mockResolvedValue({ runId: 'run-1', events: [] });
+    vi.mocked(fetchCoachRoundSummary).mockResolvedValue({ strengths: [], focus: [] });
+    mockFetchRoundRecap.mockResolvedValue({
+      strokesGainedLightTrend: {
+        windowSize: 3,
+        perCategory: { tee: { avgDelta: 0.1, rounds: 3 }, approach: { avgDelta: -0.2, rounds: 3 } },
+        focusHistory: [{ roundId: 'run-1', playedAt: '2024-02-01', focusCategory: 'approach' }],
+      },
+    } as any);
+
+    const { rerender } = render(
+      <RoundStoryScreen
+        navigation={navigation}
+        route={{ key: 'RoundStory', name: 'RoundStory', params: { runId: 'run-1', summary } }}
+      />,
+    );
+
+    await waitFor(() => expect(mockSafeEmit).toHaveBeenCalledWith('sg_light_trend_viewed', expect.any(Object)));
+    const trendCalls = () => vi.mocked(mockSafeEmit).mock.calls.filter(([event]) => event === 'sg_light_trend_viewed');
+    expect(trendCalls()).toHaveLength(1);
+
+    rerender(
+      <RoundStoryScreen
+        navigation={navigation}
+        route={{ key: 'RoundStory', name: 'RoundStory', params: { runId: 'run-1', summary } }}
+      />,
+    );
+
+    await waitFor(() => expect(trendCalls()).toHaveLength(1));
+
+    mockFetchRoundRecap.mockResolvedValueOnce({
+      strokesGainedLightTrend: {
+        windowSize: 3,
+        perCategory: { tee: { avgDelta: 0.2, rounds: 3 }, approach: { avgDelta: -0.1, rounds: 3 } },
+        focusHistory: [{ roundId: 'run-2', playedAt: '2024-03-01', focusCategory: 'tee' }],
+      },
+    } as any);
+
+    rerender(
+      <RoundStoryScreen
+        navigation={navigation}
+        route={{ key: 'RoundStory', name: 'RoundStory', params: { runId: 'run-2', summary: { ...summary, runId: 'run-2' } } }}
+      />,
+    );
+
+    await waitFor(() => expect(trendCalls()).toHaveLength(2));
+  });
+
   it('shows guided preview for free users with one teaser', async () => {
     const { fetchAccessPlan } = await import('@app/api/player');
     const { fetchRoundSg } = await import('@app/api/roundStory');
