@@ -191,6 +191,40 @@ describe('RoundStoryScreen', () => {
     expect(trendCard).toHaveTextContent(t('weeklySummary.notEnough'));
   });
 
+  it('opens SG Light explainer from trend card', async () => {
+    const { fetchAccessPlan } = await import('@app/api/player');
+    const { fetchRoundSg, fetchSessionTimeline, fetchCoachRoundSummary } = await import('@app/api/roundStory');
+    const sgLightTrend = {
+      windowSize: 3,
+      perCategory: {
+        tee: { avgDelta: 0.2, rounds: 3 },
+        approach: { avgDelta: -0.1, rounds: 3 },
+        short_game: { avgDelta: 0.0, rounds: 3 },
+        putting: { avgDelta: 0.1, rounds: 3 },
+      },
+      focusHistory: [{ roundId: 'run-1', playedAt: '2024-01-01', focusCategory: 'tee' }],
+    };
+
+    vi.mocked(fetchAccessPlan).mockResolvedValue({ plan: 'pro' } as any);
+    vi.mocked(fetchRoundSg).mockResolvedValue({ total: 0, categories: [] });
+    vi.mocked(fetchSessionTimeline).mockResolvedValue({ runId: 'run-1', events: [] });
+    vi.mocked(fetchCoachRoundSummary).mockResolvedValue({ strengths: [], focus: [] });
+    mockFetchRoundRecap.mockResolvedValue({ strokesGainedLightTrend: sgLightTrend } as any);
+
+    const { getByTestId, getByText } = render(
+      <RoundStoryScreen navigation={navigation} route={{ key: 'RoundStory', name: 'RoundStory', params: { runId: 'run-1' } }} />,
+    );
+
+    await waitFor(() => expect(getByTestId('sg-light-trend')).toBeTruthy());
+    fireEvent.click(getByTestId('open-sg-light-explainer'));
+
+    expect(getByText('What is SG Light?')).toBeTruthy();
+    expect(mockSafeEmit).toHaveBeenCalledWith('sg_light_explainer_opened', {
+      surface: 'round_story',
+      roundId: 'run-1',
+    });
+  });
+
   it('surfaces practice readiness summary and emits telemetry', async () => {
     const { fetchAccessPlan } = await import('@app/api/player');
     vi.mocked(fetchAccessPlan).mockResolvedValue({ plan: 'free' } as any);

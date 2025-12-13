@@ -10,15 +10,24 @@ import {
 
 import { formatSgDelta, labelForSgLightCategory, mapSgLightCategoryToFocusArea } from "./sgLightWebUtils";
 import { trackPracticeMissionRecommendationClicked, trackPracticeMissionRecommendationShown } from "@/practice/analytics";
+import { SgLightExplainer } from "./SgLightExplainer";
+import type { SgLightExplainerSurface } from "./analytics";
 
 type Props = {
   rounds?: Array<StrokesGainedLightSummary & { roundId?: string; playedAt?: string }>;
   trend?: StrokesGainedLightTrend | null;
   practiceSurface?: "web_round_recap" | "web_round_story";
   practiceHrefBuilder?(focusCategory: StrokesGainedLightCategory): string | null;
+  explainerSurface?: SgLightExplainerSurface;
 };
 
-export function SgLightTrendCardWeb({ rounds, trend, practiceSurface = "web_round_story", practiceHrefBuilder }: Props) {
+export function SgLightTrendCardWeb({
+  rounds,
+  trend,
+  practiceSurface = "web_round_story",
+  practiceHrefBuilder,
+  explainerSurface = "round_story",
+}: Props) {
   const { t } = useTranslation();
   const hasTrackedImpressionRef = useRef(false);
 
@@ -68,7 +77,10 @@ export function SgLightTrendCardWeb({ rounds, trend, practiceSurface = "web_roun
   return (
     <section className="rounded-xl border border-slate-800 bg-slate-900/60 p-4 shadow-sm">
       <div className="flex items-center justify-between">
-        <p className="text-sm font-semibold text-slate-100">{t("round.story.sg_light.title", "Recent SG Light trend")}</p>
+        <div className="flex items-center gap-2">
+          <p className="text-sm font-semibold text-slate-100">{t("round.story.sg_light.title", "Recent SG Light trend")}</p>
+          <SgLightExplainer surface={explainerSurface} />
+        </div>
         <span className="text-[11px] text-slate-500">
           {resolvedTrend ? t("round.story.sg_light.window", { rounds: resolvedTrend.windowSize }) : null}
         </span>

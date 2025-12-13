@@ -38,6 +38,7 @@ import { buildPracticeReadinessSummary } from '@shared/practice/practiceReadines
 import { emitPracticeReadinessViewed } from '@shared/practice/practiceReadinessAnalytics';
 import { getDefaultWeeklyPracticeGoalSettings } from '@shared/practice/practiceGoalSettings';
 import { safeEmit } from '@app/telemetry';
+import { SgLightExplainerModal } from '@app/components/SgLightExplainerModal';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'RoundRecap'>;
 
@@ -81,6 +82,7 @@ export default function RoundRecapScreen({ route, navigation }: Props): JSX.Elem
   const [practiceHistory, setPracticeHistory] = useState<PracticeMissionHistoryEntry[]>([]);
   const [weeklyGoalSettings, setWeeklyGoalSettings] = useState(getDefaultWeeklyPracticeGoalSettings());
   const [loadingPractice, setLoadingPractice] = useState(true);
+  const [sgLightExplainerVisible, setSgLightExplainerVisible] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -404,6 +406,13 @@ export default function RoundRecapScreen({ route, navigation }: Props): JSX.Elem
     return `Practice ${lower}`;
   }, [sgLightFocusLabel]);
 
+  const openSgLightExplainer = useCallback(() => {
+    safeEmit('sg_light_explainer_opened', { surface: 'round_recap', roundId });
+    setSgLightExplainerVisible(true);
+  }, [roundId]);
+
+  const closeSgLightExplainer = useCallback(() => setSgLightExplainerVisible(false), []);
+
   const handlePracticeFromSgLight = useCallback(() => {
     if (!sgLightFocusCategory) return;
     navigation.navigate('PracticeMissions', {
@@ -478,7 +487,8 @@ export default function RoundRecapScreen({ route, navigation }: Props): JSX.Elem
   }
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+    <>
+      <ScrollView style={styles.container} contentContainerStyle={styles.content}>
       <View style={styles.header}>
         <Text style={styles.title}>{courseName}</Text>
         <Text style={styles.subtitle}>{dateLabel}</Text>
@@ -587,7 +597,17 @@ export default function RoundRecapScreen({ route, navigation }: Props): JSX.Elem
         {recap.strokesGainedLight ? (
           <View style={styles.sgLightCard} testID="sg-light-card">
             <View style={styles.sgHeaderRow}>
-              <Text style={styles.sgLabel}>Strokes Gained (Light)</Text>
+              <View style={styles.sgLabelRow}>
+                <Text style={styles.sgLabel}>Strokes Gained (Light)</Text>
+                <TouchableOpacity
+                  onPress={openSgLightExplainer}
+                  accessibilityLabel={t('sg_light.explainer.open_label')}
+                  style={styles.infoButton}
+                  testID="open-sg-light-explainer"
+                >
+                  <Text style={styles.infoIcon}>i</Text>
+                </TouchableOpacity>
+              </View>
               <Text style={styles.sgValue}>{formatSgValue(recap.strokesGainedLight.totalDelta)}</Text>
             </View>
             {sgLightHeadline ? <Text style={styles.muted}>{sgLightHeadline}</Text> : null}
@@ -709,21 +729,27 @@ export default function RoundRecapScreen({ route, navigation }: Props): JSX.Elem
         )}
       </View>
 
-      <TouchableOpacity
-        style={styles.primaryCta}
-        onPress={() =>
-          navigation.navigate('CoachReport', {
-            roundId,
-            courseName,
-            date: recap?.date,
-            isDemo,
-          })
-        }
-        testID="open-coach-report"
-      >
-        <Text style={styles.primaryCtaText}>{t('coach_report_cta_from_recap')}</Text>
-      </TouchableOpacity>
-    </ScrollView>
+        <TouchableOpacity
+          style={styles.primaryCta}
+          onPress={() =>
+            navigation.navigate('CoachReport', {
+              roundId,
+              courseName,
+              date: recap?.date,
+              isDemo,
+            })
+          }
+          testID="open-coach-report"
+        >
+          <Text style={styles.primaryCtaText}>{t('coach_report_cta_from_recap')}</Text>
+        </TouchableOpacity>
+      </ScrollView>
+      <SgLightExplainerModal
+        visible={sgLightExplainerVisible}
+        onClose={closeSgLightExplainer}
+        t={t}
+      />
+    </>
   );
 }
 
@@ -772,11 +798,22 @@ const styles = StyleSheet.create({
   tileLabel: { fontWeight: '600', color: '#111827' },
   tileGrade: { fontSize: 24, fontWeight: '700' },
   tileValue: { color: '#374151' },
+  sgLabelRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   sgHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   sgLabel: { color: '#111827', fontWeight: '600' },
   sgValue: { fontSize: 20, fontWeight: '700' },
   sgPositive: { color: '#047857' },
   sgNegative: { color: '#b91c1c' },
+  infoButton: {
+    marginLeft: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: '#d1d5db',
+    backgroundColor: '#f8fafc',
+  },
+  infoIcon: { color: '#0f172a', fontWeight: '700' },
   bullet: { color: '#111827' },
   secondaryButton: {
     paddingVertical: 8,

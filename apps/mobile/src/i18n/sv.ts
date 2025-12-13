@@ -215,5 +215,18 @@ export const sv = {
       short_game: 'Närspel',
       putting: 'Puttning',
     },
+    explainer: {
+      heading: 'Strokes Gained Light',
+      title: 'Vad är SG Light?',
+      points: {
+        performance: 'Mäter hur många slag du vann eller tappade mot spelare på din nivå.',
+        delta_meaning: '+1,0 = du vann ett slag den här rundan, -1,0 = du tappade ett slag.',
+        confidence: 'Behöver tillräckligt med slag i varje kategori för att vara säker.',
+      },
+      categories: 'Kategorier: Tee, Inspel, Närspel, Puttning.',
+      confidence: 'Låg tillförlitlighet? Samla fler slag i den kategorin.',
+      open_label: 'Öppna SG Light-förklaringen',
+      close_label: 'Stäng förklaringen',
+    },
   },
 };

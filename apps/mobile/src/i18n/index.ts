@@ -3,7 +3,7 @@ import { sv } from './sv';
 
 type LeafValue = string | number | boolean | null | undefined;
 
-type Interpolation = Record<string, LeafValue>;
+export type Interpolation = Record<string, LeafValue>;
 
 type TranslationValue = string | TranslationTree;
 
@@ -31,10 +31,12 @@ function resolveKey(source: TranslationTree, key: string): string | null {
   return typeof current === 'string' ? current : null;
 }
 
-export function t(key: string, params?: Interpolation): string {
+export type Translator = (key: string, params?: Interpolation) => string;
+
+export const t: Translator = (key, params) => {
   const value = resolveKey(en as unknown as TranslationTree, key);
   if (!value) return key;
   return interpolate(value, params);
-}
+};
 
 export { en, sv };

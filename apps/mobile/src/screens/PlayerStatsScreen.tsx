@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 
@@ -9,6 +9,7 @@ import type { RootStackParamList } from '@app/navigation/types';
 import { computePlayerStats } from '@app/stats/playerStatsEngine';
 import { safeEmit } from '@app/telemetry';
 import { buildStrokesGainedLightTrend, type StrokesGainedLightTrend } from '@shared/stats/strokesGainedLight';
+import { SgLightExplainerModal } from '@app/components/SgLightExplainerModal';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'PlayerStats'>;
 
@@ -47,6 +48,7 @@ export default function PlayerStatsScreen({ navigation }: Props): JSX.Element {
   const [categoryError, setCategoryError] = useState<string | null>(null);
   const [sgLightTrend, setSgLightTrend] = useState<StrokesGainedLightTrend | null>(null);
   const [sgLightLoading, setSgLightLoading] = useState(true);
+  const [sgLightExplainerVisible, setSgLightExplainerVisible] = useState(false);
   const trendImpressionSent = useRef(false);
 
   useEffect(() => {
@@ -148,6 +150,13 @@ export default function PlayerStatsScreen({ navigation }: Props): JSX.Element {
   const hasRounds = stats.roundsPlayed > 0;
   const sgLightFocusCategory = sgLightTrend?.focusHistory?.[0]?.focusCategory ?? null;
 
+  const openSgLightExplainer = useCallback(() => {
+    safeEmit('sg_light_explainer_opened', { surface: 'player_stats' });
+    setSgLightExplainerVisible(true);
+  }, []);
+
+  const closeSgLightExplainer = useCallback(() => setSgLightExplainerVisible(false), []);
+
   useEffect(() => {
     if (!sgLightTrend || !sgLightFocusCategory || trendImpressionSent.current) return;
     trendImpressionSent.current = true;
@@ -167,7 +176,8 @@ export default function PlayerStatsScreen({ navigation }: Props): JSX.Element {
   }
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+    <>
+      <ScrollView style={styles.container} contentContainerStyle={styles.content}>
       <Text style={styles.title}>{t('stats.player.title')}</Text>
       <Text style={styles.subtitle}>{t('stats.player.subtitle')}</Text>
       {error ? <Text style={styles.error}>{error}</Text> : null}
@@ -202,7 +212,17 @@ export default function PlayerStatsScreen({ navigation }: Props): JSX.Element {
       )}
 
       <View style={styles.card} testID="player-stats-sg-trend-card">
-        <Text style={styles.cardTitle}>{t('stats.player.sg_light.trend_title')}</Text>
+        <View style={styles.cardTitleRow}>
+          <Text style={styles.cardTitle}>{t('stats.player.sg_light.trend_title')}</Text>
+          <TouchableOpacity
+            onPress={openSgLightExplainer}
+            accessibilityLabel={t('sg_light.explainer.open_label')}
+            style={styles.infoButton}
+            testID="open-sg-light-explainer"
+          >
+            <Text style={styles.infoIcon}>i</Text>
+          </TouchableOpacity>
+        </View>
         {sgLightLoading ? (
           <ActivityIndicator />
         ) : sgLightTrend ? (
@@ -328,6 +348,12 @@ export default function PlayerStatsScreen({ navigation }: Props): JSX.Element {
         <Text style={styles.primaryButtonText}>{t('stats.player.view_rounds')}</Text>
       </TouchableOpacity>
     </ScrollView>
+    <SgLightExplainerModal
+      visible={sgLightExplainerVisible}
+      onClose={closeSgLightExplainer}
+      t={t}
+    />
+    </>
   );
 }
 
@@ -369,6 +395,7 @@ const styles = StyleSheet.create({
   muted: { color: '#6b7280', marginTop: 4 },
   error: { color: '#b91c1c' },
   card: { borderWidth: 1, borderColor: '#e5e7eb', borderRadius: 12, padding: 12, gap: 8 },
+  cardTitleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
   cardTitle: { fontSize: 18, fontWeight: '700' },
   emptyTitle: { fontSize: 18, fontWeight: '700' },
   primaryButton: {
@@ -394,4 +421,15 @@ const styles = StyleSheet.create({
     color: '#111827',
     fontWeight: '600',
   },
+  infoButton: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#d1d5db',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#f3f4f6',
+  },
+  infoIcon: { color: '#111827', fontWeight: '700' },
 });

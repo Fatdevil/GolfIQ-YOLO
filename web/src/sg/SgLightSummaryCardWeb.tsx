@@ -18,14 +18,22 @@ import {
   trackPracticeMissionRecommendationShown,
 } from "@/practice/analytics";
 import type { PracticeRecommendationContext } from "@shared/practice/practiceRecommendationsAnalytics";
+import { SgLightExplainer } from "./SgLightExplainer";
+import type { SgLightExplainerSurface } from "./analytics";
 
 type Props = {
   summary?: StrokesGainedLightSummary | null;
   practiceSurface?: "web_round_recap" | "web_round_story";
   practiceHrefBuilder?(focusCategory: StrokesGainedLightCategory): string | null;
+  explainerSurface?: Extract<SgLightExplainerSurface, "round_recap" | "round_share" | "player_stats">;
 };
 
-export function SgLightSummaryCardWeb({ summary, practiceSurface = "web_round_recap", practiceHrefBuilder }: Props) {
+export function SgLightSummaryCardWeb({
+  summary,
+  practiceSurface = "web_round_recap",
+  practiceHrefBuilder,
+  explainerSurface = "round_recap",
+}: Props) {
   const { t } = useTranslation();
   const eligibleCategories = summary?.byCategory?.filter(
     (entry) => entry.confidence >= STROKES_GAINED_LIGHT_MIN_CONFIDENCE,
@@ -86,9 +94,12 @@ export function SgLightSummaryCardWeb({ summary, practiceSurface = "web_round_re
   return (
     <section className="rounded-xl border border-slate-800 bg-slate-900/60 p-4 shadow-sm">
       <div className="flex items-center justify-between gap-2">
-        <div>
-          <p className="text-sm font-semibold text-slate-100">{t("round.recap.sg_light.title", "Strokes Gained Light")}</p>
-          <p className="text-xs text-slate-400">{t("round.recap.sg_light.subtitle", "Focus from this round")}</p>
+        <div className="flex items-center gap-2">
+          <div>
+            <p className="text-sm font-semibold text-slate-100">{t("round.recap.sg_light.title", "Strokes Gained Light")}</p>
+            <p className="text-xs text-slate-400">{t("round.recap.sg_light.subtitle", "Focus from this round")}</p>
+          </div>
+          <SgLightExplainer surface={explainerSurface} />
         </div>
         {hasData ? (
           <div className="text-right">

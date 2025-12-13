@@ -197,6 +197,45 @@ describe('PlayerStatsScreen', () => {
     });
   });
 
+  it('opens SG Light explainer from player stats', async () => {
+    mockListSummaries.mockResolvedValue([
+      {
+        roundId: 'r1',
+        totalStrokes: 72,
+        totalPar: 72,
+        totalToPar: 0,
+        totalPutts: 30,
+        fairwaysHit: 10,
+        fairwaysTotal: 14,
+        girCount: 10,
+        holesPlayed: 18,
+      },
+    ]);
+    mockFetchRecap.mockResolvedValue({
+      roundId: 'r1',
+      date: '2024-01-02',
+      strokesGainedLight: {
+        totalDelta: 0.5,
+        byCategory: [
+          { category: 'tee', shots: 10, delta: 0.2, confidence: 0.8 },
+          { category: 'approach', shots: 12, delta: 0.3, confidence: 0.8 },
+        ],
+        focusCategory: 'approach',
+      },
+    });
+    mockFetchCategoryStats.mockResolvedValue({ roundsCount: 0 } as any);
+
+    const { getByTestId, getByText } = render(
+      <PlayerStatsScreen navigation={{ navigate: vi.fn() } as any} route={undefined as any} />,
+    );
+
+    await waitFor(() => expect(getByTestId('player-stats-sg-trend-card')).toBeTruthy());
+    fireEvent.click(getByTestId('open-sg-light-explainer'));
+
+    expect(getByText('What is SG Light?')).toBeTruthy();
+    expect(mockSafeEmit).toHaveBeenCalledWith('sg_light_explainer_opened', { surface: 'player_stats' });
+  });
+
   it('shows placeholder when SG Light history is insufficient', async () => {
     mockListSummaries.mockResolvedValue([{ roundId: 'r1', totalStrokes: 72, holesPlayed: 18 }]);
     mockFetchCategoryStats.mockResolvedValue({

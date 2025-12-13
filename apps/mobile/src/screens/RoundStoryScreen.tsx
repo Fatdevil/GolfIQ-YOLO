@@ -17,6 +17,7 @@ import { emitPracticeReadinessViewed } from '@shared/practice/practiceReadinessA
 import { getDefaultWeeklyPracticeGoalSettings } from '@shared/practice/practiceGoalSettings';
 import type { PracticeMissionHistoryEntry } from '@shared/practice/practiceHistory';
 import type { StrokesGainedLightTrend } from '@shared/stats/strokesGainedLight';
+import { SgLightExplainerModal } from '@app/components/SgLightExplainerModal';
 
 const PRO_TEASER = 'Unlock full analysis (SG and swing insights) with GolfIQ Pro.';
 
@@ -93,6 +94,7 @@ export default function RoundStoryScreen({ route, navigation }: Props): JSX.Elem
   const [analyticsError, setAnalyticsError] = useState<string | null>(null);
   const [sgError, setSgError] = useState<string | null>(null);
   const [reloadToken, setReloadToken] = useState(0);
+  const [sgLightExplainerVisible, setSgLightExplainerVisible] = useState(false);
   const trendImpressionSent = useRef(false);
 
   useEffect(() => {
@@ -296,6 +298,13 @@ export default function RoundStoryScreen({ route, navigation }: Props): JSX.Elem
     [sgLightTrend],
   );
 
+  const openSgLightExplainer = useCallback(() => {
+    safeEmit('sg_light_explainer_opened', { surface: 'round_story', roundId: runId });
+    setSgLightExplainerVisible(true);
+  }, [runId]);
+
+  const closeSgLightExplainer = useCallback(() => setSgLightExplainerVisible(false), []);
+
   const keyStatsChips = useMemo(() => {
     if (!isPro || !sg) return [];
     const baseChips = [
@@ -354,7 +363,8 @@ export default function RoundStoryScreen({ route, navigation }: Props): JSX.Elem
   }, []);
 
   return (
-    <ScrollView contentContainerStyle={styles.container}>
+    <>
+      <ScrollView contentContainerStyle={styles.container}>
       <View style={styles.headerCard} testID="round-story-header">
         <Text style={styles.sectionEyebrow}>Round overview</Text>
         <Text style={styles.title}>{viewModel.courseName}</Text>
@@ -425,7 +435,17 @@ export default function RoundStoryScreen({ route, navigation }: Props): JSX.Elem
 
       <View style={styles.section} testID="sg-light-trend">
         <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>{t('round.story.sgLightTrendTitle')}</Text>
+          <View style={styles.sectionTitleRow}>
+            <Text style={styles.sectionTitle}>{t('round.story.sgLightTrendTitle')}</Text>
+            <TouchableOpacity
+              onPress={openSgLightExplainer}
+              accessibilityLabel={t('sg_light.explainer.open_label')}
+              style={styles.infoButton}
+              testID="open-sg-light-explainer"
+            >
+              <Text style={styles.infoIcon}>i</Text>
+            </TouchableOpacity>
+          </View>
           {(loadingTrend || loadingSg) && <ActivityIndicator size="small" />}
         </View>
         <View style={styles.card}>
@@ -575,7 +595,13 @@ export default function RoundStoryScreen({ route, navigation }: Props): JSX.Elem
           </TouchableOpacity>
         </View>
       </View>
-    </ScrollView>
+      </ScrollView>
+      <SgLightExplainerModal
+        visible={sgLightExplainerVisible}
+        onClose={closeSgLightExplainer}
+        t={t}
+      />
+    </>
   );
 }
 
@@ -648,11 +674,23 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 8,
   },
+  sectionTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   sectionTitle: {
     fontSize: 18,
     fontWeight: '800',
     color: '#0f172a',
   },
+  infoButton: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#cbd5e1',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#f8fafc',
+  },
+  infoIcon: { color: '#0f172a', fontWeight: '700' },
   card: {
     backgroundColor: '#fff',
     padding: 16,
