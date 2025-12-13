@@ -33,6 +33,9 @@ vi.mock("@/sg/analytics", () => ({
 const mockTrackExplainer = vi.mocked(trackSgLightExplainerOpenedWeb);
 
 describe("SG Light web cards", () => {
+  const matchesSgLightDialogName = (name: string) =>
+    /sg light/i.test(name) || /sg_light\.explainer\.heading/i.test(name);
+
   const summary: StrokesGainedLightSummary = {
     totalDelta: -1.2,
     focusCategory: "approach",
@@ -75,7 +78,7 @@ describe("SG Light web cards", () => {
     await userEvent.click(trigger);
 
     const explainer = await screen.findByRole("dialog", {
-      name: (name) => /sg light/i.test(name) || /sg_light\.explainer\.heading/i.test(name),
+      name: matchesSgLightDialogName,
     });
     expect(explainer).toBeInTheDocument();
     expect(mockTrackExplainer).toHaveBeenCalledWith({ surface: "round_recap" });
@@ -111,7 +114,7 @@ describe("SG Light web cards", () => {
     await userEvent.click(trigger);
 
     const explainer = await screen.findByRole("dialog", {
-      name: (name) => /sg light/i.test(name) || /sg_light\.explainer\.heading/i.test(name),
+      name: matchesSgLightDialogName,
     });
     expect(explainer).toBeInTheDocument();
     expect(mockTrackExplainer).toHaveBeenCalledWith({ surface: "round_story" });
