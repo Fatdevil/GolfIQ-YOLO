@@ -16,6 +16,7 @@ from cv_engine.metrics.launch_mono import estimate_vertical_launch
 from cv_engine.pose.adapter import PoseAdapter
 from cv_engine.sequence import analyze_kinematic_sequence
 from cv_engine.tracking.factory import get_tracker
+from cv_engine.telemetry import FlightRecorder, flight_recorder_settings
 from observability.otel import span
 from server.metrics.faceon import compute_faceon_metrics
 from server.telemetry import record_pose_metrics, record_stage_latency
@@ -73,8 +74,27 @@ def analyze_frames(
         h, w = frames_list[0].shape[:2]
         input_size = f"{w}x{h}"
 
+    recorder_enabled, frame_sample_rate = flight_recorder_settings()
+    recorder_metadata = {
+        "detector": det.__class__.__name__,
+        "mock": det.mock,
+        "tracker": tracker_name,
+        "poseBackend": pose_backend,
+        "inputSize": input_size,
+        "fps": calib.fps,
+        "smoothingWindow": smoothing_window,
+    }
+    recorder = FlightRecorder(
+        enabled=recorder_enabled,
+        session_metadata=recorder_metadata,
+        frame_sample_rate=frame_sample_rate,
+    )
+    if not pose_adapter.is_enabled():
+        recorder.record_event("pose_disabled", {"backend": pose_backend})
+
     timings: Dict[str, float] = {}
     boxes_per_frame: List[List[Box]] = []
+    detection_times: List[float] = []
     ball_track_px: List[Tuple[float, float]] = []
     club_track_px: List[Tuple[float, float]] = []
     events: List[int] = []
@@ -97,8 +117,10 @@ def analyze_frames(
         detection_total = 0
         detection_start = perf_counter()
         with span("cv.stage.detect") as detection_span:
-            for fr in frames_list:
+            for idx, fr in enumerate(frames_list):
+                run_start = perf_counter()
                 boxes = det.run(fr)
+                detection_times.append((perf_counter() - run_start) * 1000.0)
                 boxes_per_frame.append(list(boxes))
                 detection_total += len(boxes)
         detection_ms = (perf_counter() - detection_start) * 1000.0
@@ -132,7 +154,7 @@ def analyze_frames(
         with span(
             "cv.stage.track", attributes={"cv.tracker": tracker_name}
         ) as track_span:
-            for boxes in boxes_per_frame:
+            for frame_index, boxes in enumerate(boxes_per_frame):
                 tracked = tracker.update(boxes)
 
                 per_label: Dict[str, List[Tuple[int, Box]]] = {"ball": [], "club": []}
@@ -160,6 +182,20 @@ def analyze_frames(
                         ball_track_px.append(chosen_box.center())
                     elif label == "club":
                         club_track_px.append(chosen_box.center())
+
+                detection_count = len(boxes)
+                recorder.record_frame(
+                    frame_index,
+                    inference_ms=(
+                        detection_times[frame_index]
+                        if frame_index < len(detection_times)
+                        else None
+                    ),
+                    detections=detection_count,
+                    ball_tracks=len(per_label["ball"]),
+                    club_tracks=len(per_label["club"]),
+                    dropped=detection_count == 0,
+                )
             if track_span is not None:
                 track_span.set_attribute("cv.track.frames", len(boxes_per_frame))
         tracking_ms = (perf_counter() - tracking_start) * 1000.0
@@ -251,6 +287,13 @@ def analyze_frames(
         timings["impact_ms"] = (perf_counter() - impact_start) * 1000.0
         events = [e.frame_index for e in impact_events]
         confidence = max((e.confidence for e in impact_events), default=0.0)
+        for shot_index, impact_event in enumerate(impact_events):
+            recorder.record_shot(
+                shot_index,
+                start_frame=impact_event.frame_index,
+                end_frame=impact_event.frame_index,
+                confidence=impact_event.confidence,
+            )
 
         sequence_metrics = analyze_kinematic_sequence(
             pose_history=pose_adapter.get_history(),
@@ -302,5 +345,7 @@ def analyze_frames(
                     pipeline_span.set_attribute(
                         f"cv.pose.{metric_name}", float(metric_value)
                     )
+    recorder.set_status("ok")
+    flight_recorder = recorder.to_dict() if recorder_enabled else None
 
-    return {"events": events, "metrics": metrics}
+    return {"events": events, "metrics": metrics, "flight_recorder": flight_recorder}
