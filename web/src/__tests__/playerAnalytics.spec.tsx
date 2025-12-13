@@ -104,7 +104,11 @@ const SAMPLE_ANALYTICS: PlayerAnalytics = {
 };
 
 function renderWithRouter(node: React.ReactElement) {
-  return render(<MemoryRouter>{node}</MemoryRouter>);
+  return render(
+    <MemoryRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+      {node}
+    </MemoryRouter>,
+  );
 }
 
 test("PlayerAnalyticsDashboard renders categories and sg trend", () => {

@@ -67,7 +67,10 @@ describe("PracticeMissionDetailPage", () => {
     });
 
     render(
-      <MemoryRouter initialEntries={["/practice/history/entry-1"]}>
+      <MemoryRouter
+        initialEntries={["/practice/history/entry-1"]}
+        future={{ v7_startTransition: true, v7_relativeSplatPath: true }}
+      >
         <Routes>
           <Route path="/practice/history/:id" element={<PracticeMissionDetailPage />} />
         </Routes>
@@ -102,7 +105,10 @@ describe("PracticeMissionDetailPage", () => {
     });
 
     render(
-      <MemoryRouter initialEntries={["/practice/history/entry-1"]}>
+      <MemoryRouter
+        initialEntries={["/practice/history/entry-1"]}
+        future={{ v7_startTransition: true, v7_relativeSplatPath: true }}
+      >
         <Routes>
           <Route path="/practice/history/:id" element={<PracticeMissionDetailPage />} />
         </Routes>

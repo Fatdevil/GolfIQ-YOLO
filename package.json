@@ -3,6 +3,9 @@
   "private": true,
   "type": "module",
   "version": "1.0.0",
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
     "typecheck:web": "npm --prefix web run typecheck",
     "typecheck:mobile": "npm --prefix apps/mobile run typecheck",

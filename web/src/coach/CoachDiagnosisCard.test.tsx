@@ -29,7 +29,7 @@ describe("CoachDiagnosisCard", () => {
 
   it("renders findings and mission links", () => {
     render(
-      <MemoryRouter>
+      <MemoryRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
         <CoachDiagnosisCard diagnosis={sampleDiagnosis} status="ready" />
       </MemoryRouter>,
     );
@@ -41,7 +41,7 @@ describe("CoachDiagnosisCard", () => {
 
   it("shows empty state when no findings", () => {
     render(
-      <MemoryRouter>
+      <MemoryRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
         <CoachDiagnosisCard
           diagnosis={{ run_id: "run-2", findings: [] }}
           status="ready"

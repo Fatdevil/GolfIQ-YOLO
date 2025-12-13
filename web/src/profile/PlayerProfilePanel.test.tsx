@@ -82,7 +82,7 @@ const sampleProfile: PlayerProfile = {
 describe("PlayerProfilePanel", () => {
   it("renders strengths, weaknesses and plan steps", () => {
     render(
-      <MemoryRouter>
+      <MemoryRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
         <PlayerProfilePanel profile={sampleProfile} />
       </MemoryRouter>,
     );
@@ -97,7 +97,7 @@ describe("PlayerProfilePanel", () => {
 
   it("navigates to mission when CTA is clicked", () => {
     render(
-      <MemoryRouter>
+      <MemoryRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
         <PlayerProfilePanel profile={sampleProfile} />
       </MemoryRouter>,
     );

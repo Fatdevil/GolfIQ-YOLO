@@ -67,7 +67,10 @@ const sequencePayload = {
 
 function renderPage() {
   return render(
-    <MemoryRouter initialEntries={["/runs/demo"]}>
+    <MemoryRouter
+      initialEntries={["/runs/demo"]}
+      future={{ v7_startTransition: true, v7_relativeSplatPath: true }}
+    >
       <Routes>
         <Route path="/runs/:id" element={<RunDetailPage />} />
       </Routes>

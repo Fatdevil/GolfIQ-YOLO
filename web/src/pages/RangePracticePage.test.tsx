@@ -354,7 +354,10 @@ function renderWithUnit(
   initialPath = "/range/practice"
 ) {
   return render(
-    <MemoryRouter initialEntries={[initialPath]}>
+    <MemoryRouter
+      initialEntries={[initialPath]}
+      future={{ v7_startTransition: true, v7_relativeSplatPath: true }}
+    >
       <UserSessionProvider>
         <UnitsContext.Provider value={{ unit, setUnit: () => {} }}>
           {ui}

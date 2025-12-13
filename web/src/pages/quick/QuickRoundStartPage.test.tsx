@@ -110,7 +110,7 @@ describe("QuickRoundStartPage hero courses", () => {
 
   it("renders hero courses when available", async () => {
     render(
-      <MemoryRouter>
+      <MemoryRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
         <QuickRoundStartPage />
       </MemoryRouter>
     );
@@ -123,7 +123,7 @@ describe("QuickRoundStartPage hero courses", () => {
     const user = userEvent.setup();
 
     render(
-      <MemoryRouter>
+      <MemoryRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
         <QuickRoundStartPage />
       </MemoryRouter>
     );
@@ -150,7 +150,7 @@ describe("QuickRoundStartPage hero courses", () => {
     const user = userEvent.setup();
 
     render(
-      <MemoryRouter>
+      <MemoryRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
         <QuickRoundStartPage />
       </MemoryRouter>
     );
@@ -196,7 +196,7 @@ describe("QuickRoundStartPage hero courses", () => {
     const user = userEvent.setup();
 
     render(
-      <MemoryRouter>
+      <MemoryRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
         <QuickRoundStartPage />
       </MemoryRouter>
     );
