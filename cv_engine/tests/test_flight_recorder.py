@@ -6,8 +6,12 @@ from cv_engine.telemetry.flight_recorder import FlightRecorder
 def test_records_frames_and_shots_when_enabled():
     recorder = FlightRecorder(enabled=True, session_metadata={"session": "abc"})
     recorder.record_frame(0, inference_ms=10.0, detections=2, ball_tracks=1)
-    recorder.record_frame(1, inference_ms=30.0, detections=1, ball_tracks=0, dropped=True)
-    recorder.record_shot(0, start_frame=0, end_frame=1, classification="test", confidence=0.9)
+    recorder.record_frame(
+        1, inference_ms=30.0, detections=1, ball_tracks=0, dropped=True
+    )
+    recorder.record_shot(
+        0, start_frame=0, end_frame=1, classification="test", confidence=0.9
+    )
     recorder.set_status("ok")
 
     output = recorder.to_dict()

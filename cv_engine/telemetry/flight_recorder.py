@@ -64,7 +64,9 @@ class FlightRecorder:
             self._current_dropped_streak += 1
         else:
             self._current_dropped_streak = 0
-        self._max_dropped_streak = max(self._max_dropped_streak, self._current_dropped_streak)
+        self._max_dropped_streak = max(
+            self._max_dropped_streak, self._current_dropped_streak
+        )
 
         if inference_ms is not None:
             self._inference_ms.append(float(inference_ms))
