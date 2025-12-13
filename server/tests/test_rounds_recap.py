@@ -63,6 +63,12 @@ def test_round_recap_success(recap_client):
     assert data["focusHints"][0].startswith("Dial in approach shots")
     assert any("putts per hole" in hint for hint in data["focusHints"])
 
+    sg_light = data["strokesGainedLight"]
+    assert isinstance(sg_light["totalDelta"], (int, float))
+    assert len(sg_light["byCategory"]) == 4
+    assert sg_light["focusCategory"] is not None
+    assert "strokesGainedLightTrend" in data
+
 
 def test_round_recap_forbidden_and_missing(recap_client):
     client, service = recap_client
