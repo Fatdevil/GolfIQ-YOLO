@@ -38,6 +38,11 @@ import {
 import { loadWeeklyPracticeGoalSettings } from '@app/storage/practiceGoalSettings';
 import { safeEmit } from '@app/telemetry';
 import { buildMissionProgressById, type PracticeMissionHistoryEntry } from '@shared/practice/practiceHistory';
+import {
+  buildSgLightPracticeCtaClickedPayload,
+  SG_LIGHT_PRACTICE_FOCUS_ENTRY_CLICKED_EVENT,
+  SG_LIGHT_PRACTICE_FOCUS_ENTRY_SHOWN_EVENT,
+} from '@shared/sgLight/analytics';
 import { useGeolocation } from '@app/hooks/useGeolocation';
 import { saveActiveRoundState } from '@app/round/roundState';
 import { computeNearestCourse } from '@shared/round/autoHoleCore';
@@ -381,7 +386,7 @@ export default function HomeDashboardScreen({ navigation }: Props): JSX.Element 
 
   useEffect(() => {
     if (!sgLightFocus) return;
-    safeEmit('practice_focus_entry_shown', {
+    safeEmit(SG_LIGHT_PRACTICE_FOCUS_ENTRY_SHOWN_EVENT, {
       surface: 'mobile_home_sg_light_focus',
       focusCategory: sgLightFocus.focusCategory,
     });
@@ -1001,10 +1006,11 @@ export default function HomeDashboardScreen({ navigation }: Props): JSX.Element 
 
   const handlePracticeFromSgFocus = useCallback(() => {
     if (!sgLightFocus) return;
-    safeEmit('practice_focus_entry_clicked', {
+    const payload = buildSgLightPracticeCtaClickedPayload({
       surface: 'mobile_home_sg_light_focus',
       focusCategory: sgLightFocus.focusCategory,
     });
+    safeEmit(SG_LIGHT_PRACTICE_FOCUS_ENTRY_CLICKED_EVENT, payload);
     navigation.navigate('PracticeMissions', {
       source: 'mobile_home_sg_light_focus',
       practiceRecommendationSource: 'mobile_home_sg_light_focus',

@@ -14,6 +14,7 @@ import { isSgLightInsightsEnabled } from '@shared/featureFlags/sgLightInsights';
 import {
   buildSgLightPracticeCtaClickedPayload,
   SG_LIGHT_PRACTICE_FOCUS_ENTRY_CLICKED_EVENT,
+  SG_LIGHT_PRACTICE_FOCUS_ENTRY_SHOWN_EVENT,
 } from '@shared/sgLight/analytics';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'PlayerStats'>;
@@ -165,7 +166,7 @@ export default function PlayerStatsScreen({ navigation }: Props): JSX.Element {
       focusCategory: StrokesGainedLightTrend['focusHistory'][number]['focusCategory'],
       _trend: StrokesGainedLightTrend,
     ) => {
-      safeEmit('practice_focus_entry_shown', {
+      safeEmit(SG_LIGHT_PRACTICE_FOCUS_ENTRY_SHOWN_EVENT, {
         surface: 'mobile_stats_sg_light_trend',
         focusCategory,
       });

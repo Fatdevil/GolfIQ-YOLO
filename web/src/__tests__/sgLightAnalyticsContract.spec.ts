@@ -5,6 +5,7 @@ import {
   buildSgLightImpressionKey,
   buildSgLightPracticeCtaClickedPayload,
   SG_LIGHT_EXPLAINER_OPENED_EVENT,
+  SG_LIGHT_PRACTICE_FOCUS_ENTRY_SHOWN_EVENT,
   SG_LIGHT_PRACTICE_RECOMMENDATION_CLICKED_EVENT,
 } from "@shared/sgLight/analytics";
 
@@ -40,6 +41,7 @@ describe("sg light analytics contract", () => {
 
   it("locks explainer payloads", () => {
     expect(SG_LIGHT_EXPLAINER_OPENED_EVENT).toBe("sg_light_explainer_opened");
+    expect(SG_LIGHT_PRACTICE_FOCUS_ENTRY_SHOWN_EVENT).toBe("practice_focus_entry_shown");
 
     expect(
       buildSgLightExplainerOpenedPayload({ surface: "round_recap", contextId: "round-999" }),

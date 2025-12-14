@@ -7,6 +7,7 @@ import type { StrokesGainedLightCategory } from "@shared/stats/strokesGainedLigh
 
 export const SG_LIGHT_EXPLAINER_OPENED_EVENT = "sg_light_explainer_opened" as const;
 export const SG_LIGHT_PRACTICE_FOCUS_ENTRY_CLICKED_EVENT = "practice_focus_entry_clicked" as const;
+export const SG_LIGHT_PRACTICE_FOCUS_ENTRY_SHOWN_EVENT = "practice_focus_entry_shown" as const;
 export const SG_LIGHT_PRACTICE_RECOMMENDATION_CLICKED_EVENT = "practice_mission_recommendation_clicked" as const;
 
 export const SG_LIGHT_PRIMARY_SURFACES = [
