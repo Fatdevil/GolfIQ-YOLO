@@ -7,6 +7,7 @@ import { fetchPlayerCategoryStats } from '@app/api/statsClient';
 import PlayerStatsScreen from '@app/screens/PlayerStatsScreen';
 import { safeEmit } from '@app/telemetry';
 import {
+  SG_LIGHT_EXPLAINER_OPENED_EVENT,
   SG_LIGHT_PRACTICE_FOCUS_ENTRY_CLICKED_EVENT,
   SG_LIGHT_PRACTICE_FOCUS_ENTRY_SHOWN_EVENT,
 } from '@shared/sgLight/analytics';
@@ -269,7 +270,7 @@ describe('PlayerStatsScreen', () => {
     fireEvent.click(getByTestId('open-sg-light-explainer'));
 
     expect(getByText('What is SG Light?')).toBeTruthy();
-    expect(mockSafeEmit).toHaveBeenCalledWith('sg_light_explainer_opened', { surface: 'player_stats' });
+    expect(mockSafeEmit).toHaveBeenCalledWith(SG_LIGHT_EXPLAINER_OPENED_EVENT, { surface: 'player_stats' });
   });
 
   it('shows placeholder when SG Light history is insufficient', async () => {

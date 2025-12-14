@@ -3,12 +3,16 @@ import type {
   PracticeMissionRecommendationReason,
   PracticeMissionRecommendationSurface,
 } from "@shared/practice/practiceRecommendationsAnalytics";
-import type { StrokesGainedLightCategory } from "@shared/stats/strokesGainedLight";
+import type {
+  StrokesGainedLightCategory,
+  StrokesGainedLightTrend,
+} from "@shared/stats/strokesGainedLight";
 
 export const SG_LIGHT_EXPLAINER_OPENED_EVENT = "sg_light_explainer_opened" as const;
 export const SG_LIGHT_PRACTICE_FOCUS_ENTRY_CLICKED_EVENT = "practice_focus_entry_clicked" as const;
 export const SG_LIGHT_PRACTICE_FOCUS_ENTRY_SHOWN_EVENT = "practice_focus_entry_shown" as const;
 export const SG_LIGHT_PRACTICE_RECOMMENDATION_CLICKED_EVENT = "practice_mission_recommendation_clicked" as const;
+export const SG_LIGHT_TREND_VIEWED_EVENT = "sg_light_trend_viewed" as const;
 
 export const SG_LIGHT_PRIMARY_SURFACES = [
   "round_recap",
@@ -86,4 +90,34 @@ export function buildSgLightPracticeCtaClickedPayload(
   return Object.fromEntries(
     Object.entries(payload).filter(([, value]) => value !== undefined),
   ) as SgLightPracticeCtaClickedPayload;
+}
+
+export type SgLightTrendViewedPayload = {
+  surface: SgLightSurface;
+  platform: "mobile" | "web";
+  roundId?: string | null;
+  windowSize: number;
+  focusCategory: StrokesGainedLightTrend["focusHistory"][number]["focusCategory"];
+};
+
+export function buildSgLightTrendViewedPayload({
+  surface,
+  platform,
+  roundId,
+  trend,
+  focusCategory,
+}: {
+  surface: SgLightSurface;
+  platform: "mobile" | "web";
+  roundId?: string | null;
+  trend: StrokesGainedLightTrend;
+  focusCategory: StrokesGainedLightTrend["focusHistory"][number]["focusCategory"];
+}): SgLightTrendViewedPayload {
+  return {
+    surface,
+    platform,
+    roundId,
+    windowSize: trend.windowSize,
+    focusCategory,
+  };
 }

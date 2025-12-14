@@ -17,6 +17,10 @@ import { emitPracticeReadinessViewed } from '@shared/practice/practiceReadinessA
 import { getDefaultWeeklyPracticeGoalSettings } from '@shared/practice/practiceGoalSettings';
 import type { PracticeMissionHistoryEntry } from '@shared/practice/practiceHistory';
 import type { StrokesGainedLightTrend } from '@shared/stats/strokesGainedLight';
+import {
+  buildSgLightTrendViewedPayload,
+  SG_LIGHT_TREND_VIEWED_EVENT,
+} from '@shared/sgLight/analytics';
 import { SgLightInsightsSection } from '@app/components/sg/SgLightInsightsSection';
 import { isSgLightInsightsEnabled } from '@shared/featureFlags/sgLightInsights';
 
@@ -271,13 +275,16 @@ export default function RoundStoryScreen({ route, navigation }: Props): JSX.Elem
       focusCategory: StrokesGainedLightTrend['focusHistory'][number]['focusCategory'],
       trend: StrokesGainedLightTrend,
     ) => {
-      safeEmit('sg_light_trend_viewed', {
-        surface: 'round_story',
-        platform: 'mobile',
-        roundId: runId,
-        windowSize: trend.windowSize,
-        focusCategory,
-      });
+      safeEmit(
+        SG_LIGHT_TREND_VIEWED_EVENT,
+        buildSgLightTrendViewedPayload({
+          surface: 'round_story',
+          platform: 'mobile',
+          roundId: runId,
+          trend,
+          focusCategory,
+        }),
+      );
     },
     [runId],
   );

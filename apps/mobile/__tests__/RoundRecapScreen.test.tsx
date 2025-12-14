@@ -13,6 +13,7 @@ import { loadPracticeMissionHistory } from '@app/storage/practiceMissionHistory'
 import { loadWeeklyPracticeGoalSettings } from '@app/storage/practiceGoalSettings';
 import { getTopPracticeRecommendationForRecap } from '@shared/caddie/bagPracticeRecommendations';
 import { safeEmit } from '@app/telemetry';
+import { SG_LIGHT_EXPLAINER_OPENED_EVENT } from '@shared/sgLight/analytics';
 
 vi.mock('@app/api/roundClient');
 vi.mock('@app/api/strokesGainedClient');
@@ -179,7 +180,7 @@ describe('RoundRecapScreen', () => {
     fireEvent.click(getByTestId('open-sg-light-explainer'));
 
     expect(getByText('What is SG Light?')).toBeTruthy();
-    expect(mockSafeEmit).toHaveBeenCalledWith('sg_light_explainer_opened', {
+    expect(mockSafeEmit).toHaveBeenCalledWith(SG_LIGHT_EXPLAINER_OPENED_EVENT, {
       surface: 'round_recap',
       roundId: 'r1',
     });
