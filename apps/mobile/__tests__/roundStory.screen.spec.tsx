@@ -8,6 +8,10 @@ import { loadPracticeMissionHistory } from '@app/storage/practiceMissionHistory'
 import { loadWeeklyPracticeGoalSettings } from '@app/storage/practiceGoalSettings';
 import { safeEmit } from '@app/telemetry';
 import { t } from '@app/i18n';
+import {
+  SG_LIGHT_EXPLAINER_OPENED_EVENT,
+  SG_LIGHT_TREND_VIEWED_EVENT,
+} from '@shared/sgLight/analytics';
 
 vi.mock('@app/api/player', () => ({
   fetchAccessPlan: vi.fn(),
@@ -135,7 +139,9 @@ describe('RoundStoryScreen', () => {
       expect(trendCard).toHaveTextContent('+0.8');
     });
     expect(trendCard).toHaveTextContent(t('round.story.sgLightTrendTitle'));
-    await waitFor(() => expect(mockSafeEmit).toHaveBeenCalledWith('sg_light_trend_viewed', expect.any(Object)));
+    await waitFor(() =>
+      expect(mockSafeEmit).toHaveBeenCalledWith(SG_LIGHT_TREND_VIEWED_EVENT, expect.any(Object)),
+    );
   });
 
   it('does not request SG Light data when the feature flag is disabled', async () => {
@@ -181,8 +187,10 @@ describe('RoundStoryScreen', () => {
       />,
     );
 
-    await waitFor(() => expect(mockSafeEmit).toHaveBeenCalledWith('sg_light_trend_viewed', expect.any(Object)));
-    const trendCalls = () => vi.mocked(mockSafeEmit).mock.calls.filter(([event]) => event === 'sg_light_trend_viewed');
+    await waitFor(() =>
+      expect(mockSafeEmit).toHaveBeenCalledWith(SG_LIGHT_TREND_VIEWED_EVENT, expect.any(Object)),
+    );
+    const trendCalls = () => vi.mocked(mockSafeEmit).mock.calls.filter(([event]) => event === SG_LIGHT_TREND_VIEWED_EVENT);
     expect(trendCalls()).toHaveLength(1);
 
     rerender(
@@ -295,7 +303,7 @@ describe('RoundStoryScreen', () => {
     fireEvent.click(getByTestId('open-sg-light-explainer'));
 
     expect(getByText('What is SG Light?')).toBeTruthy();
-    expect(mockSafeEmit).toHaveBeenCalledWith('sg_light_explainer_opened', {
+    expect(mockSafeEmit).toHaveBeenCalledWith(SG_LIGHT_EXPLAINER_OPENED_EVENT, {
       surface: 'round_story',
       roundId: 'run-1',
     });
