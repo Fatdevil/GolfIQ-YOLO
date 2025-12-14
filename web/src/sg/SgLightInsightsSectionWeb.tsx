@@ -19,12 +19,13 @@ import type {
   StrokesGainedLightSummary,
   StrokesGainedLightTrend,
 } from "@shared/stats/strokesGainedLight";
+import { buildSgLightImpressionKey, SG_LIGHT_PRACTICE_SURFACES } from "@shared/sgLight/analytics";
 import { isSgLightInsightsEnabled } from "@shared/featureFlags/sgLightInsights";
 
 const PRACTICE_SURFACE_BY_SURFACE = {
-  round_recap: "web_round_recap",
-  round_story: "web_round_story",
-  round_share: "web_round_share",
+  round_recap: SG_LIGHT_PRACTICE_SURFACES[0],
+  round_story: SG_LIGHT_PRACTICE_SURFACES[1],
+  round_share: SG_LIGHT_PRACTICE_SURFACES[2],
 } as const;
 
 const EXPLAINER_SURFACE_BY_SURFACE = {
@@ -195,9 +196,16 @@ export function SgLightInsightsSectionWeb({
   const hasTrend = sgLightEnabled && allowTrend && Boolean(sgLightTrend || rounds?.length);
   const shouldRender = sgLightEnabled && (hasSummary || hasTrend || surface === "round_share");
 
-  const contextKey = contextId ?? "unknown";
-  const summaryImpressionKey = `sg_light:${surface}:${contextKey}:summary`;
-  const trendImpressionKey = `sg_light:${surface}:${contextKey}:trend`;
+  const summaryImpressionKey = buildSgLightImpressionKey({
+    surface,
+    contextId,
+    cardType: "summary",
+  });
+  const trendImpressionKey = buildSgLightImpressionKey({
+    surface,
+    contextId,
+    cardType: "trend",
+  });
 
   if (!shouldRender) return null;
 

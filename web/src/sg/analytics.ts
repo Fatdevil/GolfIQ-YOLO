@@ -1,6 +1,7 @@
 import { postTelemetryEvent } from "@/api";
+import type { SgLightSurface } from "@shared/sgLight/analytics";
 
-export type SgLightExplainerSurface = "round_recap" | "round_story" | "round_share" | "player_stats";
+export type SgLightExplainerSurface = SgLightSurface;
 
 export function trackSgLightExplainerOpenedWeb(payload: { surface: SgLightExplainerSurface }): void {
   void postTelemetryEvent({
