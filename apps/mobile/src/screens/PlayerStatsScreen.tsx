@@ -9,8 +9,7 @@ import type { RootStackParamList } from '@app/navigation/types';
 import { computePlayerStats } from '@app/stats/playerStatsEngine';
 import { safeEmit } from '@app/telemetry';
 import { buildStrokesGainedLightTrend, type StrokesGainedLightTrend } from '@shared/stats/strokesGainedLight';
-import { SgLightExplainerModal } from '@app/components/SgLightExplainerModal';
-import { useTrackOncePerKey } from '@app/hooks/useTrackOncePerKey';
+import { SgLightInsightsSection } from '@app/components/sg/SgLightInsightsSection';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'PlayerStats'>;
 
@@ -49,7 +48,6 @@ export default function PlayerStatsScreen({ navigation }: Props): JSX.Element {
   const [categoryError, setCategoryError] = useState<string | null>(null);
   const [sgLightTrend, setSgLightTrend] = useState<StrokesGainedLightTrend | null>(null);
   const [sgLightLoading, setSgLightLoading] = useState(true);
-  const [sgLightExplainerVisible, setSgLightExplainerVisible] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -148,29 +146,31 @@ export default function PlayerStatsScreen({ navigation }: Props): JSX.Element {
   const stats = useMemo(() => computePlayerStats(summaries), [summaries]);
   const hasRounds = stats.roundsPlayed > 0;
   const sgLightFocusCategory = sgLightTrend?.focusHistory?.[0]?.focusCategory ?? null;
-  const sgLightTrendImpressionKey = useMemo(() => {
-    if (!sgLightFocusCategory) return null;
-    return `sg_light:mobile_stats_sg_light_trend:trend:${sgLightFocusCategory}`;
-  }, [sgLightFocusCategory]);
-  const { fire: fireSgLightTrendImpression } = useTrackOncePerKey(sgLightTrendImpressionKey);
-
-  const openSgLightExplainer = useCallback(() => {
-    safeEmit('sg_light_explainer_opened', { surface: 'player_stats' });
-    setSgLightExplainerVisible(true);
-  }, []);
-
-  const closeSgLightExplainer = useCallback(() => setSgLightExplainerVisible(false), []);
-
-  useEffect(() => {
-    if (!sgLightTrend || !sgLightFocusCategory) return;
-
-    fireSgLightTrendImpression(() => {
+  const trackPracticeFocusShown = useCallback(
+    (
+      focusCategory: StrokesGainedLightTrend['focusHistory'][number]['focusCategory'],
+      _trend: StrokesGainedLightTrend,
+    ) => {
       safeEmit('practice_focus_entry_shown', {
         surface: 'mobile_stats_sg_light_trend',
-        focusCategory: sgLightFocusCategory,
+        focusCategory,
       });
+    },
+    [],
+  );
+
+  const handlePracticeFromSgLight = useCallback(() => {
+    if (!sgLightFocusCategory) return;
+    safeEmit('practice_focus_entry_clicked', {
+      surface: 'mobile_stats_sg_light_trend',
+      focusCategory: sgLightFocusCategory,
     });
-  }, [fireSgLightTrendImpression, sgLightFocusCategory, sgLightTrend]);
+    navigation.navigate('PracticeMissions', {
+      source: 'mobile_stats_sg_light_trend',
+      practiceRecommendationSource: 'mobile_stats_sg_light_trend',
+      strokesGainedLightFocusCategory: sgLightFocusCategory,
+    });
+  }, [navigation, sgLightFocusCategory]);
 
   if (summariesLoading) {
     return (
@@ -217,84 +217,14 @@ export default function PlayerStatsScreen({ navigation }: Props): JSX.Element {
         </View>
       )}
 
-      <View style={styles.card} testID="player-stats-sg-trend-card">
-        <View style={styles.cardTitleRow}>
-          <Text style={styles.cardTitle}>{t('stats.player.sg_light.trend_title')}</Text>
-          <TouchableOpacity
-            onPress={openSgLightExplainer}
-            accessibilityLabel={t('sg_light.explainer.open_label')}
-            style={styles.infoButton}
-            testID="open-sg-light-explainer"
-          >
-            <Text style={styles.infoIcon}>i</Text>
-          </TouchableOpacity>
-        </View>
-        {sgLightLoading ? (
-          <ActivityIndicator />
-        ) : sgLightTrend ? (
-          <>
-            <Text style={styles.muted}>
-              {t('stats.player.sg_light.trend_subtitle', { rounds: sgLightTrend.windowSize })}
-            </Text>
-            {sgLightFocusCategory ? (
-              <View style={styles.statRow}>
-                <Text style={styles.statLabel} testID="player-stats-sg-trend-headline">
-                  {t('stats.player.sg_light.trend_focus', {
-                    focus: t(
-                      sgLightFocusCategory === 'tee'
-                        ? 'sg_light.focus.off_the_tee'
-                        : `sg_light.focus.${sgLightFocusCategory}`,
-                    ),
-                  })}
-                </Text>
-                <Text style={styles.statValue}>
-                  {formatSgDelta(sgLightTrend.perCategory?.[sgLightFocusCategory]?.avgDelta)}
-                </Text>
-              </View>
-            ) : null}
-
-            {sgLightTrend.focusHistory?.length ? (
-              <View style={styles.focusHistory}>
-                <Text style={styles.muted}>{t('stats.player.sg_light.focus_history')}</Text>
-                <View style={styles.focusBadges}>
-                  {sgLightTrend.focusHistory.slice(0, 4).map((entry) => (
-                    <Text key={entry.roundId} style={styles.focusBadge}>
-                      {t(
-                        entry.focusCategory === 'tee'
-                          ? 'sg_light.focus.off_the_tee'
-                          : `sg_light.focus.${entry.focusCategory}`,
-                      )}
-                    </Text>
-                  ))}
-                </View>
-              </View>
-            ) : null}
-
-            {sgLightFocusCategory ? (
-              <TouchableOpacity
-                style={[styles.primaryButton, styles.secondaryButton]}
-                onPress={() => {
-                  safeEmit('practice_focus_entry_clicked', {
-                    surface: 'mobile_stats_sg_light_trend',
-                    focusCategory: sgLightFocusCategory,
-                  });
-                  navigation.navigate('PracticeMissions', {
-                    source: 'mobile_stats_sg_light_trend',
-                    practiceRecommendationSource: 'mobile_stats_sg_light_trend',
-                    strokesGainedLightFocusCategory: sgLightFocusCategory,
-                  });
-                }}
-                accessibilityLabel={t('stats.player.sg_light.practice_cta')}
-                testID="player-stats-sg-trend-cta"
-              >
-                <Text style={styles.primaryButtonText}>{t('stats.player.sg_light.practice_cta')}</Text>
-              </TouchableOpacity>
-            ) : null}
-          </>
-        ) : (
-          <Text style={styles.muted}>{t('stats.player.sg_light.trend_empty')}</Text>
-        )}
-      </View>
+      <SgLightInsightsSection
+        surface="player_stats"
+        contextId="player_stats"
+        trend={sgLightTrend}
+        loadingTrend={sgLightLoading}
+        onTrackTrendImpression={trackPracticeFocusShown}
+        onPressPractice={handlePracticeFromSgLight}
+      />
 
       <View style={styles.card}>
         <Text style={styles.cardTitle}>{t('stats.player.categories.title')}</Text>
@@ -345,20 +275,15 @@ export default function PlayerStatsScreen({ navigation }: Props): JSX.Element {
         </TouchableOpacity>
       </View>
 
-      <TouchableOpacity
-        style={[styles.primaryButton, { marginTop: 12 }]}
-        onPress={() => navigation.navigate('RoundHistory')}
-        accessibilityLabel={t('stats.player.view_rounds')}
-        testID="player-stats-view-rounds"
-      >
-        <Text style={styles.primaryButtonText}>{t('stats.player.view_rounds')}</Text>
-      </TouchableOpacity>
-    </ScrollView>
-    <SgLightExplainerModal
-      visible={sgLightExplainerVisible}
-      onClose={closeSgLightExplainer}
-      t={t}
-    />
+    <TouchableOpacity
+      style={[styles.primaryButton, { marginTop: 12 }]}
+      onPress={() => navigation.navigate('RoundHistory')}
+      accessibilityLabel={t('stats.player.view_rounds')}
+      testID="player-stats-view-rounds"
+    >
+      <Text style={styles.primaryButtonText}>{t('stats.player.view_rounds')}</Text>
+    </TouchableOpacity>
+  </ScrollView>
     </>
   );
 }
@@ -427,15 +352,4 @@ const styles = StyleSheet.create({
     color: '#111827',
     fontWeight: '600',
   },
-  infoButton: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: '#d1d5db',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#f3f4f6',
-  },
-  infoIcon: { color: '#111827', fontWeight: '700' },
 });

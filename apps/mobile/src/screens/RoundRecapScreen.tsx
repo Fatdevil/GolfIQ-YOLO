@@ -38,19 +38,12 @@ import { buildPracticeReadinessSummary } from '@shared/practice/practiceReadines
 import { emitPracticeReadinessViewed } from '@shared/practice/practiceReadinessAnalytics';
 import { getDefaultWeeklyPracticeGoalSettings } from '@shared/practice/practiceGoalSettings';
 import { safeEmit } from '@app/telemetry';
-import { SgLightExplainerModal } from '@app/components/SgLightExplainerModal';
+import { SgLightInsightsSection } from '@app/components/sg/SgLightInsightsSection';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'RoundRecap'>;
 
 const CATEGORY_ORDER: Array<keyof RoundRecap['categories']> = [
   'driving',
-  'approach',
-  'short_game',
-  'putting',
-];
-
-const SG_LIGHT_ORDER: Array<'tee' | 'approach' | 'short_game' | 'putting'> = [
-  'tee',
   'approach',
   'short_game',
   'putting',
@@ -82,7 +75,6 @@ export default function RoundRecapScreen({ route, navigation }: Props): JSX.Elem
   const [practiceHistory, setPracticeHistory] = useState<PracticeMissionHistoryEntry[]>([]);
   const [weeklyGoalSettings, setWeeklyGoalSettings] = useState(getDefaultWeeklyPracticeGoalSettings());
   const [loadingPractice, setLoadingPractice] = useState(true);
-  const [sgLightExplainerVisible, setSgLightExplainerVisible] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -361,57 +353,7 @@ export default function RoundRecapScreen({ route, navigation }: Props): JSX.Elem
     return best.label ?? null;
   }, [strokesGained]);
 
-  const sgLightHeadline = useMemo(() => {
-    const sgLight = recap?.strokesGainedLight;
-    if (!sgLight || !sgLight.byCategory?.length) return null;
-
-    const confident = sgLight.byCategory.filter((entry) => entry.confidence >= 0.3);
-    if (!confident.length) return 'Not enough data yet';
-
-    const focus = confident.reduce((acc, curr) =>
-      Math.abs(curr.delta) > Math.abs(acc.delta) ? curr : acc,
-    );
-    const labelMap: Record<string, string> = {
-      tee: 'Tee',
-      approach: 'Approach',
-      short_game: 'Short game',
-      putting: 'Putting',
-    };
-    const label = labelMap[focus.category] ?? focus.category;
-    const deltaLabel = formatSgValue(focus.delta);
-    return focus.delta >= 0 ? `You gained ${deltaLabel} on ${label}` : `You lost ${deltaLabel} on ${label}`;
-  }, [recap?.strokesGainedLight]);
-
   const sgLightFocusCategory = recap?.strokesGainedLight?.focusCategory ?? null;
-
-  const sgLightFocusLabel = useMemo(() => {
-    if (!sgLightFocusCategory) return null;
-    const map: Record<string, string> = {
-      tee: 'Off the tee',
-      approach: 'Approach shots',
-      short_game: 'Short game',
-      putting: 'Putting',
-    };
-    return map[sgLightFocusCategory] ?? sgLightFocusCategory;
-  }, [sgLightFocusCategory]);
-
-  const sgLightOpportunityLine = useMemo(() => {
-    if (!sgLightFocusLabel) return null;
-    return `Biggest opportunity: ${sgLightFocusLabel}`;
-  }, [sgLightFocusLabel]);
-
-  const sgLightPracticeCtaLabel = useMemo(() => {
-    if (!sgLightFocusLabel) return null;
-    const lower = sgLightFocusLabel.charAt(0).toLowerCase() + sgLightFocusLabel.slice(1);
-    return `Practice ${lower}`;
-  }, [sgLightFocusLabel]);
-
-  const openSgLightExplainer = useCallback(() => {
-    safeEmit('sg_light_explainer_opened', { surface: 'round_recap', roundId });
-    setSgLightExplainerVisible(true);
-  }, [roundId]);
-
-  const closeSgLightExplainer = useCallback(() => setSgLightExplainerVisible(false), []);
 
   const handlePracticeFromSgLight = useCallback(() => {
     if (!sgLightFocusCategory) return;
@@ -594,69 +536,12 @@ export default function RoundRecapScreen({ route, navigation }: Props): JSX.Elem
 
       <View style={styles.card}>
         <Text style={styles.cardTitle}>{t('strokesGained.roundSectionTitle')}</Text>
-        {recap.strokesGainedLight ? (
-          <View style={styles.sgLightCard} testID="sg-light-card">
-            <View style={styles.sgHeaderRow}>
-              <View style={styles.sgLabelRow}>
-                <Text style={styles.sgLabel}>Strokes Gained (Light)</Text>
-                <TouchableOpacity
-                  onPress={openSgLightExplainer}
-                  accessibilityLabel={t('sg_light.explainer.open_label')}
-                  style={styles.infoButton}
-                  testID="open-sg-light-explainer"
-                >
-                  <Text style={styles.infoIcon}>i</Text>
-                </TouchableOpacity>
-              </View>
-              <Text style={styles.sgValue}>{formatSgValue(recap.strokesGainedLight.totalDelta)}</Text>
-            </View>
-            {sgLightHeadline ? <Text style={styles.muted}>{sgLightHeadline}</Text> : null}
-            {sgLightOpportunityLine ? (
-              <Text style={styles.bodyText} testID="sg-light-opportunity">
-                {sgLightOpportunityLine}
-              </Text>
-            ) : null}
-            <View style={styles.grid}>
-              {SG_LIGHT_ORDER.map((key) => {
-                const entry = recap.strokesGainedLight?.byCategory?.find((c) => c.category === key);
-                const confident = (entry?.confidence ?? 0) >= 0.3;
-                return (
-                  <View key={`sg-light-${key}`} style={styles.tile} testID={`recap-sg-light-${key}`}>
-                    <Text style={styles.tileLabel}>{key.replace('_', ' ')}</Text>
-                    {entry ? (
-                      <>
-                        <Text
-                          style={[
-                            styles.tileValue,
-                            (entry.delta ?? 0) >= 0 ? styles.sgPositive : styles.sgNegative,
-                          ]}
-                        >
-                          {confident ? formatSgValue(entry.delta ?? 0) : '—'}
-                        </Text>
-                        <Text style={styles.muted}>
-                          {confident
-                            ? `${entry.shots} shots • ${(entry.confidence * 100).toFixed(0)}% confidence`
-                            : 'Not enough data yet'}
-                        </Text>
-                      </>
-                    ) : (
-                      <Text style={styles.muted}>No data</Text>
-                    )}
-                  </View>
-                );
-              })}
-            </View>
-            {sgLightPracticeCtaLabel ? (
-              <TouchableOpacity
-                style={styles.primaryCta}
-                onPress={handlePracticeFromSgLight}
-                testID="sg-light-practice-cta"
-              >
-                <Text style={styles.primaryCtaText}>{sgLightPracticeCtaLabel}</Text>
-              </TouchableOpacity>
-            ) : null}
-          </View>
-        ) : null}
+        <SgLightInsightsSection
+          surface="round_recap"
+          contextId={roundId}
+          summary={recap.strokesGainedLight ?? null}
+          onPressPractice={handlePracticeFromSgLight}
+        />
         {strokesGained ? (
           <>
             <View style={styles.sgHeaderRow}>
@@ -744,11 +629,6 @@ export default function RoundRecapScreen({ route, navigation }: Props): JSX.Elem
           <Text style={styles.primaryCtaText}>{t('coach_report_cta_from_recap')}</Text>
         </TouchableOpacity>
       </ScrollView>
-      <SgLightExplainerModal
-        visible={sgLightExplainerVisible}
-        onClose={closeSgLightExplainer}
-        t={t}
-      />
     </>
   );
 }
@@ -769,7 +649,6 @@ const styles = StyleSheet.create({
   card: { borderWidth: 1, borderColor: '#e5e7eb', borderRadius: 12, padding: 12, gap: 12 },
   cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   cardTitle: { fontSize: 18, fontWeight: '700' },
-  sgLightCard: { gap: 8 },
   practiceRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 12 },
   practiceTitle: { fontSize: 16, fontWeight: '700', color: '#111827' },
   statusChip: {
@@ -804,16 +683,6 @@ const styles = StyleSheet.create({
   sgValue: { fontSize: 20, fontWeight: '700' },
   sgPositive: { color: '#047857' },
   sgNegative: { color: '#b91c1c' },
-  infoButton: {
-    marginLeft: 4,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: '#d1d5db',
-    backgroundColor: '#f8fafc',
-  },
-  infoIcon: { color: '#0f172a', fontWeight: '700' },
   bullet: { color: '#111827' },
   secondaryButton: {
     paddingVertical: 8,
