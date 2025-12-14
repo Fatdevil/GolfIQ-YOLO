@@ -10,12 +10,15 @@ import type {
   StrokesGainedLightSummary,
   StrokesGainedLightTrend,
 } from '@shared/stats/strokesGainedLight';
+import {
+  buildSgLightExplainerPayload,
+  buildSgLightImpressionKey,
+  type SgLightSurface,
+} from '@shared/sgLight/analytics';
 import { isSgLightInsightsEnabled } from '@shared/featureFlags/sgLightInsights';
 
-type Surface = 'round_recap' | 'round_story' | 'player_stats';
-
 type Props = {
-  surface: Surface;
+  surface: SgLightSurface;
   contextId: string;
   summary?: StrokesGainedLightSummary | null;
   trend?: StrokesGainedLightTrend | null;
@@ -95,8 +98,21 @@ export function SgLightInsightsSection({
   const [explainerVisible, setExplainerVisible] = useState(false);
 
   const trendFocusCategory = trend?.focusHistory?.[0]?.focusCategory ?? null;
-  const summaryKey = summary ? `sg_light:${surface}:${contextId}:summary` : null;
-  const trendKey = trendFocusCategory ? `sg_light:${surface}:${contextId}:trend:${trendFocusCategory}` : null;
+  const summaryKey = summary
+    ? buildSgLightImpressionKey({
+        surface,
+        contextId,
+        cardType: 'summary',
+      })
+    : null;
+  const trendKey = trendFocusCategory
+    ? buildSgLightImpressionKey({
+        surface,
+        contextId,
+        cardType: 'trend',
+        focusCategory: trendFocusCategory,
+      })
+    : null;
   const { fire: fireSummaryImpression } = useTrackOncePerKey(summaryKey);
   const { fire: fireTrendImpression } = useTrackOncePerKey(trendKey);
 
@@ -116,10 +132,7 @@ export function SgLightInsightsSection({
   }, [onPressPractice, onTrackPracticeCta]);
 
   const openExplainer = useCallback(() => {
-    const payload: Record<string, string> = { surface };
-    if (surface !== 'player_stats') {
-      payload.roundId = contextId;
-    }
+    const payload = buildSgLightExplainerPayload({ surface, contextId });
     safeEmit('sg_light_explainer_opened', payload);
     setExplainerVisible(true);
   }, [contextId, surface]);

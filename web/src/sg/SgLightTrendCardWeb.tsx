@@ -7,6 +7,7 @@ import {
   type StrokesGainedLightSummary,
   type StrokesGainedLightTrend,
 } from "@shared/stats/strokesGainedLight";
+import { buildSgLightImpressionKey, type SgLightPracticeSurface } from "@shared/sgLight/analytics";
 
 import { formatSgDelta, labelForSgLightCategory, mapSgLightCategoryToFocusArea } from "./sgLightWebUtils";
 import { trackPracticeMissionRecommendationClicked, trackPracticeMissionRecommendationShown } from "@/practice/analytics";
@@ -17,7 +18,7 @@ import { useTrackOncePerKey } from "@/hooks/useTrackOncePerKey";
 type Props = {
   rounds?: Array<StrokesGainedLightSummary & { roundId?: string; playedAt?: string }>;
   trend?: StrokesGainedLightTrend | null;
-  practiceSurface?: "web_round_recap" | "web_round_story" | "web_round_share";
+  practiceSurface?: SgLightPracticeSurface;
   practiceHrefBuilder?(focusCategory: StrokesGainedLightCategory): string | null;
   explainerSurface?: SgLightExplainerSurface;
   roundId?: string | null;
@@ -58,7 +59,11 @@ export function SgLightTrendCardWeb({
     if (!focusCategory || !practiceHref) return null;
     if (impressionKey) return impressionKey;
     const contextId = roundId ?? shareId ?? trendRoundId ?? "unknown";
-    return `sg_light:${practiceSurface}:${contextId}:trend`;
+    return buildSgLightImpressionKey({
+      surface: practiceSurface,
+      contextId,
+      cardType: "trend",
+    });
   }, [focusCategory, impressionKey, practiceHref, practiceSurface, roundId, shareId, trendRoundId]);
 
   const { fire: fireImpressionOnce } = useTrackOncePerKey(resolvedImpressionKey);

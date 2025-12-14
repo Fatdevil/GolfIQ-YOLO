@@ -6,6 +6,7 @@ import {
   type StrokesGainedLightCategory,
   type StrokesGainedLightSummary,
 } from "@shared/stats/strokesGainedLight";
+import { buildSgLightImpressionKey, type SgLightPracticeSurface } from "@shared/sgLight/analytics";
 
 import {
   formatSgDelta,
@@ -24,7 +25,7 @@ import { useTrackOncePerKey } from "@/hooks/useTrackOncePerKey";
 
 type Props = {
   summary?: StrokesGainedLightSummary | null;
-  practiceSurface?: "web_round_recap" | "web_round_story" | "web_round_share";
+  practiceSurface?: SgLightPracticeSurface;
   practiceHrefBuilder?(focusCategory: StrokesGainedLightCategory): string | null;
   explainerSurface?: Extract<
     SgLightExplainerSurface,
@@ -77,7 +78,11 @@ export function SgLightSummaryCardWeb({
     if (!focusCategory || !practiceHref) return null;
     if (impressionKey) return impressionKey;
     const contextId = roundId ?? shareId ?? "unknown";
-    return `sg_light:${practiceSurface}:${contextId}:summary`;
+    return buildSgLightImpressionKey({
+      surface: practiceSurface,
+      contextId,
+      cardType: "summary",
+    });
   }, [focusCategory, impressionKey, practiceHref, practiceSurface, roundId, shareId]);
 
   const { fire: fireImpressionOnce } = useTrackOncePerKey(resolvedImpressionKey);
