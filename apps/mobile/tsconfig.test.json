@@ -1,7 +1,7 @@
 {
   "extends": "./tsconfig.json",
   "compilerOptions": {
-    "types": ["vitest", "node"]
+    "types": ["vitest", "node", "react"]
   },
   "include": ["src", "__tests__", "vitest.config.ts", "vitest.setup.ts", "types/vitest.d.ts"],
   "exclude": ["node_modules"]
