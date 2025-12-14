@@ -208,7 +208,10 @@ export default function SwingDiagnosticsPanel({ runId }: SwingDiagnosticsPanelPr
       </div>
 
       {!resolvedMetrics.length ? (
-        <div className="rounded-lg border border-slate-800 bg-slate-950/60 px-4 py-3 text-sm text-slate-200">
+        <div
+          data-testid="swing-diagnostics-empty"
+          className="rounded-lg border border-slate-800 bg-slate-950/60 px-4 py-3 text-sm text-slate-200"
+        >
           <p className="font-medium text-slate-100">No swing metrics available</p>
           <p className="text-xs text-slate-400">
             Make sure CV analysis ran successfully for this run to see swing diagnostics here.
