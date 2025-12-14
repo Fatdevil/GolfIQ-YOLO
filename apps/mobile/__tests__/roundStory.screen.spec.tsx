@@ -138,6 +138,26 @@ describe('RoundStoryScreen', () => {
     await waitFor(() => expect(mockSafeEmit).toHaveBeenCalledWith('sg_light_trend_viewed', expect.any(Object)));
   });
 
+  it('does not request SG Light data when the feature flag is disabled', async () => {
+    const { fetchAccessPlan } = await import('@app/api/player');
+    const { fetchRoundSg } = await import('@app/api/roundStory');
+
+    vi.mocked(fetchAccessPlan).mockResolvedValue({ plan: 'free' } as any);
+    vi.mocked(fetchRoundSg).mockResolvedValue({ total: 0, categories: [] });
+    vi.stubEnv?.('EXPO_PUBLIC_FEATURE_SG_LIGHT', '0');
+
+    render(
+      <RoundStoryScreen
+        navigation={navigation}
+        route={{ key: 'RoundStory', name: 'RoundStory', params: { runId: 'run-1', summary } }}
+      />,
+    );
+
+    await waitFor(() => expect(mockFetchRoundRecap).not.toHaveBeenCalled());
+
+    vi.unstubAllEnvs?.();
+  });
+
   it('dedupes SG Light trend impressions across rerenders and new contexts', async () => {
     const { fetchAccessPlan } = await import('@app/api/player');
     const { fetchRoundSg, fetchSessionTimeline, fetchCoachRoundSummary } = await import('@app/api/roundStory');

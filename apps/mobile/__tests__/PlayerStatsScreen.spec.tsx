@@ -197,6 +197,38 @@ describe('PlayerStatsScreen', () => {
     });
   });
 
+  it('skips SG Light recap fetches when the feature flag is disabled', async () => {
+    mockListSummaries.mockResolvedValue([
+      { roundId: 'r1', totalStrokes: 72, holesPlayed: 18 },
+      { roundId: 'r2', totalStrokes: 70, holesPlayed: 18 },
+    ]);
+    mockFetchCategoryStats.mockResolvedValue({
+      playerId: 'p1',
+      roundsCount: 2,
+      teeShots: 18,
+      approachShots: 30,
+      shortGameShots: 8,
+      putts: 31,
+      penalties: 2,
+      avgTeeShotsPerRound: 18,
+      avgApproachShotsPerRound: 30,
+      avgShortGameShotsPerRound: 8,
+      avgPuttsPerRound: 31,
+      teePct: 25,
+      approachPct: 40,
+      shortGamePct: 10,
+      puttingPct: 25,
+    });
+    vi.stubEnv?.('EXPO_PUBLIC_FEATURE_SG_LIGHT', '0');
+
+    const navigation = { navigate: vi.fn() } as any;
+    render(<PlayerStatsScreen navigation={navigation} route={undefined as any} />);
+
+    await waitFor(() => expect(mockFetchRecap).not.toHaveBeenCalled());
+
+    vi.unstubAllEnvs?.();
+  });
+
   it('opens SG Light explainer from player stats', async () => {
     mockListSummaries.mockResolvedValue([
       {

@@ -148,9 +148,30 @@ test("PlayerAnalyticsSection loads analytics for pro users", async () => {
   renderWithRouter(<PlayerAnalyticsSection />);
 
   await waitFor(() => {
-    expect(mockFetchPlayerAnalytics).toHaveBeenCalled();
+    expect(mockFetchPlayerAnalytics).toHaveBeenCalledWith({ includeSgLight: true });
     expect(screen.getAllByText(/Player analytics/i).length).toBeGreaterThan(0);
   });
+});
+
+test("PlayerAnalyticsSection skips SG Light request when flag is disabled", async () => {
+  mockUseAccessPlan.mockReturnValue({ isPro: true, loading: false } as any);
+  mockUseAccessFeatures.mockReturnValue({
+    hasFeature: vi.fn(),
+    hasPlanFeature: vi.fn().mockReturnValue(true),
+    loading: false,
+  } as any);
+  mockFetchPlayerAnalytics.mockResolvedValue(SAMPLE_ANALYTICS);
+  vi.stubEnv?.("VITE_FEATURE_SG_LIGHT", "0");
+
+  renderWithRouter(<PlayerAnalyticsSection />);
+
+  await waitFor(() => {
+    expect(mockFetchPlayerAnalytics).toHaveBeenCalledWith({ includeSgLight: false });
+  });
+
+  expect(screen.queryByTestId("player-analytics-sg-light-cta")).not.toBeInTheDocument();
+
+  vi.unstubAllEnvs?.();
 });
 
 test("shows SG Light trend with practice CTA when enough data", async () => {
