@@ -1,8 +1,9 @@
 import React from 'react';
 import { render, waitFor } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { SgLightInsightsSection } from '@app/components/sg/SgLightInsightsSection';
+import { safeEmit } from '@app/telemetry';
 import type {
   StrokesGainedLightSummary,
   StrokesGainedLightTrend,
@@ -31,6 +32,22 @@ const trend: StrokesGainedLightTrend = {
 };
 
 describe('SgLightInsightsSection', () => {
+  let originalFlag: string | undefined;
+
+  beforeEach(() => {
+    originalFlag = process.env.EXPO_PUBLIC_FEATURE_SG_LIGHT;
+    process.env.EXPO_PUBLIC_FEATURE_SG_LIGHT = '1';
+  });
+
+  afterEach(() => {
+    vi.clearAllMocks();
+    if (originalFlag === undefined) {
+      delete process.env.EXPO_PUBLIC_FEATURE_SG_LIGHT;
+    } else {
+      process.env.EXPO_PUBLIC_FEATURE_SG_LIGHT = originalFlag;
+    }
+  });
+
   it('fires impressions once per card per context across rerenders', async () => {
     const trackSummary = vi.fn();
     const trackTrend = vi.fn();
@@ -82,5 +99,28 @@ describe('SgLightInsightsSection', () => {
       expect(trackSummary).toHaveBeenCalledTimes(2);
       expect(trackTrend).toHaveBeenCalledTimes(2);
     });
+  });
+
+  it('does not render or track when the feature flag is disabled', () => {
+    process.env.EXPO_PUBLIC_FEATURE_SG_LIGHT = '0';
+
+    const trackSummary = vi.fn();
+    const trackTrend = vi.fn();
+
+    const { queryByTestId } = render(
+      <SgLightInsightsSection
+        surface="round_story"
+        contextId="ctx-flag"
+        summary={summary}
+        trend={trend}
+        onTrackSummaryImpression={trackSummary}
+        onTrackTrendImpression={trackTrend}
+      />,
+    );
+
+    expect(queryByTestId('sg-light-card')).toBeNull();
+    expect(trackSummary).not.toHaveBeenCalled();
+    expect(trackTrend).not.toHaveBeenCalled();
+    expect(safeEmit).not.toHaveBeenCalled();
   });
 });

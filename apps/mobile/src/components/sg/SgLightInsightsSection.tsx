@@ -10,6 +10,7 @@ import type {
   StrokesGainedLightSummary,
   StrokesGainedLightTrend,
 } from '@shared/stats/strokesGainedLight';
+import { isSgLightInsightsEnabled } from '@shared/featureFlags/sgLightInsights';
 
 type Surface = 'round_recap' | 'round_story' | 'player_stats';
 
@@ -90,6 +91,7 @@ export function SgLightInsightsSection({
   onPressPractice,
   onTrackPracticeCta,
 }: Props): JSX.Element | null {
+  const sgLightEnabled = isSgLightInsightsEnabled();
   const [explainerVisible, setExplainerVisible] = useState(false);
 
   const trendFocusCategory = trend?.focusHistory?.[0]?.focusCategory ?? null;
@@ -99,14 +101,14 @@ export function SgLightInsightsSection({
   const { fire: fireTrendImpression } = useTrackOncePerKey(trendKey);
 
   useEffect(() => {
-    if (!summary || !onTrackSummaryImpression) return;
+    if (!sgLightEnabled || !summary || !onTrackSummaryImpression) return;
     fireSummaryImpression(() => onTrackSummaryImpression(summary));
-  }, [fireSummaryImpression, onTrackSummaryImpression, summary]);
+  }, [fireSummaryImpression, onTrackSummaryImpression, sgLightEnabled, summary]);
 
   useEffect(() => {
-    if (!trend || !trendFocusCategory || !onTrackTrendImpression) return;
+    if (!sgLightEnabled || !trend || !trendFocusCategory || !onTrackTrendImpression) return;
     fireTrendImpression(() => onTrackTrendImpression(trendFocusCategory, trend));
-  }, [fireTrendImpression, onTrackTrendImpression, trend, trendFocusCategory]);
+  }, [fireTrendImpression, onTrackTrendImpression, sgLightEnabled, trend, trendFocusCategory]);
 
   const handlePressPractice = useCallback(() => {
     onTrackPracticeCta?.();
@@ -125,7 +127,7 @@ export function SgLightInsightsSection({
   const closeExplainer = useCallback(() => setExplainerVisible(false), []);
 
   const summaryBody = useMemo(() => {
-    if (!summary) return null;
+    if (!sgLightEnabled || !summary) return null;
     const headline = sgLightSummaryHeadline(summary);
     const focusLabel = sgLightFocusLabel(summary.focusCategory ?? null);
     const opportunityLine = focusLabel ? `Biggest opportunity: ${focusLabel}` : null;
@@ -195,10 +197,10 @@ export function SgLightInsightsSection({
         ) : null}
       </View>
     );
-  }, [handlePressPractice, openExplainer, practiceCtaLabel, summary]);
+  }, [handlePressPractice, openExplainer, practiceCtaLabel, sgLightEnabled, summary]);
 
   const roundStoryTrend = useMemo(() => {
-    if (surface !== 'round_story') return null;
+    if (!sgLightEnabled || surface !== 'round_story') return null;
     return (
       <View style={roundStoryStyles.section} testID="sg-light-trend">
         <View style={roundStoryStyles.sectionHeader}>
@@ -258,10 +260,10 @@ export function SgLightInsightsSection({
         </View>
       </View>
     );
-  }, [loadingTrend, openExplainer, trend, trendFocusCategory]);
+  }, [loadingTrend, openExplainer, sgLightEnabled, trend, trendFocusCategory]);
 
   const playerStatsTrend = useMemo(() => {
-    if (surface !== 'player_stats') return null;
+    if (!sgLightEnabled || surface !== 'player_stats') return null;
     const focusCategory = trendFocusCategory;
 
     return (
@@ -328,7 +330,11 @@ export function SgLightInsightsSection({
         )}
       </View>
     );
-  }, [handlePressPractice, loadingTrend, openExplainer, trend, trendFocusCategory]);
+  }, [handlePressPractice, loadingTrend, openExplainer, sgLightEnabled, trend, trendFocusCategory]);
+
+  if (!sgLightEnabled) {
+    return null;
+  }
 
   if (!summaryBody && !roundStoryTrend && !playerStatsTrend) {
     return null;

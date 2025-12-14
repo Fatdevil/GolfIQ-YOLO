@@ -1,7 +1,7 @@
 import React from "react";
 import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { RoundStoryInsights } from "./RoundStoryInsights";
 import {
@@ -54,9 +54,14 @@ const trend: StrokesGainedLightTrend = {
 };
 
 describe("RoundStoryInsights", () => {
+  beforeEach(() => {
+    vi.stubEnv?.("VITE_FEATURE_SG_LIGHT", "1");
+  });
+
   afterEach(() => {
     cleanup();
     vi.clearAllMocks();
+    vi.unstubAllEnvs?.();
   });
 
   it("renders SG Light summary and trend with story context", async () => {

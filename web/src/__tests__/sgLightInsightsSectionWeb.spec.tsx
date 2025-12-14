@@ -1,6 +1,6 @@
 import React from "react";
 import { render, waitFor } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { SgLightInsightsSectionWeb } from "@/sg/SgLightInsightsSectionWeb";
 import {
@@ -47,8 +47,13 @@ const trend: StrokesGainedLightTrend = {
 };
 
 describe("SgLightInsightsSectionWeb", () => {
+  beforeEach(() => {
+    vi.stubEnv?.("VITE_FEATURE_SG_LIGHT", "1");
+  });
+
   afterEach(() => {
     vi.clearAllMocks();
+    vi.unstubAllEnvs?.();
   });
 
   it("renders cards and dedupes impression tracking per context", async () => {
@@ -80,6 +85,23 @@ describe("SgLightInsightsSectionWeb", () => {
     );
 
     expect(trackPracticeMissionRecommendationShown).toHaveBeenCalledTimes(2);
+    expect(trackPracticeMissionRecommendationClicked).not.toHaveBeenCalled();
+  });
+
+  it("hides SG Light insights and tracking when the flag is disabled", () => {
+    vi.stubEnv?.("VITE_FEATURE_SG_LIGHT", "0");
+
+    const { container } = render(
+      <SgLightInsightsSectionWeb
+        surface="round_story"
+        contextId="round-123"
+        sgLightSummary={summary}
+        sgLightTrend={trend}
+      />,
+    );
+
+    expect(container.firstChild).toBeNull();
+    expect(trackPracticeMissionRecommendationShown).not.toHaveBeenCalled();
     expect(trackPracticeMissionRecommendationClicked).not.toHaveBeenCalled();
   });
 });
