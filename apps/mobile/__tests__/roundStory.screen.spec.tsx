@@ -129,10 +129,12 @@ describe('RoundStoryScreen', () => {
     );
 
     const trendCard = await screen.findByTestId('sg-light-trend');
+    await waitFor(() => {
+      expect(trendCard).toHaveTextContent(t('round.story.sgLightTrendSubtitle', { rounds: 3 }));
+      expect(trendCard).toHaveTextContent(t('round.story.sgLightTrendCategory.approach'));
+      expect(trendCard).toHaveTextContent('+0.8');
+    });
     expect(trendCard).toHaveTextContent(t('round.story.sgLightTrendTitle'));
-    expect(trendCard).toHaveTextContent(t('round.story.sgLightTrendSubtitle', { rounds: 3 }));
-    expect(trendCard).toHaveTextContent(t('round.story.sgLightTrendCategory.approach'));
-    expect(trendCard).toHaveTextContent('+0.8');
     await waitFor(() => expect(mockSafeEmit).toHaveBeenCalledWith('sg_light_trend_viewed', expect.any(Object)));
   });
 
