@@ -6,6 +6,10 @@ import { fetchRoundRecap, listRoundSummaries } from '@app/api/roundClient';
 import { fetchPlayerCategoryStats } from '@app/api/statsClient';
 import PlayerStatsScreen from '@app/screens/PlayerStatsScreen';
 import { safeEmit } from '@app/telemetry';
+import {
+  SG_LIGHT_PRACTICE_FOCUS_ENTRY_CLICKED_EVENT,
+  SG_LIGHT_PRACTICE_FOCUS_ENTRY_SHOWN_EVENT,
+} from '@shared/sgLight/analytics';
 
 vi.mock('@app/api/roundClient');
 vi.mock('@app/api/statsClient');
@@ -180,7 +184,7 @@ describe('PlayerStatsScreen', () => {
 
     await waitFor(() => expect(getByTestId('player-stats-sg-trend-headline')).toBeTruthy());
     expect(getByText(/Performance trend/)).toBeTruthy();
-    expect(mockSafeEmit).toHaveBeenCalledWith('practice_focus_entry_shown', {
+    expect(mockSafeEmit).toHaveBeenCalledWith(SG_LIGHT_PRACTICE_FOCUS_ENTRY_SHOWN_EVENT, {
       focusCategory: 'tee',
       surface: 'mobile_stats_sg_light_trend',
     });
@@ -191,7 +195,7 @@ describe('PlayerStatsScreen', () => {
       practiceRecommendationSource: 'mobile_stats_sg_light_trend',
       strokesGainedLightFocusCategory: 'tee',
     });
-    expect(mockSafeEmit).toHaveBeenCalledWith('practice_focus_entry_clicked', {
+    expect(mockSafeEmit).toHaveBeenCalledWith(SG_LIGHT_PRACTICE_FOCUS_ENTRY_CLICKED_EVENT, {
       focusCategory: 'tee',
       surface: 'mobile_stats_sg_light_trend',
     });

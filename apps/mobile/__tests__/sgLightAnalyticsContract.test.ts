@@ -5,6 +5,7 @@ import {
   buildSgLightPracticeCtaClickedPayload,
   SG_LIGHT_EXPLAINER_OPENED_EVENT,
   SG_LIGHT_PRACTICE_FOCUS_ENTRY_CLICKED_EVENT,
+  SG_LIGHT_PRACTICE_FOCUS_ENTRY_SHOWN_EVENT,
 } from '@shared/sgLight/analytics';
 
 describe('sg light analytics contract (mobile)', () => {
@@ -31,6 +32,7 @@ describe('sg light analytics contract (mobile)', () => {
 
   it('locks explainer payloads for recap and stats surfaces', () => {
     expect(SG_LIGHT_EXPLAINER_OPENED_EVENT).toBe('sg_light_explainer_opened');
+    expect(SG_LIGHT_PRACTICE_FOCUS_ENTRY_SHOWN_EVENT).toBe('practice_focus_entry_shown');
 
     expect(
       buildSgLightExplainerOpenedPayload({
