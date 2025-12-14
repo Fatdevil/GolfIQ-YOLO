@@ -6,4 +6,5 @@ interface Window {
 
 interface ImportMetaEnv {
   readonly VITE_FEATURE_SG?: string;
+  readonly VITE_FEATURE_SG_LIGHT?: string;
 }

@@ -19,6 +19,7 @@ import type {
   StrokesGainedLightSummary,
   StrokesGainedLightTrend,
 } from "@shared/stats/strokesGainedLight";
+import { isSgLightInsightsEnabled } from "@shared/featureFlags/sgLightInsights";
 
 const PRACTICE_SURFACE_BY_SURFACE = {
   round_recap: "web_round_recap",
@@ -46,10 +47,12 @@ function RoundShareSgLightSummary({
   summary,
   practiceHrefBuilder,
   impressionKey,
+  enabled,
 }: {
   summary?: StrokesGainedLightSummary | null;
   practiceHrefBuilder?: (focusCategory: StrokesGainedLightCategory) => string | null;
   impressionKey: string | null;
+  enabled: boolean;
 }) {
   const { t } = useTranslation();
   const hasSgLight = useMemo(() => isValidSgLightSummary(summary), [summary]);
@@ -68,7 +71,7 @@ function RoundShareSgLightSummary({
   );
 
   useEffect(() => {
-    if (!focusCategory || !practiceHref || !focusArea) return;
+    if (!enabled || !focusCategory || !practiceHref || !focusArea) return;
 
     fireImpressionOnce(() => {
       trackPracticeMissionRecommendationShown({
@@ -81,7 +84,7 @@ function RoundShareSgLightSummary({
         strokesGainedLightFocusCategory: focusCategory,
       });
     });
-  }, [fireImpressionOnce, focusArea, focusCategory, practiceHref]);
+  }, [enabled, fireImpressionOnce, focusArea, focusCategory, practiceHref]);
 
   const handlePracticeClick = useCallback(() => {
     if (!focusCategory || !focusArea) return;
@@ -186,10 +189,11 @@ export function SgLightInsightsSectionWeb({
   practiceHrefBuilder,
   showTrend,
 }: Props): JSX.Element | null {
+  const sgLightEnabled = isSgLightInsightsEnabled();
   const allowTrend = showTrend ?? surface !== "round_share";
-  const hasSummary = isValidSgLightSummary(sgLightSummary);
-  const hasTrend = allowTrend && Boolean(sgLightTrend || rounds?.length);
-  const shouldRender = hasSummary || hasTrend || surface === "round_share";
+  const hasSummary = sgLightEnabled && isValidSgLightSummary(sgLightSummary);
+  const hasTrend = sgLightEnabled && allowTrend && Boolean(sgLightTrend || rounds?.length);
+  const shouldRender = sgLightEnabled && (hasSummary || hasTrend || surface === "round_share");
 
   const contextKey = contextId ?? "unknown";
   const summaryImpressionKey = `sg_light:${surface}:${contextKey}:summary`;
@@ -203,6 +207,7 @@ export function SgLightInsightsSectionWeb({
         summary={sgLightSummary}
         practiceHrefBuilder={practiceHrefBuilder}
         impressionKey={hasSummary ? summaryImpressionKey : null}
+        enabled={sgLightEnabled}
       />
     );
   }
