@@ -1,3 +1,4 @@
+import { describe, expect, it } from 'vitest';
 import { buildSgLightImpressionKey } from '@shared/sgLight/analytics';
 
 describe('sg light analytics contract (mobile)', () => {
