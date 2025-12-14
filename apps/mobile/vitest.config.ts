@@ -9,10 +9,20 @@ const setupFile = resolve(rootDir, 'vitest.setup.ts');
 
 export default defineConfig({
   root: rootDir,
+  ssr: {
+    noExternal: ['@testing-library/react-native', 'react-native'],
+  },
   test: {
     environment: 'jsdom',
     setupFiles: [setupFile],
     css: false,
+    deps: {
+      optimizer: {
+        web: {
+          include: ['@testing-library/react-native'],
+        },
+      },
+    },
     include: [
       '__tests__/**/*.{spec,test}.ts',
       '__tests__/**/*.{spec,test}.tsx',

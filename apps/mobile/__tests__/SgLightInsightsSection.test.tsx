@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, waitFor } from '@testing-library/react-native';
+import { render, waitFor } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 
 import { SgLightInsightsSection } from '@app/components/sg/SgLightInsightsSection';
