@@ -7,7 +7,11 @@ import {
   type StrokesGainedLightSummary,
   type StrokesGainedLightTrend,
 } from "@shared/stats/strokesGainedLight";
-import { buildSgLightImpressionKey, type SgLightPracticeSurface } from "@shared/sgLight/analytics";
+import {
+  buildSgLightImpressionKey,
+  buildSgLightPracticeCtaClickedPayload,
+  type SgLightPracticeSurface,
+} from "@shared/sgLight/analytics";
 
 import { formatSgDelta, labelForSgLightCategory, mapSgLightCategoryToFocusArea } from "./sgLightWebUtils";
 import { trackPracticeMissionRecommendationClicked, trackPracticeMissionRecommendationShown } from "@/practice/analytics";
@@ -86,7 +90,7 @@ export function SgLightTrendCardWeb({
 
   const handlePracticeClick = () => {
     if (!focusCategory) return;
-    trackPracticeMissionRecommendationClicked({
+    const payload = buildSgLightPracticeCtaClickedPayload({
       missionId: "sg_light_focus",
       reason: "focus_area",
       rank: 1,
@@ -96,6 +100,7 @@ export function SgLightTrendCardWeb({
       origin: practiceSurface,
       strokesGainedLightFocusCategory: focusCategory,
     });
+    trackPracticeMissionRecommendationClicked(payload);
   };
 
   return (
