@@ -10,6 +10,7 @@ import { computePlayerStats } from '@app/stats/playerStatsEngine';
 import { safeEmit } from '@app/telemetry';
 import { buildStrokesGainedLightTrend, type StrokesGainedLightTrend } from '@shared/stats/strokesGainedLight';
 import { SgLightInsightsSection } from '@app/components/sg/SgLightInsightsSection';
+import { isSgLightInsightsEnabled } from '@shared/featureFlags/sgLightInsights';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'PlayerStats'>;
 
@@ -48,6 +49,7 @@ export default function PlayerStatsScreen({ navigation }: Props): JSX.Element {
   const [categoryError, setCategoryError] = useState<string | null>(null);
   const [sgLightTrend, setSgLightTrend] = useState<StrokesGainedLightTrend | null>(null);
   const [sgLightLoading, setSgLightLoading] = useState(true);
+  const sgLightEnabled = isSgLightInsightsEnabled();
 
   useEffect(() => {
     let cancelled = false;
@@ -89,6 +91,14 @@ export default function PlayerStatsScreen({ navigation }: Props): JSX.Element {
 
   useEffect(() => {
     let cancelled = false;
+    if (!sgLightEnabled) {
+      setSgLightTrend(null);
+      setSgLightLoading(false);
+      return () => {
+        cancelled = true;
+      };
+    }
+
     setSgLightLoading(true);
 
     if (!summaries?.length) {
@@ -141,7 +151,7 @@ export default function PlayerStatsScreen({ navigation }: Props): JSX.Element {
     return () => {
       cancelled = true;
     };
-  }, [summaries]);
+  }, [sgLightEnabled, summaries]);
 
   const stats = useMemo(() => computePlayerStats(summaries), [summaries]);
   const hasRounds = stats.roundsPlayed > 0;

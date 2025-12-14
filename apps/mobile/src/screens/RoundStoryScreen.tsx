@@ -18,6 +18,7 @@ import { getDefaultWeeklyPracticeGoalSettings } from '@shared/practice/practiceG
 import type { PracticeMissionHistoryEntry } from '@shared/practice/practiceHistory';
 import type { StrokesGainedLightTrend } from '@shared/stats/strokesGainedLight';
 import { SgLightInsightsSection } from '@app/components/sg/SgLightInsightsSection';
+import { isSgLightInsightsEnabled } from '@shared/featureFlags/sgLightInsights';
 
 const PRO_TEASER = 'Unlock full analysis (SG and swing insights) with GolfIQ Pro.';
 
@@ -83,6 +84,7 @@ export default function RoundStoryScreen({ route, navigation }: Props): JSX.Elem
   const [analyticsError, setAnalyticsError] = useState<string | null>(null);
   const [sgError, setSgError] = useState<string | null>(null);
   const [reloadToken, setReloadToken] = useState(0);
+  const sgLightEnabled = isSgLightInsightsEnabled();
 
   useEffect(() => {
     let cancelled = false;
@@ -179,6 +181,12 @@ export default function RoundStoryScreen({ route, navigation }: Props): JSX.Elem
   }, [runId, reloadToken]);
 
   useEffect(() => {
+    if (!sgLightEnabled) {
+      setSgLightTrend(null);
+      setLoadingTrend(false);
+      return () => undefined;
+    }
+
     let cancelled = false;
     setLoadingTrend(true);
     fetchRoundRecap(runId)
@@ -200,7 +208,7 @@ export default function RoundStoryScreen({ route, navigation }: Props): JSX.Elem
     return () => {
       cancelled = true;
     };
-  }, [runId, reloadToken]);
+  }, [runId, reloadToken, sgLightEnabled]);
 
   useEffect(() => {
     if (!plan || plan.plan !== 'pro') return;

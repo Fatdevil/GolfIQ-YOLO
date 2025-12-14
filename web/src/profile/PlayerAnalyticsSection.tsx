@@ -14,6 +14,7 @@ import {
   type StrokesGainedLightCategory,
   type StrokesGainedLightTrend,
 } from "@shared/stats/strokesGainedLight";
+import { isSgLightInsightsEnabled } from "@shared/featureFlags/sgLightInsights";
 
 import { PlayerAnalyticsDashboard } from "./PlayerAnalyticsDashboard";
 
@@ -35,6 +36,7 @@ export function PlayerAnalyticsSection({
   const [state, setState] = useState<LoadState>("idle");
   const effectiveDemo = demoMode || useDemoMode().demoMode;
   const sgLightImpressionSent = useRef(false);
+  const sgLightEnabled = isSgLightInsightsEnabled();
 
   useEffect(() => {
     if (effectiveDemo) {
@@ -52,7 +54,7 @@ export function PlayerAnalyticsSection({
     let cancelled = false;
     setState("loading");
 
-    fetchPlayerAnalytics()
+    fetchPlayerAnalytics({ includeSgLight: sgLightEnabled })
       .then((data) => {
         if (cancelled) return;
         setAnalytics(data);
@@ -65,10 +67,10 @@ export function PlayerAnalyticsSection({
     return () => {
       cancelled = true;
     };
-  }, [demoAnalytics, effectiveDemo, isPro, loading, loadingDemo]);
+  }, [demoAnalytics, effectiveDemo, isPro, loading, loadingDemo, sgLightEnabled]);
 
   const sgLightTrend = useMemo<StrokesGainedLightTrend | null>(() => {
-    if (!analytics) return null;
+    if (!analytics || !sgLightEnabled) return null;
     if (analytics.strokesGainedLightTrend) return analytics.strokesGainedLightTrend;
     if (!analytics.strokesGainedLightRounds?.length) return null;
 
@@ -79,7 +81,7 @@ export function PlayerAnalyticsSection({
     return (
       buildStrokesGainedLightTrend(orderedRounds, { windowSize: 5 }) ?? null
     );
-  }, [analytics]);
+  }, [analytics, sgLightEnabled]);
 
   const sgLightFocusCategory = sgLightTrend?.focusHistory?.[0]?.focusCategory ?? null;
 

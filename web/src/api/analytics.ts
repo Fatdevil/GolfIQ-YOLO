@@ -46,8 +46,12 @@ export interface PlayerAnalytics {
   strokesGainedLightRounds?: StrokesGainedLightRound[];
 }
 
-export async function fetchPlayerAnalytics(): Promise<PlayerAnalytics> {
-  const res = await apiFetch("/api/analytics/player");
+export async function fetchPlayerAnalytics(options?: {
+  includeSgLight?: boolean;
+}): Promise<PlayerAnalytics> {
+  const { includeSgLight = true } = options ?? {};
+  const url = includeSgLight ? "/api/analytics/player" : "/api/analytics/player?includeSgLight=0";
+  const res = await apiFetch(url);
   if (!res.ok) {
     throw new Error("Failed to load analytics");
   }
