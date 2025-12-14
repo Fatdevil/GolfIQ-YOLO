@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import React from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -71,9 +71,12 @@ describe("SwingDiagnosticsPanel", () => {
   it("renders an empty message when no metrics exist", async () => {
     mockFetchSwingMetrics.mockResolvedValue({ runId: "run-empty", metrics: {}, tourCompare: {} });
 
-    render(<SwingDiagnosticsPanel runId="run-empty" />);
+    const view = render(<SwingDiagnosticsPanel runId="run-empty" />);
 
-    expect(await screen.findByText(/No swing metrics available/)).toBeInTheDocument();
+    const empty = await within(view.container).findByTestId("swing-diagnostics-empty");
+
+    expect(within(empty).getByText(/No swing metrics available/)).toBeInTheDocument();
+    expect(within(view.container).queryByText(/Tour range/)).not.toBeInTheDocument();
   });
 
   it("shows error state and allows retry", async () => {
