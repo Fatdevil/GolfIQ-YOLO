@@ -5,17 +5,20 @@ import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import "@/i18n";
 import { RoundShareView, type RoundShareData } from "@/pages/share/RoundShareView";
 import {
-  trackPracticeMissionRecommendationClicked,
   trackPracticeMissionRecommendationShown,
 } from "@/practice/analytics";
+import { trackSgLightPracticeCtaClickedWeb } from "@/sg/analytics";
 
 vi.mock("@/practice/analytics", () => ({
-  trackPracticeMissionRecommendationClicked: vi.fn(),
   trackPracticeMissionRecommendationShown: vi.fn(),
 }));
 
+vi.mock("@/sg/analytics", () => ({
+  trackSgLightPracticeCtaClickedWeb: vi.fn(),
+}));
+
 const mockShown = vi.mocked(trackPracticeMissionRecommendationShown);
-const mockClicked = vi.mocked(trackPracticeMissionRecommendationClicked);
+const mockClicked = vi.mocked(trackSgLightPracticeCtaClickedWeb);
 
 const SAMPLE_ROUND: RoundShareData = {
   roundId: "round-1",

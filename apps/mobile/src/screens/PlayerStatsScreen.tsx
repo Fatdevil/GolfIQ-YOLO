@@ -12,9 +12,8 @@ import { buildStrokesGainedLightTrend, type StrokesGainedLightTrend } from '@sha
 import { SgLightInsightsSection } from '@app/components/sg/SgLightInsightsSection';
 import { isSgLightInsightsEnabled } from '@shared/featureFlags/sgLightInsights';
 import {
-  buildSgLightPracticeCtaClickedPayload,
-  SG_LIGHT_PRACTICE_FOCUS_ENTRY_CLICKED_EVENT,
-  SG_LIGHT_PRACTICE_FOCUS_ENTRY_SHOWN_EVENT,
+  buildSgLightPracticeCtaClickTelemetry,
+  buildSgLightPracticeFocusEntryShownTelemetry,
 } from '@shared/sgLight/analytics';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'PlayerStats'>;
@@ -166,21 +165,22 @@ export default function PlayerStatsScreen({ navigation }: Props): JSX.Element {
       focusCategory: StrokesGainedLightTrend['focusHistory'][number]['focusCategory'],
       _trend: StrokesGainedLightTrend,
     ) => {
-      safeEmit(SG_LIGHT_PRACTICE_FOCUS_ENTRY_SHOWN_EVENT, {
+      const { eventName, payload } = buildSgLightPracticeFocusEntryShownTelemetry({
         surface: 'mobile_stats_sg_light_trend',
         focusCategory,
       });
+      safeEmit(eventName, payload);
     },
     [],
   );
 
   const handlePracticeFromSgLight = useCallback(() => {
     if (!sgLightFocusCategory) return;
-    const payload = buildSgLightPracticeCtaClickedPayload({
+    const { eventName, payload } = buildSgLightPracticeCtaClickTelemetry({
       surface: 'mobile_stats_sg_light_trend',
       focusCategory: sgLightFocusCategory,
     });
-    safeEmit(SG_LIGHT_PRACTICE_FOCUS_ENTRY_CLICKED_EVENT, payload);
+    safeEmit(eventName, payload);
     navigation.navigate('PracticeMissions', {
       source: 'mobile_stats_sg_light_trend',
       practiceRecommendationSource: 'mobile_stats_sg_light_trend',

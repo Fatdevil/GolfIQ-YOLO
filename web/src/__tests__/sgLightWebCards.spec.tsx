@@ -7,7 +7,7 @@ import { SgLightSummaryCardWeb } from "@/sg/SgLightSummaryCardWeb";
 import { SgLightTrendCardWeb } from "@/sg/SgLightTrendCardWeb";
 import { trackPracticeMissionRecommendationShown } from "@/practice/analytics";
 import type { StrokesGainedLightSummary, StrokesGainedLightTrend } from "@shared/stats/strokesGainedLight";
-import { trackSgLightExplainerOpenedWeb } from "@/sg/analytics";
+import { trackSgLightExplainerOpenedWeb, trackSgLightPracticeCtaClickedWeb } from "@/sg/analytics";
 
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({
@@ -33,9 +33,11 @@ vi.mock("@/practice/analytics", () => ({
 }));
 vi.mock("@/sg/analytics", () => ({
   trackSgLightExplainerOpenedWeb: vi.fn(),
+  trackSgLightPracticeCtaClickedWeb: vi.fn(),
 }));
 
 const mockTrackExplainer = vi.mocked(trackSgLightExplainerOpenedWeb);
+const mockTrackPracticeCta = vi.mocked(trackSgLightPracticeCtaClickedWeb);
 
 describe("SG Light web cards", () => {
   const matchesSgLightDialogName = (name: string) =>
@@ -74,6 +76,9 @@ describe("SG Light web cards", () => {
     const cta = screen.getByTestId("sg-light-practice-cta");
     await userEvent.click(cta);
     expect(builder).toHaveBeenCalled();
+    expect(mockTrackPracticeCta).toHaveBeenCalledWith(
+      expect.objectContaining({ surface: "web_round_recap" }),
+    );
   });
 
   it("tracks summary impression once per display context", async () => {
@@ -147,6 +152,9 @@ describe("SG Light web cards", () => {
     const cta = screen.getByTestId("sg-light-trend-practice-cta");
     await userEvent.click(cta);
     expect(builder).toHaveBeenCalled();
+    expect(mockTrackPracticeCta).toHaveBeenCalledWith(
+      expect.objectContaining({ surface: "web_round_story" }),
+    );
   });
 
   it("opens explainer from trend card", async () => {

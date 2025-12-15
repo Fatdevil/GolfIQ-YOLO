@@ -5,7 +5,6 @@ import { SgLightSummaryCardWeb } from "@/sg/SgLightSummaryCardWeb";
 import { SgLightTrendCardWeb } from "@/sg/SgLightTrendCardWeb";
 import { useTrackOncePerKey } from "@/hooks/useTrackOncePerKey";
 import {
-  trackPracticeMissionRecommendationClicked,
   trackPracticeMissionRecommendationShown,
 } from "@/practice/analytics";
 import {
@@ -19,6 +18,7 @@ import type {
   StrokesGainedLightSummary,
   StrokesGainedLightTrend,
 } from "@shared/stats/strokesGainedLight";
+import { trackSgLightPracticeCtaClickedWeb } from "./analytics";
 import {
   buildSgLightImpressionKey,
   buildSgLightSummaryViewedPayload,
@@ -93,7 +93,7 @@ function RoundShareSgLightSummary({
 
   const handlePracticeClick = useCallback(() => {
     if (!focusCategory || !focusArea) return;
-    trackPracticeMissionRecommendationClicked({
+    trackSgLightPracticeCtaClickedWeb({
       missionId: "sg_light_focus",
       reason: "focus_area",
       rank: 1,

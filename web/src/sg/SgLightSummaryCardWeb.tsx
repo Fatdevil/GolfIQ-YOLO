@@ -19,12 +19,12 @@ import {
   mapSgLightCategoryToFocusArea,
 } from "./sgLightWebUtils";
 import {
-  trackPracticeMissionRecommendationClicked,
   trackPracticeMissionRecommendationShown,
 } from "@/practice/analytics";
 import type { PracticeRecommendationContext } from "@shared/practice/practiceRecommendationsAnalytics";
 import { SgLightExplainer } from "./SgLightExplainer";
 import type { SgLightExplainerSurface } from "./analytics";
+import { trackSgLightPracticeCtaClickedWeb } from "./analytics";
 import { useTrackOncePerKey } from "@/hooks/useTrackOncePerKey";
 
 type Props = {
@@ -117,7 +117,7 @@ export function SgLightSummaryCardWeb({
       origin: practiceSurface,
       strokesGainedLightFocusCategory: focusCategory,
     });
-    trackPracticeMissionRecommendationClicked(payload);
+    trackSgLightPracticeCtaClickedWeb(payload);
   };
 
   return (

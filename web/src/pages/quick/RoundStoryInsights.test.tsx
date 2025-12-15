@@ -4,11 +4,8 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { RoundStoryInsights } from "./RoundStoryInsights";
-import {
-  trackPracticeMissionRecommendationClicked,
-  trackPracticeMissionRecommendationShown,
-} from "@/practice/analytics";
-import { trackSgLightExplainerOpenedWeb } from "@/sg/analytics";
+import { trackPracticeMissionRecommendationShown } from "@/practice/analytics";
+import { trackSgLightExplainerOpenedWeb, trackSgLightPracticeCtaClickedWeb } from "@/sg/analytics";
 import type {
   StrokesGainedLightSummary,
   StrokesGainedLightTrend,
@@ -24,11 +21,11 @@ vi.mock("react-i18next", () => ({
 
 vi.mock("@/practice/analytics", () => ({
   trackPracticeMissionRecommendationShown: vi.fn(),
-  trackPracticeMissionRecommendationClicked: vi.fn(),
 }));
 
 vi.mock("@/sg/analytics", () => ({
   trackSgLightExplainerOpenedWeb: vi.fn(),
+  trackSgLightPracticeCtaClickedWeb: vi.fn(),
 }));
 
 const matchesSgLightDialogName = (name: string) =>
@@ -119,7 +116,7 @@ describe("RoundStoryInsights", () => {
     const trendCta = await screen.findByTestId("sg-light-trend-practice-cta");
     await userEvent.click(trendCta);
 
-    expect(trackPracticeMissionRecommendationClicked).toHaveBeenCalledWith(
+    expect(trackSgLightPracticeCtaClickedWeb).toHaveBeenCalledWith(
       expect.objectContaining({ surface: "web_round_story" }),
     );
 

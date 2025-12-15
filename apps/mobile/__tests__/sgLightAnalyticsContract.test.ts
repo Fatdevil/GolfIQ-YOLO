@@ -1,8 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import {
   buildSgLightExplainerOpenedPayload,
+  buildSgLightExplainerOpenTelemetry,
   buildSgLightImpressionKey,
+  buildSgLightPracticeCtaClickTelemetry,
   buildSgLightPracticeCtaClickedPayload,
+  buildSgLightPracticeFocusEntryShownTelemetry,
   buildSgLightSummaryImpressionTelemetry,
   buildSgLightSummaryViewedPayload,
   buildSgLightTrendImpressionTelemetry,
@@ -10,8 +13,13 @@ import {
   SG_LIGHT_PRACTICE_FOCUS_ENTRY_CLICKED_EVENT,
   SG_LIGHT_PRACTICE_FOCUS_ENTRY_SHOWN_EVENT,
   SG_LIGHT_SUMMARY_VIEWED_EVENT,
+  SG_LIGHT_PRACTICE_RECOMMENDATION_CLICKED_EVENT,
   SG_LIGHT_TREND_VIEWED_EVENT,
 } from '@shared/sgLight/analytics';
+import type {
+  PracticeMissionRecommendationClickedEvent,
+  PracticeMissionRecommendationReason,
+} from '@shared/practice/practiceRecommendationsAnalytics';
 
 describe('sg light analytics contract (mobile)', () => {
   it('builds recap summary keys', () => {
@@ -99,6 +107,12 @@ describe('sg light analytics contract (mobile)', () => {
     ).toEqual({ surface: 'player_stats' });
   });
 
+  it('pairs explainer open telemetry with the locked event name', () => {
+    expect(
+      buildSgLightExplainerOpenTelemetry({ surface: 'round_story', contextId: 'round-xyz' }),
+    ).toEqual({ eventName: SG_LIGHT_EXPLAINER_OPENED_EVENT, payload: { surface: 'round_story', roundId: 'round-xyz' } });
+  });
+
   it('locks practice CTA payloads across mobile sg light surfaces', () => {
     expect(SG_LIGHT_PRACTICE_FOCUS_ENTRY_CLICKED_EVENT).toBe('practice_focus_entry_clicked');
 
@@ -118,5 +132,57 @@ describe('sg light analytics contract (mobile)', () => {
         focusCategory: 'approach',
       }),
     ).toEqual({ surface: 'mobile_stats_sg_light_trend', focusCategory: 'approach' });
+  });
+
+  it('pairs practice CTA click telemetry with the locked event name for focus entry', () => {
+    expect(
+      buildSgLightPracticeCtaClickTelemetry({
+        surface: 'mobile_home_sg_light_focus',
+        focusCategory: 'putting',
+      }),
+    ).toEqual({
+      eventName: SG_LIGHT_PRACTICE_FOCUS_ENTRY_CLICKED_EVENT,
+      payload: { surface: 'mobile_home_sg_light_focus', focusCategory: 'putting' },
+    });
+  });
+
+  it('pairs practice CTA click telemetry with the locked event name for recommendations', () => {
+    const reason: PracticeMissionRecommendationReason = 'focus_area';
+    const payload: PracticeMissionRecommendationClickedEvent = {
+      missionId: 'sg_light_focus',
+      reason,
+      rank: 1,
+      surface: 'web_round_recap',
+      entryPoint: 'sg_light_focus_card',
+      focusArea: 'approach_focus',
+      origin: 'web_round_recap',
+      strokesGainedLightFocusCategory: 'approach',
+    };
+
+    expect(buildSgLightPracticeCtaClickTelemetry(payload)).toEqual({
+      eventName: SG_LIGHT_PRACTICE_RECOMMENDATION_CLICKED_EVENT,
+      payload: {
+        missionId: 'sg_light_focus',
+        reason: 'focus_area',
+        rank: 1,
+        surface: 'web_round_recap',
+        entryPoint: 'sg_light_focus_card',
+        focusArea: 'approach_focus',
+        origin: 'web_round_recap',
+        strokesGainedLightFocusCategory: 'approach',
+      },
+    });
+  });
+
+  it('pairs practice focus entry shown telemetry with the locked event name', () => {
+    expect(
+      buildSgLightPracticeFocusEntryShownTelemetry({
+        surface: 'mobile_stats_sg_light_trend',
+        focusCategory: 'tee',
+      }),
+    ).toEqual({
+      eventName: SG_LIGHT_PRACTICE_FOCUS_ENTRY_SHOWN_EVENT,
+      payload: { surface: 'mobile_stats_sg_light_trend', focusCategory: 'tee' },
+    });
   });
 });
