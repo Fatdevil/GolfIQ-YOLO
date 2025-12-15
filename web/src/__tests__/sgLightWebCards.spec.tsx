@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { SgLightSummaryCardWeb } from "@/sg/SgLightSummaryCardWeb";
 import { SgLightTrendCardWeb } from "@/sg/SgLightTrendCardWeb";
 import { trackPracticeMissionRecommendationShown } from "@/practice/analytics";
+import { postTelemetryEvent } from "@/api";
 import type { StrokesGainedLightSummary, StrokesGainedLightTrend } from "@shared/stats/strokesGainedLight";
 import { trackSgLightExplainerOpenedWeb, trackSgLightPracticeCtaClickedWeb } from "@/sg/analytics";
 
@@ -15,6 +16,10 @@ vi.mock("react-i18next", () => ({
       typeof fallback === "string" ? fallback : key,
     i18n: { changeLanguage: () => Promise.resolve() },
   }),
+}));
+
+const { mockPostTelemetryEvent } = vi.hoisted(() => ({
+  mockPostTelemetryEvent: vi.fn().mockResolvedValue(undefined),
 }));
 
 beforeEach(() => {
@@ -31,9 +36,18 @@ vi.mock("@/practice/analytics", () => ({
   trackPracticeMissionRecommendationShown: vi.fn(),
   trackPracticeMissionRecommendationClicked: vi.fn(),
 }));
+vi.mock("@/api", () => ({
+  postTelemetryEvent: mockPostTelemetryEvent,
+}));
 vi.mock("@/sg/analytics", () => ({
   trackSgLightExplainerOpenedWeb: vi.fn(),
   trackSgLightPracticeCtaClickedWeb: vi.fn(),
+  trackSgLightSummaryImpressionWeb: vi.fn((telemetry) =>
+    mockPostTelemetryEvent({ event: telemetry.eventName, ...telemetry.payload }),
+  ),
+  trackSgLightTrendImpressionWeb: vi.fn((telemetry) =>
+    mockPostTelemetryEvent({ event: telemetry.eventName, ...telemetry.payload }),
+  ),
 }));
 
 const mockTrackExplainer = vi.mocked(trackSgLightExplainerOpenedWeb);
@@ -68,7 +82,13 @@ describe("SG Light web cards", () => {
 
   it("renders summary card with CTA when focus is available", async () => {
     const builder = vi.fn().mockReturnValue("/range/practice?source=web_round_recap");
-    render(<SgLightSummaryCardWeb summary={summary} practiceHrefBuilder={builder} />);
+    render(
+      <SgLightSummaryCardWeb
+        summary={summary}
+        practiceHrefBuilder={builder}
+        surface="round_recap"
+      />,
+    );
 
     expect(await screen.findByText(/Strokes Gained Light/i)).toBeInTheDocument();
     expect(screen.getByTestId("sg-light-category-approach")).toBeInTheDocument();
@@ -90,6 +110,7 @@ describe("SG Light web cards", () => {
         practiceHrefBuilder={builder}
         roundId="round-1"
         practiceSurface="web_round_recap"
+        surface="round_recap"
       />,
     );
 
@@ -101,6 +122,7 @@ describe("SG Light web cards", () => {
         practiceHrefBuilder={builder}
         roundId="round-1"
         practiceSurface="web_round_recap"
+        surface="round_recap"
       />,
     );
 
@@ -112,6 +134,7 @@ describe("SG Light web cards", () => {
         practiceHrefBuilder={builder}
         roundId="round-1"
         practiceSurface="web_round_recap"
+        surface="round_recap"
       />,
     );
 
@@ -119,7 +142,7 @@ describe("SG Light web cards", () => {
   });
 
   it("opens explainer from summary card", async () => {
-    render(<SgLightSummaryCardWeb summary={summary} />);
+    render(<SgLightSummaryCardWeb summary={summary} surface="round_recap" />);
 
     const trigger = await screen.findByTestId("open-sg-light-explainer");
     await userEvent.click(trigger);
@@ -132,7 +155,7 @@ describe("SG Light web cards", () => {
   });
 
   it("hides practice CTA when summary has low confidence", () => {
-    render(<SgLightSummaryCardWeb summary={null} />);
+    render(<SgLightSummaryCardWeb summary={null} surface="round_recap" />);
 
     expect(screen.queryByTestId("sg-light-practice-cta")).not.toBeInTheDocument();
   });
@@ -145,6 +168,7 @@ describe("SG Light web cards", () => {
         trend={trend}
         practiceHrefBuilder={builder}
         practiceSurface="web_round_story"
+        surface="round_story"
       />,
     );
 
@@ -158,7 +182,7 @@ describe("SG Light web cards", () => {
   });
 
   it("opens explainer from trend card", async () => {
-    render(<SgLightTrendCardWeb trend={trend} />);
+    render(<SgLightTrendCardWeb trend={trend} surface="round_story" />);
 
     const trigger = await screen.findByTestId("open-sg-light-explainer");
     await userEvent.click(trigger);
@@ -178,6 +202,7 @@ describe("SG Light web cards", () => {
         trend={trend}
         practiceHrefBuilder={builder}
         practiceSurface="web_round_story"
+        surface="round_story"
       />,
     );
 
@@ -189,6 +214,7 @@ describe("SG Light web cards", () => {
         trend={trend}
         practiceHrefBuilder={builder}
         practiceSurface="web_round_story"
+        surface="round_story"
       />,
     );
 
@@ -204,6 +230,7 @@ describe("SG Light web cards", () => {
         practiceHrefBuilder={builder}
         practiceSurface="web_round_story"
         roundId="round-1"
+        surface="round_story"
       />,
     );
 
@@ -215,6 +242,7 @@ describe("SG Light web cards", () => {
         practiceHrefBuilder={builder}
         practiceSurface="web_round_story"
         roundId="round-1"
+        surface="round_story"
       />,
     );
 
@@ -227,10 +255,84 @@ describe("SG Light web cards", () => {
         trend={{ ...trend, focusHistory: [] }}
         practiceHrefBuilder={() => "/range/practice"}
         practiceSurface="web_round_story"
+        surface="round_story"
+      />,
+    );
+  
+    expect(await screen.findByTestId("sg-light-trend-card")).toBeInTheDocument();
+    expect(trackPracticeMissionRecommendationShown).not.toHaveBeenCalled();
+  });
+
+  it("dedupes summary impressions per key across rerenders", async () => {
+    const { rerender } = render(
+      <SgLightSummaryCardWeb
+        summary={summary}
+        surface="round_recap"
+        roundId="round-1"
+        practiceHrefBuilder={() => "/range/practice"}
       />,
     );
 
-    expect(await screen.findByTestId("sg-light-trend-card")).toBeInTheDocument();
-    expect(trackPracticeMissionRecommendationShown).not.toHaveBeenCalled();
+    await waitFor(() => expect(postTelemetryEvent).toHaveBeenCalledTimes(1));
+
+    rerender(
+      <SgLightSummaryCardWeb
+        summary={summary}
+        surface="round_recap"
+        roundId="round-1"
+        practiceHrefBuilder={() => "/range/practice"}
+      />,
+    );
+
+    expect(postTelemetryEvent).toHaveBeenCalledTimes(1);
+
+    rerender(
+      <SgLightSummaryCardWeb
+        summary={summary}
+        surface="round_recap"
+        roundId="round-2"
+        practiceHrefBuilder={() => "/range/practice"}
+      />,
+    );
+
+    await waitFor(() => expect(postTelemetryEvent).toHaveBeenCalledTimes(2));
+  });
+
+  it("dedupes trend impressions per key across rerenders", async () => {
+    const { rerender } = render(
+      <SgLightTrendCardWeb
+        trend={trend}
+        surface="round_story"
+        roundId="round-1"
+        practiceHrefBuilder={() => "/range/practice"}
+      />,
+    );
+
+    await waitFor(() => expect(postTelemetryEvent).toHaveBeenCalledTimes(1));
+
+    rerender(
+      <SgLightTrendCardWeb
+        trend={trend}
+        surface="round_story"
+        roundId="round-1"
+        practiceHrefBuilder={() => "/range/practice"}
+      />,
+    );
+
+    expect(postTelemetryEvent).toHaveBeenCalledTimes(1);
+
+    rerender(
+      <SgLightTrendCardWeb
+        trend={{
+          ...trend,
+          focusHistory: [{ roundId: "round-2", playedAt: "2024-02-01", focusCategory: "tee" }],
+        }}
+        surface="round_story"
+        roundId="round-2"
+        practiceHrefBuilder={() => "/range/practice"}
+      />,
+    );
+
+    await waitFor(() => expect(postTelemetryEvent).toHaveBeenCalledTimes(2));
   });
 });

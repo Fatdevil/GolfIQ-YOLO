@@ -21,10 +21,12 @@ import type {
 import { trackSgLightPracticeCtaClickedWeb } from "./analytics";
 import {
   buildSgLightImpressionKey,
+  buildSgLightSummaryImpressionTelemetry,
   buildSgLightSummaryViewedPayload,
   SG_LIGHT_PRACTICE_SURFACES,
 } from "@shared/sgLight/analytics";
 import { isSgLightInsightsEnabled } from "@shared/featureFlags/sgLightInsights";
+import { trackSgLightSummaryImpressionWeb } from "./analytics";
 
 const PRACTICE_SURFACE_BY_SURFACE = {
   round_recap: SG_LIGHT_PRACTICE_SURFACES[0],
@@ -53,11 +55,15 @@ function RoundShareSgLightSummary({
   practiceHrefBuilder,
   impressionKey,
   enabled,
+  surface,
+  contextId,
 }: {
   summary?: StrokesGainedLightSummary | null;
   practiceHrefBuilder?: (focusCategory: StrokesGainedLightCategory) => string | null;
   impressionKey: string | null;
   enabled: boolean;
+  surface: "round_share";
+  contextId?: string | null;
 }) {
   const { t } = useTranslation();
   const hasSgLight = useMemo(() => isValidSgLightSummary(summary), [summary]);
@@ -71,9 +77,26 @@ function RoundShareSgLightSummary({
     [focusCategory],
   );
 
+  const summaryImpressionTelemetry = useMemo(() => {
+    if (!hasSgLight || !impressionKey) return null;
+    return buildSgLightSummaryImpressionTelemetry({
+      surface,
+      contextId,
+    });
+  }, [contextId, hasSgLight, impressionKey, surface]);
+
   const { fire: fireImpressionOnce } = useTrackOncePerKey(
     focusCategory && practiceHref ? impressionKey : null,
   );
+
+  const { fire: fireSummaryImpressionOnce } = useTrackOncePerKey(
+    summaryImpressionTelemetry?.payload.impressionKey ?? null,
+  );
+
+  useEffect(() => {
+    if (!summaryImpressionTelemetry) return;
+    fireSummaryImpressionOnce(() => trackSgLightSummaryImpressionWeb(summaryImpressionTelemetry));
+  }, [fireSummaryImpressionOnce, summaryImpressionTelemetry]);
 
   useEffect(() => {
     if (!enabled || !focusCategory || !practiceHref || !focusArea) return;
@@ -219,6 +242,8 @@ export function SgLightInsightsSectionWeb({
         practiceHrefBuilder={practiceHrefBuilder}
         impressionKey={hasSummary ? summaryImpressionKey : null}
         enabled={sgLightEnabled}
+        surface={surface}
+        contextId={contextId}
       />
     );
   }
@@ -236,6 +261,7 @@ export function SgLightInsightsSectionWeb({
           explainerSurface={explainerSurface}
           roundId={contextId}
           impressionKey={summaryImpressionKey}
+          surface={surface}
         />
       ) : null}
       {hasTrend ? (
@@ -247,6 +273,7 @@ export function SgLightInsightsSectionWeb({
           explainerSurface={explainerSurface}
           roundId={contextId}
           impressionKey={trendImpressionKey}
+          surface={surface}
         />
       ) : null}
     </>

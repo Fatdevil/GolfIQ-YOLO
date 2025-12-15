@@ -26,6 +26,10 @@ vi.mock("@/practice/analytics", () => ({
   trackPracticeMissionRecommendationClicked: vi.fn(),
 }));
 
+vi.mock("@/api", () => ({
+  postTelemetryEvent: vi.fn().mockResolvedValue(undefined),
+}));
+
 const summary: StrokesGainedLightSummary = {
   totalDelta: 0.6,
   focusCategory: "approach",

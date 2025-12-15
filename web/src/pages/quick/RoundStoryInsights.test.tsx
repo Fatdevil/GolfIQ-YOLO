@@ -23,9 +23,15 @@ vi.mock("@/practice/analytics", () => ({
   trackPracticeMissionRecommendationShown: vi.fn(),
 }));
 
+vi.mock("@/api", () => ({
+  postTelemetryEvent: vi.fn().mockResolvedValue(undefined),
+}));
+
 vi.mock("@/sg/analytics", () => ({
   trackSgLightExplainerOpenedWeb: vi.fn(),
   trackSgLightPracticeCtaClickedWeb: vi.fn(),
+  trackSgLightSummaryImpressionWeb: vi.fn(),
+  trackSgLightTrendImpressionWeb: vi.fn(),
 }));
 
 const matchesSgLightDialogName = (name: string) =>

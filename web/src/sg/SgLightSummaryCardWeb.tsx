@@ -8,8 +8,9 @@ import {
 } from "@shared/stats/strokesGainedLight";
 import {
   buildSgLightPracticeCtaClickedPayload,
-  buildSgLightSummaryViewedPayload,
+  buildSgLightSummaryImpressionTelemetry,
   type SgLightPracticeSurface,
+  type SgLightSurface,
 } from "@shared/sgLight/analytics";
 
 import {
@@ -24,7 +25,10 @@ import {
 import type { PracticeRecommendationContext } from "@shared/practice/practiceRecommendationsAnalytics";
 import { SgLightExplainer } from "./SgLightExplainer";
 import type { SgLightExplainerSurface } from "./analytics";
-import { trackSgLightPracticeCtaClickedWeb } from "./analytics";
+import {
+  trackSgLightPracticeCtaClickedWeb,
+  trackSgLightSummaryImpressionWeb,
+} from "./analytics";
 import { useTrackOncePerKey } from "@/hooks/useTrackOncePerKey";
 
 type Props = {
@@ -38,6 +42,7 @@ type Props = {
   roundId?: string | null;
   shareId?: string | null;
   impressionKey?: string | null;
+  surface: SgLightSurface;
 };
 
 export function SgLightSummaryCardWeb({
@@ -48,6 +53,7 @@ export function SgLightSummaryCardWeb({
   roundId,
   shareId,
   impressionKey,
+  surface,
 }: Props) {
   const { t } = useTranslation();
   const eligibleCategories = summary?.byCategory?.filter(
@@ -78,21 +84,34 @@ export function SgLightSummaryCardWeb({
     };
   }, [focusCategory, practiceHref, practiceSurface]);
 
-  const resolvedImpressionKey = useMemo(() => {
+  const summaryImpressionTelemetry = useMemo(() => {
+    if (!hasData) return null;
+    return buildSgLightSummaryImpressionTelemetry({
+      surface,
+      contextId: roundId ?? shareId ?? "unknown",
+    });
+  }, [hasData, roundId, shareId, surface]);
+
+  const summaryImpressionKey = summaryImpressionTelemetry?.payload.impressionKey ?? impressionKey ?? null;
+
+  const { fire: fireSummaryImpressionOnce } = useTrackOncePerKey(summaryImpressionKey);
+
+  const resolvedPracticeImpressionKey = useMemo(() => {
     if (!focusCategory || !practiceHref) return null;
     if (impressionKey) return impressionKey;
-    const contextId = roundId ?? shareId ?? "unknown";
-    return buildSgLightSummaryViewedPayload({
-      surface: practiceSurface,
-      contextId,
-    }).impressionKey;
-  }, [focusCategory, impressionKey, practiceHref, practiceSurface, roundId, shareId]);
+    return summaryImpressionTelemetry?.payload.impressionKey ?? null;
+  }, [focusCategory, impressionKey, practiceHref, summaryImpressionTelemetry?.payload.impressionKey]);
 
-  const { fire: fireImpressionOnce } = useTrackOncePerKey(resolvedImpressionKey);
+  const { fire: firePracticeImpressionOnce } = useTrackOncePerKey(resolvedPracticeImpressionKey);
+
+  useEffect(() => {
+    if (!summaryImpressionTelemetry) return;
+    fireSummaryImpressionOnce(() => trackSgLightSummaryImpressionWeb(summaryImpressionTelemetry));
+  }, [fireSummaryImpressionOnce, summaryImpressionTelemetry]);
 
   useEffect(() => {
     if (!focusCategory || !recommendation) return;
-    fireImpressionOnce(() => {
+    firePracticeImpressionOnce(() => {
       trackPracticeMissionRecommendationShown({
         missionId: "sg_light_focus",
         reason: "focus_area",
@@ -103,7 +122,7 @@ export function SgLightSummaryCardWeb({
         strokesGainedLightFocusCategory: focusCategory,
       });
     });
-  }, [fireImpressionOnce, focusCategory, practiceSurface, recommendation]);
+  }, [firePracticeImpressionOnce, focusCategory, practiceSurface, recommendation]);
 
   const handlePracticeClick = () => {
     if (!focusCategory || !recommendation) return;

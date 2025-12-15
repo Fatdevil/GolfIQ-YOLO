@@ -10,7 +10,9 @@ import {
 import {
   buildSgLightImpressionKey,
   buildSgLightPracticeCtaClickedPayload,
+  buildSgLightTrendImpressionTelemetry,
   type SgLightPracticeSurface,
+  type SgLightSurface,
 } from "@shared/sgLight/analytics";
 
 import { formatSgDelta, labelForSgLightCategory, mapSgLightCategoryToFocusArea } from "./sgLightWebUtils";
@@ -18,7 +20,10 @@ import { trackPracticeMissionRecommendationShown } from "@/practice/analytics";
 import { SgLightExplainer } from "./SgLightExplainer";
 import type { SgLightExplainerSurface } from "./analytics";
 import { useTrackOncePerKey } from "@/hooks/useTrackOncePerKey";
-import { trackSgLightPracticeCtaClickedWeb } from "./analytics";
+import {
+  trackSgLightPracticeCtaClickedWeb,
+  trackSgLightTrendImpressionWeb,
+} from "./analytics";
 
 type Props = {
   rounds?: Array<StrokesGainedLightSummary & { roundId?: string; playedAt?: string }>;
@@ -29,6 +34,7 @@ type Props = {
   roundId?: string | null;
   shareId?: string | null;
   impressionKey?: string | null;
+  surface: SgLightSurface;
 };
 
 export function SgLightTrendCardWeb({
@@ -40,6 +46,7 @@ export function SgLightTrendCardWeb({
   roundId,
   shareId,
   impressionKey,
+  surface,
 }: Props) {
   const { t } = useTranslation();
 
@@ -60,23 +67,46 @@ export function SgLightTrendCardWeb({
     return resolvedTrend?.focusHistory?.[0]?.roundId ?? rounds?.[0]?.roundId ?? null;
   }, [resolvedTrend?.focusHistory, rounds]);
 
-  const resolvedImpressionKey = useMemo(() => {
-    if (!focusCategory || !practiceHref) return null;
-    if (impressionKey) return impressionKey;
-    const contextId = roundId ?? shareId ?? trendRoundId ?? "unknown";
-    return buildSgLightImpressionKey({
-      surface: practiceSurface,
-      contextId,
-      cardType: "trend",
+  const trendImpressionTelemetry = useMemo(() => {
+    if (!resolvedTrend || !focusCategory) return null;
+    return buildSgLightTrendImpressionTelemetry({
+      surface,
+      platform: "web",
+      roundId: roundId ?? shareId ?? trendRoundId ?? undefined,
+      trend: resolvedTrend,
+      focusCategory,
     });
-  }, [focusCategory, impressionKey, practiceHref, practiceSurface, roundId, shareId, trendRoundId]);
+  }, [focusCategory, resolvedTrend, roundId, shareId, surface, trendRoundId]);
 
-  const { fire: fireImpressionOnce } = useTrackOncePerKey(resolvedImpressionKey);
+  const trendImpressionKey = useMemo(() => {
+    return (
+      impressionKey ??
+      buildSgLightImpressionKey({
+        surface,
+        contextId: roundId ?? shareId ?? trendRoundId ?? "unknown",
+        cardType: "trend",
+      })
+    );
+  }, [impressionKey, roundId, shareId, surface, trendRoundId]);
+
+  const { fire: fireTrendImpressionOnce } = useTrackOncePerKey(trendImpressionKey);
+
+  const resolvedPracticeImpressionKey = useMemo(() => {
+    if (!focusCategory || !practiceHref) return null;
+    return trendImpressionKey;
+  }, [focusCategory, practiceHref, trendImpressionKey]);
+
+  const { fire: firePracticeImpressionOnce } = useTrackOncePerKey(resolvedPracticeImpressionKey);
+
+  useEffect(() => {
+    if (!trendImpressionTelemetry) return;
+    fireTrendImpressionOnce(() => trackSgLightTrendImpressionWeb(trendImpressionTelemetry));
+  }, [fireTrendImpressionOnce, trendImpressionTelemetry]);
 
   useEffect(() => {
     if (!focusCategory || !practiceHref) return;
 
-    fireImpressionOnce(() => {
+    firePracticeImpressionOnce(() => {
       trackPracticeMissionRecommendationShown({
         missionId: "sg_light_focus",
         reason: "focus_area",
@@ -87,7 +117,7 @@ export function SgLightTrendCardWeb({
         strokesGainedLightFocusCategory: focusCategory,
       });
     });
-  }, [fireImpressionOnce, focusCategory, practiceHref, practiceSurface]);
+  }, [firePracticeImpressionOnce, focusCategory, practiceHref, practiceSurface]);
 
   const handlePracticeClick = () => {
     if (!focusCategory) return;
