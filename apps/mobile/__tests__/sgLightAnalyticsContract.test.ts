@@ -3,6 +3,7 @@ import {
   buildSgLightExplainerOpenedPayload,
   buildSgLightImpressionKey,
   buildSgLightPracticeCtaClickedPayload,
+  buildSgLightSummaryViewedPayload,
   SG_LIGHT_EXPLAINER_OPENED_EVENT,
   SG_LIGHT_PRACTICE_FOCUS_ENTRY_CLICKED_EVENT,
   SG_LIGHT_PRACTICE_FOCUS_ENTRY_SHOWN_EVENT,
@@ -17,6 +18,10 @@ describe('sg light analytics contract (mobile)', () => {
         cardType: 'summary',
       }),
     ).toBe('sg_light:round_recap:round-abc:summary');
+
+    expect(
+      buildSgLightSummaryViewedPayload({ surface: 'round_recap', contextId: 'round-abc' }),
+    ).toEqual({ impressionKey: 'sg_light:round_recap:round-abc:summary' });
   });
 
   it('builds trend keys with focus category for round story', () => {

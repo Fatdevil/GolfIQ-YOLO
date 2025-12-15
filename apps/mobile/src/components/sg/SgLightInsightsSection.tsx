@@ -12,8 +12,9 @@ import type {
 } from '@shared/stats/strokesGainedLight';
 import {
   buildSgLightExplainerOpenedPayload,
-  buildSgLightImpressionKey,
   SG_LIGHT_EXPLAINER_OPENED_EVENT,
+  buildSgLightSummaryViewedPayload,
+  buildSgLightImpressionKey,
   type SgLightSurface,
 } from '@shared/sgLight/analytics';
 import { isSgLightInsightsEnabled } from '@shared/featureFlags/sgLightInsights';
@@ -100,11 +101,10 @@ export function SgLightInsightsSection({
 
   const trendFocusCategory = trend?.focusHistory?.[0]?.focusCategory ?? null;
   const summaryKey = summary
-    ? buildSgLightImpressionKey({
+    ? buildSgLightSummaryViewedPayload({
         surface,
         contextId,
-        cardType: 'summary',
-      })
+      }).impressionKey
     : null;
   const trendKey = trendFocusCategory
     ? buildSgLightImpressionKey({

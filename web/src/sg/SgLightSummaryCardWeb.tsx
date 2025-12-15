@@ -7,8 +7,8 @@ import {
   type StrokesGainedLightSummary,
 } from "@shared/stats/strokesGainedLight";
 import {
-  buildSgLightImpressionKey,
   buildSgLightPracticeCtaClickedPayload,
+  buildSgLightSummaryViewedPayload,
   type SgLightPracticeSurface,
 } from "@shared/sgLight/analytics";
 
@@ -82,11 +82,10 @@ export function SgLightSummaryCardWeb({
     if (!focusCategory || !practiceHref) return null;
     if (impressionKey) return impressionKey;
     const contextId = roundId ?? shareId ?? "unknown";
-    return buildSgLightImpressionKey({
+    return buildSgLightSummaryViewedPayload({
       surface: practiceSurface,
       contextId,
-      cardType: "summary",
-    });
+    }).impressionKey;
   }, [focusCategory, impressionKey, practiceHref, practiceSurface, roundId, shareId]);
 
   const { fire: fireImpressionOnce } = useTrackOncePerKey(resolvedImpressionKey);
