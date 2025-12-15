@@ -167,6 +167,24 @@ export function buildSgLightPracticeFocusEntryShownTelemetry({
   };
 }
 
+export function buildSgLightPracticeFocusEntryImpressionDedupeKey({
+  surface,
+  missionId,
+  entryPoint,
+  focusArea,
+}: {
+  surface: string;
+  missionId?: string | null;
+  entryPoint?: string | null;
+  focusArea?: string | null;
+}): string {
+  const resolvedMission = missionId ?? "unknown";
+  const resolvedEntryPoint = entryPoint ?? "unknown";
+  const resolvedFocusArea = focusArea ?? "unknown";
+
+  return `sg_light:practice_focus_entry:${surface}:${resolvedMission}:${resolvedEntryPoint}:${resolvedFocusArea}`;
+}
+
 export type SgLightTrendViewedPayload = {
   surface: SgLightSurface;
   platform: "mobile" | "web";

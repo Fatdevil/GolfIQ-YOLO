@@ -37,9 +37,11 @@ import {
 } from '@app/storage/practiceMissionHistory';
 import { loadWeeklyPracticeGoalSettings } from '@app/storage/practiceGoalSettings';
 import { safeEmit } from '@app/telemetry';
+import { useTrackOncePerKey } from '@app/hooks/useTrackOncePerKey';
 import { buildMissionProgressById, type PracticeMissionHistoryEntry } from '@shared/practice/practiceHistory';
 import {
   buildSgLightPracticeCtaClickTelemetry,
+  buildSgLightPracticeFocusEntryImpressionDedupeKey,
   buildSgLightPracticeFocusEntryShownTelemetry,
 } from '@shared/sgLight/analytics';
 import { useGeolocation } from '@app/hooks/useGeolocation';
@@ -372,6 +374,28 @@ export default function HomeDashboardScreen({ navigation }: Props): JSX.Element 
     [userIdForExperiments],
   );
 
+  const practiceFocusEntryTelemetry = useMemo(() => {
+    if (!sgLightFocus) return null;
+    return buildSgLightPracticeFocusEntryShownTelemetry({
+      surface: 'mobile_home_sg_light_focus',
+      focusCategory: sgLightFocus.focusCategory,
+    });
+  }, [sgLightFocus]);
+
+  const practiceFocusEntryDedupeKey = useMemo(() => {
+    if (!sgLightFocus) return null;
+    return buildSgLightPracticeFocusEntryImpressionDedupeKey({
+      surface: 'mobile_home_sg_light_focus',
+      missionId: 'sg_light_focus',
+      entryPoint: 'sg_light_focus_card',
+      focusArea: sgLightFocus.focusCategory,
+    });
+  }, [sgLightFocus]);
+
+  const { fire: trackPracticeFocusEntryOnce } = useTrackOncePerKey(
+    practiceFocusEntryDedupeKey,
+  );
+
   const shouldRenderWeeklyGoalNudge = useMemo(
     () => isInExperiment('weekly_goal_nudge', userIdForExperiments) && weeklyGoalNudge.shouldShow,
     [userIdForExperiments, weeklyGoalNudge.shouldShow],
@@ -384,13 +408,15 @@ export default function HomeDashboardScreen({ navigation }: Props): JSX.Element 
   }, [practiceGoalStreak.currentStreakWeeks, t]);
 
   useEffect(() => {
-    if (!sgLightFocus) return;
-    const { eventName, payload } = buildSgLightPracticeFocusEntryShownTelemetry({
-      surface: 'mobile_home_sg_light_focus',
-      focusCategory: sgLightFocus.focusCategory,
+    if (!practiceFocusEntryTelemetry) return;
+
+    trackPracticeFocusEntryOnce(() => {
+      safeEmit(
+        practiceFocusEntryTelemetry.eventName,
+        practiceFocusEntryTelemetry.payload,
+      );
     });
-    safeEmit(eventName, payload);
-  }, [sgLightFocus]);
+  }, [practiceFocusEntryTelemetry, trackPracticeFocusEntryOnce]);
 
   const practiceGoalCopy = useMemo(() => {
     const summary = practiceGoalProgress

@@ -7,11 +7,17 @@ import {
   trackPracticeMissionRecommendationClicked,
   trackPracticeMissionRecommendationShown,
 } from "@/practice/analytics";
+import { postTelemetryEvent } from "@/api";
+import { useTrackOncePerKey } from "@/hooks/useTrackOncePerKey";
 import type {
   StrokesGainedLightCategory,
   StrokesGainedLightSummary,
   StrokesGainedLightTrend,
 } from "@shared/stats/strokesGainedLight";
+import {
+  buildSgLightPracticeFocusEntryImpressionDedupeKey,
+  buildSgLightPracticeFocusEntryShownTelemetry,
+} from "@shared/sgLight/analytics";
 
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({
@@ -90,6 +96,57 @@ describe("SgLightInsightsSectionWeb", () => {
 
     expect(trackPracticeMissionRecommendationShown).toHaveBeenCalledTimes(2);
     expect(trackPracticeMissionRecommendationClicked).not.toHaveBeenCalled();
+  });
+
+  it("dedupes practice focus entry impressions across rerenders", async () => {
+    const TestComponent = ({
+      focusCategory,
+    }: {
+      focusCategory: Parameters<typeof buildSgLightPracticeFocusEntryShownTelemetry>[0]["focusCategory"];
+    }) => {
+      const telemetry = React.useMemo(
+        () =>
+          buildSgLightPracticeFocusEntryShownTelemetry({
+            surface: "web_stats_sg_light_trend",
+            focusCategory,
+          }),
+        [focusCategory],
+      );
+
+      const dedupeKey = React.useMemo(
+        () =>
+          buildSgLightPracticeFocusEntryImpressionDedupeKey({
+            surface: "web_stats_sg_light_trend",
+            missionId: "sg_light_focus",
+            entryPoint: "sg_light_focus_card",
+            focusArea: focusCategory,
+          }),
+        [focusCategory],
+      );
+
+      const { fire } = useTrackOncePerKey(dedupeKey);
+
+      React.useEffect(() => {
+        fire(() =>
+          postTelemetryEvent({
+            event: telemetry.eventName,
+            ...telemetry.payload,
+          }),
+        );
+      }, [fire, telemetry]);
+
+      return null;
+    };
+
+    const { rerender } = render(<TestComponent focusCategory="tee" />);
+
+    await waitFor(() => expect(postTelemetryEvent).toHaveBeenCalledTimes(1));
+
+    rerender(<TestComponent focusCategory="tee" />);
+    expect(postTelemetryEvent).toHaveBeenCalledTimes(1);
+
+    rerender(<TestComponent focusCategory="approach" />);
+    expect(postTelemetryEvent).toHaveBeenCalledTimes(2);
   });
 
   it("hides SG Light insights and tracking when the flag is disabled", () => {
