@@ -14,10 +14,11 @@ import {
 } from "@shared/sgLight/analytics";
 
 import { formatSgDelta, labelForSgLightCategory, mapSgLightCategoryToFocusArea } from "./sgLightWebUtils";
-import { trackPracticeMissionRecommendationClicked, trackPracticeMissionRecommendationShown } from "@/practice/analytics";
+import { trackPracticeMissionRecommendationShown } from "@/practice/analytics";
 import { SgLightExplainer } from "./SgLightExplainer";
 import type { SgLightExplainerSurface } from "./analytics";
 import { useTrackOncePerKey } from "@/hooks/useTrackOncePerKey";
+import { trackSgLightPracticeCtaClickedWeb } from "./analytics";
 
 type Props = {
   rounds?: Array<StrokesGainedLightSummary & { roundId?: string; playedAt?: string }>;
@@ -100,7 +101,7 @@ export function SgLightTrendCardWeb({
       origin: practiceSurface,
       strokesGainedLightFocusCategory: focusCategory,
     });
-    trackPracticeMissionRecommendationClicked(payload);
+    trackSgLightPracticeCtaClickedWeb(payload);
   };
 
   return (

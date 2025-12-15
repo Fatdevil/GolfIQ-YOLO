@@ -11,8 +11,9 @@ import type {
   StrokesGainedLightTrend,
 } from '@shared/stats/strokesGainedLight';
 import {
-  buildSgLightExplainerOpenedPayload,
-  SG_LIGHT_EXPLAINER_OPENED_EVENT,
+  buildSgLightExplainerOpenTelemetry,
+  buildSgLightPracticeCtaClickTelemetry,
+  buildSgLightPracticeFocusEntryShownTelemetry,
   buildSgLightSummaryViewedPayload,
   buildSgLightImpressionKey,
   type SgLightSurface,
@@ -133,8 +134,8 @@ export function SgLightInsightsSection({
   }, [onPressPractice, onTrackPracticeCta]);
 
   const openExplainer = useCallback(() => {
-    const payload = buildSgLightExplainerOpenedPayload({ surface, contextId });
-    safeEmit(SG_LIGHT_EXPLAINER_OPENED_EVENT, payload);
+    const { eventName, payload } = buildSgLightExplainerOpenTelemetry({ surface, contextId });
+    safeEmit(eventName, payload);
     setExplainerVisible(true);
   }, [contextId, surface]);
 

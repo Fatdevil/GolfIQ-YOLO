@@ -1,7 +1,8 @@
-import type {
-  PracticeMissionRecommendationClickedEvent,
-  PracticeMissionRecommendationReason,
-  PracticeMissionRecommendationSurface,
+import {
+  buildPracticeMissionRecommendationClickedEvent,
+  type PracticeMissionRecommendationClickedEvent,
+  type PracticeMissionRecommendationReason,
+  type PracticeMissionRecommendationSurface,
 } from "@shared/practice/practiceRecommendationsAnalytics";
 import type {
   StrokesGainedLightCategory,
@@ -88,6 +89,19 @@ export function buildSgLightExplainerOpenedPayload({
 
 export const buildSgLightExplainerPayload = buildSgLightExplainerOpenedPayload;
 
+export function buildSgLightExplainerOpenTelemetry({
+  surface,
+  contextId,
+}: {
+  surface: SgLightSurface;
+  contextId?: string | null;
+}): { eventName: typeof SG_LIGHT_EXPLAINER_OPENED_EVENT; payload: ReturnType<typeof buildSgLightExplainerOpenedPayload> } {
+  return {
+    eventName: SG_LIGHT_EXPLAINER_OPENED_EVENT,
+    payload: buildSgLightExplainerOpenedPayload({ surface, contextId }),
+  };
+}
+
 export type SgLightPracticeCtaSurface = SgLightAnalyticsSurface | PracticeMissionRecommendationSurface;
 
 export type SgLightPracticeCtaFocusPayload = {
@@ -111,6 +125,46 @@ export function buildSgLightPracticeCtaClickedPayload(
   return Object.fromEntries(
     Object.entries(payload).filter(([, value]) => value !== undefined),
   ) as SgLightPracticeCtaClickedPayload;
+}
+
+export function buildSgLightPracticeCtaClickTelemetry(
+  payload: SgLightPracticeCtaClickedPayload,
+):
+  | {
+      eventName: typeof SG_LIGHT_PRACTICE_FOCUS_ENTRY_CLICKED_EVENT;
+      payload: SgLightPracticeCtaFocusPayload;
+    }
+  | {
+      eventName: typeof SG_LIGHT_PRACTICE_RECOMMENDATION_CLICKED_EVENT;
+      payload: PracticeMissionRecommendationClickedEvent;
+    } {
+  if ("missionId" in payload) {
+    return {
+      eventName: SG_LIGHT_PRACTICE_RECOMMENDATION_CLICKED_EVENT,
+      payload: buildPracticeMissionRecommendationClickedEvent(payload),
+    };
+  }
+
+  return {
+    eventName: SG_LIGHT_PRACTICE_FOCUS_ENTRY_CLICKED_EVENT,
+    payload: buildSgLightPracticeCtaClickedPayload(payload),
+  };
+}
+
+export function buildSgLightPracticeFocusEntryShownTelemetry({
+  surface,
+  focusCategory,
+}: {
+  surface: string;
+  focusCategory: StrokesGainedLightCategory;
+}): {
+  eventName: typeof SG_LIGHT_PRACTICE_FOCUS_ENTRY_SHOWN_EVENT;
+  payload: { surface: string; focusCategory: StrokesGainedLightCategory };
+} {
+  return {
+    eventName: SG_LIGHT_PRACTICE_FOCUS_ENTRY_SHOWN_EVENT,
+    payload: { surface, focusCategory },
+  };
 }
 
 export type SgLightTrendViewedPayload = {
