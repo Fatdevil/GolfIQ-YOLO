@@ -4,10 +4,14 @@ import {
   buildSgLightExplainerOpenedPayload,
   buildSgLightImpressionKey,
   buildSgLightPracticeCtaClickedPayload,
+  buildSgLightSummaryImpressionTelemetry,
   buildSgLightSummaryViewedPayload,
+  buildSgLightTrendImpressionTelemetry,
   SG_LIGHT_EXPLAINER_OPENED_EVENT,
   SG_LIGHT_PRACTICE_FOCUS_ENTRY_SHOWN_EVENT,
   SG_LIGHT_PRACTICE_RECOMMENDATION_CLICKED_EVENT,
+  SG_LIGHT_SUMMARY_VIEWED_EVENT,
+  SG_LIGHT_TREND_VIEWED_EVENT,
 } from "@shared/sgLight/analytics";
 
 describe("sg light analytics contract", () => {
@@ -28,6 +32,15 @@ describe("sg light analytics contract", () => {
     ).toEqual({ impressionKey: "sg_light:round_recap:round-123:summary" });
   });
 
+  it("pairs summary impression telemetry with the locked event name", () => {
+    expect(
+      buildSgLightSummaryImpressionTelemetry({ surface: "round_recap", contextId: "round-123" }),
+    ).toEqual({
+      eventName: SG_LIGHT_SUMMARY_VIEWED_EVENT,
+      payload: { impressionKey: "sg_light:round_recap:round-123:summary" },
+    });
+  });
+
   it("builds round story trend keys with and without focus", () => {
     expect(
       buildSgLightImpressionKey({
@@ -45,6 +58,38 @@ describe("sg light analytics contract", () => {
         focusCategory: "tee",
       }),
     ).toBe("sg_light:round_story:story-456:trend:tee");
+  });
+
+  it("pairs trend impression telemetry with the locked event name", () => {
+    expect(
+      buildSgLightTrendImpressionTelemetry({
+        surface: "round_story",
+        platform: "web",
+        roundId: "story-456",
+        trend: {
+          windowSize: 5,
+          perCategory: {
+            tee: { avgDelta: 0.1, rounds: 5 },
+            approach: { avgDelta: 0.2, rounds: 5 },
+            short_game: { avgDelta: -0.1, rounds: 5 },
+            putting: { avgDelta: 0.0, rounds: 5 },
+          },
+          focusHistory: [
+            { focusCategory: "tee", roundId: "story-456", playedAt: "2024-01-01" },
+          ],
+        },
+        focusCategory: "tee",
+      }),
+    ).toEqual({
+      eventName: SG_LIGHT_TREND_VIEWED_EVENT,
+      payload: {
+        surface: "round_story",
+        platform: "web",
+        roundId: "story-456",
+        windowSize: 5,
+        focusCategory: "tee",
+      },
+    });
   });
 
   it("locks explainer payloads", () => {

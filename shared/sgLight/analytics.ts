@@ -9,6 +9,7 @@ import type {
 } from "@shared/stats/strokesGainedLight";
 
 export const SG_LIGHT_EXPLAINER_OPENED_EVENT = "sg_light_explainer_opened" as const;
+export const SG_LIGHT_SUMMARY_VIEWED_EVENT = "sg_light_summary_viewed" as const;
 export const SG_LIGHT_PRACTICE_FOCUS_ENTRY_CLICKED_EVENT = "practice_focus_entry_clicked" as const;
 export const SG_LIGHT_PRACTICE_FOCUS_ENTRY_SHOWN_EVENT = "practice_focus_entry_shown" as const;
 export const SG_LIGHT_PRACTICE_RECOMMENDATION_CLICKED_EVENT = "practice_mission_recommendation_clicked" as const;
@@ -43,6 +44,15 @@ export function buildSgLightSummaryViewedPayload(
       ...context,
       cardType: "summary",
     }),
+  };
+}
+
+export function buildSgLightSummaryImpressionTelemetry(
+  context: SgLightAnalyticsContext,
+): { eventName: typeof SG_LIGHT_SUMMARY_VIEWED_EVENT; payload: { impressionKey: string } } {
+  return {
+    eventName: SG_LIGHT_SUMMARY_VIEWED_EVENT,
+    payload: buildSgLightSummaryViewedPayload(context),
   };
 }
 
@@ -130,5 +140,30 @@ export function buildSgLightTrendViewedPayload({
     roundId,
     windowSize: trend.windowSize,
     focusCategory,
+  };
+}
+
+export function buildSgLightTrendImpressionTelemetry({
+  surface,
+  platform,
+  roundId,
+  trend,
+  focusCategory,
+}: {
+  surface: SgLightSurface;
+  platform: "mobile" | "web";
+  roundId?: string | null;
+  trend: StrokesGainedLightTrend;
+  focusCategory: SgLightTrendViewedPayload["focusCategory"];
+}): { eventName: typeof SG_LIGHT_TREND_VIEWED_EVENT; payload: SgLightTrendViewedPayload } {
+  return {
+    eventName: SG_LIGHT_TREND_VIEWED_EVENT,
+    payload: buildSgLightTrendViewedPayload({
+      surface,
+      platform,
+      roundId,
+      trend,
+      focusCategory,
+    }),
   };
 }
