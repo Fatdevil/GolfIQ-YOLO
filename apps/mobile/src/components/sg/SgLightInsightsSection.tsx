@@ -14,7 +14,8 @@ import {
   buildSgLightExplainerOpenTelemetry,
   buildSgLightPracticeCtaClickTelemetry,
   buildSgLightPracticeFocusEntryShownTelemetry,
-  buildSgLightSummaryViewedPayload,
+  buildSgLightSummaryImpressionTelemetry,
+  buildSgLightTrendImpressionTelemetry,
   buildSgLightImpressionKey,
   type SgLightSurface,
 } from '@shared/sgLight/analytics';
@@ -101,32 +102,76 @@ export function SgLightInsightsSection({
   const [explainerVisible, setExplainerVisible] = useState(false);
 
   const trendFocusCategory = trend?.focusHistory?.[0]?.focusCategory ?? null;
-  const summaryKey = summary
-    ? buildSgLightSummaryViewedPayload({
+  const summaryImpressionTelemetry = useMemo(
+    () =>
+      summary
+        ? buildSgLightSummaryImpressionTelemetry({
+            surface,
+            contextId,
+          })
+        : null,
+    [contextId, surface, summary],
+  );
+  const trendImpressionKey = useMemo(
+    () =>
+      trendFocusCategory
+        ? buildSgLightImpressionKey({
+            surface,
+            contextId,
+            cardType: 'trend',
+            focusCategory: trendFocusCategory,
+          })
+        : null,
+    [contextId, surface, trendFocusCategory],
+  );
+  const { fire: fireSummaryImpression } = useTrackOncePerKey(
+    summaryImpressionTelemetry?.payload.impressionKey,
+  );
+  const { fire: fireTrendImpression } = useTrackOncePerKey(trendImpressionKey);
+
+  useEffect(() => {
+    if (!sgLightEnabled || !summaryImpressionTelemetry || !summary) return;
+    fireSummaryImpression(() => {
+      if (onTrackSummaryImpression) {
+        onTrackSummaryImpression(summary);
+        return;
+      }
+
+      safeEmit(
+        summaryImpressionTelemetry.eventName,
+        summaryImpressionTelemetry.payload,
+      );
+    });
+  }, [fireSummaryImpression, onTrackSummaryImpression, sgLightEnabled, summary, summaryImpressionTelemetry]);
+
+  useEffect(() => {
+    if (!sgLightEnabled || !trend || !trendFocusCategory || !trendImpressionKey) return;
+    fireTrendImpression(() => {
+      if (onTrackTrendImpression) {
+        onTrackTrendImpression(trendFocusCategory, trend);
+        return;
+      }
+
+      const { eventName, payload } = buildSgLightTrendImpressionTelemetry({
         surface,
-        contextId,
-      }).impressionKey
-    : null;
-  const trendKey = trendFocusCategory
-    ? buildSgLightImpressionKey({
-        surface,
-        contextId,
-        cardType: 'trend',
+        platform: 'mobile',
+        roundId: contextId,
+        trend,
         focusCategory: trendFocusCategory,
-      })
-    : null;
-  const { fire: fireSummaryImpression } = useTrackOncePerKey(summaryKey);
-  const { fire: fireTrendImpression } = useTrackOncePerKey(trendKey);
+      });
 
-  useEffect(() => {
-    if (!sgLightEnabled || !summary || !onTrackSummaryImpression) return;
-    fireSummaryImpression(() => onTrackSummaryImpression(summary));
-  }, [fireSummaryImpression, onTrackSummaryImpression, sgLightEnabled, summary]);
-
-  useEffect(() => {
-    if (!sgLightEnabled || !trend || !trendFocusCategory || !onTrackTrendImpression) return;
-    fireTrendImpression(() => onTrackTrendImpression(trendFocusCategory, trend));
-  }, [fireTrendImpression, onTrackTrendImpression, sgLightEnabled, trend, trendFocusCategory]);
+      safeEmit(eventName, payload);
+    });
+  }, [
+    contextId,
+    fireTrendImpression,
+    onTrackTrendImpression,
+    sgLightEnabled,
+    surface,
+    trend,
+    trendFocusCategory,
+    trendImpressionKey,
+  ]);
 
   const handlePressPractice = useCallback(() => {
     onTrackPracticeCta?.();

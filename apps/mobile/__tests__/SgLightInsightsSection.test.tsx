@@ -101,6 +101,58 @@ describe('SgLightInsightsSection', () => {
     });
   });
 
+  it('emits sg light impressions once per impression key by default', async () => {
+    const { rerender } = render(
+      <SgLightInsightsSection
+        surface="player_stats"
+        contextId="ctx-1"
+        summary={summary}
+        trend={trend}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(safeEmit).toHaveBeenCalledWith('sg_light_summary_viewed', {
+        impressionKey: 'sg_light:player_stats:ctx-1:summary',
+      });
+      expect(safeEmit).toHaveBeenCalledWith('sg_light_trend_viewed', {
+        surface: 'player_stats',
+        platform: 'mobile',
+        roundId: 'ctx-1',
+        windowSize: 5,
+        focusCategory: 'tee',
+      });
+    });
+
+    rerender(
+      <SgLightInsightsSection
+        surface="player_stats"
+        contextId="ctx-1"
+        summary={summary}
+        trend={trend}
+      />,
+    );
+
+    await waitFor(() => expect(safeEmit).toHaveBeenCalledTimes(2));
+
+    rerender(
+      <SgLightInsightsSection
+        surface="player_stats"
+        contextId="ctx-2"
+        summary={summary}
+        trend={{ ...trend, focusHistory: [{ ...trend.focusHistory[0], roundId: 'ctx-2' }] }}
+      />,
+    );
+
+    await waitFor(() => {
+      const summaryCalls = vi.mocked(safeEmit).mock.calls.filter(([event]) => event === 'sg_light_summary_viewed');
+      const trendCalls = vi.mocked(safeEmit).mock.calls.filter(([event]) => event === 'sg_light_trend_viewed');
+
+      expect(summaryCalls).toHaveLength(2);
+      expect(trendCalls).toHaveLength(2);
+    });
+  });
+
   it('does not render or track when the feature flag is disabled', () => {
     process.env.EXPO_PUBLIC_FEATURE_SG_LIGHT = '0';
 
