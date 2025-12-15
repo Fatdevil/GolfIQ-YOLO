@@ -3,10 +3,14 @@ import {
   buildSgLightExplainerOpenedPayload,
   buildSgLightImpressionKey,
   buildSgLightPracticeCtaClickedPayload,
+  buildSgLightSummaryImpressionTelemetry,
   buildSgLightSummaryViewedPayload,
+  buildSgLightTrendImpressionTelemetry,
   SG_LIGHT_EXPLAINER_OPENED_EVENT,
   SG_LIGHT_PRACTICE_FOCUS_ENTRY_CLICKED_EVENT,
   SG_LIGHT_PRACTICE_FOCUS_ENTRY_SHOWN_EVENT,
+  SG_LIGHT_SUMMARY_VIEWED_EVENT,
+  SG_LIGHT_TREND_VIEWED_EVENT,
 } from '@shared/sgLight/analytics';
 
 describe('sg light analytics contract (mobile)', () => {
@@ -24,6 +28,15 @@ describe('sg light analytics contract (mobile)', () => {
     ).toEqual({ impressionKey: 'sg_light:round_recap:round-abc:summary' });
   });
 
+  it('pairs summary impression telemetry with the locked event name', () => {
+    expect(
+      buildSgLightSummaryImpressionTelemetry({ surface: 'round_recap', contextId: 'round-abc' }),
+    ).toEqual({
+      eventName: SG_LIGHT_SUMMARY_VIEWED_EVENT,
+      payload: { impressionKey: 'sg_light:round_recap:round-abc:summary' },
+    });
+  });
+
   it('builds trend keys with focus category for round story', () => {
     expect(
       buildSgLightImpressionKey({
@@ -33,6 +46,38 @@ describe('sg light analytics contract (mobile)', () => {
         focusCategory: 'approach',
       }),
     ).toBe('sg_light:round_story:round-def:trend:approach');
+  });
+
+  it('pairs trend impression telemetry with the locked event name', () => {
+    expect(
+      buildSgLightTrendImpressionTelemetry({
+        surface: 'round_story',
+        platform: 'mobile',
+        roundId: 'round-def',
+        trend: {
+          windowSize: 4,
+          perCategory: {
+            tee: { avgDelta: 0.1, rounds: 4 },
+            approach: { avgDelta: -0.2, rounds: 4 },
+            short_game: { avgDelta: 0.0, rounds: 4 },
+            putting: { avgDelta: 0.05, rounds: 4 },
+          },
+          focusHistory: [
+            { focusCategory: 'approach', roundId: 'round-def', playedAt: '2024-01-01' },
+          ],
+        },
+        focusCategory: 'approach',
+      }),
+    ).toEqual({
+      eventName: SG_LIGHT_TREND_VIEWED_EVENT,
+      payload: {
+        surface: 'round_story',
+        platform: 'mobile',
+        roundId: 'round-def',
+        windowSize: 4,
+        focusCategory: 'approach',
+      },
+    });
   });
 
   it('locks explainer payloads for recap and stats surfaces', () => {
