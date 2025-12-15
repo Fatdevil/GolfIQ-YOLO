@@ -8,11 +8,13 @@ import { t } from '@app/i18n';
 import type { RootStackParamList } from '@app/navigation/types';
 import { computePlayerStats } from '@app/stats/playerStatsEngine';
 import { safeEmit } from '@app/telemetry';
+import { useTrackOncePerKey } from '@app/hooks/useTrackOncePerKey';
 import { buildStrokesGainedLightTrend, type StrokesGainedLightTrend } from '@shared/stats/strokesGainedLight';
 import { SgLightInsightsSection } from '@app/components/sg/SgLightInsightsSection';
 import { isSgLightInsightsEnabled } from '@shared/featureFlags/sgLightInsights';
 import {
   buildSgLightPracticeCtaClickTelemetry,
+  buildSgLightPracticeFocusEntryImpressionDedupeKey,
   buildSgLightPracticeFocusEntryShownTelemetry,
 } from '@shared/sgLight/analytics';
 
@@ -160,18 +162,42 @@ export default function PlayerStatsScreen({ navigation }: Props): JSX.Element {
   const stats = useMemo(() => computePlayerStats(summaries), [summaries]);
   const hasRounds = stats.roundsPlayed > 0;
   const sgLightFocusCategory = sgLightTrend?.focusHistory?.[0]?.focusCategory ?? null;
+  const practiceFocusEntryTelemetry = useMemo(() => {
+    if (!sgLightFocusCategory) return null;
+    return buildSgLightPracticeFocusEntryShownTelemetry({
+      surface: 'mobile_stats_sg_light_trend',
+      focusCategory: sgLightFocusCategory,
+    });
+  }, [sgLightFocusCategory]);
+
+  const practiceFocusEntryDedupeKey = useMemo(() => {
+    if (!sgLightFocusCategory) return null;
+    return buildSgLightPracticeFocusEntryImpressionDedupeKey({
+      surface: 'mobile_stats_sg_light_trend',
+      missionId: 'sg_light_focus',
+      entryPoint: 'sg_light_focus_card',
+      focusArea: sgLightFocusCategory,
+    });
+  }, [sgLightFocusCategory]);
+
+  const { fire: trackPracticeFocusEntryOnce } = useTrackOncePerKey(
+    practiceFocusEntryDedupeKey,
+  );
   const trackPracticeFocusShown = useCallback(
     (
       focusCategory: StrokesGainedLightTrend['focusHistory'][number]['focusCategory'],
       _trend: StrokesGainedLightTrend,
     ) => {
-      const { eventName, payload } = buildSgLightPracticeFocusEntryShownTelemetry({
-        surface: 'mobile_stats_sg_light_trend',
-        focusCategory,
+      if (!practiceFocusEntryTelemetry) return;
+
+      trackPracticeFocusEntryOnce(() => {
+        safeEmit(
+          practiceFocusEntryTelemetry.eventName,
+          practiceFocusEntryTelemetry.payload,
+        );
       });
-      safeEmit(eventName, payload);
     },
-    [],
+    [practiceFocusEntryTelemetry, trackPracticeFocusEntryOnce],
   );
 
   const handlePracticeFromSgLight = useCallback(() => {

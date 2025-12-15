@@ -6,10 +6,13 @@ import { fetchRoundRecap, listRoundSummaries } from '@app/api/roundClient';
 import { fetchPlayerCategoryStats } from '@app/api/statsClient';
 import PlayerStatsScreen from '@app/screens/PlayerStatsScreen';
 import { safeEmit } from '@app/telemetry';
+import { useTrackOncePerKey } from '@app/hooks/useTrackOncePerKey';
 import {
   SG_LIGHT_EXPLAINER_OPENED_EVENT,
   SG_LIGHT_PRACTICE_FOCUS_ENTRY_CLICKED_EVENT,
   SG_LIGHT_PRACTICE_FOCUS_ENTRY_SHOWN_EVENT,
+  buildSgLightPracticeFocusEntryImpressionDedupeKey,
+  buildSgLightPracticeFocusEntryShownTelemetry,
 } from '@shared/sgLight/analytics';
 
 vi.mock('@app/api/roundClient');
@@ -200,6 +203,52 @@ describe('PlayerStatsScreen', () => {
       focusCategory: 'tee',
       surface: 'mobile_stats_sg_light_trend',
     });
+  });
+
+  it('dedupes practice focus entry impressions across rerenders', async () => {
+    const TestComponent = ({
+      focusCategory,
+    }: {
+      focusCategory: Parameters<typeof buildSgLightPracticeFocusEntryShownTelemetry>[0]['focusCategory'];
+    }) => {
+      const telemetry = React.useMemo(
+        () =>
+          buildSgLightPracticeFocusEntryShownTelemetry({
+            surface: 'mobile_stats_sg_light_trend',
+            focusCategory,
+          }),
+        [focusCategory],
+      );
+
+      const dedupeKey = React.useMemo(
+        () =>
+          buildSgLightPracticeFocusEntryImpressionDedupeKey({
+            surface: 'mobile_stats_sg_light_trend',
+            missionId: 'sg_light_focus',
+            entryPoint: 'sg_light_focus_card',
+            focusArea: focusCategory,
+          }),
+        [focusCategory],
+      );
+
+      const { fire } = useTrackOncePerKey(dedupeKey);
+
+      React.useEffect(() => {
+        fire(() => safeEmit(telemetry.eventName, telemetry.payload));
+      }, [fire, telemetry]);
+
+      return null;
+    };
+
+    const { rerender } = render(<TestComponent focusCategory="tee" />);
+
+    await waitFor(() => expect(mockSafeEmit).toHaveBeenCalledTimes(1));
+
+    rerender(<TestComponent focusCategory="tee" />);
+    expect(mockSafeEmit).toHaveBeenCalledTimes(1);
+
+    rerender(<TestComponent focusCategory="approach" />);
+    expect(mockSafeEmit).toHaveBeenCalledTimes(2);
   });
 
   it('skips SG Light recap fetches when the feature flag is disabled', async () => {
