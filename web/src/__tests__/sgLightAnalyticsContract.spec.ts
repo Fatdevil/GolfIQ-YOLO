@@ -4,6 +4,7 @@ import {
   buildSgLightExplainerOpenedPayload,
   buildSgLightImpressionKey,
   buildSgLightPracticeCtaClickedPayload,
+  buildSgLightSummaryViewedPayload,
   SG_LIGHT_EXPLAINER_OPENED_EVENT,
   SG_LIGHT_PRACTICE_FOCUS_ENTRY_SHOWN_EVENT,
   SG_LIGHT_PRACTICE_RECOMMENDATION_CLICKED_EVENT,
@@ -18,6 +19,13 @@ describe("sg light analytics contract", () => {
         cardType: "summary",
       }),
     ).toBe("sg_light:round_recap:round-123:summary");
+
+    expect(
+      buildSgLightSummaryViewedPayload({
+        surface: "round_recap",
+        contextId: "round-123",
+      }),
+    ).toEqual({ impressionKey: "sg_light:round_recap:round-123:summary" });
   });
 
   it("builds round story trend keys with and without focus", () => {

@@ -35,6 +35,17 @@ export type SgLightAnalyticsContext = {
   focusCategory?: StrokesGainedLightCategory | null;
 };
 
+export function buildSgLightSummaryViewedPayload(
+  context: SgLightAnalyticsContext,
+): { impressionKey: string } {
+  return {
+    impressionKey: buildSgLightImpressionKey({
+      ...context,
+      cardType: "summary",
+    }),
+  };
+}
+
 export function buildSgLightImpressionKey({
   surface,
   contextId,
