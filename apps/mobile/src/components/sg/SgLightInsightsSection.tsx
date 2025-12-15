@@ -130,7 +130,7 @@ export function SgLightInsightsSection({
   const { fire: fireTrendImpression } = useTrackOncePerKey(trendImpressionKey);
 
   useEffect(() => {
-    if (!sgLightEnabled || !summaryImpressionTelemetry) return;
+    if (!sgLightEnabled || !summaryImpressionTelemetry || !summary) return;
     fireSummaryImpression(() => {
       if (onTrackSummaryImpression) {
         onTrackSummaryImpression(summary);
