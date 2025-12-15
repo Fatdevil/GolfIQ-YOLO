@@ -2,6 +2,8 @@ import { postTelemetryEvent } from "@/api";
 import {
   buildSgLightExplainerOpenTelemetry,
   buildSgLightPracticeCtaClickTelemetry,
+  buildSgLightSummaryImpressionTelemetry,
+  buildSgLightTrendImpressionTelemetry,
   SG_LIGHT_EXPLAINER_OPENED_EVENT,
   type SgLightPracticeCtaClickedPayload,
   type SgLightSurface,
@@ -33,6 +35,38 @@ export function trackSgLightPracticeCtaClickedWeb(payload: SgLightPracticeCtaCli
     if (import.meta.env.DEV) {
       // eslint-disable-next-line no-console
       console.warn("[sg_light] failed to emit practice CTA click", error);
+    }
+  });
+}
+
+export function trackSgLightSummaryImpressionWeb(
+  telemetry: ReturnType<typeof buildSgLightSummaryImpressionTelemetry>,
+): void {
+  const { eventName, payload } = telemetry;
+
+  void postTelemetryEvent({
+    event: eventName,
+    ...payload,
+  }).catch((error) => {
+    if (import.meta.env.DEV) {
+      // eslint-disable-next-line no-console
+      console.warn("[sg_light] failed to emit summary impression", error);
+    }
+  });
+}
+
+export function trackSgLightTrendImpressionWeb(
+  telemetry: ReturnType<typeof buildSgLightTrendImpressionTelemetry>,
+): void {
+  const { eventName, payload } = telemetry;
+
+  void postTelemetryEvent({
+    event: eventName,
+    ...payload,
+  }).catch((error) => {
+    if (import.meta.env.DEV) {
+      // eslint-disable-next-line no-console
+      console.warn("[sg_light] failed to emit trend impression", error);
     }
   });
 }

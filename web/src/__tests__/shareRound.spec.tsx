@@ -15,6 +15,8 @@ vi.mock("@/practice/analytics", () => ({
 
 vi.mock("@/sg/analytics", () => ({
   trackSgLightPracticeCtaClickedWeb: vi.fn(),
+  trackSgLightSummaryImpressionWeb: vi.fn(),
+  trackSgLightTrendImpressionWeb: vi.fn(),
 }));
 
 const mockShown = vi.mocked(trackPracticeMissionRecommendationShown);
