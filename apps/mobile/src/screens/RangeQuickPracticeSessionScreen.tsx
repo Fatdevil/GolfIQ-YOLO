@@ -14,6 +14,7 @@ import { loadCurrentTrainingGoal } from '@app/range/rangeTrainingGoalStorage';
 import { loadRangeHistory } from '@app/range/rangeHistoryStorage';
 import { t } from '@app/i18n';
 import { recordPracticeMissionOutcome } from '@app/storage/practiceMissionHistory';
+import { appendPracticeSessionResultEntry } from '@app/storage/practiceSessionResults';
 import {
   isTempoTrainerAvailable,
   sendTempoTrainerActivation,
@@ -260,12 +261,12 @@ export default function RangeQuickPracticeSessionScreen({ navigation, route }: P
 
     const summary = buildSummary(sessionState, goal?.text ?? undefined, missionMeta);
 
-    if (!isMissionSession) {
-      const startedAtMs = sessionStartedAtRef.current ? Date.parse(sessionStartedAtRef.current) : NaN;
-      const durationSeconds = Number.isFinite(startedAtMs)
-        ? Math.max(0, Math.round((Date.now() - startedAtMs) / 1000))
-        : undefined;
+    const startedAtMs = sessionStartedAtRef.current ? Date.parse(sessionStartedAtRef.current) : NaN;
+    const durationSeconds = Number.isFinite(startedAtMs)
+      ? Math.max(0, Math.round((Date.now() - startedAtMs) / 1000))
+      : undefined;
 
+    if (!isMissionSession) {
       logQuickPracticeSessionComplete({
         surface: 'mobile',
         entrySource,
@@ -296,6 +297,22 @@ export default function RangeQuickPracticeSessionScreen({ navigation, route }: P
           await recordPracticeMissionOutcome(missionOutcome, {
             source: 'quick_practice',
             recommendation: practiceRecommendationContext,
+          });
+
+          await appendPracticeSessionResultEntry({
+            missionId: practiceRecommendation.id,
+            completedAt: missionOutcome.endedAt ?? new Date().toISOString(),
+            shotsAttempted: sessionState.shots.length,
+            successRate:
+              practiceRecommendation.targetSampleCount && practiceRecommendation.targetSampleCount > 0
+                ? Math.min(1, totalTargetShots / practiceRecommendation.targetSampleCount)
+                : undefined,
+            durationSec: durationSeconds,
+            context: {
+              recommendationId: practiceRecommendation.id,
+              strokesGainedLightFocusCategory: practiceRecommendationContext?.strokesGainedLightFocusCategory ?? undefined,
+              source: practiceRecommendationContext?.origin ?? undefined,
+            },
           });
         } catch (err) {
           console.warn('[range] Failed to persist practice mission session', err);

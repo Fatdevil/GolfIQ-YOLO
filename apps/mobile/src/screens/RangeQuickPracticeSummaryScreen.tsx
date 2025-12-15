@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -11,6 +11,8 @@ import { buildTempoStory } from '@app/range/tempoStory';
 import { evaluateTempoMissionProgress } from '@app/range/tempoMissionEvaluator';
 import { saveLastRangeSessionSummary } from '@app/range/rangeSummaryStorage';
 import { appendRangeHistoryEntry } from '@app/range/rangeHistoryStorage';
+import { summarizePracticeSessionProgress } from '@app/storage/practiceSessionResults';
+import type { PracticeSessionProgress } from '@shared/practice/practiceSessionResult';
 
 const directionCopy: Record<'left' | 'right' | 'straight', string> = {
   left: 'Left',
@@ -27,6 +29,7 @@ export default function RangeQuickPracticeSummaryScreen({ navigation, route }: P
   const [sessionRating, setSessionRating] = useState<number | undefined>(summary?.sessionRating);
   const [reflectionNotes, setReflectionNotes] = useState(summary?.reflectionNotes ?? '');
   const hasPersistedRef = useRef(false);
+  const [progress, setProgress] = useState<PracticeSessionProgress | null>(null);
 
   const tendencyLabel = useMemo(() => {
     if (!summary?.tendency) return '—';
@@ -123,6 +126,12 @@ export default function RangeQuickPracticeSummaryScreen({ navigation, route }: P
     return t('range.missions.tempo.outside_band', { avg: avgText, lower: lowerText, upper: upperText });
   }, [mission, summary, tempoMissionProgress]);
 
+  useEffect(() => {
+    summarizePracticeSessionProgress()
+      .then(setProgress)
+      .catch((error) => console.warn('[practice] failed to load session progress', error));
+  }, []);
+
   if (!summary) {
     return (
       <View style={styles.container}>
@@ -195,6 +204,19 @@ export default function RangeQuickPracticeSummaryScreen({ navigation, route }: P
             <Text style={styles.helper}>{t(tempoStory.bodyKey as any, tempoStory.params)}</Text>
           </View>
         ) : null}
+      </View>
+
+      <View style={styles.card}>
+        <Text style={styles.sectionTitle}>Practice progress</Text>
+        {progress ? (
+          <>
+            <Text style={styles.helper}>Streak: {progress.consecutiveDays} days</Text>
+            <Text style={styles.helper}>Last 7 days: {progress.lastSevenDays}</Text>
+            <Text style={styles.helper}>Last 14 days: {progress.lastFourteenDays}</Text>
+          </>
+        ) : (
+          <Text style={styles.helper}>No recent practice sessions yet.</Text>
+        )}
       </View>
 
       {story ? (

@@ -25,14 +25,17 @@
     "audit:inventory": "if [ -f tools/inventory_audit.py ]; then python tools/inventory_audit.py; else echo 'tools/inventory_audit.py missing; skipping audit'; fi"
   },
   "dependencies": {
-    "@supabase/supabase-js": "^2.45.0",
     "@octokit/rest": "^20.1.1",
+    "@supabase/supabase-js": "^2.45.0",
     "puppeteer": "^22.15.0"
   },
   "devDependencies": {
+    "@react-native-async-storage/async-storage": "^2.2.0",
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.1",
     "jsdom": "^24.0.0",
-    "tsx": "^4.19.0",
     "ts-node": "^10.9.2",
+    "tsx": "^4.19.0",
     "typescript": "^5.6.2",
     "vitest": "^2.1.4"
   }

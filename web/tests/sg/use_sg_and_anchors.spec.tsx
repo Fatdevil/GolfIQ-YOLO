@@ -71,7 +71,7 @@ describe('useRunSG & useAnchors', () => {
     __testing.clearCache();
     fetchSpy.mockReset();
     mockResponses();
-    global.fetch = fetchSpy;
+    global.fetch = fetchSpy as unknown as typeof fetch;
   });
 
   afterEach(() => {

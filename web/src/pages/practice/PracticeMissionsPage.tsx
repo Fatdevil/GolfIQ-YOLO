@@ -7,6 +7,7 @@ import { mapBagStateToPlayerBag } from "@/bag/utils";
 import { loadBag } from "@/bag/storage";
 import type { BagState } from "@/bag/types";
 import { PRACTICE_MISSION_WINDOW_DAYS, loadPracticeMissionHistory } from "@/practice/practiceMissionHistory";
+import { summarizePracticeSessionProgress } from "@/practice/practiceSessionResults";
 import {
   buildMissionProgressById,
   buildWeeklyPracticeHistory,
@@ -38,6 +39,7 @@ import {
 import { loadWeeklyPracticeGoalSettings } from "@/practice/practiceGoalSettings";
 import { buildPracticeDecisionContext } from "@shared/practice/practiceDecisionContext";
 import { recommendPracticeMissions, type RecommendedMission } from "@shared/practice/recommendPracticeMissions";
+import type { PracticeSessionProgress } from "@shared/practice/practiceSessionResult";
 import type { PracticeRecommendationContext } from "@shared/practice/practiceRecommendationsAnalytics";
 import { getPracticeRecommendationsExperiment } from "@shared/experiments/flags";
 import type { StrokesGainedLightCategory } from "@shared/stats/strokesGainedLight";
@@ -312,6 +314,7 @@ export default function PracticeMissionsPage(): JSX.Element {
   const [bag] = useState<BagState>(() => loadBag());
   const [{ missions, history, loading }, setState] = useState<PageState>({ loading: true, missions: [], history: [] });
   const [weeklyGoalSettings] = useState(loadWeeklyPracticeGoalSettings);
+  const [sessionProgress, setSessionProgress] = useState<PracticeSessionProgress | null>(null);
   const viewedRef = useRef(false);
   const planViewedRef = useRef(false);
   const planCompletedViewedRef = useRef(false);
@@ -351,6 +354,12 @@ export default function PracticeMissionsPage(): JSX.Element {
     () => buildPracticeReadinessSummary({ history, goalSettings: weeklyGoalSettings }),
     [history, weeklyGoalSettings],
   );
+
+  useEffect(() => {
+    summarizePracticeSessionProgress()
+      .then(setSessionProgress)
+      .catch((error) => console.warn('[practice] failed to load session results', error));
+  }, []);
 
   const preselectedFocusArea = preselectedRecommendationContext?.focusArea ?? undefined;
   const preselectedSource =
@@ -671,6 +680,36 @@ export default function PracticeMissionsPage(): JSX.Element {
         <h1 className="text-2xl font-semibold text-slate-50">{t("practice.missions.title")}</h1>
         <p className="text-sm text-slate-400">{t("practice.history.subtitle")}</p>
       </header>
+
+      <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-4" data-testid="practice-progress-card">
+        <div className="flex items-center justify-between">
+          <div>
+            <p className="text-sm font-semibold text-slate-200">Practice progress</p>
+            <p className="text-xs text-slate-400">Recent streak and completions</p>
+          </div>
+          <span className="rounded-full bg-emerald-500/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-emerald-100">
+            {sessionProgress ? `${sessionProgress.consecutiveDays} day streak` : 'No sessions'}
+          </span>
+        </div>
+        {sessionProgress ? (
+          <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-3">
+            <div className="rounded-lg border border-slate-800/80 bg-slate-950/40 p-3">
+              <p className="text-xs text-slate-400">Streak</p>
+              <p className="text-lg font-semibold text-slate-50">{sessionProgress.consecutiveDays} days</p>
+            </div>
+            <div className="rounded-lg border border-slate-800/80 bg-slate-950/40 p-3">
+              <p className="text-xs text-slate-400">Last 7 days</p>
+              <p className="text-lg font-semibold text-slate-50">{sessionProgress.lastSevenDays}</p>
+            </div>
+            <div className="rounded-lg border border-slate-800/80 bg-slate-950/40 p-3">
+              <p className="text-xs text-slate-400">Last 14 days</p>
+              <p className="text-lg font-semibold text-slate-50">{sessionProgress.lastFourteenDays}</p>
+            </div>
+          </div>
+        ) : (
+          <p className="mt-3 text-sm text-slate-400">Complete a mission to start your progress streak.</p>
+        )}
+      </div>
 
       {loading ? (
         <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-4 text-sm text-slate-300" data-testid="practice-missions-loading">
