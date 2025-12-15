@@ -16,6 +16,10 @@ import {
   SG_LIGHT_PRACTICE_RECOMMENDATION_CLICKED_EVENT,
   SG_LIGHT_TREND_VIEWED_EVENT,
 } from '@shared/sgLight/analytics';
+import type {
+  PracticeMissionRecommendationClickedEvent,
+  PracticeMissionRecommendationReason,
+} from '@shared/practice/practiceRecommendationsAnalytics';
 
 describe('sg light analytics contract (mobile)', () => {
   it('builds recap summary keys', () => {
@@ -143,15 +147,16 @@ describe('sg light analytics contract (mobile)', () => {
   });
 
   it('pairs practice CTA click telemetry with the locked event name for recommendations', () => {
-    const payload = {
+    const reason: PracticeMissionRecommendationReason = 'focus_area';
+    const payload: PracticeMissionRecommendationClickedEvent = {
       missionId: 'sg_light_focus',
-      reason: 'focus_area',
+      reason,
       rank: 1,
-      surface: 'web_round_recap' as const,
-      entryPoint: 'sg_light_focus_card' as const,
+      surface: 'web_round_recap',
+      entryPoint: 'sg_light_focus_card',
       focusArea: 'approach_focus',
-      origin: 'web_round_recap' as const,
-      strokesGainedLightFocusCategory: 'approach' as const,
+      origin: 'web_round_recap',
+      strokesGainedLightFocusCategory: 'approach',
     };
 
     expect(buildSgLightPracticeCtaClickTelemetry(payload)).toEqual({
