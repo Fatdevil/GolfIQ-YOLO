@@ -45,7 +45,7 @@ describe('EventSGLeaderboard', () => {
       }
       return Promise.reject(new Error(`unexpected url ${url}`));
     });
-    global.fetch = fetchSpy;
+    global.fetch = fetchSpy as unknown as typeof fetch;
   });
 
   afterEach(() => {

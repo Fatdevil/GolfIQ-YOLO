@@ -1,6 +1,7 @@
 import type { RangeMission } from "@/features/range/missions";
 import type { RangeShot } from "@/range/types";
 import { recordPracticeMissionOutcome } from "@/practice/practiceMissionHistory";
+import { appendPracticeSessionResultEntry } from "@/practice/practiceSessionResults";
 import type { PracticeMissionOutcome } from "@shared/practice/practiceHistory";
 import type { PracticeRecommendationContext } from "@shared/practice/practiceRecommendationsAnalytics";
 
@@ -40,6 +41,24 @@ export async function persistMissionOutcomeFromSession(
 
   try {
     await recordPracticeMissionOutcome(outcome, { recommendation: recommendationContext });
+    await appendPracticeSessionResultEntry({
+      missionId: mission.id,
+      completedAt: meta.endedAt,
+      shotsAttempted: shots.length,
+      successRate:
+        meta.missionTargetReps && meta.missionTargetReps > 0
+          ? Math.min(1, completedTargetShots / meta.missionTargetReps)
+          : undefined,
+      durationSec:
+        Number.isFinite(Date.parse(meta.startedAt)) && Number.isFinite(Date.parse(meta.endedAt))
+          ? Math.max(0, Math.round((Date.parse(meta.endedAt) - Date.parse(meta.startedAt)) / 1000))
+          : undefined,
+      context: {
+        recommendationId: mission.id,
+        strokesGainedLightFocusCategory: recommendationContext?.strokesGainedLightFocusCategory ?? undefined,
+        source: recommendationContext?.origin ?? undefined,
+      },
+    });
   } catch (err) {
     console.warn("[practice] Failed to persist practice mission session", err);
   }

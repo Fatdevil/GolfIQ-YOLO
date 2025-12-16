@@ -1,6 +1,7 @@
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { MockedFunction } from 'vitest';
 
 import { EventContextProvider } from '@web/events/context';
 import { EventSGLeaderboard } from '@web/sg/EventSGLeaderboard';
@@ -96,12 +97,12 @@ const demoData: DemoData = {
 };
 
 describe('sg demo smoke', () => {
-  const originalFetch = global.fetch;
-  const fetchSpy = vi.fn<typeof fetch>();
+  const fetchSpy: MockedFunction<typeof fetch> = vi.fn();
 
   beforeEach(() => {
     vi.stubEnv?.('VITE_FEATURE_SG', '1');
     __testing.clearCache();
+    vi.stubGlobal('fetch', fetchSpy);
     fetchSpy.mockImplementation((input: RequestInfo | URL) => {
       const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
       const match = /\/api\/sg\/runs\/([^/]+)(?:\/(anchors))?$/.exec(url);
@@ -122,12 +123,11 @@ describe('sg demo smoke', () => {
       }
       return Promise.resolve(new Response(JSON.stringify(payload), { status: 200 }));
     });
-    global.fetch = fetchSpy;
   });
 
   afterEach(() => {
     vi.unstubAllEnvs?.();
-    global.fetch = originalFetch;
+    vi.unstubAllGlobals();
     fetchSpy.mockReset();
   });
 
