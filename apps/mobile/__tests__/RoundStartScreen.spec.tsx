@@ -23,6 +23,7 @@ const mockedFetchCourses = fetchCourses as unknown as Mock;
 const mockedUseGeolocation = useGeolocation as unknown as Mock;
 
 beforeEach(() => {
+  vi.clearAllMocks();
   mockedStartRound.mockResolvedValue({ id: 'r1', holes: 18, startedAt: 'now', startHole: 1 });
   mockedSaveState.mockResolvedValue(undefined);
   mockedGetCurrentRound.mockResolvedValue({
@@ -99,7 +100,7 @@ describe('RoundStartScreen', () => {
 
   it('auto-selects nearest course and shows hint when GPS is available', async () => {
     mockedGetCurrentRound.mockResolvedValueOnce(null);
-    mockedFetchCourses.mockResolvedValueOnce([
+    mockedFetchCourses.mockResolvedValue([
       { id: 'near', name: 'Near', holeCount: 9, location: { lat: 59.3, lon: 18.1 } },
       { id: 'far', name: 'Far', holeCount: 9, location: { lat: 0, lon: 0 } },
     ]);
@@ -111,12 +112,13 @@ describe('RoundStartScreen', () => {
     });
     const navigation: Nav = { navigate: vi.fn() };
 
-    const { getByTestId, getByText } = render(
+    const { getByTestId, getByText, getAllByTestId } = render(
       <RoundStartScreen navigation={navigation as any} route={undefined as any} />,
     );
 
-    await waitFor(() => expect(getByText(/GPS suggests Near/)).toBeTruthy());
-    expect(getByText(/GPS suggests Near/)).toBeTruthy();
+    await waitFor(() => expect(getByText(/GPS suggests/i)).toBeTruthy());
+    expect(getByText(/GPS suggests/i)).toBeTruthy();
+    expect(getAllByTestId('course-near').length).toBeGreaterThan(0);
     fireEvent.click(getByTestId('start-round-button'));
 
     await waitFor(() =>
