@@ -71,6 +71,11 @@ export default function StartRoundScreen({ navigation }: Props): JSX.Element {
   const [query, setQuery] = useState('');
   const [tournamentSafe, setTournamentSafe] = useState(false);
   const scrollRef = useRef<HTMLDivElement | null>(null);
+  const tournamentSafeRef = useRef(false);
+  const updateTournamentSafe = useCallback((value: boolean) => {
+    tournamentSafeRef.current = value;
+    setTournamentSafe(value);
+  }, []);
 
   const geo = useGeolocation();
 
@@ -86,7 +91,7 @@ export default function StartRoundScreen({ navigation }: Props): JSX.Element {
           if (!courseId) setCourseId(cachedCourses[0].id);
         }
 
-        const [current, history, courses, storedTournamentSafe] = await Promise.all([
+        const [current, history, courses, storedTournamentSafe, cachedState] = await Promise.all([
           getCurrentRound().catch((err) => {
             setActiveRoundError(err instanceof Error ? err.message : 'Unable to check active round');
             return null;
@@ -97,11 +102,16 @@ export default function StartRoundScreen({ navigation }: Props): JSX.Element {
             return null;
           }),
           loadTournamentSafePref().catch(() => false),
+          loadActiveRoundState().catch(() => null),
         ]);
 
         if (cancelled) return;
 
-        setTournamentSafe(storedTournamentSafe);
+        const cachedPreferences =
+          cachedState?.round?.id && current?.id === cachedState.round.id
+            ? cachedState.preferences
+            : undefined;
+        updateTournamentSafe(cachedPreferences?.tournamentSafe ?? storedTournamentSafe);
         setActiveRound(current ?? null);
         setRecentRounds(history ?? []);
 
@@ -135,7 +145,7 @@ export default function StartRoundScreen({ navigation }: Props): JSX.Element {
     return () => {
       cancelled = true;
     };
-  }, [courseId, teeName]);
+  }, [courseId, teeName, updateTournamentSafe]);
 
   const courseGeo = useMemo(
     () =>
@@ -237,6 +247,10 @@ export default function StartRoundScreen({ navigation }: Props): JSX.Element {
   }, [autoCourseSuggestion.confidence, autoCourseSuggestion.suggestedCourseId, courseManuallySet]);
 
   useEffect(() => {
+    tournamentSafeRef.current = tournamentSafe;
+  }, [tournamentSafe]);
+
+  useEffect(() => {
     if (teeName || !courseId) return;
     const suggestedTee = teeSuggestions[0];
     if (suggestedTee) setTeeName(suggestedTee);
@@ -250,6 +264,12 @@ export default function StartRoundScreen({ navigation }: Props): JSX.Element {
       activeRound.lastHole ?? startHole,
       (activeRound.holes as number | undefined) ?? 18,
     );
+    const cachedPreferences =
+      existingState?.round?.id === activeRound.id ? existingState?.preferences ?? {} : undefined;
+    const mergedPreferences = {
+      ...(cachedPreferences ?? {}),
+      tournamentSafe: tournamentSafeRef.current,
+    };
     await saveActiveRoundState({
       round: {
         id: activeRound.id,
@@ -262,11 +282,10 @@ export default function StartRoundScreen({ navigation }: Props): JSX.Element {
         status: activeRound.status,
       },
       currentHole: resumeHole,
-      preferences:
-        existingState?.round.id === activeRound.id ? existingState?.preferences : { tournamentSafe },
+      preferences: mergedPreferences,
     });
     navigation.navigate('RoundShot', { roundId: activeRound.id });
-  }, [activeRound, navigation, tournamentSafe]);
+  }, [activeRound, navigation]);
 
   const handleStart = useCallback(async () => {
     const trimmedCourse = courseId.trim();
@@ -276,17 +295,18 @@ export default function StartRoundScreen({ navigation }: Props): JSX.Element {
     }
     setSubmitting(true);
     try {
+      const currentTournamentSafe = tournamentSafeRef.current;
       const round = await startRound({
         courseId: trimmedCourse,
         teeName: teeName.trim() || undefined,
         holes,
         startHole: 1,
       });
-      await saveTournamentSafePref(tournamentSafe);
+      await saveTournamentSafePref(currentTournamentSafe);
       await saveActiveRoundState({
         round,
         currentHole: round.startHole ?? 1,
-        preferences: { tournamentSafe },
+        preferences: { tournamentSafe: currentTournamentSafe },
       });
       navigation.navigate('RoundShot', { roundId: round.id });
     } catch (err) {
@@ -299,7 +319,7 @@ export default function StartRoundScreen({ navigation }: Props): JSX.Element {
     } finally {
       setSubmitting(false);
     }
-  }, [activeRound, courseId, holes, navigation, teeName, tournamentSafe]);
+  }, [activeRound, courseId, holes, navigation, teeName]);
 
   const handleScrollToForm = useCallback(() => {
     scrollRef.current?.scrollTo({ top: 120, behavior: 'smooth' });
@@ -484,7 +504,7 @@ export default function StartRoundScreen({ navigation }: Props): JSX.Element {
           </View>
           <Switch
             value={tournamentSafe}
-            onValueChange={setTournamentSafe}
+            onValueChange={() => updateTournamentSafe(!tournamentSafeRef.current)}
             testID="tournament-safe-toggle"
           />
         </View>

@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
 
 import RoundStartScreen from '@app/screens/RoundStartScreen';
 import { getCurrentRound, listRounds, startRound } from '@app/api/roundClient';
-import { saveActiveRoundState } from '@app/round/roundState';
+import { loadActiveRoundState, saveActiveRoundState } from '@app/round/roundState';
 import { fetchCourses } from '@app/api/courseClient';
 import { useGeolocation } from '@app/hooks/useGeolocation';
 
@@ -17,6 +17,7 @@ vi.mock('@app/hooks/useGeolocation');
 
 const mockedStartRound = startRound as unknown as Mock;
 const mockedSaveState = saveActiveRoundState as unknown as Mock;
+const mockedLoadState = loadActiveRoundState as unknown as Mock;
 const mockedGetCurrentRound = getCurrentRound as unknown as Mock;
 const mockedListRounds = listRounds as unknown as Mock;
 const mockedFetchCourses = fetchCourses as unknown as Mock;
@@ -26,6 +27,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   mockedStartRound.mockResolvedValue({ id: 'r1', holes: 18, startedAt: 'now', startHole: 1 });
   mockedSaveState.mockResolvedValue(undefined);
+  mockedLoadState.mockResolvedValue(null);
   mockedGetCurrentRound.mockResolvedValue({
     id: 'r1',
     holes: 18,
@@ -163,6 +165,73 @@ describe('RoundStartScreen', () => {
         currentHole: 1,
         preferences: { tournamentSafe: true },
       }),
+    );
+  });
+
+  it('applies tournament-safe toggle when resuming cached round without preferences', async () => {
+    mockedLoadState.mockResolvedValue({
+      round: { id: 'r1', holes: 18, startHole: 1, status: 'in_progress', startedAt: 'today' },
+      currentHole: 3,
+    });
+    const navigation: Nav = { navigate: vi.fn() };
+
+    const { getByTestId } = render(
+      <RoundStartScreen navigation={navigation as any} route={undefined as any} />,
+    );
+
+    await waitFor(() => expect(getByTestId('resume-round')).toBeTruthy());
+    fireEvent.change(getByTestId('tournament-safe-toggle'), { target: { checked: true } });
+    fireEvent.click(getByTestId('resume-round'));
+
+    await waitFor(() =>
+      expect(mockedSaveState).toHaveBeenCalledWith(
+        expect.objectContaining({ preferences: expect.objectContaining({ tournamentSafe: true }) }),
+      ),
+    );
+  });
+
+  it('overrides cached preferences with current toggle when resuming same round', async () => {
+    mockedLoadState.mockResolvedValue({
+      round: { id: 'r1', holes: 18, startHole: 1, status: 'in_progress', startedAt: 'today' },
+      currentHole: 4,
+      preferences: { tournamentSafe: false },
+    });
+    const navigation: Nav = { navigate: vi.fn() };
+
+    const { getByTestId } = render(
+      <RoundStartScreen navigation={navigation as any} route={undefined as any} />,
+    );
+
+    await waitFor(() => expect(getByTestId('resume-round')).toBeTruthy());
+    fireEvent.click(getByTestId('tournament-safe-toggle'));
+    fireEvent.click(getByTestId('resume-round'));
+
+    await waitFor(() =>
+      expect(mockedSaveState).toHaveBeenCalledWith(
+        expect.objectContaining({ preferences: expect.objectContaining({ tournamentSafe: true }) }),
+      ),
+    );
+  });
+
+  it('respects cached tournament-safe preference when resuming without toggling', async () => {
+    mockedLoadState.mockResolvedValue({
+      round: { id: 'r1', holes: 18, startHole: 1, status: 'in_progress', startedAt: 'today' },
+      currentHole: 4,
+      preferences: { tournamentSafe: true },
+    });
+    const navigation: Nav = { navigate: vi.fn() };
+
+    const { getByTestId } = render(
+      <RoundStartScreen navigation={navigation as any} route={undefined as any} />,
+    );
+
+    await waitFor(() => expect(getByTestId('resume-round')).toBeTruthy());
+    fireEvent.click(getByTestId('resume-round'));
+
+    await waitFor(() =>
+      expect(mockedSaveState).toHaveBeenCalledWith(
+        expect.objectContaining({ preferences: expect.objectContaining({ tournamentSafe: true }) }),
+      ),
     );
   });
 
