@@ -24,11 +24,11 @@ function formatToPar(value?: number | null): string | null {
   return value > 0 ? `+${value}` : `${value}`;
 }
 
-function isWithinWindow(date: string | undefined | null, end: Date, days: number): boolean {
+function isWithinRange(date: string | undefined | null, start: Date, end: Date): boolean {
   if (!date) return false;
   const ts = new Date(date).getTime();
   if (Number.isNaN(ts)) return false;
-  return ts >= end.getTime() - days * MS_IN_DAY;
+  return ts >= start.getTime() && ts <= end.getTime();
 }
 
 export function aggregateWeeklySummary(
@@ -42,7 +42,7 @@ export function aggregateWeeklySummary(
   const summariesById = new Map(summaries.map((s) => [s.roundId, s] as const));
 
   const recentRounds = rounds.filter((round) =>
-    isWithinWindow(round.endedAt ?? round.startedAt, endDate, days),
+    isWithinRange(round.endedAt ?? round.startedAt, startDate, endDate),
   );
 
   const weeklyDetails = recentRounds.map((round) => ({
