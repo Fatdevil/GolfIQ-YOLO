@@ -3,6 +3,7 @@ import {
   ActivityIndicator,
   Alert,
   FlatList,
+  Modal,
   ScrollView,
   StyleSheet,
   Text,
@@ -100,6 +101,8 @@ export default function RoundShotScreen({ navigation }: Props): JSX.Element {
   const [scoreSaving, setScoreSaving] = useState(false);
   const [scoreDirty, setScoreDirty] = useState(false);
   const [scoresLoading, setScoresLoading] = useState(false);
+  const [holePickerVisible, setHolePickerVisible] = useState(false);
+  const [lastScoreSnapshot, setLastScoreSnapshot] = useState<HoleScore | null>(null);
   const [courseLayout, setCourseLayout] = useState<CourseLayout | null>(null);
   const [playerBag, setPlayerBag] = useState<PlayerBag | null>(null);
   const [bagLoading, setBagLoading] = useState(false);
@@ -163,6 +166,11 @@ export default function RoundShotScreen({ navigation }: Props): JSX.Element {
   }, []);
 
   const currentHole = state?.currentHole ?? startingHole;
+  const tournamentSafeMode = state?.preferences?.tournamentSafe ?? false;
+
+  useEffect(() => {
+    setLastScoreSnapshot(null);
+  }, [currentHole]);
 
   useEffect(() => {
     let cancelled = false;
@@ -329,6 +337,7 @@ export default function RoundShotScreen({ navigation }: Props): JSX.Element {
     (partial: Partial<HoleScore>) => {
       setScores((prev) => {
         const existing = prev[currentHole] ?? { holeNumber: currentHole };
+        setLastScoreSnapshot(existing);
         return {
           ...prev,
           [currentHole]: { ...existing, ...partial, holeNumber: currentHole },
@@ -471,6 +480,8 @@ export default function RoundShotScreen({ navigation }: Props): JSX.Element {
       if (!saved) return;
       const nextState = { ...state, currentHole: target };
       setState(nextState);
+      setHolePickerVisible(false);
+      setLastScoreSnapshot(null);
       await saveActiveRoundState(nextState);
     },
     [ensureScoreSaved, lastHoleNumber, startingHole, state],
@@ -514,11 +525,11 @@ export default function RoundShotScreen({ navigation }: Props): JSX.Element {
 
       Alert.alert(
         'Round complete',
-        'View Round Recap?',
+        'Finish round and view recap?',
         [
-          { text: 'Stay', style: 'cancel' },
+          { text: 'Stay on scorecard', style: 'cancel' },
           {
-            text: 'View recap',
+            text: 'Finish round',
             onPress: () => {
               void handleEndRound(false);
             },
@@ -530,6 +541,13 @@ export default function RoundShotScreen({ navigation }: Props): JSX.Element {
     },
     [currentHole, goToHole, handleEndRound, lastHoleNumber, persistScore, state],
   );
+
+  const handleUndo = useCallback(() => {
+    if (!lastScoreSnapshot || lastScoreSnapshot.holeNumber !== currentHole) return;
+    setScores((prev) => ({ ...prev, [currentHole]: lastScoreSnapshot }));
+    setScoreDirty(true);
+    setLastScoreSnapshot(null);
+  }, [currentHole, lastScoreSnapshot]);
 
   if (loading) {
     return (
@@ -560,21 +578,46 @@ export default function RoundShotScreen({ navigation }: Props): JSX.Element {
             <Text style={styles.holeBadgeText}>
               Hole {currentHole}/{totalHoles}
             </Text>
-            <Text style={styles.holeBadgeSub}>Par {currentScore.par ?? '—'}</Text>
+            <Text style={styles.holeBadgeSub}>
+              Par {currentHoleLayout?.par ?? currentScore.par ?? '—'}
+            </Text>
           </View>
         </View>
-        <View style={styles.headerRow}>
+        <View style={styles.headerRowBetween}>
           <Text style={styles.muted}>Running total: {runningTotal || 0}</Text>
-          <Text style={styles.muted}>Start: Hole {startingHole}</Text>
+          <TouchableOpacity onPress={() => setHolePickerVisible(true)} testID="change-hole">
+            <Text style={styles.changeHoleText}>Change hole</Text>
+          </TouchableOpacity>
         </View>
-        {currentHoleLayout && (
+        <View style={styles.headerRowBetween}>
+          <Text style={styles.muted}>Start: Hole {startingHole}</Text>
+          {autoHoleSuggestion.suggestedHole ? (
+            <Text style={styles.autoHoleHint}>
+              GPS suggests hole {autoHoleSuggestion.suggestedHole}
+              {autoHoleSuggestion.distanceToSuggestedM != null
+                ? ` (~${Math.round(autoHoleSuggestion.distanceToSuggestedM)} m)`
+                : ''}
+            </Text>
+          ) : null}
+        </View>
+        {tournamentSafeMode ? (
+          <Text style={styles.tournamentSafePill}>Tournament-safe mode</Text>
+        ) : null}
+        {autoHoleSuggestion.suggestedHole &&
+        autoHoleSuggestion.suggestedHole !== currentHole &&
+        autoHoleSuggestion.confidence !== 'low' ? (
+          <TouchableOpacity
+            onPress={() => goToHole(autoHoleSuggestion.suggestedHole as number)}
+            testID="fix-hole"
+          >
+            <Text style={styles.fixHoleText}>Fix hole to {autoHoleSuggestion.suggestedHole}</Text>
+          </TouchableOpacity>
+        ) : null}
+        {currentHoleLayout && currentHoleLayout.yardage_m != null ? (
           <View style={styles.holeMetaRow}>
-            <Text style={styles.holeMetaText}>Par {currentHoleLayout.par}</Text>
-            {currentHoleLayout.yardage_m != null && (
-              <Text style={styles.holeMetaText}>{currentHoleLayout.yardage_m} m</Text>
-            )}
+            <Text style={styles.holeMetaText}>{currentHoleLayout.yardage_m} m</Text>
           </View>
-        )}
+        ) : null}
       </View>
 
       {bagLoading && <Text style={styles.muted}>Loading bag distances…</Text>}
@@ -601,7 +644,7 @@ export default function RoundShotScreen({ navigation }: Props): JSX.Element {
         </TouchableOpacity>
       ) : null}
 
-      {caddieDecision && (
+      {!tournamentSafeMode && caddieDecision && (
         <View style={styles.caddiePanel} testID="caddie-decision">
           <Text style={styles.caddieHeadline}>
             {caddieDecision.strategy === 'layup' ? 'Safe layup' : 'Attack the green'}
@@ -630,7 +673,7 @@ export default function RoundShotScreen({ navigation }: Props): JSX.Element {
         </View>
       )}
 
-      {caddieTargets && (
+      {!tournamentSafeMode && caddieTargets && (
         <View style={styles.caddieTargetsContainer} testID="caddie-targets">
           <Text style={styles.caddieTargetsTitle}>Caddie targets</Text>
           <Text style={styles.caddieTargetsLine}>Green: center of green</Text>
@@ -682,18 +725,6 @@ export default function RoundShotScreen({ navigation }: Props): JSX.Element {
         </TouchableOpacity>
       </View>
 
-      {courseLayout &&
-        geo.supported &&
-        autoHoleSuggestion.suggestedHole &&
-        autoHoleSuggestion.confidence !== 'low' ? (
-          <Text style={styles.autoHoleHint}>
-            GPS suggests hole {autoHoleSuggestion.suggestedHole}
-            {autoHoleSuggestion.distanceToSuggestedM != null
-              ? ` (~${Math.round(autoHoleSuggestion.distanceToSuggestedM)} m away)`
-              : ''}
-          </Text>
-        ) : null}
-
       <Text style={styles.label}>Club</Text>
       <FlatList
         horizontal
@@ -723,7 +754,24 @@ export default function RoundShotScreen({ navigation }: Props): JSX.Element {
       <View style={styles.scoreCard}>
         <View style={styles.scoreHeader}>
           <Text style={styles.label}>Hole scoring</Text>
-          {(scoresLoading || scoreSaving) && <ActivityIndicator size="small" />}
+          <View style={styles.scoreHeaderActions}>
+            {(scoresLoading || scoreSaving) && <ActivityIndicator size="small" />}
+            <TouchableOpacity
+              onPress={handleUndo}
+              disabled={!lastScoreSnapshot || lastScoreSnapshot.holeNumber !== currentHole}
+              testID="undo-score"
+            >
+              <Text
+                style={[
+                  styles.undoText,
+                  (!lastScoreSnapshot || lastScoreSnapshot.holeNumber !== currentHole) &&
+                    styles.undoTextDisabled,
+                ]}
+              >
+                Undo last change
+              </Text>
+            </TouchableOpacity>
+          </View>
         </View>
         <View style={styles.scoreRow}>
           <Text style={styles.scoreLabel}>Par</Text>
@@ -916,6 +964,37 @@ export default function RoundShotScreen({ navigation }: Props): JSX.Element {
           ))}
         </View>
       )}
+
+      <Modal visible={holePickerVisible} transparent animationType="fade">
+        <View style={styles.modalBackdrop}>
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>Jump to hole</Text>
+            <View style={styles.holePickerGrid}>
+              {holeNumbers.map((holeNumber) => (
+                <TouchableOpacity
+                  key={holeNumber}
+                  style={[styles.pillButton, holeNumber === currentHole && styles.pillButtonActive]}
+                  onPress={() => goToHole(holeNumber)}
+                  testID={`hole-${holeNumber}`}
+                >
+                  <Text
+                    style={[styles.pillText, holeNumber === currentHole && styles.pillTextActive]}
+                  >
+                    Hole {holeNumber}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+            <TouchableOpacity
+              style={[styles.secondaryButton, styles.modalClose]}
+              onPress={() => setHolePickerVisible(false)}
+              accessibilityLabel="Close hole picker"
+            >
+              <Text style={styles.secondaryButtonText}>Close</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -952,6 +1031,12 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   headerRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: 8,
+  },
+  headerRowBetween: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
@@ -1039,6 +1124,23 @@ const styles = StyleSheet.create({
     color: '#cbd5e1',
     fontSize: 12,
   },
+  changeHoleText: {
+    color: '#0284c7',
+    fontWeight: '700',
+  },
+  fixHoleText: {
+    color: '#b91c1c',
+    fontWeight: '700',
+  },
+  tournamentSafePill: {
+    backgroundColor: '#fef3c7',
+    color: '#92400e',
+    alignSelf: 'flex-start',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 999,
+    fontWeight: '700',
+  },
   holePickerRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1067,6 +1169,12 @@ const styles = StyleSheet.create({
   },
   holeChipTextActive: {
     color: '#fff',
+  },
+  holePickerGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginVertical: 8,
   },
   autoHoleHint: {
     marginTop: 6,
@@ -1111,6 +1219,18 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+  },
+  scoreHeaderActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  undoText: {
+    color: '#0ea5e9',
+    fontWeight: '700',
+  },
+  undoTextDisabled: {
+    color: '#9ca3af',
   },
   scoreRow: {
     flexDirection: 'row',
@@ -1241,5 +1361,26 @@ const styles = StyleSheet.create({
   },
   unsavedText: {
     color: '#b45309',
+  },
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.4)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 16,
+  },
+  modalCard: {
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    padding: 16,
+    width: '90%',
+    gap: 12,
+  },
+  modalTitle: {
+    fontWeight: '800',
+    fontSize: 18,
+  },
+  modalClose: {
+    marginTop: 4,
   },
 });

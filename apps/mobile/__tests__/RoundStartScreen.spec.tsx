@@ -74,6 +74,7 @@ describe('RoundStartScreen', () => {
     expect(mockedSaveState).toHaveBeenCalledWith({
       round: expect.objectContaining({ id: 'new-round' }),
       currentHole: 1,
+      preferences: { tournamentSafe: false },
     });
     expect(navigation.navigate).toHaveBeenCalledWith('RoundShot', { roundId: 'new-round' });
   });
@@ -114,7 +115,7 @@ describe('RoundStartScreen', () => {
       <RoundStartScreen navigation={navigation as any} route={undefined as any} />,
     );
 
-    await waitFor(() => expect(getByTestId('course-near')).toBeTruthy());
+    await waitFor(() => expect(getByText(/GPS suggests Near/)).toBeTruthy());
     expect(getByText(/GPS suggests Near/)).toBeTruthy();
     fireEvent.click(getByTestId('start-round-button'));
 
@@ -138,5 +139,39 @@ describe('RoundStartScreen', () => {
 
     await waitFor(() => expect(getByTestId('course-demo-links-hero')).toBeTruthy());
     expect(queryByText(/GPS suggests/)).toBeNull();
+  });
+
+  it('persists tournament safe preference when toggled', async () => {
+    mockedGetCurrentRound.mockResolvedValueOnce(null);
+    mockedStartRound.mockResolvedValueOnce({ id: 'safe-round', holes: 18, startedAt: 'now', startHole: 1 });
+    const navigation: Nav = { navigate: vi.fn() };
+
+    const { getByTestId } = render(
+      <RoundStartScreen navigation={navigation as any} route={undefined as any} />,
+    );
+
+    await waitFor(() => expect(getByTestId('tournament-safe-toggle')).toBeTruthy());
+    fireEvent.click(getByTestId('tournament-safe-toggle'));
+    fireEvent.change(getByTestId('course-input'), { target: { value: 'Safe Course' } });
+    fireEvent.click(getByTestId('start-round-button'));
+
+    await waitFor(() =>
+      expect(mockedSaveState).toHaveBeenCalledWith({
+        round: expect.objectContaining({ id: 'safe-round' }),
+        currentHole: 1,
+        preferences: { tournamentSafe: true },
+      }),
+    );
+  });
+
+  it('renders start new flow even when active round check fails', async () => {
+    mockedGetCurrentRound.mockRejectedValueOnce(new Error('offline'));
+    const navigation: Nav = { navigate: vi.fn() };
+
+    const { getByTestId } = render(
+      <RoundStartScreen navigation={navigation as any} route={undefined as any} />,
+    );
+
+    await waitFor(() => expect(getByTestId('start-new-round')).toBeTruthy());
   });
 });

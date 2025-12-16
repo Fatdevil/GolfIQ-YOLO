@@ -1,9 +1,14 @@
 import { getItem, removeItem, setItem } from '@app/storage/asyncStorage';
 import type { Round } from '@app/api/roundClient';
 
+export interface ActiveRoundPreferences {
+  tournamentSafe?: boolean;
+}
+
 export interface ActiveRoundState {
   round: Round;
   currentHole: number;
+  preferences?: ActiveRoundPreferences;
 }
 
 const ROUND_STATE_KEY = 'golfiq.activeRound.v1';
