@@ -42,7 +42,7 @@ const mockWeekly: weeklyApi.WeeklySummary = {
   holesPlayed: 72,
   highlight: { label: 'Best round', value: '72 (E)' },
   focusCategory: 'driving',
-  focusHints: ['Fairways first'],
+  focusHints: [{ id: 'focus-1', text: 'Fairways first', category: 'driving' }],
 };
 
 const mockPracticePlan: practiceClient.PracticePlan = {

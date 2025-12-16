@@ -1,125 +1,84 @@
 import React from 'react';
-import { fireEvent, render, waitFor } from '@testing-library/react';
+import { fireEvent, render, waitFor, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
 
 import PracticePlannerScreen from '@app/screens/PracticePlannerScreen';
-import { fetchAllDrills, fetchPracticePlan, fetchPracticePlanFromDrills } from '@app/api/practiceClient';
+import { getWeekStartISO, loadPracticePlan, savePracticePlan } from '@app/practice/practicePlanStorage';
 
-vi.mock('@app/api/practiceClient', () => ({
-  fetchPracticePlan: vi.fn(),
-  fetchPracticePlanFromDrills: vi.fn(),
-  fetchAllDrills: vi.fn(),
+const catalog = vi.hoisted(() => [
+  {
+    id: 'putting-lag-ladder',
+    category: 'putting',
+    titleKey: 'practiceDrills.putting_lag_title',
+    descriptionKey: 'practiceDrills.putting_lag_desc',
+    durationMin: 12,
+    tags: [],
+  },
+]);
+
+vi.mock('@app/practice/practicePlanStorage', () => ({
+  loadPracticePlan: vi.fn(),
+  savePracticePlan: vi.fn(),
+  getWeekStartISO: vi.fn(),
 }));
 
-const mockFetchPlan = fetchPracticePlan as unknown as Mock;
-const mockFetchPlanFromDrills = fetchPracticePlanFromDrills as unknown as Mock;
-const mockFetchDrills = fetchAllDrills as unknown as Mock;
+vi.mock('@app/practice/drillsCatalog', () => ({
+  DRILLS_CATALOG: catalog,
+  findDrillById: (id: string) => catalog.find((drill) => drill.id === id),
+}));
+
+const mockLoadPlan = loadPracticePlan as unknown as Mock;
+const mockSavePlan = savePracticePlan as unknown as Mock;
+const mockGetWeekStartISO = getWeekStartISO as unknown as Mock;
 
 const navigation = { navigate: vi.fn() } as any;
-
-const samplePlan = {
-  focusCategories: ['driving', 'putting'],
-  drills: [
-    {
-      id: 'drill-a',
-      name: 'Fairway Finder',
-      description: 'Hit to fairway',
-      category: 'driving',
-      focusMetric: 'fairways',
-      difficulty: 'easy',
-      durationMinutes: 15,
-    },
-    {
-      id: 'drill-b',
-      name: 'Lag Ladder',
-      description: 'Lag putts',
-      category: 'putting',
-      focusMetric: '3_putts',
-      difficulty: 'medium',
-      durationMinutes: 15,
-    },
-  ],
-};
-
-const sampleDrills = [
-  {
-    id: 'drill-a',
-    name: 'Fairway Finder',
-    description: 'Hit to fairway',
-    category: 'driving',
-    focusMetric: 'fairways',
-    difficulty: 'easy',
-    durationMinutes: 15,
-  },
-  {
-    id: 'drill-c',
-    name: 'Up & Down',
-    description: 'Short game reps',
-    category: 'short_game',
-    focusMetric: 'up_and_down',
-    difficulty: 'medium',
-    durationMinutes: 20,
-  },
-];
 
 describe('PracticePlannerScreen', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockFetchPlan.mockResolvedValue(samplePlan);
-    mockFetchPlanFromDrills.mockResolvedValue(samplePlan);
-    mockFetchDrills.mockResolvedValue(sampleDrills);
+    mockGetWeekStartISO.mockReturnValue('2024-01-01T00:00:00.000Z');
   });
 
-  it('renders focus categories and drills from the plan', async () => {
-    const { getByTestId, getByText } = render(
+  it('shows empty state when no plan is stored for the week', async () => {
+    mockLoadPlan.mockResolvedValue(null);
+
+    const { findByText } = render(
       <PracticePlannerScreen navigation={navigation} route={undefined as any} />,
     );
 
-    await waitFor(() => getByTestId('plan-drill-drill-a'));
-    expect(getByTestId('focus-driving')).toBeTruthy();
-    expect(getByTestId('focus-putting')).toBeTruthy();
-    expect(getByText('Fairway Finder')).toBeTruthy();
-    expect(getByText('Lag Ladder')).toBeTruthy();
+    expect(await findByText(/No plan yet/i)).toBeTruthy();
   });
 
-  it('updates plan when duration is changed', async () => {
-    const { getByTestId } = render(
+  it('renders stored drills and toggles completion', async () => {
+    const plan = {
+      weekStartISO: '2024-01-01T00:00:00.000Z',
+      items: [
+        {
+          id: 'item-1',
+          drillId: 'putting-lag-ladder',
+          createdAt: '2024-01-02',
+          status: 'planned' as const,
+        },
+      ],
+    };
+    mockLoadPlan.mockResolvedValue(plan);
+    mockSavePlan.mockResolvedValue(undefined);
+
+    const { findByTestId, getByText } = render(
       <PracticePlannerScreen navigation={navigation} route={undefined as any} />,
     );
 
-    await waitFor(() => getByTestId('plan-drill-drill-a'));
-    fireEvent.click(getByTestId('duration-30'));
+    const item = await findByTestId('plan-item-item-1');
+    expect(within(item).getByText(/Lag putting ladder/i)).toBeTruthy();
 
-    await waitFor(() => {
-      expect(mockFetchPlan).toHaveBeenCalledWith({ maxMinutes: 30 });
-    });
-  });
+    fireEvent.click(getByText(/Mark done/i));
 
-  it('shows library when toggled', async () => {
-    const { getByTestId, getByText } = render(
-      <PracticePlannerScreen navigation={navigation} route={undefined as any} />,
+    await waitFor(() =>
+      expect(mockSavePlan).toHaveBeenCalledWith(
+        expect.objectContaining({
+          items: [expect.objectContaining({ status: 'done' })],
+        }),
+      ),
     );
-
-    await waitFor(() => getByTestId('toggle-library'));
-    fireEvent.click(getByTestId('toggle-library'));
-
-    await waitFor(() => getByTestId('library-drill-c'));
-    expect(getByText('Up & Down')).toBeTruthy();
-  });
-
-  it('uses focus drill ids when provided', async () => {
-    const { getByTestId } = render(
-      <PracticePlannerScreen
-        navigation={navigation}
-        route={{ params: { focusDrillIds: ['drill-a', 'drill-c'], maxMinutes: 45 } } as any}
-      />,
-    );
-
-    await waitFor(() => getByTestId('plan-drill-drill-a'));
-    expect(mockFetchPlanFromDrills).toHaveBeenCalledWith({
-      drillIds: ['drill-a', 'drill-c'],
-      maxMinutes: 45,
-    });
-    expect(getByTestId('plan-drill-drill-a')).toBeTruthy();
   });
 });
