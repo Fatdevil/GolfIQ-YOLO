@@ -155,6 +155,32 @@ describe('RoundShotScreen', () => {
     }));
   });
 
+  it('auto-advances after saving a hole', async () => {
+    const { getByTestId } = render(
+      <RoundShotScreen navigation={{} as any} route={undefined as any} />,
+    );
+
+    await waitFor(() => expect(mockGetScores).toHaveBeenCalled());
+    fireEvent.click(getByTestId('save-score'));
+
+    await waitFor(() => expect(mockSave).toHaveBeenCalledWith({ ...sampleState, currentHole: 2 }));
+  });
+
+  it('prompts to finish on the last hole and navigates to recap', async () => {
+    mockLoad.mockResolvedValueOnce({ ...sampleState, currentHole: 2, round: { ...sampleState.round, holes: 2 } });
+    alertSpy.mockImplementationOnce((_, __, buttons) => {
+      buttons?.[1]?.onPress?.();
+    });
+    const navigation = { navigate: vi.fn() } as any;
+    const { getByTestId } = render(<RoundShotScreen navigation={navigation} route={undefined as any} />);
+
+    await waitFor(() => expect(mockGetScores).toHaveBeenCalled());
+    fireEvent.click(getByTestId('save-score'));
+
+    await waitFor(() => expect(mockEndRound).toHaveBeenCalled());
+    expect(navigation.navigate).toHaveBeenCalledWith('RoundRecap', { roundId: 'r1' });
+  });
+
   it('shows GPS-based hole suggestion hint', async () => {
     mockUseGeolocation.mockReturnValue({
       position: { lat: 59.3001, lon: 18.1001 },
@@ -190,6 +216,18 @@ describe('RoundShotScreen', () => {
     expect(await findByTestId('caddie-targets')).toBeTruthy();
     expect(await findByText(/Layup: 216 m from tee/)).toBeTruthy();
     expect(await findByText(/Green: center of green/)).toBeTruthy();
+  });
+
+  it('hides caddie hints in tournament-safe mode', async () => {
+    mockLoad.mockResolvedValueOnce({ ...sampleState, preferences: { tournamentSafe: true } });
+
+    const { queryByTestId } = render(
+      <RoundShotScreen navigation={{} as any} route={undefined as any} />,
+    );
+
+    await waitFor(() => expect(mockFetchCourseLayout).toHaveBeenCalled());
+    expect(queryByTestId('caddie-decision')).toBeNull();
+    expect(queryByTestId('caddie-targets')).toBeNull();
   });
 
   it('shows target-aware layup strategy for safe par 5', async () => {
