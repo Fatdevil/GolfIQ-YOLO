@@ -6,7 +6,7 @@ import { beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
 import HomeDashboardScreen from '@app/screens/HomeDashboardScreen';
 import * as playerApi from '@app/api/player';
 import * as roundClient from '@app/api/roundClient';
-import * as weeklyApi from '@app/api/weeklySummary';
+import * as weeklyApi from '@app/api/weeklySummaryClient';
 import * as practiceClient from '@app/api/practiceClient';
 import * as bagClient from '@app/api/bagClient';
 import * as engagementStorage from '@app/storage/engagement';
@@ -21,7 +21,7 @@ vi.mock('@app/api/roundClient', () => ({
   fetchLatestCompletedRound: vi.fn(),
   startRound: vi.fn(),
 }));
-vi.mock('@app/api/weeklySummary', () => ({ fetchWeeklySummary: vi.fn() }));
+vi.mock('@app/api/weeklySummaryClient', () => ({ fetchWeeklySummary: vi.fn() }));
 vi.mock('@app/api/practiceClient', () => ({ fetchPracticePlan: vi.fn() }));
 vi.mock('@app/api/bagClient', () => ({ fetchPlayerBag: vi.fn() }));
 vi.mock('@app/storage/engagement', () => ({

@@ -108,6 +108,37 @@ export const sv = {
   weekly_history_counts: '{{completed}} / {{target}} uppdrag',
   weekly_history_goal_reached: 'Mål uppnått',
   weekly_history_goal_not_reached: 'Under målet',
+  weekly: {
+    title: 'Den här veckan',
+    subtitle: 'Rundor: {{rounds}} · Hål: {{holes}}',
+    loading: 'Laddar veckosummering…',
+    error: 'Kunde inte ladda veckans recap',
+    retry: 'Försök igen',
+    empty: {
+      title: 'Inga rundor den här veckan',
+      body: 'Spela en runda eller gör en snabbträning för att komma igång.',
+    },
+    stats: {
+      rounds: 'Rundor',
+      holes: 'Hål',
+    },
+    focusTitle: 'Coachens fokus',
+    focus: {
+      driving: 'Utslag',
+      approach: 'Inspel',
+      short_game: 'Närspel',
+      putting: 'Puttning',
+      overall: 'Helhet',
+    },
+    cta: {
+      startRound: 'Starta runda',
+      range: 'Range & Träning',
+    },
+    share: {
+      cta: 'Dela',
+      template: 'GolfIQ veckosammanfattning: {{rounds}} rundor · {{holes}} hål. {{highlight}}{{focus}}Spårat med GolfIQ.',
+    },
+  },
   bag: {
     practice: {
       recommendedTitle: 'Rekommenderad träning',

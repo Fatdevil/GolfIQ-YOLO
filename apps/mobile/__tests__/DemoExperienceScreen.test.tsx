@@ -5,7 +5,7 @@ import { describe, expect, it, vi } from 'vitest';
 import DemoExperienceScreen from '@app/screens/DemoExperienceScreen';
 import { fetchDemoRoundRecap, fetchDemoWeeklySummary } from '@app/demo/demoService';
 import type { RoundRecap } from '@app/api/roundClient';
-import type { WeeklySummary } from '@app/api/weeklySummary';
+import type { WeeklySummary } from '@app/api/weeklySummaryClient';
 
 vi.mock('@app/demo/demoService', () => ({
   fetchDemoRoundRecap: vi.fn(),
@@ -29,12 +29,12 @@ const mockRecap: RoundRecap = {
 };
 
 const mockWeekly: WeeklySummary = {
-  period: { from: '2024-01-01', to: '2024-01-07', roundCount: 3 },
-  headline: { text: 'Solid week', emoji: '🔥' },
-  coreStats: { avgScore: 72, bestScore: 70, worstScore: 75, avgToPar: 'E', holesPlayed: 54 },
-  categories: {},
-  focusHints: [],
-  strokesGained: null,
+  startDate: '2024-01-01T00:00:00Z',
+  endDate: '2024-01-07T00:00:00Z',
+  roundsPlayed: 3,
+  holesPlayed: 54,
+  highlight: { label: 'Best round', value: '72 (E)' },
+  focusHints: ['Keep the driver in play'],
 };
 
 describe('DemoExperienceScreen', () => {
@@ -48,7 +48,8 @@ describe('DemoExperienceScreen', () => {
     );
 
     await waitFor(() => expect(getByText('Demo Links Hero')).toBeTruthy());
-    expect(getByText('Solid week')).toBeTruthy();
+    expect(getByText('This week')).toBeTruthy();
+    expect(getByText(/72/)).toBeTruthy();
 
     fireEvent.click(getByText('Round recap'));
     expect(navigate).toHaveBeenCalledWith('RoundRecap', { roundId: 'demo-round', isDemo: true });

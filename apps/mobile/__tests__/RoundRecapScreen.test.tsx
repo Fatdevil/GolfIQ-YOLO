@@ -232,12 +232,12 @@ describe('RoundRecapScreen', () => {
     mockCreateRoundShareLink.mockRejectedValue(new Error('fail'));
     const shareSpy = vi.spyOn(Share, 'share').mockResolvedValue({} as any);
 
-    const { getByTestId } = render(
+    const { findByTestId } = render(
       <RoundRecapScreen navigation={{} as any} route={{ params: { roundId: 'r1' } } as any} />,
     );
 
     await waitFor(() => expect(mockFetchRecap).toHaveBeenCalled());
-    fireEvent.click(getByTestId('share-round'));
+    fireEvent.click(await findByTestId('share-round'));
 
     await waitFor(() => expect(shareSpy).toHaveBeenCalled());
     const message = shareSpy.mock.calls[0][0].message;

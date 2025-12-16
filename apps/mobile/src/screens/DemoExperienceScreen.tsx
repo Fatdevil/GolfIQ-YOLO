@@ -5,7 +5,7 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { t } from '@app/i18n';
 import type { RootStackParamList } from '@app/navigation/types';
 import type { RoundRecap } from '@app/api/roundClient';
-import type { WeeklySummary } from '@app/api/weeklySummary';
+import type { WeeklySummary } from '@app/api/weeklySummaryClient';
 import { fetchDemoRoundRecap, fetchDemoWeeklySummary } from '@app/demo/demoService';
 
 const CATEGORY_ORDER: Array<keyof RoundRecap['categories']> = ['driving', 'approach', 'short_game', 'putting'];
@@ -40,7 +40,7 @@ export default function DemoExperienceScreen({ navigation }: Props): JSX.Element
     return (
       <View style={styles.center}>
         <ActivityIndicator />
-        <Text style={styles.muted}>{t('weeklySummary.loading')}</Text>
+        <Text style={styles.muted}>{t('weekly.loading')}</Text>
       </View>
     );
   }
@@ -76,16 +76,16 @@ export default function DemoExperienceScreen({ navigation }: Props): JSX.Element
 
       {weekly ? (
         <View style={styles.card}>
-          <Text style={styles.cardTitle}>{t('weeklySummary.title')}</Text>
+          <Text style={styles.cardTitle}>{t('weekly.title')}</Text>
           <Text style={styles.helper}>
-            {t('weeklySummary.period', { from: weekly.period.from, to: weekly.period.to })}
+            {t('weekly.subtitle', { rounds: weekly.roundsPlayed, holes: weekly.holesPlayed })}
           </Text>
-          <Text style={styles.body}>{weekly.headline.text}</Text>
+          {weekly.highlight ? <Text style={styles.body}>{weekly.highlight.value}</Text> : null}
           <TouchableOpacity
             style={styles.secondaryButton}
             onPress={() => navigation.navigate('WeeklySummary', { isDemo: true })}
           >
-            <Text style={styles.secondaryText}>{t('weeklySummary.viewRounds')}</Text>
+            <Text style={styles.secondaryText}>{t('weekly.share.cta')}</Text>
           </TouchableOpacity>
         </View>
       ) : null}

@@ -73,12 +73,12 @@ describe('RoundHistoryScreen', () => {
     mockListSummaries.mockResolvedValue([]);
 
     const navigation = { navigate: vi.fn() } as any;
-    const { getByTestId, getByText } = render(
+    const { getByTestId, findByText } = render(
       <RoundHistoryScreen navigation={navigation} route={undefined as any} />,
     );
 
     await waitFor(() => expect(mockListRounds).toHaveBeenCalled());
-    expect(getByText(/No rounds logged yet/)).toBeTruthy();
+    expect(await findByText(/No rounds logged yet/)).toBeTruthy();
 
     fireEvent.click(getByTestId('round-history-empty-cta'));
     expect(navigation.navigate).toHaveBeenCalledWith('RoundStart');
