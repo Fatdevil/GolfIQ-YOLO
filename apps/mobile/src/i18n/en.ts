@@ -219,6 +219,37 @@ export const en = {
   weekly_history_counts: '{{completed}} / {{target}} missions',
   weekly_history_goal_reached: 'Goal reached',
   weekly_history_goal_not_reached: 'Below goal',
+  weekly: {
+    title: 'This week',
+    subtitle: 'Rounds: {{rounds}} · Holes: {{holes}}',
+    loading: 'Loading this week…',
+    error: 'Unable to load this week’s recap',
+    retry: 'Try again',
+    empty: {
+      title: 'No rounds yet this week',
+      body: 'Play a round or do a Quick Practice to start building your week.',
+    },
+    stats: {
+      rounds: 'Rounds',
+      holes: 'Holes',
+    },
+    focusTitle: 'Coach focus',
+    focus: {
+      driving: 'Driving',
+      approach: 'Approach',
+      short_game: 'Short game',
+      putting: 'Putting',
+      overall: 'Overall',
+    },
+    cta: {
+      startRound: 'Start round',
+      range: 'Range & Training',
+    },
+    share: {
+      cta: 'Share',
+      template: 'GolfIQ Weekly Recap: {{rounds}} rounds · {{holes}} holes. {{highlight}}{{focus}}Tracked with GolfIQ.',
+    },
+  },
   practice_planner_title: 'Practice Planner',
   practice_planner_subtitle: "Today’s plan based on your recent rounds",
   practice_planner_focus_title: 'Focus areas',

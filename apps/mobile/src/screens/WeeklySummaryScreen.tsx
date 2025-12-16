@@ -1,190 +1,85 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Alert, ActivityIndicator, ScrollView, Share, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, ScrollView, Share, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 
-import {
-  fetchWeeklySummary,
-  type WeeklyStrokesGained,
-  type WeeklySummaryCategory,
-} from '@app/api/weeklySummary';
-import { createWeeklyShareLink } from '@app/api/shareClient';
+import { fetchWeeklySummary, type WeeklySummary } from '@app/api/weeklySummaryClient';
+import { fetchDemoWeeklySummary } from '@app/demo/demoService';
 import { t } from '@app/i18n';
 import type { RootStackParamList } from '@app/navigation/types';
-import { fetchDemoWeeklySummary } from '@app/demo/demoService';
+import { safeEmit } from '@app/telemetry';
+
+const formatter = new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric' });
 
 type Props = NativeStackScreenProps<RootStackParamList, 'WeeklySummary'>;
 
-const CATEGORY_ORDER: Array<{ key: keyof NonNullable<ReturnType<typeof buildCategoryMap>>; label: string }> = [
-  { key: 'driving', label: t('weeklySummary.categories.driving') },
-  { key: 'approach', label: t('weeklySummary.categories.approach') },
-  { key: 'short_game', label: t('weeklySummary.categories.short_game') },
-  { key: 'putting', label: t('weeklySummary.categories.putting') },
-];
-
-function buildCategoryMap(categories: Record<string, WeeklySummaryCategory>): {
-  driving?: WeeklySummaryCategory;
-  approach?: WeeklySummaryCategory;
-  short_game?: WeeklySummaryCategory;
-  putting?: WeeklySummaryCategory;
-} {
-  return categories ?? {};
+function formatRange(start: string, end: string): string {
+  const startLabel = formatter.format(new Date(start));
+  const endLabel = formatter.format(new Date(end));
+  return `${startLabel} – ${endLabel}`;
 }
 
-function buildSgCategoryMap(categories: WeeklyStrokesGained['categories'] | undefined): {
-  driving?: WeeklyStrokesGained['categories'][keyof WeeklyStrokesGained['categories']];
-  approach?: WeeklyStrokesGained['categories'][keyof WeeklyStrokesGained['categories']];
-  short_game?: WeeklyStrokesGained['categories'][keyof WeeklyStrokesGained['categories']];
-  putting?: WeeklyStrokesGained['categories'][keyof WeeklyStrokesGained['categories']];
-} {
-  return categories ?? {};
-}
-
-function formatPeriod(from: string, to: string): string {
-  const fromDate = new Date(from);
-  const toDate = new Date(to);
-
-  if (Number.isNaN(fromDate.getTime()) || Number.isNaN(toDate.getTime())) {
-    return `${from} – ${to}`;
-  }
-
-  const opts: Intl.DateTimeFormatOptions = { month: 'short', day: 'numeric' };
-  return t('weeklySummary.period', {
-    from: fromDate.toLocaleDateString(undefined, opts),
-    to: toDate.toLocaleDateString(undefined, opts),
+function buildShareMessage(summary: WeeklySummary): string {
+  const highlight = summary.highlight?.value;
+  const firstHint = summary.focusHints[0];
+  return t('weekly.share.template', {
+    rounds: summary.roundsPlayed,
+    holes: summary.holesPlayed,
+    highlight: highlight ? `Highlight: ${highlight}. ` : '',
+    focus: firstHint ? `Focus: ${firstHint}. ` : '',
   });
-}
-
-function formatNumber(value?: number | null): string {
-  if (value == null) return '—';
-  return value.toFixed(Number.isInteger(value) ? 0 : 1);
-}
-
-function formatToPar(value?: string | null): string {
-  if (!value) return '—';
-  return value;
-}
-
-function trendSymbol(trend?: WeeklySummaryCategory['trend']): string {
-  if (trend === 'up') return '↑';
-  if (trend === 'down') return '↓';
-  return '→';
-}
-
-function formatSgValue(value: number | undefined): string {
-  if (value == null || Number.isNaN(value)) return '—';
-  return value > 0 ? `+${value.toFixed(1)}` : value.toFixed(1);
 }
 
 export default function WeeklySummaryScreen({ navigation, route }: Props): JSX.Element {
   const { isDemo } = route.params ?? {};
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [summary, setSummary] = useState<Awaited<ReturnType<typeof fetchWeeklySummary>> | null>(null);
-  const [shareLoading, setShareLoading] = useState(false);
+  const [summary, setSummary] = useState<WeeklySummary | null>(null);
+  const [sharing, setSharing] = useState(false);
 
-  useEffect(() => {
-    let cancelled = false;
+  const load = useCallback(async () => {
     setLoading(true);
-    const loadDemo = async () => {
-      const result = await fetchDemoWeeklySummary();
-      if (cancelled) return;
-      setSummary(result);
-      setError(null);
+    setError(null);
+    try {
+      const data = isDemo ? await fetchDemoWeeklySummary() : await fetchWeeklySummary();
+      setSummary(data);
+      safeEmit('weekly_summary.viewed', { rounds: data.roundsPlayed, holes: data.holesPlayed });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : t('weekly.error');
+      setError(message || t('weekly.error'));
+    } finally {
       setLoading(false);
-    };
-
-    const loadReal = () =>
-      fetchWeeklySummary()
-        .then((data) => {
-          if (cancelled) return;
-          setSummary(data);
-          setError(null);
-        })
-        .catch(() => {
-          if (!cancelled) setError(t('weeklySummary.error'));
-        })
-        .finally(() => {
-          if (!cancelled) setLoading(false);
-        });
-
-    if (isDemo) {
-      loadDemo().catch(() => {
-        if (!cancelled) {
-          setError(t('weeklySummary.error'));
-          setLoading(false);
-        }
-      });
-    } else {
-      loadReal();
     }
-
-    return () => {
-      cancelled = true;
-    };
   }, [isDemo]);
 
-  const hasRounds = summary?.period.roundCount && summary.period.roundCount > 0;
-  const categories = useMemo(
-    () => buildCategoryMap(summary?.categories ?? {}),
-    [summary?.categories],
-  );
-  const strokesGained = summary?.strokesGained ?? null;
-  const sgCategories = useMemo(
-    () => buildSgCategoryMap(strokesGained?.categories),
-    [strokesGained?.categories],
-  );
-  const topCategoryLabel = useMemo(() => {
-    for (const { key, label } of CATEGORY_ORDER) {
-      const category = categories[key];
-      if (category?.grade || category?.note) return label;
-    }
-    return CATEGORY_ORDER[0]?.label ?? 'Overall';
-  }, [categories]);
+  useEffect(() => {
+    load().catch(() => setError(t('weekly.error')));
+  }, [load]);
+
+  const hasRounds = (summary?.roundsPlayed ?? 0) > 0;
+
+  const shareMessage = useMemo(() => (summary ? buildShareMessage(summary) : ''), [summary]);
 
   const handleShare = useCallback(async () => {
     if (!summary) return;
-    const rounds = summary.period.roundCount ?? 0;
-    const avgScore = formatNumber(summary.coreStats.avgScore);
-    const fallbackMessage = t('weeklySummary.shareFallback', {
-      rounds,
-      avgScore,
-      topCategory: topCategoryLabel,
-    });
-
-    setShareLoading(true);
-
+    setSharing(true);
     try {
-      if (isDemo) {
-        await Share.share({ message: fallbackMessage });
-      } else {
-        const link = await createWeeklyShareLink();
-        const message = t('weeklySummary.shareTemplate', {
-          rounds,
-          avgScore,
-          topCategory: topCategoryLabel,
-          url: link.url,
-        });
-        await Share.share({ message });
-      }
-    } catch (err) {
-      console.warn('[weekly] Failed to share weekly summary', err);
-      try {
-        await Share.share({ message: fallbackMessage });
-      } catch (shareErr) {
-        console.warn('[weekly] Failed to share weekly fallback', shareErr);
-        Alert.alert(t('weeklySummary.shareErrorTitle'), t('weeklySummary.shareErrorBody'));
-      }
+      await Share.share({ message: shareMessage });
+      safeEmit('weekly_summary.shared', {
+        rounds: summary.roundsPlayed,
+        holes: summary.holesPlayed,
+        hasHighlight: Boolean(summary.highlight),
+      });
     } finally {
-      setShareLoading(false);
+      setSharing(false);
     }
-  }, [isDemo, summary, topCategoryLabel]);
+  }, [shareMessage, summary]);
 
   if (loading) {
     return (
       <View style={styles.center}>
         <ActivityIndicator />
-        <Text style={styles.muted}>{t('weeklySummary.loading')}</Text>
+        <Text style={styles.muted}>{t('weekly.loading')}</Text>
       </View>
     );
   }
@@ -193,311 +88,126 @@ export default function WeeklySummaryScreen({ navigation, route }: Props): JSX.E
     return (
       <View style={styles.center}>
         <Text style={styles.error}>{error}</Text>
-        <TouchableOpacity
-          onPress={() => {
-            setLoading(true);
-            setError(null);
-            setSummary(null);
-            fetchWeeklySummary()
-              .then((data) => {
-                setSummary(data);
-                setError(null);
-              })
-              .catch(() => setError(t('weeklySummary.error')))
-              .finally(() => setLoading(false));
-          }}
-          testID="weekly-summary-retry"
-        >
+        <TouchableOpacity onPress={() => load().catch(() => {})} testID="weekly-retry">
           <View style={styles.primaryButton}>
-            <Text style={styles.primaryButtonText}>{t('weeklySummary.retry')}</Text>
+            <Text style={styles.primaryButtonText}>{t('weekly.retry')}</Text>
           </View>
         </TouchableOpacity>
       </View>
     );
   }
 
-  return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      <Text style={styles.title}>{t('weeklySummary.title')}</Text>
-      {summary ? (
-        <>
-          <Text style={styles.period}>{formatPeriod(summary.period.from, summary.period.to)}</Text>
-          <View style={styles.card}>
-            <Text style={styles.headline} testID="weekly-headline">
-              {summary.headline.emoji ? `${summary.headline.emoji} ` : ''}
-              {summary.headline.text}
-            </Text>
-          </View>
-
-          {hasRounds ? (
-            <>
-              <View style={styles.card}>
-                <Text style={styles.cardTitle}>{t('weeklySummary.coreStats')}</Text>
-                <View style={styles.statRow}>
-                  <Text style={styles.statLabel}>{t('weeklySummary.avgScore')}</Text>
-                  <Text style={styles.statValue}>{formatNumber(summary.coreStats.avgScore)}</Text>
-                </View>
-                <View style={styles.statRow}>
-                  <Text style={styles.statLabel}>{t('weeklySummary.bestScore')}</Text>
-                  <Text style={styles.statValue}>{formatNumber(summary.coreStats.bestScore)}</Text>
-                </View>
-                <View style={styles.statRow}>
-                  <Text style={styles.statLabel}>{t('weeklySummary.worstScore')}</Text>
-                  <Text style={styles.statValue}>{formatNumber(summary.coreStats.worstScore)}</Text>
-                </View>
-                <View style={styles.statRow}>
-                  <Text style={styles.statLabel}>{t('weeklySummary.avgToPar')}</Text>
-                  <Text style={styles.statValue}>{formatToPar(summary.coreStats.avgToPar)}</Text>
-                </View>
-                <View style={styles.statRow}>
-                  <Text style={styles.statLabel}>{t('weeklySummary.holesPlayed')}</Text>
-                  <Text style={styles.statValue}>{formatNumber(summary.coreStats.holesPlayed)}</Text>
-                </View>
-              </View>
-
-              <View style={styles.card}>
-                <Text style={styles.cardTitle}>{t('weeklySummary.categories.title')}</Text>
-                <View style={styles.categoryGrid}>
-                  {CATEGORY_ORDER.map(({ key, label }) => {
-                    const category = categories[key];
-                    return (
-                      <View key={key} style={styles.categoryTile} testID={`weekly-category-${key}`}>
-                        <Text style={styles.categoryLabel}>{label}</Text>
-                        <Text style={styles.categoryGrade}>
-                          {category?.grade ?? '—'} <Text style={styles.trend}>{trendSymbol(category?.trend)}</Text>
-                        </Text>
-                        <Text style={styles.muted}>{category?.note ?? t('weeklySummary.noCategoryData')}</Text>
-                      </View>
-                    );
-                  })}
-                </View>
-              </View>
-
-              <View style={styles.card}>
-                <Text style={styles.cardTitle}>{t('strokesGained.weeklySectionTitle')}</Text>
-                {strokesGained ? (
-                  <>
-                    <View style={styles.statRow}>
-                      <Text style={styles.statLabel}>{t('strokesGained.totalLabel')}</Text>
-                      <Text
-                        style={[
-                          styles.statValue,
-                          (strokesGained.total ?? 0) >= 0 ? styles.sgPositive : styles.sgNegative,
-                        ]}
-                      >
-                        {formatSgValue(strokesGained.total)}
-                      </Text>
-                    </View>
-                    <View style={styles.categoryGrid}>
-                      {CATEGORY_ORDER.map(({ key, label }) => {
-                        const category = sgCategories[key];
-                        return (
-                          <View key={`sg-${key}`} style={styles.categoryTile} testID={`weekly-sg-${key}`}>
-                            <Text style={styles.categoryLabel}>{label}</Text>
-                            <Text
-                              style={[
-                                styles.categoryGrade,
-                                (category?.value ?? 0) >= 0 ? styles.sgPositive : styles.sgNegative,
-                              ]}
-                            >
-                              {formatSgValue(category?.value ?? 0)} {category?.grade ?? '—'}
-                            </Text>
-                            <Text style={styles.muted}>
-                              {category?.label ?? t('weeklySummary.noCategoryData')}
-                            </Text>
-                          </View>
-                        );
-                      })}
-                    </View>
-                  </>
-                ) : (
-                  <Text style={styles.muted}>{t('strokesGained.weeklyUnavailable')}</Text>
-                )}
-              </View>
-
-              <View style={styles.card}>
-                <Text style={styles.cardTitle}>{t('weeklySummary.focusTitle')}</Text>
-                {summary.focusHints.length === 0 ? (
-                  <Text style={styles.muted}>{t('weeklySummary.noHints')}</Text>
-                ) : (
-                  summary.focusHints.map((hint, index) => (
-                    <Text key={hint} style={styles.hint}>
-                      • {hint}
-                    </Text>
-                  ))
-                )}
-              </View>
-            </>
-          ) : (
-            <View style={styles.card}>
-              <Text style={styles.emptyTitle}>{t('weeklySummary.notEnough')}</Text>
-              <Text style={styles.muted}>{t('weeklySummary.playMore')}</Text>
-            </View>
-          )}
-        </>
-      ) : null}
-
-      {summary ? (
-        <TouchableOpacity
-          style={[styles.primaryButton, shareLoading ? styles.disabledButton : null]}
-          onPress={handleShare}
-          disabled={shareLoading}
-          accessibilityLabel={t('weeklySummary.shareCta')}
-          testID="share-weekly"
-        >
-          {shareLoading ? (
-            <ActivityIndicator color="#0c0c0f" />
-          ) : (
-            <Text style={styles.primaryButtonText}>{t('weeklySummary.shareCta')}</Text>
-          )}
-        </TouchableOpacity>
-      ) : null}
-
-      <View style={styles.ctaRow}>
-        <TouchableOpacity
-          style={styles.primaryButton}
-          onPress={() => navigation.navigate('RoundHistory')}
-          accessibilityLabel={t('weeklySummary.viewRounds')}
-          testID="weekly-summary-history"
-        >
-          <Text style={styles.primaryButtonText}>{t('weeklySummary.viewRounds')}</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.primaryButton, styles.secondaryButton]}
-          onPress={() => navigation.navigate('PracticePlanner')}
-          accessibilityLabel={t('practice_planner_title')}
-          testID="weekly-summary-practice"
-        >
-          <Text style={styles.primaryButtonText}>{t('practice_planner_title')}</Text>
-        </TouchableOpacity>
+  if (!summary) {
+    return (
+      <View style={styles.center}>
+        <Text style={styles.error}>{t('weekly.error')}</Text>
       </View>
+    );
+  }
+
+  const rangeLabel = formatRange(summary.startDate, summary.endDate);
+
+  return (
+    <ScrollView contentContainerStyle={styles.content} style={styles.container}>
+      <Text style={styles.title}>{t('weekly.title')}</Text>
+      <Text style={styles.subtitle}>{rangeLabel}</Text>
+
+      <View style={styles.card}>
+        <Text style={styles.cardTitle}>
+          {t('weekly.subtitle', { rounds: summary.roundsPlayed, holes: summary.holesPlayed })}
+        </Text>
+        <View style={styles.statRow}>
+          <View style={styles.statTile}>
+            <Text style={styles.statLabel}>{t('weekly.stats.rounds')}</Text>
+            <Text style={styles.statValue}>{summary.roundsPlayed}</Text>
+          </View>
+          <View style={styles.statTile}>
+            <Text style={styles.statLabel}>{t('weekly.stats.holes')}</Text>
+            <Text style={styles.statValue}>{summary.holesPlayed}</Text>
+          </View>
+        </View>
+      </View>
+
+      {hasRounds ? (
+        <>
+          {summary.highlight ? (
+            <View style={styles.card}>
+              <Text style={styles.cardTitle}>{summary.highlight.label}</Text>
+              <Text style={styles.headline} testID="weekly-headline">
+                {summary.highlight.value}
+              </Text>
+            </View>
+          ) : null}
+
+          <View style={styles.card}>
+            <Text style={styles.cardTitle}>{t('weekly.focusTitle')}</Text>
+            {summary.focusHints.length ? (
+              summary.focusHints.map((hint) => (
+                <Text style={styles.hint} key={hint}>
+                  • {hint}
+                </Text>
+              ))
+            ) : (
+              <Text style={styles.muted}>{t('weekly.empty.body')}</Text>
+            )}
+          </View>
+        </>
+      ) : (
+        <View style={styles.card}>
+          <Text style={styles.cardTitle}>{t('weekly.empty.title')}</Text>
+          <Text style={styles.muted}>{t('weekly.empty.body')}</Text>
+          <View style={styles.ctaRow}>
+            <TouchableOpacity onPress={() => navigation.navigate('RoundStart')} testID="weekly-empty-start-round">
+              <View style={styles.primaryButton}>
+                <Text style={styles.primaryButtonText}>{t('weekly.cta.startRound')}</Text>
+              </View>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={() => navigation.navigate('RangePractice')} testID="weekly-empty-range">
+              <View style={[styles.primaryButton, styles.secondaryButton]}>
+                <Text style={styles.primaryButtonText}>{t('weekly.cta.range')}</Text>
+              </View>
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
+
+      <TouchableOpacity
+        style={[styles.primaryButton, sharing ? styles.disabledButton : null]}
+        onPress={handleShare}
+        disabled={sharing}
+        testID="weekly-share"
+      >
+        {sharing ? <ActivityIndicator color="#0c0c0f" /> : <Text style={styles.primaryButtonText}>{t('weekly.share.cta')}</Text>}
+      </TouchableOpacity>
     </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#0c0c0f',
-  },
-  content: {
-    padding: 16,
-    gap: 12,
-  },
-  center: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 24,
-  },
-  title: {
-    fontSize: 28,
-    fontWeight: '700',
-    color: '#f5f5f7',
-  },
-  period: {
-    color: '#b6b6c2',
-    marginBottom: 4,
-  },
-  headline: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#f5f5f7',
-  },
-  card: {
-    backgroundColor: '#16171f',
-    borderRadius: 12,
-    padding: 16,
-    gap: 8,
-  },
-  cardTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#f5f5f7',
-    marginBottom: 4,
-  },
-  statRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-  statLabel: {
-    color: '#b6b6c2',
-  },
-  statValue: {
-    color: '#f5f5f7',
-    fontWeight: '600',
-  },
-  categoryGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 12,
-  },
-  categoryTile: {
-    width: '48%',
-    backgroundColor: '#1f202a',
-    padding: 12,
-    borderRadius: 10,
-  },
-  categoryLabel: {
-    color: '#f5f5f7',
-    fontWeight: '600',
-    marginBottom: 4,
-  },
-  categoryGrade: {
-    fontSize: 18,
-    color: '#f5f5f7',
-    marginBottom: 4,
-  },
-  trend: {
-    color: '#7dd3fc',
-    fontSize: 14,
-  },
-  sgPositive: {
-    color: '#22c55e',
-  },
-  sgNegative: {
-    color: '#f87171',
-  },
-  hint: {
-    color: '#f5f5f7',
-  },
-  muted: {
-    color: '#8a8a94',
-  },
-  error: {
-    color: '#ff8a8a',
-    textAlign: 'center',
-    marginBottom: 12,
-  },
+  container: { flex: 1, backgroundColor: '#0c0c0f' },
+  content: { padding: 16, gap: 12 },
+  center: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 8, padding: 24 },
+  title: { fontSize: 28, fontWeight: '700', color: '#f5f5f7' },
+  subtitle: { color: '#b6b6c2' },
+  card: { backgroundColor: '#16171f', borderRadius: 12, padding: 16, gap: 8 },
+  cardTitle: { fontSize: 16, fontWeight: '700', color: '#f5f5f7' },
+  headline: { fontSize: 18, fontWeight: '700', color: '#f5f5f7' },
+  statRow: { flexDirection: 'row', gap: 12 },
+  statTile: { flex: 1, backgroundColor: '#1f202a', padding: 12, borderRadius: 10, gap: 4 },
+  statLabel: { color: '#8a8a94' },
+  statValue: { color: '#f5f5f7', fontSize: 22, fontWeight: '700' },
+  hint: { color: '#f5f5f7' },
+  muted: { color: '#8a8a94' },
+  error: { color: '#ff8a8a', textAlign: 'center' },
   primaryButton: {
     backgroundColor: '#00c853',
     paddingVertical: 12,
     paddingHorizontal: 16,
     borderRadius: 10,
     alignItems: 'center',
-    justifyContent: 'center',
   },
-  secondaryButton: {
-    backgroundColor: '#2a2b35',
-  },
-  disabledButton: {
-    opacity: 0.7,
-  },
-  primaryButtonText: {
-    color: '#0c0c0f',
-    fontWeight: '700',
-  },
-  emptyTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#f5f5f7',
-    marginBottom: 4,
-  },
-  ctaRow: {
-    flexDirection: 'row',
-    gap: 12,
-    marginTop: 4,
-    flexWrap: 'wrap',
-  },
+  primaryButtonText: { color: '#0c0c0f', fontWeight: '700' },
+  secondaryButton: { backgroundColor: '#2a2b35' },
+  disabledButton: { opacity: 0.7 },
+  ctaRow: { flexDirection: 'row', gap: 12, marginTop: 8, flexWrap: 'wrap' },
 });
-

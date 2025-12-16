@@ -8,7 +8,7 @@ import * as bagStatsClient from '@app/api/bagStatsClient';
 import * as playerApi from '@app/api/player';
 import * as practiceClient from '@app/api/practiceClient';
 import * as roundClient from '@app/api/roundClient';
-import * as weeklyApi from '@app/api/weeklySummary';
+import * as weeklyApi from '@app/api/weeklySummaryClient';
 import type { RootStackParamList } from '@app/navigation/types';
 import HomeDashboardScreen from '@app/screens/HomeDashboardScreen';
 import * as engagementStorage from '@app/storage/engagement';
@@ -36,12 +36,13 @@ const mockProfile: playerApi.PlayerProfile = {
 };
 
 const mockWeekly: weeklyApi.WeeklySummary = {
-  period: { from: '2024-01-01', to: '2024-01-07', roundCount: 4 },
-  headline: { text: 'Nice work', emoji: '🔥' },
-  coreStats: { avgScore: 82, bestScore: 78, worstScore: 88, avgToPar: '+10', holesPlayed: 72 },
-  categories: {},
-  focusHints: [],
-  strokesGained: undefined,
+  startDate: '2024-01-01T00:00:00Z',
+  endDate: '2024-01-07T00:00:00Z',
+  roundsPlayed: 4,
+  holesPlayed: 72,
+  highlight: { label: 'Best round', value: '72 (E)' },
+  focusCategory: 'driving',
+  focusHints: ['Fairways first'],
 };
 
 const mockPracticePlan: practiceClient.PracticePlan = {
@@ -112,7 +113,7 @@ vi.mock('@app/api/roundClient', () => ({
   fetchLatestCompletedRound: vi.fn(),
   fetchRoundRecap: vi.fn(),
 }));
-vi.mock('@app/api/weeklySummary', () => ({ fetchWeeklySummary: vi.fn() }));
+vi.mock('@app/api/weeklySummaryClient', () => ({ fetchWeeklySummary: vi.fn() }));
 vi.mock('@app/api/practiceClient', () => ({ fetchPracticePlan: vi.fn() }));
 vi.mock('@app/api/bagClient', () => ({ fetchPlayerBag: vi.fn() }));
 vi.mock('@app/api/bagStatsClient', () => ({ fetchBagStats: vi.fn() }));
@@ -309,7 +310,7 @@ describe('HomeDashboardScreen', () => {
 
   it('hides weekly badge when already seen', async () => {
     vi.mocked(engagementStorage.loadEngagementState).mockResolvedValue({
-      lastSeenWeeklySummaryAt: mockWeekly.period.to,
+      lastSeenWeeklySummaryAt: mockWeekly.endDate,
     });
     const navigation = createNavigation();
 
@@ -352,7 +353,7 @@ describe('HomeDashboardScreen', () => {
     await waitFor(() => {
       expect(navigation.navigate).toHaveBeenCalledWith('WeeklySummary');
       expect(engagementStorage.saveEngagementState).toHaveBeenCalledWith({
-        lastSeenWeeklySummaryAt: mockWeekly.period.to,
+        lastSeenWeeklySummaryAt: mockWeekly.endDate,
       });
     });
   });
@@ -360,7 +361,7 @@ describe('HomeDashboardScreen', () => {
   it('renders weekly progress copy', async () => {
     vi.mocked(weeklyApi.fetchWeeklySummary).mockResolvedValue({
       ...mockWeekly,
-      period: { ...mockWeekly.period, roundCount: 2 },
+      roundsPlayed: 2,
     });
     const navigation = createNavigation();
 
@@ -372,7 +373,7 @@ describe('HomeDashboardScreen', () => {
   it('shows encouragement when no rounds this week', async () => {
     vi.mocked(weeklyApi.fetchWeeklySummary).mockResolvedValue({
       ...mockWeekly,
-      period: { ...mockWeekly.period, roundCount: 0 },
+      roundsPlayed: 0,
     });
     const navigation = createNavigation();
 

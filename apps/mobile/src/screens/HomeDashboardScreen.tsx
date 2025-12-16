@@ -23,8 +23,7 @@ import {
 } from '@app/api/roundClient';
 import { fetchPracticePlan, type PracticePlan } from '@app/api/practiceClient';
 import { fetchPlayerProfile, type PlayerProfile } from '@app/api/player';
-import { fetchWeeklySummary, type WeeklySummary } from '@app/api/weeklySummary';
-import { createWeeklyShareLink } from '@app/api/shareClient';
+import { fetchWeeklySummary, type WeeklySummary } from '@app/api/weeklySummaryClient';
 import { fetchCourseLayout, fetchCourses } from '@app/api/courseClient';
 import { t } from '@app/i18n';
 import type { RootStackParamList } from '@app/navigation/types';
@@ -778,27 +777,30 @@ export default function HomeDashboardScreen({ navigation }: Props): JSX.Element 
   const bagSummary = useMemo(() => summarizeBag(bag), [bag]);
 
   const weeklyProgress = useMemo(() => {
-    const rounds = weeklySummary?.period.roundCount ?? 0;
+    const rounds = weeklySummary?.roundsPlayed ?? 0;
     const progress = Math.min(rounds / TARGET_ROUNDS_PER_WEEK, 1);
     return { rounds, progress };
-  }, [weeklySummary?.period.roundCount ?? 0]);
+  }, [weeklySummary?.roundsPlayed ?? 0]);
 
   const weeklyTopCategory = useMemo(() => {
-    const categories = weeklySummary?.categories ?? {};
-    const order: Array<keyof typeof categories> = ['driving', 'approach', 'short_game', 'putting'];
-    for (const key of order) {
-      const category = categories[key];
-      if (category?.grade || category?.note) {
-        return t(`weeklySummary.categories.${key}` as const);
-      }
+    switch (weeklySummary?.focusCategory) {
+      case 'driving':
+        return t('weekly.focus.driving');
+      case 'approach':
+        return t('weekly.focus.approach');
+      case 'short_game':
+        return t('weekly.focus.short_game');
+      case 'putting':
+        return t('weekly.focus.putting');
+      default:
+        return t('weekly.focus.overall');
     }
-    return t('weeklySummary.categories.driving');
-  }, [weeklySummary?.categories]);
+  }, [weeklySummary?.focusCategory]);
 
   const hasNewWeeklySummary = useMemo(() => {
-    if (!weeklySummary?.period.to) return false;
-    if ((weeklySummary.period.roundCount ?? 0) <= 0) return false;
-    const periodTime = new Date(weeklySummary.period.to).getTime();
+    if (!weeklySummary?.endDate) return false;
+    if ((weeklySummary.roundsPlayed ?? 0) <= 0) return false;
+    const periodTime = new Date(weeklySummary.endDate).getTime();
     if (Number.isNaN(periodTime)) return false;
     const lastSeen = engagement?.lastSeenWeeklySummaryAt;
     if (!lastSeen) return true;
@@ -837,7 +839,7 @@ export default function HomeDashboardScreen({ navigation }: Props): JSX.Element 
   }, [practiceRecommendation]);
 
   const markWeeklySeen = useCallback(async () => {
-    const timestamp = weeklySummary?.period.to;
+    const timestamp = weeklySummary?.endDate;
     if (!timestamp) return;
     setState((prev) => ({
       ...prev,
@@ -848,7 +850,7 @@ export default function HomeDashboardScreen({ navigation }: Props): JSX.Element 
     } catch (err) {
       console.warn('Home dashboard engagement save failed (weekly)', err);
     }
-  }, [weeklySummary?.period.to]);
+  }, [weeklySummary?.endDate]);
 
   const markCoachReportSeen = useCallback(async () => {
     const roundId = latestRound?.roundId;
@@ -936,39 +938,30 @@ export default function HomeDashboardScreen({ navigation }: Props): JSX.Element 
 
   const handleShareWeekly = useCallback(async () => {
     if (!weeklySummary) return;
-    const rounds = weeklySummary.period.roundCount ?? 0;
-    const avgScoreRaw = weeklySummary.coreStats.avgScore;
-    const avgScore =
-      avgScoreRaw == null ? '—' : avgScoreRaw.toFixed(Number.isInteger(avgScoreRaw) ? 0 : 1);
-    const fallbackMessage = t('weeklySummary.shareFallback', {
-      rounds,
-      avgScore,
-      topCategory: weeklyTopCategory,
-    });
-
     setSharingWeekly(true);
 
     try {
-      const link = await createWeeklyShareLink();
-      const message = t('weeklySummary.shareTemplate', {
-        rounds,
-        avgScore,
-        topCategory: weeklyTopCategory,
-        url: link.url,
+      const highlight = weeklySummary.highlight?.value;
+      const firstHint = weeklySummary.focusHints[0];
+      const message = t('weekly.share.template', {
+        rounds: weeklySummary.roundsPlayed,
+        holes: weeklySummary.holesPlayed,
+        highlight: highlight ? `Highlight: ${highlight}. ` : '',
+        focus: firstHint ? `Focus: ${firstHint}. ` : '',
       });
       await Share.share({ message });
+      safeEmit('weekly_summary.shared', {
+        rounds: weeklySummary.roundsPlayed,
+        holes: weeklySummary.holesPlayed,
+        hasHighlight: Boolean(weeklySummary.highlight),
+      });
     } catch (err) {
       console.warn('[home] Failed to share weekly summary', err);
-      try {
-        await Share.share({ message: fallbackMessage });
-      } catch (shareErr) {
-        console.warn('[home] Failed to share weekly fallback', shareErr);
-        Alert.alert(t('weeklySummary.shareErrorTitle'), t('weeklySummary.shareErrorBody'));
-      }
+      Alert.alert(t('weeklySummary.shareErrorTitle'), t('weeklySummary.shareErrorBody'));
     } finally {
       setSharingWeekly(false);
     }
-  }, [weeklySummary, weeklyTopCategory]);
+  }, [weeklySummary]);
 
   const handleStartHomePracticeRecommendation = useCallback(() => {
     if (!homePracticeRecommendation || !homePracticeMission) return;
@@ -1199,13 +1192,10 @@ export default function HomeDashboardScreen({ navigation }: Props): JSX.Element 
         {weeklySummary ? (
           <>
             <Text style={styles.cardBody} testID="weekly-headline">
-              {`${weeklySummary.headline.emoji ?? ''} ${weeklySummary.headline.text}`.trim()}
+              {t('weekly.subtitle', { rounds: weeklySummary.roundsPlayed, holes: weeklySummary.holesPlayed })}
             </Text>
             <Text style={styles.muted}>
-              {t('home_dashboard_weekly_summary', {
-                rounds: weeklySummary.period.roundCount,
-                avg: weeklySummary.coreStats.avgScore ?? '–',
-              })}
+              {weeklySummary.highlight?.value ?? t('weekly.empty.body')}
             </Text>
             <View style={styles.progressBlock}>
               <View style={styles.progressBar}>
@@ -1220,6 +1210,20 @@ export default function HomeDashboardScreen({ navigation }: Props): JSX.Element 
                     })}
               </Text>
             </View>
+            {weeklySummary.roundsPlayed === 0 ? (
+              <View style={styles.row}>
+                <TouchableOpacity onPress={() => navigation.navigate('RoundStart')} testID="weekly-home-start">
+                  <View style={styles.primaryButton}>
+                    <Text style={styles.primaryButtonText}>{t('weekly.cta.startRound')}</Text>
+                  </View>
+                </TouchableOpacity>
+                <TouchableOpacity onPress={() => navigation.navigate('RangePractice')} testID="weekly-home-range">
+                  <View style={styles.secondaryButton}>
+                    <Text style={styles.secondaryButtonText}>{t('weekly.cta.range')}</Text>
+                  </View>
+                </TouchableOpacity>
+              </View>
+            ) : null}
             <TouchableOpacity onPress={handleOpenWeekly} testID="open-weekly">
               <Text style={styles.link}>{t('home_dashboard_weekly_cta')}</Text>
             </TouchableOpacity>
@@ -1508,6 +1512,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+  },
+  row: {
+    flexDirection: 'row',
+    gap: 8,
+    flexWrap: 'wrap',
   },
   rowGapSmall: {
     flexDirection: 'row',
