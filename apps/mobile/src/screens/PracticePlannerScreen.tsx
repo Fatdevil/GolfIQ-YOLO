@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -6,6 +6,7 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { t } from '@app/i18n';
 import type { RootStackParamList } from '@app/navigation/types';
 import { DRILLS_CATALOG, findDrillById } from '@app/practice/drillsCatalog';
+import { fetchPracticePlanFromDrills } from '@app/api/practiceClient';
 import {
   getWeekStartISO,
   loadCurrentWeekPracticePlan,
@@ -20,27 +21,84 @@ type Props = NativeStackScreenProps<RootStackParamList, 'PracticePlanner'>;
 
 type PlannedDrill = { item: PracticePlanItem; drill: ReturnType<typeof findDrillById> };
 
-export default function PracticePlannerScreen({ navigation }: Props): JSX.Element {
+export default function PracticePlannerScreen({ navigation, route }: Props): JSX.Element {
   const [loading, setLoading] = useState(true);
   const [plan, setPlan] = useState<PracticePlan | null>(null);
 
-  const loadPlan = () => {
+  const focusDrillIds = useMemo(
+    () => route?.params?.focusDrillIds?.filter(Boolean) ?? [],
+    [route?.params?.focusDrillIds],
+  );
+  const maxMinutes = route?.params?.maxMinutes;
+  const recommendedSet = useMemo(() => new Set(focusDrillIds), [focusDrillIds]);
+
+  const buildPlanFromDrills = (drillIds: string[]): PracticePlan => ({
+    weekStartISO: getWeekStartISO(),
+    items: drillIds.map((drillId, index) => ({
+      id: `${drillId}-${index}`,
+      drillId,
+      createdAt: new Date().toISOString(),
+      status: 'planned',
+    })),
+  });
+
+  const loadPlan = (isCancelled?: () => boolean) => {
     setLoading(true);
     loadCurrentWeekPracticePlan()
       .then((stored) => {
+        if (isCancelled?.()) return;
         setPlan(stored);
       })
-      .finally(() => setLoading(false));
+      .finally(() => {
+        if (isCancelled?.()) return;
+        setLoading(false);
+      });
   };
 
   useEffect(() => {
-    loadPlan();
-  }, []);
+    let cancelled = false;
+
+    const hydrateFromDrills = async () => {
+      setLoading(true);
+      try {
+        const response = await fetchPracticePlanFromDrills({
+          drillIds: focusDrillIds,
+          maxMinutes,
+        });
+        const drillIdsFromResponse = response?.drills?.map((drill) => drill.id).filter(Boolean) ?? [];
+        const deduped = Array.from(new Set(drillIdsFromResponse.length ? drillIdsFromResponse : focusDrillIds));
+        const nextPlan = buildPlanFromDrills(deduped);
+        if (!cancelled) {
+          setPlan(nextPlan);
+          await savePracticePlan(nextPlan);
+        }
+      } catch (error) {
+        console.warn('[practice-planner] failed to fetch plan from drills', error);
+        if (!cancelled) loadPlan(() => cancelled);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    };
+
+    if (focusDrillIds.length) {
+      hydrateFromDrills().catch(() => {});
+    } else {
+      loadPlan(() => cancelled);
+    }
+
+    return () => {
+      cancelled = true;
+    };
+  }, [focusDrillIds, maxMinutes]);
 
   const mappedItems: PlannedDrill[] = (plan?.items ?? []).map((item) => ({
     item,
     drill: findDrillById(item.drillId),
   }));
+
+  const missingRecommendedDrills = focusDrillIds.filter(
+    (id) => !mappedItems.some(({ item }) => item.drillId === id),
+  );
 
   const toggleStatus = async (itemId: string) => {
     await serializePracticePlanWrite(async () => {
@@ -93,6 +151,21 @@ export default function PracticePlannerScreen({ navigation }: Props): JSX.Elemen
         </View>
       </TouchableOpacity>
 
+      {focusDrillIds.length && missingRecommendedDrills.length ? (
+        <View style={styles.card} testID="recommended-drills">
+          <Text style={styles.cardTitle}>{t('coach_report_recommended_drills_title')}</Text>
+          {missingRecommendedDrills.map((drillId) => {
+            const drill = findDrillById(drillId);
+            return (
+              <View key={drillId} style={styles.recommendedRow}>
+                <Text style={styles.cardTitle}>{drill ? t(drill.titleKey) : drillId}</Text>
+                {drill ? <Text style={styles.recommendedCategory}>{drill.category}</Text> : null}
+              </View>
+            );
+          })}
+        </View>
+      ) : null}
+
       {loading ? (
         <View style={styles.center}>
           <ActivityIndicator />
@@ -109,6 +182,7 @@ export default function PracticePlannerScreen({ navigation }: Props): JSX.Elemen
       ) : (
         mappedItems.map(({ item, drill }) => {
           const statusKey = item.status === 'done' ? 'practicePlan.statusDone' : 'practicePlan.statusPlanned';
+          const isRecommended = recommendedSet.has(item.drillId);
           return (
             <View style={styles.card} key={item.id} testID={`plan-item-${item.id}`}>
               <View style={styles.rowBetween}>
@@ -118,6 +192,11 @@ export default function PracticePlannerScreen({ navigation }: Props): JSX.Elemen
                     {drill ? t(drill.descriptionKey) : t('practicePlan.unknownDrill')}
                   </Text>
                 </View>
+                {isRecommended ? (
+                  <View style={styles.recommendedChip} testID={`recommended-${item.drillId}`}>
+                    <Text style={styles.recommendedText}>{t('practice_planner_recommended')}</Text>
+                  </View>
+                ) : null}
                 <View
                   style={[
                     styles.statusChip,
@@ -217,4 +296,13 @@ const styles = StyleSheet.create({
   sectionTitle: { fontWeight: '700', fontSize: 16 },
   library: { marginTop: 8, gap: 8 },
   libraryItem: { borderBottomWidth: 1, borderBottomColor: '#eee', paddingBottom: 8 },
+  recommendedChip: {
+    backgroundColor: '#f3f4ff',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+  },
+  recommendedText: { color: '#4338ca', fontWeight: '700' },
+  recommendedRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  recommendedCategory: { color: '#4338ca', fontWeight: '600' },
 });

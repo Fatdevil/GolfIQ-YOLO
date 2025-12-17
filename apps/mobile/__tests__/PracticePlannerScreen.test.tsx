@@ -9,6 +9,7 @@ import {
   loadPracticePlan,
   savePracticePlan,
 } from '@app/practice/practicePlanStorage';
+import { fetchPracticePlanFromDrills } from '@app/api/practiceClient';
 
 const catalog = vi.hoisted(() => [
   {
@@ -34,10 +35,15 @@ vi.mock('@app/practice/drillsCatalog', () => ({
   findDrillById: (id: string) => catalog.find((drill) => drill.id === id),
 }));
 
+vi.mock('@app/api/practiceClient', () => ({
+  fetchPracticePlanFromDrills: vi.fn(),
+}));
+
 const mockLoadPlan = loadPracticePlan as unknown as Mock;
 const mockLoadCurrentWeekPlan = loadCurrentWeekPracticePlan as unknown as Mock;
 const mockSavePlan = savePracticePlan as unknown as Mock;
 const mockGetWeekStartISO = getWeekStartISO as unknown as Mock;
+const mockFetchPlanFromDrills = fetchPracticePlanFromDrills as unknown as Mock;
 
 const navigation = { navigate: vi.fn() } as any;
 
@@ -105,5 +111,40 @@ describe('PracticePlannerScreen', () => {
     fireEvent.click(history);
 
     expect(navigation.navigate).toHaveBeenCalledWith('PracticeJournal');
+  });
+
+  it('loads a plan from recommended drills and highlights them', async () => {
+    mockLoadPlan.mockResolvedValue(null);
+    mockFetchPlanFromDrills.mockResolvedValue({
+      focusCategories: ['putting'],
+      drills: [
+        {
+          id: 'putting-lag-ladder',
+          name: 'Lag ladder',
+          description: 'Control distance',
+          category: 'putting',
+          focusMetric: 'speed',
+          difficulty: 'easy',
+          durationMinutes: 10,
+        },
+      ],
+    });
+
+    const { findByTestId, getByTestId } = render(
+      <PracticePlannerScreen
+        navigation={navigation}
+        route={{ params: { focusDrillIds: ['putting-lag-ladder'], maxMinutes: 30 } } as any}
+      />,
+    );
+
+    await waitFor(() =>
+      expect(mockFetchPlanFromDrills).toHaveBeenCalledWith({
+        drillIds: ['putting-lag-ladder'],
+        maxMinutes: 30,
+      }),
+    );
+
+    expect(await findByTestId('plan-item-putting-lag-ladder-0')).toBeTruthy();
+    expect(getByTestId('recommended-putting-lag-ladder')).toBeTruthy();
   });
 });

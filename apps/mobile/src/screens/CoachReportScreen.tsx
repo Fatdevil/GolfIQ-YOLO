@@ -6,6 +6,7 @@ import { fetchCoachRoundSummary, ProRequiredError, type CoachRoundSummary } from
 import { t } from '@app/i18n';
 import type { RootStackParamList } from '@app/navigation/types';
 import { fetchDemoCoachRound } from '@app/demo/demoService';
+import { logPracticeStartClick } from '@app/analytics/practicePlanner';
 
 const SG_CATEGORY_ORDER: Array<{ key: keyof NonNullable<CoachRoundSummary['strokesGained']>; label: string }> = [
   { key: 'driving', label: t('weeklySummary.categories.driving') },
@@ -60,14 +61,21 @@ export default function CoachReportScreen({ route, navigation }: Props): JSX.Ele
 
   const handleStartPractice = () => {
     const drillIds = recommendedDrillIds;
+    const maxMinutes = 60;
+    logPracticeStartClick({
+      source: 'coach_report',
+      drillCount: drillIds.length,
+      maxMinutes,
+    });
+
     if (drillIds.length) {
-      navigation.navigate('PracticePlanner', { focusDrillIds: drillIds, maxMinutes: 60 });
+      navigation.navigate('PracticePlanner', { focusDrillIds: drillIds, maxMinutes });
       return;
     }
 
     navigation.navigate('PracticePlanner', {
       focusCategories: fallbackCategories,
-      maxMinutes: 60,
+      maxMinutes,
     });
   };
 
@@ -239,10 +247,10 @@ export default function CoachReportScreen({ route, navigation }: Props): JSX.Ele
           )}
         </View>
 
-        <View style={[styles.card, proRequired && styles.dimmed]}>
-          <Text style={styles.cardTitle}>{t('coach_report_recommended_drills_title')}</Text>
-          {summary?.recommendedDrills?.length ? (
-            summary.recommendedDrills.map((drill) => (
+        {summary?.recommendedDrills?.length ? (
+          <View style={[styles.card, proRequired && styles.dimmed]}>
+            <Text style={styles.cardTitle}>{t('coach_report_recommended_drills_title')}</Text>
+            {summary.recommendedDrills.map((drill) => (
               <View key={drill.id} style={styles.drillRow}>
                 <View>
                   <Text style={styles.tileLabel}>{drill.name}</Text>
@@ -250,11 +258,9 @@ export default function CoachReportScreen({ route, navigation }: Props): JSX.Ele
                 </View>
                 <Text style={styles.link}>{t('practice_planner_recommended')}</Text>
               </View>
-            ))
-          ) : (
-            <Text style={styles.muted}>{t('practice_planner_no_data')}</Text>
-          )}
-        </View>
+            ))}
+          </View>
+        ) : null}
 
         <TouchableOpacity onPress={handleStartPractice} testID="start-practice-button">
           <View style={styles.primaryButton}>
