@@ -743,6 +743,10 @@ export default function HomeDashboardScreen({ navigation }: Props): JSX.Element 
     telemetryClient,
   ]);
 
+  const handleOpenPracticeJournal = useCallback(() => {
+    navigation.navigate('PracticeJournal');
+  }, [navigation]);
+
   const handleOpenPracticeProgress = useCallback(() => {
     if (practiceProgressModel?.hasData) {
       navigation.navigate('PracticeHistory');
@@ -1326,6 +1330,9 @@ export default function HomeDashboardScreen({ navigation }: Props): JSX.Element 
                 {practicePlanCopy}
               </Text>
             ) : null}
+            <TouchableOpacity onPress={handleOpenPracticeJournal} testID="practice-progress-history">
+              <Text style={styles.link}>{t('practice.journal.view_history')}</Text>
+            </TouchableOpacity>
             {shouldRenderWeeklyGoalNudge && weeklyGoalNudgeCopy ? (
               <View style={styles.goalNudge} testID="practice-goal-nudge">
                 <Text style={styles.goalNudgeText}>{weeklyGoalNudgeCopy}</Text>

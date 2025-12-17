@@ -92,4 +92,18 @@ describe('PracticePlannerScreen', () => {
       ),
     );
   });
+
+  it('navigates to practice journal from header link', async () => {
+    mockLoadPlan.mockResolvedValue(null);
+    mockLoadCurrentWeekPlan.mockResolvedValue(null);
+
+    const { findByTestId } = render(
+      <PracticePlannerScreen navigation={navigation} route={undefined as any} />,
+    );
+
+    const history = await findByTestId('practice-planner-history');
+    fireEvent.click(history);
+
+    expect(navigation.navigate).toHaveBeenCalledWith('PracticeJournal');
+  });
 });

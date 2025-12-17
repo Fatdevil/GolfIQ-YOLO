@@ -292,6 +292,10 @@ export default function HomeScreen({ navigation }: Props): JSX.Element {
     navigation.navigate('WeeklySummary');
   }, [navigation]);
 
+  const handlePracticeHistory = useCallback(() => {
+    navigation.navigate('PracticeJournal');
+  }, [navigation]);
+
   if (loading) {
     return (
       <View style={styles.center}>
@@ -430,6 +434,11 @@ export default function HomeScreen({ navigation }: Props): JSX.Element {
                 <Text style={styles.secondaryButtonText}>{t('home.practice.cta_view_plan')}</Text>
               </View>
             </TouchableOpacity>
+            <TouchableOpacity onPress={handlePracticeHistory} testID="practice-home-history">
+              <View style={styles.linkButton}>
+                <Text style={styles.linkText}>{t('practice.journal.view_history')}</Text>
+              </View>
+            </TouchableOpacity>
           </>
         ) : (
           <>
@@ -452,6 +461,11 @@ export default function HomeScreen({ navigation }: Props): JSX.Element {
             >
               <View style={styles.secondaryButton}>
                 <Text style={styles.secondaryButtonText}>{t('home.practice.cta_view_plan')}</Text>
+              </View>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={handlePracticeHistory} testID="practice-home-history">
+              <View style={styles.linkButton}>
+                <Text style={styles.linkText}>{t('practice.journal.view_history')}</Text>
               </View>
             </TouchableOpacity>
           </>

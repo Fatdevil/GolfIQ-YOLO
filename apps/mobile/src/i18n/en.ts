@@ -184,6 +184,29 @@ export const en = {
       ctaBack: 'Back to Weekly Summary',
       ctaViewPlan: 'View practice plan',
     },
+    journal: {
+      title: 'Practice Journal',
+      streak: 'Streak: {{days}} days',
+      this_week: 'This week: {{sessions}} sessions · {{minutes}} min',
+      view_history: 'View history',
+      empty: {
+        title: 'No recent practice yet',
+        body: 'Complete a guided practice session to start your journal.',
+        cta_start: 'Start practice',
+      },
+      detail: {
+        completed: '{{drills}} drills completed',
+      },
+      share: {
+        cta: 'Share',
+        minutes: '{{minutes}} min',
+        drills: '{{drills}} drills',
+        summary_fallback: 'Practice logged',
+        text_template: 'Practice done ✅ {{date}}: {{summary}}{{focus}}Tracked with GolfIQ.',
+        date_fallback: 'Recent practice',
+        focus: 'Focus: {{focus}}.',
+      },
+    },
   },
   weeklySummary: {
     title: 'Weekly Summary',
