@@ -30,11 +30,9 @@
     "puppeteer": "^22.15.0"
   },
   "devDependencies": {
-    "@react-native-async-storage/async-storage": "^2.2.0",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.1",
     "@types/react": "^18.3.27",
-    "@types/react-native": "^0.73.0",
     "jsdom": "^24.0.0",
     "ts-node": "^10.9.2",
     "tsx": "^4.19.0",
