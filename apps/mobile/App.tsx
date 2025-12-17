@@ -50,6 +50,7 @@ import WeeklySummaryScreen from '@app/screens/WeeklySummaryScreen';
 import PracticePlannerScreen from '@app/screens/PracticePlannerScreen';
 import PracticeSessionScreen from '@app/screens/PracticeSessionScreen';
 import PracticeJournalScreen from '@app/screens/PracticeJournalScreen';
+import PracticeWeeklySummaryScreen from '@app/screens/PracticeWeeklySummaryScreen';
 import OnboardingScreen from '@app/screens/OnboardingScreen';
 import DemoExperienceScreen from '@app/screens/DemoExperienceScreen';
 import { getHasCompletedOnboarding } from '@app/storage/onboarding';
@@ -164,6 +165,11 @@ export default function App(): JSX.Element {
           name="PracticeSession"
           component={PracticeSessionScreen}
           options={{ title: t('practice.session.title') }}
+        />
+        <Stack.Screen
+          name="PracticeWeeklySummary"
+          component={PracticeWeeklySummaryScreen}
+          options={{ title: t('practice.weeklySummary.title') }}
         />
         <Stack.Screen
           name="PracticeJournal"

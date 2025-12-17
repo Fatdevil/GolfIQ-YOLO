@@ -146,6 +146,10 @@ export default function PracticeJournalScreen({ navigation }: Props): JSX.Elemen
   const streakDays = useMemo(() => getPracticeStreakDays(sortedSessions, new Date()), [sortedSessions]);
   const thisWeekTotals = useMemo(() => getThisWeekTotals(sortedSessions, new Date()), [sortedSessions]);
 
+  const handleOpenWeeklySummary = () => {
+    navigation.navigate('PracticeWeeklySummary', { source: 'journal' });
+  };
+
   const handleShare = async (session: PracticeSession) => {
     try {
       const payload = buildShareText(session);
@@ -223,6 +227,9 @@ export default function PracticeJournalScreen({ navigation }: Props): JSX.Elemen
             minutes: thisWeekTotals.minutes,
           })}
         </Text>
+        <TouchableOpacity onPress={handleOpenWeeklySummary} testID="practice-weekly-summary-from-journal">
+          <Text style={styles.shareText}>{t('practice.weeklySummary.cta_view')}</Text>
+        </TouchableOpacity>
       </View>
 
       {renderContent()}

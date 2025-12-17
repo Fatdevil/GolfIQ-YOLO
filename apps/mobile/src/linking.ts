@@ -19,6 +19,7 @@ export const linking: LinkingOptions<any> = {
       RangePractice: 'range',
       RangeMissions: 'range/missions',
       PracticeMissions: 'practice/missions',
+      PracticeWeeklySummary: 'practice/weekly-summary',
       PracticeJournal: 'practice/journal',
       WeeklyPracticeGoalSettings: 'practice/goal-settings',
       PracticeHistory: 'practice/history',

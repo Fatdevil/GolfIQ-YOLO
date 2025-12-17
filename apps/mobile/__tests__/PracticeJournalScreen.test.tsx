@@ -74,4 +74,14 @@ describe('PracticeJournalScreen', () => {
     expect(message).toContain('2 drills');
     expect(message).toContain('Tracked with GolfIQ');
   });
+
+  it('opens weekly summary from the journal header', async () => {
+    mockLoadPracticeSessions.mockResolvedValue([]);
+
+    render(<PracticeJournalScreen navigation={navigation as any} route={undefined as any} />);
+
+    fireEvent.click(await screen.findByTestId('practice-weekly-summary-from-journal'));
+
+    expect(navigation.navigate).toHaveBeenCalledWith('PracticeWeeklySummary', { source: 'journal' });
+  });
 });

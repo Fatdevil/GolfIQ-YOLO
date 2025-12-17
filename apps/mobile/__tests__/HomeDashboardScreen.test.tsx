@@ -970,6 +970,26 @@ describe('HomeDashboardScreen', () => {
     expect(navigation.navigate).toHaveBeenCalledWith('PracticeJournal');
   });
 
+  it('opens weekly practice summary from the practice tile', async () => {
+    vi.mocked(practiceHistory.summarizeRecentPracticeHistory).mockReturnValue({
+      totalSessions: 2,
+      completedSessions: 1,
+      windowDays: 14,
+      lastCompleted: undefined,
+      lastStarted: undefined,
+      streakDays: 0,
+    });
+
+    const navigation = createNavigation();
+
+    render(<HomeDashboardScreen navigation={navigation} route={createRoute()} />);
+
+    const link = await screen.findByTestId('practice-weekly-summary-link');
+    fireEvent.click(link);
+
+    expect(navigation.navigate).toHaveBeenCalledWith('PracticeWeeklySummary', { source: 'home' });
+  });
+
   it('hides home practice recommendation when experiment is disabled', async () => {
     practiceRecommendationsVariant = 'disabled';
     mockRecommendPracticeMissions.mockReturnValue([
