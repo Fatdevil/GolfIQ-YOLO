@@ -149,6 +149,7 @@ describe('App navigation', () => {
     await waitFor(() => expect(Object.keys(registeredScreens)).toContain('PracticePlanner'));
 
     navigation.navigate('PracticePlanner');
+    forceRerender?.();
     await findByTestId('planner-start-session');
 
     fireEvent.click(getByTestId('planner-start-session'));
