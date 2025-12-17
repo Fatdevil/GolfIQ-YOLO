@@ -8,6 +8,7 @@ import type { RootStackParamList } from '@app/navigation/types';
 import { DRILLS_CATALOG, findDrillById } from '@app/practice/drillsCatalog';
 import {
   getWeekStartISO,
+  loadCurrentWeekPracticePlan,
   loadPracticePlan,
   savePracticePlan,
   serializePracticePlanWrite,
@@ -25,13 +26,9 @@ export default function PracticePlannerScreen({ navigation }: Props): JSX.Elemen
 
   const loadPlan = () => {
     setLoading(true);
-    loadPracticePlan()
+    loadCurrentWeekPracticePlan()
       .then((stored) => {
-        if (stored?.weekStartISO === getWeekStartISO()) {
-          setPlan(stored);
-        } else {
-          setPlan(null);
-        }
+        setPlan(stored);
       })
       .finally(() => setLoading(false));
   };
@@ -82,6 +79,12 @@ export default function PracticePlannerScreen({ navigation }: Props): JSX.Elemen
         <Text style={styles.title}>{t('practicePlan.title')}</Text>
         <Text style={styles.subtitle}>{t('practicePlan.thisWeek')}</Text>
       </View>
+
+      <TouchableOpacity onPress={() => navigation.navigate('PracticeSession')} testID="planner-start-session">
+        <View style={styles.primaryButton}>
+          <Text style={styles.primaryButtonText}>{t('practice.session.start')}</Text>
+        </View>
+      </TouchableOpacity>
 
       {loading ? (
         <View style={styles.center}>

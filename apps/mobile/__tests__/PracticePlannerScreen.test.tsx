@@ -3,7 +3,12 @@ import { fireEvent, render, waitFor, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
 
 import PracticePlannerScreen from '@app/screens/PracticePlannerScreen';
-import { getWeekStartISO, loadPracticePlan, savePracticePlan } from '@app/practice/practicePlanStorage';
+import {
+  getWeekStartISO,
+  loadCurrentWeekPracticePlan,
+  loadPracticePlan,
+  savePracticePlan,
+} from '@app/practice/practicePlanStorage';
 
 const catalog = vi.hoisted(() => [
   {
@@ -18,6 +23,7 @@ const catalog = vi.hoisted(() => [
 
 vi.mock('@app/practice/practicePlanStorage', () => ({
   loadPracticePlan: vi.fn(),
+  loadCurrentWeekPracticePlan: vi.fn(),
   savePracticePlan: vi.fn(),
   getWeekStartISO: vi.fn(),
   serializePracticePlanWrite: (op: () => Promise<unknown> | unknown) => Promise.resolve().then(op),
@@ -29,6 +35,7 @@ vi.mock('@app/practice/drillsCatalog', () => ({
 }));
 
 const mockLoadPlan = loadPracticePlan as unknown as Mock;
+const mockLoadCurrentWeekPlan = loadCurrentWeekPracticePlan as unknown as Mock;
 const mockSavePlan = savePracticePlan as unknown as Mock;
 const mockGetWeekStartISO = getWeekStartISO as unknown as Mock;
 
@@ -38,10 +45,12 @@ describe('PracticePlannerScreen', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockGetWeekStartISO.mockReturnValue('2024-01-01T00:00:00.000Z');
+    mockLoadCurrentWeekPlan.mockResolvedValue(null);
   });
 
   it('shows empty state when no plan is stored for the week', async () => {
     mockLoadPlan.mockResolvedValue(null);
+    mockLoadCurrentWeekPlan.mockResolvedValue(null);
 
     const { findByText } = render(
       <PracticePlannerScreen navigation={navigation} route={undefined as any} />,
@@ -63,6 +72,7 @@ describe('PracticePlannerScreen', () => {
       ],
     };
     mockLoadPlan.mockResolvedValue(plan);
+    mockLoadCurrentWeekPlan.mockResolvedValue(plan);
     mockSavePlan.mockResolvedValue(undefined);
 
     const { findByTestId, getByText } = render(

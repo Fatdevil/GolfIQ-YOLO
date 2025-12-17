@@ -8,6 +8,7 @@ import { fetchDemoWeeklySummary } from '@app/demo/demoService';
 import { t } from '@app/i18n';
 import type { RootStackParamList } from '@app/navigation/types';
 import { focusHintToDrills, addDrillToPlan } from '@app/practice/focusHintToDrills';
+import { loadCurrentWeekPracticePlan } from '@app/practice/practicePlanStorage';
 import { safeEmit } from '@app/telemetry';
 
 const formatter = new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric' });
@@ -43,6 +44,7 @@ export default function WeeklySummaryScreen({ navigation, route }: Props): JSX.E
   const [sharing, setSharing] = useState(false);
   const [addingHintId, setAddingHintId] = useState<string | null>(null);
   const [addedHints, setAddedHints] = useState<Set<string>>(new Set());
+  const [planProgress, setPlanProgress] = useState<{ done: number; total: number } | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -62,6 +64,19 @@ export default function WeeklySummaryScreen({ navigation, route }: Props): JSX.E
   useEffect(() => {
     load().catch(() => setError(t('weekly.error')));
   }, [load]);
+
+  useEffect(() => {
+    loadCurrentWeekPracticePlan()
+      .then((plan) => {
+        if (plan) {
+          const done = plan.items.filter((item) => item.status === 'done').length;
+          setPlanProgress({ done, total: plan.items.length });
+        } else {
+          setPlanProgress({ done: 0, total: 0 });
+        }
+      })
+      .catch(() => setPlanProgress({ done: 0, total: 0 }));
+  }, []);
 
   const hasRounds = (summary?.roundsPlayed ?? 0) > 0;
 
@@ -228,6 +243,29 @@ export default function WeeklySummaryScreen({ navigation, route }: Props): JSX.E
           </View>
         </View>
       )}
+
+      <View style={styles.card} testID="weekly-practice-card">
+        <Text style={styles.cardTitle}>{t('practicePlan.title')}</Text>
+        {planProgress && planProgress.total > 0 ? (
+          <Text style={styles.muted} testID="weekly-practice-progress">
+            {t('weekly.practice.progress', { done: planProgress.done, total: planProgress.total })}
+          </Text>
+        ) : (
+          <Text style={styles.muted}>{t('practicePlan.emptyBody')}</Text>
+        )}
+        <View style={styles.ctaRow}>
+          <TouchableOpacity onPress={() => navigation.navigate('PracticeSession')} testID="weekly-start-practice">
+            <View style={styles.primaryButton}>
+              <Text style={styles.primaryButtonText}>{t('practice.session.start')}</Text>
+            </View>
+          </TouchableOpacity>
+          <TouchableOpacity onPress={() => navigation.navigate('PracticePlanner')} testID="weekly-practice-view-plan">
+            <View style={[styles.primaryButton, styles.secondaryButton]}>
+              <Text style={styles.primaryButtonText}>{t('practicePlan.viewPlan')}</Text>
+            </View>
+          </TouchableOpacity>
+        </View>
+      </View>
 
       <TouchableOpacity
         style={[styles.primaryButton, sharing ? styles.disabledButton : null]}
