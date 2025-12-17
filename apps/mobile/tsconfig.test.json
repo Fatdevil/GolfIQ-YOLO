@@ -1,7 +1,7 @@
 {
   "extends": "./tsconfig.json",
   "compilerOptions": {
-    "types": ["vitest", "node", "react"]
+    "types": ["vitest", "vitest/globals", "node", "react", "react-native"]
   },
   "include": ["src", "__tests__", "vitest.config.ts", "vitest.setup.ts", "types/vitest.d.ts"],
   "exclude": ["node_modules"]
