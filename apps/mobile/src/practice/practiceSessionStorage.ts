@@ -35,8 +35,7 @@ function isPracticeSession(value: any): value is PracticeSession {
   );
 }
 
-export async function loadLastPracticeSession(): Promise<PracticeSession | null> {
-  const raw = await getItem(LAST_SESSION_KEY);
+function parsePracticeSession(raw: string | null): PracticeSession | null {
   if (!raw) return null;
 
   try {
@@ -45,7 +44,36 @@ export async function loadLastPracticeSession(): Promise<PracticeSession | null>
   } catch (err) {
     console.warn('[practice-session] Failed to parse last session', err);
   }
+
   return null;
+}
+
+function parsePracticeSessions(raw: string | null): PracticeSession[] {
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed)) {
+      return parsed.filter(isPracticeSession);
+    }
+  } catch (err) {
+    console.warn('[practice-session] Failed to parse session list', err);
+  }
+  return [];
+}
+
+export async function loadLastPracticeSession(): Promise<PracticeSession | null> {
+  const raw = await getItem(LAST_SESSION_KEY);
+  return parsePracticeSession(raw);
+}
+
+export async function loadPracticeSessions(): Promise<PracticeSession[]> {
+  const [rawList, rawLast] = await Promise.all([getItem(SESSIONS_KEY), getItem(LAST_SESSION_KEY)]);
+
+  const list = parsePracticeSessions(rawList);
+  if (list.length > 0) return list.slice(0, MAX_SESSIONS);
+
+  const last = parsePracticeSession(rawLast);
+  return last ? [last] : [];
 }
 
 export async function savePracticeSession(session: PracticeSession): Promise<void> {
@@ -57,10 +85,7 @@ export async function savePracticeSession(session: PracticeSession): Promise<voi
 
   try {
     const rawList = await getItem(SESSIONS_KEY);
-    const parsed = rawList ? JSON.parse(rawList) : [];
-    const list: PracticeSession[] = Array.isArray(parsed)
-      ? parsed.filter(isPracticeSession)
-      : [];
+    const list = parsePracticeSessions(rawList);
     const nextList = [session, ...list.filter((item) => item.id !== session.id)].slice(0, MAX_SESSIONS);
     await setItem(SESSIONS_KEY, JSON.stringify(nextList));
   } catch (err) {

@@ -145,6 +145,9 @@ describe('HomeScreen practice card', () => {
     expect(practiceAnalytics.logPracticeHomeCta).toHaveBeenCalledWith('view_plan');
     expect(navigation.navigate).toHaveBeenCalledWith('PracticePlanner');
 
+    fireEvent.click(screen.getByTestId('practice-home-history'));
+    expect(navigation.navigate).toHaveBeenCalledWith('PracticeJournal');
+
     vi.mocked(practicePlanStorage.loadCurrentWeekPracticePlan).mockResolvedValueOnce(null);
     render(<HomeScreen navigation={navigation} route={createRoute()} />);
 

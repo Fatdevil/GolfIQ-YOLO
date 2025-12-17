@@ -80,6 +80,13 @@ export default function PracticePlannerScreen({ navigation }: Props): JSX.Elemen
         <Text style={styles.subtitle}>{t('practicePlan.thisWeek')}</Text>
       </View>
 
+      <TouchableOpacity
+        onPress={() => navigation.navigate('PracticeJournal')}
+        testID="practice-planner-history"
+      >
+        <Text style={styles.link}>{t('practice.journal.view_history')}</Text>
+      </TouchableOpacity>
+
       <TouchableOpacity onPress={() => navigation.navigate('PracticeSession')} testID="planner-start-session">
         <View style={styles.primaryButton}>
           <Text style={styles.primaryButtonText}>{t('practice.session.start')}</Text>

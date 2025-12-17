@@ -950,6 +950,26 @@ describe('HomeDashboardScreen', () => {
     expect(navigation.navigate).toHaveBeenCalledWith('PracticeHistory');
   });
 
+  it('navigates to practice journal from the practice tile link', async () => {
+    vi.mocked(practiceHistory.summarizeRecentPracticeHistory).mockReturnValue({
+      totalSessions: 2,
+      completedSessions: 1,
+      windowDays: 14,
+      lastCompleted: undefined,
+      lastStarted: undefined,
+      streakDays: 0,
+    });
+
+    const navigation = createNavigation();
+
+    render(<HomeDashboardScreen navigation={navigation} route={createRoute()} />);
+
+    const link = await screen.findByTestId('practice-progress-history');
+    fireEvent.click(link);
+
+    expect(navigation.navigate).toHaveBeenCalledWith('PracticeJournal');
+  });
+
   it('hides home practice recommendation when experiment is disabled', async () => {
     practiceRecommendationsVariant = 'disabled';
     mockRecommendPracticeMissions.mockReturnValue([
