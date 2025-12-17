@@ -249,12 +249,12 @@ describe('RoundRecapScreen', () => {
     mockFetchRecap.mockRejectedValue(new Error('nope'));
     mockFetchRoundStrokesGained.mockResolvedValue(sampleStrokes);
 
-    const { getByText } = render(
+    const { getByText, findByText } = render(
       <RoundRecapScreen navigation={{} as any} route={{ params: { roundId: 'r1' } } as any} />,
     );
 
     await waitFor(() => expect(mockFetchRecap).toHaveBeenCalled());
-    expect(getByText(/Unable to load/)).toBeTruthy();
+    expect(await findByText(/Unable to load/)).toBeTruthy();
   });
 
   it('continues when strokes gained fails', async () => {

@@ -48,6 +48,7 @@ import RoundScorecardScreen from '@app/screens/RoundScorecardScreen';
 import CoachReportScreen from '@app/screens/CoachReportScreen';
 import WeeklySummaryScreen from '@app/screens/WeeklySummaryScreen';
 import PracticePlannerScreen from '@app/screens/PracticePlannerScreen';
+import PracticeSessionScreen from '@app/screens/PracticeSessionScreen';
 import OnboardingScreen from '@app/screens/OnboardingScreen';
 import DemoExperienceScreen from '@app/screens/DemoExperienceScreen';
 import { getHasCompletedOnboarding } from '@app/storage/onboarding';
@@ -157,6 +158,11 @@ export default function App(): JSX.Element {
           name="PracticePlanner"
           component={PracticePlannerScreen}
           options={{ title: t('practice_planner_title') }}
+        />
+        <Stack.Screen
+          name="PracticeSession"
+          component={PracticeSessionScreen}
+          options={{ title: t('practice.session.title') }}
         />
         <Stack.Screen
           name="PracticeMissions"

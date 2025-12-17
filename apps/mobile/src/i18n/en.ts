@@ -150,6 +150,30 @@ export const en = {
         edit: 'Edit goal',
       },
     },
+    session: {
+      title: 'Practice session',
+      start: 'Start practice',
+      progress: 'Drill {{current}} of {{total}}',
+      done: 'Mark done',
+      skip: 'Skip',
+      end: 'End session',
+      endConfirm: 'Finish your session and see recap?',
+      empty: {
+        title: 'No drills in your plan yet',
+        body: 'Add drills from Weekly Summary to start a guided session.',
+        cta: 'Back to Weekly Summary',
+      },
+    },
+    recap: {
+      title: 'Practice recap',
+      subtitle: 'Session summary',
+      completed: 'Completed',
+      skipped: 'Skipped',
+      total: 'Total drills',
+      duration: 'Duration',
+      ctaBack: 'Back to Weekly Summary',
+      ctaViewPlan: 'View practice plan',
+    },
   },
   weeklySummary: {
     title: 'Weekly Summary',
@@ -248,6 +272,9 @@ export const en = {
     share: {
       cta: 'Share',
       template: 'GolfIQ Weekly Recap: {{rounds}} rounds · {{holes}} holes. {{highlight}}{{focus}}Tracked with GolfIQ.',
+    },
+    practice: {
+      progress: 'Practice plan: {{done}}/{{total}} done',
     },
   },
   practice_planner_title: 'Practice Planner',

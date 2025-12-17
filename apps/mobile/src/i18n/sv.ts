@@ -84,6 +84,30 @@ export const sv = {
         edit: 'Ändra mål',
       },
     },
+    session: {
+      title: 'Träningspass',
+      start: 'Starta träning',
+      progress: 'Övning {{current}} av {{total}}',
+      done: 'Markera klar',
+      skip: 'Hoppa över',
+      end: 'Avsluta pass',
+      endConfirm: 'Avsluta passet och visa sammanfattning?',
+      empty: {
+        title: 'Inga övningar i planen ännu',
+        body: 'Lägg till övningar från veckosummeringen för att starta ett guidat pass.',
+        cta: 'Till veckosummering',
+      },
+    },
+    recap: {
+      title: 'Sammanfattning',
+      subtitle: 'Passöversikt',
+      completed: 'Klart',
+      skipped: 'Hoppat över',
+      total: 'Totalt antal övningar',
+      duration: 'Tid',
+      ctaBack: 'Till veckosummering',
+      ctaViewPlan: 'Visa träningsplan',
+    },
   },
   practice_goal_streak_label: '{{count}} veckors svit',
   practice_plan_title: 'Veckans träningsplan',
@@ -180,6 +204,9 @@ export const sv = {
     share: {
       cta: 'Dela',
       template: 'GolfIQ veckosammanfattning: {{rounds}} rundor · {{holes}} hål. {{highlight}}{{focus}}Spårat med GolfIQ.',
+    },
+    practice: {
+      progress: 'Träningsplan: {{done}}/{{total}} klar',
     },
   },
   bag: {

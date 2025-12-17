@@ -6,6 +6,7 @@ import { beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
 import { fetchWeeklySummary } from '@app/api/weeklySummaryClient';
 import WeeklySummaryScreen from '@app/screens/WeeklySummaryScreen';
 import { addDrillToPlan, focusHintToDrills } from '@app/practice/focusHintToDrills';
+import { loadCurrentWeekPracticePlan } from '@app/practice/practicePlanStorage';
 
 vi.mock('@app/api/weeklySummaryClient', () => ({
   fetchWeeklySummary: vi.fn(),
@@ -14,14 +15,19 @@ vi.mock('@app/practice/focusHintToDrills', () => ({
   focusHintToDrills: vi.fn(),
   addDrillToPlan: vi.fn(),
 }));
+vi.mock('@app/practice/practicePlanStorage', () => ({
+  loadCurrentWeekPracticePlan: vi.fn(),
+}));
 
 const mockFetchWeeklySummary = fetchWeeklySummary as unknown as Mock;
 const mockAddToPlan = addDrillToPlan as unknown as Mock;
 const mockFocusToDrills = focusHintToDrills as unknown as Mock;
+const mockLoadCurrentPlan = loadCurrentWeekPracticePlan as unknown as Mock;
 
 beforeEach(() => {
   vi.clearAllMocks();
   mockFocusToDrills.mockReturnValue([]);
+  mockLoadCurrentPlan.mockResolvedValue(null);
 });
 
 describe('WeeklySummaryScreen', () => {
@@ -112,5 +118,37 @@ describe('WeeklySummaryScreen', () => {
     }));
 
     expect(await findByText(/Added to this week/)).toBeTruthy();
+  });
+
+  it('surfaces weekly practice plan progress and CTA', async () => {
+    mockFetchWeeklySummary.mockResolvedValue({
+      startDate: '2024-01-01T00:00:00Z',
+      endDate: '2024-01-07T00:00:00Z',
+      roundsPlayed: 1,
+      holesPlayed: 18,
+      focusHints: [],
+    });
+    mockLoadCurrentPlan.mockResolvedValue({
+      weekStartISO: '2024-01-01T00:00:00Z',
+      items: [
+        { id: 'one', drillId: 'a', createdAt: '2024', status: 'done' as const },
+        { id: 'two', drillId: 'b', createdAt: '2024', status: 'planned' as const },
+        { id: 'three', drillId: 'c', createdAt: '2024', status: 'done' as const },
+      ],
+    });
+
+    const navigation = { navigate: vi.fn() } as any;
+    const { findByTestId, getByTestId, getByText } = render(
+      <WeeklySummaryScreen
+        navigation={navigation}
+        route={{ key: 'WeeklySummary', name: 'WeeklySummary', params: undefined } as any}
+      />,
+    );
+
+    expect(await findByTestId('weekly-practice-progress')).toBeTruthy();
+    expect(getByText(/Practice plan: 2\/3 done/i)).toBeTruthy();
+
+    fireEvent.click(getByTestId('weekly-start-practice'));
+    expect(navigation.navigate).toHaveBeenCalledWith('PracticeSession');
   });
 });

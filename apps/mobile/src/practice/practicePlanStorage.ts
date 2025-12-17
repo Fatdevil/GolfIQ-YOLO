@@ -75,6 +75,15 @@ export async function loadPracticePlan(): Promise<PracticePlan | null> {
   return null;
 }
 
+export async function loadCurrentWeekPracticePlan(date = new Date()): Promise<PracticePlan | null> {
+  const plan = await loadPracticePlan();
+  const weekStartISO = getWeekStartISO(date);
+  if (plan?.weekStartISO === weekStartISO) {
+    return plan;
+  }
+  return null;
+}
+
 export async function savePracticePlan(plan: PracticePlan): Promise<void> {
   try {
     await setItem(PRACTICE_PLAN_STORAGE_KEY, JSON.stringify(plan));

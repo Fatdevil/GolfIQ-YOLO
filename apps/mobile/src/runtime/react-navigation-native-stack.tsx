@@ -23,25 +23,26 @@ export type NativeStackScreenProps<
   route: Route<Name & string, List[Name]>;
 };
 
-type ScreenProps<List extends ParamList> = {
-  name: keyof List;
+type ScreenProps<List extends ParamList, Name extends keyof List> = {
+  name: Name;
   component?: React.ComponentType<any>;
-  children?: (props: NativeStackScreenProps<List, keyof List>) => React.ReactNode;
+  children?: (props: NativeStackScreenProps<List, Name>) => React.ReactNode;
   options?: Record<string, unknown>;
 };
 
-type NavigatorProps = {
+type NavigatorProps<List extends ParamList> = {
   children?: React.ReactNode;
+  initialRouteName?: keyof List;
 };
 
 export function createNativeStackNavigator<List extends ParamList>() {
-  const Navigator: React.FC<NavigatorProps> = ({ children }) => <>{children}</>;
-  const Screen: React.FC<ScreenProps<List>> = ({ children, component: Component }) => {
+  const Navigator: React.FC<NavigatorProps<List>> = ({ children }) => <>{children}</>;
+  const Screen = <Name extends keyof List>({ children, component: Component }: ScreenProps<List, Name>) => {
     if (Component) {
       return <Component />;
     }
     if (typeof children === 'function') {
-      const props: NativeStackScreenProps<List, keyof List> = {
+      const props: NativeStackScreenProps<List, Name> = {
         navigation: {
           navigate: () => {},
           setParams: () => {},
@@ -50,7 +51,7 @@ export function createNativeStackNavigator<List extends ParamList>() {
         },
         route: {
           key: 'mock',
-          name: '' as keyof List & string,
+          name: '' as Name & string,
           params: undefined,
         },
       };
