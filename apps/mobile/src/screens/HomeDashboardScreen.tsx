@@ -747,6 +747,10 @@ export default function HomeDashboardScreen({ navigation }: Props): JSX.Element 
     navigation.navigate('PracticeJournal');
   }, [navigation]);
 
+  const handleOpenPracticeWeeklySummary = useCallback(() => {
+    navigation.navigate('PracticeWeeklySummary', { source: 'home' });
+  }, [navigation]);
+
   const handleOpenPracticeProgress = useCallback(() => {
     if (practiceProgressModel?.hasData) {
       navigation.navigate('PracticeHistory');
@@ -1332,6 +1336,9 @@ export default function HomeDashboardScreen({ navigation }: Props): JSX.Element 
             ) : null}
             <TouchableOpacity onPress={handleOpenPracticeJournal} testID="practice-progress-history">
               <Text style={styles.link}>{t('practice.journal.view_history')}</Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={handleOpenPracticeWeeklySummary} testID="practice-weekly-summary-link">
+              <Text style={styles.link}>{t('practice.weeklySummary.cta_view')}</Text>
             </TouchableOpacity>
             {shouldRenderWeeklyGoalNudge && weeklyGoalNudgeCopy ? (
               <View style={styles.goalNudge} testID="practice-goal-nudge">
