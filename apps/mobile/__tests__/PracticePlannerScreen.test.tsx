@@ -20,6 +20,7 @@ vi.mock('@app/practice/practicePlanStorage', () => ({
   loadPracticePlan: vi.fn(),
   savePracticePlan: vi.fn(),
   getWeekStartISO: vi.fn(),
+  serializePracticePlanWrite: (op: () => Promise<unknown> | unknown) => Promise.resolve().then(op),
 }));
 
 vi.mock('@app/practice/drillsCatalog', () => ({

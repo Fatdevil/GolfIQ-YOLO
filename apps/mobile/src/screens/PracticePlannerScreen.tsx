@@ -10,6 +10,7 @@ import {
   getWeekStartISO,
   loadPracticePlan,
   savePracticePlan,
+  serializePracticePlanWrite,
   type PracticePlan,
   type PracticePlanItem,
 } from '@app/practice/practicePlanStorage';
@@ -45,20 +46,34 @@ export default function PracticePlannerScreen({ navigation }: Props): JSX.Elemen
   }));
 
   const toggleStatus = async (itemId: string) => {
-    if (!plan) return;
-    const nextItems: PracticePlanItem[] = plan.items.map((item) =>
-      item.id === itemId ? { ...item, status: item.status === 'done' ? 'planned' : 'done' } : item,
-    );
-    const nextPlan: PracticePlan = { ...plan, items: nextItems };
-    setPlan(nextPlan);
-    await savePracticePlan(nextPlan);
+    await serializePracticePlanWrite(async () => {
+      const latestPlan = await loadPracticePlan();
+      const currentPlan: PracticePlan | null =
+        latestPlan?.weekStartISO === getWeekStartISO() ? latestPlan : plan ?? null;
+      if (!currentPlan) return null;
+
+      const nextItems: PracticePlanItem[] = currentPlan.items.map((item) =>
+        item.id === itemId ? { ...item, status: item.status === 'done' ? 'planned' : 'done' } : item,
+      );
+      const nextPlan: PracticePlan = { ...currentPlan, items: nextItems };
+      setPlan(nextPlan);
+      await savePracticePlan(nextPlan);
+      return nextPlan;
+    });
   };
 
   const removeItem = async (itemId: string) => {
-    if (!plan) return;
-    const nextPlan: PracticePlan = { ...plan, items: plan.items.filter((item) => item.id !== itemId) };
-    setPlan(nextPlan);
-    await savePracticePlan(nextPlan);
+    await serializePracticePlanWrite(async () => {
+      const latestPlan = await loadPracticePlan();
+      const currentPlan: PracticePlan | null =
+        latestPlan?.weekStartISO === getWeekStartISO() ? latestPlan : plan ?? null;
+      if (!currentPlan) return null;
+
+      const nextPlan: PracticePlan = { ...currentPlan, items: currentPlan.items.filter((item) => item.id !== itemId) };
+      setPlan(nextPlan);
+      await savePracticePlan(nextPlan);
+      return nextPlan;
+    });
   };
 
   return (

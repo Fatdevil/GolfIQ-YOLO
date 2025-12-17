@@ -1,7 +1,14 @@
 import type { WeeklyFocusCategory, WeeklyFocusHint } from '@app/api/weeklySummaryClient';
 
 import { DRILLS_CATALOG, type DrillCategory, type PracticeDrill } from './drillsCatalog';
-import { getWeekStartISO, loadPracticePlan, savePracticePlan, type PracticePlan, type PracticePlanItem } from './practicePlanStorage';
+import {
+  getWeekStartISO,
+  loadPracticePlan,
+  savePracticePlan,
+  serializePracticePlanWrite,
+  type PracticePlan,
+  type PracticePlanItem,
+} from './practicePlanStorage';
 
 const KEYWORD_MAPPINGS: Array<{ keywords: string[]; category: DrillCategory }> = [
   { keywords: ['putt', '3-putt', 'lag', 'green speed', 'greens'], category: 'putting' },
@@ -46,23 +53,25 @@ export async function addDrillToPlan(
   drillId: string,
   source?: PracticePlanItem['source'],
 ): Promise<PracticePlan> {
-  const weekStartISO = getWeekStartISO();
-  const existing = await loadPracticePlan();
-  const basePlan: PracticePlan = existing?.weekStartISO === weekStartISO ? existing : { weekStartISO, items: [] };
+  return serializePracticePlanWrite(async () => {
+    const weekStartISO = getWeekStartISO();
+    const existing = await loadPracticePlan();
+    const basePlan: PracticePlan = existing?.weekStartISO === weekStartISO ? existing : { weekStartISO, items: [] };
 
-  if (basePlan.items.some((item) => item.drillId === drillId)) {
-    return basePlan;
-  }
+    if (basePlan.items.some((item) => item.drillId === drillId)) {
+      return basePlan;
+    }
 
-  const newItem: PracticePlanItem = {
-    id: `${drillId}:${Date.now()}`,
-    drillId,
-    createdAt: new Date().toISOString(),
-    source,
-    status: 'planned',
-  };
+    const newItem: PracticePlanItem = {
+      id: `${drillId}:${Date.now()}`,
+      drillId,
+      createdAt: new Date().toISOString(),
+      source,
+      status: 'planned',
+    };
 
-  const nextPlan: PracticePlan = { ...basePlan, items: [...basePlan.items, newItem] };
-  await savePracticePlan(nextPlan);
-  return nextPlan;
+    const nextPlan: PracticePlan = { ...basePlan, items: [...basePlan.items, newItem] };
+    await savePracticePlan(nextPlan);
+    return nextPlan;
+  });
 }

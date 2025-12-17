@@ -2,6 +2,14 @@ import { getItem, setItem } from '@app/storage/asyncStorage';
 
 export const PRACTICE_PLAN_STORAGE_KEY = 'golfiq.practice.plan.v1';
 
+let practicePlanWriteChain: Promise<unknown> = Promise.resolve();
+
+export function serializePracticePlanWrite<T>(op: () => Promise<T>): Promise<T> {
+  const next = practicePlanWriteChain.then(op, op);
+  practicePlanWriteChain = next.then(() => undefined, () => undefined);
+  return next;
+}
+
 export type PracticePlanItem = {
   id: string;
   drillId: string;
