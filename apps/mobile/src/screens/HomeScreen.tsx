@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Modal,
@@ -26,6 +26,12 @@ import { loadLastRoundSummary, type LastRoundSummary } from '@app/run/lastRound'
 import { t } from '@app/i18n';
 import { loadLastRangeSessionSummary } from '@app/range/rangeSummaryStorage';
 import type { RangeSessionSummary } from '@app/range/rangeSession';
+import { logPracticeHomeCardViewed, logPracticeHomeCta } from '@app/analytics/practiceHome';
+import {
+  getWeekStartISO,
+  loadCurrentWeekPracticePlan,
+  type PracticePlan,
+} from '@app/practice/practicePlanStorage';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'PlayerHome'>;
 
@@ -116,6 +122,11 @@ export default function HomeScreen({ navigation }: Props): JSX.Element {
   const [discardVisible, setDiscardVisible] = useState(false);
   const [discarding, setDiscarding] = useState(false);
   const [lastRangeSession, setLastRangeSession] = useState<RangeSessionSummary | null>();
+  const [practicePlanState, setPracticePlanState] = useState<{
+    loading: boolean;
+    plan: PracticePlan | null;
+  }>({ loading: true, plan: null });
+  const practiceCardLoggedRef = useRef(false);
 
   const load = useCallback(async () => {
     setState((prev) => ({ ...prev, loading: true, error: null }));
@@ -187,6 +198,28 @@ export default function HomeScreen({ navigation }: Props): JSX.Element {
     };
   }, []);
 
+  useEffect(() => {
+    let cancelled = false;
+
+    setPracticePlanState({ loading: true, plan: null });
+
+    loadCurrentWeekPracticePlan()
+      .then((plan) => {
+        if (cancelled) return;
+        const hasCurrentWeekPlan = plan?.weekStartISO === getWeekStartISO();
+        setPracticePlanState({ loading: false, plan: hasCurrentWeekPlan ? plan : null });
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setPracticePlanState({ loading: false, plan: null });
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const lastRoundSummary = useMemo(() => {
     if (!data?.lastRoundSummary) return null;
     const dateLabel = formatRelativeDate(data.lastRoundSummary.finishedAt);
@@ -214,6 +247,50 @@ export default function HomeScreen({ navigation }: Props): JSX.Element {
       club: t('home.range.lastSession.anyClub'),
     });
   }, [lastRangeSession]);
+
+  const practiceProgress = useMemo(() => {
+    const plan = practicePlanState.plan;
+    if (!plan || !plan.items.length) return null;
+
+    const total = plan.items.length;
+    const completed = plan.items.filter((item) => {
+      return item.status === 'done' || Boolean((item as any).completedAt);
+    }).length;
+
+    return { total, completed };
+  }, [practicePlanState.plan]);
+
+  useEffect(() => {
+    if (practicePlanState.loading || practiceCardLoggedRef.current) return;
+
+    practiceCardLoggedRef.current = true;
+    logPracticeHomeCardViewed({
+      hasPlan: Boolean(practicePlanState.plan && practicePlanState.plan.items.length),
+      totalDrills: practiceProgress?.total,
+      completedDrills: practiceProgress?.completed,
+    });
+  }, [practicePlanState.loading, practicePlanState.plan, practiceProgress]);
+
+  const hasPracticePlan = Boolean(practicePlanState.plan && practicePlanState.plan.items.length);
+
+  const practicePrimaryCtaLabel = practiceProgress && practiceProgress.completed > 0
+    ? t('home.practice.cta_continue')
+    : t('home.practice.cta_start');
+
+  const handlePracticeStart = useCallback(() => {
+    logPracticeHomeCta('start');
+    navigation.navigate('PracticeSession');
+  }, [navigation]);
+
+  const handlePracticeViewPlan = useCallback(() => {
+    logPracticeHomeCta('view_plan');
+    navigation.navigate('PracticePlanner');
+  }, [navigation]);
+
+  const handlePracticeBuildPlan = useCallback(() => {
+    logPracticeHomeCta('build_plan');
+    navigation.navigate('WeeklySummary');
+  }, [navigation]);
 
   if (loading) {
     return (
@@ -318,6 +395,67 @@ export default function HomeScreen({ navigation }: Props): JSX.Element {
           </View>
         </TouchableOpacity>
         <Text style={styles.cardFootnote}>{t('home.range.missionsTeaser')}</Text>
+      </View>
+
+      <View style={styles.card} testID="practice-home-card">
+        <Text style={styles.cardTitle}>{t('home.practice.title')}</Text>
+        {practicePlanState.loading ? (
+          <View style={styles.row}>
+            <ActivityIndicator color="#fff" />
+            <Text style={styles.cardSubtitle}>{t('home.practice.loading')}</Text>
+          </View>
+        ) : hasPracticePlan && practiceProgress ? (
+          <>
+            <Text style={styles.cardSubtitle} testID="practice-home-progress">
+              {t('home.practice.progress', {
+                done: practiceProgress.completed,
+                total: practiceProgress.total,
+              })}
+            </Text>
+            <TouchableOpacity
+              accessibilityLabel={practicePrimaryCtaLabel}
+              onPress={handlePracticeStart}
+              testID="practice-home-start"
+            >
+              <View style={styles.primaryButton}>
+                <Text style={styles.primaryButtonText}>{practicePrimaryCtaLabel}</Text>
+              </View>
+            </TouchableOpacity>
+            <TouchableOpacity
+              accessibilityLabel={t('home.practice.cta_view_plan')}
+              onPress={handlePracticeViewPlan}
+              testID="practice-home-view-plan"
+            >
+              <View style={styles.secondaryButton}>
+                <Text style={styles.secondaryButtonText}>{t('home.practice.cta_view_plan')}</Text>
+              </View>
+            </TouchableOpacity>
+          </>
+        ) : (
+          <>
+            <Text style={styles.cardSubtitle} testID="practice-home-empty">
+              {t('home.practice.empty')}
+            </Text>
+            <TouchableOpacity
+              accessibilityLabel={t('home.practice.cta_build')}
+              onPress={handlePracticeBuildPlan}
+              testID="practice-home-build"
+            >
+              <View style={styles.primaryButton}>
+                <Text style={styles.primaryButtonText}>{t('home.practice.cta_build')}</Text>
+              </View>
+            </TouchableOpacity>
+            <TouchableOpacity
+              accessibilityLabel={t('home.practice.cta_view_plan')}
+              onPress={handlePracticeViewPlan}
+              testID="practice-home-view-plan"
+            >
+              <View style={styles.secondaryButton}>
+                <Text style={styles.secondaryButtonText}>{t('home.practice.cta_view_plan')}</Text>
+              </View>
+            </TouchableOpacity>
+          </>
+        )}
       </View>
 
       <View style={styles.card} testID="practice-planner-card">

@@ -209,6 +209,31 @@ export const sv = {
       progress: 'Träningsplan: {{done}}/{{total}} klar',
     },
   },
+  home: {
+    range: {
+      title: 'Range & Träning',
+      subtitle: 'Starta ett snabbpass',
+      cta: 'Starta snabbträning',
+      missionsTeaser: 'Testa nya rangemissioner för fokus i varje pass',
+      lastSession: {
+        none: 'Inget nyligt rangepass',
+        label: 'Senast: {{club}} · {{shots}} slag',
+        label_no_club: 'Senast: {{shots}} slag',
+        label_club_only: 'Senast: {{club}}',
+        anyClub: 'Valfri klubba',
+      },
+    },
+    practice: {
+      title: 'Veckans träning',
+      empty: 'Ingen plan ännu – lägg till övningar från veckosummeringen.',
+      loading: 'Laddar träningsplan…',
+      progress: '{{done}}/{{total}} övningar klara',
+      cta_start: 'Starta träning',
+      cta_continue: 'Fortsätt träna',
+      cta_view_plan: 'Visa plan',
+      cta_build: 'Bygg träningsplan',
+    },
+  },
   bag: {
     practice: {
       recommendedTitle: 'Rekommenderad träning',
