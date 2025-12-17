@@ -947,7 +947,7 @@ export default function HomeDashboardScreen({ navigation }: Props): JSX.Element 
         rounds: weeklySummary.roundsPlayed,
         holes: weeklySummary.holesPlayed,
         highlight: highlight ? `Highlight: ${highlight}. ` : '',
-        focus: firstHint ? `Focus: ${firstHint}. ` : '',
+        focus: firstHint ? `Focus: ${firstHint.text}. ` : '',
       });
       await Share.share({ message });
       safeEmit('weekly_summary.shared', {

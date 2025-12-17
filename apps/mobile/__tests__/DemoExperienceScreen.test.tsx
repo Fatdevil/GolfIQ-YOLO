@@ -34,7 +34,7 @@ const mockWeekly: WeeklySummary = {
   roundsPlayed: 3,
   holesPlayed: 54,
   highlight: { label: 'Best round', value: '72 (E)' },
-  focusHints: ['Keep the driver in play'],
+  focusHints: [{ id: 'demo-hint', text: 'Keep the driver in play', category: 'driving' }],
 };
 
 describe('DemoExperienceScreen', () => {

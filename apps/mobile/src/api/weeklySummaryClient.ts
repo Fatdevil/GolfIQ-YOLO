@@ -2,6 +2,12 @@ import { listRoundSummaries, listRounds, type RoundInfo, type RoundSummary } fro
 
 export type WeeklyFocusCategory = 'driving' | 'approach' | 'short_game' | 'putting' | 'overall';
 
+export type WeeklyFocusHint = {
+  id: string;
+  text: string;
+  category?: WeeklyFocusCategory;
+};
+
 export type WeeklySummary = {
   startDate: string; // ISO
   endDate: string; // ISO
@@ -13,7 +19,7 @@ export type WeeklySummary = {
     roundId?: string;
   };
   focusCategory?: WeeklyFocusCategory;
-  focusHints: string[];
+  focusHints: WeeklyFocusHint[];
 };
 
 const MS_IN_DAY = 1000 * 60 * 60 * 24;
@@ -52,7 +58,7 @@ export function aggregateWeeklySummary(
 
   let holesPlayed = 0;
   let focusCategory: WeeklyFocusCategory | undefined;
-  const focusHints: string[] = [];
+  const focusHints: WeeklyFocusHint[] = [];
 
   const drivingStats = { hit: 0, total: 0 };
   const girStats = { gir: 0, holes: 0 };
@@ -108,20 +114,36 @@ export function aggregateWeeklySummary(
   if (roundsPlayed > 0) {
     if (drivingStats.total >= 6 && drivingStats.hit / Math.max(drivingStats.total, 1) < 0.5) {
       focusCategory = 'driving';
-      focusHints.push('Aim for more fairways: choose a confident club off the tee and favor the wide side.');
+      focusHints.push({
+        id: 'driving-fairways',
+        category: 'driving',
+        text: 'Aim for more fairways: choose a confident club off the tee and favor the wide side.',
+      });
     }
     if (girStats.holes >= 6 && girStats.gir / Math.max(girStats.holes, 1) < 0.35) {
       focusCategory = focusCategory ?? 'approach';
-      focusHints.push('Give yourself birdie looks: pace stock irons and favor center targets.');
+      focusHints.push({
+        id: 'approach-pace',
+        category: 'approach',
+        text: 'Give yourself birdie looks: pace stock irons and favor center targets.',
+      });
     }
     const avgPutts = holesPlayed > 0 ? totalPutts / holesPlayed : null;
     if (avgPutts && avgPutts > 1.9) {
       focusCategory = focusCategory ?? 'putting';
-      focusHints.push('Speed control first: rehearse 30–40 ft pace and clean up your 3-footers.');
+      focusHints.push({
+        id: 'putting-speed',
+        category: 'putting',
+        text: 'Speed control first: rehearse 30–40 ft pace and clean up your 3-footers.',
+      });
     }
     if (focusHints.length === 0) {
       focusCategory = focusCategory ?? 'overall';
-      focusHints.push('Solid week—keep building reps with another round or focused range session.');
+      focusHints.push({
+        id: 'overall-solid-week',
+        category: 'overall',
+        text: 'Solid week—keep building reps with another round or focused range session.',
+      });
     }
   }
 

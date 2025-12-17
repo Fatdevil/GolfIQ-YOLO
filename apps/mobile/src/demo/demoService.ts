@@ -1,7 +1,7 @@
 import { apiFetch } from '@app/api/client';
 import type { RoundRecap } from '@app/api/roundClient';
 import type { RoundStrokesGained } from '@app/api/strokesGainedClient';
-import type { WeeklySummary } from '@app/api/weeklySummaryClient';
+import type { WeeklyFocusHint, WeeklySummary } from '@app/api/weeklySummaryClient';
 import type { CoachRoundSummary } from '@app/api/coachClient';
 
 export type DemoRoundResponse = {
@@ -35,8 +35,28 @@ export async function fetchDemoWeeklySummary(): Promise<WeeklySummary> {
     highlight: payload.coreStats?.bestScore
       ? { label: 'Best round', value: `${payload.coreStats.bestScore}` }
       : undefined,
-    focusHints: Array.isArray(payload.focusHints) ? payload.focusHints : [],
+    focusHints: normalizeFocusHints(payload.focusHints),
   } satisfies WeeklySummary;
+}
+
+function normalizeFocusHints(raw: unknown): WeeklyFocusHint[] {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .map((hint, idx) => {
+      if (hint && typeof hint === 'object' && 'text' in (hint as any)) {
+        const candidate = hint as WeeklyFocusHint;
+        return {
+          id: candidate.id ?? `demo-hint-${idx}`,
+          text: candidate.text ?? '',
+          category: candidate.category,
+        } satisfies WeeklyFocusHint;
+      }
+      if (typeof hint === 'string') {
+        return { id: `demo-hint-${idx}`, text: hint } satisfies WeeklyFocusHint;
+      }
+      return null;
+    })
+    .filter(Boolean) as WeeklyFocusHint[];
 }
 
 export async function fetchDemoCoachRound(): Promise<CoachRoundSummary> {

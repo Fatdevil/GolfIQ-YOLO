@@ -1,215 +1,156 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 
-import {
-  fetchAllDrills,
-  fetchPracticePlan,
-  fetchPracticePlanFromDrills,
-  type Drill,
-  type DrillCategory,
-} from '@app/api/practiceClient';
 import { t } from '@app/i18n';
 import type { RootStackParamList } from '@app/navigation/types';
-
-const DURATIONS = [30, 45, 60, 90];
-
-function formatCategory(category: DrillCategory | string): string {
-  switch (category) {
-    case 'driving':
-      return t('practice_planner_driving');
-    case 'approach':
-      return t('practice_planner_approach');
-    case 'short_game':
-      return t('practice_planner_short_game');
-    case 'putting':
-      return t('practice_planner_putting');
-    case 'mixed':
-    default:
-      return t('practice_planner_mixed');
-  }
-}
+import { DRILLS_CATALOG, findDrillById } from '@app/practice/drillsCatalog';
+import {
+  getWeekStartISO,
+  loadPracticePlan,
+  savePracticePlan,
+  serializePracticePlanWrite,
+  type PracticePlan,
+  type PracticePlanItem,
+} from '@app/practice/practicePlanStorage';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'PracticePlanner'>;
 
-export default function PracticePlannerScreen({ navigation, route }: Props): JSX.Element {
+type PlannedDrill = { item: PracticePlanItem; drill: ReturnType<typeof findDrillById> };
+
+export default function PracticePlannerScreen({ navigation }: Props): JSX.Element {
   const [loading, setLoading] = useState(true);
-  const [planError, setPlanError] = useState<string | null>(null);
-  const [plan, setPlan] = useState<Awaited<ReturnType<typeof fetchPracticePlan>> | null>(null);
-  const [allDrills, setAllDrills] = useState<Drill[] | null>(null);
-  const [selectedMinutes, setSelectedMinutes] = useState(route?.params?.maxMinutes ?? 60);
-  const [showLibrary, setShowLibrary] = useState(false);
-  const [completed, setCompleted] = useState<Set<string>>(new Set());
-  const focusDrillIds = route?.params?.focusDrillIds ?? [];
-  const focusCategoriesFromRoute = route?.params?.focusCategories ?? [];
+  const [plan, setPlan] = useState<PracticePlan | null>(null);
 
-  const recommendedIds = useMemo(() => new Set(focusDrillIds), [focusDrillIds]);
-
-  const loadPlan = (minutes: number) => {
+  const loadPlan = () => {
     setLoading(true);
-    const requester = focusDrillIds.length
-      ? fetchPracticePlanFromDrills({ drillIds: focusDrillIds, maxMinutes: minutes })
-      : fetchPracticePlan({ maxMinutes: minutes });
-
-    requester
-      .then((data) => {
-        setPlan(data);
-        setPlanError(null);
+    loadPracticePlan()
+      .then((stored) => {
+        if (stored?.weekStartISO === getWeekStartISO()) {
+          setPlan(stored);
+        } else {
+          setPlan(null);
+        }
       })
-      .catch(() => setPlanError(t('practice_planner_error')))
       .finally(() => setLoading(false));
   };
 
   useEffect(() => {
-    loadPlan(selectedMinutes);
-  }, [selectedMinutes]);
-
-  useEffect(() => {
-    fetchAllDrills()
-      .then((data) => setAllDrills(data))
-      .catch(() => setAllDrills([]));
+    loadPlan();
   }, []);
 
-  const focusChips = useMemo(() => {
-    if (plan?.focusCategories?.length) return plan.focusCategories;
-    return focusCategoriesFromRoute;
-  }, [plan?.focusCategories, focusCategoriesFromRoute]);
-  const browseList = useMemo(() => allDrills ?? [], [allDrills]);
+  const mappedItems: PlannedDrill[] = (plan?.items ?? []).map((item) => ({
+    item,
+    drill: findDrillById(item.drillId),
+  }));
 
-  const toggleComplete = (id: string) => {
-    setCompleted((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) {
-        next.delete(id);
-      } else {
-        next.add(id);
-      }
-      return next;
+  const toggleStatus = async (itemId: string) => {
+    await serializePracticePlanWrite(async () => {
+      const latestPlan = await loadPracticePlan();
+      const currentPlan: PracticePlan | null =
+        latestPlan?.weekStartISO === getWeekStartISO() ? latestPlan : plan ?? null;
+      if (!currentPlan) return null;
+
+      const nextItems: PracticePlanItem[] = currentPlan.items.map((item) =>
+        item.id === itemId ? { ...item, status: item.status === 'done' ? 'planned' : 'done' } : item,
+      );
+      const nextPlan: PracticePlan = { ...currentPlan, items: nextItems };
+      setPlan(nextPlan);
+      await savePracticePlan(nextPlan);
+      return nextPlan;
+    });
+  };
+
+  const removeItem = async (itemId: string) => {
+    await serializePracticePlanWrite(async () => {
+      const latestPlan = await loadPracticePlan();
+      const currentPlan: PracticePlan | null =
+        latestPlan?.weekStartISO === getWeekStartISO() ? latestPlan : plan ?? null;
+      if (!currentPlan) return null;
+
+      const nextPlan: PracticePlan = { ...currentPlan, items: currentPlan.items.filter((item) => item.id !== itemId) };
+      setPlan(nextPlan);
+      await savePracticePlan(nextPlan);
+      return nextPlan;
     });
   };
 
   return (
     <ScrollView contentContainerStyle={styles.container} testID="practice-planner-screen">
       <View style={styles.header}>
-        <Text style={styles.title}>{t('practice_planner_title')}</Text>
-        <Text style={styles.subtitle}>{t('practice_planner_subtitle')}</Text>
-        <TouchableOpacity
-          onPress={() => navigation.navigate('MyBag')}
-          testID="planner-my-bag-link"
-        >
-          <Text style={styles.link}>{t('my_bag_entry_planner')}</Text>
-        </TouchableOpacity>
+        <Text style={styles.title}>{t('practicePlan.title')}</Text>
+        <Text style={styles.subtitle}>{t('practicePlan.thisWeek')}</Text>
       </View>
 
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>{t('practice_planner_time_title')}</Text>
-        <View style={styles.row}>
-          {DURATIONS.map((minutes) => {
-            const active = selectedMinutes === minutes;
-            return (
-              <TouchableOpacity
-                key={minutes}
-                onPress={() => setSelectedMinutes(minutes)}
-                testID={`duration-${minutes}`}
-              >
-                <View style={[styles.pill, active && styles.pillActive]}>
-                  <Text style={[styles.pillText, active && styles.pillTextActive]}>
-                    {t('practice_planner_time_option', { minutes })}
-                  </Text>
-                </View>
-              </TouchableOpacity>
-            );
-          })}
+      {loading ? (
+        <View style={styles.center}>
+          <ActivityIndicator />
+          <Text style={styles.muted}>{t('practicePlan.loading')}</Text>
         </View>
-      </View>
-
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>{t('practice_planner_focus_title')}</Text>
-        <View style={styles.rowWrap}>
-          {focusChips.length === 0 && !loading ? (
-            <Text style={styles.muted}>{t('practice_planner_no_data')}</Text>
-          ) : (
-            focusChips.map((cat) => (
-              <View style={styles.chip} key={cat} testID={`focus-${cat}`}>
-                <Text style={styles.chipText}>{formatCategory(cat)}</Text>
-              </View>
-            ))
-          )}
+      ) : mappedItems.length === 0 ? (
+        <View style={styles.card}>
+          <Text style={styles.cardTitle}>{t('practicePlan.emptyTitle')}</Text>
+          <Text style={styles.muted}>{t('practicePlan.emptyBody')}</Text>
+          <TouchableOpacity onPress={() => navigation.navigate('WeeklySummary')} testID="planner-go-weekly">
+            <Text style={styles.link}>{t('practicePlan.fromWeekly')}</Text>
+          </TouchableOpacity>
         </View>
-      </View>
-
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>{t('practice_planner_plan_title')}</Text>
-        {loading && (
-          <View style={styles.center}>
-            <ActivityIndicator />
-            <Text style={styles.muted}>{t('practice_planner_loading')}</Text>
-          </View>
-        )}
-        {planError && <Text style={styles.error}>{planError}</Text>}
-        {!loading && plan?.drills?.length === 0 && (
-          <Text style={styles.muted}>{t('practice_planner_no_data')}</Text>
-        )}
-        {plan?.drills?.map((drill) => {
-          const done = completed.has(drill.id);
-          const isRecommended = recommendedIds.has(drill.id);
+      ) : (
+        mappedItems.map(({ item, drill }) => {
+          const statusKey = item.status === 'done' ? 'practicePlan.statusDone' : 'practicePlan.statusPlanned';
           return (
-            <TouchableOpacity
-              key={drill.id}
-              onPress={() => toggleComplete(drill.id)}
-              testID={`plan-drill-${drill.id}`}
-            >
-              <View style={[styles.card, done && styles.cardDone]}>
-                <View style={styles.rowBetween}>
-                  <Text style={styles.cardTitle}>{drill.name}</Text>
-                  <Text style={styles.difficulty}>{drill.difficulty.toUpperCase()}</Text>
-                </View>
-                {isRecommended && <Text style={styles.recommendedBadge}>{t('practice_planner_recommended')}</Text>}
-                <Text style={styles.muted}>{formatCategory(drill.category)}</Text>
-                <Text style={styles.cardSubtitle} numberOfLines={2}>
-                  {drill.description}
-                </Text>
-                <Text style={styles.detail}>{t('practice_planner_duration', { minutes: drill.durationMinutes })}</Text>
-                {done && <Text style={styles.doneLabel}>{t('practice_planner_done')}</Text>}
-              </View>
-            </TouchableOpacity>
-          );
-        })}
-      </View>
-
-      <View style={styles.section}>
-        <TouchableOpacity onPress={() => setShowLibrary((prev) => !prev)} testID="toggle-library">
-          <View style={styles.secondaryButton}>
-            <Text style={styles.secondaryButtonText}>{t('practice_planner_browse_all')}</Text>
-          </View>
-        </TouchableOpacity>
-        {showLibrary && (
-          <View style={{ marginTop: 8 }}>
-            {browseList.map((drill) => {
-              const isRecommended = recommendedIds.has(drill.id);
-              return (
-                <View style={styles.libraryItem} key={`lib-${drill.id}`} testID={`library-${drill.id}`}>
-                  <View style={styles.rowBetween}>
-                    <Text style={styles.cardTitle}>{drill.name}</Text>
-                    <View style={styles.row}>
-                      {isRecommended && <Text style={styles.recommendedTag}>{t('practice_planner_recommended')}</Text>}
-                      <Text style={[styles.muted, { marginLeft: 8 }]}>{formatCategory(drill.category)}</Text>
-                    </View>
-                  </View>
+            <View style={styles.card} key={item.id} testID={`plan-item-${item.id}`}>
+              <View style={styles.rowBetween}>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.cardTitle}>{drill ? t(drill.titleKey) : t('practicePlan.unknownDrill')}</Text>
                   <Text style={styles.cardSubtitle} numberOfLines={2}>
-                    {drill.description}
+                    {drill ? t(drill.descriptionKey) : t('practicePlan.unknownDrill')}
                   </Text>
                 </View>
-              );
-            })}
-          </View>
-        )}
-      </View>
+                <View
+                  style={[
+                    styles.statusChip,
+                    item.status === 'done' ? styles.statusDone : styles.statusPlanned,
+                  ]}
+                >
+                  <Text style={styles.statusText}>{t(statusKey)}</Text>
+                </View>
+              </View>
+              <Text style={styles.detail}>
+                {t('practicePlan.duration', { minutes: drill?.durationMin ?? 10 })}
+              </Text>
+              <View style={styles.actionRow}>
+                <TouchableOpacity onPress={() => toggleStatus(item.id)} testID={`toggle-item-${item.id}`}>
+                  <View style={styles.primaryButton}>
+                    <Text style={styles.primaryButtonText}>
+                      {t(item.status === 'done' ? 'practicePlan.markPlanned' : 'practicePlan.markDone')}
+                    </Text>
+                  </View>
+                </TouchableOpacity>
+                <TouchableOpacity onPress={() => removeItem(item.id)} testID={`remove-item-${item.id}`}>
+                  <View style={styles.secondaryButton}>
+                    <Text style={styles.secondaryButtonText}>{t('practicePlan.remove')}</Text>
+                  </View>
+                </TouchableOpacity>
+              </View>
+            </View>
+          );
+        })
+      )}
 
-      <TouchableOpacity onPress={() => navigation.navigate('WeeklySummary')}>
-        <Text style={[styles.link, { marginBottom: 24 }]}>{t('practice_planner_weekly_cta')}</Text>
-      </TouchableOpacity>
+      <View style={styles.library}>
+        <Text style={styles.sectionTitle}>{t('practicePlan.catalogTitle')}</Text>
+        {DRILLS_CATALOG.map((drill) => (
+          <View style={styles.libraryItem} key={drill.id} testID={`library-${drill.id}`}>
+            <View style={styles.rowBetween}>
+              <Text style={styles.cardTitle}>{t(drill.titleKey)}</Text>
+              <Text style={styles.muted}>{t('practicePlan.duration', { minutes: drill.durationMin })}</Text>
+            </View>
+            <Text style={styles.cardSubtitle}>{t(drill.descriptionKey)}</Text>
+          </View>
+        ))}
+      </View>
     </ScrollView>
   );
 }
@@ -225,77 +166,45 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   subtitle: { color: '#666' },
-  section: { marginTop: 8 },
-  sectionTitle: { fontWeight: '700', fontSize: 16, marginBottom: 6 },
-  row: { flexDirection: 'row', gap: 8 },
-  rowWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  rowBetween: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  chip: {
-    backgroundColor: '#eef2ff',
-    borderRadius: 16,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-  },
-  chipText: { color: '#1e3a8a', fontWeight: '600' },
-  pill: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: '#ccc',
-  },
-  pillActive: {
-    backgroundColor: '#0ea5e9',
-    borderColor: '#0ea5e9',
-  },
-  pillText: { color: '#333' },
-  pillTextActive: { color: '#fff', fontWeight: '700' },
-  center: { alignItems: 'center', justifyContent: 'center', paddingVertical: 12 },
+  center: { alignItems: 'center', gap: 8 },
   muted: { color: '#666' },
-  error: { color: '#c00' },
   card: {
     backgroundColor: '#fff',
     borderRadius: 12,
     padding: 12,
-    marginBottom: 8,
     borderWidth: 1,
     borderColor: '#eee',
+    gap: 8,
   },
-  cardDone: { borderColor: '#16a34a', backgroundColor: '#f0fdf4' },
-  cardTitle: { fontWeight: '700', fontSize: 15 },
-  cardSubtitle: { color: '#444', marginTop: 4 },
-  detail: { marginTop: 4, color: '#333' },
-  difficulty: { fontWeight: '700', color: '#0f172a' },
-  doneLabel: { color: '#16a34a', fontWeight: '700', marginTop: 4 },
-  recommendedBadge: {
-    color: '#0f172a',
-    backgroundColor: '#e0f2fe',
-    alignSelf: 'flex-start',
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 8,
-    marginTop: 4,
-    fontWeight: '700',
+  cardTitle: { fontWeight: '700', fontSize: 16 },
+  cardSubtitle: { color: '#444' },
+  rowBetween: { flexDirection: 'row', justifyContent: 'space-between', gap: 12 },
+  statusChip: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
   },
-  secondaryButton: {
+  statusText: { fontWeight: '700', color: '#0f172a' },
+  statusDone: { backgroundColor: '#dcfce7' },
+  statusPlanned: { backgroundColor: '#e0f2fe' },
+  detail: { color: '#333' },
+  actionRow: { flexDirection: 'row', gap: 10 },
+  primaryButton: {
+    backgroundColor: '#0ea5e9',
+    paddingHorizontal: 14,
+    paddingVertical: 10,
     borderRadius: 12,
-    padding: 12,
+  },
+  primaryButtonText: { color: '#fff', fontWeight: '700' },
+  secondaryButton: {
     backgroundColor: '#eef2ff',
-    alignItems: 'center',
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 12,
   },
   secondaryButtonText: { color: '#1e3a8a', fontWeight: '700' },
-  libraryItem: {
-    paddingVertical: 8,
-    borderBottomWidth: 1,
-    borderBottomColor: '#eee',
-  },
-  recommendedTag: {
-    color: '#0f172a',
-    backgroundColor: '#e0f2fe',
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 8,
-    fontWeight: '700',
-  },
-  link: { color: '#0ea5e9', textAlign: 'center', fontWeight: '700' },
+  link: { color: '#0ea5e9', fontWeight: '700', marginTop: 8 },
+  sectionTitle: { fontWeight: '700', fontSize: 16 },
+  library: { marginTop: 8, gap: 8 },
+  libraryItem: { borderBottomWidth: 1, borderBottomColor: '#eee', paddingBottom: 8 },
 });

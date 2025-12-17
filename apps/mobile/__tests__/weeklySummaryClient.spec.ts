@@ -39,6 +39,6 @@ describe('weeklySummaryClient', () => {
     expect(summary.holesPlayed).toBe(9);
     expect(summary.highlight?.roundId).toBe('r_recent');
     expect(summary.focusCategory).toBe('driving');
-    expect(summary.focusHints[0]).toContain('fairways');
+    expect(summary.focusHints[0].text).toContain('fairways');
   });
 });

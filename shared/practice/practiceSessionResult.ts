@@ -172,7 +172,10 @@ export function computePracticeSessionProgress(
     }
   }
 
-  const lastCompletedAt = results.length ? clampPracticeSessionResults(results).at(-1)?.completedAt : undefined;
+  const clampedResults = results.length ? clampPracticeSessionResults(results) : [];
+  const lastCompletedAt = clampedResults.length
+    ? clampedResults[clampedResults.length - 1]?.completedAt
+    : undefined;
   const nowMs = now.getTime();
   const sevenMs = 7 * 24 * 60 * 60 * 1000;
   const fourteenMs = 14 * 24 * 60 * 60 * 1000;

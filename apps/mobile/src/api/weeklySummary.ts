@@ -1,4 +1,5 @@
 import { apiFetch } from './client';
+import type { WeeklyFocusHint } from './weeklySummaryClient';
 
 export type WeeklySummaryCategory = {
   grade: string | null;
@@ -45,7 +46,7 @@ export type WeeklySummary = {
     short_game?: WeeklySummaryCategory;
     putting?: WeeklySummaryCategory;
   };
-  focusHints: string[];
+  focusHints: WeeklyFocusHint[];
   strokesGained?: WeeklyStrokesGained | null;
 };
 

@@ -3,10 +3,11 @@ import { ActivityIndicator, ScrollView, Share, StyleSheet, Text, TouchableOpacit
 
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 
-import { fetchWeeklySummary, type WeeklySummary } from '@app/api/weeklySummaryClient';
+import { fetchWeeklySummary, type WeeklyFocusHint, type WeeklySummary } from '@app/api/weeklySummaryClient';
 import { fetchDemoWeeklySummary } from '@app/demo/demoService';
 import { t } from '@app/i18n';
 import type { RootStackParamList } from '@app/navigation/types';
+import { focusHintToDrills, addDrillToPlan } from '@app/practice/focusHintToDrills';
 import { safeEmit } from '@app/telemetry';
 
 const formatter = new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric' });
@@ -26,8 +27,12 @@ function buildShareMessage(summary: WeeklySummary): string {
     rounds: summary.roundsPlayed,
     holes: summary.holesPlayed,
     highlight: highlight ? `Highlight: ${highlight}. ` : '',
-    focus: firstHint ? `Focus: ${firstHint}. ` : '',
+    focus: firstHint ? `Focus: ${firstHint.text}. ` : '',
   });
+}
+
+function getHintId(hint: WeeklyFocusHint, index: number): string {
+  return hint.id || `hint-${index}`;
 }
 
 export default function WeeklySummaryScreen({ navigation, route }: Props): JSX.Element {
@@ -36,6 +41,8 @@ export default function WeeklySummaryScreen({ navigation, route }: Props): JSX.E
   const [error, setError] = useState<string | null>(null);
   const [summary, setSummary] = useState<WeeklySummary | null>(null);
   const [sharing, setSharing] = useState(false);
+  const [addingHintId, setAddingHintId] = useState<string | null>(null);
+  const [addedHints, setAddedHints] = useState<Set<string>>(new Set());
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -74,6 +81,23 @@ export default function WeeklySummaryScreen({ navigation, route }: Props): JSX.E
       setSharing(false);
     }
   }, [shareMessage, summary]);
+
+  const handleAddToPlan = useCallback(
+    async (hint: WeeklyFocusHint, index: number) => {
+      if (!summary) return;
+      const suggestion = focusHintToDrills(hint, summary.focusCategory)[0];
+      if (!suggestion) return;
+      const id = getHintId(hint, index);
+      setAddingHintId(id);
+      try {
+        await addDrillToPlan(suggestion.id, { type: 'weekly_focus_hint', hintId: hint.id });
+        setAddedHints((prev) => new Set(prev).add(id));
+      } finally {
+        setAddingHintId(null);
+      }
+    },
+    [summary],
+  );
 
   if (loading) {
     return (
@@ -142,14 +166,48 @@ export default function WeeklySummaryScreen({ navigation, route }: Props): JSX.E
           <View style={styles.card}>
             <Text style={styles.cardTitle}>{t('weekly.focusTitle')}</Text>
             {summary.focusHints.length ? (
-              summary.focusHints.map((hint) => (
-                <Text style={styles.hint} key={hint}>
-                  • {hint}
-                </Text>
-              ))
+              summary.focusHints.map((hint, idx) => {
+                const hintId = getHintId(hint, idx);
+                const suggestions = focusHintToDrills(hint, summary.focusCategory) ?? [];
+                const suggestion = suggestions[0];
+                const added = addedHints.has(hintId);
+                const isAdding = addingHintId === hintId;
+                return (
+                  <View style={styles.hintRow} key={hintId} testID={`weekly-hint-${hintId}`}>
+                    <Text style={styles.hint}>• {hint.text}</Text>
+                    {suggestion ? (
+                      added ? (
+                        <Text style={styles.addedLabel}>{t('practicePlan.added')}</Text>
+                      ) : (
+                        <TouchableOpacity
+                          onPress={() => handleAddToPlan(hint, idx)}
+                          disabled={isAdding}
+                          testID={`add-plan-${hintId}`}
+                        >
+                          <View
+                            style={[
+                              styles.inlineButton,
+                              isAdding ? styles.disabledButton : null,
+                            ]}
+                          >
+                            {isAdding ? (
+                              <ActivityIndicator color="#f5f5f7" />
+                            ) : (
+                              <Text style={styles.inlineButtonText}>{t('practicePlan.addToPlan')}</Text>
+                            )}
+                          </View>
+                        </TouchableOpacity>
+                      )
+                    ) : null}
+                  </View>
+                );
+              })
             ) : (
               <Text style={styles.muted}>{t('weekly.empty.body')}</Text>
             )}
+            <TouchableOpacity onPress={() => navigation.navigate('PracticePlanner')} testID="weekly-view-plan">
+              <Text style={styles.link}>{t('practicePlan.viewPlan')}</Text>
+            </TouchableOpacity>
           </View>
         </>
       ) : (
@@ -210,4 +268,22 @@ const styles = StyleSheet.create({
   secondaryButton: { backgroundColor: '#2a2b35' },
   disabledButton: { opacity: 0.7 },
   ctaRow: { flexDirection: 'row', gap: 12, marginTop: 8, flexWrap: 'wrap' },
+  hintRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+    flexWrap: 'wrap',
+  },
+  inlineButton: {
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#2a2b35',
+    backgroundColor: '#1b1c24',
+  },
+  inlineButtonText: { color: '#f5f5f7', fontWeight: '700' },
+  addedLabel: { color: '#00c853', fontWeight: '700' },
+  link: { color: '#00c853', fontWeight: '700', marginTop: 8 },
 });
