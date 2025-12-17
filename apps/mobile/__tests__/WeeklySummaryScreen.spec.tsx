@@ -96,7 +96,7 @@ describe('WeeklySummaryScreen', () => {
     mockAddToPlan.mockResolvedValue({ weekStartISO: '2024-01-01', items: [] });
 
     const navigation = { navigate: vi.fn() } as any;
-    const { findByTestId, getByText } = render(
+    const { findByTestId, findByText, getByText } = render(
       <WeeklySummaryScreen
         navigation={navigation}
         route={{ key: 'WeeklySummary', name: 'WeeklySummary', params: undefined } as any}
@@ -110,6 +110,7 @@ describe('WeeklySummaryScreen', () => {
       type: 'weekly_focus_hint',
       hintId: 'hint-putting',
     }));
-    expect(getByText(/Added to this week/)).toBeTruthy();
+
+    expect(await findByText(/Added to this week/)).toBeTruthy();
   });
 });
