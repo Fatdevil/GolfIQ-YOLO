@@ -319,15 +319,13 @@ describe('RoundShotScreen', () => {
       roundId: 'r1',
       holes: { 1: { holeNumber: 1, par: 4 } },
     });
-    const { getByTestId } = render(
-      <RoundShotScreen navigation={{} as any} route={undefined as any} />,
-    );
+    render(<RoundShotScreen navigation={{} as any} route={undefined as any} />);
 
     await waitFor(() => expect(mockGetScores).toHaveBeenCalled());
 
-    fireEvent.click(getByTestId('fairway-left'));
-    fireEvent.click(getByTestId('putt-bucket-3_10m'));
-    fireEvent.click(getByTestId('save-score'));
+    fireEvent.click(await screen.findByTestId('fairway-left'));
+    fireEvent.click(await screen.findByTestId('putt-bucket-3_10m'));
+    fireEvent.click(await screen.findByTestId('save-score'));
 
     await waitFor(() => expect(mockUpdateHoleScore).toHaveBeenCalled());
     expect(mockUpdateHoleScore).toHaveBeenCalledWith(

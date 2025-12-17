@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import React from 'react';
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
@@ -164,7 +164,9 @@ describe('RangeQuickPracticeSessionScreen', () => {
 
     fireEvent.click(screen.getByTestId('end-session'));
 
-    await vi.runAllTimersAsync();
+    await act(async () => {
+      await vi.runAllTimersAsync();
+    });
 
     expect(logQuickPracticeSessionStart).toHaveBeenCalledTimes(1);
     expect(logQuickPracticeSessionComplete).toHaveBeenCalledWith(
@@ -204,7 +206,9 @@ describe('RangeQuickPracticeSessionScreen', () => {
 
     fireEvent.click(screen.getByTestId('end-session'));
 
-    await vi.runAllTimersAsync();
+    await act(async () => {
+      await vi.runAllTimersAsync();
+    });
 
     expect(logQuickPracticeSessionStart).toHaveBeenCalledTimes(1);
     expect(logQuickPracticeSessionComplete).toHaveBeenCalledWith(
@@ -385,7 +389,9 @@ describe('RangeQuickPracticeSessionScreen', () => {
 
     fireEvent.click(screen.getByTestId('end-session'));
 
-    await vi.runAllTimersAsync();
+    await act(async () => {
+      await vi.runAllTimersAsync();
+    });
 
     expect(practiceMissionHistory.recordPracticeMissionOutcome).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -454,7 +460,9 @@ describe('RangeQuickPracticeSessionScreen', () => {
 
     fireEvent.click(screen.getByTestId('end-session'));
 
-    await vi.runAllTimersAsync();
+    await act(async () => {
+      await vi.runAllTimersAsync();
+    });
 
     expect(practiceMissionHistory.recordPracticeMissionOutcome).not.toHaveBeenCalled();
 
@@ -589,7 +597,7 @@ describe('RangeQuickPracticeSessionScreen', () => {
     });
   });
 
-  it('hides tempo trainer toggle when watch is unavailable', () => {
+  it('hides tempo trainer toggle when watch is unavailable', async () => {
     vi.mocked(tempoBridge.isTempoTrainerAvailable).mockReturnValue(false);
     const navigation = createNavigation();
     const session: RangeSession = {
@@ -604,7 +612,9 @@ describe('RangeQuickPracticeSessionScreen', () => {
 
     render(<RangeQuickPracticeSessionScreen navigation={navigation} route={createRoute(session)} />);
 
-    expect(screen.queryByTestId('tempo-trainer-toggle')).not.toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.queryByTestId('tempo-trainer-toggle')).not.toBeInTheDocument();
+    });
   });
 
   it('uses trainer tempo result for last shot feedback', async () => {
