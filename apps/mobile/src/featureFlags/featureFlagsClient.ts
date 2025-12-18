@@ -12,6 +12,7 @@ import type {
 import { readCachedFeatureFlags, writeCachedFeatureFlags } from './featureFlagsStorage';
 
 let exposureLogged = false;
+let lastUserId: string | null = null;
 
 function normalizeFlags(
   flags: Partial<Record<FeatureFlagName, ResolvedFeatureFlag>> | undefined,
@@ -86,17 +87,24 @@ function logExposureOnce(payload: FeatureFlagsPayload | null, fallbackSource: st
   }
 }
 
-export async function loadFeatureFlags(options?: { userId?: string }): Promise<FeatureFlagsPayload | null> {
-  const remote = await fetchRemoteFeatureFlags(options?.userId);
+export async function loadFeatureFlags(options?: { userId?: string | null }): Promise<FeatureFlagsPayload | null> {
+  const userId = options?.userId ?? null;
+
+  if (userId !== lastUserId) {
+    setRemoteFeatureFlags(null);
+    lastUserId = userId;
+  }
+
+  const remote = await fetchRemoteFeatureFlags(userId ?? undefined);
   if (remote) {
     const normalized = normalizePayload(remote, 'rollout');
     setRemoteFeatureFlags(normalized);
-    await writeCachedFeatureFlags(normalized);
+    await writeCachedFeatureFlags(normalized, userId);
     logExposureOnce(normalized, 'rollout');
     return normalized;
   }
 
-  const cached = await readCachedFeatureFlags();
+  const cached = await readCachedFeatureFlags(userId);
   if (cached) {
     const normalized = normalizePayload(cached, 'cache', 'cache');
     setRemoteFeatureFlags(normalized);
@@ -111,5 +119,6 @@ export async function loadFeatureFlags(options?: { userId?: string }): Promise<F
 
 export function __resetFeatureFlagsForTests(): void {
   exposureLogged = false;
+  lastUserId = null;
   setRemoteFeatureFlags(null);
 }

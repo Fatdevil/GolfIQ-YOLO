@@ -1,10 +1,15 @@
 import type { FeatureFlagsPayload } from '@shared/featureFlags/types';
 import { getItem, removeItem, setItem } from '@app/storage/asyncStorage';
 
-export const FEATURE_FLAGS_CACHE_KEY = 'golfiq.featureFlags.v1';
+function featureFlagsCacheKey(userId?: string | null): string {
+  const scope = userId ? `user:${userId}` : 'user:anon';
+  return `golfiq.featureFlags.remote.rollout.v1:${scope}`;
+}
 
-export async function readCachedFeatureFlags(): Promise<FeatureFlagsPayload | null> {
-  const raw = await getItem(FEATURE_FLAGS_CACHE_KEY);
+export async function readCachedFeatureFlags(
+  userId?: string | null,
+): Promise<FeatureFlagsPayload | null> {
+  const raw = await getItem(featureFlagsCacheKey(userId));
   if (!raw) return null;
   try {
     const parsed = JSON.parse(raw) as FeatureFlagsPayload;
@@ -15,17 +20,20 @@ export async function readCachedFeatureFlags(): Promise<FeatureFlagsPayload | nu
   }
 }
 
-export async function writeCachedFeatureFlags(payload: FeatureFlagsPayload): Promise<void> {
+export async function writeCachedFeatureFlags(
+  payload: FeatureFlagsPayload,
+  userId?: string | null,
+): Promise<void> {
   try {
-    await setItem(FEATURE_FLAGS_CACHE_KEY, JSON.stringify(payload));
+    await setItem(featureFlagsCacheKey(userId), JSON.stringify(payload));
   } catch {
     // ignore cache write failures
   }
 }
 
-export async function clearCachedFeatureFlags(): Promise<void> {
+export async function clearCachedFeatureFlags(userId?: string | null): Promise<void> {
   try {
-    await removeItem(FEATURE_FLAGS_CACHE_KEY);
+    await removeItem(featureFlagsCacheKey(userId));
   } catch {
     // ignore cache delete failures
   }
