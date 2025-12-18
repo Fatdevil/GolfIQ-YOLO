@@ -239,6 +239,17 @@ export default function StartRoundScreen({ navigation }: Props): JSX.Element {
     return Array.from(new Set(tees));
   }, [courseId, recentRounds]);
 
+  const resolvedCourseId = useMemo(() => {
+    if (
+      !courseManuallySet &&
+      autoCourseSuggestion.confidence !== 'low' &&
+      autoCourseSuggestion.suggestedCourseId
+    ) {
+      return autoCourseSuggestion.suggestedCourseId;
+    }
+    return courseId.trim();
+  }, [autoCourseSuggestion.confidence, autoCourseSuggestion.suggestedCourseId, courseId, courseManuallySet]);
+
   useEffect(() => {
     if (courseManuallySet) return;
     if (!autoCourseSuggestion.suggestedCourseId) return;
@@ -288,7 +299,7 @@ export default function StartRoundScreen({ navigation }: Props): JSX.Element {
   }, [activeRound, navigation]);
 
   const handleStart = useCallback(async () => {
-    const trimmedCourse = courseId.trim();
+    const trimmedCourse = resolvedCourseId;
     if (!trimmedCourse) {
       Alert.alert(t('start_round.course_label'), t('start_round.course_required'));
       return;
@@ -319,7 +330,7 @@ export default function StartRoundScreen({ navigation }: Props): JSX.Element {
     } finally {
       setSubmitting(false);
     }
-  }, [activeRound, courseId, holes, navigation, teeName]);
+  }, [activeRound, holes, navigation, resolvedCourseId, teeName]);
 
   const handleScrollToForm = useCallback(() => {
     scrollRef.current?.scrollTo({ top: 120, behavior: 'smooth' });
