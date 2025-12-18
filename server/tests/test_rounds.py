@@ -129,6 +129,30 @@ def test_get_current_round(round_client) -> None:
     assert empty.json() is None
 
 
+def test_get_active_round_summary(round_client) -> None:
+    client, _, service = round_client
+
+    active = service.start_round(
+        player_id="player-1", course_id="c1", tee_name="Blue", holes=9
+    )
+    update_resp = client.put(
+        f"/api/rounds/{active.id}/scores/1",
+        json={"strokes": 4},
+        headers=_headers(),
+    )
+    assert update_resp.status_code == 200
+
+    response = client.get("/api/rounds/active", headers=_headers())
+    assert response.status_code == 200
+    summary = response.json()
+    assert summary["roundId"] == active.id
+    assert summary["holesPlayed"] == 1
+    assert summary["currentHole"] == 1
+
+    empty = client.get("/api/rounds/active", headers=_headers("other"))
+    assert empty.status_code == 204
+
+
 def test_append_and_list_shots(round_client) -> None:
     client, _, _ = round_client
     start = client.post("/api/rounds/start", json={}, headers=_headers()).json()

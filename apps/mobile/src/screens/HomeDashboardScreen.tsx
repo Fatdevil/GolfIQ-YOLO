@@ -27,6 +27,7 @@ import { fetchWeeklySummary, type WeeklySummary } from '@app/api/weeklySummaryCl
 import { fetchCourseLayout, fetchCourses } from '@app/api/courseClient';
 import { t } from '@app/i18n';
 import type { RootStackParamList } from '@app/navigation/types';
+import { navigateToStartRound } from '@app/navigation/startRound';
 import { loadEngagementState, saveEngagementState, type EngagementState } from '@app/storage/engagement';
 import {
   PRACTICE_MISSION_WINDOW_DAYS,
@@ -905,7 +906,7 @@ export default function HomeDashboardScreen({ navigation }: Props): JSX.Element 
     try {
       const courses = await fetchCourses().catch(() => null);
       if (!courses || courses.length === 0) {
-        navigation.navigate('RoundStart');
+        navigateToStartRound(navigation, 'home');
         return;
       }
 
@@ -919,13 +920,13 @@ export default function HomeDashboardScreen({ navigation }: Props): JSX.Element 
       );
 
       if (!nearest.suggestedCourseId) {
-        navigation.navigate('RoundStart');
+        navigateToStartRound(navigation, 'home');
         return;
       }
 
       const layout = await fetchCourseLayout(nearest.suggestedCourseId).catch(() => null);
       if (!layout) {
-        navigation.navigate('RoundStart');
+        navigateToStartRound(navigation, 'home');
         return;
       }
 
@@ -936,7 +937,7 @@ export default function HomeDashboardScreen({ navigation }: Props): JSX.Element 
       });
 
       if (!plan) {
-        navigation.navigate('RoundStart');
+        navigateToStartRound(navigation, 'home');
         return;
       }
 
@@ -949,11 +950,15 @@ export default function HomeDashboardScreen({ navigation }: Props): JSX.Element 
       await saveActiveRoundState({ round, currentHole: round.startHole ?? 1 });
       navigation.navigate('RoundShot', { roundId: round.id });
     } catch (err) {
-      navigation.navigate('RoundStart');
+      navigateToStartRound(navigation, 'home');
     } finally {
       setQuickStarting(false);
     }
   }, [geo.position, navigation]);
+
+  const handleStartRoundEntry = useCallback(() => {
+    navigateToStartRound(navigation, 'home');
+  }, [navigation]);
 
   const handleOpenWeekly = useCallback(() => {
     navigation.navigate('WeeklySummary');
@@ -1157,7 +1162,7 @@ export default function HomeDashboardScreen({ navigation }: Props): JSX.Element 
         ) : (
           <>
             <Text style={styles.cardBody}>{t('home_dashboard_quick_start_new_round')}</Text>
-            <TouchableOpacity onPress={() => navigation.navigate('RoundStart')} testID="start-round">
+        <TouchableOpacity onPress={handleStartRoundEntry} testID="start-round">
               <View style={styles.primaryButton}>
                 <Text style={styles.primaryButtonText}>{t('home_dashboard_quick_start_new_round_cta')}</Text>
               </View>
@@ -1246,7 +1251,7 @@ export default function HomeDashboardScreen({ navigation }: Props): JSX.Element 
             </View>
             {weeklySummary.roundsPlayed === 0 ? (
               <View style={styles.row}>
-                <TouchableOpacity onPress={() => navigation.navigate('RoundStart')} testID="weekly-home-start">
+                <TouchableOpacity onPress={handleStartRoundEntry} testID="weekly-home-start">
                   <View style={styles.primaryButton}>
                     <Text style={styles.primaryButtonText}>{t('weekly.cta.startRound')}</Text>
                   </View>

@@ -41,6 +41,7 @@ import RoundStoryScreen from '@app/screens/RoundStoryScreen';
 import ClubDistancesScreen from '@app/screens/ClubDistancesScreen';
 import MyBagScreen from '@app/screens/MyBagScreen';
 import RoundStartScreen from '@app/screens/RoundStartScreen';
+import StartRoundV2Screen from '@app/screens/StartRoundV2Screen';
 import RoundShotScreen from '@app/screens/RoundShotScreen';
 import RoundRecapScreen from '@app/screens/RoundRecapScreen';
 import RoundSummaryScreen from '@app/screens/RoundSummaryScreen';
@@ -138,6 +139,7 @@ export default function App(): JSX.Element {
         <Stack.Screen name="RoundStory" component={RoundStoryScreen} options={{ title: 'Round story' }} />
         <Stack.Screen name="RoundSaved" component={RoundSavedScreen} options={{ title: 'Round saved' }} />
         <Stack.Screen name="RoundStart" component={RoundStartScreen} options={{ title: 'Start round' }} />
+        <Stack.Screen name="StartRoundV2" component={StartRoundV2Screen} options={{ title: 'Start round' }} />
         <Stack.Screen name="RoundShot" component={RoundShotScreen} options={{ title: 'Log shots' }} />
         <Stack.Screen
           name="RoundRecap"

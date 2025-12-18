@@ -5,6 +5,7 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { listRoundSummaries, listRounds, type RoundInfo, type RoundSummary } from '@app/api/roundClient';
 import { t } from '@app/i18n';
 import type { RootStackParamList } from '@app/navigation/types';
+import { navigateToStartRound } from '@app/navigation/startRound';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'RoundHistory'>;
 
@@ -94,7 +95,7 @@ export default function RoundHistoryScreen({ navigation }: Props): JSX.Element {
           <Text style={styles.muted}>{t('round.history.empty_body')}</Text>
           <TouchableOpacity
             style={styles.primaryButton}
-            onPress={() => navigation.navigate('RoundStart')}
+            onPress={() => navigateToStartRound(navigation, 'home')}
             accessibilityLabel={t('round.history.empty_cta')}
             testID="round-history-empty-cta"
           >
