@@ -36,3 +36,5 @@ Force values win over rollout percentages. Percentages are deterministic per use
 - Immediate: set the rollout percentage to `0` for the affected flag.
 - Hard kill: set `*_FORCE=off` to disable regardless of rollout percentage.
 - Clients cache the last known payload and fall back to env/local defaults if the endpoint is unavailable.
+- Mobile refreshes remote flags when returning to the foreground with a 10-minute TTL to pick up changes quickly without
+  spamming the API.

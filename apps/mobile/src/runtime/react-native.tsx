@@ -286,3 +286,29 @@ export const Alert = {
     if (!buttons || buttons.length === 0) return;
   },
 };
+
+type AppStateStatus = 'active' | 'background' | 'inactive';
+type AppStateListener = (state: AppStateStatus) => void;
+
+let currentState: AppStateStatus = 'active';
+const appStateListeners = new Set<AppStateListener>();
+
+export const AppState = {
+  addEventListener(_type: 'change', listener: AppStateListener) {
+    appStateListeners.add(listener);
+    return {
+      remove() {
+        appStateListeners.delete(listener);
+      },
+    };
+  },
+  __emit(state: AppStateStatus) {
+    currentState = state;
+    for (const listener of appStateListeners) {
+      listener(state);
+    }
+  },
+  get currentState(): AppStateStatus {
+    return currentState;
+  },
+};

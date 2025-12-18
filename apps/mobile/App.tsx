@@ -55,7 +55,7 @@ import PracticeWeeklySummaryScreen from '@app/screens/PracticeWeeklySummaryScree
 import OnboardingScreen from '@app/screens/OnboardingScreen';
 import DemoExperienceScreen from '@app/screens/DemoExperienceScreen';
 import { getHasCompletedOnboarding } from '@app/storage/onboarding';
-import { loadFeatureFlags } from '@app/featureFlags/featureFlagsClient';
+import FeatureFlagsRefresher from '@app/featureFlags/FeatureFlagsRefresher';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
@@ -80,12 +80,6 @@ export default function App(): JSX.Element {
     return () => {
       cancelled = true;
     };
-  }, []);
-
-  useEffect(() => {
-    loadFeatureFlags().catch(() => {
-      // ignore failures; fall back to env/local flags
-    });
   }, []);
 
   useEffect(() => {
@@ -119,6 +113,7 @@ export default function App(): JSX.Element {
 
   return (
     <NavigationContainer linking={linking}>
+      <FeatureFlagsRefresher />
       <Stack.Navigator initialRouteName={initialRoute}>
         <Stack.Screen
           name="Onboarding"

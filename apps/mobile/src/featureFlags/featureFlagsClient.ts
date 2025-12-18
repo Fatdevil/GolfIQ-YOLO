@@ -13,6 +13,11 @@ import { readCachedFeatureFlags, writeCachedFeatureFlags } from './featureFlagsS
 
 let exposureLogged = false;
 let lastUserId: string | null = null;
+const lastSuccessfulFetchByUser = new Map<string, number>();
+
+function featureFlagScopeKey(userId?: string | null): string {
+  return userId ?? 'anon';
+}
 
 function normalizeFlags(
   flags: Partial<Record<FeatureFlagName, ResolvedFeatureFlag>> | undefined,
@@ -67,6 +72,13 @@ function resolveSource(
   return payload?.flags?.[name]?.source ?? fallbackSource;
 }
 
+export function getLastSuccessfulFeatureFlagsFetchMs(
+  userId?: string | null,
+): number | null {
+  const timestamp = lastSuccessfulFetchByUser.get(featureFlagScopeKey(userId));
+  return timestamp ?? null;
+}
+
 function logExposureOnce(payload: FeatureFlagsPayload | null, fallbackSource: string): void {
   if (exposureLogged) return;
   exposureLogged = true;
@@ -98,6 +110,7 @@ export async function loadFeatureFlags(options?: { userId?: string | null }): Pr
   const remote = await fetchRemoteFeatureFlags(userId ?? undefined);
   if (remote) {
     const normalized = normalizePayload(remote, 'rollout');
+    lastSuccessfulFetchByUser.set(featureFlagScopeKey(userId), Date.now());
     setRemoteFeatureFlags(normalized);
     await writeCachedFeatureFlags(normalized, userId);
     logExposureOnce(normalized, 'rollout');
@@ -120,5 +133,6 @@ export async function loadFeatureFlags(options?: { userId?: string | null }): Pr
 export function __resetFeatureFlagsForTests(): void {
   exposureLogged = false;
   lastUserId = null;
+  lastSuccessfulFetchByUser.clear();
   setRemoteFeatureFlags(null);
 }
