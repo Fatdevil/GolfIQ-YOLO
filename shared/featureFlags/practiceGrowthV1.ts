@@ -1,3 +1,6 @@
+import { clearRemoteFeatureFlag, getRemoteFeatureFlag } from './remote';
+import type { ResolvedFeatureFlag } from './types';
+
 const TRUTHY_VALUES = new Set(["1", "true", "on", "yes", "enable", "enabled"]);
 const FALSY_VALUES = new Set(["0", "false", "off", "no", "disable", "disabled"]);
 
@@ -30,10 +33,15 @@ function normalizeFlag(value: string | undefined, defaultValue: boolean): boolea
  * Default: enabled (true) so existing behavior is preserved unless explicitly disabled.
  */
 export function isPracticeGrowthV1Enabled(defaultValue = true): boolean {
+  const remote: ResolvedFeatureFlag | null = getRemoteFeatureFlag("practiceGrowthV1");
+  if (remote && typeof remote.enabled === "boolean") {
+    return remote.enabled;
+  }
+
   const raw = readEnvFlag();
   return normalizeFlag(raw, defaultValue);
 }
 
 export function __resetPracticeGrowthV1FlagCacheForTests() {
-  // noop placeholder to keep parity with potential future caching; intentionally empty
+  clearRemoteFeatureFlag("practiceGrowthV1");
 }
