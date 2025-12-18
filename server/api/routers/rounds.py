@@ -198,7 +198,7 @@ class ActiveRoundOut(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
 
-ActiveRoundOut.model_rebuild(_types_namespace={'datetime': datetime})
+ActiveRoundOut.model_rebuild(_types_namespace={"datetime": datetime})
 
 
 @router.post("/start", response_model=Round)
@@ -517,7 +517,9 @@ def get_current_round(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
 
 
-@router.get("/active", response_model=ActiveRoundOut | None, status_code=status.HTTP_200_OK)
+@router.get(
+    "/active", response_model=ActiveRoundOut | None, status_code=status.HTTP_200_OK
+)
 def get_active_round_summary(
     api_key: str | None = Depends(require_api_key),
     user_id: UserIdHeader = None,
@@ -542,7 +544,9 @@ def get_active_round_summary(
     except Exception:
         if active.last_hole:
             current_hole = active.last_hole
-            holes_played = max(holes_played, active.last_hole - (active.start_hole or 1) + 1)
+            holes_played = max(
+                holes_played, active.last_hole - (active.start_hole or 1) + 1
+            )
 
     return ActiveRoundOut(
         round_id=active.id,
