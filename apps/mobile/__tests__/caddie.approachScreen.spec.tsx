@@ -39,7 +39,13 @@ vi.mock('@app/watch/caddieHudBridge', () => ({
 
 describe('CaddieApproachScreen', () => {
   function createNavigation(): Props['navigation'] {
-    return { navigate: vi.fn(), setParams: vi.fn(), goBack: vi.fn(), replace: vi.fn() } as Props['navigation'];
+    return {
+      navigate: vi.fn(),
+      setParams: vi.fn(),
+      goBack: vi.fn(),
+      replace: vi.fn(),
+      setOptions: vi.fn(),
+    } as Props['navigation'];
   }
 
   function createRoute(): Props['route'] {

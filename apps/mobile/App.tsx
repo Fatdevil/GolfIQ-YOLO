@@ -11,6 +11,7 @@ import EventLiveScreen from '@app/screens/EventLiveScreen';
 import EventScanScreen from '@app/screens/EventScanScreen';
 import HomeDashboardScreen from '@app/screens/HomeDashboardScreen';
 import HomeScreen from '@app/screens/HomeScreen';
+import FeatureFlagsDebugScreen from '@app/screens/FeatureFlagsDebugScreen';
 import RangePracticeScreen from '@app/screens/RangePracticeScreen';
 import RangeProgressScreen from '@app/screens/RangeProgressScreen';
 import RangeQuickPracticeSessionScreen from '@app/screens/RangeQuickPracticeSessionScreen';
@@ -287,6 +288,11 @@ export default function App(): JSX.Element {
         </Stack.Screen>
         <Stack.Screen name="EventLive" component={EventLiveScreen} />
         <Stack.Screen name="EventScan" component={EventScanScreen} />
+        <Stack.Screen
+          name="FeatureFlagsDebug"
+          component={FeatureFlagsDebugScreen}
+          options={{ title: 'Feature Flags Debug' }}
+        />
       </Stack.Navigator>
     </NavigationContainer>
   );

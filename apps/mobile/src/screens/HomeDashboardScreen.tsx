@@ -233,6 +233,8 @@ export default function HomeDashboardScreen({ navigation }: Props): JSX.Element 
   const planCompletedViewedRef = useRef(false);
   const goalNudgeShownRef = useRef<string | null>(null);
   const practiceRecommendationImpressionsRef = useRef(new Set<string>());
+  const developerTapCountRef = useRef(0);
+  const developerTapTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const geo = useGeolocation();
   const practiceGrowthEnabled = isPracticeGrowthV1Enabled();
 
@@ -243,6 +245,41 @@ export default function HomeDashboardScreen({ navigation }: Props): JSX.Element 
     },
     [navigation],
   );
+
+  useEffect(() => {
+    const title = t('home_dashboard_title');
+
+    const handleTitlePress = () => {
+      developerTapCountRef.current += 1;
+      if (developerTapTimeoutRef.current) {
+        clearTimeout(developerTapTimeoutRef.current);
+      }
+      developerTapTimeoutRef.current = setTimeout(() => {
+        developerTapCountRef.current = 0;
+      }, 1200);
+
+      if (developerTapCountRef.current >= 7) {
+        developerTapCountRef.current = 0;
+        navigation.navigate('FeatureFlagsDebug', { userId: state.profile?.memberId ?? null });
+      }
+    };
+
+    if (!navigation?.setOptions) return undefined;
+
+    navigation.setOptions({
+      headerTitle: () => (
+        <TouchableOpacity onPress={handleTitlePress} activeOpacity={0.7} testID="home-title">
+          <Text style={styles.headerTitle}>{title}</Text>
+        </TouchableOpacity>
+      ),
+    });
+
+    return () => {
+      if (developerTapTimeoutRef.current) {
+        clearTimeout(developerTapTimeoutRef.current);
+      }
+    };
+  }, [navigation, state.profile?.memberId]);
 
   useEffect(() => {
     let cancelled = false;
@@ -1477,6 +1514,11 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 26,
     fontWeight: '700',
+    color: '#0f172a',
+  },
+  headerTitle: {
+    fontSize: 18,
+    fontWeight: '600',
     color: '#0f172a',
   },
   subtitle: {
