@@ -1,9 +1,10 @@
-import { describe, expect, it, beforeEach, vi } from 'vitest';
+import { describe, expect, it, beforeEach, afterEach, vi } from 'vitest';
 import type { Mock } from 'vitest';
 
 import {
   loadFeatureFlags,
   __resetFeatureFlagsForTests,
+  getLastSuccessfulFeatureFlagsFetchMs,
 } from '@app/featureFlags/featureFlagsClient';
 import {
   clearCachedFeatureFlags,
@@ -46,6 +47,10 @@ describe('featureFlagsClient', () => {
       clearCachedFeatureFlags('user-a'),
       clearCachedFeatureFlags('user-b'),
     ]);
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   it('uses remote flags when the API succeeds', async () => {
@@ -150,6 +155,37 @@ describe('featureFlagsClient', () => {
 
     expect(isPracticeGrowthV1Enabled(true)).toBe(false);
     expect(isRoundFlowV2Enabled(false)).toBe(false);
+  });
+
+  it('tracks last successful remote fetch time per user', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2024-02-02T00:00:00Z'));
+
+    mockedApiFetch.mockResolvedValueOnce({
+      version: 1,
+      flags: {
+        practiceGrowthV1: { enabled: true, rolloutPct: 10, source: 'rollout' },
+      },
+    });
+
+    await loadFeatureFlags({ userId: 'user-a' });
+
+    expect(getLastSuccessfulFeatureFlagsFetchMs('user-a')).toBe(Date.now());
+    expect(getLastSuccessfulFeatureFlagsFetchMs('user-b')).toBeNull();
+
+    vi.useRealTimers();
+  });
+
+  it('does not update fetch time when remote flags fail to load', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2024-03-03T00:00:00Z'));
+
+    mockedApiFetch.mockRejectedValueOnce(new ApiError('offline'));
+    await loadFeatureFlags({ userId: 'user-a' });
+
+    expect(getLastSuccessfulFeatureFlagsFetchMs('user-a')).toBeNull();
+
+    vi.useRealTimers();
   });
 
   it('uses per-user cached flags after account switch when remote fails', async () => {
