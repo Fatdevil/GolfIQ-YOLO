@@ -12,10 +12,12 @@ import {
 } from '@app/api/roundClient';
 import { fetchCourses } from '@app/api/courseClient';
 import { loadActiveRoundState, saveActiveRoundState } from '@app/round/roundState';
+import { getItem, setItem } from '@app/storage/asyncStorage';
 
 vi.mock('@app/api/roundClient');
 vi.mock('@app/api/courseClient');
 vi.mock('@app/round/roundState');
+vi.mock('@app/storage/asyncStorage');
 vi.mock('@app/analytics/roundFlow', () => ({
   logRoundStartOpened: vi.fn(),
   logRoundResumeClicked: vi.fn(),
@@ -30,6 +32,8 @@ const mockStartRound = startRound as unknown as Mock;
 const mockFetchCourses = fetchCourses as unknown as Mock;
 const mockLoadActiveRoundState = loadActiveRoundState as unknown as Mock;
 const mockSaveActiveRoundState = saveActiveRoundState as unknown as Mock;
+const mockGetItem = getItem as unknown as Mock;
+const mockSetItem = setItem as unknown as Mock;
 
 function createRoundInfo(): RoundInfo {
   return {
@@ -60,6 +64,8 @@ describe('StartRoundV2Screen', () => {
     mockFetchCourses.mockResolvedValue([{ id: 'c1', name: 'Course One', holeCount: 18 }]);
     mockLoadActiveRoundState.mockResolvedValue(null);
     mockSaveActiveRoundState.mockResolvedValue(undefined);
+    mockGetItem.mockResolvedValue(null);
+    mockSetItem.mockResolvedValue(undefined);
   });
 
   it('shows start-new UI when no active round', async () => {
@@ -101,6 +107,24 @@ describe('StartRoundV2Screen', () => {
 
     await waitFor(() => expect(mockStartRound).toHaveBeenCalled());
     expect(navigation.navigate).toHaveBeenCalledWith('RoundShot', { roundId: 'new-round' });
+  });
+
+  it('propagates stored tournament-safe preference when starting a round', async () => {
+    const navigation = { navigate: vi.fn() } as any;
+    mockGetItem.mockResolvedValue('true');
+
+    const { getByTestId } = render(
+      <StartRoundV2Screen navigation={navigation} route={undefined as any} />,
+    );
+
+    await waitFor(() => expect(getByTestId('start-round-button')).toBeTruthy());
+    fireEvent.click(getByTestId('start-round-button'));
+
+    await waitFor(() => expect(mockSaveActiveRoundState).toHaveBeenCalled());
+    expect(mockSaveActiveRoundState).toHaveBeenCalledWith(
+      expect.objectContaining({ preferences: { tournamentSafe: true } }),
+    );
+    expect(mockSetItem).toHaveBeenCalledWith('golfiq.tournamentSafePref.v1', 'true');
   });
 
   it('keeps UI usable when active round fetch fails', async () => {

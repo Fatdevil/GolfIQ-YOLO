@@ -7,8 +7,20 @@ import { fetchCourses, type CourseSummary } from '@app/api/courseClient';
 import type { RootStackParamList } from '@app/navigation/types';
 import { logRoundCreateClicked, logRoundCreatedFailed, logRoundCreatedSuccess, logRoundResumeClicked, logRoundStartOpened } from '@app/analytics/roundFlow';
 import { loadActiveRoundState, saveActiveRoundState } from '@app/round/roundState';
+import { getItem, setItem } from '@app/storage/asyncStorage';
 
 const holesOptions = [9, 18];
+const TOURNAMENT_SAFE_KEY = 'golfiq.tournamentSafePref.v1';
+
+async function loadTournamentSafePref(): Promise<boolean> {
+  const raw = await getItem(TOURNAMENT_SAFE_KEY);
+  if (!raw) return false;
+  return raw === 'true';
+}
+
+async function saveTournamentSafePref(value: boolean): Promise<void> {
+  await setItem(TOURNAMENT_SAFE_KEY, value ? 'true' : 'false');
+}
 
 function buildResumePayload(summary: ActiveRoundSummary | null, info: RoundInfo | null) {
   if (!summary && !info) return null;
@@ -48,6 +60,7 @@ export default function StartRoundV2Screen({ navigation }: Props): JSX.Element {
   const [loading, setLoading] = useState(true);
   const [coursesError, setCoursesError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [tournamentSafe, setTournamentSafe] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -55,7 +68,7 @@ export default function StartRoundV2Screen({ navigation }: Props): JSX.Element {
 
     (async () => {
       try {
-        const [active, current, courseList] = await Promise.all([
+        const [active, current, courseList, cachedState, storedTournamentSafe] = await Promise.all([
           fetchActiveRoundSummary().catch((err) => {
             setActiveError(err instanceof Error ? err.message : 'Unable to load active round');
             return null;
@@ -65,12 +78,17 @@ export default function StartRoundV2Screen({ navigation }: Props): JSX.Element {
             setCoursesError(err instanceof Error ? err.message : 'Unable to load courses');
             return [] as CourseSummary[];
           }),
+          loadActiveRoundState().catch(() => null),
+          loadTournamentSafePref().catch(() => false),
         ]);
 
         if (cancelled) return;
 
         setActiveRound(active ?? null);
         setActiveInfo(current ?? null);
+        const cachedPreferences = cachedState?.round?.id === current?.id ? cachedState?.preferences : undefined;
+        const tournamentSafePref = cachedPreferences?.tournamentSafe ?? storedTournamentSafe;
+        setTournamentSafe(Boolean(tournamentSafePref));
         setCourses(courseList ?? []);
         if (courseList?.length) {
           setSelectedCourseId((prev) => prev || courseList[0].id);
@@ -99,11 +117,11 @@ export default function StartRoundV2Screen({ navigation }: Props): JSX.Element {
     logRoundResumeClicked(resumePayload.round.id);
 
     const existing = await loadActiveRoundState().catch(() => null);
-    const preferences = existing?.preferences ?? {};
+    const preferences = existing?.preferences ?? (tournamentSafe ? { tournamentSafe } : {});
     const payload = { ...resumePayload, preferences };
     await saveActiveRoundState(payload);
     navigation.navigate('RoundShot', { roundId: resumePayload.round.id });
-  }, [navigation, resumePayload]);
+  }, [navigation, resumePayload, tournamentSafe]);
 
   const handleStart = useCallback(async () => {
     const selectedCourse = courseInput.trim();
@@ -121,8 +139,9 @@ export default function StartRoundV2Screen({ navigation }: Props): JSX.Element {
       await saveActiveRoundState({
         round,
         currentHole: round.startHole ?? 1,
-        preferences: {},
+        preferences: tournamentSafe ? { tournamentSafe } : {},
       });
+      await saveTournamentSafePref(tournamentSafe);
       navigation.navigate('RoundShot', { roundId: round.id });
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Unable to start round';
@@ -131,7 +150,7 @@ export default function StartRoundV2Screen({ navigation }: Props): JSX.Element {
     } finally {
       setSubmitting(false);
     }
-  }, [courseInput, holes, navigation, selectedCourseId, teeName]);
+  }, [courseInput, holes, navigation, selectedCourseId, teeName, tournamentSafe]);
 
   if (loading) {
     return (
