@@ -8,6 +8,10 @@ import type { RootStackParamList } from '@app/navigation/types';
 import * as playerApi from '@app/api/player';
 import * as watchApi from '@app/api/watch';
 import * as currentRun from '@app/run/currentRun';
+import * as roundFlags from '@shared/featureFlags/roundFlowV2';
+import * as roundClient from '@app/api/roundClient';
+import * as roundState from '@app/round/roundState';
+import * as roundFlowAnalytics from '@app/analytics/roundFlow';
 
 vi.mock('@app/api/player', () => ({
   fetchPlayerProfile: vi.fn(),
@@ -23,6 +27,31 @@ vi.mock('@app/api/watch', () => ({
 vi.mock('@app/run/currentRun', () => ({
   loadCurrentRun: vi.fn(),
   clearCurrentRun: vi.fn(),
+}));
+
+vi.mock('@shared/featureFlags/roundFlowV2', () => ({
+  isRoundFlowV2Enabled: vi.fn(),
+}));
+
+vi.mock('@app/api/roundClient', () => ({
+  fetchActiveRoundSummary: vi.fn(),
+  getCurrentRound: vi.fn(),
+}));
+
+vi.mock('@app/round/roundState', () => ({
+  loadActiveRoundState: vi.fn(),
+  saveActiveRoundState: vi.fn(),
+}));
+
+vi.mock('@app/analytics/roundFlow', () => ({
+  logRoundFlowGated: vi.fn(),
+  logRoundStartOpened: vi.fn(),
+  logRoundResumeClicked: vi.fn(),
+  logRoundCreateClicked: vi.fn(),
+  logRoundCreatedFailed: vi.fn(),
+  logRoundCreatedSuccess: vi.fn(),
+  logRoundHomeStartClicked: vi.fn(),
+  logRoundHomeContinueClicked: vi.fn(),
 }));
 
 type Props = NativeStackScreenProps<RootStackParamList, 'PlayerHome'>;
@@ -87,6 +116,11 @@ describe('HomeScreen', () => {
     });
     vi.mocked(currentRun.loadCurrentRun).mockResolvedValue(null);
     vi.mocked(currentRun.clearCurrentRun).mockResolvedValue();
+    vi.mocked(roundFlags.isRoundFlowV2Enabled).mockReturnValue(false);
+    vi.mocked(roundClient.fetchActiveRoundSummary).mockResolvedValue(null);
+    vi.mocked(roundClient.getCurrentRound).mockResolvedValue(null);
+    vi.mocked(roundState.loadActiveRoundState).mockResolvedValue(null);
+    vi.mocked(roundState.saveActiveRoundState).mockResolvedValue();
   });
 
   it('renders greeting, plan badge, and CTAs', async () => {
@@ -226,6 +260,60 @@ describe('HomeScreen', () => {
     await waitFor(() => {
       expect(currentRun.clearCurrentRun).toHaveBeenCalled();
       expect(screen.queryByTestId('resume-round-card')).not.toBeInTheDocument();
+    });
+  });
+
+  it('shows start CTA when round flow v2 is enabled without an active round', async () => {
+    vi.mocked(roundFlags.isRoundFlowV2Enabled).mockReturnValue(true);
+    vi.mocked(playerApi.fetchPlayerProfile).mockResolvedValue(mockProfile);
+    vi.mocked(playerApi.fetchAccessPlan).mockResolvedValue({ plan: 'free' });
+    const navigation = createNavigation();
+
+    render(<HomeScreen navigation={navigation} route={createRoute()} />);
+
+    expect(await screen.findByTestId('start-round-card')).toBeInTheDocument();
+    fireEvent.click(screen.getByTestId('start-round-v2'));
+
+    await waitFor(() => {
+      expect(roundFlowAnalytics.logRoundHomeStartClicked).toHaveBeenCalled();
+      expect(navigation.navigate).toHaveBeenCalledWith('StartRoundV2');
+    });
+  });
+
+  it('renders continue CTA when round flow v2 has an active round', async () => {
+    vi.mocked(roundFlags.isRoundFlowV2Enabled).mockReturnValue(true);
+    vi.mocked(playerApi.fetchPlayerProfile).mockResolvedValue(mockProfile);
+    vi.mocked(playerApi.fetchAccessPlan).mockResolvedValue({ plan: 'free' });
+    vi.mocked(roundClient.fetchActiveRoundSummary).mockResolvedValue({
+      roundId: 'round-42',
+      courseName: 'Pebble',
+      holes: 9,
+      startedAt: new Date().toISOString(),
+      holesPlayed: 3,
+      currentHole: 4,
+    });
+    vi.mocked(roundClient.getCurrentRound).mockResolvedValue({
+      id: 'round-42',
+      courseId: 'c1',
+      courseName: 'Pebble',
+      teeName: 'Blue',
+      holes: 9,
+      startedAt: new Date().toISOString(),
+      status: 'in_progress',
+    } as roundClient.RoundInfo);
+    const navigation = createNavigation();
+
+    render(<HomeScreen navigation={navigation} route={createRoute()} />);
+
+    expect(await screen.findByTestId('continue-round-card')).toBeInTheDocument();
+    fireEvent.click(screen.getByTestId('continue-round'));
+
+    await waitFor(() => {
+      expect(roundFlowAnalytics.logRoundHomeContinueClicked).toHaveBeenCalledWith('round-42');
+      expect(roundState.saveActiveRoundState).toHaveBeenCalledWith(
+        expect.objectContaining({ round: expect.objectContaining({ id: 'round-42' }) }),
+      );
+      expect(navigation.navigate).toHaveBeenCalledWith('RoundShot', { roundId: 'round-42' });
     });
   });
 });

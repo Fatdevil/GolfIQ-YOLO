@@ -21,8 +21,16 @@ export function logRoundStartOpened(): void {
   tryEmit('round_start_opened');
 }
 
+export function logRoundHomeStartClicked(): void {
+  tryEmit('round_home_start_clicked');
+}
+
 export function logRoundResumeClicked(roundId: string): void {
   tryEmit('round_resume_clicked', { roundId });
+}
+
+export function logRoundHomeContinueClicked(roundId: string): void {
+  tryEmit('round_home_continue_clicked', { roundId });
 }
 
 export function logRoundCreateClicked(payload: { courseId?: string | null; holes?: number; teeName?: string | null }): void {
