@@ -280,6 +280,28 @@ describe('HomeScreen', () => {
     });
   });
 
+  it('disables round start while active round lookup is loading', async () => {
+    vi.mocked(roundFlags.isRoundFlowV2Enabled).mockReturnValue(true);
+    vi.mocked(playerApi.fetchPlayerProfile).mockResolvedValue(mockProfile);
+    vi.mocked(playerApi.fetchAccessPlan).mockResolvedValue({ plan: 'free' });
+    const navigation = createNavigation();
+
+    // Keep the active round hydrate pending to preserve the loading state
+    vi.mocked(roundState.loadActiveRoundState).mockReturnValue(new Promise(() => {}));
+
+    render(<HomeScreen navigation={navigation} route={createRoute()} />);
+
+    const startCta = await screen.findByTestId('start-round-v2');
+
+    expect(startCta).toBeDisabled();
+    expect(startCta).toHaveTextContent('Checking round…');
+
+    fireEvent.click(startCta);
+
+    expect(roundFlowAnalytics.logRoundHomeStartClicked).not.toHaveBeenCalled();
+    expect(navigation.navigate).not.toHaveBeenCalledWith('StartRoundV2');
+  });
+
   it('renders continue CTA when round flow v2 has an active round', async () => {
     vi.mocked(roundFlags.isRoundFlowV2Enabled).mockReturnValue(true);
     vi.mocked(playerApi.fetchPlayerProfile).mockResolvedValue(mockProfile);

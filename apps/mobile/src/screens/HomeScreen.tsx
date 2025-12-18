@@ -373,6 +373,10 @@ export default function HomeScreen({ navigation }: Props): JSX.Element {
     ? t('home.practice.cta_continue')
     : t('home.practice.cta_start');
 
+  const loadingAccessibilityState: Record<string, unknown> = activeRoundLoading
+    ? { accessibilityState: { disabled: true, busy: true } }
+    : {};
+
   const activeRoundSubtitle = useMemo(() => {
     if (!activeRound?.round) return null;
     const courseLabel = activeRound.round.courseName?.trim() || activeRound.round.courseId || 'Course';
@@ -403,11 +407,14 @@ export default function HomeScreen({ navigation }: Props): JSX.Element {
   }, [gatePracticeGrowth, navigation]);
 
   const handleRoundV2Start = useCallback(() => {
+    if (activeRoundLoading) return;
+
     logRoundHomeStartClicked();
     navigateToStartRound(navigation, 'home');
-  }, [navigation]);
+  }, [activeRoundLoading, navigation]);
 
   const handleRoundV2Continue = useCallback(async () => {
+    if (activeRoundLoading) return;
     if (!activeRound?.round?.id) return;
     logRoundHomeContinueClicked(activeRound.round.id);
 
@@ -418,7 +425,7 @@ export default function HomeScreen({ navigation }: Props): JSX.Element {
     }
 
     navigation.navigate('RoundShot', { roundId: activeRound.round.id });
-  }, [activeRound, navigation]);
+  }, [activeRound, activeRoundLoading, navigation]);
 
   const handlePracticeHistory = useCallback(() => {
     if (gatePracticeGrowth('PracticeJournal')) return;
@@ -477,12 +484,16 @@ export default function HomeScreen({ navigation }: Props): JSX.Element {
             </View>
           ) : null}
           <TouchableOpacity
-            accessibilityLabel={activeRound ? 'Continue round' : 'Start round'}
+            accessibilityLabel={activeRoundLoading ? 'Checking round' : activeRound ? 'Continue round' : 'Start round'}
+            {...loadingAccessibilityState}
+            disabled={activeRoundLoading}
             onPress={activeRound ? handleRoundV2Continue : handleRoundV2Start}
             testID={activeRound ? 'continue-round' : 'start-round-v2'}
           >
             <View style={styles.primaryButton}>
-              <Text style={styles.primaryButtonText}>{activeRound ? 'Continue' : 'Start round'}</Text>
+              <Text style={styles.primaryButtonText}>
+                {activeRoundLoading ? 'Checking round…' : activeRound ? 'Continue' : 'Start round'}
+              </Text>
             </View>
           </TouchableOpacity>
         </View>
