@@ -11,6 +11,8 @@ import {
   logPracticeWeeklySummaryStartPractice,
   logPracticeWeeklySummaryViewed,
 } from '@app/analytics/practiceWeeklySummary';
+import { isPracticeGrowthV1Enabled } from '@shared/featureFlags/practiceGrowthV1';
+import { logPracticeFeatureGated } from '@app/analytics/practiceFeatureGate';
 
 vi.mock('@app/practice/practiceSessionStorage', () => ({
   loadPracticeSessions: vi.fn(),
@@ -34,6 +36,14 @@ vi.mock('@app/analytics/practiceWeeklySummary', () => ({
   logPracticeWeeklySummaryViewed: vi.fn(),
 }));
 
+vi.mock('@shared/featureFlags/practiceGrowthV1', () => ({
+  isPracticeGrowthV1Enabled: vi.fn(() => true),
+}));
+
+vi.mock('@app/analytics/practiceFeatureGate', () => ({
+  logPracticeFeatureGated: vi.fn(),
+}));
+
 const mockLoadSessions = vi.mocked(loadPracticeSessions);
 const mockLoadPlan = vi.mocked(loadCurrentWeekPracticePlan);
 const navigation = { navigate: vi.fn() } as any;
@@ -52,6 +62,7 @@ function getCurrentWeekStartISO(now: Date): string {
 beforeEach(() => {
   vi.clearAllMocks();
   vi.spyOn(Share, 'share').mockResolvedValue({ action: 'sharedAction' } as never);
+  vi.mocked(isPracticeGrowthV1Enabled).mockReturnValue(true);
   const now = new Date();
   const weekStartISO = getCurrentWeekStartISO(now);
   const start = new Date(now);
@@ -80,6 +91,28 @@ afterEach(() => {
 });
 
 describe('PracticeWeeklySummaryScreen', () => {
+  it('redirects when practice growth is disabled', async () => {
+    vi.mocked(isPracticeGrowthV1Enabled).mockReturnValue(false);
+    mockLoadSessions.mockResolvedValue([]);
+    mockLoadPlan.mockResolvedValue(null as any);
+
+    render(
+      <PracticeWeeklySummaryScreen
+        navigation={navigation}
+        route={{ key: 'PracticeWeeklySummary', name: 'PracticeWeeklySummary', params: { source: 'journal' } } as any}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(logPracticeFeatureGated).toHaveBeenCalledWith({
+        feature: 'practiceGrowthV1',
+        target: 'PracticeWeeklySummary',
+        source: 'home',
+      });
+    });
+    expect(navigation.navigate).toHaveBeenCalledWith('HomeDashboard');
+  });
+
   it('renders weekly totals and plan progress', async () => {
     mockLoadSessions.mockResolvedValue([session]);
     mockLoadPlan.mockResolvedValue(plan as any);

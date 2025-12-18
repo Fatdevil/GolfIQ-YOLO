@@ -11,6 +11,7 @@ import * as currentRun from '@app/run/currentRun';
 import * as rangeSummary from '@app/range/rangeSummaryStorage';
 import * as practicePlanStorage from '@app/practice/practicePlanStorage';
 import * as practiceAnalytics from '@app/analytics/practiceHome';
+import { isPracticeGrowthV1Enabled } from '@shared/featureFlags/practiceGrowthV1';
 
 vi.mock('@app/api/player', () => ({
   fetchPlayerProfile: vi.fn(),
@@ -40,6 +41,10 @@ vi.mock('@app/practice/practicePlanStorage', () => ({
 vi.mock('@app/analytics/practiceHome', () => ({
   logPracticeHomeCardViewed: vi.fn(),
   logPracticeHomeCta: vi.fn(),
+}));
+
+vi.mock('@shared/featureFlags/practiceGrowthV1', () => ({
+  isPracticeGrowthV1Enabled: vi.fn(() => true),
 }));
 
 type Props = NativeStackScreenProps<RootStackParamList, 'PlayerHome'>;
@@ -78,6 +83,7 @@ function createRoute(): Route {
 describe('HomeScreen practice card', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(isPracticeGrowthV1Enabled).mockReturnValue(true);
     vi.mocked(watchApi.fetchWatchStatus).mockResolvedValue({ paired: false, lastSeenAt: null });
     vi.mocked(watchApi.requestWatchPairCode).mockResolvedValue({
       code: '123456',
@@ -89,6 +95,18 @@ describe('HomeScreen practice card', () => {
     vi.mocked(playerApi.fetchPlayerProfile).mockResolvedValue(mockProfile);
     vi.mocked(playerApi.fetchAccessPlan).mockResolvedValue({ plan: 'free' });
     vi.mocked(playerApi.fetchPlayerAnalytics).mockResolvedValue(null as never);
+  });
+
+  it('hides practice entry points when practice growth is disabled', async () => {
+    vi.mocked(isPracticeGrowthV1Enabled).mockReturnValue(false);
+    vi.mocked(practicePlanStorage.loadCurrentWeekPracticePlan).mockResolvedValue(null);
+
+    render(<HomeScreen navigation={createNavigation()} route={createRoute()} />);
+
+    await waitFor(() => {
+      expect(screen.queryByTestId('practice-home-card')).not.toBeInTheDocument();
+    });
+    expect(screen.queryByTestId('practice-planner-card')).not.toBeInTheDocument();
   });
 
   it('shows empty practice card when no plan is available', async () => {

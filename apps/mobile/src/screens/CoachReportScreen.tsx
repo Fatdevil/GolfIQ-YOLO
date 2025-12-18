@@ -7,6 +7,8 @@ import { t } from '@app/i18n';
 import type { RootStackParamList } from '@app/navigation/types';
 import { fetchDemoCoachRound } from '@app/demo/demoService';
 import { logPracticeStartClick } from '@app/analytics/practicePlanner';
+import { isPracticeGrowthV1Enabled } from '@shared/featureFlags/practiceGrowthV1';
+import { logPracticeFeatureGated } from '@app/analytics/practiceFeatureGate';
 
 const SG_CATEGORY_ORDER: Array<{ key: keyof NonNullable<CoachRoundSummary['strokesGained']>; label: string }> = [
   { key: 'driving', label: t('weeklySummary.categories.driving') },
@@ -35,6 +37,7 @@ export default function CoachReportScreen({ route, navigation }: Props): JSX.Ele
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [proRequired, setProRequired] = useState(false);
+  const practiceGrowthEnabled = isPracticeGrowthV1Enabled();
 
   const recommendedDrillIds = useMemo(
     () => summary?.recommendedDrills?.map((d) => d.id).filter(Boolean) ?? [],
@@ -60,6 +63,12 @@ export default function CoachReportScreen({ route, navigation }: Props): JSX.Ele
   }, [summary?.strokesGained]);
 
   const handleStartPractice = () => {
+    if (!practiceGrowthEnabled) {
+      logPracticeFeatureGated({ feature: 'practiceGrowthV1', target: 'CoachReportCTA', source: 'coach_report' });
+      navigation.navigate('HomeDashboard');
+      return;
+    }
+
     const drillIds = recommendedDrillIds;
     const maxMinutes = 60;
     logPracticeStartClick({
@@ -73,11 +82,11 @@ export default function CoachReportScreen({ route, navigation }: Props): JSX.Ele
       return;
     }
 
-    navigation.navigate('PracticePlanner', {
-      focusCategories: fallbackCategories,
-      maxMinutes,
-    });
-  };
+      navigation.navigate('PracticePlanner', {
+        focusCategories: fallbackCategories,
+        maxMinutes,
+      });
+    };
 
   useEffect(() => {
     let cancelled = false;
@@ -262,11 +271,13 @@ export default function CoachReportScreen({ route, navigation }: Props): JSX.Ele
           </View>
         ) : null}
 
-        <TouchableOpacity onPress={handleStartPractice} testID="start-practice-button">
-          <View style={styles.primaryButton}>
-            <Text style={styles.primaryButtonText}>{t('coach_report_start_practice_button')}</Text>
-          </View>
-        </TouchableOpacity>
+          {practiceGrowthEnabled ? (
+            <TouchableOpacity onPress={handleStartPractice} testID="start-practice-button">
+              <View style={styles.primaryButton}>
+                <Text style={styles.primaryButtonText}>{t('coach_report_start_practice_button')}</Text>
+              </View>
+            </TouchableOpacity>
+          ) : null}
       </ScrollView>
 
       {proRequired ? (

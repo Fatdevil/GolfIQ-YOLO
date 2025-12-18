@@ -32,6 +32,8 @@ import {
   loadCurrentWeekPracticePlan,
   type PracticePlan,
 } from '@app/practice/practicePlanStorage';
+import { isPracticeGrowthV1Enabled } from '@shared/featureFlags/practiceGrowthV1';
+import { logPracticeFeatureGated } from '@app/analytics/practiceFeatureGate';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'PlayerHome'>;
 
@@ -127,6 +129,18 @@ export default function HomeScreen({ navigation }: Props): JSX.Element {
     plan: PracticePlan | null;
   }>({ loading: true, plan: null });
   const practiceCardLoggedRef = useRef(false);
+  const practiceGrowthEnabled = isPracticeGrowthV1Enabled();
+
+  const gatePracticeGrowth = useCallback(
+    (target: string) => {
+      if (practiceGrowthEnabled) return false;
+
+      logPracticeFeatureGated({ feature: 'practiceGrowthV1', target, source: 'home' });
+      navigation.navigate('HomeDashboard');
+      return true;
+    },
+    [navigation, practiceGrowthEnabled],
+  );
 
   const load = useCallback(async () => {
     setState((prev) => ({ ...prev, loading: true, error: null }));
@@ -261,7 +275,7 @@ export default function HomeScreen({ navigation }: Props): JSX.Element {
   }, [practicePlanState.plan]);
 
   useEffect(() => {
-    if (practicePlanState.loading || practiceCardLoggedRef.current) return;
+    if (!practiceGrowthEnabled || practicePlanState.loading || practiceCardLoggedRef.current) return;
 
     practiceCardLoggedRef.current = true;
     logPracticeHomeCardViewed({
@@ -269,7 +283,7 @@ export default function HomeScreen({ navigation }: Props): JSX.Element {
       totalDrills: practiceProgress?.total,
       completedDrills: practiceProgress?.completed,
     });
-  }, [practicePlanState.loading, practicePlanState.plan, practiceProgress]);
+  }, [practiceGrowthEnabled, practicePlanState.loading, practicePlanState.plan, practiceProgress]);
 
   const hasPracticePlan = Boolean(practicePlanState.plan && practicePlanState.plan.items.length);
 
@@ -278,23 +292,31 @@ export default function HomeScreen({ navigation }: Props): JSX.Element {
     : t('home.practice.cta_start');
 
   const handlePracticeStart = useCallback(() => {
+    if (gatePracticeGrowth('PracticeSession')) return;
+
     logPracticeHomeCta('start');
     navigation.navigate('PracticeSession');
-  }, [navigation]);
+  }, [gatePracticeGrowth, navigation]);
 
   const handlePracticeViewPlan = useCallback(() => {
+    if (gatePracticeGrowth('PracticePlanner')) return;
+
     logPracticeHomeCta('view_plan');
     navigation.navigate('PracticePlanner');
-  }, [navigation]);
+  }, [gatePracticeGrowth, navigation]);
 
   const handlePracticeBuildPlan = useCallback(() => {
+    if (gatePracticeGrowth('PracticeWeeklySummary')) return;
+
     logPracticeHomeCta('build_plan');
     navigation.navigate('WeeklySummary');
-  }, [navigation]);
+  }, [gatePracticeGrowth, navigation]);
 
   const handlePracticeHistory = useCallback(() => {
+    if (gatePracticeGrowth('PracticeJournal')) return;
+
     navigation.navigate('PracticeJournal');
-  }, [navigation]);
+  }, [gatePracticeGrowth, navigation]);
 
   if (loading) {
     return (
@@ -401,90 +423,94 @@ export default function HomeScreen({ navigation }: Props): JSX.Element {
         <Text style={styles.cardFootnote}>{t('home.range.missionsTeaser')}</Text>
       </View>
 
-      <View style={styles.card} testID="practice-home-card">
-        <Text style={styles.cardTitle}>{t('home.practice.title')}</Text>
-        {practicePlanState.loading ? (
-          <View style={styles.row}>
-            <ActivityIndicator color="#fff" />
-            <Text style={styles.cardSubtitle}>{t('home.practice.loading')}</Text>
-          </View>
-        ) : hasPracticePlan && practiceProgress ? (
-          <>
-            <Text style={styles.cardSubtitle} testID="practice-home-progress">
-              {t('home.practice.progress', {
-                done: practiceProgress.completed,
-                total: practiceProgress.total,
-              })}
-            </Text>
-            <TouchableOpacity
-              accessibilityLabel={practicePrimaryCtaLabel}
-              onPress={handlePracticeStart}
-              testID="practice-home-start"
-            >
-              <View style={styles.primaryButton}>
-                <Text style={styles.primaryButtonText}>{practicePrimaryCtaLabel}</Text>
-              </View>
-            </TouchableOpacity>
-            <TouchableOpacity
-              accessibilityLabel={t('home.practice.cta_view_plan')}
-              onPress={handlePracticeViewPlan}
-              testID="practice-home-view-plan"
-            >
-              <View style={styles.secondaryButton}>
-                <Text style={styles.secondaryButtonText}>{t('home.practice.cta_view_plan')}</Text>
-              </View>
-            </TouchableOpacity>
-            <TouchableOpacity onPress={handlePracticeHistory} testID="practice-home-history">
-              <View style={styles.linkButton}>
-                <Text style={styles.linkText}>{t('practice.journal.view_history')}</Text>
-              </View>
-            </TouchableOpacity>
-          </>
-        ) : (
-          <>
-            <Text style={styles.cardSubtitle} testID="practice-home-empty">
-              {t('home.practice.empty')}
-            </Text>
-            <TouchableOpacity
-              accessibilityLabel={t('home.practice.cta_build')}
-              onPress={handlePracticeBuildPlan}
-              testID="practice-home-build"
-            >
-              <View style={styles.primaryButton}>
-                <Text style={styles.primaryButtonText}>{t('home.practice.cta_build')}</Text>
-              </View>
-            </TouchableOpacity>
-            <TouchableOpacity
-              accessibilityLabel={t('home.practice.cta_view_plan')}
-              onPress={handlePracticeViewPlan}
-              testID="practice-home-view-plan"
-            >
-              <View style={styles.secondaryButton}>
-                <Text style={styles.secondaryButtonText}>{t('home.practice.cta_view_plan')}</Text>
-              </View>
-            </TouchableOpacity>
-            <TouchableOpacity onPress={handlePracticeHistory} testID="practice-home-history">
-              <View style={styles.linkButton}>
-                <Text style={styles.linkText}>{t('practice.journal.view_history')}</Text>
-              </View>
-            </TouchableOpacity>
-          </>
-        )}
-      </View>
+      {practiceGrowthEnabled ? (
+        <View style={styles.card} testID="practice-home-card">
+          <Text style={styles.cardTitle}>{t('home.practice.title')}</Text>
+          {practicePlanState.loading ? (
+            <View style={styles.row}>
+              <ActivityIndicator color="#fff" />
+              <Text style={styles.cardSubtitle}>{t('home.practice.loading')}</Text>
+            </View>
+          ) : hasPracticePlan && practiceProgress ? (
+            <>
+              <Text style={styles.cardSubtitle} testID="practice-home-progress">
+                {t('home.practice.progress', {
+                  done: practiceProgress.completed,
+                  total: practiceProgress.total,
+                })}
+              </Text>
+              <TouchableOpacity
+                accessibilityLabel={practicePrimaryCtaLabel}
+                onPress={handlePracticeStart}
+                testID="practice-home-start"
+              >
+                <View style={styles.primaryButton}>
+                  <Text style={styles.primaryButtonText}>{practicePrimaryCtaLabel}</Text>
+                </View>
+              </TouchableOpacity>
+              <TouchableOpacity
+                accessibilityLabel={t('home.practice.cta_view_plan')}
+                onPress={handlePracticeViewPlan}
+                testID="practice-home-view-plan"
+              >
+                <View style={styles.secondaryButton}>
+                  <Text style={styles.secondaryButtonText}>{t('home.practice.cta_view_plan')}</Text>
+                </View>
+              </TouchableOpacity>
+              <TouchableOpacity onPress={handlePracticeHistory} testID="practice-home-history">
+                <View style={styles.linkButton}>
+                  <Text style={styles.linkText}>{t('practice.journal.view_history')}</Text>
+                </View>
+              </TouchableOpacity>
+            </>
+          ) : (
+            <>
+              <Text style={styles.cardSubtitle} testID="practice-home-empty">
+                {t('home.practice.empty')}
+              </Text>
+              <TouchableOpacity
+                accessibilityLabel={t('home.practice.cta_build')}
+                onPress={handlePracticeBuildPlan}
+                testID="practice-home-build"
+              >
+                <View style={styles.primaryButton}>
+                  <Text style={styles.primaryButtonText}>{t('home.practice.cta_build')}</Text>
+                </View>
+              </TouchableOpacity>
+              <TouchableOpacity
+                accessibilityLabel={t('home.practice.cta_view_plan')}
+                onPress={handlePracticeViewPlan}
+                testID="practice-home-view-plan"
+              >
+                <View style={styles.secondaryButton}>
+                  <Text style={styles.secondaryButtonText}>{t('home.practice.cta_view_plan')}</Text>
+                </View>
+              </TouchableOpacity>
+              <TouchableOpacity onPress={handlePracticeHistory} testID="practice-home-history">
+                <View style={styles.linkButton}>
+                  <Text style={styles.linkText}>{t('practice.journal.view_history')}</Text>
+                </View>
+              </TouchableOpacity>
+            </>
+          )}
+        </View>
+      ) : null}
 
-      <View style={styles.card} testID="practice-planner-card">
-        <Text style={styles.cardTitle}>{t('practice_planner_title')}</Text>
-        <Text style={styles.cardSubtitle}>{t('practice_planner_subtitle')}</Text>
-        <TouchableOpacity
-          accessibilityLabel={t('practice_planner_title')}
-          onPress={() => navigation.navigate('PracticePlanner')}
-          testID="practice-planner-cta"
-        >
-          <View style={styles.primaryButton}>
-            <Text style={styles.primaryButtonText}>{t('practice_planner_browse_all')}</Text>
-          </View>
-        </TouchableOpacity>
-      </View>
+      {practiceGrowthEnabled ? (
+        <View style={styles.card} testID="practice-planner-card">
+          <Text style={styles.cardTitle}>{t('practice_planner_title')}</Text>
+          <Text style={styles.cardSubtitle}>{t('practice_planner_subtitle')}</Text>
+          <TouchableOpacity
+            accessibilityLabel={t('practice_planner_title')}
+            onPress={() => navigation.navigate('PracticePlanner')}
+            testID="practice-planner-cta"
+          >
+            <View style={styles.primaryButton}>
+              <Text style={styles.primaryButtonText}>{t('practice_planner_browse_all')}</Text>
+            </View>
+          </TouchableOpacity>
+        </View>
+      ) : null}
 
       <View style={styles.card} testID="rounds-stats-card">
         <Text style={styles.cardTitle}>{t('round.history.title')}</Text>

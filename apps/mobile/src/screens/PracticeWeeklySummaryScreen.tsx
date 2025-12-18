@@ -13,6 +13,8 @@ import type { RootStackParamList } from '@app/navigation/types';
 import { buildPracticeWeeklySummary, type PracticeWeeklySummary } from '@app/practice/practiceWeeklySummary';
 import { loadCurrentWeekPracticePlan } from '@app/practice/practicePlanStorage';
 import { loadPracticeSessions } from '@app/practice/practiceSessionStorage';
+import { isPracticeGrowthV1Enabled } from '@shared/featureFlags/practiceGrowthV1';
+import { logPracticeFeatureGated, type PracticeFeatureGateSource } from '@app/analytics/practiceFeatureGate';
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#0c0c0f', padding: 16, gap: 12 },
@@ -75,15 +77,32 @@ function buildShareText(summary: PracticeWeeklySummary): string {
 
 export default function PracticeWeeklySummaryScreen({ navigation, route }: Props): JSX.Element {
   const [state, setState] = useState<ScreenState>({ loading: true, summary: null });
+  const practiceGrowthEnabled = isPracticeGrowthV1Enabled();
 
-  const analyticsContext = useMemo(
-    () => ({
-      source: route.params?.source,
-    }),
+  const analyticsSource = useMemo(
+    () => (route.params?.source === 'home' || route.params?.source === 'journal' ? route.params.source : undefined),
     [route.params?.source],
   );
 
+  const analyticsContext = useMemo(
+    () => ({
+      source: analyticsSource,
+    }),
+    [analyticsSource],
+  );
+
   useEffect(() => {
+    if (practiceGrowthEnabled) return;
+
+    const source: PracticeFeatureGateSource =
+      route.params?.source === 'home' ? 'home' : route.params?.source === 'journal' ? 'home' : 'deeplink';
+    logPracticeFeatureGated({ feature: 'practiceGrowthV1', target: 'PracticeWeeklySummary', source });
+    navigation.navigate('HomeDashboard');
+  }, [navigation, practiceGrowthEnabled, route.params?.source]);
+
+  useEffect(() => {
+    if (!practiceGrowthEnabled) return undefined;
+
     let cancelled = false;
     Promise.all([loadPracticeSessions(), loadCurrentWeekPracticePlan()])
       .then(([sessions, plan]) => {
@@ -118,7 +137,7 @@ export default function PracticeWeeklySummaryScreen({ navigation, route }: Props
     return () => {
       cancelled = true;
     };
-  }, [analyticsContext.source]);
+  }, [analyticsContext.source, practiceGrowthEnabled]);
 
   const handleShare = useCallback(async () => {
     if (!state.summary) return;
@@ -150,6 +169,10 @@ export default function PracticeWeeklySummaryScreen({ navigation, route }: Props
     });
     navigation.navigate('PracticeSession');
   }, [analyticsContext.source, navigation, state.summary]);
+
+  if (!practiceGrowthEnabled) {
+    return <View style={styles.container} />;
+  }
 
   if (state.loading || !state.summary) {
     return (
