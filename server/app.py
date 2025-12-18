@@ -31,6 +31,7 @@ from server.api.routers.hole_detect import router as auto_hole_router
 from server.api.routers.live_tokens import router as live_tokens_router
 from server.api.routers.sg import router as sg_router
 from server.api.routers.swing_metrics import router as swing_metrics_router
+from server.api.routers.feature_flags import router as feature_flags_router
 from server.api.routers.session_timeline import router as session_timeline_router
 from server.api.routers.share import router as share_router
 from server.api.routers.profile import router as profile_router
@@ -200,6 +201,7 @@ app.include_router(trip_router)
 app.include_router(user_history_router)
 app.include_router(rounds_router)
 app.include_router(stats_router)
+app.include_router(feature_flags_router)
 app.include_router(summary_router)
 if os.getenv("APP_ENV", "").lower() not in {"production", "prod"}:
     from server.dev.seed_s16 import router as seed_s16_router

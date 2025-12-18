@@ -1,3 +1,6 @@
+import { clearRemoteFeatureFlag, getRemoteFeatureFlag } from './remote';
+import type { ResolvedFeatureFlag } from './types';
+
 const TRUTHY_VALUES = new Set(["1", "true", "on", "yes", "enable", "enabled"]);
 const FALSY_VALUES = new Set(["0", "false", "off", "no", "disable", "disabled"]);
 
@@ -30,10 +33,15 @@ function normalizeFlag(value: string | undefined, defaultValue: boolean): boolea
  * Default: disabled to preserve existing flow unless explicitly rolled out.
  */
 export function isRoundFlowV2Enabled(defaultValue = false): boolean {
+  const remote: ResolvedFeatureFlag | null = getRemoteFeatureFlag("roundFlowV2");
+  if (remote && typeof remote.enabled === "boolean") {
+    return remote.enabled;
+  }
+
   const raw = readEnvFlag();
   return normalizeFlag(raw, defaultValue);
 }
 
 export function __resetRoundFlowV2FlagCacheForTests() {
-  // placeholder for future caching parity
+  clearRemoteFeatureFlag("roundFlowV2");
 }

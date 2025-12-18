@@ -4,13 +4,7 @@ from fastapi import APIRouter, HTTPException, Query, Request, Response
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import JSONResponse
 
-from server.providers import (
-    compute_components,
-    get_elevation,
-    get_wind,
-    refresh_elevation,
-    refresh_wind,
-)
+from server.providers import elevation, wind
 from server.providers.elevation import ElevationProviderResult
 from server.providers.errors import ProviderError
 from server.providers.wind import WindProviderResult
@@ -75,12 +69,14 @@ async def elevation_endpoint(
     request: Request, lat: float = Query(...), lon: float = Query(...)
 ) -> Response:
     try:
-        result = await run_in_threadpool(lambda: get_elevation(lat, lon))
+        result = await run_in_threadpool(lambda: elevation.get_elevation(lat, lon))
     except ProviderError as exc:  # pragma: no cover - handled in tests
         raise HTTPException(status_code=502, detail=str(exc)) from exc
 
     if _if_none_match_matches(request.headers.get("if-none-match"), result.etag):
-        refreshed = await run_in_threadpool(lambda: refresh_elevation(lat, lon))
+        refreshed = await run_in_threadpool(
+            lambda: elevation.refresh_elevation(lat, lon)
+        )
         result = refreshed or result
         response = Response(status_code=304)
         return _apply_cache_headers(response, result.etag, result.ttl_seconds)
@@ -98,12 +94,12 @@ async def wind_endpoint(
     bearing: float | None = Query(None),
 ) -> Response:
     try:
-        result = await run_in_threadpool(lambda: get_wind(lat, lon))
+        result = await run_in_threadpool(lambda: wind.get_wind(lat, lon))
     except ProviderError as exc:  # pragma: no cover - handled in tests
         raise HTTPException(status_code=502, detail=str(exc)) from exc
 
     if _if_none_match_matches(request.headers.get("if-none-match"), result.etag):
-        refreshed = await run_in_threadpool(lambda: refresh_wind(lat, lon))
+        refreshed = await run_in_threadpool(lambda: wind.refresh_wind(lat, lon))
         result = refreshed or result
         response = Response(status_code=304)
         return _apply_cache_headers(response, result.etag, result.ttl_seconds)
@@ -112,7 +108,7 @@ async def wind_endpoint(
     w_parallel = None
     w_perp = None
     if bearing is not None:
-        w_parallel, w_perp = compute_components(result, bearing)
+        w_parallel, w_perp = wind.compute_components(result, bearing)
     payload["w_parallel"] = w_parallel
     payload["w_perp"] = w_perp
 

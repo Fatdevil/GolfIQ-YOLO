@@ -7,6 +7,7 @@ import { getCurrentRound, listRounds, startRound } from '@app/api/roundClient';
 import { loadActiveRoundState, saveActiveRoundState } from '@app/round/roundState';
 import { fetchCourses } from '@app/api/courseClient';
 import { useGeolocation } from '@app/hooks/useGeolocation';
+import { removeItem, setItem } from '@app/storage/asyncStorage';
 
 type Nav = { navigate: (...args: any[]) => void };
 
@@ -23,8 +24,9 @@ const mockedListRounds = listRounds as unknown as Mock;
 const mockedFetchCourses = fetchCourses as unknown as Mock;
 const mockedUseGeolocation = useGeolocation as unknown as Mock;
 
-beforeEach(() => {
+beforeEach(async () => {
   vi.clearAllMocks();
+  await removeItem('golfiq.courseCache.v1');
   mockedStartRound.mockResolvedValue({ id: 'r1', holes: 18, startedAt: 'now', startHole: 1 });
   mockedSaveState.mockResolvedValue(undefined);
   mockedLoadState.mockResolvedValue(null);
@@ -121,6 +123,36 @@ describe('RoundStartScreen', () => {
     await waitFor(() => expect(getByText(/GPS suggests/i)).toBeTruthy());
     expect(getByText(/GPS suggests/i)).toBeTruthy();
     expect(getAllByTestId('course-near').length).toBeGreaterThan(0);
+    fireEvent.click(getByTestId('start-round-button'));
+
+    await waitFor(() =>
+      expect(mockedStartRound).toHaveBeenCalledWith(expect.objectContaining({ courseId: 'near' })),
+    );
+  });
+
+  it('prefers GPS suggestion over cached defaults when available', async () => {
+    await setItem(
+      'golfiq.courseCache.v1',
+      JSON.stringify([{ id: 'demo-links-hero', name: 'Demo Links Hero', holeCount: 5, location: null }]),
+    );
+    mockedGetCurrentRound.mockResolvedValueOnce(null);
+    mockedFetchCourses.mockResolvedValue([
+      { id: 'near', name: 'Near', holeCount: 9, location: { lat: 59.3, lon: 18.1 } },
+      { id: 'far', name: 'Far', holeCount: 9, location: { lat: 0, lon: 0 } },
+    ]);
+    mockedUseGeolocation.mockReturnValue({
+      position: { lat: 59.3001, lon: 18.0999 },
+      error: null,
+      supported: true,
+      loading: false,
+    });
+    const navigation: Nav = { navigate: vi.fn() };
+
+    const { getByTestId, getByText } = render(
+      <RoundStartScreen navigation={navigation as any} route={undefined as any} />,
+    );
+
+    await waitFor(() => expect(getByText(/GPS suggests/i)).toBeTruthy());
     fireEvent.click(getByTestId('start-round-button'));
 
     await waitFor(() =>
