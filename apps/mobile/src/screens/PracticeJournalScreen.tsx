@@ -12,6 +12,8 @@ import {
   getThisWeekTotals,
 } from '@app/practice/practiceInsights';
 import { loadPracticeSessions, type PracticeSession } from '@app/practice/practiceSessionStorage';
+import { isPracticeGrowthV1Enabled } from '@shared/featureFlags/practiceGrowthV1';
+import { logPracticeFeatureGated, type PracticeFeatureGateSource } from '@app/analytics/practiceFeatureGate';
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#0c0c0f', padding: 16, gap: 12 },
@@ -110,10 +112,21 @@ function SessionRow({ session, onPress, onShare }: {
   );
 }
 
-export default function PracticeJournalScreen({ navigation }: Props): JSX.Element {
+export default function PracticeJournalScreen({ navigation, route }: Props): JSX.Element {
   const [state, setState] = useState<ScreenState>({ loading: true, sessions: [] });
+  const practiceGrowthEnabled = isPracticeGrowthV1Enabled();
 
   useEffect(() => {
+    if (practiceGrowthEnabled) return;
+
+    const source: PracticeFeatureGateSource = route.params?.source === 'home' ? 'home' : 'deeplink';
+    logPracticeFeatureGated({ feature: 'practiceGrowthV1', target: 'PracticeJournal', source });
+    navigation.navigate('HomeDashboard');
+  }, [navigation, practiceGrowthEnabled, route.params?.source]);
+
+  useEffect(() => {
+    if (!practiceGrowthEnabled) return;
+
     logPracticeJournalOpened();
 
     let cancelled = false;
@@ -131,7 +144,7 @@ export default function PracticeJournalScreen({ navigation }: Props): JSX.Elemen
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [practiceGrowthEnabled]);
 
   const sortedSessions = useMemo(
     () =>
@@ -147,6 +160,12 @@ export default function PracticeJournalScreen({ navigation }: Props): JSX.Elemen
   const thisWeekTotals = useMemo(() => getThisWeekTotals(sortedSessions, new Date()), [sortedSessions]);
 
   const handleOpenWeeklySummary = () => {
+    if (!practiceGrowthEnabled) {
+      logPracticeFeatureGated({ feature: 'practiceGrowthV1', target: 'PracticeWeeklySummary', source: 'home' });
+      navigation.navigate('HomeDashboard');
+      return;
+    }
+
     navigation.navigate('PracticeWeeklySummary', { source: 'journal' });
   };
 
@@ -170,10 +189,14 @@ export default function PracticeJournalScreen({ navigation }: Props): JSX.Elemen
     Alert.alert(formatSessionDate(session), lines.join('\n'));
   };
 
+  if (!practiceGrowthEnabled) {
+    return <View style={styles.container} />;
+  }
+
   const renderContent = () => {
     if (state.loading) {
       return (
-        <View style={[styles.empty, { paddingTop: 80 }]}> 
+        <View style={[styles.empty, { paddingTop: 80 }]}>
           <ActivityIndicator />
           <Text style={styles.subtitle}>{t('practicePlan.loading')}</Text>
         </View>

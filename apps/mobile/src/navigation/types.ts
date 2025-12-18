@@ -85,8 +85,8 @@ export type RootStackParamList = {
       }
     | undefined;
   PracticeSession: undefined;
-  PracticeWeeklySummary: { source?: 'home' | 'journal' } | undefined;
-  PracticeJournal: undefined;
+  PracticeWeeklySummary: { source?: 'home' | 'journal' | 'deeplink' } | undefined;
+  PracticeJournal: { source?: 'home' | 'deeplink' | 'unknown' } | undefined;
   PracticeMissions:
     | {
         source?:

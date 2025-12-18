@@ -78,6 +78,8 @@ import {
   emitPracticeMissionRecommendationShown,
   type PracticeRecommendationContext,
 } from '@shared/practice/practiceRecommendationsAnalytics';
+import { isPracticeGrowthV1Enabled } from '@shared/featureFlags/practiceGrowthV1';
+import { logPracticeFeatureGated, type PracticeFeatureGateSource } from '@app/analytics/practiceFeatureGate';
 import { emitPracticeMissionStart } from '@shared/practice/practiceSessionAnalytics';
 import { getExperimentBucket, getExperimentVariant, getPracticeRecommendationsExperiment, isInExperiment } from '@shared/experiments/flags';
 import {
@@ -231,6 +233,15 @@ export default function HomeDashboardScreen({ navigation }: Props): JSX.Element 
   const goalNudgeShownRef = useRef<string | null>(null);
   const practiceRecommendationImpressionsRef = useRef(new Set<string>());
   const geo = useGeolocation();
+  const practiceGrowthEnabled = isPracticeGrowthV1Enabled();
+
+  const handlePracticeGrowthGate = useCallback(
+    (target: string, source: PracticeFeatureGateSource = 'home') => {
+      logPracticeFeatureGated({ feature: 'practiceGrowthV1', target, source });
+      navigation.navigate('HomeDashboard');
+    },
+    [navigation],
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -744,20 +755,35 @@ export default function HomeDashboardScreen({ navigation }: Props): JSX.Element 
   ]);
 
   const handleOpenPracticeJournal = useCallback(() => {
+    if (!practiceGrowthEnabled) {
+      handlePracticeGrowthGate('PracticeJournal', 'home');
+      return;
+    }
+
     navigation.navigate('PracticeJournal');
-  }, [navigation]);
+  }, [handlePracticeGrowthGate, navigation, practiceGrowthEnabled]);
 
   const handleOpenPracticeWeeklySummary = useCallback(() => {
+    if (!practiceGrowthEnabled) {
+      handlePracticeGrowthGate('PracticeWeeklySummary', 'home');
+      return;
+    }
+
     navigation.navigate('PracticeWeeklySummary', { source: 'home' });
-  }, [navigation]);
+  }, [handlePracticeGrowthGate, navigation, practiceGrowthEnabled]);
 
   const handleOpenPracticeProgress = useCallback(() => {
+    if (!practiceGrowthEnabled) {
+      handlePracticeGrowthGate('PracticeProgress', 'home');
+      return;
+    }
+
     if (practiceProgressModel?.hasData) {
       navigation.navigate('PracticeHistory');
     } else {
       navigation.navigate('RangeQuickPracticeStart', { entrySource: 'range_home' });
     }
-  }, [navigation, practiceProgressModel?.hasData]);
+  }, [handlePracticeGrowthGate, navigation, practiceGrowthEnabled, practiceProgressModel?.hasData]);
 
   const latestRoundDisplay = useMemo(() => {
     if (!latestRound) return null;
@@ -1257,152 +1283,153 @@ export default function HomeDashboardScreen({ navigation }: Props): JSX.Element 
         )}
       </View>
 
-      {sgLightFocus ? (
-        <View style={styles.card} testID="home-sg-focus-card">
-          <Text style={styles.cardTitle}>{t('home_dashboard_focus_title')}</Text>
-          <Text style={styles.cardBody} testID="home-sg-focus-label">
-            {t(sgLightFocus.labelKey)}
-          </Text>
-          <Text style={styles.muted}>{t('home_dashboard_focus_helper')}</Text>
-          <TouchableOpacity onPress={handlePracticeFromSgFocus} testID="home-sg-focus-cta">
-            <Text style={styles.link}>{t('home_dashboard_focus_cta')}</Text>
-          </TouchableOpacity>
-        </View>
-      ) : null}
-
-      {practiceProgressModel ? (
-        <TouchableOpacity
-          style={styles.card}
-          activeOpacity={0.9}
-          onPress={handleOpenPracticeProgress}
-          testID="practice-progress-card"
-        >
-          <Text style={styles.cardTitle}>{t('practice.progress.title')}</Text>
-          <View style={styles.progressBlock}>
-            <View style={styles.progressBar}>
-              <View
-                style={[
-                  styles.progressFill,
-                  { width: `${Math.min(1, Math.max(0, practiceProgressModel.completionRatio)) * 100}%` },
-                ]}
-              />
-            </View>
-            <Text style={styles.cardBody} testID="practice-progress-summary">
-              {t(practiceProgressModel.summaryKey, practiceProgressModel.summaryParams)}
+              {sgLightFocus ? (
+          <View style={styles.card} testID="home-sg-focus-card">
+            <Text style={styles.cardTitle}>{t('home_dashboard_focus_title')}</Text>
+            <Text style={styles.cardBody} testID="home-sg-focus-label">
+              {t(sgLightFocus.labelKey)}
             </Text>
-            <Text style={styles.muted} testID="practice-progress-subtitle">
-              {t(practiceProgressModel.subtitleKey, practiceProgressModel.subtitleParams)}
-            </Text>
-            {practiceGoalCopy.summary ? (
-              <View style={[styles.rowSpaceBetween, styles.goalRow]}>
-                <Text style={styles.cardBody} testID="practice-goal-summary">
-                  {practiceGoalCopy.summary}
-                </Text>
-                {practiceGoalCopy.statusLabel ? (
-                  <View
-                    style={[
-                      styles.goalPill,
-                      practiceGoalProgress?.isOnTrack ? styles.goalPillOnTrack : styles.goalPillCatchUp,
-                    ]}
-                    testID="practice-goal-status"
-                  >
-                    <Text
-                      style={[
-                        styles.goalPillText,
-                        practiceGoalProgress?.isOnTrack ? styles.goalPillTextOnTrack : styles.goalPillTextCatchUp,
-                      ]}
-                    >
-                      {practiceGoalCopy.statusLabel}
-                    </Text>
-                  </View>
-                ) : null}
-              </View>
-            ) : null}
-            <TouchableOpacity
-              onPress={() => navigation.navigate('WeeklyPracticeGoalSettings')}
-              testID="edit-practice-goal"
-            >
-              <Text style={styles.link}>{t('practice.goal.settings.edit')}</Text>
-            </TouchableOpacity>
-            {practiceGoalStreakLabel ? (
-              <Text style={styles.muted} testID="practice-goal-streak">
-                {practiceGoalStreakLabel}
-              </Text>
-            ) : null}
-            {practicePlanCopy ? (
-              <Text style={styles.muted} testID="practice-plan-summary">
-                {practicePlanCopy}
-              </Text>
-            ) : null}
-            <TouchableOpacity onPress={handleOpenPracticeJournal} testID="practice-progress-history">
-              <Text style={styles.link}>{t('practice.journal.view_history')}</Text>
-            </TouchableOpacity>
-            <TouchableOpacity onPress={handleOpenPracticeWeeklySummary} testID="practice-weekly-summary-link">
-              <Text style={styles.link}>{t('practice.weeklySummary.cta_view')}</Text>
-            </TouchableOpacity>
-            {shouldRenderWeeklyGoalNudge && weeklyGoalNudgeCopy ? (
-              <View style={styles.goalNudge} testID="practice-goal-nudge">
-                <Text style={styles.goalNudgeText}>{weeklyGoalNudgeCopy}</Text>
-                <TouchableOpacity onPress={handleWeeklyGoalNudgePress} testID="practice-goal-nudge-cta">
-                  <Text style={styles.link}>{t('practice.missions.cta.viewAll')}</Text>
-                </TouchableOpacity>
-              </View>
-            ) : null}
-          </View>
-          <TouchableOpacity onPress={handleOpenPracticeProgress} testID="open-practice-progress">
-            <Text style={styles.link}>{t('practice.progress.cta')}</Text>
-          </TouchableOpacity>
-        </TouchableOpacity>
-      ) : null}
-
-      <View style={styles.card}>
-        <Text style={styles.cardTitle}>{t('home_dashboard_practice_title')}</Text>
-        <Text style={styles.cardBody} testID="practice-snippet">
-          {practiceHeadline}
-        </Text>
-        {homePracticeRecommendation && homePracticeMission ? (
-          <View style={[styles.recommendationBlock, styles.homeRecommendation]} testID="home-practice-recommendation">
-            <Text style={styles.cardOverline}>{t('practice.missionRecommendations.badge')}</Text>
-            <Text style={styles.cardTitle}>{t(homePracticeMission.title)}</Text>
-            {homePracticeRecommendationReason ? (
-              <Text style={styles.muted}>{homePracticeRecommendationReason}</Text>
-            ) : null}
-            <TouchableOpacity
-              onPress={handleStartHomePracticeRecommendation}
-              testID="home-practice-recommendation-cta"
-            >
-              <Text style={styles.link}>{t('home_dashboard_practice_next_cta')}</Text>
+            <Text style={styles.muted}>{t('home_dashboard_focus_helper')}</Text>
+            <TouchableOpacity onPress={handlePracticeFromSgFocus} testID="home-sg-focus-cta">
+              <Text style={styles.link}>{t('home_dashboard_focus_cta')}</Text>
             </TouchableOpacity>
           </View>
         ) : null}
-        {practiceRecommendationCopy ? (
-          <View style={styles.recommendationBlock} testID="practice-next-mission">
-            <View style={styles.rowSpaceBetween}>
-              <Text style={styles.cardOverline}>{t('home_dashboard_practice_next_title')}</Text>
-              {practiceRecommendationStatusLabel ? (
-                <View style={styles.badge} testID="practice-next-status">
-                  <Text style={styles.badgeText}>{practiceRecommendationStatusLabel}</Text>
+
+        {practiceGrowthEnabled && practiceProgressModel ? (
+          <TouchableOpacity
+            style={styles.card}
+            activeOpacity={0.9}
+            onPress={handleOpenPracticeProgress}
+            testID="practice-progress-card"
+          >
+            <Text style={styles.cardTitle}>{t('practice.progress.title')}</Text>
+            <View style={styles.progressBlock}>
+              <View style={styles.progressBar}>
+                <View
+                  style={[
+                    styles.progressFill,
+                    { width: `${Math.min(1, Math.max(0, practiceProgressModel.completionRatio)) * 100}%` },
+                  ]}
+                />
+              </View>
+              <Text style={styles.cardBody} testID="practice-progress-summary">
+                {t(practiceProgressModel.summaryKey, practiceProgressModel.summaryParams)}
+              </Text>
+              <Text style={styles.muted} testID="practice-progress-subtitle">
+                {t(practiceProgressModel.subtitleKey, practiceProgressModel.subtitleParams)}
+              </Text>
+              {practiceGoalCopy.summary ? (
+                <View style={[styles.rowSpaceBetween, styles.goalRow]}>
+                  <Text style={styles.cardBody} testID="practice-goal-summary">
+                    {practiceGoalCopy.summary}
+                  </Text>
+                  {practiceGoalCopy.statusLabel ? (
+                    <View
+                      style={[
+                        styles.goalPill,
+                        practiceGoalProgress?.isOnTrack ? styles.goalPillOnTrack : styles.goalPillCatchUp,
+                      ]}
+                      testID="practice-goal-status"
+                    >
+                      <Text
+                        style={[
+                          styles.goalPillText,
+                          practiceGoalProgress?.isOnTrack ? styles.goalPillTextOnTrack : styles.goalPillTextCatchUp,
+                        ]}
+                      >
+                        {practiceGoalCopy.statusLabel}
+                      </Text>
+                    </View>
+                  ) : null}
+                </View>
+              ) : null}
+              <TouchableOpacity
+                onPress={() => navigation.navigate('WeeklyPracticeGoalSettings')}
+                testID="edit-practice-goal"
+              >
+                <Text style={styles.link}>{t('practice.goal.settings.edit')}</Text>
+              </TouchableOpacity>
+              {practiceGoalStreakLabel ? (
+                <Text style={styles.muted} testID="practice-goal-streak">
+                  {practiceGoalStreakLabel}
+                </Text>
+              ) : null}
+              {practicePlanCopy ? (
+                <Text style={styles.muted} testID="practice-plan-summary">
+                  {practicePlanCopy}
+                </Text>
+              ) : null}
+              <TouchableOpacity onPress={handleOpenPracticeJournal} testID="practice-progress-history">
+                <Text style={styles.link}>{t('practice.journal.view_history')}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity onPress={handleOpenPracticeWeeklySummary} testID="practice-weekly-summary-link">
+                <Text style={styles.link}>{t('practice.weeklySummary.cta_view')}</Text>
+              </TouchableOpacity>
+              {shouldRenderWeeklyGoalNudge && weeklyGoalNudgeCopy ? (
+                <View style={styles.goalNudge} testID="practice-goal-nudge">
+                  <Text style={styles.goalNudgeText}>{weeklyGoalNudgeCopy}</Text>
+                  <TouchableOpacity onPress={handleWeeklyGoalNudgePress} testID="practice-goal-nudge-cta">
+                    <Text style={styles.link}>{t('practice.missions.cta.viewAll')}</Text>
+                  </TouchableOpacity>
                 </View>
               ) : null}
             </View>
-            <Text style={styles.cardTitle}>{practiceRecommendationCopy.title}</Text>
-            <Text style={styles.muted}>{practiceRecommendationCopy.description}</Text>
-            <TouchableOpacity onPress={handleStartPracticeRecommendation} testID="practice-next-cta">
-              <Text style={styles.link}>{t('home_dashboard_practice_next_cta')}</Text>
+            <TouchableOpacity onPress={handleOpenPracticeProgress} testID="open-practice-progress">
+              <Text style={styles.link}>{t('practice.progress.cta')}</Text>
+            </TouchableOpacity>
+          </TouchableOpacity>
+        ) : null}
+
+        {practiceGrowthEnabled ? (
+          <View style={styles.card}>
+            <Text style={styles.cardTitle}>{t('home_dashboard_practice_title')}</Text>
+            <Text style={styles.cardBody} testID="practice-snippet">
+              {practiceHeadline}
+            </Text>
+            {homePracticeRecommendation && homePracticeMission ? (
+              <View style={[styles.recommendationBlock, styles.homeRecommendation]} testID="home-practice-recommendation">
+                <Text style={styles.cardOverline}>{t('practice.missionRecommendations.badge')}</Text>
+                <Text style={styles.cardTitle}>{t(homePracticeMission.title)}</Text>
+                {homePracticeRecommendationReason ? (
+                  <Text style={styles.muted}>{homePracticeRecommendationReason}</Text>
+                ) : null}
+                <TouchableOpacity
+                  onPress={handleStartHomePracticeRecommendation}
+                  testID="home-practice-recommendation-cta"
+                >
+                  <Text style={styles.link}>{t('home_dashboard_practice_next_cta')}</Text>
+                </TouchableOpacity>
+              </View>
+            ) : null}
+            {practiceRecommendationCopy ? (
+              <View style={styles.recommendationBlock} testID="practice-next-mission">
+                <View style={styles.rowSpaceBetween}>
+                  <Text style={styles.cardOverline}>{t('home_dashboard_practice_next_title')}</Text>
+                  {practiceRecommendationStatusLabel ? (
+                    <View style={styles.badge} testID="practice-next-status">
+                      <Text style={styles.badgeText}>{practiceRecommendationStatusLabel}</Text>
+                    </View>
+                  ) : null}
+                </View>
+                <Text style={styles.cardTitle}>{practiceRecommendationCopy.title}</Text>
+                <Text style={styles.muted}>{practiceRecommendationCopy.description}</Text>
+                <TouchableOpacity onPress={handleStartPracticeRecommendation} testID="practice-next-cta">
+                  <Text style={styles.link}>{t('home_dashboard_practice_next_cta')}</Text>
+                </TouchableOpacity>
+              </View>
+            ) : null}
+            <TouchableOpacity
+              onPress={() => navigation.navigate('PracticeMissions', { source: 'home' })}
+              testID="open-practice-missions"
+            >
+              <Text style={styles.link}>{t('practice.missions.cta.viewAll')}</Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={() => navigation.navigate('PracticePlanner')} testID="open-practice">
+              <Text style={styles.link}>{t('home_dashboard_practice_cta')}</Text>
             </TouchableOpacity>
           </View>
         ) : null}
-        <TouchableOpacity
-          onPress={() => navigation.navigate('PracticeMissions', { source: 'home' })}
-          testID="open-practice-missions"
-        >
-          <Text style={styles.link}>{t('practice.missions.cta.viewAll')}</Text>
-        </TouchableOpacity>
-        <TouchableOpacity onPress={() => navigation.navigate('PracticePlanner')} testID="open-practice">
-          <Text style={styles.link}>{t('home_dashboard_practice_cta')}</Text>
-        </TouchableOpacity>
-      </View>
-
       <View style={styles.card}>
         <Text style={styles.cardTitle}>{t('home_dashboard_bag_title')}</Text>
         <Text style={styles.cardBody} testID="bag-status">
