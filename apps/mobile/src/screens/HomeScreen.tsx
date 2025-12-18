@@ -28,6 +28,7 @@ import { t } from '@app/i18n';
 import { loadLastRangeSessionSummary } from '@app/range/rangeSummaryStorage';
 import type { RangeSessionSummary } from '@app/range/rangeSession';
 import { logPracticeHomeCardViewed, logPracticeHomeCta } from '@app/analytics/practiceHome';
+import { logRoundHomeContinueClicked, logRoundHomeStartClicked } from '@app/analytics/roundFlow';
 import {
   getWeekStartISO,
   loadCurrentWeekPracticePlan,
@@ -35,6 +36,9 @@ import {
 } from '@app/practice/practicePlanStorage';
 import { isPracticeGrowthV1Enabled } from '@shared/featureFlags/practiceGrowthV1';
 import { logPracticeFeatureGated } from '@app/analytics/practiceFeatureGate';
+import { fetchActiveRoundSummary, getCurrentRound, type ActiveRoundSummary, type RoundInfo } from '@app/api/roundClient';
+import { isRoundFlowV2Enabled } from '@shared/featureFlags/roundFlowV2';
+import { loadActiveRoundState, saveActiveRoundState, type ActiveRoundState } from '@app/round/roundState';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'PlayerHome'>;
 
@@ -46,6 +50,36 @@ export type PlayerHomeState = {
   plan: AccessPlan;
   lastRoundSummary?: LastRoundSummary | null;
 };
+
+function buildActiveRoundEntry(
+  summary: ActiveRoundSummary | null,
+  info: RoundInfo | null,
+  fallback: ActiveRoundState | null,
+): ActiveRoundState | null {
+  const roundId = summary?.roundId ?? info?.id ?? fallback?.round.id;
+  if (!roundId) return null;
+
+  const round = {
+    id: roundId,
+    holes: info?.holes ?? summary?.holes ?? fallback?.round.holes ?? 18,
+    courseId: info?.courseId ?? summary?.courseId ?? fallback?.round.courseId,
+    courseName:
+      info?.courseName ??
+      summary?.courseName ??
+      fallback?.round.courseName ??
+      info?.courseId ??
+      summary?.courseId ??
+      'Course',
+    teeName: info?.teeName ?? fallback?.round.teeName,
+    startedAt: info?.startedAt ?? summary?.startedAt ?? fallback?.round.startedAt ?? new Date().toISOString(),
+    startHole: info?.startHole ?? fallback?.round.startHole ?? 1,
+    status: info?.status ?? 'in_progress',
+  } as ActiveRoundState['round'];
+
+  const currentHole = summary?.currentHole ?? info?.lastHole ?? fallback?.currentHole ?? round.startHole ?? 1;
+
+  return { round, currentHole, preferences: fallback?.preferences };
+}
 
 function formatShortDate(value?: string | null): string | null {
   if (!value) return null;
@@ -131,6 +165,10 @@ export default function HomeScreen({ navigation }: Props): JSX.Element {
   }>({ loading: true, plan: null });
   const practiceCardLoggedRef = useRef(false);
   const practiceGrowthEnabled = isPracticeGrowthV1Enabled();
+  const roundFlowV2Enabled = isRoundFlowV2Enabled();
+  const [activeRound, setActiveRound] = useState<ActiveRoundState | null>(null);
+  const [activeRoundError, setActiveRoundError] = useState<string | null>(null);
+  const [activeRoundLoading, setActiveRoundLoading] = useState(false);
 
   const gatePracticeGrowth = useCallback(
     (target: string) => {
@@ -192,6 +230,49 @@ export default function HomeScreen({ navigation }: Props): JSX.Element {
       /* handled in state */
     });
   }, [load]);
+
+  useEffect(() => {
+    if (!roundFlowV2Enabled) return;
+
+    let cancelled = false;
+
+    async function hydrateActiveRound(): Promise<void> {
+      setActiveRoundLoading(true);
+      const cached = await loadActiveRoundState().catch(() => null);
+      if (!cancelled && cached) {
+        setActiveRound(cached);
+      }
+
+      try {
+        let fetchError: string | null = null;
+        const [summary, info] = await Promise.all([
+          fetchActiveRoundSummary().catch((err) => {
+            console.warn('[home] Failed to load active round', err);
+            fetchError = err instanceof Error ? err.message : 'Unable to load active round';
+            return null;
+          }),
+          getCurrentRound().catch(() => null),
+        ]);
+
+        if (cancelled) return;
+
+        const derived = buildActiveRoundEntry(summary, info, cached);
+        setActiveRound(derived);
+        if (derived) {
+          await saveActiveRoundState(derived);
+        }
+        setActiveRoundError(fetchError);
+      } finally {
+        if (!cancelled) setActiveRoundLoading(false);
+      }
+    }
+
+    hydrateActiveRound();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [roundFlowV2Enabled]);
 
   useEffect(() => {
     let cancelled = false;
@@ -292,6 +373,18 @@ export default function HomeScreen({ navigation }: Props): JSX.Element {
     ? t('home.practice.cta_continue')
     : t('home.practice.cta_start');
 
+  const loadingAccessibilityState: Record<string, unknown> = activeRoundLoading
+    ? { accessibilityState: { disabled: true, busy: true } }
+    : {};
+
+  const activeRoundSubtitle = useMemo(() => {
+    if (!activeRound?.round) return null;
+    const courseLabel = activeRound.round.courseName?.trim() || activeRound.round.courseId || 'Course';
+    const holesLabel = activeRound.round.holes ? `${activeRound.round.holes} holes` : null;
+    const holeProgress = activeRound.currentHole ? `Hole ${activeRound.currentHole}` : null;
+    return [courseLabel, holesLabel, holeProgress].filter(Boolean).join(' · ');
+  }, [activeRound]);
+
   const handlePracticeStart = useCallback(() => {
     if (gatePracticeGrowth('PracticeSession')) return;
 
@@ -312,6 +405,27 @@ export default function HomeScreen({ navigation }: Props): JSX.Element {
     logPracticeHomeCta('build_plan');
     navigation.navigate('WeeklySummary');
   }, [gatePracticeGrowth, navigation]);
+
+  const handleRoundV2Start = useCallback(() => {
+    if (activeRoundLoading) return;
+
+    logRoundHomeStartClicked();
+    navigateToStartRound(navigation, 'home');
+  }, [activeRoundLoading, navigation]);
+
+  const handleRoundV2Continue = useCallback(async () => {
+    if (activeRoundLoading) return;
+    if (!activeRound?.round?.id) return;
+    logRoundHomeContinueClicked(activeRound.round.id);
+
+    try {
+      await saveActiveRoundState(activeRound);
+    } catch {
+      // best-effort cache for quick resume
+    }
+
+    navigation.navigate('RoundShot', { roundId: activeRound.round.id });
+  }, [activeRound, activeRoundLoading, navigation]);
 
   const handlePracticeHistory = useCallback(() => {
     if (gatePracticeGrowth('PracticeJournal')) return;
@@ -354,7 +468,38 @@ export default function HomeScreen({ navigation }: Props): JSX.Element {
         </View>
       </View>
 
-      {currentRun && (
+      {roundFlowV2Enabled ? (
+        <View style={styles.card} testID={activeRound ? 'continue-round-card' : 'start-round-card'}>
+          <Text style={styles.cardTitle}>{activeRound ? 'Continue round' : 'Start round'}</Text>
+          <Text style={styles.cardSubtitle}>
+            {activeRound
+              ? activeRoundSubtitle || 'Resume your on-course round.'
+              : 'Start a new round with GPS, scoring, and caddie tools.'}
+          </Text>
+          {activeRoundError ? <Text style={styles.cardFootnote}>{activeRoundError}</Text> : null}
+          {activeRoundLoading && !activeRound ? (
+            <View style={styles.row}>
+              <ActivityIndicator color="#fff" />
+              <Text style={styles.cardSubtitle}>Checking for active rounds…</Text>
+            </View>
+          ) : null}
+          <TouchableOpacity
+            accessibilityLabel={activeRoundLoading ? 'Checking round' : activeRound ? 'Continue round' : 'Start round'}
+            {...loadingAccessibilityState}
+            disabled={activeRoundLoading}
+            onPress={activeRound ? handleRoundV2Continue : handleRoundV2Start}
+            testID={activeRound ? 'continue-round' : 'start-round-v2'}
+          >
+            <View style={styles.primaryButton}>
+              <Text style={styles.primaryButtonText}>
+                {activeRoundLoading ? 'Checking round…' : activeRound ? 'Continue' : 'Start round'}
+              </Text>
+            </View>
+          </TouchableOpacity>
+        </View>
+      ) : null}
+
+      {!roundFlowV2Enabled && currentRun && (
         <View style={styles.card} testID="resume-round-card">
           <Text style={styles.cardTitle}>Pågående runda</Text>
           <Text style={styles.cardSubtitle}>
@@ -383,28 +528,30 @@ export default function HomeScreen({ navigation }: Props): JSX.Element {
         </View>
       )}
 
-      <View style={styles.card}>
-        <Text style={styles.cardTitle}>Ready to play?</Text>
-        <Text style={styles.cardSubtitle}>Start a new round with GPS, scoring, and caddie tools.</Text>
-        <TouchableOpacity
-          accessibilityLabel="Play round"
-          onPress={() => navigation.navigate('PlayCourseSelect')}
-          testID="play-round-cta"
-        >
-          <View style={styles.primaryButton}>
-            <Text style={styles.primaryButtonText}>Play round</Text>
-          </View>
-        </TouchableOpacity>
-        <TouchableOpacity
-          accessibilityLabel="Start on-course logging"
-          onPress={() => navigateToStartRound(navigation, 'home')}
-          testID="round-engine-start"
-        >
-          <View style={[styles.secondaryButton, { marginTop: 8 }]}>
-            <Text style={styles.secondaryButtonText}>Log shots on course</Text>
-          </View>
-        </TouchableOpacity>
-      </View>
+      {!roundFlowV2Enabled ? (
+        <View style={styles.card}>
+          <Text style={styles.cardTitle}>Ready to play?</Text>
+          <Text style={styles.cardSubtitle}>Start a new round with GPS, scoring, and caddie tools.</Text>
+          <TouchableOpacity
+            accessibilityLabel="Play round"
+            onPress={() => navigation.navigate('PlayCourseSelect')}
+            testID="play-round-cta"
+          >
+            <View style={styles.primaryButton}>
+              <Text style={styles.primaryButtonText}>Play round</Text>
+            </View>
+          </TouchableOpacity>
+          <TouchableOpacity
+            accessibilityLabel="Start on-course logging"
+            onPress={() => navigateToStartRound(navigation, 'home')}
+            testID="round-engine-start"
+          >
+            <View style={[styles.secondaryButton, { marginTop: 8 }]}>
+              <Text style={styles.secondaryButtonText}>Log shots on course</Text>
+            </View>
+          </TouchableOpacity>
+        </View>
+      ) : null}
 
       <View style={styles.card} testID="range-home-card">
         <Text style={styles.cardTitle}>{t('home.range.title')}</Text>
