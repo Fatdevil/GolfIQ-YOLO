@@ -21,7 +21,13 @@ describe('ClubDistancesScreen', () => {
   type Props = NativeStackScreenProps<RootStackParamList, 'ClubDistances'>;
 
   function createNavigation(): Props['navigation'] {
-    return { navigate: vi.fn(), setParams: vi.fn(), goBack: vi.fn(), replace: vi.fn() } as Props['navigation'];
+    return {
+      navigate: vi.fn(),
+      setParams: vi.fn(),
+      goBack: vi.fn(),
+      replace: vi.fn(),
+      setOptions: vi.fn(),
+    } as Props['navigation'];
   }
 
   function createRoute(): Props['route'] {

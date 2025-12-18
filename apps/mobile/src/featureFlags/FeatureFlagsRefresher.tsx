@@ -1,12 +1,13 @@
 import { useEffect } from 'react';
 import { AppState } from 'react-native';
 
+import { FEATURE_FLAG_TTL_MS } from '@app/featureFlags/constants';
 import {
   getLastSuccessfulFeatureFlagsFetchMs,
   loadFeatureFlags,
 } from '@app/featureFlags/featureFlagsClient';
 
-export const DEFAULT_FEATURE_FLAG_REFRESH_INTERVAL_MS = 10 * 60 * 1000;
+export const DEFAULT_FEATURE_FLAG_REFRESH_INTERVAL_MS = FEATURE_FLAG_TTL_MS;
 
 type Props = {
   userId?: string | null;

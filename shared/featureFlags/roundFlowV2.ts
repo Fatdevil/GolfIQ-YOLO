@@ -38,6 +38,10 @@ export function isRoundFlowV2Enabled(defaultValue = false): boolean {
     return remote.enabled;
   }
 
+  return getRoundFlowV2Fallback(defaultValue);
+}
+
+export function getRoundFlowV2Fallback(defaultValue = false): boolean {
   const raw = readEnvFlag();
   return normalizeFlag(raw, defaultValue);
 }

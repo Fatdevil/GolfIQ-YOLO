@@ -36,6 +36,7 @@ export default defineConfig({
       '@react-navigation/native': resolve(srcDir, 'runtime/react-navigation-native.tsx'),
       '@react-navigation/native-stack': resolve(srcDir, 'runtime/react-navigation-native-stack.tsx'),
       'expo-barcode-scanner': resolve(srcDir, 'runtime/expo-barcode-scanner.tsx'),
+      'expo-clipboard': resolve(srcDir, 'runtime/expo-clipboard.ts'),
       'expo-av': resolve(srcDir, 'runtime/expo-av.ts'),
       '@react-native-async-storage/async-storage': resolve(srcDir, 'runtime/async-storage.ts'),
     },

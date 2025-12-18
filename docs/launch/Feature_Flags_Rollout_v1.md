@@ -38,3 +38,14 @@ Force values win over rollout percentages. Percentages are deterministic per use
 - Clients cache the last known payload and fall back to env/local defaults if the endpoint is unavailable.
 - Mobile refreshes remote flags when returning to the foreground with a 10-minute TTL to pick up changes quickly without
   spamming the API.
+
+## Verifying on a device
+
+- Open the hidden **Feature Flags Debug** screen by tapping the Home title seven times.
+- Review the top metadata card for the current user id, the last successful fetch timestamp, and whether the cached values are
+  still fresh under the 10-minute TTL.
+- Use **Refresh now** to bypass the TTL and fetch the latest payload, and **Clear cache** to wipe the per-user cache for
+  first-launch testing.
+- Tap **Copy JSON** to grab the current effective flags (including source/freshness) for quick sharing in Slack.
+- In dev builds, you can toggle per-flag local overrides to validate experiences without changing the server payload. Overrides
+  are read-only in production builds.

@@ -108,6 +108,18 @@ export const TouchableOpacity: React.FC<TouchableOpacityProps> = ({
   </button>
 );
 
+type ButtonProps = CommonProps & {
+  title: string;
+  onPress?: () => void;
+  disabled?: boolean;
+};
+
+export const Button: React.FC<ButtonProps> = ({ title, onPress, disabled, testID }) => (
+  <button type="button" data-testid={testID} onClick={() => onPress?.()} disabled={disabled}>
+    {title}
+  </button>
+);
+
 type PressableProps = TouchableOpacityProps & { accessibilityRole?: string };
 
 export const Pressable: React.FC<PressableProps> = ({
@@ -170,13 +182,15 @@ export const TextInput: React.FC<TextInputProps> = ({
 type SwitchProps = CommonProps & {
   value?: boolean;
   onValueChange?: (value: boolean) => void;
+  disabled?: boolean;
 };
 
-export const Switch: React.FC<SwitchProps> = ({ value = false, onValueChange, testID }) => (
+export const Switch: React.FC<SwitchProps> = ({ value = false, onValueChange, disabled, testID }) => (
   <input
     data-testid={testID}
     type="checkbox"
     checked={value}
+    disabled={disabled}
     onChange={(event) => onValueChange?.(event.currentTarget.checked)}
   />
 );

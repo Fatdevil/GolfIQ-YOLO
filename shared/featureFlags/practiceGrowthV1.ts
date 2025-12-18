@@ -38,6 +38,10 @@ export function isPracticeGrowthV1Enabled(defaultValue = true): boolean {
     return remote.enabled;
   }
 
+  return getPracticeGrowthV1Fallback(defaultValue);
+}
+
+export function getPracticeGrowthV1Fallback(defaultValue = true): boolean {
   const raw = readEnvFlag();
   return normalizeFlag(raw, defaultValue);
 }

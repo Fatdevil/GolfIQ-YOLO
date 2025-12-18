@@ -119,4 +119,5 @@ export type RootStackParamList = {
     coachMode?: boolean;
   };
   EventScan: undefined;
+  FeatureFlagsDebug: { userId?: string | null } | undefined;
 };
