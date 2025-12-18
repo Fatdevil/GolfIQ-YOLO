@@ -21,6 +21,7 @@ import {
 } from '@app/api/player';
 import WatchStatusCard from '@app/components/WatchStatusCard';
 import type { RootStackParamList } from '@app/navigation/types';
+import { navigateToStartRound } from '@app/navigation/startRound';
 import { clearCurrentRun, loadCurrentRun, type CurrentRun } from '@app/run/currentRun';
 import { loadLastRoundSummary, type LastRoundSummary } from '@app/run/lastRound';
 import { t } from '@app/i18n';
@@ -396,7 +397,7 @@ export default function HomeScreen({ navigation }: Props): JSX.Element {
         </TouchableOpacity>
         <TouchableOpacity
           accessibilityLabel="Start on-course logging"
-          onPress={() => navigation.navigate('RoundStart')}
+          onPress={() => navigateToStartRound(navigation, 'home')}
           testID="round-engine-start"
         >
           <View style={[styles.secondaryButton, { marginTop: 8 }]}>

@@ -4,6 +4,7 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 
 import { t } from '@app/i18n';
 import type { RootStackParamList } from '@app/navigation/types';
+import { navigateToStartRound } from '@app/navigation/startRound';
 import type { RoundRecap } from '@app/api/roundClient';
 import type { WeeklySummary } from '@app/api/weeklySummaryClient';
 import { fetchDemoRoundRecap, fetchDemoWeeklySummary } from '@app/demo/demoService';
@@ -90,7 +91,7 @@ export default function DemoExperienceScreen({ navigation }: Props): JSX.Element
         </View>
       ) : null}
 
-      <TouchableOpacity style={styles.primaryButton} onPress={() => navigation.navigate('RoundStart')}>
+      <TouchableOpacity style={styles.primaryButton} onPress={() => navigateToStartRound(navigation, 'recap')}>
         <Text style={styles.primaryText}>{t('demo_experience_start_own_round')}</Text>
       </TouchableOpacity>
     </ScrollView>

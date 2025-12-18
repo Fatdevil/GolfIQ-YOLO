@@ -7,6 +7,7 @@ import { fetchWeeklySummary, type WeeklyFocusHint, type WeeklySummary } from '@a
 import { fetchDemoWeeklySummary } from '@app/demo/demoService';
 import { t } from '@app/i18n';
 import type { RootStackParamList } from '@app/navigation/types';
+import { navigateToStartRound } from '@app/navigation/startRound';
 import { focusHintToDrills, addDrillToPlan } from '@app/practice/focusHintToDrills';
 import { loadCurrentWeekPracticePlan } from '@app/practice/practicePlanStorage';
 import { safeEmit } from '@app/telemetry';
@@ -230,7 +231,7 @@ export default function WeeklySummaryScreen({ navigation, route }: Props): JSX.E
           <Text style={styles.cardTitle}>{t('weekly.empty.title')}</Text>
           <Text style={styles.muted}>{t('weekly.empty.body')}</Text>
           <View style={styles.ctaRow}>
-            <TouchableOpacity onPress={() => navigation.navigate('RoundStart')} testID="weekly-empty-start-round">
+            <TouchableOpacity onPress={() => navigateToStartRound(navigation, 'home')} testID="weekly-empty-start-round">
               <View style={styles.primaryButton}>
                 <Text style={styles.primaryButtonText}>{t('weekly.cta.startRound')}</Text>
               </View>

@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import logging
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from datetime import datetime
+
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from fastapi.encoders import jsonable_encoder
 from pydantic import AliasChoices, BaseModel, ConfigDict, Field
 
@@ -182,6 +184,21 @@ class RoundStrokesGainedOut(BaseModel):
     categories: dict[str, RoundStrokesGainedCategory]
 
     model_config = ConfigDict(populate_by_name=True)
+
+
+class ActiveRoundOut(BaseModel):
+    round_id: str = Field(serialization_alias="roundId")
+    course_id: str | None = Field(default=None, serialization_alias="courseId")
+    course_name: str | None = Field(default=None, serialization_alias="courseName")
+    holes: int | None = None
+    started_at: datetime = Field(serialization_alias="startedAt")
+    holes_played: int = Field(serialization_alias="holesPlayed")
+    current_hole: int = Field(serialization_alias="currentHole")
+
+    model_config = ConfigDict(populate_by_name=True)
+
+
+ActiveRoundOut.model_rebuild(_types_namespace={"datetime": datetime})
 
 
 @router.post("/start", response_model=Round)
@@ -498,6 +515,48 @@ def get_current_round(
         return service.get_active_round(player_id=player_id)
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
+
+
+@router.get(
+    "/active", response_model=ActiveRoundOut | None, status_code=status.HTTP_200_OK
+)
+def get_active_round_summary(
+    api_key: str | None = Depends(require_api_key),
+    user_id: UserIdHeader = None,
+    service: RoundService = Depends(get_round_service),
+) -> ActiveRoundOut | None:
+    player_id = _derive_player_id(api_key, user_id)
+    try:
+        active = service.get_active_round(player_id=player_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
+
+    if not active:
+        return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+    holes_played = 0
+    current_hole = active.start_hole or 1
+    try:
+        scores = service.get_scores(player_id=player_id, round_id=active.id)
+        holes_played = len(scores.holes)
+        if scores.holes:
+            current_hole = max(scores.holes.keys())
+    except Exception:
+        if active.last_hole:
+            current_hole = active.last_hole
+            holes_played = max(
+                holes_played, active.last_hole - (active.start_hole or 1) + 1
+            )
+
+    return ActiveRoundOut(
+        round_id=active.id,
+        course_id=active.course_id,
+        course_name=active.course_name or active.course_id,
+        holes=active.holes,
+        started_at=active.started_at,
+        holes_played=holes_played,
+        current_hole=current_hole,
+    )
 
 
 @router.get("/latest", response_model=RoundSummaryWithRoundInfo | None)

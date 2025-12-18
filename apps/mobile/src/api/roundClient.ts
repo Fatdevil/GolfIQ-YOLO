@@ -1,4 +1,6 @@
-import { apiFetch } from './client';
+import { resolveApiBase, resolveApiKey } from '@app/config';
+
+import { ApiError, apiFetch } from './client';
 
 export interface Round {
   id: string;
@@ -166,6 +168,16 @@ export interface RoundInfo {
   endedAt?: string | null;
 }
 
+export interface ActiveRoundSummary {
+  roundId: string;
+  courseId?: string | null;
+  courseName?: string | null;
+  holes?: number | null;
+  startedAt: string;
+  holesPlayed: number;
+  currentHole: number;
+}
+
 export async function startRound(req: {
   courseId?: string;
   teeName?: string;
@@ -268,4 +280,27 @@ export async function listRoundSummaries(limit?: number): Promise<RoundSummary[]
 
 export async function fetchLatestCompletedRound(): Promise<RoundSummaryWithRoundInfo | null> {
   return apiFetch<RoundSummaryWithRoundInfo | null>('/api/rounds/latest');
+}
+
+export async function fetchActiveRoundSummary(): Promise<ActiveRoundSummary | null> {
+  const base = resolveApiBase();
+  const apiKey = resolveApiKey();
+  const response = await fetch(`${base}/api/rounds/active`, {
+    headers: {
+      Accept: 'application/json',
+      ...(apiKey ? { 'x-api-key': apiKey } : {}),
+    },
+  });
+
+  if (response.status === 204) return null;
+
+  if (!response.ok) {
+    const description = await response.text().catch(() => '');
+    const message = description || `Request failed with status ${response.status}`;
+    throw new ApiError(message, response.status);
+  }
+
+  const text = await response.text();
+  if (!text) return null;
+  return JSON.parse(text) as ActiveRoundSummary;
 }
