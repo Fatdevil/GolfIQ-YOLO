@@ -12,6 +12,7 @@ import {
 } from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 
+import { ApiError } from '@app/api/client';
 import { getCurrentRound, listRounds, startRound, type RoundInfo } from '@app/api/roundClient';
 import { fetchCourses, type CourseSummary } from '@app/api/courseClient';
 import { t } from '@app/i18n';
@@ -20,6 +21,8 @@ import { loadActiveRoundState, saveActiveRoundState } from '@app/round/roundStat
 import { useGeolocation } from '@app/hooks/useGeolocation';
 import { computeNearestCourse, distanceMeters } from '@shared/round/autoHoleCore';
 import { getItem, setItem } from '@app/storage/asyncStorage';
+import { isRoundFlowV2Enabled } from '@shared/featureFlags/roundFlowV2';
+import { logRoundFlowV2StartRoundRequest, logRoundFlowV2StartRoundResponse } from '@app/analytics/roundFlow';
 
 const holesOptions = [9, 18];
 const COURSE_CACHE_KEY = 'golfiq.courseCache.v1';
@@ -315,6 +318,11 @@ export default function StartRoundScreen({ navigation }: Props): JSX.Element {
       Alert.alert(t('start_round.course_label'), t('start_round.course_required'));
       return;
     }
+    const roundFlowV2Enabled = isRoundFlowV2Enabled();
+    const startTime = Date.now();
+    let reusedActiveRound: boolean | null = null;
+    let httpStatus: number | null = null;
+    logRoundFlowV2StartRoundRequest({ roundFlowV2Enabled, screen: 'StartRound' });
     setSubmitting(true);
     try {
       const currentTournamentSafe = tournamentSafeRef.current;
@@ -324,6 +332,7 @@ export default function StartRoundScreen({ navigation }: Props): JSX.Element {
         holes,
         startHole: 1,
       });
+      reusedActiveRound = round.reusedActiveRound ?? null;
       if (round.reusedActiveRound) {
         const current = await getCurrentRound().catch(() => null);
         const candidate = selectActiveRound(current, activeRound);
@@ -372,12 +381,22 @@ export default function StartRoundScreen({ navigation }: Props): JSX.Element {
     } catch (err) {
       const message = err instanceof Error ? err.message : t('start_round.error');
       Alert.alert(t('start_round.error_title'), message);
+      if (err instanceof ApiError) {
+        httpStatus = err.status ?? null;
+      }
       if (!activeRound) {
         const current = await getCurrentRound().catch(() => null);
         setActiveRound(current ?? null);
       }
     } finally {
       setSubmitting(false);
+      logRoundFlowV2StartRoundResponse({
+        roundFlowV2Enabled,
+        screen: 'StartRound',
+        reusedActiveRound,
+        httpStatus,
+        durationMs: Date.now() - startTime,
+      });
     }
   }, [activeRound, holes, navigation, resolvedCourseId, teeName]);
 

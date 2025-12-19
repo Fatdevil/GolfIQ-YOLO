@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 
+import { ApiError } from '@app/api/client';
 import { fetchPlayerBag, type PlayerBag } from '@app/api/bagClient';
 import { fetchBagStats } from '@app/api/bagStatsClient';
 import {
@@ -80,6 +81,7 @@ import {
   type PracticeRecommendationContext,
 } from '@shared/practice/practiceRecommendationsAnalytics';
 import { isPracticeGrowthV1Enabled } from '@shared/featureFlags/practiceGrowthV1';
+import { isRoundFlowV2Enabled } from '@shared/featureFlags/roundFlowV2';
 import { logPracticeFeatureGated, type PracticeFeatureGateSource } from '@app/analytics/practiceFeatureGate';
 import { emitPracticeMissionStart } from '@shared/practice/practiceSessionAnalytics';
 import { getExperimentBucket, getExperimentVariant, getPracticeRecommendationsExperiment, isInExperiment } from '@shared/experiments/flags';
@@ -87,6 +89,7 @@ import {
   findLatestStrokesGainedLightFocus,
   type StrokesGainedLightFocusInsight,
 } from '@shared/stats/strokesGainedLightFocus';
+import { logRoundFlowV2StartRoundRequest, logRoundFlowV2StartRoundResponse } from '@app/analytics/roundFlow';
 
 const CALIBRATION_SAMPLE_THRESHOLD = 5;
 const TARGET_ROUNDS_PER_WEEK = 3;
@@ -940,6 +943,10 @@ export default function HomeDashboardScreen({ navigation }: Props): JSX.Element 
 
   const handleQuickStart = useCallback(async () => {
     setQuickStarting(true);
+    let requestStarted = false;
+    let requestStartTime = 0;
+    let reusedActiveRound: boolean | null = null;
+    let httpStatus: number | null = null;
     try {
       const courses = await fetchCourses().catch(() => null);
       if (!courses || courses.length === 0) {
@@ -978,11 +985,18 @@ export default function HomeDashboardScreen({ navigation }: Props): JSX.Element 
         return;
       }
 
+      requestStarted = true;
+      requestStartTime = Date.now();
+      logRoundFlowV2StartRoundRequest({
+        roundFlowV2Enabled: isRoundFlowV2Enabled(),
+        screen: 'HomeDashboard',
+      });
       const round = await startRound({
         courseId: plan.courseId,
         startHole: plan.startHole,
         holes: plan.holeCount,
       });
+      reusedActiveRound = round.reusedActiveRound ?? null;
 
       if (round.reusedActiveRound) {
         const current = await fetchCurrentRound().catch(() => null);
@@ -1021,8 +1035,20 @@ export default function HomeDashboardScreen({ navigation }: Props): JSX.Element 
       await saveActiveRoundState({ round, currentHole: round.startHole ?? 1 });
       navigation.navigate('RoundShot', { roundId: round.id });
     } catch (err) {
+      if (err instanceof ApiError) {
+        httpStatus = err.status ?? null;
+      }
       navigateToStartRound(navigation, 'home');
     } finally {
+      if (requestStarted) {
+        logRoundFlowV2StartRoundResponse({
+          roundFlowV2Enabled: isRoundFlowV2Enabled(),
+          screen: 'HomeDashboard',
+          reusedActiveRound,
+          httpStatus,
+          durationMs: Date.now() - requestStartTime,
+        });
+      }
       setQuickStarting(false);
     }
   }, [geo.position, navigation]);

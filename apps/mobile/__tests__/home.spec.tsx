@@ -52,6 +52,12 @@ vi.mock('@app/analytics/roundFlow', () => ({
   logRoundCreatedSuccess: vi.fn(),
   logRoundHomeStartClicked: vi.fn(),
   logRoundHomeContinueClicked: vi.fn(),
+  logRoundFlowV2HomeCardImpression: vi.fn(),
+  logRoundFlowV2HomeCtaTap: vi.fn(),
+  logRoundFlowV2HomeCtaBlockedLoading: vi.fn(),
+  logRoundFlowV2ActiveRoundHydrateStart: vi.fn(),
+  logRoundFlowV2ActiveRoundHydrateSuccess: vi.fn(),
+  logRoundFlowV2ActiveRoundHydrateFailure: vi.fn(),
 }));
 
 type Props = NativeStackScreenProps<RootStackParamList, 'PlayerHome'>;
@@ -275,6 +281,12 @@ describe('HomeScreen', () => {
     fireEvent.click(screen.getByTestId('start-round-v2'));
 
     await waitFor(() => {
+      expect(roundFlowAnalytics.logRoundFlowV2HomeCardImpression).toHaveBeenCalledWith(
+        expect.objectContaining({ roundFlowV2Enabled: true, screen: 'Home', ctaType: 'start' }),
+      );
+      expect(roundFlowAnalytics.logRoundFlowV2HomeCtaTap).toHaveBeenCalledWith(
+        expect.objectContaining({ roundFlowV2Enabled: true, screen: 'Home', ctaType: 'start' }),
+      );
       expect(roundFlowAnalytics.logRoundHomeStartClicked).toHaveBeenCalled();
       expect(navigation.navigate).toHaveBeenCalledWith('StartRoundV2');
     });
@@ -292,14 +304,15 @@ describe('HomeScreen', () => {
     render(<HomeScreen navigation={navigation} route={createRoute()} />);
 
     const startCta = await screen.findByTestId('start-round-v2');
-
-    expect(startCta).toBeDisabled();
     expect(startCta).toHaveTextContent('Checking round…');
 
     fireEvent.click(startCta);
 
     expect(roundFlowAnalytics.logRoundHomeStartClicked).not.toHaveBeenCalled();
     expect(navigation.navigate).not.toHaveBeenCalledWith('StartRoundV2');
+    expect(roundFlowAnalytics.logRoundFlowV2HomeCtaBlockedLoading).toHaveBeenCalledWith(
+      expect.objectContaining({ roundFlowV2Enabled: true, screen: 'Home', ctaType: 'start' }),
+    );
   });
 
   it('renders continue CTA when round flow v2 has an active round', async () => {
@@ -337,5 +350,38 @@ describe('HomeScreen', () => {
       );
       expect(navigation.navigate).toHaveBeenCalledWith('RoundShot', { roundId: 'round-42' });
     });
+  });
+
+  it('tracks active round hydrate success with duration', async () => {
+    vi.mocked(roundFlags.isRoundFlowV2Enabled).mockReturnValue(true);
+    vi.mocked(playerApi.fetchPlayerProfile).mockResolvedValue(mockProfile);
+    vi.mocked(playerApi.fetchAccessPlan).mockResolvedValue({ plan: 'free' });
+    const nowSpy = vi.spyOn(Date, 'now').mockReturnValue(1000);
+
+    render(<HomeScreen navigation={createNavigation()} route={createRoute()} />);
+
+    await waitFor(() => {
+      expect(roundFlowAnalytics.logRoundFlowV2ActiveRoundHydrateSuccess).toHaveBeenCalledWith(
+        expect.objectContaining({ screen: 'Home', durationMs: expect.any(Number) }),
+      );
+    });
+    nowSpy.mockRestore();
+  });
+
+  it('tracks active round hydrate failure with duration', async () => {
+    vi.mocked(roundFlags.isRoundFlowV2Enabled).mockReturnValue(true);
+    vi.mocked(playerApi.fetchPlayerProfile).mockResolvedValue(mockProfile);
+    vi.mocked(playerApi.fetchAccessPlan).mockResolvedValue({ plan: 'free' });
+    vi.mocked(roundClient.fetchActiveRoundSummary).mockRejectedValue(new TypeError('network'));
+    const nowSpy = vi.spyOn(Date, 'now').mockReturnValue(1000);
+
+    render(<HomeScreen navigation={createNavigation()} route={createRoute()} />);
+
+    await waitFor(() => {
+      expect(roundFlowAnalytics.logRoundFlowV2ActiveRoundHydrateFailure).toHaveBeenCalledWith(
+        expect.objectContaining({ screen: 'Home', durationMs: expect.any(Number), errorType: 'network' }),
+      );
+    });
+    nowSpy.mockRestore();
   });
 });
