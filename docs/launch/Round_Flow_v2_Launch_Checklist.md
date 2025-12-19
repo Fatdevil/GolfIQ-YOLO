@@ -22,6 +22,14 @@ Track these events (mobile analytics) during staged rollout. Investigate if any 
   - HTTP error rate >1% or large increases in `durationMs` are suspect.
   - Monitor `reusedActiveRound` rate to ensure idempotent start is working.
 
+## Rollout control
+
+- Defaults: set `ROUND_FLOW_V2_ROLLOUT_PERCENT=0` to keep the feature off by default.
+- Allowlist internal testers with `ROUND_FLOW_V2_ALLOWLIST` (comma-separated member ids).
+- Ramp in stages: `1% → 5% → 20% → 50% → 100%` once telemetry stays within guardrails.
+- Roll back instantly by setting `ROUND_FLOW_V2_FORCE=off` (or `ROUND_FLOW_V2_ROLLOUT_PERCENT=0`).
+- Force-enable for QA with `ROUND_FLOW_V2_FORCE=on` when needed.
+
 ## QA verification
 
 - Use the **Feature Flags Debug** screen to force `roundFlowV2` ON/OFF for a test account.
