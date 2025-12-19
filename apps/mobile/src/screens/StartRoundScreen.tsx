@@ -57,6 +57,12 @@ function resolveResumeHole(activeRound: RoundInfo): number {
   );
 }
 
+function selectActiveRound(current: RoundInfo | null, fallback: RoundInfo | null): RoundInfo | null {
+  if (current?.lastHole != null) return current;
+  if (fallback?.lastHole != null) return fallback;
+  return current ?? fallback;
+}
+
 type Props = NativeStackScreenProps<RootStackParamList, 'RoundStart'>;
 
 type CourseWithDistance = CourseSummary & { distanceM?: number | null };
@@ -320,7 +326,8 @@ export default function StartRoundScreen({ navigation }: Props): JSX.Element {
       });
       if (round.reusedActiveRound) {
         const current = await getCurrentRound().catch(() => null);
-        const active = current ?? {
+        const candidate = selectActiveRound(current, activeRound);
+        const active = candidate ?? {
           id: round.id,
           holes: round.holes,
           courseId: round.courseId,
