@@ -5,6 +5,8 @@ import os
 from dataclasses import dataclass
 from typing import Dict, Optional
 
+from server.feature_flag_config_store import store
+
 
 @dataclass
 class EvaluatedFlag:
@@ -53,6 +55,44 @@ def _parse_allowlist(env_var: str) -> set[str]:
     return {entry.strip() for entry in raw.split(",") if entry.strip()}
 
 
+def _resolve_round_flow_config() -> tuple[int, Optional[bool], set[str]]:
+    config, has_config = store.load()
+    round_flow = config.get("roundFlowV2") if has_config else {}
+    rollout_raw = (
+        round_flow.get("rolloutPercent") if isinstance(round_flow, dict) else None
+    )
+    force_raw = round_flow.get("force") if isinstance(round_flow, dict) else None
+    allowlist_raw = (
+        round_flow.get("allowlist") if isinstance(round_flow, dict) else None
+    )
+
+    rollout_pct = None
+    if rollout_raw is not None:
+        rollout_pct = _coerce_rollout_pct_value(str(rollout_raw), default=0)
+    if rollout_pct is None:
+        rollout_pct = _coerce_rollout_pct(
+            ("ROUND_FLOW_V2_ROLLOUT_PERCENT", "ROUND_FLOW_V2_ROLLOUT_PCT"),
+            default=0,
+        )
+
+    force_value: Optional[bool] = None
+    if force_raw in {"force_on", "force_off"}:
+        force_value = force_raw == "force_on"
+    if force_value is None:
+        force_value = _coerce_force("ROUND_FLOW_V2_FORCE")
+
+    allowlist: set[str] = set()
+    allowlist_defined = False
+    if isinstance(allowlist_raw, list):
+        allowlist_defined = True
+        allowlist = {entry.strip() for entry in allowlist_raw if isinstance(entry, str)}
+        allowlist = {entry for entry in allowlist if entry}
+    if not allowlist_defined:
+        allowlist = _parse_allowlist("ROUND_FLOW_V2_ALLOWLIST")
+
+    return rollout_pct, force_value, allowlist
+
+
 def bucket_user(flag_name: str, user_id: str | None) -> int:
     seed = f"{flag_name}:{user_id or ''}".encode("utf-8")
     digest = hashlib.sha256(seed).digest()
@@ -98,12 +138,9 @@ def get_feature_flags(user_id: str | None) -> Dict[FlagName, EvaluatedFlag]:
     )
     practice_force = _coerce_force("PRACTICE_GROWTH_V1_FORCE")
 
-    round_flow_rollout = _coerce_rollout_pct(
-        ("ROUND_FLOW_V2_ROLLOUT_PERCENT", "ROUND_FLOW_V2_ROLLOUT_PCT"),
-        default=0,
+    round_flow_rollout, round_flow_force, round_flow_allowlist = (
+        _resolve_round_flow_config()
     )
-    round_flow_force = _coerce_force("ROUND_FLOW_V2_FORCE")
-    round_flow_allowlist = _parse_allowlist("ROUND_FLOW_V2_ALLOWLIST")
 
     return {
         "practiceGrowthV1": evaluate_flag(
