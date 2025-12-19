@@ -135,7 +135,10 @@ def test_feature_flags_use_config_store(monkeypatch, tmp_path):
                     "allowlist": [],
                     "force": None,
                 },
-                "meta": {"updatedAt": "2025-01-01T00:00:00Z", "updatedBy": "admin:test"},
+                "meta": {
+                    "updatedAt": "2025-01-01T00:00:00Z",
+                    "updatedBy": "admin:test",
+                },
             }
         )
     )

@@ -41,7 +41,9 @@ def _validate_rollout_percent(value: Any) -> int | None:
 def _validate_allowlist(value: Any) -> list[str] | None:
     if value is None:
         return None
-    if not isinstance(value, list) or any(not isinstance(entry, str) for entry in value):
+    if not isinstance(value, list) or any(
+        not isinstance(entry, str) for entry in value
+    ):
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="allowlist must be a list of strings",
@@ -79,7 +81,9 @@ def _validate_update_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
             round_flow.get("rolloutPercent")
         )
     if "allowlist" in round_flow:
-        round_flow_updates["allowlist"] = _validate_allowlist(round_flow.get("allowlist"))
+        round_flow_updates["allowlist"] = _validate_allowlist(
+            round_flow.get("allowlist")
+        )
     if "force" in round_flow:
         round_flow_updates["force"] = _validate_force(round_flow.get("force"))
     if round_flow_updates:
@@ -150,7 +154,9 @@ def remove_round_flow_allowlist_member(
     round_flow = config.get("roundFlowV2") or {}
     allowlist = round_flow.get("allowlist") or []
     updated_allowlist = sorted(
-        entry for entry in allowlist if entry.strip() and entry.strip() != member_id.strip()
+        entry
+        for entry in allowlist
+        if entry.strip() and entry.strip() != member_id.strip()
     )
     updated = store.update(
         {"roundFlowV2": {"allowlist": updated_allowlist}},

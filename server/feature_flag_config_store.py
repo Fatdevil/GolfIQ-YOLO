@@ -43,7 +43,9 @@ def _normalize_allowlist(value: Any) -> list[str] | None:
         return None
     if not isinstance(value, list):
         return None
-    cleaned = [entry.strip() for entry in value if isinstance(entry, str) and entry.strip()]
+    cleaned = [
+        entry.strip() for entry in value if isinstance(entry, str) and entry.strip()
+    ]
     return cleaned
 
 
@@ -71,7 +73,9 @@ def _normalize_config(value: Dict[str, Any]) -> Dict[str, Any]:
     meta = _normalize_meta(value.get("meta"))
     return {
         "roundFlowV2": {
-            "rolloutPercent": _normalize_rollout_percent(round_flow.get("rolloutPercent")),
+            "rolloutPercent": _normalize_rollout_percent(
+                round_flow.get("rolloutPercent")
+            ),
             "allowlist": _normalize_allowlist(round_flow.get("allowlist")),
             "force": _normalize_force(round_flow.get("force")),
         },

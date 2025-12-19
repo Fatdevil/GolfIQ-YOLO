@@ -58,9 +58,13 @@ def _parse_allowlist(env_var: str) -> set[str]:
 def _resolve_round_flow_config() -> tuple[int, Optional[bool], set[str]]:
     config, has_config = store.load()
     round_flow = config.get("roundFlowV2") if has_config else {}
-    rollout_raw = round_flow.get("rolloutPercent") if isinstance(round_flow, dict) else None
+    rollout_raw = (
+        round_flow.get("rolloutPercent") if isinstance(round_flow, dict) else None
+    )
     force_raw = round_flow.get("force") if isinstance(round_flow, dict) else None
-    allowlist_raw = round_flow.get("allowlist") if isinstance(round_flow, dict) else None
+    allowlist_raw = (
+        round_flow.get("allowlist") if isinstance(round_flow, dict) else None
+    )
 
     rollout_pct = None
     if rollout_raw is not None:
@@ -134,7 +138,9 @@ def get_feature_flags(user_id: str | None) -> Dict[FlagName, EvaluatedFlag]:
     )
     practice_force = _coerce_force("PRACTICE_GROWTH_V1_FORCE")
 
-    round_flow_rollout, round_flow_force, round_flow_allowlist = _resolve_round_flow_config()
+    round_flow_rollout, round_flow_force, round_flow_allowlist = (
+        _resolve_round_flow_config()
+    )
 
     return {
         "practiceGrowthV1": evaluate_flag(
