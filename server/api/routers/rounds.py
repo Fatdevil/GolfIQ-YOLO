@@ -220,6 +220,10 @@ def start_round(
     try:
         active = service.get_active_round(player_id=player_id)
         if active:
+            logger.info(
+                "round_start_reused_active_round",
+                extra={"round_id": active.id, "player_id": player_id},
+            )
             active_payload = active.model_dump(exclude={"course_name", "last_hole"})
             return StartRoundResponse(**active_payload, reused_active_round=True)
         round_out = service.start_round(
@@ -228,6 +232,10 @@ def start_round(
             tee_name=payload.tee_name,
             holes=payload.holes or 18,
             start_hole=payload.start_hole or 1,
+        )
+        logger.info(
+            "round_start_created_new_round",
+            extra={"round_id": round_out.id, "player_id": player_id},
         )
         return StartRoundResponse(**round_out.model_dump(), reused_active_round=False)
     except ValueError as exc:

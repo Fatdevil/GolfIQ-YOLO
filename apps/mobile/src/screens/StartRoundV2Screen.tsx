@@ -2,12 +2,22 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Alert, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 
+import { ApiError } from '@app/api/client';
 import { fetchActiveRoundSummary, getCurrentRound, startRound, type ActiveRoundSummary, type RoundInfo } from '@app/api/roundClient';
 import { fetchCourses, type CourseSummary } from '@app/api/courseClient';
 import type { RootStackParamList } from '@app/navigation/types';
-import { logRoundCreateClicked, logRoundCreatedFailed, logRoundCreatedSuccess, logRoundResumeClicked, logRoundStartOpened } from '@app/analytics/roundFlow';
+import {
+  logRoundCreateClicked,
+  logRoundCreatedFailed,
+  logRoundCreatedSuccess,
+  logRoundFlowV2StartRoundRequest,
+  logRoundFlowV2StartRoundResponse,
+  logRoundResumeClicked,
+  logRoundStartOpened,
+} from '@app/analytics/roundFlow';
 import { loadActiveRoundState, saveActiveRoundState } from '@app/round/roundState';
 import { getItem, setItem } from '@app/storage/asyncStorage';
+import { isRoundFlowV2Enabled } from '@shared/featureFlags/roundFlowV2';
 
 const holesOptions = [9, 18];
 const TOURNAMENT_SAFE_KEY = 'golfiq.tournamentSafePref.v1';
@@ -132,9 +142,15 @@ export default function StartRoundV2Screen({ navigation }: Props): JSX.Element {
 
     const courseId = selectedCourseId || selectedCourse;
     logRoundCreateClicked({ courseId, holes, teeName });
+    const roundFlowV2Enabled = isRoundFlowV2Enabled();
+    const startTime = Date.now();
+    let reusedActiveRound: boolean | null = null;
+    let httpStatus: number | null = null;
+    logRoundFlowV2StartRoundRequest({ roundFlowV2Enabled, screen: 'StartRoundV2' });
     setSubmitting(true);
     try {
       const round = await startRound({ courseId, teeName: teeName.trim() || undefined, holes, startHole: 1 });
+      reusedActiveRound = round.reusedActiveRound ?? null;
       if (round.reusedActiveRound) {
         const [active, current] = await Promise.all([
           fetchActiveRoundSummary().catch(() => null),
@@ -161,9 +177,19 @@ export default function StartRoundV2Screen({ navigation }: Props): JSX.Element {
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Unable to start round';
       logRoundCreatedFailed({ courseId, holes, error: message });
+      if (err instanceof ApiError) {
+        httpStatus = err.status ?? null;
+      }
       Alert.alert('Unable to start round', message);
     } finally {
       setSubmitting(false);
+      logRoundFlowV2StartRoundResponse({
+        roundFlowV2Enabled,
+        screen: 'StartRoundV2',
+        reusedActiveRound,
+        httpStatus,
+        durationMs: Date.now() - startTime,
+      });
     }
   }, [courseInput, holes, navigation, selectedCourseId, teeName, tournamentSafe]);
 

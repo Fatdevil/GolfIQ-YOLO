@@ -13,6 +13,7 @@ import {
 import { fetchCourses } from '@app/api/courseClient';
 import { loadActiveRoundState, saveActiveRoundState } from '@app/round/roundState';
 import { getItem, setItem } from '@app/storage/asyncStorage';
+import * as roundFlowAnalytics from '@app/analytics/roundFlow';
 
 vi.mock('@app/api/roundClient');
 vi.mock('@app/api/courseClient');
@@ -24,6 +25,8 @@ vi.mock('@app/analytics/roundFlow', () => ({
   logRoundCreateClicked: vi.fn(),
   logRoundCreatedSuccess: vi.fn(),
   logRoundCreatedFailed: vi.fn(),
+  logRoundFlowV2StartRoundRequest: vi.fn(),
+  logRoundFlowV2StartRoundResponse: vi.fn(),
 }));
 
 const mockFetchActiveRoundSummary = fetchActiveRoundSummary as unknown as Mock;
@@ -152,6 +155,9 @@ describe('StartRoundV2Screen', () => {
       ),
     );
     expect(navigation.navigate).toHaveBeenCalledWith('RoundShot', { roundId: 'r1' });
+    expect(roundFlowAnalytics.logRoundFlowV2StartRoundResponse).toHaveBeenCalledWith(
+      expect.objectContaining({ reusedActiveRound: true }),
+    );
   });
 
   it('keeps UI usable when active round fetch fails', async () => {

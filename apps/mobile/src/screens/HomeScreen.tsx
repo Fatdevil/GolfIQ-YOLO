@@ -28,7 +28,20 @@ import { t } from '@app/i18n';
 import { loadLastRangeSessionSummary } from '@app/range/rangeSummaryStorage';
 import type { RangeSessionSummary } from '@app/range/rangeSession';
 import { logPracticeHomeCardViewed, logPracticeHomeCta } from '@app/analytics/practiceHome';
-import { logRoundHomeContinueClicked, logRoundHomeStartClicked } from '@app/analytics/roundFlow';
+import {
+  logRoundFlowV2ActiveRoundHydrateFailure,
+  logRoundFlowV2ActiveRoundHydrateStart,
+  logRoundFlowV2ActiveRoundHydrateSuccess,
+  logRoundFlowV2HomeCardImpression,
+  logRoundFlowV2HomeCtaBlockedLoading,
+  logRoundFlowV2HomeCtaTap,
+  logRoundHomeContinueClicked,
+  logRoundHomeStartClicked,
+  type RoundFlowV2ErrorType,
+  type RoundFlowV2HydrateSource,
+  type RoundFlowV2HomeCtaType,
+  type RoundFlowV2Screen,
+} from '@app/analytics/roundFlow';
 import {
   getWeekStartISO,
   loadCurrentWeekPracticePlan,
@@ -166,9 +179,15 @@ export default function HomeScreen({ navigation }: Props): JSX.Element {
   const practiceCardLoggedRef = useRef(false);
   const practiceGrowthEnabled = isPracticeGrowthV1Enabled();
   const roundFlowV2Enabled = isRoundFlowV2Enabled();
+  const roundFlowV2Screen: RoundFlowV2Screen = 'Home';
   const [activeRound, setActiveRound] = useState<ActiveRoundState | null>(null);
   const [activeRoundError, setActiveRoundError] = useState<string | null>(null);
   const [activeRoundLoading, setActiveRoundLoading] = useState(false);
+  const [activeRoundMeta, setActiveRoundMeta] = useState<{ hasCached: boolean; hasRemote: boolean }>({
+    hasCached: false,
+    hasRemote: false,
+  });
+  const roundFlowV2ImpressionLogged = useRef(false);
 
   const gatePracticeGrowth = useCallback(
     (target: string) => {
@@ -237,18 +256,25 @@ export default function HomeScreen({ navigation }: Props): JSX.Element {
     let cancelled = false;
 
     async function hydrateActiveRound(): Promise<void> {
+      const startTime = Date.now();
+      let fetchError: unknown = null;
       setActiveRoundLoading(true);
       const cached = await loadActiveRoundState().catch(() => null);
+      const hasCached = Boolean(cached?.round?.id);
       if (!cancelled && cached) {
         setActiveRound(cached);
       }
 
       try {
-        let fetchError: string | null = null;
+        logRoundFlowV2ActiveRoundHydrateStart({
+          roundFlowV2Enabled,
+          screen: roundFlowV2Screen,
+          source: hasCached ? 'cached' : 'none',
+        });
         const [summary, info] = await Promise.all([
           fetchActiveRoundSummary().catch((err) => {
             console.warn('[home] Failed to load active round', err);
-            fetchError = err instanceof Error ? err.message : 'Unable to load active round';
+            fetchError = err;
             return null;
           }),
           getCurrentRound().catch(() => null),
@@ -256,12 +282,47 @@ export default function HomeScreen({ navigation }: Props): JSX.Element {
 
         if (cancelled) return;
 
+        const hasRemote = Boolean(summary?.roundId || info?.id);
+        setActiveRoundMeta({ hasCached, hasRemote });
         const derived = buildActiveRoundEntry(summary, info, cached);
         setActiveRound(derived);
         if (derived) {
           await saveActiveRoundState(derived);
         }
-        setActiveRoundError(fetchError);
+        const durationMs = Date.now() - startTime;
+        const source: RoundFlowV2HydrateSource = hasCached && hasRemote
+          ? 'mixed'
+          : hasCached
+            ? 'cached'
+            : hasRemote
+              ? 'remote'
+              : 'none';
+        if (fetchError) {
+          const errorType: RoundFlowV2ErrorType =
+            fetchError instanceof ApiError
+              ? 'http'
+              : fetchError instanceof TypeError
+                ? 'network'
+                : fetchError instanceof Error && /timeout/i.test(fetchError.message)
+                  ? 'timeout'
+                  : 'unknown';
+          logRoundFlowV2ActiveRoundHydrateFailure({
+            roundFlowV2Enabled,
+            screen: roundFlowV2Screen,
+            source,
+            durationMs,
+            errorType,
+          });
+          setActiveRoundError(fetchError instanceof Error ? fetchError.message : 'Unable to load active round');
+        } else {
+          logRoundFlowV2ActiveRoundHydrateSuccess({
+            roundFlowV2Enabled,
+            screen: roundFlowV2Screen,
+            source,
+            durationMs,
+          });
+          setActiveRoundError(null);
+        }
       } finally {
         if (!cancelled) setActiveRoundLoading(false);
       }
@@ -373,6 +434,24 @@ export default function HomeScreen({ navigation }: Props): JSX.Element {
     ? t('home.practice.cta_continue')
     : t('home.practice.cta_start');
 
+  const buildRoundFlowV2HomeTelemetry = useCallback(
+    (ctaType: RoundFlowV2HomeCtaType) => ({
+      roundFlowV2Enabled,
+      screen: roundFlowV2Screen,
+      ctaType,
+      activeRoundLoading,
+      hasActiveRoundCached: activeRoundMeta.hasCached,
+      hasActiveRoundRemote: activeRoundMeta.hasRemote,
+    }),
+    [activeRoundLoading, activeRoundMeta.hasCached, activeRoundMeta.hasRemote, roundFlowV2Enabled, roundFlowV2Screen],
+  );
+
+  useEffect(() => {
+    if (!roundFlowV2Enabled || roundFlowV2ImpressionLogged.current || loading) return;
+    roundFlowV2ImpressionLogged.current = true;
+    logRoundFlowV2HomeCardImpression(buildRoundFlowV2HomeTelemetry(activeRound ? 'continue' : 'start'));
+  }, [activeRound, buildRoundFlowV2HomeTelemetry, loading, roundFlowV2Enabled]);
+
   const loadingAccessibilityState: Record<string, unknown> = activeRoundLoading
     ? { accessibilityState: { disabled: true, busy: true } }
     : {};
@@ -407,15 +486,22 @@ export default function HomeScreen({ navigation }: Props): JSX.Element {
   }, [gatePracticeGrowth, navigation]);
 
   const handleRoundV2Start = useCallback(() => {
-    if (activeRoundLoading) return;
-
+    if (activeRoundLoading) {
+      logRoundFlowV2HomeCtaBlockedLoading(buildRoundFlowV2HomeTelemetry('start'));
+      return;
+    }
+    logRoundFlowV2HomeCtaTap(buildRoundFlowV2HomeTelemetry('start'));
     logRoundHomeStartClicked();
     navigateToStartRound(navigation, 'home');
-  }, [activeRoundLoading, navigation]);
+  }, [activeRoundLoading, buildRoundFlowV2HomeTelemetry, navigation]);
 
   const handleRoundV2Continue = useCallback(async () => {
-    if (activeRoundLoading) return;
+    if (activeRoundLoading) {
+      logRoundFlowV2HomeCtaBlockedLoading(buildRoundFlowV2HomeTelemetry('continue'));
+      return;
+    }
     if (!activeRound?.round?.id) return;
+    logRoundFlowV2HomeCtaTap(buildRoundFlowV2HomeTelemetry('continue'));
     logRoundHomeContinueClicked(activeRound.round.id);
 
     try {
@@ -425,7 +511,7 @@ export default function HomeScreen({ navigation }: Props): JSX.Element {
     }
 
     navigation.navigate('RoundShot', { roundId: activeRound.round.id });
-  }, [activeRound, activeRoundLoading, navigation]);
+  }, [activeRound, activeRoundLoading, buildRoundFlowV2HomeTelemetry, navigation]);
 
   const handlePracticeHistory = useCallback(() => {
     if (gatePracticeGrowth('PracticeJournal')) return;
@@ -486,7 +572,6 @@ export default function HomeScreen({ navigation }: Props): JSX.Element {
           <TouchableOpacity
             accessibilityLabel={activeRoundLoading ? 'Checking round' : activeRound ? 'Continue round' : 'Start round'}
             {...loadingAccessibilityState}
-            disabled={activeRoundLoading}
             onPress={activeRound ? handleRoundV2Continue : handleRoundV2Start}
             testID={activeRound ? 'continue-round' : 'start-round-v2'}
           >

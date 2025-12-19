@@ -8,6 +8,31 @@ Use this checklist when toggling `roundFlowV2` via the remote rollout:
 - Finish → recap renders and analytics fire.
 - Round analytics events fire for both flag states.
 
+## Rollout telemetry to monitor
+
+Track these events (mobile analytics) during staged rollout. Investigate if any metric deviates from baseline or exceeds the thresholds below:
+
+- `roundflowv2_home_card_impression` + `roundflowv2_home_cta_tap`
+  - CTA tap-through should remain stable; large drops (>20%) indicate UI or loading regressions.
+  - `roundflowv2_home_cta_blocked_loading` should be rare and short-lived; spikes indicate hydrate stalls.
+- `roundflowv2_active_round_hydrate_start` / `roundflowv2_active_round_hydrate_success` / `roundflowv2_active_round_hydrate_failure`
+  - Failure rate >2% or sustained p95 duration >3s is a rollback signal.
+  - Check `source` to see cached vs remote behavior shifts.
+- `roundflowv2_start_round_request` / `roundflowv2_start_round_response`
+  - HTTP error rate >1% or large increases in `durationMs` are suspect.
+  - Monitor `reusedActiveRound` rate to ensure idempotent start is working.
+
+## QA verification
+
+- Use the **Feature Flags Debug** screen to force `roundFlowV2` ON/OFF for a test account.
+- With `roundFlowV2` **OFF**:
+  - Home shows legacy start/resume UI and behavior is unchanged.
+- With `roundFlowV2` **ON**:
+  - Home shows start/continue card correctly.
+  - CTA is disabled during hydrate; taps while loading should not navigate.
+  - Start is idempotent: if an active round exists, the flow resumes and `reusedActiveRound` is returned.
+  - Verify StartRoundV2 and HomeDashboard quick-start paths both create/resume correctly.
+
 ## Entry & Resume verification
 
 - Force-enable `roundFlowV2` for a test user via the feature flag overrides (server admin → set rollout to 100% or a user-specific allow list).
