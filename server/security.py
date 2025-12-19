@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import os
 
-from fastapi import Header, HTTPException, Query, status
+from fastapi import Header, HTTPException, Query, Request, status
 
 from server.access.config import load_api_keys
 
@@ -32,3 +32,31 @@ def require_api_key(
         )
 
     return candidate
+
+
+def require_admin_token(request: Request) -> str:
+    expected = os.getenv("ADMIN_TOKEN")
+    if not expected:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="admin token not configured",
+        )
+    provided = request.headers.get("x-admin-token")
+    if not provided or provided != expected:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="invalid admin token",
+        )
+    origin = request.headers.get("origin")
+    if origin:
+        base = f"{request.url.scheme}://{request.url.netloc}"
+        if origin.rstrip("/") != base.rstrip("/"):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="cross-origin POSTs are not permitted",
+            )
+    hint = provided[-4:] if len(provided) >= 4 else provided
+    return f"admin:{hint}"
+
+
+__all__ = ["require_api_key", "require_admin_token"]

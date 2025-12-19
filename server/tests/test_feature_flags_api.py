@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -88,3 +90,29 @@ def test_endpoint_returns_expected_schema(monkeypatch):
     assert round_flag["rolloutPct"] == 0
     assert round_flag["source"] == "force"
     assert round_flag["reason"] == "force_off"
+
+
+def test_config_store_overrides_env(monkeypatch, tmp_path):
+    config_path = tmp_path / "feature_flags_config.json"
+    config_path.write_text(
+        json.dumps(
+            {
+                "roundFlowV2": {
+                    "rolloutPercent": 100,
+                    "allowlist": [],
+                    "force": None,
+                },
+                "meta": {"updatedAt": "2024-01-01T00:00:00Z", "updatedBy": "admin:seed"},
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("FEATURE_FLAGS_CONFIG_PATH", str(config_path))
+    monkeypatch.setenv("ROUND_FLOW_V2_ROLLOUT_PCT", "0")
+    monkeypatch.setenv("ROUND_FLOW_V2_FORCE", "off")
+
+    flags = get_feature_flags("member-123")
+    flag = flags["roundFlowV2"]
+    assert flag.enabled is True
+    assert flag.rollout_pct == 100
+    assert flag.source == "rollout"

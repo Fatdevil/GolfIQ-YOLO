@@ -5,6 +5,8 @@ import os
 from dataclasses import dataclass
 from typing import Dict, Optional
 
+from server.feature_flags_config_store import get_feature_flags_store
+
 
 @dataclass
 class EvaluatedFlag:
@@ -53,6 +55,14 @@ def _parse_allowlist(env_var: str) -> set[str]:
     return {entry.strip() for entry in raw.split(",") if entry.strip()}
 
 
+def _force_token_to_bool(token: str | None) -> Optional[bool]:
+    if token == "force_on":
+        return True
+    if token == "force_off":
+        return False
+    return None
+
+
 def bucket_user(flag_name: str, user_id: str | None) -> int:
     seed = f"{flag_name}:{user_id or ''}".encode("utf-8")
     digest = hashlib.sha256(seed).digest()
@@ -98,12 +108,24 @@ def get_feature_flags(user_id: str | None) -> Dict[FlagName, EvaluatedFlag]:
     )
     practice_force = _coerce_force("PRACTICE_GROWTH_V1_FORCE")
 
-    round_flow_rollout = _coerce_rollout_pct(
-        ("ROUND_FLOW_V2_ROLLOUT_PERCENT", "ROUND_FLOW_V2_ROLLOUT_PCT"),
-        default=0,
-    )
-    round_flow_force = _coerce_force("ROUND_FLOW_V2_FORCE")
-    round_flow_allowlist = _parse_allowlist("ROUND_FLOW_V2_ALLOWLIST")
+    snapshot = get_feature_flags_store().snapshot()
+    round_flow_overrides = snapshot.round_flow_overrides
+    round_flow_config = snapshot.config["roundFlowV2"]
+    if "rolloutPercent" in round_flow_overrides:
+        round_flow_rollout = round_flow_config["rolloutPercent"]
+    else:
+        round_flow_rollout = _coerce_rollout_pct(
+            ("ROUND_FLOW_V2_ROLLOUT_PERCENT", "ROUND_FLOW_V2_ROLLOUT_PCT"),
+            default=0,
+        )
+    if "force" in round_flow_overrides:
+        round_flow_force = _force_token_to_bool(round_flow_config["force"])
+    else:
+        round_flow_force = _coerce_force("ROUND_FLOW_V2_FORCE")
+    if "allowlist" in round_flow_overrides:
+        round_flow_allowlist = set(round_flow_config["allowlist"])
+    else:
+        round_flow_allowlist = _parse_allowlist("ROUND_FLOW_V2_ALLOWLIST")
 
     return {
         "practiceGrowthV1": evaluate_flag(

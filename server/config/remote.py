@@ -13,6 +13,7 @@ from fastapi import APIRouter, HTTPException, Request, Response, status
 
 from . import coerce_boolish
 from .playslike_wind_config import compute_wind_slope_delta, resolveWindSlopeConfig
+from server.security import require_admin_token
 
 DEFAULT_TEMP_ALT_CFG: Dict[str, Any] = {
     "enabled": False,
@@ -579,29 +580,6 @@ _store = RemoteConfigStore()
 router = APIRouter(prefix="/config", tags=["remote-config"])
 
 
-def _require_admin(request: Request) -> None:
-    expected = os.getenv("ADMIN_TOKEN")
-    if not expected:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="admin token not configured",
-        )
-    provided = request.headers.get("x-admin-token")
-    if not provided or provided != expected:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="invalid admin token",
-        )
-    origin = request.headers.get("origin")
-    if origin:
-        base = f"{request.url.scheme}://{request.url.netloc}"
-        if origin.rstrip("/") != base.rstrip("/"):
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="cross-origin POSTs are not permitted",
-            )
-
-
 @router.get("/remote")
 async def get_remote_config(request: Request) -> Response:
     config, etag, updated_at = _store.snapshot()
@@ -672,7 +650,7 @@ async def get_remote_config(request: Request) -> Response:
 
 @router.post("/remote")
 async def update_remote_config(request: Request) -> Response:
-    _require_admin(request)
+    require_admin_token(request)
     try:
         payload = await request.json()
     except Exception as exc:  # pragma: no cover - FastAPI already validates JSON

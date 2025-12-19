@@ -27,11 +27,55 @@ Progress only after guardrails are green for the prior step.
 7. **100%**
 
 ## Controls
-Server-side environment variables:
+Server-side environment variables (fallbacks when no remote config is set):
 
 - **Percent rollout**: `ROUND_FLOW_V2_ROLLOUT_PERCENT` (alias: `ROUND_FLOW_V2_ROLLOUT_PCT`)
 - **Allowlist**: `ROUND_FLOW_V2_ALLOWLIST` (comma-separated member IDs)
 - **Force**: `ROUND_FLOW_V2_FORCE` (`on`/`off`)
+
+### Remote rollout config (preferred)
+Set `ADMIN_TOKEN` on the server and use the admin endpoints to update persisted rollout
+controls without redeploying. Configuration is stored in `server/.data/feature_flags_config.json`.
+
+#### Read current config
+```bash
+curl -H "X-Admin-Token: $ADMIN_TOKEN" \\
+  http://localhost:8000/api/admin/feature-flags/config
+```
+
+#### Set rollout percent
+```bash
+curl -X PUT -H "X-Admin-Token: $ADMIN_TOKEN" \\
+  -H "Content-Type: application/json" \\
+  -d '{"roundFlowV2":{"rolloutPercent":5}}' \\
+  http://localhost:8000/api/admin/feature-flags/config
+```
+
+#### Add/remove allowlist member
+```bash
+curl -X POST -H "X-Admin-Token: $ADMIN_TOKEN" \\
+  -H "Content-Type: application/json" \\
+  -d '{"memberId":"member-123"}' \\
+  http://localhost:8000/api/admin/feature-flags/roundFlowV2/allowlist:add
+
+curl -X POST -H "X-Admin-Token: $ADMIN_TOKEN" \\
+  -H "Content-Type: application/json" \\
+  -d '{"memberId":"member-123"}' \\
+  http://localhost:8000/api/admin/feature-flags/roundFlowV2/allowlist:remove
+```
+
+#### Force on/off (kill switch)
+```bash
+curl -X PUT -H "X-Admin-Token: $ADMIN_TOKEN" \\
+  -H "Content-Type: application/json" \\
+  -d '{"roundFlowV2":{"force":"force_on"}}' \\
+  http://localhost:8000/api/admin/feature-flags/config
+
+curl -X PUT -H "X-Admin-Token: $ADMIN_TOKEN" \\
+  -H "Content-Type: application/json" \\
+  -d '{"roundFlowV2":{"force":"force_off"}}' \\
+  http://localhost:8000/api/admin/feature-flags/config
+```
 
 ## Telemetry to monitor
 Use `roundflowv2_flag_evaluated` as the denominator for enabled/disabled counts.
