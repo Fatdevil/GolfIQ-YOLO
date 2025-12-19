@@ -12,6 +12,8 @@ Use this checklist when toggling `roundFlowV2` via the remote rollout:
 
 Track these events (mobile analytics) during staged rollout. Investigate if any metric deviates from baseline or exceeds the thresholds below:
 
+- `roundflowv2_flag_evaluated`
+  - Emitted once per Home mount; use `roundFlowV2Enabled` + `roundFlowV2Reason` to segment exposure by allowlist/percent/force.
 - `roundflowv2_home_card_impression` + `roundflowv2_home_cta_tap`
   - CTA tap-through should remain stable; large drops (>20%) indicate UI or loading regressions.
   - `roundflowv2_home_cta_blocked_loading` should be rare and short-lived; spikes indicate hydrate stalls.
@@ -21,6 +23,8 @@ Track these events (mobile analytics) during staged rollout. Investigate if any 
 - `roundflowv2_start_round_request` / `roundflowv2_start_round_response`
   - HTTP error rate >1% or large increases in `durationMs` are suspect.
   - Monitor `reusedActiveRound` rate to ensure idempotent start is working.
+
+All RoundFlowV2 telemetry now includes `roundFlowV2Reason` (falls back to `unknown`) to segment dashboards by rollout decision.
 
 ## Rollout control
 

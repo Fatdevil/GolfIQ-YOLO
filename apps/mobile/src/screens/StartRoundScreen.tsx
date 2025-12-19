@@ -21,7 +21,7 @@ import { loadActiveRoundState, saveActiveRoundState } from '@app/round/roundStat
 import { useGeolocation } from '@app/hooks/useGeolocation';
 import { computeNearestCourse, distanceMeters } from '@shared/round/autoHoleCore';
 import { getItem, setItem } from '@app/storage/asyncStorage';
-import { isRoundFlowV2Enabled } from '@shared/featureFlags/roundFlowV2';
+import { getRoundFlowV2Reason, isRoundFlowV2Enabled } from '@shared/featureFlags/roundFlowV2';
 import { logRoundFlowV2StartRoundRequest, logRoundFlowV2StartRoundResponse } from '@app/analytics/roundFlow';
 
 const holesOptions = [9, 18];
@@ -319,10 +319,11 @@ export default function StartRoundScreen({ navigation }: Props): JSX.Element {
       return;
     }
     const roundFlowV2Enabled = isRoundFlowV2Enabled();
+    const roundFlowV2Reason = getRoundFlowV2Reason() ?? 'unknown';
     const startTime = Date.now();
     let reusedActiveRound: boolean | null = null;
     let httpStatus: number | null = null;
-    logRoundFlowV2StartRoundRequest({ roundFlowV2Enabled, screen: 'StartRound' });
+    logRoundFlowV2StartRoundRequest({ roundFlowV2Enabled, roundFlowV2Reason, screen: 'StartRound' });
     setSubmitting(true);
     try {
       const currentTournamentSafe = tournamentSafeRef.current;
@@ -392,6 +393,7 @@ export default function StartRoundScreen({ navigation }: Props): JSX.Element {
       setSubmitting(false);
       logRoundFlowV2StartRoundResponse({
         roundFlowV2Enabled,
+        roundFlowV2Reason,
         screen: 'StartRound',
         reusedActiveRound,
         httpStatus,

@@ -51,8 +51,16 @@ export function logRoundCreatedFailed(payload: { courseId?: string | null; holes
 
 type RoundFlowV2BasePayload = {
   roundFlowV2Enabled: boolean;
+  roundFlowV2Reason: string;
   screen: RoundFlowV2Screen;
 };
+
+export function logRoundFlowV2FlagEvaluated(payload: {
+  roundFlowV2Enabled: boolean;
+  roundFlowV2Reason: string;
+}): void {
+  tryEmit('roundflowv2_flag_evaluated', payload);
+}
 
 export function logRoundFlowV2HomeCardImpression(
   payload: RoundFlowV2BasePayload & {

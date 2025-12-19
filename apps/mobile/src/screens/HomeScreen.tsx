@@ -32,6 +32,7 @@ import {
   logRoundFlowV2ActiveRoundHydrateFailure,
   logRoundFlowV2ActiveRoundHydrateStart,
   logRoundFlowV2ActiveRoundHydrateSuccess,
+  logRoundFlowV2FlagEvaluated,
   logRoundFlowV2HomeCardImpression,
   logRoundFlowV2HomeCtaBlockedLoading,
   logRoundFlowV2HomeCtaTap,
@@ -50,7 +51,7 @@ import {
 import { isPracticeGrowthV1Enabled } from '@shared/featureFlags/practiceGrowthV1';
 import { logPracticeFeatureGated } from '@app/analytics/practiceFeatureGate';
 import { fetchActiveRoundSummary, getCurrentRound, type ActiveRoundSummary, type RoundInfo } from '@app/api/roundClient';
-import { isRoundFlowV2Enabled } from '@shared/featureFlags/roundFlowV2';
+import { getRoundFlowV2Reason, isRoundFlowV2Enabled } from '@shared/featureFlags/roundFlowV2';
 import { loadActiveRoundState, saveActiveRoundState, type ActiveRoundState } from '@app/round/roundState';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'PlayerHome'>;
@@ -179,6 +180,7 @@ export default function HomeScreen({ navigation }: Props): JSX.Element {
   const practiceCardLoggedRef = useRef(false);
   const practiceGrowthEnabled = isPracticeGrowthV1Enabled();
   const roundFlowV2Enabled = isRoundFlowV2Enabled();
+  const roundFlowV2Reason = getRoundFlowV2Reason() ?? 'unknown';
   const roundFlowV2Screen: RoundFlowV2Screen = 'Home';
   const [activeRound, setActiveRound] = useState<ActiveRoundState | null>(null);
   const [activeRoundError, setActiveRoundError] = useState<string | null>(null);
@@ -188,6 +190,7 @@ export default function HomeScreen({ navigation }: Props): JSX.Element {
     hasRemote: false,
   });
   const roundFlowV2ImpressionLogged = useRef(false);
+  const roundFlowV2EvaluationLogged = useRef(false);
 
   const gatePracticeGrowth = useCallback(
     (target: string) => {
@@ -251,6 +254,12 @@ export default function HomeScreen({ navigation }: Props): JSX.Element {
   }, [load]);
 
   useEffect(() => {
+    if (roundFlowV2EvaluationLogged.current) return;
+    roundFlowV2EvaluationLogged.current = true;
+    logRoundFlowV2FlagEvaluated({ roundFlowV2Enabled, roundFlowV2Reason });
+  }, [roundFlowV2Enabled, roundFlowV2Reason]);
+
+  useEffect(() => {
     if (!roundFlowV2Enabled) return;
 
     let cancelled = false;
@@ -268,6 +277,7 @@ export default function HomeScreen({ navigation }: Props): JSX.Element {
       try {
         logRoundFlowV2ActiveRoundHydrateStart({
           roundFlowV2Enabled,
+          roundFlowV2Reason,
           screen: roundFlowV2Screen,
           source: hasCached ? 'cached' : 'none',
         });
@@ -308,6 +318,7 @@ export default function HomeScreen({ navigation }: Props): JSX.Element {
                   : 'unknown';
           logRoundFlowV2ActiveRoundHydrateFailure({
             roundFlowV2Enabled,
+            roundFlowV2Reason,
             screen: roundFlowV2Screen,
             source,
             durationMs,
@@ -317,6 +328,7 @@ export default function HomeScreen({ navigation }: Props): JSX.Element {
         } else {
           logRoundFlowV2ActiveRoundHydrateSuccess({
             roundFlowV2Enabled,
+            roundFlowV2Reason,
             screen: roundFlowV2Screen,
             source,
             durationMs,
@@ -333,7 +345,7 @@ export default function HomeScreen({ navigation }: Props): JSX.Element {
     return () => {
       cancelled = true;
     };
-  }, [roundFlowV2Enabled]);
+  }, [roundFlowV2Enabled, roundFlowV2Reason]);
 
   useEffect(() => {
     let cancelled = false;
@@ -437,13 +449,21 @@ export default function HomeScreen({ navigation }: Props): JSX.Element {
   const buildRoundFlowV2HomeTelemetry = useCallback(
     (ctaType: RoundFlowV2HomeCtaType) => ({
       roundFlowV2Enabled,
+      roundFlowV2Reason,
       screen: roundFlowV2Screen,
       ctaType,
       activeRoundLoading,
       hasActiveRoundCached: activeRoundMeta.hasCached,
       hasActiveRoundRemote: activeRoundMeta.hasRemote,
     }),
-    [activeRoundLoading, activeRoundMeta.hasCached, activeRoundMeta.hasRemote, roundFlowV2Enabled, roundFlowV2Screen],
+    [
+      activeRoundLoading,
+      activeRoundMeta.hasCached,
+      activeRoundMeta.hasRemote,
+      roundFlowV2Enabled,
+      roundFlowV2Reason,
+      roundFlowV2Screen,
+    ],
   );
 
   useEffect(() => {
