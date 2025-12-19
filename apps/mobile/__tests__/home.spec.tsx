@@ -29,9 +29,13 @@ vi.mock('@app/run/currentRun', () => ({
   clearCurrentRun: vi.fn(),
 }));
 
-vi.mock('@shared/featureFlags/roundFlowV2', () => ({
-  isRoundFlowV2Enabled: vi.fn(),
-}));
+vi.mock('@shared/featureFlags/roundFlowV2', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@shared/featureFlags/roundFlowV2')>();
+  return {
+    ...actual,
+    isRoundFlowV2Enabled: vi.fn(),
+  };
+});
 
 vi.mock('@app/api/roundClient', () => ({
   fetchActiveRoundSummary: vi.fn(),
@@ -52,6 +56,7 @@ vi.mock('@app/analytics/roundFlow', () => ({
   logRoundCreatedSuccess: vi.fn(),
   logRoundHomeStartClicked: vi.fn(),
   logRoundHomeContinueClicked: vi.fn(),
+  logRoundFlowV2FlagEvaluated: vi.fn(),
   logRoundFlowV2HomeCardImpression: vi.fn(),
   logRoundFlowV2HomeCtaTap: vi.fn(),
   logRoundFlowV2HomeCtaBlockedLoading: vi.fn(),
