@@ -31,6 +31,39 @@ def test_force_override(monkeypatch, force_value: str, expected: bool):
     flag = flags["roundFlowV2"]
     assert flag.enabled is expected
     assert flag.source == "force"
+    assert flag.reason in {"forced_on", "forced_off"}
+
+
+def test_allowlist_overrides_percent(monkeypatch):
+    monkeypatch.setenv("ROUND_FLOW_V2_ROLLOUT_PCT", "0")
+    monkeypatch.setenv("ROUND_FLOW_V2_ALLOWLIST", "member-123,member-456")
+    flags = get_feature_flags("member-456")
+    flag = flags["roundFlowV2"]
+    assert flag.enabled is True
+    assert flag.source == "allowlist"
+    assert flag.reason == "allowlist"
+
+
+def test_percent_rollout_reason(monkeypatch):
+    monkeypatch.setenv("ROUND_FLOW_V2_ROLLOUT_PCT", "100")
+    monkeypatch.delenv("ROUND_FLOW_V2_FORCE", raising=False)
+    monkeypatch.delenv("ROUND_FLOW_V2_ALLOWLIST", raising=False)
+    flags = get_feature_flags("member-789")
+    flag = flags["roundFlowV2"]
+    assert flag.enabled is True
+    assert flag.source == "rollout"
+    assert flag.reason == "percent"
+
+
+def test_forced_off_overrides_allowlist(monkeypatch):
+    monkeypatch.setenv("ROUND_FLOW_V2_ROLLOUT_PCT", "100")
+    monkeypatch.setenv("ROUND_FLOW_V2_ALLOWLIST", "member-999")
+    monkeypatch.setenv("ROUND_FLOW_V2_FORCE", "off")
+    flags = get_feature_flags("member-999")
+    flag = flags["roundFlowV2"]
+    assert flag.enabled is False
+    assert flag.source == "force"
+    assert flag.reason == "forced_off"
 
 
 def test_endpoint_returns_expected_schema(monkeypatch):
@@ -48,9 +81,10 @@ def test_endpoint_returns_expected_schema(monkeypatch):
     assert set(flags.keys()) == {"practiceGrowthV1", "roundFlowV2"}
 
     practice_flag = flags["practiceGrowthV1"]
-    assert set(practice_flag.keys()) == {"enabled", "rolloutPct", "source"}
+    assert set(practice_flag.keys()) == {"enabled", "rolloutPct", "source", "reason"}
     assert practice_flag["rolloutPct"] == 10
 
     round_flag = flags["roundFlowV2"]
     assert round_flag["rolloutPct"] == 0
     assert round_flag["source"] == "force"
+    assert round_flag["reason"] == "forced_off"

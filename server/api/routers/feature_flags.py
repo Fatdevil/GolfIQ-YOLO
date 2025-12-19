@@ -23,6 +23,7 @@ def fetch_feature_flags(
                 "enabled": flag.enabled,
                 "rolloutPct": flag.rollout_pct,
                 "source": flag.source,
+                "reason": flag.reason,
             }
             for name, flag in evaluated.items()
         },

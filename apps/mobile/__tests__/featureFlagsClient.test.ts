@@ -5,6 +5,7 @@ import {
   loadFeatureFlags,
   __resetFeatureFlagsForTests,
   getLastSuccessfulFeatureFlagsFetchMs,
+  getFeatureFlagsDebugState,
 } from '@app/featureFlags/featureFlagsClient';
 import {
   clearCachedFeatureFlags,
@@ -58,7 +59,7 @@ describe('featureFlagsClient', () => {
       version: 1,
       flags: {
         practiceGrowthV1: { enabled: true, rolloutPct: 10, source: 'rollout' },
-        roundFlowV2: { enabled: true, rolloutPct: 50, source: 'rollout' },
+        roundFlowV2: { enabled: true, rolloutPct: 50, source: 'rollout', reason: 'percent' },
       },
     });
 
@@ -66,6 +67,20 @@ describe('featureFlagsClient', () => {
 
     expect(isPracticeGrowthV1Enabled(false)).toBe(true);
     expect(isRoundFlowV2Enabled(false)).toBe(true);
+  });
+
+  it('preserves remote rollout reason metadata', async () => {
+    mockedApiFetch.mockResolvedValueOnce({
+      version: 1,
+      flags: {
+        roundFlowV2: { enabled: true, rolloutPct: 0, source: 'allowlist', reason: 'allowlist' },
+      },
+    });
+
+    await loadFeatureFlags({ userId: 'user-a' });
+
+    const state = await getFeatureFlagsDebugState({ userId: 'user-a' });
+    expect(state.effectiveFlags.flags?.roundFlowV2?.reason).toBe('allowlist');
   });
 
   it('falls back to cached flags when the API fails', async () => {

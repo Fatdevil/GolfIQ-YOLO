@@ -4,6 +4,7 @@ export type ResolvedFeatureFlag = {
   enabled: boolean;
   rolloutPct: number;
   source?: string;
+  reason?: string;
 };
 
 export type FeatureFlagsPayload = {
