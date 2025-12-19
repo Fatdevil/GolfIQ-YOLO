@@ -14,6 +14,10 @@ export interface Round {
   endedAt?: string | null;
 }
 
+export interface StartRoundResponse extends Round {
+  reusedActiveRound?: boolean;
+}
+
 export interface Shot {
   id: string;
   roundId: string;
@@ -183,8 +187,8 @@ export async function startRound(req: {
   teeName?: string;
   holes?: number;
   startHole?: number;
-}): Promise<Round> {
-  return apiFetch<Round>('/api/rounds/start', {
+}): Promise<StartRoundResponse> {
+  return apiFetch<StartRoundResponse>('/api/rounds/start', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(req),

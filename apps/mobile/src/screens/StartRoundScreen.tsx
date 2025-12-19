@@ -49,6 +49,20 @@ async function saveTournamentSafePref(value: boolean): Promise<void> {
   await setItem(TOURNAMENT_SAFE_KEY, value ? 'true' : 'false');
 }
 
+function resolveResumeHole(activeRound: RoundInfo): number {
+  const startHole = activeRound.startHole ?? 1;
+  return Math.min(
+    Math.max(activeRound.lastHole ?? startHole, startHole),
+    (activeRound.holes as number | undefined) ?? 18,
+  );
+}
+
+function selectActiveRound(current: RoundInfo | null, fallback: RoundInfo | null): RoundInfo | null {
+  if (current?.lastHole != null) return current;
+  if (fallback?.lastHole != null) return fallback;
+  return current ?? fallback;
+}
+
 type Props = NativeStackScreenProps<RootStackParamList, 'RoundStart'>;
 
 type CourseWithDistance = CourseSummary & { distanceM?: number | null };
@@ -271,10 +285,7 @@ export default function StartRoundScreen({ navigation }: Props): JSX.Element {
     if (!activeRound) return;
     const existingState = await loadActiveRoundState();
     const startHole = activeRound.startHole ?? 1;
-    const resumeHole = Math.min(
-      activeRound.lastHole ?? startHole,
-      (activeRound.holes as number | undefined) ?? 18,
-    );
+    const resumeHole = resolveResumeHole(activeRound);
     const cachedPreferences =
       existingState?.round?.id === activeRound.id ? existingState?.preferences ?? {} : undefined;
     const mergedPreferences = {
@@ -313,6 +324,44 @@ export default function StartRoundScreen({ navigation }: Props): JSX.Element {
         holes,
         startHole: 1,
       });
+      if (round.reusedActiveRound) {
+        const current = await getCurrentRound().catch(() => null);
+        const candidate = selectActiveRound(current, activeRound);
+        const active = candidate ?? {
+          id: round.id,
+          holes: round.holes,
+          courseId: round.courseId,
+          courseName: round.courseName,
+          teeName: round.teeName,
+          startedAt: round.startedAt,
+          startHole: round.startHole ?? 1,
+          status: round.status,
+        };
+        setActiveRound(active);
+        const startHole = active.startHole ?? 1;
+        const resumeHole = resolveResumeHole(active);
+        const existingState = await loadActiveRoundState().catch(() => null);
+        const mergedPreferences = {
+          ...(existingState?.round?.id === active.id ? existingState?.preferences ?? {} : {}),
+          tournamentSafe: currentTournamentSafe,
+        };
+        await saveActiveRoundState({
+          round: {
+            id: active.id,
+            holes: active.holes,
+            courseId: active.courseId,
+            courseName: active.courseName,
+            teeName: active.teeName,
+            startedAt: active.startedAt,
+            startHole,
+            status: active.status,
+          },
+          currentHole: resumeHole,
+          preferences: mergedPreferences,
+        });
+        navigation.navigate('RoundShot', { roundId: active.id });
+        return;
+      }
       await saveTournamentSafePref(currentTournamentSafe);
       await saveActiveRoundState({
         round,

@@ -135,6 +135,21 @@ export default function StartRoundV2Screen({ navigation }: Props): JSX.Element {
     setSubmitting(true);
     try {
       const round = await startRound({ courseId, teeName: teeName.trim() || undefined, holes, startHole: 1 });
+      if (round.reusedActiveRound) {
+        const [active, current] = await Promise.all([
+          fetchActiveRoundSummary().catch(() => null),
+          getCurrentRound().catch(() => null),
+        ]);
+        const payload = buildResumePayload(active, current) ?? {
+          round,
+          currentHole: round.startHole ?? 1,
+        };
+        const existing = await loadActiveRoundState().catch(() => null);
+        const preferences = existing?.preferences ?? (tournamentSafe ? { tournamentSafe } : {});
+        await saveActiveRoundState({ ...payload, preferences });
+        navigation.navigate('RoundShot', { roundId: payload.round.id });
+        return;
+      }
       logRoundCreatedSuccess({ roundId: round.id, courseId: round.courseId ?? courseId, holes: round.holes });
       await saveActiveRoundState({
         round,

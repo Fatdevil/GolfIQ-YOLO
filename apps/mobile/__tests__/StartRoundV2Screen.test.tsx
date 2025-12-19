@@ -127,6 +127,33 @@ describe('StartRoundV2Screen', () => {
     expect(mockSetItem).toHaveBeenCalledWith('golfiq.tournamentSafePref.v1', 'true');
   });
 
+  it('resumes an existing round when start responds with reuse flag', async () => {
+    const navigation = { navigate: vi.fn() } as any;
+    mockStartRound.mockResolvedValue({
+      id: 'r1',
+      holes: 18,
+      startHole: 1,
+      startedAt: 'now',
+      reusedActiveRound: true,
+    });
+    mockFetchActiveRoundSummary.mockResolvedValue(createActiveSummary());
+    mockGetCurrentRound.mockResolvedValue(createRoundInfo());
+
+    const { getByTestId } = render(
+      <StartRoundV2Screen navigation={navigation} route={undefined as any} />,
+    );
+
+    await waitFor(() => expect(getByTestId('start-round-button')).toBeTruthy());
+    fireEvent.click(getByTestId('start-round-button'));
+
+    await waitFor(() =>
+      expect(mockSaveActiveRoundState).toHaveBeenCalledWith(
+        expect.objectContaining({ currentHole: 4 }),
+      ),
+    );
+    expect(navigation.navigate).toHaveBeenCalledWith('RoundShot', { roundId: 'r1' });
+  });
+
   it('keeps UI usable when active round fetch fails', async () => {
     const navigation = { navigate: vi.fn() } as any;
     mockFetchActiveRoundSummary.mockRejectedValueOnce(new Error('network'));

@@ -5,7 +5,6 @@ import logging
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
-from fastapi.encoders import jsonable_encoder
 from pydantic import AliasChoices, BaseModel, ConfigDict, Field
 
 from server.api.security import require_api_key
@@ -68,6 +67,15 @@ class StartRoundRequest(BaseModel):
         validation_alias=AliasChoices("start_hole", "startHole"),
         serialization_alias="startHole",
         ge=1,
+    )
+
+    model_config = ConfigDict(populate_by_name=True)
+
+
+class StartRoundResponse(Round):
+    reused_active_round: bool = Field(
+        serialization_alias="reusedActiveRound",
+        validation_alias=AliasChoices("reused_active_round", "reusedActiveRound"),
     )
 
     model_config = ConfigDict(populate_by_name=True)
@@ -201,31 +209,27 @@ class ActiveRoundOut(BaseModel):
 ActiveRoundOut.model_rebuild(_types_namespace={"datetime": datetime})
 
 
-@router.post("/start", response_model=Round)
+@router.post("/start", response_model=StartRoundResponse)
 def start_round(
     payload: StartRoundRequest,
     api_key: str | None = Depends(require_api_key),
     user_id: UserIdHeader = None,
     service: RoundService = Depends(get_round_service),
-) -> Round:
+) -> StartRoundResponse:
     player_id = _derive_player_id(api_key, user_id)
     try:
         active = service.get_active_round(player_id=player_id)
         if active:
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail={
-                    "message": "round already in progress",
-                    "activeRound": jsonable_encoder(active, by_alias=True),
-                },
-            )
-        return service.start_round(
+            active_payload = active.model_dump(exclude={"course_name", "last_hole"})
+            return StartRoundResponse(**active_payload, reused_active_round=True)
+        round_out = service.start_round(
             player_id=player_id,
             course_id=payload.course_id,
             tee_name=payload.tee_name,
             holes=payload.holes or 18,
             start_hole=payload.start_hole or 1,
         )
+        return StartRoundResponse(**round_out.model_dump(), reused_active_round=False)
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
 
