@@ -81,7 +81,7 @@ import {
   type PracticeRecommendationContext,
 } from '@shared/practice/practiceRecommendationsAnalytics';
 import { isPracticeGrowthV1Enabled } from '@shared/featureFlags/practiceGrowthV1';
-import { isRoundFlowV2Enabled } from '@shared/featureFlags/roundFlowV2';
+import { getRoundFlowV2Reason, isRoundFlowV2Enabled } from '@shared/featureFlags/roundFlowV2';
 import { logPracticeFeatureGated, type PracticeFeatureGateSource } from '@app/analytics/practiceFeatureGate';
 import { emitPracticeMissionStart } from '@shared/practice/practiceSessionAnalytics';
 import { getExperimentBucket, getExperimentVariant, getPracticeRecommendationsExperiment, isInExperiment } from '@shared/experiments/flags';
@@ -240,6 +240,7 @@ export default function HomeDashboardScreen({ navigation }: Props): JSX.Element 
   const developerTapTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const geo = useGeolocation();
   const practiceGrowthEnabled = isPracticeGrowthV1Enabled();
+  const roundFlowV2Reason = getRoundFlowV2Reason() ?? 'unknown';
 
   const handlePracticeGrowthGate = useCallback(
     (target: string, source: PracticeFeatureGateSource = 'home') => {
@@ -989,6 +990,7 @@ export default function HomeDashboardScreen({ navigation }: Props): JSX.Element 
       requestStartTime = Date.now();
       logRoundFlowV2StartRoundRequest({
         roundFlowV2Enabled: isRoundFlowV2Enabled(),
+        roundFlowV2Reason,
         screen: 'HomeDashboard',
       });
       const round = await startRound({
@@ -1043,6 +1045,7 @@ export default function HomeDashboardScreen({ navigation }: Props): JSX.Element 
       if (requestStarted) {
         logRoundFlowV2StartRoundResponse({
           roundFlowV2Enabled: isRoundFlowV2Enabled(),
+          roundFlowV2Reason,
           screen: 'HomeDashboard',
           reusedActiveRound,
           httpStatus,
@@ -1051,7 +1054,7 @@ export default function HomeDashboardScreen({ navigation }: Props): JSX.Element 
       }
       setQuickStarting(false);
     }
-  }, [geo.position, navigation]);
+  }, [geo.position, navigation, roundFlowV2Reason]);
 
   const handleStartRoundEntry = useCallback(() => {
     navigateToStartRound(navigation, 'home');

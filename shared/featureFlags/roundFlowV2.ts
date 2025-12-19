@@ -46,6 +46,15 @@ export function getRoundFlowV2Fallback(defaultValue = false): boolean {
   return normalizeFlag(raw, defaultValue);
 }
 
+export function getRoundFlowV2Reason(): string | undefined {
+  const remote: ResolvedFeatureFlag | null = getRemoteFeatureFlag("roundFlowV2");
+  if (!remote || typeof remote.reason !== "string") {
+    return undefined;
+  }
+  const reason = remote.reason.trim();
+  return reason.length > 0 ? reason : undefined;
+}
+
 export function __resetRoundFlowV2FlagCacheForTests() {
   clearRemoteFeatureFlag("roundFlowV2");
 }
