@@ -102,6 +102,40 @@ describe('RoundStartScreen', () => {
     })));
   });
 
+  it('resumes when start round returns an existing active round', async () => {
+    mockedGetCurrentRound.mockResolvedValueOnce(null);
+    mockedStartRound.mockResolvedValueOnce({
+      id: 'existing-round',
+      holes: 18,
+      startedAt: 'now',
+      startHole: 1,
+      reusedActiveRound: true,
+    });
+    mockedGetCurrentRound.mockResolvedValueOnce({
+      id: 'existing-round',
+      holes: 18,
+      startHole: 1,
+      lastHole: 6,
+      status: 'in_progress',
+      startedAt: 'today',
+    });
+    const navigation: Nav = { navigate: vi.fn() };
+
+    const { getByTestId } = render(
+      <RoundStartScreen navigation={navigation as any} route={undefined as any} />,
+    );
+
+    await waitFor(() => expect(getByTestId('start-round-button')).toBeTruthy());
+    fireEvent.click(getByTestId('start-round-button'));
+
+    await waitFor(() =>
+      expect(mockedSaveState).toHaveBeenCalledWith(
+        expect.objectContaining({ currentHole: 6 }),
+      ),
+    );
+    expect(navigation.navigate).toHaveBeenCalledWith('RoundShot', { roundId: 'existing-round' });
+  });
+
   it('auto-selects nearest course and shows hint when GPS is available', async () => {
     mockedGetCurrentRound.mockResolvedValueOnce(null);
     mockedFetchCourses.mockResolvedValue([

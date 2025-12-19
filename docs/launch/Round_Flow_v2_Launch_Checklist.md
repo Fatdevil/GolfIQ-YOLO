@@ -14,4 +14,5 @@ Use this checklist when toggling `roundFlowV2` via the remote rollout:
 - On mobile Home, confirm the "Continue round" card appears when an active round exists and opens RoundShot for that round.
 - With no active round, confirm the Home card shows "Start round" and routes to StartRoundV2.
 - While active-round lookup is still loading, verify the Home CTA stays disabled so a duplicate round cannot be started during hydrate.
+- Attempt to start a new round while an active round exists: the app should resume the existing round instead of creating another.
 - Roll back by setting the `roundFlowV2` rollout to 0% when verification is complete.

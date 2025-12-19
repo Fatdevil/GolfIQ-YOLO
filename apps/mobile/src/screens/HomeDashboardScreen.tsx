@@ -984,6 +984,40 @@ export default function HomeDashboardScreen({ navigation }: Props): JSX.Element 
         holes: plan.holeCount,
       });
 
+      if (round.reusedActiveRound) {
+        const current = await fetchCurrentRound().catch(() => null);
+        const active = current ?? {
+          id: round.id,
+          holes: round.holes,
+          courseId: round.courseId,
+          courseName: round.courseName,
+          teeName: round.teeName,
+          startedAt: round.startedAt,
+          startHole: round.startHole ?? 1,
+          status: round.status,
+        };
+        const startHole = active.startHole ?? 1;
+        const resumeHole = Math.min(
+          Math.max(active.lastHole ?? startHole, startHole),
+          (active.holes as number | undefined) ?? 18,
+        );
+        await saveActiveRoundState({
+          round: {
+            id: active.id,
+            holes: active.holes,
+            courseId: active.courseId,
+            courseName: active.courseName,
+            teeName: active.teeName,
+            startedAt: active.startedAt,
+            startHole,
+            status: active.status,
+          },
+          currentHole: resumeHole,
+        });
+        navigation.navigate('RoundShot', { roundId: active.id });
+        return;
+      }
+
       await saveActiveRoundState({ round, currentHole: round.startHole ?? 1 });
       navigation.navigate('RoundShot', { roundId: round.id });
     } catch (err) {

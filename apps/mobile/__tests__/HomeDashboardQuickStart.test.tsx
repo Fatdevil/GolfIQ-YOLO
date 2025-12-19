@@ -158,4 +158,59 @@ describe('HomeDashboardScreen quick start', () => {
       expect(navigation.navigate).toHaveBeenCalledWith('RoundStart');
     });
   });
+
+  it('resumes active round when quick start reuses existing round', async () => {
+    mockedUseGeolocation.mockReturnValue({
+      position: { lat: 59.302, lon: 18.1 },
+      error: null,
+      supported: true,
+      loading: false,
+    });
+    vi.mocked(courseClient.fetchCourses).mockResolvedValue([
+      { id: 'near', name: 'Near Course', holeCount: 18, location: { lat: 59.3, lon: 18.1 } },
+    ]);
+    vi.mocked(courseClient.fetchCourseLayout).mockResolvedValue({
+      id: 'near',
+      name: 'Near Course',
+      holes: Array.from({ length: 18 }, (_, index) => ({
+        number: index + 1,
+        par: 4,
+        yardage_m: 360 + index,
+        tee: { lat: 59.3 + index * 0.001, lon: 18.1 },
+        green: { lat: 59.3005 + index * 0.001, lon: 18.1005 },
+      })),
+    });
+    vi.mocked(roundClient.startRound).mockResolvedValue({
+      id: 'active-round',
+      courseId: 'near',
+      holes: 18,
+      startHole: 1,
+      startedAt: 'now',
+      reusedActiveRound: true,
+    } as any);
+    vi.mocked(roundClient.fetchCurrentRound).mockResolvedValue({
+      id: 'active-round',
+      holes: 18,
+      startHole: 1,
+      lastHole: 5,
+      status: 'in_progress',
+      startedAt: 'today',
+    } as any);
+    vi.mocked(roundState.saveActiveRoundState).mockResolvedValue();
+
+    const navigation = createNavigation();
+
+    render(<HomeDashboardScreen navigation={navigation} route={createRoute()} />);
+
+    const quickStart = await screen.findByTestId('quick-start-round');
+    fireEvent.click(quickStart);
+
+    await waitFor(() => {
+      expect(roundState.saveActiveRoundState).toHaveBeenCalledWith({
+        round: expect.objectContaining({ id: 'active-round' }),
+        currentHole: 5,
+      });
+    });
+    expect(navigation.navigate).toHaveBeenCalledWith('RoundShot', { roundId: 'active-round' });
+  });
 });

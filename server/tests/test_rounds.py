@@ -42,6 +42,7 @@ def test_start_and_end_round(round_client) -> None:
     assert data["startHole"] == 1
     assert data["status"] == "in_progress"
     assert data["endedAt"] is None
+    assert data["reusedActiveRound"] is False
 
     round_id = data["id"]
     end = client.post(f"/api/rounds/{round_id}/end", headers=_headers())
@@ -103,10 +104,13 @@ def test_start_round_conflict_returns_active(round_client) -> None:
         headers=_headers(),
     )
 
-    assert response.status_code == 409
+    assert response.status_code == 200
     payload = response.json()
-    assert payload["detail"]["message"] == "round already in progress"
-    assert payload["detail"]["activeRound"]["id"] == active.id
+    assert payload["id"] == active.id
+    assert payload["reusedActiveRound"] is True
+
+    rounds = service.list_rounds(player_id="player-1")
+    assert len(rounds) == 1
 
 
 def test_get_current_round(round_client) -> None:
