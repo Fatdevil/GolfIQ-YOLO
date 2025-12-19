@@ -27,11 +27,67 @@ Progress only after guardrails are green for the prior step.
 7. **100%**
 
 ## Controls
-Server-side environment variables:
+Server-side environment variables (fallback defaults if no remote config is set):
 
 - **Percent rollout**: `ROUND_FLOW_V2_ROLLOUT_PERCENT` (alias: `ROUND_FLOW_V2_ROLLOUT_PCT`)
 - **Allowlist**: `ROUND_FLOW_V2_ALLOWLIST` (comma-separated member IDs)
 - **Force**: `ROUND_FLOW_V2_FORCE` (`on`/`off`)
+
+### Remote rollout config (preferred)
+Set `ADMIN_TOKEN` on the server and use the admin endpoints to persist rollout changes
+without redeploying. All admin requests require `X-Admin-Token: $ADMIN_TOKEN`.
+
+#### Read current config
+```bash
+curl -sS \\
+  -H "X-Admin-Token: $ADMIN_TOKEN" \\
+  http://localhost:8000/api/admin/feature-flags/config
+```
+
+#### Set rollout percent
+```bash
+curl -sS -X PUT \\
+  -H "Content-Type: application/json" \\
+  -H "X-Admin-Token: $ADMIN_TOKEN" \\
+  -d '{"roundFlowV2":{"rolloutPercent":5}}' \\
+  http://localhost:8000/api/admin/feature-flags/config
+```
+
+#### Add/remove allowlist member
+```bash
+curl -sS -X POST \\
+  -H "Content-Type: application/json" \\
+  -H "X-Admin-Token: $ADMIN_TOKEN" \\
+  -d '{"memberId":"member-123"}' \\
+  http://localhost:8000/api/admin/feature-flags/roundFlowV2/allowlist:add
+
+curl -sS -X POST \\
+  -H "Content-Type: application/json" \\
+  -H "X-Admin-Token: $ADMIN_TOKEN" \\
+  -d '{"memberId":"member-123"}' \\
+  http://localhost:8000/api/admin/feature-flags/roundFlowV2/allowlist:remove
+```
+
+#### Force on/off or unset
+```bash
+curl -sS -X PUT \\
+  -H "Content-Type: application/json" \\
+  -H "X-Admin-Token: $ADMIN_TOKEN" \\
+  -d '{"roundFlowV2":{"force":"force_on"}}' \\
+  http://localhost:8000/api/admin/feature-flags/config
+
+curl -sS -X PUT \\
+  -H "Content-Type: application/json" \\
+  -H "X-Admin-Token: $ADMIN_TOKEN" \\
+  -d '{"roundFlowV2":{"force":"force_off"}}' \\
+  http://localhost:8000/api/admin/feature-flags/config
+
+curl -sS -X PUT \\
+  -H "Content-Type: application/json" \\
+  -H "X-Admin-Token: $ADMIN_TOKEN" \\
+  -d '{"roundFlowV2":{"force":null}}' \\
+  http://localhost:8000/api/admin/feature-flags/config
+```
 
 ## Telemetry to monitor
 Use `roundflowv2_flag_evaluated` as the denominator for enabled/disabled counts.
@@ -73,8 +129,8 @@ Use conservative thresholds for early steps. If any guardrail is breached, pause
 - **CTA blocked tap rate** (`roundflowv2_home_cta_blocked_loading` / `roundflowv2_home_cta_tap`)
 
 ### Rollback / kill switch
-- Set `ROUND_FLOW_V2_FORCE=off` to disable for all users.
-- Optionally set `ROUND_FLOW_V2_ROLLOUT_PERCENT=0` and clear `ROUND_FLOW_V2_ALLOWLIST` to return to default-off.
+- Set `force_off` via the admin config (preferred) or `ROUND_FLOW_V2_FORCE=off` to disable for all users.
+- Optionally set `rolloutPercent=0` and clear the allowlist to return to default-off.
 
 ## QA verification checklist
 1. **Allowlist smoke test**
