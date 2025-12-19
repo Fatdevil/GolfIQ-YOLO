@@ -1,4 +1,5 @@
 import { safeEmit } from '@app/telemetry';
+import type { RoundFlowV2RolloutReason } from '@shared/featureFlags/roundFlowV2';
 
 export type RoundFlowGateSource = 'home' | 'play' | 'recap' | 'unknown';
 export type RoundFlowV2Screen = 'Home' | 'HomeDashboard' | 'StartRoundV2' | 'StartRound';
@@ -51,13 +52,13 @@ export function logRoundCreatedFailed(payload: { courseId?: string | null; holes
 
 type RoundFlowV2BasePayload = {
   roundFlowV2Enabled: boolean;
-  roundFlowV2Reason: string;
+  roundFlowV2Reason: RoundFlowV2RolloutReason;
   screen: RoundFlowV2Screen;
 };
 
 export function logRoundFlowV2FlagEvaluated(payload: {
   roundFlowV2Enabled: boolean;
-  roundFlowV2Reason: string;
+  roundFlowV2Reason: RoundFlowV2RolloutReason;
 }): void {
   tryEmit('roundflowv2_flag_evaluated', payload);
 }

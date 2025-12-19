@@ -4,6 +4,31 @@ import type { ResolvedFeatureFlag } from './types';
 const TRUTHY_VALUES = new Set(["1", "true", "on", "yes", "enable", "enabled"]);
 const FALSY_VALUES = new Set(["0", "false", "off", "no", "disable", "disabled"]);
 
+export type RoundFlowV2RolloutReason =
+  | "allowlist"
+  | "percent"
+  | "force_on"
+  | "force_off"
+  | "default_off"
+  | "unknown";
+
+const REASON_ALIASES: Record<string, RoundFlowV2RolloutReason> = {
+  allowlist: "allowlist",
+  allow_list: "allowlist",
+  percent: "percent",
+  rollout_percent: "percent",
+  rollout_pct: "percent",
+  force: "force_on",
+  forceon: "force_on",
+  force_on: "force_on",
+  forced_on: "force_on",
+  forceoff: "force_off",
+  force_off: "force_off",
+  forced_off: "force_off",
+  default_off: "default_off",
+  unknown: "unknown",
+};
+
 function readEnvFlag(): string | undefined {
   const importMetaEnv = typeof import.meta !== "undefined" ? (import.meta as unknown as { env?: Record<string, unknown> }) : null;
   const raw =
@@ -53,6 +78,14 @@ export function getRoundFlowV2Reason(): string | undefined {
   }
   const reason = remote.reason.trim();
   return reason.length > 0 ? reason : undefined;
+}
+
+export function normalizeRoundFlowV2Reason(raw?: string | null): RoundFlowV2RolloutReason | undefined {
+  if (raw == null) return undefined;
+  const trimmed = raw.trim();
+  if (!trimmed) return undefined;
+  const normalized = trimmed.toLowerCase();
+  return REASON_ALIASES[normalized] ?? "unknown";
 }
 
 export function __resetRoundFlowV2FlagCacheForTests() {

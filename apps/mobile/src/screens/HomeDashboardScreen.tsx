@@ -81,7 +81,7 @@ import {
   type PracticeRecommendationContext,
 } from '@shared/practice/practiceRecommendationsAnalytics';
 import { isPracticeGrowthV1Enabled } from '@shared/featureFlags/practiceGrowthV1';
-import { getRoundFlowV2Reason, isRoundFlowV2Enabled } from '@shared/featureFlags/roundFlowV2';
+import { getRoundFlowV2Reason, isRoundFlowV2Enabled, normalizeRoundFlowV2Reason } from '@shared/featureFlags/roundFlowV2';
 import { logPracticeFeatureGated, type PracticeFeatureGateSource } from '@app/analytics/practiceFeatureGate';
 import { emitPracticeMissionStart } from '@shared/practice/practiceSessionAnalytics';
 import { getExperimentBucket, getExperimentVariant, getPracticeRecommendationsExperiment, isInExperiment } from '@shared/experiments/flags';
@@ -240,7 +240,7 @@ export default function HomeDashboardScreen({ navigation }: Props): JSX.Element 
   const developerTapTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const geo = useGeolocation();
   const practiceGrowthEnabled = isPracticeGrowthV1Enabled();
-  const roundFlowV2Reason = getRoundFlowV2Reason() ?? 'unknown';
+  const roundFlowV2Reason = normalizeRoundFlowV2Reason(getRoundFlowV2Reason()) ?? 'unknown';
 
   const handlePracticeGrowthGate = useCallback(
     (target: string, source: PracticeFeatureGateSource = 'home') => {

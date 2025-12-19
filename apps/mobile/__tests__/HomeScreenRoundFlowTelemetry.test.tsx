@@ -119,6 +119,33 @@ describe('HomeScreen roundflowv2 telemetry', () => {
     });
   });
 
+  it('normalizes unknown reasons to unknown', async () => {
+    const telemetry = vi.fn();
+    setTelemetryEmitter(telemetry);
+    setRemoteFeatureFlag('roundFlowV2', {
+      enabled: true,
+      rolloutPct: 100,
+      reason: 'some_new_reason',
+      source: 'rollout',
+    });
+
+    renderHome();
+
+    await waitFor(() => {
+      expect(telemetry).toHaveBeenCalledWith(
+        'roundflowv2_flag_evaluated',
+        expect.objectContaining({ roundFlowV2Enabled: true, roundFlowV2Reason: 'unknown' }),
+      );
+    });
+
+    await waitFor(() => {
+      expect(telemetry).toHaveBeenCalledWith(
+        'roundflowv2_home_card_impression',
+        expect.objectContaining({ roundFlowV2Reason: 'unknown' }),
+      );
+    });
+  });
+
   it('falls back to unknown reason when missing', async () => {
     const telemetry = vi.fn();
     setTelemetryEmitter(telemetry);

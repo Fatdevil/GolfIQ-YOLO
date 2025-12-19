@@ -21,7 +21,7 @@ import { loadActiveRoundState, saveActiveRoundState } from '@app/round/roundStat
 import { useGeolocation } from '@app/hooks/useGeolocation';
 import { computeNearestCourse, distanceMeters } from '@shared/round/autoHoleCore';
 import { getItem, setItem } from '@app/storage/asyncStorage';
-import { getRoundFlowV2Reason, isRoundFlowV2Enabled } from '@shared/featureFlags/roundFlowV2';
+import { getRoundFlowV2Reason, isRoundFlowV2Enabled, normalizeRoundFlowV2Reason } from '@shared/featureFlags/roundFlowV2';
 import { logRoundFlowV2StartRoundRequest, logRoundFlowV2StartRoundResponse } from '@app/analytics/roundFlow';
 
 const holesOptions = [9, 18];
@@ -319,7 +319,7 @@ export default function StartRoundScreen({ navigation }: Props): JSX.Element {
       return;
     }
     const roundFlowV2Enabled = isRoundFlowV2Enabled();
-    const roundFlowV2Reason = getRoundFlowV2Reason() ?? 'unknown';
+    const roundFlowV2Reason = normalizeRoundFlowV2Reason(getRoundFlowV2Reason()) ?? 'unknown';
     const startTime = Date.now();
     let reusedActiveRound: boolean | null = null;
     let httpStatus: number | null = null;
