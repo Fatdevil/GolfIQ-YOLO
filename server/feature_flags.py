@@ -67,7 +67,7 @@ def evaluate_flag(
     allowlist: set[str] | None = None,
 ) -> EvaluatedFlag:
     if force is not None:
-        reason = "forced_on" if force else "forced_off"
+        reason = "force_on" if force else "force_off"
         return EvaluatedFlag(
             enabled=force,
             rollout_pct=rollout_pct,

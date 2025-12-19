@@ -31,7 +31,7 @@ def test_force_override(monkeypatch, force_value: str, expected: bool):
     flag = flags["roundFlowV2"]
     assert flag.enabled is expected
     assert flag.source == "force"
-    assert flag.reason in {"forced_on", "forced_off"}
+    assert flag.reason in {"force_on", "force_off"}
 
 
 def test_allowlist_overrides_percent(monkeypatch):
@@ -63,7 +63,7 @@ def test_forced_off_overrides_allowlist(monkeypatch):
     flag = flags["roundFlowV2"]
     assert flag.enabled is False
     assert flag.source == "force"
-    assert flag.reason == "forced_off"
+    assert flag.reason == "force_off"
 
 
 def test_endpoint_returns_expected_schema(monkeypatch):
@@ -87,4 +87,4 @@ def test_endpoint_returns_expected_schema(monkeypatch):
     round_flag = flags["roundFlowV2"]
     assert round_flag["rolloutPct"] == 0
     assert round_flag["source"] == "force"
-    assert round_flag["reason"] == "forced_off"
+    assert round_flag["reason"] == "force_off"

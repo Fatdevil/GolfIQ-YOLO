@@ -51,7 +51,7 @@ import {
 import { isPracticeGrowthV1Enabled } from '@shared/featureFlags/practiceGrowthV1';
 import { logPracticeFeatureGated } from '@app/analytics/practiceFeatureGate';
 import { fetchActiveRoundSummary, getCurrentRound, type ActiveRoundSummary, type RoundInfo } from '@app/api/roundClient';
-import { getRoundFlowV2Reason, isRoundFlowV2Enabled } from '@shared/featureFlags/roundFlowV2';
+import { getRoundFlowV2Reason, isRoundFlowV2Enabled, normalizeRoundFlowV2Reason } from '@shared/featureFlags/roundFlowV2';
 import { loadActiveRoundState, saveActiveRoundState, type ActiveRoundState } from '@app/round/roundState';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'PlayerHome'>;
@@ -180,7 +180,7 @@ export default function HomeScreen({ navigation }: Props): JSX.Element {
   const practiceCardLoggedRef = useRef(false);
   const practiceGrowthEnabled = isPracticeGrowthV1Enabled();
   const roundFlowV2Enabled = isRoundFlowV2Enabled();
-  const roundFlowV2Reason = getRoundFlowV2Reason() ?? 'unknown';
+  const roundFlowV2Reason = normalizeRoundFlowV2Reason(getRoundFlowV2Reason()) ?? 'unknown';
   const roundFlowV2Screen: RoundFlowV2Screen = 'Home';
   const [activeRound, setActiveRound] = useState<ActiveRoundState | null>(null);
   const [activeRoundError, setActiveRoundError] = useState<string | null>(null);

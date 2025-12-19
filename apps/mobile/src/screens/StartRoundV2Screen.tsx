@@ -17,7 +17,7 @@ import {
 } from '@app/analytics/roundFlow';
 import { loadActiveRoundState, saveActiveRoundState } from '@app/round/roundState';
 import { getItem, setItem } from '@app/storage/asyncStorage';
-import { getRoundFlowV2Reason, isRoundFlowV2Enabled } from '@shared/featureFlags/roundFlowV2';
+import { getRoundFlowV2Reason, isRoundFlowV2Enabled, normalizeRoundFlowV2Reason } from '@shared/featureFlags/roundFlowV2';
 
 const holesOptions = [9, 18];
 const TOURNAMENT_SAFE_KEY = 'golfiq.tournamentSafePref.v1';
@@ -143,7 +143,7 @@ export default function StartRoundV2Screen({ navigation }: Props): JSX.Element {
     const courseId = selectedCourseId || selectedCourse;
     logRoundCreateClicked({ courseId, holes, teeName });
     const roundFlowV2Enabled = isRoundFlowV2Enabled();
-    const roundFlowV2Reason = getRoundFlowV2Reason() ?? 'unknown';
+    const roundFlowV2Reason = normalizeRoundFlowV2Reason(getRoundFlowV2Reason()) ?? 'unknown';
     const startTime = Date.now();
     let reusedActiveRound: boolean | null = null;
     let httpStatus: number | null = null;
