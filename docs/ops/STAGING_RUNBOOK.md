@@ -13,6 +13,11 @@
   - `GOLFIQ_BAGS_DIR=/data/bags`
   - `FEATURE_FLAGS_CONFIG_PATH=/data/config/feature_flags.json`
 
+### Set up env file
+1. Copy the example: `cp server/.env.staging.example server/.env.staging`
+2. Fill in the secret values (API_KEY, ADMIN_TOKEN, LIVE_SIGN_SECRET, LIVE_VIEWER_SIGN_KEY).
+3. The compose file loads `server/.env.staging` automatically; keep the file untracked.
+
 ## Starting the server
 ```bash
 docker compose -f docker-compose.staging.yml up --build

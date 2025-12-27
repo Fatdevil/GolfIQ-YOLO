@@ -5,6 +5,8 @@ services:
       context: .
       args:
         VIDEO_EXTRAS: "0"
+    env_file:
+      - server/.env.staging
     environment:
       APP_ENV: "staging"
       STAGING: "1"
