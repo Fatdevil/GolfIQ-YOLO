@@ -83,7 +83,13 @@ def _normalize_config(value: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
-def _resolve_config_path() -> Path:
+def resolve_config_path() -> Path:
+    """Return the resolved feature flag config path.
+
+    Exposed for diagnostics/readiness checks so the config store location can be
+    validated without duplicating the resolution rules.
+    """
+
     return Path(os.getenv("FEATURE_FLAGS_CONFIG_PATH", _default_config_path()))
 
 
@@ -108,7 +114,7 @@ def format_feature_flags_config(config: Dict[str, Any]) -> Dict[str, Any]:
 @dataclass
 class FeatureFlagConfigStore:
     def load(self) -> Tuple[Dict[str, Any], bool]:
-        path = _resolve_config_path()
+        path = resolve_config_path()
         if not path.exists():
             return deepcopy(DEFAULT_CONFIG), False
         try:
@@ -120,7 +126,7 @@ class FeatureFlagConfigStore:
         return _normalize_config(raw), True
 
     def save(self, config: Dict[str, Any]) -> None:
-        path = _resolve_config_path()
+        path = resolve_config_path()
         path.parent.mkdir(parents=True, exist_ok=True)
         temp_path = path.with_suffix(".tmp")
         with temp_path.open("w", encoding="utf-8") as handle:
@@ -150,6 +156,7 @@ store = FeatureFlagConfigStore()
 __all__ = [
     "DEFAULT_CONFIG",
     "FeatureFlagConfigStore",
+    "resolve_config_path",
     "format_feature_flags_config",
     "store",
 ]

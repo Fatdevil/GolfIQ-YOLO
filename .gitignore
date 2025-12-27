@@ -7,6 +7,8 @@ node_modules/
 .codex/log/
 .codex/sessions/
 .codex/log/
+.env.staging
+server/.env.staging
 
 # Local web configuration (should remain untracked)
 web/config/*.json

@@ -43,9 +43,12 @@ RUN if [ "$VIDEO_EXTRAS" = "1" ]; then pip install -e ".[video]"; fi
 RUN useradd -m appuser && chown -R appuser:appuser /app
 USER appuser
 
-ENV SERVE_WEB=1 PORT=8000 HOST=0.0.0.0 GOLFIQ_MOCK=1 GOLFIQ_RUNS_DIR=/data/runs
+ENV SERVE_WEB=0 PORT=8000 HOST=0.0.0.0 GOLFIQ_MOCK=1 \
+    GOLFIQ_RUNS_DIR=/data/runs RUNS_UPLOAD_DIR=/data/uploads \
+    GOLFIQ_ROUNDS_DIR=/data/rounds GOLFIQ_BAGS_DIR=/data/bags \
+    FEATURE_FLAGS_CONFIG_PATH=/data/config/feature_flags.json
 EXPOSE 8000
-VOLUME ["/data/runs"]
+VOLUME ["/data/runs", "/data/uploads", "/data/rounds", "/data/bags", "/data/config"]
 
 # Build info for /health endpoint
 ARG BUILD_VERSION=dev
