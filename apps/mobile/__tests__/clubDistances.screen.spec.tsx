@@ -131,7 +131,9 @@ describe('ClubDistancesScreen', () => {
     render(<ClubDistancesScreen navigation={createNavigation()} route={createRoute()} />);
 
     const input = await screen.findByTestId('manual-input-7i');
-    fireEvent.change(input, { target: { value: '155' }, nativeEvent: { text: '155' } });
+    fireEvent.input(input, { target: { value: '155' } });
+    fireEvent.change(input, { target: { value: '155' } });
+    await waitFor(() => expect(input).toHaveValue('155'));
     fireEvent.click(screen.getByTestId('save-manual-7i'));
 
     await waitFor(() => {
