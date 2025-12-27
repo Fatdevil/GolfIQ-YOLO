@@ -12,7 +12,9 @@ def _set_dirs(monkeypatch, tmp_path):
     monkeypatch.setenv("GOLFIQ_RUNS_DIR", str(tmp_path / "runs"))
     monkeypatch.setenv("GOLFIQ_ROUNDS_DIR", str(tmp_path / "rounds"))
     monkeypatch.setenv("GOLFIQ_BAGS_DIR", str(tmp_path / "bags"))
-    monkeypatch.setenv("FEATURE_FLAGS_CONFIG_PATH", str(tmp_path / "feature_flags.json"))
+    monkeypatch.setenv(
+        "FEATURE_FLAGS_CONFIG_PATH", str(tmp_path / "feature_flags.json")
+    )
 
 
 def test_readiness_ok(monkeypatch, tmp_path):
@@ -36,7 +38,9 @@ def test_readiness_presign_failure(monkeypatch, tmp_path):
     monkeypatch.setattr("server.readiness.get_presigned_put", _boom)
 
     result = readiness_checks()
-    presign = next(check for check in result["checks"] if check["name"] == "storage:presign")
+    presign = next(
+        check for check in result["checks"] if check["name"] == "storage:presign"
+    )
     assert presign["status"] == "error"
     assert result["status"] == "error"
 
@@ -44,10 +48,14 @@ def test_readiness_presign_failure(monkeypatch, tmp_path):
 def test_ready_endpoint_status(monkeypatch):
     client = TestClient(app)
 
-    monkeypatch.setattr(ready_api, "readiness_checks", lambda: {"status": "ok", "checks": []})
+    monkeypatch.setattr(
+        ready_api, "readiness_checks", lambda: {"status": "ok", "checks": []}
+    )
     ok = client.get("/ready")
     assert ok.status_code == 200
 
-    monkeypatch.setattr(ready_api, "readiness_checks", lambda: {"status": "error", "checks": []})
+    monkeypatch.setattr(
+        ready_api, "readiness_checks", lambda: {"status": "error", "checks": []}
+    )
     fail = client.get("/ready")
     assert fail.status_code == 503

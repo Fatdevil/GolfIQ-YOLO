@@ -19,12 +19,18 @@ def validate_startup() -> None:
 
     strict_env = _is_strict_env()
     if strict_env and not os.getenv("ADMIN_TOKEN"):
-        errors.append("ADMIN_TOKEN must be set when feature flag admin routes are enabled")
+        errors.append(
+            "ADMIN_TOKEN must be set when feature flag admin routes are enabled"
+        )
 
     if strict_env and not os.getenv("LIVE_SIGN_SECRET"):
-        errors.append("LIVE_SIGN_SECRET must be set when live signing routes are enabled")
+        errors.append(
+            "LIVE_SIGN_SECRET must be set when live signing routes are enabled"
+        )
     if strict_env and not os.getenv("LIVE_VIEWER_SIGN_KEY"):
-        errors.append("LIVE_VIEWER_SIGN_KEY must be set when live viewer tokens are enabled")
+        errors.append(
+            "LIVE_VIEWER_SIGN_KEY must be set when live viewer tokens are enabled"
+        )
 
     if errors:
         joined = "; ".join(errors)

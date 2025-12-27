@@ -35,7 +35,9 @@ def _check_writable_dir(name: str, raw_path: str) -> CheckResult:
             handle.flush()
         return CheckResult(name=name, status="ok", detail=str(path))
     except Exception as exc:
-        return CheckResult(name=name, status="error", detail=f"{exc.__class__.__name__}: {exc}")
+        return CheckResult(
+            name=name, status="error", detail=f"{exc.__class__.__name__}: {exc}"
+        )
 
 
 def _check_feature_flag_store() -> List[CheckResult]:
@@ -43,7 +45,9 @@ def _check_feature_flag_store() -> List[CheckResult]:
     path = resolve_config_path()
     try:
         store.load()
-        results.append(CheckResult(name="feature-flags:read", status="ok", detail=str(path)))
+        results.append(
+            CheckResult(name="feature-flags:read", status="ok", detail=str(path))
+        )
     except Exception as exc:
         results.append(
             CheckResult(
@@ -62,7 +66,9 @@ def _check_feature_flag_store() -> List[CheckResult]:
         ) as handle:
             handle.write(b"ok")
             handle.flush()
-        results.append(CheckResult(name="feature-flags:write", status="ok", detail=str(target)))
+        results.append(
+            CheckResult(name="feature-flags:write", status="ok", detail=str(target))
+        )
     except Exception as exc:
         results.append(
             CheckResult(
@@ -93,10 +99,18 @@ def _check_presign() -> CheckResult:
 def readiness_checks() -> Dict[str, Any]:
     checks: List[CheckResult] = []
 
-    checks.append(_check_writable_dir("runs-upload", os.getenv("RUNS_UPLOAD_DIR", "data/uploads")))
-    checks.append(_check_writable_dir("runs-dir", os.getenv("GOLFIQ_RUNS_DIR", "data/runs")))
-    checks.append(_check_writable_dir("rounds-dir", os.getenv("GOLFIQ_ROUNDS_DIR", "data/rounds")))
-    checks.append(_check_writable_dir("bags-dir", os.getenv("GOLFIQ_BAGS_DIR", "data/bags")))
+    checks.append(
+        _check_writable_dir("runs-upload", os.getenv("RUNS_UPLOAD_DIR", "data/uploads"))
+    )
+    checks.append(
+        _check_writable_dir("runs-dir", os.getenv("GOLFIQ_RUNS_DIR", "data/runs"))
+    )
+    checks.append(
+        _check_writable_dir("rounds-dir", os.getenv("GOLFIQ_ROUNDS_DIR", "data/rounds"))
+    )
+    checks.append(
+        _check_writable_dir("bags-dir", os.getenv("GOLFIQ_BAGS_DIR", "data/bags"))
+    )
     checks.extend(_check_feature_flag_store())
     checks.append(_check_presign())
 
