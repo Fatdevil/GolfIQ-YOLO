@@ -33,6 +33,7 @@ from server.api.routers.sg import router as sg_router
 from server.api.routers.swing_metrics import router as swing_metrics_router
 from server.api.routers.feature_flags import router as feature_flags_router
 from server.api.routers.feature_flags_admin import router as feature_flags_admin_router
+from server.api.ready import router as ready_router
 from server.api.routers.session_timeline import router as session_timeline_router
 from server.api.routers.share import router as share_router
 from server.api.routers.profile import router as profile_router
@@ -49,6 +50,7 @@ from server.api.routers.stats import router as stats_router
 from server.api.routers.summary import router as summary_router
 from server.metrics import MetricsMiddleware, metrics_app
 from server.retention.sweeper import sweep_retention_once, sweep_upload_retention
+from server.startup_validation import validate_startup
 
 from .routes.bench import router as bench_router
 from .routes.bundle import router as bundle_router
@@ -105,6 +107,8 @@ def _api_key_dependency():
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     retention_task: Optional[asyncio.Task] = None
+
+    validate_startup()
 
     dirs = [x.strip() for x in os.getenv("RETENTION_DIRS", "").split(",") if x.strip()]
     minutes = int(os.getenv("RETENTION_MINUTES", "15"))
@@ -222,6 +226,7 @@ app.add_api_route(
     response_model=None,
     tags=["health"],
 )
+app.include_router(ready_router)
 
 
 _metrics_router = APIRouter()

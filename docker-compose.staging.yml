@@ -1,20 +1,21 @@
 services:
   app:
+    image: ghcr.io/${GH_USER:-fatdevil}/golfiq-yolo:staging
     build:
       context: .
       args:
-        VIDEO_EXTRAS: "1"   # set "0" to skip video deps
-    image: ghcr.io/${GH_USER:-fatdevil}/golfiq-yolo:dev
-    ports:
-      - "8000:8000"
+        VIDEO_EXTRAS: "0"
     environment:
-      SERVE_WEB: "1"
-      GOLFIQ_MOCK: "1"
+      APP_ENV: "staging"
+      STAGING: "1"
+      SERVE_WEB: "0"
       GOLFIQ_RUNS_DIR: "/data/runs"
       RUNS_UPLOAD_DIR: "/data/uploads"
       GOLFIQ_ROUNDS_DIR: "/data/rounds"
       GOLFIQ_BAGS_DIR: "/data/bags"
       FEATURE_FLAGS_CONFIG_PATH: "/data/config/feature_flags.json"
+    ports:
+      - "8000:8000"
     volumes:
       - ./data/runs:/data/runs
       - ./data/uploads:/data/uploads
