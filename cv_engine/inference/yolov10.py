@@ -39,4 +39,3 @@ class YoloV10Engine(DetectionEngine):
 
     def run(self, image: "np.ndarray") -> List[Box]:
         return list(self.detect(image))
-

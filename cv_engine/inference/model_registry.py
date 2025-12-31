@@ -44,8 +44,7 @@ def get_detection_engine(
         variant if variant is not None else os.getenv("MODEL_VARIANT")
     )
     engine_cls = ALLOWED_VARIANTS[selected]
-    resolved_weight_path = weight_path if weight_path is not None else os.getenv(
-        "YOLO_MODEL_PATH"
+    resolved_weight_path = (
+        weight_path if weight_path is not None else os.getenv("YOLO_MODEL_PATH")
     )
     return engine_cls(weight_path=resolved_weight_path, **kwargs)
-

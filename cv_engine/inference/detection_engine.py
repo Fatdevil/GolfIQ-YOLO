@@ -17,4 +17,3 @@ class DetectionEngine(Protocol):
 
     def run(self, image: "np.ndarray") -> Sequence[Box]:
         """Alias kept for compatibility with existing pipeline usage."""
-

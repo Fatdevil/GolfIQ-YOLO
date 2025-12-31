@@ -34,4 +34,3 @@ class YoloV11Engine(DetectionEngine):
 
     def run(self, image: "np.ndarray") -> Sequence[Box]:
         return self.detect(image)
-

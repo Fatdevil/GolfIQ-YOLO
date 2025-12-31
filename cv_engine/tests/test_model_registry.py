@@ -30,4 +30,3 @@ def test_yolov11_stub_is_explicit(monkeypatch):
     assert isinstance(engine, YoloV11Engine)
     with pytest.raises(NotImplementedError):
         engine.run(np.zeros((4, 4, 3), dtype=np.uint8))
-
