@@ -42,7 +42,13 @@ def test_cv_analyze_video_uses_mock_when_flag_disabled(
     captured = {}
 
     def _fake_analyze_frames(
-        frames, calib, *, mock, smoothing_window, model_variant=None, variant_source=None
+        frames,
+        calib,
+        *,
+        mock,
+        smoothing_window,
+        model_variant=None,
+        variant_source=None,
     ):
         captured["mock"] = mock
         captured["model_variant"] = model_variant
@@ -66,7 +72,13 @@ def test_cv_analyze_video_uses_real_when_flag_enabled(
     captured = {}
 
     def _fake_analyze_frames(
-        frames, calib, *, mock, smoothing_window, model_variant=None, variant_source=None
+        frames,
+        calib,
+        *,
+        mock,
+        smoothing_window,
+        model_variant=None,
+        variant_source=None,
     ):
         captured["mock"] = mock
         captured["model_variant"] = model_variant
