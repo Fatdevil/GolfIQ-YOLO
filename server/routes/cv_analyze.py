@@ -72,6 +72,9 @@ class AnalyzeQuery(BaseModel):
     mock: bool | None = Field(
         default=None, description="Optional override for CV mock backend"
     )
+    model_variant: str | None = Field(
+        default=None, description="Optional override for YOLO model variant"
+    )
 
 
 class AnalyzeResponse(BaseModel):
@@ -85,10 +88,16 @@ async def analyze(
     response: Response,
     query: AnalyzeQuery = Depends(),
     mock_header: str | None = Header(default=None, alias="x-cv-mock"),
+    model_variant_header: str | None = Header(default=None, alias="x-model-variant"),
     mock_form: bool | None = Form(
         default=None,
         alias="mock",
         description="Optional override for CV mock backend",
+    ),
+    model_variant_form: str | None = Form(
+        default=None,
+        alias="model_variant",
+        description="Optional override for YOLO model variant",
     ),
     frames_zip: UploadFile = File(..., description="ZIP med PNG/JPG eller .npy-filer"),
 ):
@@ -147,11 +156,30 @@ async def analyze(
     use_mock = effective_mock(query.mock, mock_header, mock_form)
     response.headers["x-cv-source"] = "mock" if use_mock else "real"
 
+    variant_override = (
+        model_variant_header
+        if model_variant_header is not None
+        else (
+            model_variant_form
+            if model_variant_form is not None
+            else query.model_variant
+        )
+    )
+    variant_source = None
+    if model_variant_header is not None:
+        variant_source = "X-Model-Variant"
+    elif model_variant_form is not None:
+        variant_source = "model_variant form"
+    elif query.model_variant is not None:
+        variant_source = "model_variant query"
+
     result = analyze_frames(
         frames,
         calib,
         mock=use_mock,
         smoothing_window=query.smoothing_window,
+        model_variant=variant_override,
+        variant_source=variant_source,
     )  # använder detektor + vår pipeline
     events = result["events"]
     metrics_dict = dict(result["metrics"])

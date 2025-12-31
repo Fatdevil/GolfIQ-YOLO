@@ -41,8 +41,18 @@ def test_cv_analyze_video_uses_mock_when_flag_disabled(
     monkeypatch.delenv("YOLO_INFERENCE", raising=False)
     captured = {}
 
-    def _fake_analyze_frames(frames, calib, *, mock, smoothing_window):
+    def _fake_analyze_frames(
+        frames,
+        calib,
+        *,
+        mock,
+        smoothing_window,
+        model_variant=None,
+        variant_source=None,
+    ):
         captured["mock"] = mock
+        captured["model_variant"] = model_variant
+        captured["variant_source"] = variant_source
         return {"events": [1], "metrics": {"confidence": 0.5}}
 
     monkeypatch.setattr(
@@ -61,8 +71,18 @@ def test_cv_analyze_video_uses_real_when_flag_enabled(
     monkeypatch.setenv("YOLO_INFERENCE", "true")
     captured = {}
 
-    def _fake_analyze_frames(frames, calib, *, mock, smoothing_window):
+    def _fake_analyze_frames(
+        frames,
+        calib,
+        *,
+        mock,
+        smoothing_window,
+        model_variant=None,
+        variant_source=None,
+    ):
         captured["mock"] = mock
+        captured["model_variant"] = model_variant
+        captured["variant_source"] = variant_source
         return {"events": [1], "metrics": {"confidence": 0.5}}
 
     monkeypatch.setattr(

@@ -98,9 +98,20 @@ def test_zip_persist_adds_confidence(monkeypatch):
     def fake_frames(_: bytes):
         return [object(), object()]
 
-    def fake_analyze(frames, calib, *, mock=True, smoothing_window):
+    def fake_analyze(
+        frames,
+        calib,
+        *,
+        mock=True,
+        smoothing_window,
+        model_variant=None,
+        variant_source=None,
+        **__,
+    ):
         assert mock is True
         assert smoothing_window == 3
+        assert model_variant is None
+        assert variant_source is None
         return {"events": [1, 2], "metrics": {"distance": 12.3}}
 
     class DummyRun:

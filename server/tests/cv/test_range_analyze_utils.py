@@ -132,8 +132,8 @@ def test_run_real_analyze_uses_dependencies(monkeypatch) -> None:
         calls["frames"] = payload
         return [np.zeros((2, 2, 3), dtype=np.uint8) for _ in range(2)]
 
-    def fake_analyze(frames, calib, mock, smoothing_window):
-        calls["analyze"] = (frames, calib, mock, smoothing_window)
+    def fake_analyze(frames, calib, mock, smoothing_window, **kwargs):
+        calls["analyze"] = (frames, calib, mock, smoothing_window, kwargs)
         return {
             "metrics": {
                 "ballSpeedMps": 55.1,
@@ -154,8 +154,9 @@ def test_run_real_analyze_uses_dependencies(monkeypatch) -> None:
 
     assert calls["calib"] == (payload.ref_len_m, payload.ref_len_px, payload.fps)
     assert calls["frames"] == payload
-    frames, calib, mock_flag, smoothing = calls["analyze"]
+    frames, calib, mock_flag, smoothing, kwargs = calls["analyze"]
     assert mock_flag is False
     assert smoothing == 5
+    assert kwargs.get("model_variant") is None
     assert out.ball_speed_mps == 55.1
     assert out.quality and out.quality.level == "good"

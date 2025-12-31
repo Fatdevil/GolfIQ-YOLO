@@ -44,6 +44,9 @@ class RangeAnalyzeIn(BaseModel):
         default=None,
         description="Optional mission identifier used by the client for range missions",
     )
+    model_variant: str | None = Field(
+        default=None, description="Optional override for YOLO model variant"
+    )
 
 
 class CameraFitness(BaseModel):
@@ -163,6 +166,7 @@ def run_mock_analyze(payload: RangeAnalyzeIn) -> RangeAnalyzeOut:
     """Run the mock CV analyzer and normalize the response."""
 
     request_data = payload.model_dump(exclude_none=True)
+    request_data.pop("model_variant", None)
     mock_request = cv_mock.AnalyzeRequest(**request_data)
     mock_response = cv_mock.analyze(mock_request)
     metrics: Mapping[str, Any]
@@ -185,6 +189,8 @@ def run_real_analyze(payload: RangeAnalyzeIn) -> RangeAnalyzeOut:
         calib,
         mock=False,
         smoothing_window=payload.smoothing_window,
+        model_variant=payload.model_variant,
+        variant_source="range_analyze.model_variant" if payload.model_variant else None,
     )
     metrics_obj = result.get("metrics", {})
     metrics = dict(metrics_obj) if isinstance(metrics_obj, Mapping) else {}

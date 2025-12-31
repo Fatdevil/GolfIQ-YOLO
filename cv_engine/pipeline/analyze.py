@@ -54,6 +54,8 @@ def analyze_frames(
     mock: bool | None = None,
     motion: Tuple[float, float, float, float] | None = None,
     smoothing_window: int = 1,
+    model_variant: str | None = None,
+    variant_source: str | None = None,
 ) -> Dict[str, Any]:
     """Analyze sequence of frames for ball/club metrics."""
 
@@ -62,6 +64,8 @@ def analyze_frames(
     det = get_detection_engine(
         mock=(mock if mock is not None else False),
         motion=(motion if motion is not None else (2.0, -1.0, 1.5, 0.0)),
+        variant=model_variant,
+        variant_source=variant_source,
     )
 
     tracker = get_tracker()
@@ -125,10 +129,23 @@ def analyze_frames(
                 boxes_per_frame.append(list(boxes))
                 detection_total += len(boxes)
         detection_ms = (perf_counter() - detection_start) * 1000.0
+        detection_avg_ms = (
+            float(sum(detection_times) / len(detection_times))
+            if detection_times
+            else None
+        )
         timings["detect_ms"] = detection_ms
+        if detection_avg_ms is not None:
+            timings["detect_avg_ms"] = detection_avg_ms
         record_stage_latency("detect", detection_ms)
         if detection_span is not None:
             detection_span.set_attribute("cv.detections_total", detection_total)
+            detection_span.set_attribute("cv.detections_frames", len(frames_list))
+            detection_span.set_attribute("cv.detections_inference_ms", detection_ms)
+            if detection_avg_ms is not None:
+                detection_span.set_attribute(
+                    "cv.detections_inference_avg_ms", detection_avg_ms
+                )
 
         if frames_list and boxes_per_frame:
             try:
@@ -349,4 +366,18 @@ def analyze_frames(
     recorder.set_status("ok")
     flight_recorder = recorder.to_dict() if recorder_enabled else None
 
-    return {"events": events, "metrics": metrics, "flight_recorder": flight_recorder}
+    detection_summary = {
+        "modelVariant": getattr(det, "variant", "unknown"),
+        "frames": len(frames_list),
+        "totalInferenceMs": round(timings.get("detect_ms", 0.0), 3),
+        "avgInferenceMs": (
+            round(timings["detect_avg_ms"], 3) if "detect_avg_ms" in timings else None
+        ),
+    }
+    metrics["inference"] = detection_summary
+
+    return {
+        "events": events,
+        "metrics": metrics,
+        "flight_recorder": flight_recorder,
+    }
