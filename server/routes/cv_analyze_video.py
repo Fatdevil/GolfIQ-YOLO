@@ -60,10 +60,16 @@ async def analyze_video(
         None, description="Optional override for CV mock backend"
     ),
     mock_header: str | None = Header(default=None, alias="x-cv-mock"),
+    model_variant_header: str | None = Header(default=None, alias="x-model-variant"),
     mock_form: bool | None = Form(
         default=None,
         alias="mock",
         description="Optional override for CV mock backend",
+    ),
+    model_variant_form: str | None = Form(
+        default=None,
+        alias="model_variant",
+        description="Optional override for YOLO model variant",
     ),
     fps_fallback: float = Form(120, gt=0),
     ref_len_m: float = Form(1.0, gt=0),
@@ -122,11 +128,22 @@ async def analyze_video(
     use_mock = effective_mock(mock, mock_header, mock_form)
     response.headers["x-cv-source"] = "mock" if use_mock else "real"
 
+    variant_override = (
+        model_variant_header if model_variant_header is not None else model_variant_form
+    )
+    variant_source = None
+    if model_variant_header is not None:
+        variant_source = "X-Model-Variant"
+    elif model_variant_form is not None:
+        variant_source = "model_variant form"
+
     result = analyze_frames(
         frames,
         calib,
         mock=use_mock,
         smoothing_window=query.smoothing_window,
+        model_variant=variant_override,
+        variant_source=variant_source,
     )
     events = result["events"]
     metrics_dict = dict(result["metrics"])

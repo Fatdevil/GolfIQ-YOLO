@@ -17,14 +17,15 @@ ALLOWED_VARIANTS: Dict[str, Type[DetectionEngine]] = {
 logger = logging.getLogger(__name__)
 
 
-def _normalize_variant(raw: str | None) -> str:
+def _normalize_variant(raw: str | None, *, source: str = "MODEL_VARIANT") -> str:
     if raw is None:
         return DEFAULT_MODEL_VARIANT
     normalized = raw.strip().lower()
     if normalized in ALLOWED_VARIANTS:
         return normalized
     logger.warning(
-        "Unknown MODEL_VARIANT '%s'; falling back to '%s'",
+        "Unknown %s '%s'; falling back to '%s'",
+        source,
         raw,
         DEFAULT_MODEL_VARIANT,
     )
@@ -32,7 +33,11 @@ def _normalize_variant(raw: str | None) -> str:
 
 
 def get_detection_engine(
-    *, variant: str | None = None, weight_path: str | None = None, **kwargs: Any
+    *,
+    variant: str | None = None,
+    variant_source: str | None = None,
+    weight_path: str | None = None,
+    **kwargs: Any,
 ) -> DetectionEngine:
     """Return the configured detection engine.
 
@@ -40,9 +45,11 @@ def get_detection_engine(
     Invalid values fall back to the safe default (yolov10) with a warning.
     """
 
-    selected = _normalize_variant(
-        variant if variant is not None else os.getenv("MODEL_VARIANT")
+    raw_variant = variant if variant is not None else os.getenv("MODEL_VARIANT")
+    source_label = variant_source or (
+        "MODEL_VARIANT" if variant is None else "model variant override"
     )
+    selected = _normalize_variant(raw_variant, source=source_label)
     engine_cls = ALLOWED_VARIANTS[selected]
     resolved_weight_path = (
         weight_path if weight_path is not None else os.getenv("YOLO_MODEL_PATH")

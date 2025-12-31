@@ -24,9 +24,18 @@ def test_invalid_variant_falls_back(monkeypatch, caplog):
     assert any("Unknown MODEL_VARIANT" in rec.message for rec in caplog.records)
 
 
+def test_invalid_override_falls_back(monkeypatch, caplog):
+    with caplog.at_level("WARNING"):
+        engine = get_detection_engine(
+            variant="banana", variant_source="header:x-model-variant"
+        )
+    assert isinstance(engine, YoloV10Engine)
+    assert any("header:x-model-variant" in rec.message for rec in caplog.records)
+
+
 def test_yolov11_stub_is_explicit(monkeypatch):
     monkeypatch.setenv("MODEL_VARIANT", "yolov11")
     engine = get_detection_engine()
     assert isinstance(engine, YoloV11Engine)
-    with pytest.raises(NotImplementedError):
+    with pytest.raises(RuntimeError, match="YOLOv11 not wired; use yolov10"):
         engine.run(np.zeros((4, 4, 3), dtype=np.uint8))

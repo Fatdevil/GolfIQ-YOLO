@@ -13,7 +13,7 @@ Project repository.
 3) Testa: `GET http://localhost:8000/health` â†’ `{\"status\":\"ok\", ...}`
    Om `API_KEY` i `.env` Ã¤r satt mÃ¥ste klienter skicka header `x-api-key: <vÃ¤rdet>` (ej nÃ¶dvÃ¤ndigt fÃ¶r /health).
 
-`MODEL_VARIANT` styr vilken YOLO-backend som laddas server-side. Standard är `yolov10`; sätter du ett ogiltigt värde loggas en varning och fallback sker till standard. `yolov11` är stub: välj det bara om du vill validera den nya vägen utan att exponera någon app-ändring.
+`MODEL_VARIANT` styr vilken YOLO-backend som laddas server-side. Standard är `yolov10`; sätter du ett ogiltigt värde loggas en varning och fallback sker till standard. `yolov11` är stub: välj det bara om du vill validera den nya vägen utan att exponera någon app-ändring. Du kan även styra modell per förfrågan med headern `X-Model-Variant: yolov10|yolov11` (eller fältet `model_variant` i `POST /cv/analyze` / `POST /cv/analyze/video`). Utelämnas header/fältet används `MODEL_VARIANT` som tidigare.
 
 ## Operations
 
