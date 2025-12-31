@@ -40,7 +40,9 @@ class YoloV11Engine(DetectionEngine):
         if self._model is None:
             raise RuntimeError("YOLOv11 not wired; use yolov10")
 
-        results = self._model.predict(image, device=self.device, verbose=False)  # type: ignore[attr-defined]
+        results = self._model.predict(
+            image, device=self.device, verbose=False
+        )  # type: ignore[attr-defined]
         boxes: List[Box] = []
         for r in results:
             # Heuristic: pick top-2 boxes by confidence to mimic v10 mock outputs
