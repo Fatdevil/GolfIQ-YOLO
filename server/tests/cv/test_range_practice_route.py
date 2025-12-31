@@ -91,6 +91,6 @@ def test_analyze_route_handles_analyzer_failure(monkeypatch) -> None:
 
     assert response.status_code == 500
     payload = response.json()
-    assert payload["error_code"] == "ANALYZE_FAILED"
-    assert payload["run_id"] == "range-boom"
-    assert payload["message"]
+    assert payload["detail"]["error_code"] == "ANALYZE_FAILED"
+    assert payload["detail"]["run_id"] == "range-boom"
+    assert payload["detail"]["message"]

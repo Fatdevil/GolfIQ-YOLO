@@ -69,10 +69,13 @@ def test_cv_analyze_failure_returns_run_error(monkeypatch, tmp_path):
         response = client.post("/cv/analyze", files=files)
 
         assert response.status_code == 400
-        payload = response.json()
-        assert set(payload) == {"run_id", "error_code", "message"}
-        assert payload["error_code"] == "INVALID_ZIP"
-        assert payload["run_id"]
+        payload = response.json()["detail"]
+        run_id = payload["run_id"]
+        assert payload == {
+            "run_id": run_id,
+            "error_code": "INVALID_ZIP",
+            "message": "Invalid ZIP file",
+        }
 
         stored = runs_storage.get_run(payload["run_id"])
         assert stored is not None

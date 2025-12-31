@@ -123,9 +123,10 @@ def _fail_run(run_id: str, error_code: str, message: str, status_code: int):
         error_code=error_code,
         error_message=message,
     )
+    body = {"run_id": run_id, "error_code": error_code, "message": message}
     return JSONResponse(
         status_code=status_code,
-        content={"run_id": run_id, "error_code": error_code, "message": message},
+        content={"detail": body},
     )
 
 

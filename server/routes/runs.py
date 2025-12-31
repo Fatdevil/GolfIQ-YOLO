@@ -2,13 +2,12 @@ from __future__ import annotations
 
 from typing import Any, List
 
-from fastapi import APIRouter, Depends, HTTPException, Path, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 
 from ..security import require_api_key
 from ..storage.runs import (
     RunRecord,
-    RUN_ID_RE,
     RunStatus,
     delete_run,
     get_run as load_run,
@@ -164,7 +163,7 @@ def get_runs_v1(
 
 
 @router.get("/{run_id}")
-def get_run(run_id: str = Path(..., pattern=RUN_ID_RE)):
+def get_run(run_id: str):
     r = load_run(run_id)
     if r is None:
         raise HTTPException(404, "run not found")
@@ -190,14 +189,14 @@ def get_run(run_id: str = Path(..., pattern=RUN_ID_RE)):
         "error_message": r.error_message,
         "input_ref": r.input_ref,
         "metadata": r.metadata,
-        "timings": r.timing_summary or None,
-        "kind": r.kind,
+        "timings": getattr(r, "timing_summary", None) or None,
+        "kind": getattr(r, "kind", None),
         "inputs": r.input_ref,
     }
 
 
 @router.delete("/{run_id}")
-def delete(run_id: str = Path(..., pattern=RUN_ID_RE)):
+def delete(run_id: str):
     if not delete_run(run_id):
         raise HTTPException(404, "run not found")
     return {"deleted": run_id}
