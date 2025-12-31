@@ -6,6 +6,7 @@
 - `ADMIN_TOKEN=<feature-flag admin secret>`
 - `LIVE_SIGN_SECRET=<HLS signing secret>`
 - `LIVE_VIEWER_SIGN_KEY=<viewer token signing secret>`
+- `MODEL_VARIANT=yolov10` (default) – switch to `yolov11` only when the new weights are staged; the API surface stays unchanged.
 - Paths (defaults baked into the image):
   - `GOLFIQ_RUNS_DIR=/data/runs`
   - `RUNS_UPLOAD_DIR=/data/uploads`
@@ -21,6 +22,11 @@
 ## Starting the server
 ```bash
 docker compose -f docker-compose.staging.yml up --build
+```
+
+To experiment with YOLOv11 in staging, override the compose environment:
+```bash
+MODEL_VARIANT=yolov11 docker compose -f docker-compose.staging.yml up --build
 ```
 
 ## Health and readiness

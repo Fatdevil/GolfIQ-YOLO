@@ -44,7 +44,7 @@ def test_smoothing_window_reduces_metric_error(monkeypatch):
             _box_from_center(*noisy_club[idx], "club"),
         ]
 
-    monkeypatch.setattr("cv_engine.inference.yolo8.YoloV8Detector.run", fake_run)
+    monkeypatch.setattr("cv_engine.inference.yolov10.YoloV10Engine.detect", fake_run)
 
     baseline = as_dict(measure_from_tracks(base_ball, base_club, calib))
 

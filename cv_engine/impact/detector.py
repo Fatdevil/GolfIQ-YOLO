@@ -2,7 +2,8 @@ from typing import Iterable, List, Sequence
 
 import numpy as np
 
-from ..inference.yolo8 import YoloV8Detector
+from ..inference.detection_engine import DetectionEngine
+from ..inference.model_registry import get_detection_engine
 from ..tracking.factory import get_tracker
 from ..types import Box, ImpactEvent
 
@@ -17,8 +18,8 @@ class ImpactDetector:
       - impact = första frame där ball- och club-boxar överlappar
     """
 
-    def __init__(self, detector: YoloV8Detector | None = None):
-        self.detector = detector or YoloV8Detector()
+    def __init__(self, detector: DetectionEngine | None = None):
+        self.detector = detector or get_detection_engine()
         self.tracker = get_tracker()
 
     def run_with_boxes(

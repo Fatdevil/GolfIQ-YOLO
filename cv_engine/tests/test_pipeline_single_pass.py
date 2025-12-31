@@ -14,7 +14,7 @@ def test_single_pass_detector(monkeypatch):
         call_counter["count"] += 1
         return []
 
-    monkeypatch.setattr("cv_engine.inference.yolo8.YoloV8Detector.run", fake_run)
+    monkeypatch.setattr("cv_engine.inference.yolov10.YoloV10Engine.detect", fake_run)
 
     analyze_frames(frames, calib)
 

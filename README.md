@@ -6,12 +6,14 @@ Project repository.
 
 ## Staging run
 
-1) Kopiera `server/.env.example` till `server/.env` och fyll ev. vÃ¤rden (`YOLO_INFERENCE`, `YOLO_MODEL_PATH`, `API_KEY`, `CORS_ORIGINS`).
+1) Kopiera `server/.env.example` till `server/.env` och fyll ev. vÃ¤rden (`YOLO_INFERENCE`, `YOLO_MODEL_PATH`, `MODEL_VARIANT`, `API_KEY`, `CORS_ORIGINS`).
 2) KÃ¶r staging:
    - **Windows:** `./scripts/run_staging.ps1`
    - **macOS/Linux:** `bash scripts/run_staging.sh`
 3) Testa: `GET http://localhost:8000/health` â†’ `{\"status\":\"ok\", ...}`
    Om `API_KEY` i `.env` Ã¤r satt mÃ¥ste klienter skicka header `x-api-key: <vÃ¤rdet>` (ej nÃ¶dvÃ¤ndigt fÃ¶r /health).
+
+`MODEL_VARIANT` styr vilken YOLO-backend som laddas server-side. Standard är `yolov10`; sätter du ett ogiltigt värde loggas en varning och fallback sker till standard. `yolov11` är stub: välj det bara om du vill validera den nya vägen utan att exponera någon app-ändring.
 
 ## Operations
 
