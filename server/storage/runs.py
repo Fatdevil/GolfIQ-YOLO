@@ -78,6 +78,41 @@ class RunRecord:
     def updated_at(self) -> str:
         return datetime.fromtimestamp(self.updated_ts, tz=timezone.utc).isoformat()
 
+    @property
+    def kind(self) -> str | None:
+        """Return a coarse run kind for filtering and UI affordances."""
+
+        input_type = None
+        if isinstance(self.input_ref, dict):
+            input_type = self.input_ref.get("type")
+            if input_type == "zip":
+                return "image"
+            if input_type in {"video", "range"}:
+                return str(input_type)
+        source_type = str(self.source_type)
+        if source_type == RunSourceType.ANALYZE_VIDEO.value:
+            return "video"
+        if source_type == RunSourceType.RANGE.value:
+            return "range"
+        if source_type == RunSourceType.ANALYZE.value:
+            return "image"
+        return input_type
+
+    @property
+    def timing_summary(self) -> Dict[str, Any]:
+        timing = self.inference_timing or {}
+        total_ms = timing.get("total_ms") or timing.get("totalMs")
+        avg_ms = timing.get("avg_ms_per_frame") or timing.get("avgInferenceMs")
+        frames = timing.get("frame_count") or timing.get("frames")
+        summary: Dict[str, Any] = {}
+        if total_ms is not None:
+            summary["total_ms"] = total_ms
+        if avg_ms is not None:
+            summary["avg_inference_ms"] = avg_ms
+        if frames is not None:
+            summary["frame_count"] = frames
+        return summary
+
     def to_dict(self) -> Dict[str, Any]:
         data = asdict(self)
         data["status"] = (
@@ -129,7 +164,14 @@ class RunStore(Protocol):
     def get_run(self, run_id: str) -> Optional[RunRecord]: ...
 
     def list_runs(
-        self, limit: int = 50, offset: int = 0, newest_first: bool = True
+        self,
+        limit: int = 50,
+        offset: int = 0,
+        newest_first: bool = True,
+        status: str | RunStatus | None = None,
+        kind: str | None = None,
+        model_variant: str | None = None,
+        cursor: tuple[float, str] | None = None,
     ) -> List[RunRecord]: ...
 
     def delete_run(self, run_id: str) -> bool: ...
@@ -256,7 +298,14 @@ class FileRunStore(RunStore):
             return None
 
     def list_runs(
-        self, limit: int = 50, offset: int = 0, newest_first: bool = True
+        self,
+        limit: int = 50,
+        offset: int = 0,
+        newest_first: bool = True,
+        status: str | RunStatus | None = None,
+        kind: str | None = None,
+        model_variant: str | None = None,
+        cursor: tuple[float, str] | None = None,
     ) -> List[RunRecord]:
         if not self.root.exists():
             return []
@@ -272,7 +321,40 @@ class FileRunStore(RunStore):
                 runs.append(record)
             except Exception:
                 continue
-        runs.sort(key=lambda r: r.created_ts, reverse=newest_first)
+        runs.sort(
+            key=lambda r: (r.created_ts, r.run_id), reverse=newest_first  # newest first
+        )
+        status_filter = (
+            status.value
+            if isinstance(status, RunStatus)
+            else str(status).lower() if status else None
+        )
+        kind_filter = kind.lower() if kind else None
+        variant_filter = model_variant.lower() if model_variant else None
+        filtered: List[RunRecord] = []
+        for record in runs:
+            record_status = (
+                record.status.value
+                if isinstance(record.status, Enum)
+                else str(record.status)
+            ).lower()
+            if status_filter and record_status != status_filter:
+                continue
+            record_kind = (record.kind or "").lower()
+            if kind_filter and record_kind != kind_filter:
+                continue
+            if variant_filter and (
+                (record.model_variant_selected or "").lower() != variant_filter
+            ):
+                continue
+            if cursor:
+                created_ts, cursor_run_id = cursor
+                if record.created_ts > created_ts:
+                    continue
+                if record.created_ts == created_ts and record.run_id >= cursor_run_id:
+                    continue
+            filtered.append(record)
+        runs = filtered
         start = max(offset, 0)
         end = start + max(1, limit)
         return runs[start:end]
@@ -311,8 +393,24 @@ def get_run(run_id: str) -> Optional[RunRecord]:
     return _current_store().get_run(run_id)
 
 
-def list_runs(limit: int = 50, offset: int = 0) -> List[RunRecord]:
-    return _current_store().list_runs(limit=limit, offset=offset, newest_first=True)
+def list_runs(
+    limit: int = 50,
+    offset: int = 0,
+    *,
+    status: str | RunStatus | None = None,
+    kind: str | None = None,
+    model_variant: str | None = None,
+    cursor: tuple[float, str] | None = None,
+) -> List[RunRecord]:
+    return _current_store().list_runs(
+        limit=limit,
+        offset=offset,
+        newest_first=True,
+        status=status,
+        kind=kind,
+        model_variant=model_variant,
+        cursor=cursor,
+    )
 
 
 def delete_run(run_id: str) -> bool:

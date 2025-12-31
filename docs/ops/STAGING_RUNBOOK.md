@@ -39,8 +39,9 @@ MODEL_VARIANT=yolov11 docker compose -f docker-compose.staging.yml up --build
   ```
 - Inspect recent runs:
   ```bash
-  curl -s "http://localhost:8000/runs?limit=5&offset=0" -H "x-api-key: $API_KEY"
+  curl -s "http://localhost:8000/runs/v1?limit=5" -H "x-api-key: $API_KEY"
   ```
+- Filters (optional) for `/runs/v1`: `status=processing|succeeded|failed`, `kind=image|video|range`, `model_variant=yolov10`. Pagination uses `limit` (default 50, max 200) and `cursor` (opaque `created_ts:run_id` from `next_cursor` in the prior response).
 - Fetch a single run (includes status, inference timing, errors, and model variant info):
   ```bash
   curl -s "http://localhost:8000/runs/${RUN_ID}" -H "x-api-key: $API_KEY" | jq
@@ -54,6 +55,8 @@ MODEL_VARIANT=yolov11 docker compose -f docker-compose.staging.yml up --build
     "model_variant_selected": "yolov10",
     "override_source": "header",
     "inference_timing": {"total_ms": 182.4, "avg_ms_per_frame": 7.6, "frame_count": 24},
+    "timings": {"total_ms": 182.4, "avg_inference_ms": 7.6, "frame_count": 24},
+    "inputs": {"type": "video", "filename": "sample.mp4"},
     "error_code": null,
     "error_message": null,
     "created_at": "2025-01-05T12:00:00Z",
@@ -66,6 +69,7 @@ MODEL_VARIANT=yolov11 docker compose -f docker-compose.staging.yml up --build
 - Readiness: `curl -s -w "\n%{http_code}\n" http://localhost:8000/ready`
   - 200 => all checks passed
   - 503 => at least one check failed; payload includes `checks` with per-item status
+- Error contract (run-producing endpoints): `/cv/analyze`, `/cv/analyze/video`, and `/range/practice/analyze` now return JSON `{ "run_id": "...", "error_code": "...", "message": "..." }` on failures when a run is created, alongside persisted `status=failed` in the run store.
 
 ## Feature flag admin verification
 1. Ensure `ADMIN_TOKEN` is set in the container environment.

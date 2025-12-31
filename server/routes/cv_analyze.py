@@ -11,11 +11,11 @@ from fastapi import (
     File,
     Form,
     Header,
-    HTTPException,
     Response,
     UploadFile,
 )
 from pydantic import BaseModel, Field
+from fastapi.responses import JSONResponse
 from starlette import status
 from starlette.status import (
     HTTP_413_CONTENT_TOO_LARGE as HTTP_413_REQUEST_ENTITY_TOO_LARGE,
@@ -123,9 +123,10 @@ def _fail_run(run_id: str, error_code: str, message: str, status_code: int):
         error_code=error_code,
         error_message=message,
     )
-    raise HTTPException(
+    body = {"run_id": run_id, "error_code": error_code, "message": message}
+    return JSONResponse(
         status_code=status_code,
-        detail={"run_id": run_id, "error_code": error_code, "message": message},
+        content={"detail": body},
     )
 
 
@@ -175,7 +176,7 @@ async def analyze(
     )
 
     if len(data) > MAX_ZIP_SIZE_BYTES:
-        _fail_run(
+        return _fail_run(
             run.run_id,
             "ZIP_TOO_LARGE",
             "ZIP too large",
@@ -185,7 +186,7 @@ async def analyze(
         with zipfile.ZipFile(io.BytesIO(data)) as zf:
             members = [m for m in zf.infolist() if not m.is_dir()]
             if len(members) > MAX_ZIP_FILES:
-                _fail_run(
+                return _fail_run(
                     run.run_id,
                     "ZIP_TOO_MANY_FILES",
                     "Too many files in ZIP",
@@ -194,14 +195,14 @@ async def analyze(
             uncompressed_sum = sum(m.file_size for m in members)
             compressed_sum = sum(m.compress_size for m in members)
             if any(m.file_size > MAX_ZIP_SIZE_BYTES for m in members):
-                _fail_run(
+                return _fail_run(
                     run.run_id,
                     "ZIP_FILE_TOO_LARGE",
                     "File too large in ZIP",
                     HTTP_413_REQUEST_ENTITY_TOO_LARGE,
                 )
             if compressed_sum == 0 and uncompressed_sum > 0:
-                _fail_run(
+                return _fail_run(
                     run.run_id,
                     "ZIP_RATIO_INVALID",
                     "ZIP compression ratio too high",
@@ -210,7 +211,7 @@ async def analyze(
             if compressed_sum > 0:
                 ratio = uncompressed_sum / compressed_sum
                 if ratio > MAX_ZIP_RATIO:
-                    _fail_run(
+                    return _fail_run(
                         run.run_id,
                         "ZIP_RATIO_INVALID",
                         "ZIP compression ratio too high",
@@ -220,20 +221,20 @@ async def analyze(
             for member in members:
                 ext = os.path.splitext(member.filename)[1].lower()
                 if ext not in allowed_ext:
-                    _fail_run(
+                    return _fail_run(
                         run.run_id,
                         "ZIP_INVALID_TYPE",
                         "Invalid file type in ZIP",
                         status.HTTP_400_BAD_REQUEST,
                     )
     except zipfile.BadZipFile:
-        _fail_run(
+        return _fail_run(
             run.run_id, "INVALID_ZIP", "Invalid ZIP file", status.HTTP_400_BAD_REQUEST
         )
 
     frames = frames_from_zip_bytes(data)
     if len(frames) < 2:
-        _fail_run(
+        return _fail_run(
             run.run_id,
             "INSUFFICIENT_FRAMES",
             "Need >=2 frames in ZIP (.npy or images).",
@@ -256,20 +257,20 @@ async def analyze(
     except RuntimeError as exc:
         message = str(exc)
         if "yolov11" in message.lower():
-            _fail_run(
+            return _fail_run(
                 run.run_id,
                 "YOLOV11_UNAVAILABLE",
                 "YOLOv11 unavailable; try yolov10",
                 status.HTTP_503_SERVICE_UNAVAILABLE,
             )
-        _fail_run(
+        return _fail_run(
             run.run_id,
             "ANALYZE_FAILED",
             "Analysis failed",
             status.HTTP_500_INTERNAL_SERVER_ERROR,
         )
     except Exception:
-        _fail_run(
+        return _fail_run(
             run.run_id,
             "ANALYZE_FAILED",
             "Analysis failed",
