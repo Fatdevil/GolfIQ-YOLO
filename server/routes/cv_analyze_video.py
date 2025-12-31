@@ -131,7 +131,7 @@ async def analyze_video(
     if header_len:
         try:
             if int(header_len) > MAX_VIDEO_BYTES:
-                _fail_run(
+                return _fail_run(
                     run.run_id,
                     "VIDEO_TOO_LARGE",
                     "Video too large",
@@ -149,7 +149,7 @@ async def analyze_video(
                 break
             total += len(chunk)
             if total > MAX_VIDEO_BYTES:
-                _fail_run(
+                return _fail_run(
                     run.run_id,
                     "VIDEO_TOO_LARGE",
                     "Video too large",
@@ -161,28 +161,28 @@ async def analyze_video(
     try:
         frames = frames_from_video(data, max_frames=300, stride=1)
     except ImportError:
-        _fail_run(
+        return _fail_run(
             run.run_id,
             "VIDEO_DECODE_DEP_MISSING",
             "Video extras not installed. Install with: pip install -e '.[video]'",
             status.HTTP_400_BAD_REQUEST,
         )
     except RuntimeError as exc:
-        _fail_run(
+        return _fail_run(
             run.run_id,
             "VIDEO_DECODE_FAILED",
             f"Could not decode video: {exc}",
             status.HTTP_400_BAD_REQUEST,
         )
     except Exception:
-        _fail_run(
+        return _fail_run(
             run.run_id,
             "VIDEO_DECODE_ERROR",
             "Video decode error",
             status.HTTP_400_BAD_REQUEST,
         )
     if len(frames) < 2:
-        _fail_run(
+        return _fail_run(
             run.run_id,
             "VIDEO_DECODE_FAILED",
             "Could not decode video or not enough frames.",
@@ -205,20 +205,20 @@ async def analyze_video(
     except RuntimeError as exc:
         message = str(exc)
         if "yolov11" in message.lower():
-            _fail_run(
+            return _fail_run(
                 run.run_id,
                 "YOLOV11_UNAVAILABLE",
                 "YOLOv11 unavailable; try yolov10",
                 status.HTTP_503_SERVICE_UNAVAILABLE,
             )
-        _fail_run(
+        return _fail_run(
             run.run_id,
             "ANALYZE_FAILED",
             "Analysis failed",
             status.HTTP_500_INTERNAL_SERVER_ERROR,
         )
     except Exception:
-        _fail_run(
+        return _fail_run(
             run.run_id,
             "ANALYZE_FAILED",
             "Analysis failed",

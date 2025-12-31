@@ -90,5 +90,7 @@ def test_analyze_route_handles_analyzer_failure(monkeypatch) -> None:
         response = client.post("/range/practice/analyze", json={"frames": 8})
 
     assert response.status_code == 500
-    detail = response.json()["detail"]
-    assert detail["error_code"] == "ANALYZE_FAILED"
+    payload = response.json()
+    assert payload["error_code"] == "ANALYZE_FAILED"
+    assert payload["run_id"] == "range-boom"
+    assert payload["message"]

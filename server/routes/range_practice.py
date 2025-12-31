@@ -54,20 +54,20 @@ def analyze_range_capture(payload: RangeAnalyzeIn) -> RangeAnalyzeOut:
     except RuntimeError as exc:
         message = str(exc)
         if "yolov11" in message.lower():
-            _fail_run(
+            return _fail_run(
                 run.run_id,
                 "YOLOV11_UNAVAILABLE",
                 "YOLOv11 unavailable; try yolov10",
                 status.HTTP_503_SERVICE_UNAVAILABLE,
             )
-        _fail_run(
+        return _fail_run(
             run.run_id,
             "ANALYZE_FAILED",
             "Analysis failed",
             status.HTTP_500_INTERNAL_SERVER_ERROR,
         )
     except Exception:
-        _fail_run(
+        return _fail_run(
             run.run_id,
             "ANALYZE_FAILED",
             "Analysis failed",

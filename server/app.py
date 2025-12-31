@@ -77,6 +77,7 @@ from .routes.moderation import router as moderation_router
 from .routes.media import router as media_router
 from .routes.range_practice import router as range_practice_router
 from .routes.runs import router as runs_router
+from .routes.runs import router_v1 as runs_router_v1
 from .routes.runs_upload import router as runs_upload_router
 from .routes.sg_preview import router as sg_preview_router
 from .routes.sg_summary import router as sg_summary_router
@@ -247,6 +248,7 @@ app.include_router(rollout_router)
 app.include_router(media_router)
 app.include_router(range_practice_router)
 app.include_router(ws_telemetry_router)
+app.include_router(runs_router_v1)
 app.include_router(runs_upload_router)
 app.include_router(runs_router)
 app.include_router(issues_router)
