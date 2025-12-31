@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 import importlib
-from dataclasses import asdict
+from datetime import datetime, timezone
+from uuid import UUID
 
 import numpy as np
 import pytest
@@ -9,10 +10,11 @@ import pytest
 
 @pytest.fixture
 def runs_module(monkeypatch, tmp_path):
-    monkeypatch.setenv("GOLFIQ_RUNS_DIR", str(tmp_path))
+    monkeypatch.setenv("RUN_STORE_DIR", str(tmp_path))
     from server.storage import runs as runs_mod
 
     module = importlib.reload(runs_mod)
+    module._reset_store_for_tests(tmp_path)
     yield module
     importlib.reload(runs_mod)
 
@@ -22,9 +24,12 @@ def test_save_and_load_run_round_trip(runs_module, monkeypatch):
         def __init__(self, value: str) -> None:
             self.hex = value
 
+        def __str__(self) -> str:
+            return str(UUID(self.hex))
+
     monkeypatch.setattr(runs_module.time, "time", lambda: 1_700_000_000.0)
     monkeypatch.setattr(
-        runs_module.uuid, "uuid4", lambda: DummyUUID("abcd1234efgh5678")
+        runs_module.uuid, "uuid4", lambda: DummyUUID("abcd1234abcd5678abcd1234abcd5678")
     )
 
     record = runs_module.save_run(
@@ -36,6 +41,8 @@ def test_save_and_load_run_round_trip(runs_module, monkeypatch):
     )
     loaded = runs_module.load_run(record.run_id)
     assert loaded == record
+    expected_iso = datetime.fromtimestamp(1_700_000_000.0, tz=timezone.utc).isoformat()
+    assert loaded.created_at == expected_iso
 
 
 def test_load_run_returns_none_for_missing_file(runs_module):
@@ -62,18 +69,22 @@ def test_list_runs_skips_invalid_and_limits(runs_module, tmp_path):
     valid_record = runs_module.RunRecord(
         run_id="1234567890-abcd1234",
         created_ts=1.0,
+        updated_ts=1.0,
+        status=runs_module.RunStatus.SUCCEEDED,
         source="app",
+        source_type=runs_module.RunSourceType.LEGACY.value,
         mode="play",
         params={},
         metrics={},
         events=[],
     )
-    (valid_dir / "run.json").write_text(runs_module.json.dumps(asdict(valid_record)))
+    (valid_dir / "run.json").write_text(runs_module.json.dumps(valid_record.to_dict()))
 
     invalid_dir = tmp_path / "1234567891-abcd1234"
     invalid_dir.mkdir()
     (invalid_dir / "run.json").write_text("{invalid}")
 
+    runs_module._reset_store_for_tests(tmp_path)
     runs = runs_module.list_runs(limit=1)
     assert [r.run_id for r in runs] == ["1234567890-abcd1234"]
 
@@ -90,5 +101,5 @@ def test_delete_run_handles_missing_directory(runs_module):
 
 def test_list_runs_returns_empty_when_root_missing(runs_module, monkeypatch, tmp_path):
     missing_root = tmp_path / "missing"
-    monkeypatch.setattr(runs_module, "RUNS_DIR", missing_root)
+    runs_module._reset_store_for_tests(missing_root)
     assert runs_module.list_runs() == []

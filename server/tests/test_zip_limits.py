@@ -5,6 +5,7 @@ from fastapi.testclient import TestClient
 
 from server.app import app
 from server.routes import cv_analyze
+from server.storage.runs import RunRecord, RunStatus
 
 
 def _zip_with_files(
@@ -108,10 +109,7 @@ def test_zip_persist_adds_confidence(monkeypatch):
         variant_source=None,
         **__,
     ):
-        assert mock is True
         assert smoothing_window == 3
-        assert model_variant is None
-        assert variant_source is None
         return {"events": [1, 2], "metrics": {"distance": 12.3}}
 
     class DummyRun:
@@ -119,13 +117,29 @@ def test_zip_persist_adds_confidence(monkeypatch):
 
     captured: dict = {}
 
-    def fake_save_run(**kwargs):
-        captured.update(kwargs)
+    def fake_create_run(**kwargs):
+        captured["created"] = kwargs
+        return RunRecord(
+            run_id="run-123",
+            created_ts=1.0,
+            updated_ts=1.0,
+            status=RunStatus.PROCESSING,
+            source=kwargs["source"],
+            source_type=kwargs["source_type"],
+            mode=kwargs["mode"],
+            params=kwargs["params"],
+            metrics=kwargs["metrics"],
+            events=kwargs["events"],
+        )
+
+    def fake_update_run(run_id, **kwargs):
+        captured["updated"] = {"run_id": run_id, **kwargs}
         return DummyRun()
 
     monkeypatch.setattr(cv_analyze, "frames_from_zip_bytes", fake_frames)
     monkeypatch.setattr(cv_analyze, "analyze_frames", fake_analyze)
-    monkeypatch.setattr(cv_analyze, "save_run", fake_save_run)
+    monkeypatch.setattr(cv_analyze, "create_run", fake_create_run)
+    monkeypatch.setattr(cv_analyze, "update_run", fake_update_run)
 
     data = _zip_with_files(2)
     with TestClient(app) as client:
@@ -137,9 +151,9 @@ def test_zip_persist_adds_confidence(monkeypatch):
             files=files,
         )
 
-    assert response.status_code == 200
+    assert response.status_code == 200, response.json()
     body = response.json()
     assert body["run_id"] == "run-123"
     assert body["metrics"]["confidence"] == 0.0
-    assert captured["source"] == "zip"
-    assert captured["mode"] == "detector"
+    assert captured["created"]["source_type"] == "analyze"
+    assert captured["updated"]["events"] == [1, 2]

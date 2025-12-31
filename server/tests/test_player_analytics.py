@@ -9,14 +9,17 @@ from server.schemas.player_analytics import MissionStats, PlayerAnalytics
 from server.services import player_analytics as analytics
 from server.services.player_analytics import build_player_analytics
 from server.services.sg_preview import SgCategory
-from server.storage.runs import RunRecord
+from server.storage.runs import RunRecord, RunSourceType, RunStatus
 
 
 def _run(run_id: str, created: float, member_id: str) -> RunRecord:
     return RunRecord(
         run_id=run_id,
         created_ts=created,
+        updated_ts=created,
+        status=RunStatus.SUCCEEDED,
         source="unit",  # type: ignore[arg-type]
+        source_type=RunSourceType.LEGACY.value,
         mode="quickround",
         params={"memberId": member_id},
         metrics={},

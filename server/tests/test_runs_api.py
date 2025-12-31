@@ -1,9 +1,11 @@
 from fastapi.testclient import TestClient
 
 from server.app import app
+from server.storage import runs as runs_storage
 
 
-def test_runs_lifecycle():
+def test_runs_lifecycle(monkeypatch, tmp_path):
+    runs_storage._reset_store_for_tests(tmp_path)
     with TestClient(app) as client:
         assert client.get("/runs").status_code == 200
         payload = {

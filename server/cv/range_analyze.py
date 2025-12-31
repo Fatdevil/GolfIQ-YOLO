@@ -64,6 +64,7 @@ class RangeAnalyzeOut(BaseModel):
     launch_deg: float | None = None
     side_deg: float | None = None
     quality: CameraFitness | None = None
+    run_id: str | None = None
 
 
 _QUALITY_REASON_MAP: Dict[str, str] = {
@@ -162,7 +163,9 @@ def _frames_from_payload(payload: RangeAnalyzeIn) -> Iterable[np.ndarray]:
     return [np.zeros((height, width, 3), dtype=np.uint8) for _ in range(count)]
 
 
-def run_mock_analyze(payload: RangeAnalyzeIn) -> RangeAnalyzeOut:
+def run_mock_analyze(
+    payload: RangeAnalyzeIn, *, return_raw: bool = False
+) -> RangeAnalyzeOut | tuple[RangeAnalyzeOut, Mapping[str, Any]]:
     """Run the mock CV analyzer and normalize the response."""
 
     request_data = payload.model_dump(exclude_none=True)
@@ -174,10 +177,19 @@ def run_mock_analyze(payload: RangeAnalyzeIn) -> RangeAnalyzeOut:
         metrics = dict(mock_response.metrics)
     else:  # pragma: no cover - defensive fallback
         metrics = {}
-    return _build_out(metrics)
+    out = _build_out(metrics)
+    if return_raw:
+        return out, metrics
+    return out
 
 
-def run_real_analyze(payload: RangeAnalyzeIn) -> RangeAnalyzeOut:
+def run_real_analyze(
+    payload: RangeAnalyzeIn,
+    *,
+    return_raw: bool = False,
+    model_variant: str | None = None,
+    variant_source: str | None = None,
+) -> RangeAnalyzeOut | tuple[RangeAnalyzeOut, Mapping[str, Any], list[int]]:
     """Run the real CV analyzer and normalize the response."""
 
     calib = CalibrationParams.from_reference(
@@ -189,21 +201,57 @@ def run_real_analyze(payload: RangeAnalyzeIn) -> RangeAnalyzeOut:
         calib,
         mock=False,
         smoothing_window=payload.smoothing_window,
-        model_variant=payload.model_variant,
-        variant_source="range_analyze.model_variant" if payload.model_variant else None,
+        model_variant=model_variant or payload.model_variant,
+        variant_source=variant_source
+        or ("range_analyze.model_variant" if payload.model_variant else None),
     )
     metrics_obj = result.get("metrics", {})
     metrics = dict(metrics_obj) if isinstance(metrics_obj, Mapping) else {}
-    return _build_out(metrics)
+    out = _build_out(metrics)
+    if return_raw:
+        return out, metrics, result.get("events", [])
+    return out
 
 
-def run_range_analyze(payload: RangeAnalyzeIn) -> RangeAnalyzeOut:
+def run_range_analyze(
+    payload: RangeAnalyzeIn,
+    *,
+    return_raw: bool = False,
+    model_variant: str | None = None,
+    variant_source: str | None = None,
+) -> RangeAnalyzeOut | tuple[RangeAnalyzeOut, Mapping[str, Any], list[int], CvBackend]:
     """Dispatch to the configured backend and return normalized metrics."""
 
     backend = get_range_backend()
     if backend == CvBackend.MOCK:
-        return run_mock_analyze(payload)
-    return run_real_analyze(payload)
+        try:
+            result = run_mock_analyze(payload, return_raw=return_raw)
+        except TypeError:
+            result = run_mock_analyze(payload)  # type: ignore[call-arg]
+        if return_raw:
+            if isinstance(result, tuple):
+                out, metrics = result  # type: ignore[misc]
+            else:
+                out, metrics = result, {}
+            return out, metrics, [], backend
+        return result
+    try:
+        result = run_real_analyze(
+            payload,
+            return_raw=return_raw,
+            model_variant=model_variant,
+            variant_source=variant_source
+            or ("range_analyze.model_variant" if payload.model_variant else None),
+        )
+    except TypeError:
+        result = run_real_analyze(payload)  # type: ignore[call-arg]
+    if return_raw:
+        if isinstance(result, tuple):
+            out, metrics, events = result  # type: ignore[misc]
+        else:
+            out, metrics, events = result, {}, []
+        return out, metrics, events, backend
+    return result
 
 
 __all__ = [

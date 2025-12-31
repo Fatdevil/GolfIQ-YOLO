@@ -8,7 +8,7 @@ from fastapi.testclient import TestClient
 from server.app import app
 from server.schemas.anchors import AnchorOut
 from server.services.sg_preview import SgCategory, compute_sg_preview_for_run
-from server.storage.runs import RunRecord
+from server.storage.runs import RunRecord, RunSourceType, RunStatus
 
 
 def _anchor_factory(run_id: str) -> Callable[[int, int], AnchorOut]:
@@ -86,7 +86,10 @@ def test_sg_preview_endpoint(monkeypatch: pytest.MonkeyPatch) -> None:
     run_record = RunRecord(
         run_id="run-api",
         created_ts=0.0,
+        updated_ts=0.0,
+        status=RunStatus.SUCCEEDED,
         source="test",
+        source_type=RunSourceType.LEGACY.value,
         mode="qr",
         params={"courseId": "course-api"},
         metrics={},

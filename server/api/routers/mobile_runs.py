@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
 
 from server.security import require_api_key
-from server.storage.runs import save_run
+from server.storage.runs import RunSourceType, RunStatus, create_run
 
 router = APIRouter(
     prefix="/api/mobile", tags=["mobile"], dependencies=[Depends(require_api_key)]
@@ -28,8 +28,10 @@ class MobileRunResponse(BaseModel):
 @router.post("/runs", response_model=MobileRunResponse)
 def create_mobile_run(payload: MobileRunCreate) -> MobileRunResponse:
     try:
-        record = save_run(
+        record = create_run(
             source="mobile",
+            source_type=RunSourceType.MOBILE.value,
+            status=RunStatus.SUCCEEDED,
             mode=payload.mode,
             params={
                 "courseId": payload.courseId,
