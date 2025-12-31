@@ -1,5 +1,6 @@
 pytest
 pytest-cov
+pytest-timeout>=2.2
 black
 flake8
 numpy>=1.26

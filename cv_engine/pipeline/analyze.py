@@ -13,6 +13,7 @@ from cv_engine.calibration.homography import (
 from cv_engine.metrics.angle import compute_side_angle
 from cv_engine.metrics.carry_v1 import estimate_carry
 from cv_engine.metrics.launch_mono import estimate_vertical_launch
+from cv_engine.inference.model_registry import get_detection_engine
 from cv_engine.pose.adapter import PoseAdapter
 from cv_engine.sequence import analyze_kinematic_sequence
 from cv_engine.tracking.factory import get_tracker
@@ -20,7 +21,6 @@ from cv_engine.telemetry import FlightRecorder, flight_recorder_settings
 from observability.otel import span
 from server.metrics.faceon import compute_faceon_metrics
 from server.telemetry import record_pose_metrics, record_stage_latency
-from .inference.yolo8 import YoloV8Detector
 from .impact.detector import ImpactDetector
 from .metrics.kinematics import CalibrationParams
 from .calibration.simple import measure_from_tracks, as_dict
@@ -59,7 +59,7 @@ def analyze_frames(
 
     frames_list = list(frames)
 
-    det = YoloV8Detector(
+    det = get_detection_engine(
         mock=(mock if mock is not None else False),
         motion=(motion if motion is not None else (2.0, -1.0, 1.5, 0.0)),
     )
@@ -83,6 +83,7 @@ def analyze_frames(
         "inputSize": input_size,
         "fps": calib.fps,
         "smoothingWindow": smoothing_window,
+        "modelVariant": getattr(det, "variant", "unknown"),
     }
     recorder = FlightRecorder(
         enabled=recorder_enabled,
