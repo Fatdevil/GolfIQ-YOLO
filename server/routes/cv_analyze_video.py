@@ -163,8 +163,22 @@ async def analyze_video(
     except ImportError:
         _fail_run(
             run.run_id,
-            "VIDEO_EXTRAS_MISSING",
+            "VIDEO_DECODE_DEP_MISSING",
             "Video extras not installed. Install with: pip install -e '.[video]'",
+            status.HTTP_400_BAD_REQUEST,
+        )
+    except RuntimeError as exc:
+        _fail_run(
+            run.run_id,
+            "VIDEO_DECODE_FAILED",
+            f"Could not decode video: {exc}",
+            status.HTTP_400_BAD_REQUEST,
+        )
+    except Exception:
+        _fail_run(
+            run.run_id,
+            "VIDEO_DECODE_ERROR",
+            "Video decode error",
             status.HTTP_400_BAD_REQUEST,
         )
     if len(frames) < 2:
