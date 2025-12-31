@@ -6,8 +6,8 @@ import re
 import time
 import uuid
 import zipfile
-from contextlib import contextmanager
-from dataclasses import asdict, dataclass, field
+from contextlib import contextmanager, nullcontext
+from dataclasses import asdict, dataclass, field, replace
 from datetime import datetime, timezone
 from enum import Enum
 from io import BytesIO
@@ -56,7 +56,9 @@ class RunRecord:
     status: RunStatus
     source: str
     source_type: str
-    mode: str | None
+    mode: str | None = None
+    started_ts: float | None = None
+    finished_ts: float | None = None
     params: Dict[str, Any] = field(default_factory=dict)
     metrics: Dict[str, Any] = field(default_factory=dict)
     events: List[int] = field(default_factory=list)
@@ -77,6 +79,18 @@ class RunRecord:
     @property
     def updated_at(self) -> str:
         return datetime.fromtimestamp(self.updated_ts, tz=timezone.utc).isoformat()
+
+    @property
+    def started_at(self) -> str | None:
+        if self.started_ts is None:
+            return None
+        return datetime.fromtimestamp(self.started_ts, tz=timezone.utc).isoformat()
+
+    @property
+    def finished_at(self) -> str | None:
+        if self.finished_ts is None:
+            return None
+        return datetime.fromtimestamp(self.finished_ts, tz=timezone.utc).isoformat()
 
     @property
     def kind(self) -> str | None:
@@ -125,16 +139,22 @@ class RunRecord:
         )
         data["created_at"] = self.created_at
         data["updated_at"] = self.updated_at
+        data["started_at"] = self.started_at
+        data["finished_at"] = self.finished_at
         return data
 
     @staticmethod
     def from_dict(data: Dict[str, Any]) -> "RunRecord":
         created_ts = float(data.get("created_ts") or time.time())
         updated_ts = float(data.get("updated_ts") or created_ts)
+        started_ts = data.get("started_ts")
+        finished_ts = data.get("finished_ts")
         return RunRecord(
             run_id=data["run_id"],
             created_ts=created_ts,
             updated_ts=updated_ts,
+            started_ts=float(started_ts) if started_ts is not None else None,
+            finished_ts=float(finished_ts) if finished_ts is not None else None,
             status=RunStatus(data.get("status", RunStatus.SUCCEEDED.value)),
             source=data.get("source", "unknown"),
             source_type=data.get("source_type", RunSourceType.LEGACY.value),
@@ -174,7 +194,11 @@ class RunStore(Protocol):
         cursor: tuple[float, str] | None = None,
     ) -> List[RunRecord]: ...
 
-    def delete_run(self, run_id: str) -> bool: ...
+    def delete_run(self, run_id: str, *, locked: bool = False) -> bool: ...
+
+    def prune_runs(
+        self, *, max_runs: int | None = None, max_age_days: int | None = None
+    ) -> dict[str, int]: ...
 
 
 def _run_dir(run_id: str) -> Path:
@@ -206,7 +230,15 @@ def _locked(lock_file: Path):
         try:
             import fcntl
 
-            fcntl.flock(handle, fcntl.LOCK_EX)
+            start = time.monotonic()
+            while True:
+                try:
+                    fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                    break
+                except BlockingIOError:
+                    if time.monotonic() - start > 5:
+                        raise TimeoutError("run store lock acquisition timed out")
+                    time.sleep(0.05)
             yield
         finally:
             try:
@@ -222,6 +254,10 @@ def _write_json_atomic(path: Path, content: str) -> None:
     tmp_path = path.with_suffix(path.suffix + ".tmp")
     tmp_path.write_text(content, encoding="utf-8")
     tmp_path.replace(path)
+
+
+class RunTransitionError(ValueError):
+    """Raised when an invalid run status transition is attempted."""
 
 
 class FileRunStore(RunStore):
@@ -262,27 +298,78 @@ class FileRunStore(RunStore):
             impact_preview=kwargs.get("impact_preview"),
             metadata=kwargs.get("metadata", {}) or {},
         )
+        if status_enum == RunStatus.PROCESSING:
+            record.started_ts = now
+        if status_enum in {RunStatus.SUCCEEDED, RunStatus.FAILED}:
+            record.finished_ts = now
         with _locked(self.lock_path):
             _write_json_atomic(
                 _run_json(run_id), json.dumps(record.to_dict(), indent=2)
             )
         return record
 
+    def _validate_transition(
+        self, current: RunStatus, target: RunStatus
+    ) -> tuple[bool, str]:
+        allowed: dict[RunStatus, set[RunStatus]] = {
+            RunStatus.QUEUED: {
+                RunStatus.QUEUED,
+                RunStatus.PROCESSING,
+                RunStatus.SUCCEEDED,
+                RunStatus.FAILED,
+            },
+            RunStatus.PROCESSING: {
+                RunStatus.PROCESSING,
+                RunStatus.SUCCEEDED,
+                RunStatus.FAILED,
+            },
+            RunStatus.SUCCEEDED: {RunStatus.SUCCEEDED},
+            RunStatus.FAILED: {RunStatus.FAILED},
+        }
+        if target not in allowed.get(current, set()):
+            return (
+                False,
+                f"invalid status transition {current.value}->{target.value}",
+            )
+        return True, ""
+
     def update_run(self, run_id: str, **updates: Any) -> Optional[RunRecord]:
         with _locked(self.lock_path):
             current = self.get_run(run_id)
             if not current:
                 return None
+            candidate = replace(current)
+            status_update = updates.get("status")
+            if status_update is None:
+                target_status = candidate.status
+            else:
+                target_status = (
+                    status_update
+                    if isinstance(status_update, RunStatus)
+                    else RunStatus(status_update)
+                )
+            is_valid, reason = self._validate_transition(candidate.status, target_status)
+            if not is_valid:
+                raise RunTransitionError(reason)
             for key, value in updates.items():
                 if value is None:
                     continue
-                if hasattr(current, key):
-                    setattr(current, key, value)
-            current.updated_ts = time.time()
+                if hasattr(candidate, key):
+                    setattr(candidate, key, value)
+            now = time.time()
+            candidate.status = target_status
+            candidate.updated_ts = now
+            if candidate.status == RunStatus.PROCESSING and candidate.started_ts is None:
+                candidate.started_ts = now
+            if candidate.status in {RunStatus.SUCCEEDED, RunStatus.FAILED}:
+                if candidate.finished_ts is None:
+                    candidate.finished_ts = now
+                if candidate.started_ts is None:
+                    candidate.started_ts = candidate.created_ts
             _write_json_atomic(
-                _run_json(run_id), json.dumps(current.to_dict(), indent=2)
+                _run_json(run_id), json.dumps(candidate.to_dict(), indent=2)
             )
-            return current
+            return candidate
 
     def get_run(self, run_id: str) -> Optional[RunRecord]:
         safe_dir = _safe(run_id)
@@ -359,17 +446,71 @@ class FileRunStore(RunStore):
         end = start + max(1, limit)
         return runs[start:end]
 
-    def delete_run(self, run_id: str) -> bool:
-        safe_dir = _safe(run_id)
-        if not safe_dir:
-            return False
-        if not safe_dir.exists():
-            return False
-        for child in safe_dir.iterdir():
-            if child.is_file():
-                child.unlink()
-        safe_dir.rmdir()
-        return True
+    def delete_run(self, run_id: str, *, locked: bool = False) -> bool:
+        with (_locked(self.lock_path) if not locked else nullcontext()):
+            safe_dir = _safe(run_id)
+            if not safe_dir:
+                return False
+            if not safe_dir.exists():
+                return False
+            for child in safe_dir.iterdir():
+                if child.is_file():
+                    child.unlink()
+            safe_dir.rmdir()
+            return True
+
+    def _load_all(self) -> list[RunRecord]:
+        if not self.root.exists():
+            return []
+        records: list[RunRecord] = []
+        for entry in self.root.iterdir():
+            if not entry.is_dir():
+                continue
+            run_file = entry / "run.json"
+            if not run_file.exists():
+                continue
+            try:
+                records.append(RunRecord.from_dict(json.loads(run_file.read_text())))
+            except Exception:
+                continue
+        return records
+
+    def prune_runs(
+        self, *, max_runs: int | None = None, max_age_days: int | None = None
+    ) -> dict[str, int]:
+        with _locked(self.lock_path):
+            records = self._load_all()
+            scanned = len(records)
+            if scanned == 0:
+                return {"scanned": 0, "deleted": 0, "kept": 0}
+            terminal_statuses = {RunStatus.SUCCEEDED.value, RunStatus.FAILED.value}
+            now = time.time()
+            max_age_seconds = (max_age_days or 0) * 86400 if max_age_days else None
+            terminal_runs = [
+                r
+                for r in records
+                if (
+                    (r.status.value if isinstance(r.status, Enum) else str(r.status))
+                    in terminal_statuses
+                )
+            ]
+            terminal_runs.sort(key=lambda r: (r.created_ts, r.run_id), reverse=True)
+            to_delete: set[str] = set()
+            if max_runs is not None:
+                allowed = max(0, int(max_runs))
+                for r in terminal_runs[allowed:]:
+                    to_delete.add(r.run_id)
+            if max_age_seconds is not None and max_age_seconds > 0:
+                cutoff = now - max_age_seconds
+                for r in terminal_runs:
+                    if r.created_ts < cutoff:
+                        to_delete.add(r.run_id)
+            deleted = 0
+            for rid in to_delete:
+                if self.delete_run(rid, locked=True):
+                    deleted += 1
+            kept = scanned - deleted
+            return {"scanned": scanned, "deleted": deleted, "kept": kept}
 
 
 def _store() -> RunStore:
@@ -413,8 +554,39 @@ def list_runs(
     )
 
 
-def delete_run(run_id: str) -> bool:
-    return _current_store().delete_run(run_id)
+def delete_run(run_id: str, *, locked: bool = False) -> bool:
+    return _current_store().delete_run(run_id, locked=locked)
+
+
+def _resolve_prune_limits(
+    *, max_runs: int | None = None, max_age_days: int | None = None
+) -> tuple[int | None, int | None]:
+    env_max_runs = os.getenv("RUNS_PRUNE_MAX_RUNS")
+    env_max_age = os.getenv("RUNS_PRUNE_MAX_AGE_DAYS")
+    resolved_max_runs = max_runs
+    resolved_max_age = max_age_days
+    if resolved_max_runs is None and env_max_runs:
+        try:
+            resolved_max_runs = int(env_max_runs)
+        except ValueError:
+            resolved_max_runs = None
+    if resolved_max_age is None and env_max_age:
+        try:
+            resolved_max_age = int(env_max_age)
+        except ValueError:
+            resolved_max_age = None
+    return resolved_max_runs, resolved_max_age
+
+
+def prune_runs(
+    *, max_runs: int | None = None, max_age_days: int | None = None
+) -> dict[str, int]:
+    resolved_max_runs, resolved_max_age = _resolve_prune_limits(
+        max_runs=max_runs, max_age_days=max_age_days
+    )
+    return _current_store().prune_runs(
+        max_runs=resolved_max_runs, max_age_days=resolved_max_age
+    )
 
 
 def save_run(

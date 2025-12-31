@@ -11,6 +11,8 @@
   - `RUN_STORE_DIR=/data/runs` (alias: `GOLFIQ_RUNS_DIR`)
   - `RUN_STORE_BACKEND=file`
   - `RUNS_UPLOAD_DIR=/data/uploads`
+  - `RUNS_PRUNE_MAX_RUNS` (optional, e.g. `500` to keep the 500 newest terminal runs)
+  - `RUNS_PRUNE_MAX_AGE_DAYS` (optional, e.g. `30` to prune terminal runs older than 30 days)
   - `GOLFIQ_ROUNDS_DIR=/data/rounds`
   - `GOLFIQ_BAGS_DIR=/data/bags`
   - `FEATURE_FLAGS_CONFIG_PATH=/data/config/feature_flags.json`
@@ -42,15 +44,17 @@ MODEL_VARIANT=yolov11 docker compose -f docker-compose.staging.yml up --build
   curl -s "http://localhost:8000/runs/v1?limit=5" -H "x-api-key: $API_KEY"
   ```
 - Filters (optional) for `/runs/v1`: `status=processing|succeeded|failed`, `kind=image|video|range`, `model_variant=yolov10`. Pagination uses `limit` (default 50, max 200) and `cursor` (opaque `created_ts:run_id` from `next_cursor` in the prior response).
-- Fetch a single run (includes status, inference timing, errors, and model variant info):
+- Fetch a single run (includes status, lifecycle timestamps, inference timing, errors, and model variant info):
   ```bash
-  curl -s "http://localhost:8000/runs/${RUN_ID}" -H "x-api-key: $API_KEY" | jq
+  curl -s "http://localhost:8000/runs/v1/${RUN_ID}" -H "x-api-key: $API_KEY" | jq
   ```
 - Example run payload:
   ```json
   {
     "run_id": "1a2b3c4d-1111-2222-3333-444455556666",
     "status": "succeeded",
+    "started_at": "2025-01-05T12:00:00Z",
+    "finished_at": "2025-01-05T12:00:00Z",
     "source_type": "analyze_video",
     "model_variant_selected": "yolov10",
     "override_source": "header",
@@ -70,6 +74,19 @@ MODEL_VARIANT=yolov11 docker compose -f docker-compose.staging.yml up --build
   - 200 => all checks passed
   - 503 => at least one check failed; payload includes `checks` with per-item status
 - Error contract (run-producing endpoints): `/cv/analyze`, `/cv/analyze/video`, and `/range/practice/analyze` now return JSON `{ "run_id": "...", "error_code": "...", "message": "..." }` on failures when a run is created, alongside persisted `status=failed` in the run store.
+- Lifecycle rules:
+  - Valid transitions: `queued` → `processing` → `succeeded|failed`, or `queued` → `succeeded|failed` directly for short-circuit runs.
+  - Terminal states (`succeeded`, `failed`) cannot transition back. Attempted invalid transitions return a stable error payload.
+  - `started_at` is recorded the first time a run enters `processing`; `finished_at` is recorded when a run becomes `succeeded` or `failed`.
+- Pruning:
+  - Configure retention with `RUNS_PRUNE_MAX_RUNS` and/or `RUNS_PRUNE_MAX_AGE_DAYS`.
+  - Trigger manual pruning (terminal runs only) via:
+    ```bash
+    curl -X POST "http://localhost:8000/runs/v1/prune" -H "x-api-key: $API_KEY"
+    # Optional overrides:
+    # curl -X POST "http://localhost:8000/runs/v1/prune?max_runs=500&max_age_days=30" -H "x-api-key: $API_KEY"
+    ```
+  - The response includes `{ "scanned": <total>, "deleted": <removed>, "kept": <kept> }`. Non-terminal (`processing`) runs are never pruned.
 
 ## Feature flag admin verification
 1. Ensure `ADMIN_TOKEN` is set in the container environment.

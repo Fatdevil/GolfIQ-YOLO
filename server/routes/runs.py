@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Any, List
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from ..security import require_api_key
 from ..storage.runs import (
@@ -12,6 +12,7 @@ from ..storage.runs import (
     delete_run,
     get_run as load_run,
     list_runs,
+    prune_runs,
 )
 
 router = APIRouter(
@@ -64,11 +65,38 @@ class RunListItemV1(RunListItem):
     error_message: str | None = None
     input_ref: dict[str, Any] | None = None
     timings: dict[str, Any] | None = None
+    started_at: str | None = None
+    finished_at: str | None = None
 
 
 class RunListResponseV1(BaseModel):
     items: list[RunListItemV1]
     next_cursor: str | None = None
+
+
+class RunDetailResponse(RunListItemV1):
+    created_ts: float
+    updated_ts: float
+    started_ts: float | None = None
+    finished_ts: float | None = None
+    params: dict[str, Any]
+    metrics: dict[str, Any]
+    events: list[int]
+    model_variant_requested: str | None = None
+    metadata: dict[str, Any]
+    impact_preview: str | None = None
+    inputs: dict[str, Any] | None = None
+
+
+class RunPruneRequest(BaseModel):
+    max_runs: int | None = Field(default=None, ge=0)
+    max_age_days: int | None = Field(default=None, ge=0)
+
+
+class RunPruneResponse(BaseModel):
+    scanned: int
+    deleted: int
+    kept: int
 
 
 def _item_v1(r: RunRecord) -> RunListItemV1:
@@ -79,6 +107,8 @@ def _item_v1(r: RunRecord) -> RunListItemV1:
         source_type=r.source_type,
         created_at=r.created_at,
         updated_at=r.updated_at,
+        started_at=r.started_at,
+        finished_at=r.finished_at,
         model_variant_selected=r.model_variant_selected,
         override_source=r.override_source,
         inference_timing=r.inference_timing,
@@ -87,6 +117,23 @@ def _item_v1(r: RunRecord) -> RunListItemV1:
         kind=r.kind,
         input_ref=r.input_ref,
         timings=r.timing_summary or None,
+    )
+
+
+def _detail_item(r: RunRecord) -> RunDetailResponse:
+    return RunDetailResponse(
+        **_item_v1(r).dict(),
+        created_ts=r.created_ts,
+        updated_ts=r.updated_ts,
+        started_ts=r.started_ts,
+        finished_ts=r.finished_ts,
+        params=r.params or {},
+        metrics=r.metrics or {},
+        events=r.events or [],
+        model_variant_requested=r.model_variant_requested,
+        metadata=r.metadata or {},
+        impact_preview=r.impact_preview,
+        inputs=r.input_ref,
     )
 
 
@@ -100,6 +147,10 @@ def _decode_cursor(cursor: str) -> tuple[float, str]:
         return float(created_ts), run_id
     except Exception as exc:
         raise HTTPException(400, f"invalid cursor: {cursor}") from exc
+
+
+def _error_payload(run_id: str, error_code: str, message: str) -> dict[str, str]:
+    return {"run_id": run_id, "error_code": error_code, "message": message}
 
 
 @router.get("", response_model=List[RunListItem])
@@ -193,6 +244,25 @@ def get_run(run_id: str):
         "kind": getattr(r, "kind", None),
         "inputs": r.input_ref,
     }
+
+
+@router_v1.get("/{run_id}", response_model=RunDetailResponse)
+def get_run_detail(run_id: str) -> RunDetailResponse:
+    r = load_run(run_id)
+    if r is None:
+        raise HTTPException(
+            status_code=404,
+            detail=_error_payload(run_id, "RUN_NOT_FOUND", "Run not found"),
+        )
+    return _detail_item(r)
+
+
+@router_v1.post("/prune", response_model=RunPruneResponse)
+def prune_runs_v1(payload: RunPruneRequest | None = None) -> RunPruneResponse:
+    max_runs = payload.max_runs if payload else None
+    max_age_days = payload.max_age_days if payload else None
+    result = prune_runs(max_runs=max_runs, max_age_days=max_age_days)
+    return RunPruneResponse(**result)
 
 
 @router.delete("/{run_id}")
