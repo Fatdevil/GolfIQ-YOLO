@@ -8,7 +8,8 @@
 - `LIVE_VIEWER_SIGN_KEY=<viewer token signing secret>`
 - `MODEL_VARIANT=yolov10` (default) – switch to `yolov11` only when the new weights are staged; the API surface stays unchanged.
 - Paths (defaults baked into the image):
-  - `GOLFIQ_RUNS_DIR=/data/runs`
+  - `RUN_STORE_DIR=/data/runs` (alias: `GOLFIQ_RUNS_DIR`)
+  - `RUN_STORE_BACKEND=file`
   - `RUNS_UPLOAD_DIR=/data/uploads`
   - `GOLFIQ_ROUNDS_DIR=/data/rounds`
   - `GOLFIQ_BAGS_DIR=/data/bags`
@@ -28,6 +29,37 @@ To experiment with YOLOv11 in staging, override the compose environment:
 ```bash
 MODEL_VARIANT=yolov11 docker compose -f docker-compose.staging.yml up --build
 ```
+
+## Run artifact store
+- Every `/cv/analyze`, `/cv/analyze/video`, and `/range/practice/analyze` call now creates a persisted run with a `run_id`, status, model variant metadata, and timing. Runs are written to `RUN_STORE_DIR` (JSON files, newest first).
+- Configure the store per environment:
+  ```bash
+  export RUN_STORE_DIR=/data/runs       # default
+  export RUN_STORE_BACKEND=file         # only supported backend today
+  ```
+- Inspect recent runs:
+  ```bash
+  curl -s "http://localhost:8000/runs?limit=5&offset=0" -H "x-api-key: $API_KEY"
+  ```
+- Fetch a single run (includes status, inference timing, errors, and model variant info):
+  ```bash
+  curl -s "http://localhost:8000/runs/${RUN_ID}" -H "x-api-key: $API_KEY" | jq
+  ```
+- Example run payload:
+  ```json
+  {
+    "run_id": "1a2b3c4d-1111-2222-3333-444455556666",
+    "status": "succeeded",
+    "source_type": "analyze_video",
+    "model_variant_selected": "yolov10",
+    "override_source": "header",
+    "inference_timing": {"total_ms": 182.4, "avg_ms_per_frame": 7.6, "frame_count": 24},
+    "error_code": null,
+    "error_message": null,
+    "created_at": "2025-01-05T12:00:00Z",
+    "updated_at": "2025-01-05T12:00:00Z"
+  }
+  ```
 
 ## Health and readiness
 - Liveness/health: `curl -s http://localhost:8000/health`

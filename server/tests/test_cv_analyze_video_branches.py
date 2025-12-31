@@ -5,7 +5,7 @@ from fastapi.testclient import TestClient
 
 from server.app import app
 from server.routes import cv_analyze_video as video_module
-from server.storage.runs import RunRecord
+from server.storage.runs import RunRecord, RunSourceType, RunStatus
 
 
 @pytest.fixture()
@@ -27,7 +27,7 @@ def test_cv_analyze_video_requires_video_extras(monkeypatch, client):
     response = client.post("/cv/analyze/video", data={}, files=_video_file())
 
     assert response.status_code == 400
-    assert "Video extras not installed" in response.json()["detail"]
+    assert "Video extras not installed" in response.json()["detail"]["message"]
 
 
 def test_cv_analyze_video_rejects_insufficient_frames(monkeypatch, client):
@@ -46,7 +46,7 @@ def test_cv_analyze_video_rejects_insufficient_frames(monkeypatch, client):
     response = client.post("/cv/analyze/video", data={}, files=_video_file())
 
     assert response.status_code == 400
-    assert "not enough frames" in response.json()["detail"]
+    assert "not enough frames" in response.json()["detail"]["message"]
 
 
 def test_cv_analyze_video_persists_run_when_requested(monkeypatch, client):
@@ -66,21 +66,29 @@ def test_cv_analyze_video_persists_run_when_requested(monkeypatch, client):
 
     monkeypatch.setattr(video_module, "analyze_frames", _fake_analyze)
 
-    saved = {}
+    saved: dict = {}
 
-    def _fake_save_run(**kwargs):
-        saved.update(kwargs)
+    def _fake_create_run(**kwargs):
+        saved["created"] = kwargs
         return RunRecord(
             run_id="1700000000-deadbeef",
             created_ts=1.0,
+            updated_ts=1.0,
+            status=RunStatus.PROCESSING,
             source=kwargs["source"],
+            source_type=kwargs["source_type"],
             mode=kwargs["mode"],
             params=kwargs["params"],
             metrics=kwargs["metrics"],
             events=kwargs["events"],
         )
 
-    monkeypatch.setattr(video_module, "save_run", _fake_save_run)
+    def _fake_update_run(run_id, **kwargs):
+        saved["updated"] = {"run_id": run_id, **kwargs}
+        return saved.get("created")
+
+    monkeypatch.setattr(video_module, "create_run", _fake_create_run)
+    monkeypatch.setattr(video_module, "update_run", _fake_update_run)
 
     response = client.post(
         "/cv/analyze/video",
@@ -95,6 +103,7 @@ def test_cv_analyze_video_persists_run_when_requested(monkeypatch, client):
     assert body["metrics"]["confidence"] == 0.0
     assert "GOLFIQ_MOCK" not in os.environ
 
-    assert saved["params"]["run_name"] == "demo"
-    assert saved["metrics"]["confidence"] == 0.0
-    assert saved["events"] == [1, 2]
+    assert saved["created"]["params"]["run_name"] == "demo"
+    assert saved["updated"]["metrics"]["confidence"] == 0.0
+    assert saved["updated"]["events"] == [1, 2]
+    assert saved["created"]["source_type"] == RunSourceType.ANALYZE_VIDEO.value

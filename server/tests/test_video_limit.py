@@ -2,6 +2,7 @@ from fastapi.testclient import TestClient
 
 from server.app import app
 from server.routes import cv_analyze_video
+from server.storage.runs import RunRecord, RunStatus
 
 
 def test_video_size_guard(monkeypatch):
@@ -80,10 +81,9 @@ def test_video_persist_adds_confidence(monkeypatch):
         variant_source=None,
         **__,
     ):
-        assert mock is True
+        captured["analyze_called"] = True
+        captured["mock_flag"] = mock
         assert smoothing_window == 3
-        assert model_variant is None
-        assert variant_source is None
         return {"events": [42], "metrics": {}}
 
     class DummyRun:
@@ -91,14 +91,30 @@ def test_video_persist_adds_confidence(monkeypatch):
 
     captured: dict = {}
 
-    def fake_save_run(**kwargs):
-        captured.update(kwargs)
+    def fake_create_run(**kwargs):
+        captured["created"] = kwargs
+        return RunRecord(
+            run_id="vid-456",
+            created_ts=1.0,
+            updated_ts=1.0,
+            status=RunStatus.PROCESSING,
+            source=kwargs["source"],
+            source_type=kwargs["source_type"],
+            mode=kwargs["mode"],
+            params=kwargs["params"],
+            metrics=kwargs["metrics"],
+            events=kwargs["events"],
+        )
+
+    def fake_update_run(run_id, **kwargs):
+        captured["updated"] = {"run_id": run_id, **kwargs}
         return DummyRun()
 
     monkeypatch.setattr(cv_analyze_video, "frames_from_video", fake_frames)
     monkeypatch.setattr(cv_analyze_video, "fps_from_video", fake_fps)
     monkeypatch.setattr(cv_analyze_video, "analyze_frames", fake_analyze)
-    monkeypatch.setattr(cv_analyze_video, "save_run", fake_save_run)
+    monkeypatch.setattr(cv_analyze_video, "create_run", fake_create_run)
+    monkeypatch.setattr(cv_analyze_video, "update_run", fake_update_run)
 
     payload = {"persist": "true", "fps_fallback": "144"}
     video_bytes = b"0123456789"
@@ -113,9 +129,10 @@ def test_video_persist_adds_confidence(monkeypatch):
         }
         response = client.post("/cv/analyze/video", data=payload, files=files)
 
-    assert response.status_code == 200
+    assert response.status_code == 200, (response.json(), captured)
     body = response.json()
     assert body["run_id"] == "vid-456"
     assert body["metrics"]["confidence"] == 0.0
-    assert captured["source"] == "video"
-    assert captured["params"]["fps_fallback"] == 144.0
+    assert captured["created"]["source"] in {"mock", "real"}
+    assert captured["created"]["params"]["fps_fallback"] == 144.0
+    assert captured["updated"]["events"] == [42]

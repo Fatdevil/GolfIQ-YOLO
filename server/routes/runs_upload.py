@@ -186,12 +186,25 @@ def _format_run_record(record: RunRecord) -> Dict[str, Any]:
     return {
         "run_id": record.run_id,
         "created_ts": record.created_ts,
+        "updated_ts": record.updated_ts,
+        "created_at": record.created_at,
+        "updated_at": record.updated_at,
         "source": record.source,
+        "source_type": getattr(record, "source_type", None),
         "mode": record.mode,
         "params": record.params,
         "metrics": record.metrics,
         "events": record.events,
         "impact_preview": record.impact_preview,
+        "status": getattr(record, "status", None),
+        "model_variant_requested": getattr(record, "model_variant_requested", None),
+        "model_variant_selected": getattr(record, "model_variant_selected", None),
+        "override_source": getattr(record, "override_source", None),
+        "inference_timing": getattr(record, "inference_timing", None),
+        "error_code": getattr(record, "error_code", None),
+        "error_message": getattr(record, "error_message", None),
+        "input_ref": getattr(record, "input_ref", None),
+        "metadata": getattr(record, "metadata", None),
     }
 
 

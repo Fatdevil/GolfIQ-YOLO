@@ -5,7 +5,8 @@ from server.storage import runs as runs_storage
 
 
 def test_create_mobile_run(monkeypatch, tmp_path):
-    monkeypatch.setattr(runs_storage, "RUNS_DIR", tmp_path)
+    runs_storage._reset_store_for_tests(tmp_path)
+    monkeypatch.setenv("RUN_STORE_DIR", str(tmp_path))
     client = TestClient(app)
 
     response = client.post(

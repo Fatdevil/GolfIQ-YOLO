@@ -15,7 +15,14 @@ from server.config import (
     IMPACT_CAPTURE_BEFORE,
 )
 from server.security import require_api_key
-from server.storage.runs import save_impact_frames, save_run
+from server.storage.runs import (
+    RunSourceType,
+    RunStatus,
+    create_run,
+    save_impact_frames,
+    update_run,
+)
+from .cv_analyze import _inference_timing
 
 router = APIRouter(
     prefix="/cv/mock", tags=["cv-mock"], dependencies=[Depends(require_api_key)]
@@ -39,11 +46,22 @@ class AnalyzeRequest(BaseModel):
 class AnalyzeResponse(BaseModel):
     events: list[int]
     metrics: dict
-    run_id: str | None = None
+    run_id: str
+    error_code: str | None = None
+    error_message: str | None = None
 
 
 @router.post("/analyze", response_model=AnalyzeResponse)
 def analyze(req: AnalyzeRequest):
+    run = create_run(
+        source="mock",
+        source_type=RunSourceType.ANALYZE.value,
+        mode=getattr(req, "mode", "detector"),
+        status=RunStatus.PROCESSING,
+        params=req.model_dump(exclude_none=True),
+        metrics={},
+        events=[],
+    )
     frames = [np.zeros((64, 64, 3), dtype=np.uint8) for _ in range(req.frames)]
 
     if req.mode == "detector":
@@ -69,33 +87,26 @@ def analyze(req: AnalyzeRequest):
         metrics = as_dict(m)
         metrics["confidence"] = quality_confidence(ball, club, req.frames)
 
-    rec = None
-    if req.persist:
-        rec = save_run(
-            source="mock",
-            mode=getattr(req, "mode", "detector"),
-            params=req.model_dump(),
-            metrics=dict(metrics),
-            events=list(events),
-        )
-        impact_idx = events[0] if events else None
-        if rec and CAPTURE_IMPACT_FRAMES and impact_idx is not None:
-            start = max(0, impact_idx - IMPACT_CAPTURE_BEFORE)
-            stop = min(len(frames), impact_idx + IMPACT_CAPTURE_AFTER)
-            if stop > start:
-                preview = save_impact_frames(rec.run_id, frames[start:stop])
-                import json
-                from pathlib import Path
-
-                run_json_path = Path(preview).parent / "run.json"
-                try:
-                    data = json.loads(run_json_path.read_text())
-                    data["impact_preview"] = preview
-                    run_json_path.write_text(json.dumps(data, indent=2))
-                except Exception:
-                    pass
+    timing = _inference_timing(metrics if isinstance(metrics, dict) else {}) or {}
+    impact_idx = events[0] if events else None
+    impact_preview = None
+    if CAPTURE_IMPACT_FRAMES and impact_idx is not None:
+        start = max(0, impact_idx - IMPACT_CAPTURE_BEFORE)
+        stop = min(len(frames), impact_idx + IMPACT_CAPTURE_AFTER)
+        if stop > start:
+            impact_preview = save_impact_frames(run.run_id, frames[start:stop])
     if "confidence" not in metrics:
         metrics["confidence"] = 0.0
+    update_run(
+        run.run_id,
+        status=RunStatus.SUCCEEDED,
+        metrics=dict(metrics),
+        events=list(events),
+        inference_timing=timing,
+        impact_preview=impact_preview,
+    )
     return AnalyzeResponse(
-        events=events, metrics=metrics, run_id=rec.run_id if rec else None
+        events=events,
+        metrics=metrics,
+        run_id=run.run_id,
     )
