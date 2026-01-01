@@ -72,9 +72,7 @@ def get_presigned_put(key: str, ttl_days: int) -> Dict[str, Any]:
         ExpiresIn=expires_in,
         HttpMethod="PUT",
     )
-    expires_at = dt.datetime.utcnow().replace(tzinfo=dt.timezone.utc) + dt.timedelta(
-        days=ttl_days
-    )
+    expires_at = dt.datetime.now(dt.timezone.utc) + dt.timedelta(days=ttl_days)
 
     return {
         "url": url,

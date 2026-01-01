@@ -8,6 +8,7 @@ from fastapi import APIRouter, Body, Depends, Header, HTTPException, status
 from server.feature_flag_config_store import format_feature_flags_config, store
 
 router = APIRouter()
+UNPROCESSABLE_STATUS = status.HTTP_422_UNPROCESSABLE_CONTENT
 
 
 def _require_admin_token(
@@ -27,13 +28,13 @@ def _validate_rollout_percent(value: Any) -> int | None:
         return None
     if isinstance(value, bool) or not isinstance(value, int):
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=UNPROCESSABLE_STATUS,
             detail="rolloutPercent must be an integer between 0 and 100",
         )
     if 0 <= value <= 100:
         return value
     raise HTTPException(
-        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+        status_code=UNPROCESSABLE_STATUS,
         detail="rolloutPercent must be an integer between 0 and 100",
     )
 
@@ -45,7 +46,7 @@ def _validate_allowlist(value: Any) -> list[str] | None:
         not isinstance(entry, str) for entry in value
     ):
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=UNPROCESSABLE_STATUS,
             detail="allowlist must be a list of strings",
         )
     return [entry for entry in (item.strip() for item in value) if entry]
@@ -55,7 +56,7 @@ def _validate_force(value: Any) -> str | None:
     if value in (None, "force_on", "force_off"):
         return value
     raise HTTPException(
-        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+        status_code=UNPROCESSABLE_STATUS,
         detail="force must be force_on, force_off, or null",
     )
 
@@ -63,7 +64,7 @@ def _validate_force(value: Any) -> str | None:
 def _validate_update_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
     if not isinstance(payload, dict):
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=UNPROCESSABLE_STATUS,
             detail="payload must be a JSON object",
         )
     updates: Dict[str, Any] = {}
@@ -72,7 +73,7 @@ def _validate_update_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
         return updates
     if not isinstance(round_flow, dict):
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=UNPROCESSABLE_STATUS,
             detail="roundFlowV2 must be a JSON object",
         )
     round_flow_updates: Dict[str, Any] = {}
@@ -125,7 +126,7 @@ def add_round_flow_allowlist_member(
     member_id = payload.get("memberId")
     if not isinstance(member_id, str) or not member_id.strip():
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=UNPROCESSABLE_STATUS,
             detail="memberId must be a non-empty string",
         )
     config, _ = store.load()
@@ -147,7 +148,7 @@ def remove_round_flow_allowlist_member(
     member_id = payload.get("memberId")
     if not isinstance(member_id, str) or not member_id.strip():
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=UNPROCESSABLE_STATUS,
             detail="memberId must be a non-empty string",
         )
     config, _ = store.load()

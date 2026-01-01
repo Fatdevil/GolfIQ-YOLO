@@ -18,6 +18,7 @@ from server.services.caddie_telemetry import (
 )
 
 router = APIRouter(dependencies=[Depends(require_api_key)])
+UNPROCESSABLE_STATUS = status.HTTP_422_UNPROCESSABLE_CONTENT
 
 
 class CaddieTelemetryIn(BaseModel):
@@ -41,7 +42,7 @@ def _to_event(payload: CaddieTelemetryIn) -> CaddieTelemetryEvent:
     if payload.type == CADDIE_ADVICE_SHOWN_V1:
         if not payload.recommendedClub:
             raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                status_code=UNPROCESSABLE_STATUS,
                 detail="recommendedClub required for advice shown",
             )
         return build_caddie_advice_shown_event(
@@ -57,7 +58,7 @@ def _to_event(payload: CaddieTelemetryIn) -> CaddieTelemetryEvent:
     if payload.type == CADDIE_ADVICE_ACCEPTED_V1:
         if not payload.recommendedClub:
             raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                status_code=UNPROCESSABLE_STATUS,
                 detail="recommendedClub required for advice accepted",
             )
         return build_caddie_advice_accepted_event(
@@ -73,7 +74,7 @@ def _to_event(payload: CaddieTelemetryIn) -> CaddieTelemetryEvent:
     if payload.type == SHOT_OUTCOME_V1:
         if not payload.club:
             raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                status_code=UNPROCESSABLE_STATUS,
                 detail="club required for shot outcome",
             )
         return build_shot_outcome_event(

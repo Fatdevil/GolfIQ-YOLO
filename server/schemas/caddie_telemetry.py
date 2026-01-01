@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Literal, Optional
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 
 CADDIE_ADVICE_SHOWN_V1 = "CADDIE_ADVICE_SHOWN_V1"
@@ -30,5 +30,4 @@ class CaddieTelemetryEvent(BaseModel):
     resultCategory: Optional[str] = None
     adviceId: Optional[str] = None
 
-    class Config:
-        extra = "ignore"
+    model_config = ConfigDict(extra="ignore")

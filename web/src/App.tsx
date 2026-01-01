@@ -29,6 +29,7 @@ import EventLiveHostPage from "./pages/events/[id]/live-host";
 import EventLiveViewerPage from "./pages/events/[id]/live-view";
 import LiveViewerPage from "./pages/events/LiveViewerPage";
 import EventTopShotsPage from "./pages/events/[id]/top-shots";
+import RunsDashboardPage from "./pages/admin/RunsDashboard";
 import HomeFeed from "./pages/home/HomeFeed";
 import { HomeHubPage } from "@/pages/home/HomeHubPage";
 import PracticeHistoryPage from "@/pages/practice/PracticeHistoryPage";
@@ -62,6 +63,7 @@ export default function App() {
           <Route path="/mock" element={<MockAnalyzePage />} />
           <Route path="/runs" element={<RunsPage />} />
           <Route path="/runs/:id" element={<RunDetailPage />} />
+          <Route path="/admin/runs" element={<RunsDashboardPage />} />
           <Route path="/share/:id" element={<ShareRunPage />} />
           <Route path="/event/:id" element={<EventLeaderboardPage />} />
           <Route path="/events/new" element={<CreateEventPage />} />

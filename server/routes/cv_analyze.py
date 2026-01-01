@@ -14,7 +14,7 @@ from fastapi import (
     Response,
     UploadFile,
 )
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 from fastapi.responses import JSONResponse
 from starlette import status
 from starlette.status import (
@@ -66,8 +66,7 @@ class AnalyzeMetrics(BaseModel):
     carryEstM: float | None = None
     quality: dict[str, str] | None = None
 
-    class Config:
-        extra = "allow"
+    model_config = ConfigDict(extra="allow")
 
 
 class AnalyzeQuery(BaseModel):

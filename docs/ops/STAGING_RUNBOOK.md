@@ -88,6 +88,12 @@ MODEL_VARIANT=yolov11 docker compose -f docker-compose.staging.yml up --build
     ```
   - The response includes `{ "scanned": <total>, "deleted": <removed>, "kept": <kept> }`. Non-terminal (`processing`) runs are never pruned.
 
+## Runs dashboard (admin UI)
+- Navigate to `http://localhost:5173/admin/runs` with the web app pointed at the staging API.
+- Filters supported: status (`processing|succeeded|failed`), kind (`image|video|range`), model variant, created date range, and per-page limit (25/50/100). Pagination uses the opaque `next_cursor` from the API; the UI exposes Next/Prev.
+- Row click opens a detail drawer showing lifecycle timestamps, duration, inputs, timings, and the stable error contract (`error_code`, `message`). A diagnostics block exposes the raw JSON.
+- Prune action (guarded): shown only when `VITE_RUNS_PRUNE_ENABLED=true`. If `VITE_RUNS_PRUNE_LOCKED=true` (or `VITE_PROD_LOCK=true`) the button is disabled. To execute, type `PRUNE` and optionally supply `max_runs` / `max_age_days`; a summary of `{scanned, deleted, kept}` is displayed after completion. Use this only in staging or sandbox environments.
+
 ## Feature flag admin verification
 1. Ensure `ADMIN_TOKEN` is set in the container environment.
 2. Fetch config:

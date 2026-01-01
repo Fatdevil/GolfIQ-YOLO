@@ -7,6 +7,13 @@ export const playsLikeEnabled =
 export const qaReplayEnabled =
   import.meta.env.DEV || (import.meta.env.VITE_QA_MODE ?? "false") === "true";
 
+export const runsPruneEnabled =
+  (import.meta.env.VITE_RUNS_PRUNE_ENABLED ?? "false") === "true";
+
+export const runsPruneLocked =
+  (import.meta.env.VITE_RUNS_PRUNE_LOCKED ?? import.meta.env.VITE_PROD_LOCK ?? "false") ===
+  "true";
+
 function parseNumber(value: string | undefined, fallback: number): number {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : fallback;
