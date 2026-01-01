@@ -14,6 +14,8 @@ from fastapi import APIRouter, HTTPException, Request, Response, status
 from . import coerce_boolish
 from .playslike_wind_config import compute_wind_slope_delta, resolveWindSlopeConfig
 
+UNPROCESSABLE_STATUS = status.HTTP_422_UNPROCESSABLE_CONTENT
+
 DEFAULT_TEMP_ALT_CFG: Dict[str, Any] = {
     "enabled": False,
     "betaPerC": 0.0018,
@@ -56,28 +58,28 @@ def _sanitize_temp_alt(
         return sanitized
     if not isinstance(overrides, dict):
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=UNPROCESSABLE_STATUS,
             detail="playsLike.tempAlt must be a JSON object",
         )
     for key, value in overrides.items():
         if key == "enabled":
             if not isinstance(value, bool):
                 raise HTTPException(
-                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    status_code=UNPROCESSABLE_STATUS,
                     detail="playsLike.tempAlt.enabled must be a boolean",
                 )
             sanitized["enabled"] = value
         elif key == "betaPerC":
             if not isinstance(value, (int, float)):
                 raise HTTPException(
-                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    status_code=UNPROCESSABLE_STATUS,
                     detail="playsLike.tempAlt.betaPerC must be a number",
                 )
             sanitized["betaPerC"] = float(value)
         elif key == "gammaPer100m":
             if not isinstance(value, (int, float)):
                 raise HTTPException(
-                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    status_code=UNPROCESSABLE_STATUS,
                     detail="playsLike.tempAlt.gammaPer100m must be a number",
                 )
             sanitized["gammaPer100m"] = float(value)
@@ -87,14 +89,14 @@ def _sanitize_temp_alt(
                 continue
             if not isinstance(value, dict):
                 raise HTTPException(
-                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    status_code=UNPROCESSABLE_STATUS,
                     detail="playsLike.tempAlt.caps must be a JSON object",
                 )
             per_component = value.get("perComponent")
             if per_component is not None:
                 if not isinstance(per_component, (int, float)):
                     raise HTTPException(
-                        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                        status_code=UNPROCESSABLE_STATUS,
                         detail="playsLike.tempAlt.caps.perComponent must be a number",
                     )
                 sanitized["caps"]["perComponent"] = float(per_component)
@@ -102,7 +104,7 @@ def _sanitize_temp_alt(
             if total is not None:
                 if not isinstance(total, (int, float)):
                     raise HTTPException(
-                        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                        status_code=UNPROCESSABLE_STATUS,
                         detail="playsLike.tempAlt.caps.total must be a number",
                     )
                 sanitized["caps"]["total"] = float(total)
@@ -133,21 +135,21 @@ def _sanitize_wind(
         return sanitized
     if not isinstance(overrides, dict):
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=UNPROCESSABLE_STATUS,
             detail="playsLike.wind must be a JSON object",
         )
     for key, value in overrides.items():
         if key == "enabled":
             if not isinstance(value, bool):
                 raise HTTPException(
-                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    status_code=UNPROCESSABLE_STATUS,
                     detail="playsLike.wind.enabled must be a boolean",
                 )
             sanitized["enabled"] = value
         elif key in {"head_per_mps", "slope_per_m", "cross_aim_deg_per_mps"}:
             if not isinstance(value, (int, float)):
                 raise HTTPException(
-                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    status_code=UNPROCESSABLE_STATUS,
                     detail=f"playsLike.wind.{key} must be a number",
                 )
             sanitized[key] = float(value)
@@ -157,14 +159,14 @@ def _sanitize_wind(
                 continue
             if not isinstance(value, dict):
                 raise HTTPException(
-                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    status_code=UNPROCESSABLE_STATUS,
                     detail="playsLike.wind.caps must be a JSON object",
                 )
             per_component = value.get("perComponent")
             if per_component is not None:
                 if not isinstance(per_component, (int, float)):
                     raise HTTPException(
-                        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                        status_code=UNPROCESSABLE_STATUS,
                         detail="playsLike.wind.caps.perComponent must be a number",
                     )
                 sanitized["caps"]["perComponent"] = float(per_component)
@@ -172,7 +174,7 @@ def _sanitize_wind(
             if total is not None:
                 if not isinstance(total, (int, float)):
                     raise HTTPException(
-                        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                        status_code=UNPROCESSABLE_STATUS,
                         detail="playsLike.wind.caps.total must be a number",
                     )
                 sanitized["caps"]["total"] = float(total)
@@ -269,7 +271,7 @@ def _sanitize_ui(
         return sanitized
     if not isinstance(overrides, dict):
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=UNPROCESSABLE_STATUS,
             detail="ui must be a JSON object",
         )
     for key, value in overrides.items():
@@ -277,13 +279,13 @@ def _sanitize_ui(
             continue
         if not isinstance(value, str):
             raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                status_code=UNPROCESSABLE_STATUS,
                 detail="ui.playsLikeVariant must be a string",
             )
         normalized = value.lower()
         if normalized not in {"off", "v1"}:
             raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                status_code=UNPROCESSABLE_STATUS,
                 detail="ui.playsLikeVariant must be one of ['off', 'v1']",
             )
         sanitized["playsLikeVariant"] = normalized
@@ -366,7 +368,7 @@ class RemoteConfigStore:
             return sanitized
         if not isinstance(overrides, dict):
             raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                status_code=UNPROCESSABLE_STATUS,
                 detail="playsLikeProfileSelection must be a JSON object",
             )
         for key, value in overrides.items():
@@ -374,7 +376,7 @@ class RemoteConfigStore:
                 continue
             if value is not None and not isinstance(value, str):
                 raise HTTPException(
-                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    status_code=UNPROCESSABLE_STATUS,
                     detail=f"playsLikeProfileSelection.{key} must be a string or null",
                 )
             sanitized[key] = value
@@ -393,21 +395,21 @@ class RemoteConfigStore:
             return sanitized
         if not isinstance(overrides, dict):
             raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                status_code=UNPROCESSABLE_STATUS,
                 detail="playsLike must be a JSON object",
             )
         for key, value in overrides.items():
             if key == "windModel":
                 if not isinstance(value, str):
                     raise HTTPException(
-                        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                        status_code=UNPROCESSABLE_STATUS,
                         detail="playsLike.windModel must be a string",
                     )
                 sanitized[key] = value
             elif key == "sidewindDistanceAdjust":
                 if not isinstance(value, bool):
                     raise HTTPException(
-                        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                        status_code=UNPROCESSABLE_STATUS,
                         detail="playsLike.sidewindDistanceAdjust must be a boolean",
                     )
                 sanitized[key] = value
@@ -417,14 +419,14 @@ class RemoteConfigStore:
                     continue
                 if not isinstance(value, dict):
                     raise HTTPException(
-                        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                        status_code=UNPROCESSABLE_STATUS,
                         detail=f"playsLike.{key} must be a JSON object",
                     )
                 sanitized_map: Dict[str, Dict[str, float]] = {}
                 for entry, scales in value.items():
                     if not isinstance(scales, dict):
                         raise HTTPException(
-                            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                            status_code=UNPROCESSABLE_STATUS,
                             detail=f"playsLike.{key}.{entry} must be a JSON object",
                         )
                     sanitized_entry: Dict[str, float] = {}
@@ -435,7 +437,7 @@ class RemoteConfigStore:
                             continue
                         if not isinstance(scale_value, (int, float)):
                             raise HTTPException(
-                                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                                status_code=UNPROCESSABLE_STATUS,
                                 detail=(
                                     f"playsLike.{key}.{entry}.{scale_key} must be a number"
                                 ),
@@ -451,7 +453,7 @@ class RemoteConfigStore:
             elif key in sanitized:
                 if not isinstance(value, (int, float)):
                     raise HTTPException(
-                        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                        status_code=UNPROCESSABLE_STATUS,
                         detail=f"playsLike.{key} must be a number",
                     )
                 sanitized[key] = float(value)
@@ -488,7 +490,7 @@ class RemoteConfigStore:
                     and not isinstance(value, str)
                 ):
                     raise HTTPException(
-                        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                        status_code=UNPROCESSABLE_STATUS,
                         detail=f"{tier}.playsLikeProfile must be a string",
                     )
                 if key == "ui":
@@ -506,7 +508,7 @@ class RemoteConfigStore:
                 if key == "playsLikeProfile":
                     if value is not None and not isinstance(value, str):
                         raise HTTPException(
-                            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                            status_code=UNPROCESSABLE_STATUS,
                             detail=f"{tier}.playsLikeProfile must be a string",
                         )
                     base[key] = value
@@ -523,12 +525,12 @@ class RemoteConfigStore:
         for key, value in list(base.items()):
             if key in BOOL_KEYS and value is not None and not isinstance(value, bool):
                 raise HTTPException(
-                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    status_code=UNPROCESSABLE_STATUS,
                     detail=f"{tier}.{key} must be a boolean",
                 )
             if key == "inputSize" and value is not None and not isinstance(value, int):
                 raise HTTPException(
-                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    status_code=UNPROCESSABLE_STATUS,
                     detail=f"{tier}.inputSize must be an integer",
                 )
         return base
@@ -541,14 +543,14 @@ class RemoteConfigStore:
     ) -> Dict[str, Dict[str, Any]]:
         if not isinstance(data, dict):
             raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                status_code=UNPROCESSABLE_STATUS,
                 detail="remote config must be a JSON object",
             )
         allowed_tiers = {"tierA", "tierB", "tierC"}
         unexpected = [tier for tier in data.keys() if tier not in allowed_tiers]
         if unexpected:
             raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                status_code=UNPROCESSABLE_STATUS,
                 detail=f"unsupported tier: {unexpected[0]}",
             )
         snapshot = deepcopy(current or DEFAULT_REMOTE_CONFIG)
@@ -557,7 +559,7 @@ class RemoteConfigStore:
             tier_overrides = data.get(tier)
             if tier_overrides is not None and not isinstance(tier_overrides, dict):
                 raise HTTPException(
-                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    status_code=UNPROCESSABLE_STATUS,
                     detail=f"{tier} overrides must be a JSON object",
                 )
             validated[tier] = cls._merge_tier(

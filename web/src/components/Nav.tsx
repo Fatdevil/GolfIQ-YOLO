@@ -109,6 +109,7 @@ function getLinks(t: (key: string) => string): LinkItem[] {
     { to: "/profile", label: t("nav.profile") },
     { to: "/bag", label: t("nav.myBag") },
     { to: "/runs", label: "Runs" },
+    { to: "/admin/runs", label: "Runs v1" },
     { to: "/reels", label: "Reels" },
     { to: "/field-runs", label: "Field runs" },
     { to: "/accuracy", label: "Accuracy" },
