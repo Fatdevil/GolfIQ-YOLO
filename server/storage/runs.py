@@ -256,8 +256,11 @@ def _write_json_atomic(path: Path, content: str) -> None:
     tmp_path.replace(path)
 
 
-class RunTransitionError(ValueError):
-    """Raised when an invalid run status transition is attempted."""
+try:
+    RunTransitionError
+except NameError:
+    class RunTransitionError(ValueError):
+        """Raised when an invalid run status transition is attempted."""
 
 
 class FileRunStore(RunStore):

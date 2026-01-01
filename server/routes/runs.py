@@ -122,7 +122,7 @@ def _item_v1(r: RunRecord) -> RunListItemV1:
 
 def _detail_item(r: RunRecord) -> RunDetailResponse:
     return RunDetailResponse(
-        **_item_v1(r).dict(),
+        **_item_v1(r).model_dump(),
         created_ts=r.created_ts,
         updated_ts=r.updated_ts,
         started_ts=r.started_ts,
