@@ -259,6 +259,7 @@ def _write_json_atomic(path: Path, content: str) -> None:
 try:
     RunTransitionError
 except NameError:
+
     class RunTransitionError(ValueError):
         """Raised when an invalid run status transition is attempted."""
 
@@ -351,7 +352,9 @@ class FileRunStore(RunStore):
                     if isinstance(status_update, RunStatus)
                     else RunStatus(status_update)
                 )
-            is_valid, reason = self._validate_transition(candidate.status, target_status)
+            is_valid, reason = self._validate_transition(
+                candidate.status, target_status
+            )
             if not is_valid:
                 raise RunTransitionError(reason)
             for key, value in updates.items():
@@ -362,7 +365,10 @@ class FileRunStore(RunStore):
             now = time.time()
             candidate.status = target_status
             candidate.updated_ts = now
-            if candidate.status == RunStatus.PROCESSING and candidate.started_ts is None:
+            if (
+                candidate.status == RunStatus.PROCESSING
+                and candidate.started_ts is None
+            ):
                 candidate.started_ts = now
             if candidate.status in {RunStatus.SUCCEEDED, RunStatus.FAILED}:
                 if candidate.finished_ts is None:
@@ -450,7 +456,7 @@ class FileRunStore(RunStore):
         return runs[start:end]
 
     def delete_run(self, run_id: str, *, locked: bool = False) -> bool:
-        with (_locked(self.lock_path) if not locked else nullcontext()):
+        with _locked(self.lock_path) if not locked else nullcontext():
             safe_dir = _safe(run_id)
             if not safe_dir:
                 return False
