@@ -17,6 +17,9 @@ export const toast = {
   error(message: string): void {
     dispatchToast({ message, variant: 'error' });
   },
+  success(message: string): void {
+    dispatchToast({ message, variant: 'success' });
+  },
 };
 
 export type ToastApi = typeof toast;
