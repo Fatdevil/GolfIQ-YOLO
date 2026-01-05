@@ -5,7 +5,7 @@ const mockWithAuth = vi.fn((extra: Record<string, string> = {}) => ({ ...extra, 
 
 vi.mock("@/api", () => ({
   apiClient: { get: (...args: unknown[]) => mockApiClientGet(...args) },
-  withAuth: (...args: unknown[]) => mockWithAuth(...args),
+  withAuth: (extra?: Record<string, string>) => mockWithAuth(extra),
 }));
 
 import { buildRunsListQuery, getRunDetailV1 } from "./runsV1";
