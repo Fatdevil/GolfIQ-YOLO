@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { getRunDetailV1, resolveRunsError, type RunDetailV1, type RunsError } from "@/api/runsV1";
 import { copyToClipboard } from "@/utils/copy";
 import { toast } from "@/ui/toast";
@@ -32,9 +32,20 @@ export function RunDetailPanel({ runId, onClose }: Props) {
   const [error, setError] = useState<RunsError | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [showDiagnostics, setShowDiagnostics] = useState(false);
+  const mountedRef = useRef(true);
+  const requestSeqRef = useRef(0);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
 
   const loadDetail = useCallback(
     async (currentRunId: string, options?: { preserveData?: boolean }) => {
+      const requestId = ++requestSeqRef.current;
+      const requestedRunId = currentRunId;
       const preserveData = options?.preserveData ?? false;
       if (preserveData) {
         setIsRefreshing(true);
@@ -45,20 +56,26 @@ export function RunDetailPanel({ runId, onClose }: Props) {
       }
       try {
         const response = await getRunDetailV1(currentRunId);
+        if (!mountedRef.current || requestId !== requestSeqRef.current || requestedRunId !== currentRunId) {
+          return;
+        }
         setDetail(response);
         setState("loaded");
-        if (preserveData) {
+        if (preserveData && mountedRef.current && requestId === requestSeqRef.current && requestedRunId === currentRunId) {
           toast.success("Updated");
         }
       } catch (err) {
         const resolved = normalizeError(err);
+        if (!mountedRef.current || requestId !== requestSeqRef.current || requestedRunId !== currentRunId) {
+          return;
+        }
         if (!preserveData) {
           setError(resolved);
           setState("error");
         }
         toast.error(resolved.message);
       } finally {
-        if (preserveData) {
+        if (preserveData && mountedRef.current && requestId === requestSeqRef.current && requestedRunId === currentRunId) {
           setIsRefreshing(false);
         }
       }
