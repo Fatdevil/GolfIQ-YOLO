@@ -9,7 +9,7 @@ import {
 } from "@/api/runsV1";
 import RunsTable from "@/features/admin/runs/RunsTable";
 import RunsFilters from "@/features/admin/runs/RunsFilters";
-import RunDetailPanel from "@/features/admin/runs/RunDetailPanel";
+import RunDetailPanel from "./RunDetailPanel";
 import { runsPruneEnabled, runsPruneLocked } from "@/config";
 import { toast } from "@/ui/toast";
 

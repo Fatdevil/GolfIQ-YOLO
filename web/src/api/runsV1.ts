@@ -51,7 +51,7 @@ export type RunListResponse = {
   next_cursor?: string | null;
 };
 
-export type RunDetail = RunListItem & {
+export type RunDetailV1 = RunListItem & {
   created_ts: number;
   updated_ts: number;
   started_ts?: number | null;
@@ -64,6 +64,8 @@ export type RunDetail = RunListItem & {
   impact_preview?: string | null;
   inputs?: Record<string, unknown> | null;
 };
+
+export type RunDetail = RunDetailV1;
 
 export type RunPruneRequest = {
   max_runs?: number;
@@ -119,15 +121,19 @@ export async function listRunsV1(params: RunsListFilters = {}): Promise<RunListR
   return response.data;
 }
 
-export async function getRunDetailV1(runId: string): Promise<RunDetail> {
-  const response = await apiClient.get<RunDetail>(`/runs/v1/${encodeURIComponent(runId)}`, {
-    headers: withAuth(),
-  });
-  return response.data;
+export async function getRunDetailV1(runId: string, headers: Record<string, string> = {}): Promise<RunDetailV1> {
+  try {
+    const response = await apiClient.get<RunDetailV1>(`/runs/v1/${encodeURIComponent(runId)}`, {
+      headers: withAuth(headers),
+    });
+    return response.data;
+  } catch (error) {
+    throw resolveRunsError(error, "Failed to load run detail");
+  }
 }
 
 export async function pruneRunsV1(payload?: RunPruneRequest): Promise<RunPruneResponse> {
-  const response = await apiClient.post<RunPruneResponse>('/runs/v1/prune', payload ?? {}, {
+  const response = await apiClient.post<RunPruneResponse>("/runs/v1/prune", payload ?? {}, {
     headers: withAuth({ "Content-Type": "application/json" }),
   });
   return response.data;
