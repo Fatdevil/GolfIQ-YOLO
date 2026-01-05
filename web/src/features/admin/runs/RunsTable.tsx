@@ -43,7 +43,12 @@ export function RunsTable({ runs, loading, error, onSelect }: Props) {
       const duration =
         started && finished ? formatDuration(finished.getTime() - started.getTime()) : "–";
       return (
-        <tr key={run.run_id} className="border-t border-slate-800/80">
+        <tr
+          key={run.run_id}
+          data-testid={`run-row-${run.run_id}`}
+          className="border-t border-slate-800/80 hover:bg-slate-900/60"
+          onClick={() => onSelect(run.run_id)}
+        >
           <td className="whitespace-nowrap px-4 py-3 font-mono text-xs text-emerald-200">{run.run_id}</td>
           <td className="px-4 py-3 text-sm text-slate-300 capitalize">{run.status}</td>
           <td className="px-4 py-3 text-sm text-slate-300">{run.kind ?? "–"}</td>
@@ -55,9 +60,12 @@ export function RunsTable({ runs, loading, error, onSelect }: Props) {
           <td className="px-4 py-3 text-right text-sm">
             <button
               className="rounded-md border border-emerald-500/40 px-3 py-1 text-xs font-semibold text-emerald-200 transition hover:bg-emerald-500/10"
-              onClick={() => onSelect(run.run_id)}
+              onClick={(event) => {
+                event.stopPropagation();
+                onSelect(run.run_id);
+              }}
             >
-              Inspect
+              Details
             </button>
           </td>
         </tr>
