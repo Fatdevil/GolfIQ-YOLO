@@ -1,5 +1,14 @@
-import { describe, expect, it } from "vitest";
-import { buildRunsListQuery } from "./runsV1";
+import { describe, expect, it, vi } from "vitest";
+
+const mockApiClientGet = vi.fn();
+const mockWithAuth = vi.fn((extra: Record<string, string> = {}) => ({ ...extra, "x-api-key": "test-key" }));
+
+vi.mock("@/api", () => ({
+  apiClient: { get: (...args: unknown[]) => mockApiClientGet(...args) },
+  withAuth: (...args: unknown[]) => mockWithAuth(...args),
+}));
+
+import { buildRunsListQuery, getRunDetailV1 } from "./runsV1";
 
 describe("buildRunsListQuery", () => {
   it("serializes filters and ISO dates", () => {
@@ -31,5 +40,16 @@ describe("buildRunsListQuery", () => {
     });
     expect(query.created_after).toBeUndefined();
     expect(query.created_before).toBeUndefined();
+  });
+
+  it("adds auth headers when fetching run detail", async () => {
+    mockApiClientGet.mockResolvedValue({ data: { run_id: "run-1" } });
+
+    await getRunDetailV1("run-1");
+
+    expect(mockWithAuth).toHaveBeenCalled();
+    expect(mockApiClientGet).toHaveBeenCalledWith("/runs/v1/run-1", {
+      headers: { "x-api-key": "test-key" },
+    });
   });
 });

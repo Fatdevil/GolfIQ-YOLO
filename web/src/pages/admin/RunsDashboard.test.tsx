@@ -4,7 +4,7 @@ import { render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import RunsDashboardPage from "./RunsDashboard";
+import RunsDashboardPage, { buildPrunePayload } from "./RunsDashboard";
 
 const mockListRunsV1 = vi.fn();
 const mockPruneRunsV1 = vi.fn();
@@ -97,5 +97,21 @@ describe("RunsDashboardPage", () => {
 
     await waitFor(() => expect(mockListRunsV1).toHaveBeenCalledTimes(2));
     expect(mockListRunsV1.mock.calls[1][0]).toMatchObject({ cursor: "cursor-1" });
+  });
+});
+
+describe("buildPrunePayload", () => {
+  it("omits invalid numbers to avoid NaN payloads", () => {
+    const { payload, errors } = buildPrunePayload("not-a-number", "30");
+
+    expect(errors.maxRuns).toBeDefined();
+    expect(payload).toEqual({ max_age_days: 30 });
+  });
+
+  it("passes through valid numeric inputs", () => {
+    const { payload, errors } = buildPrunePayload("10", "5");
+
+    expect(errors).toEqual({});
+    expect(payload).toEqual({ max_runs: 10, max_age_days: 5 });
   });
 });

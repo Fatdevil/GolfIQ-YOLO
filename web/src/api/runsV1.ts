@@ -120,7 +120,9 @@ export async function listRunsV1(params: RunsListFilters = {}): Promise<RunListR
 }
 
 export async function getRunDetailV1(runId: string): Promise<RunDetail> {
-  const response = await apiClient.get<RunDetail>(`/runs/v1/${encodeURIComponent(runId)}`);
+  const response = await apiClient.get<RunDetail>(`/runs/v1/${encodeURIComponent(runId)}`, {
+    headers: withAuth(),
+  });
   return response.data;
 }
 

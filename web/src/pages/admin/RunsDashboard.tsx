@@ -1,5 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
-import { listRunsV1, pruneRunsV1, resolveRunsError, type RunListItem, type RunsListFilters } from "@/api/runsV1";
+import {
+  listRunsV1,
+  pruneRunsV1,
+  resolveRunsError,
+  type RunListItem,
+  type RunPruneRequest,
+  type RunsListFilters,
+} from "@/api/runsV1";
 import RunsTable from "@/features/admin/runs/RunsTable";
 import RunsFilters from "@/features/admin/runs/RunsFilters";
 import RunDetailPanel from "@/features/admin/runs/RunDetailPanel";
@@ -12,6 +19,40 @@ type RunsDashboardPageProps = {
 };
 
 const DEFAULT_LIMIT = 25;
+const INVALID_NUMBER_MESSAGE = "Must be a number";
+
+export function buildPrunePayload(
+  maxRuns: string,
+  maxAgeDays: string,
+): {
+  payload: RunPruneRequest;
+  errors: { maxRuns?: string; maxAgeDays?: string };
+} {
+  const errors: { maxRuns?: string; maxAgeDays?: string } = {};
+  const payload: RunPruneRequest = {};
+
+  const trimmedRuns = maxRuns.trim();
+  if (trimmedRuns.length) {
+    const parsed = Number(trimmedRuns);
+    if (Number.isFinite(parsed)) {
+      payload.max_runs = parsed;
+    } else {
+      errors.maxRuns = INVALID_NUMBER_MESSAGE;
+    }
+  }
+
+  const trimmedAge = maxAgeDays.trim();
+  if (trimmedAge.length) {
+    const parsed = Number(trimmedAge);
+    if (Number.isFinite(parsed)) {
+      payload.max_age_days = parsed;
+    } else {
+      errors.maxAgeDays = INVALID_NUMBER_MESSAGE;
+    }
+  }
+
+  return { payload, errors };
+}
 
 export default function RunsDashboardPage({ initialCursor = null, debugControls }: RunsDashboardPageProps) {
   const [runs, setRuns] = useState<RunListItem[]>([]);
@@ -28,6 +69,11 @@ export default function RunsDashboardPage({ initialCursor = null, debugControls 
   const [pruneMaxRuns, setPruneMaxRuns] = useState<string>("");
   const [pruneMaxAgeDays, setPruneMaxAgeDays] = useState<string>("");
   const [pruneConfirm, setPruneConfirm] = useState("");
+
+  const pruneValidation = useMemo(
+    () => buildPrunePayload(pruneMaxRuns, pruneMaxAgeDays),
+    [pruneMaxRuns, pruneMaxAgeDays],
+  );
 
   useEffect(() => {
     if (debugControls) {
@@ -91,14 +137,15 @@ export default function RunsDashboardPage({ initialCursor = null, debugControls 
   const handlePrune = async () => {
     setPruneBusy(true);
     setPruneResult(null);
+    if (pruneValidation.errors.maxRuns || pruneValidation.errors.maxAgeDays) {
+      setPruneResult(pruneValidation.errors.maxRuns ?? pruneValidation.errors.maxAgeDays ?? null);
+      setPruneBusy(false);
+      return;
+    }
     try {
-      const payload = {
-        max_runs: pruneMaxRuns ? Number(pruneMaxRuns) : undefined,
-        max_age_days: pruneMaxAgeDays ? Number(pruneMaxAgeDays) : undefined,
-      };
-      const response = await pruneRunsV1(payload);
+      const response = await pruneRunsV1(pruneValidation.payload);
       setPruneResult(`Scanned ${response.scanned}; deleted ${response.deleted}; kept ${response.kept}.`);
-      toast.error(`Pruned ${response.deleted} runs (kept ${response.kept}).`);
+      toast.success(`Pruned ${response.deleted} runs (kept ${response.kept}).`);
       setCursorStack([]);
       setCurrentCursor(null);
     } catch (err) {
@@ -111,11 +158,14 @@ export default function RunsDashboardPage({ initialCursor = null, debugControls 
   };
 
   const pruneDisabledReason = useMemo(() => {
+    if (pruneValidation.errors.maxRuns || pruneValidation.errors.maxAgeDays) {
+      return pruneValidation.errors.maxRuns ?? pruneValidation.errors.maxAgeDays ?? null;
+    }
     if (!runsPruneEnabled) return "Pruning disabled for this environment.";
     if (runsPruneLocked) return "Pruning locked in production.";
     if (pruneConfirm.trim() !== "PRUNE") return "Type PRUNE to confirm.";
     return null;
-  }, [pruneConfirm, runsPruneEnabled, runsPruneLocked]);
+  }, [pruneConfirm, pruneValidation.errors.maxAgeDays, pruneValidation.errors.maxRuns, runsPruneEnabled, runsPruneLocked]);
 
   return (
     <section className="space-y-6">
@@ -154,7 +204,7 @@ export default function RunsDashboardPage({ initialCursor = null, debugControls 
           <button
             data-testid="runs-next-page"
             onClick={handleNext}
-            disabled={loading}
+            disabled={!canGoNext || loading}
             className="rounded-md border border-slate-700 px-3 py-1 text-xs font-semibold text-slate-200 transition hover:border-emerald-400 hover:text-emerald-200 disabled:cursor-not-allowed disabled:opacity-60"
           >
             Next
@@ -194,6 +244,9 @@ export default function RunsDashboardPage({ initialCursor = null, debugControls 
                   onChange={(e) => setPruneMaxRuns(e.target.value)}
                   className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100"
                 />
+                {pruneValidation.errors.maxRuns && (
+                  <p className="text-xs text-red-300">{pruneValidation.errors.maxRuns}</p>
+                )}
               </label>
               <label className="block space-y-1">
                 <span className="text-xs text-slate-400">Max age (days, optional)</span>
@@ -204,6 +257,9 @@ export default function RunsDashboardPage({ initialCursor = null, debugControls 
                   onChange={(e) => setPruneMaxAgeDays(e.target.value)}
                   className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100"
                 />
+                {pruneValidation.errors.maxAgeDays && (
+                  <p className="text-xs text-red-300">{pruneValidation.errors.maxAgeDays}</p>
+                )}
               </label>
               <label className="block space-y-1">
                 <span className="text-xs text-slate-400">
