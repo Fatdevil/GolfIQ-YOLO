@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { getRunDetailV1, resolveRunsError, type RunDetailV1, type RunsError } from "@/api/runsV1";
 import { copyToClipboard } from "@/utils/copy";
 import { toast } from "@/ui/toast";
@@ -17,26 +17,67 @@ const normalizeError = (error: unknown): RunsError => {
   return resolveRunsError(error, "Failed to load run detail");
 };
 
+type ArtifactAction = {
+  id: string;
+  label: string;
+  href?: string;
+  copyText?: string;
+  copyLabel: string;
+  disabledReason?: string;
+};
+
 export function RunDetailPanel({ runId, onClose }: Props) {
   const [detail, setDetail] = useState<RunDetailV1 | null>(null);
   const [state, setState] = useState<DetailState>("idle");
   const [error, setError] = useState<RunsError | null>(null);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [showDiagnostics, setShowDiagnostics] = useState(false);
+  const mountedRef = useRef(true);
+  const requestSeqRef = useRef(0);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
 
   const loadDetail = useCallback(
-    async (currentRunId: string) => {
-      setState("loading");
-      setError(null);
-      setDetail(null);
+    async (currentRunId: string, options?: { preserveData?: boolean }) => {
+      const requestId = ++requestSeqRef.current;
+      const requestedRunId = currentRunId;
+      const preserveData = options?.preserveData ?? false;
+      if (preserveData) {
+        setIsRefreshing(true);
+      } else {
+        setState("loading");
+        setError(null);
+        setDetail(null);
+      }
       try {
         const response = await getRunDetailV1(currentRunId);
+        if (!mountedRef.current || requestId !== requestSeqRef.current || requestedRunId !== currentRunId) {
+          return;
+        }
         setDetail(response);
         setState("loaded");
+        if (preserveData && mountedRef.current && requestId === requestSeqRef.current && requestedRunId === currentRunId) {
+          toast.success("Updated");
+        }
       } catch (err) {
         const resolved = normalizeError(err);
-        setError(resolved);
-        setState("error");
+        if (!mountedRef.current || requestId !== requestSeqRef.current || requestedRunId !== currentRunId) {
+          return;
+        }
+        if (!preserveData) {
+          setError(resolved);
+          setState("error");
+        }
         toast.error(resolved.message);
+      } finally {
+        if (preserveData && mountedRef.current && requestId === requestSeqRef.current && requestedRunId === currentRunId) {
+          setIsRefreshing(false);
+        }
       }
     },
     [],
@@ -50,28 +91,8 @@ export function RunDetailPanel({ runId, onClose }: Props) {
       return;
     }
 
-    let cancelled = false;
-    setState("loading");
-    setError(null);
-    setDetail(null);
-    getRunDetailV1(runId)
-      .then((response) => {
-        if (cancelled) return;
-        setDetail(response);
-        setState("loaded");
-      })
-      .catch((err) => {
-        if (cancelled) return;
-        const resolved = normalizeError(err);
-        setError(resolved);
-        setState("error");
-        toast.error(resolved.message);
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [runId]);
+    loadDetail(runId);
+  }, [loadDetail, runId]);
 
   const duration = useMemo(() => {
     if (!detail?.started_ts || !detail.finished_ts) return null;
@@ -123,6 +144,59 @@ export function RunDetailPanel({ runId, onClose }: Props) {
     }
   };
 
+  const handleCopyValue = async (value?: string) => {
+    if (!value) return;
+    try {
+      await copyToClipboard(value);
+      toast.success("Link copied");
+    } catch (err) {
+      const resolved = normalizeError(err);
+      toast.error(resolved.message || "Failed to copy link");
+    }
+  };
+
+  const handleRefresh = () => {
+    if (!runId) return;
+    loadDetail(runId, { preserveData: true });
+  };
+
+  const artifactActions: ArtifactAction[] = useMemo(() => {
+    if (!detail) return [];
+
+    const actions: ArtifactAction[] = [];
+
+    (detail.artifacts ?? []).forEach((artifact, index) => {
+      const label = artifact.label || artifact.kind || artifact.key || `Artifact ${index + 1}`;
+      const href = artifact.url;
+      const copyText = artifact.url ?? artifact.key;
+      actions.push({
+        id: `artifact-${index}`,
+        label,
+        href,
+        copyText,
+        copyLabel: artifact.url ? "Copy link" : artifact.key ? "Copy key" : "Copy",
+        disabledReason: href ? undefined : "URL unavailable",
+      });
+    });
+
+    if (detail.media) {
+      Object.entries(detail.media).forEach(([key, value], index) => {
+        const label = humanizeLabel(key);
+        const href = value;
+        actions.push({
+          id: `media-${key}-${index}`,
+          label,
+          href,
+          copyText: value,
+          copyLabel: "Copy link",
+          disabledReason: href ? undefined : "Link unavailable",
+        });
+      });
+    }
+
+    return actions;
+  }, [detail]);
+
   if (!runId) return null;
 
   return (
@@ -141,6 +215,16 @@ export function RunDetailPanel({ runId, onClose }: Props) {
             <p className="text-xs text-slate-400">Inspect run metadata, lifecycle timestamps, and diagnostics.</p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
+            <button
+              onClick={handleRefresh}
+              disabled={state === "loading" || isRefreshing}
+              className="flex items-center gap-2 rounded-md border border-slate-700 px-3 py-1 text-sm font-semibold text-slate-200 transition hover:border-emerald-400 hover:text-emerald-200 disabled:cursor-not-allowed disabled:border-slate-800 disabled:text-slate-500"
+            >
+              {isRefreshing ? (
+                <span className="h-3 w-3 animate-spin rounded-full border-2 border-emerald-400 border-t-transparent" />
+              ) : null}
+              Refresh
+            </button>
             <button
               onClick={handleCopyRunId}
               className="rounded-md border border-slate-700 px-3 py-1 text-sm font-semibold text-slate-200 transition hover:border-emerald-400 hover:text-emerald-200"
@@ -216,6 +300,48 @@ export function RunDetailPanel({ runId, onClose }: Props) {
                 </pre>
               </section>
 
+              <section className="rounded-lg border border-slate-800 bg-slate-950/50 p-4 text-sm text-slate-200">
+                <div className="text-xs uppercase text-slate-500">Artifacts / Links</div>
+                {artifactActions.length === 0 ? (
+                  <p className="mt-2 text-xs text-slate-400">No artifacts available yet.</p>
+                ) : (
+                  <div className="mt-2 space-y-2">
+                    {artifactActions.map((artifact, index) => (
+                      <div
+                        key={artifact.id}
+                        className="flex flex-wrap items-center justify-between gap-3 rounded border border-slate-800 bg-slate-900/80 px-3 py-2"
+                        data-testid={`artifact-row-${index}`}
+                      >
+                        <div>
+                          <div className="font-semibold text-slate-100">{artifact.label}</div>
+                          {artifact.disabledReason ? (
+                            <div className="text-xs text-slate-400">{artifact.disabledReason}</div>
+                          ) : null}
+                        </div>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <button
+                            onClick={() => openLink(artifact.href)}
+                            disabled={!artifact.href}
+                            className="rounded-md border border-slate-700 px-3 py-1 text-xs font-semibold text-slate-100 transition hover:border-emerald-400 hover:text-emerald-200 disabled:cursor-not-allowed disabled:border-slate-800 disabled:text-slate-500"
+                            data-testid={`artifact-open-${index}`}
+                          >
+                            Open
+                          </button>
+                          <button
+                            onClick={() => handleCopyValue(artifact.copyText)}
+                            disabled={!artifact.copyText}
+                            className="rounded-md border border-slate-700 px-3 py-1 text-xs font-semibold text-slate-100 transition hover:border-emerald-400 hover:text-emerald-200 disabled:cursor-not-allowed disabled:border-slate-800 disabled:text-slate-500"
+                            data-testid={`artifact-copy-${index}`}
+                          >
+                            {artifact.copyLabel}
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </section>
+
               <section className="rounded-lg border border-amber-600/40 bg-amber-500/5 p-4 text-sm text-amber-100">
                 <div className="flex items-center justify-between">
                   <div>
@@ -265,3 +391,15 @@ function formatDate(value?: string | null): string {
 }
 
 export default RunDetailPanel;
+
+const humanizeLabel = (value: string): string =>
+  value
+    .split("_")
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ") || "Artifact";
+
+const openLink = (href?: string) => {
+  if (!href) return;
+  window.open(href, "_blank", "noreferrer");
+};

@@ -51,6 +51,20 @@ export type RunListResponse = {
   next_cursor?: string | null;
 };
 
+export type RunArtifactLink = {
+  label?: string;
+  url?: string;
+  key?: string;
+  kind?: string;
+};
+
+export type RunMediaLinks = {
+  video_url?: string;
+  overlay_url?: string;
+  telemetry_url?: string;
+  [key: string]: string | undefined;
+};
+
 export type RunDetailV1 = RunListItem & {
   created_ts: number;
   updated_ts: number;
@@ -63,6 +77,8 @@ export type RunDetailV1 = RunListItem & {
   metadata: Record<string, unknown>;
   impact_preview?: string | null;
   inputs?: Record<string, unknown> | null;
+  artifacts?: RunArtifactLink[];
+  media?: RunMediaLinks;
 };
 
 export type RunDetail = RunDetailV1;
