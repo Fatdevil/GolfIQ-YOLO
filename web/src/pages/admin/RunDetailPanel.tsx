@@ -64,13 +64,16 @@ export function RunDetailPanel({ runId, onClose }: Props) {
   const [refreshError, setRefreshError] = useState<RunsError | null>(null);
   const [isRetryingRefresh, setIsRetryingRefresh] = useState(false);
   const mountedRef = useRef(true);
+  const activeRunIdRef = useRef<string | null>(runId);
   const requestSeqRef = useRef(0);
   const retryTimeoutRef = useRef<number | null>(null);
+  const refreshRetryGenerationRef = useRef(0);
 
   useEffect(() => {
     mountedRef.current = true;
     return () => {
       mountedRef.current = false;
+      refreshRetryGenerationRef.current += 1;
       if (retryTimeoutRef.current) {
         window.clearTimeout(retryTimeoutRef.current);
       }
@@ -87,6 +90,11 @@ export function RunDetailPanel({ runId, onClose }: Props) {
     ): Promise<LoadDetailResult> => {
       const requestId = ++requestSeqRef.current;
       const requestedRunId = currentRunId;
+      const isStaleRequest = () =>
+        !mountedRef.current ||
+        requestId !== requestSeqRef.current ||
+        activeRunIdRef.current == null ||
+        activeRunIdRef.current !== requestedRunId;
       const preserveData = options?.preserveData ?? false;
       const silenceErrorToast = options?.silenceErrorToast ?? false;
       if (preserveData) {
@@ -99,7 +107,7 @@ export function RunDetailPanel({ runId, onClose }: Props) {
       }
       try {
         const response = await getRunDetailV1(currentRunId);
-        if (!mountedRef.current || requestId !== requestSeqRef.current || requestedRunId !== currentRunId) {
+        if (isStaleRequest()) {
           return { success: false, stale: true };
         }
         setDetail(response);
@@ -111,7 +119,7 @@ export function RunDetailPanel({ runId, onClose }: Props) {
         return { success: true };
       } catch (err) {
         const resolved = normalizeError(err);
-        if (!mountedRef.current || requestId !== requestSeqRef.current || requestedRunId !== currentRunId) {
+        if (isStaleRequest()) {
           return { success: false, stale: true };
         }
         if (!preserveData) {
@@ -128,7 +136,7 @@ export function RunDetailPanel({ runId, onClose }: Props) {
         }
         return { success: false, error: resolved };
       } finally {
-        if (preserveData && mountedRef.current && requestId === requestSeqRef.current && requestedRunId === currentRunId) {
+        if (preserveData && !isStaleRequest()) {
           setIsRefreshing(false);
         }
       }
@@ -143,10 +151,17 @@ export function RunDetailPanel({ runId, onClose }: Props) {
     }
   }, []);
 
-  useEffect(() => {
+  const cancelRefreshRetries = useCallback(() => {
+    refreshRetryGenerationRef.current += 1;
     clearRetryTimeout();
     setIsRetryingRefresh(false);
+  }, [clearRetryTimeout]);
+
+  useEffect(() => {
+    activeRunIdRef.current = runId;
+    cancelRefreshRetries();
     setRefreshError(null);
+    setIsRefreshing(false);
     if (!runId) {
       setDetail(null);
       setError(null);
@@ -155,7 +170,7 @@ export function RunDetailPanel({ runId, onClose }: Props) {
     }
 
     loadDetail(runId);
-  }, [clearRetryTimeout, loadDetail, runId]);
+  }, [cancelRefreshRetries, loadDetail, runId]);
 
   const duration = useMemo(() => {
     if (!detail?.started_ts || !detail.finished_ts) return null;
@@ -244,42 +259,49 @@ export function RunDetailPanel({ runId, onClose }: Props) {
 
   const handleRefresh = () => {
     if (!runId) return;
-    clearRetryTimeout();
-    setIsRetryingRefresh(false);
+    cancelRefreshRetries();
     setRefreshError(null);
     loadDetail(runId, { preserveData: true });
   };
 
   const performRefreshRetry = useCallback(
-    async (attempt: number) => {
-      if (!runId) {
+    async (attempt: number, generation: number, targetRunId: string) => {
+      if (!targetRunId || generation !== refreshRetryGenerationRef.current || activeRunIdRef.current !== targetRunId) {
         setIsRetryingRefresh(false);
         return;
       }
-      const result = await loadDetail(runId, { preserveData: true, silenceErrorToast: attempt > 0 });
+      const result = await loadDetail(targetRunId, { preserveData: true, silenceErrorToast: attempt > 0 });
+      if (generation !== refreshRetryGenerationRef.current || activeRunIdRef.current !== targetRunId) {
+        setIsRetryingRefresh(false);
+        return;
+      }
       if (result?.success) {
         setRefreshError(null);
         setIsRetryingRefresh(false);
         return;
       }
-      const status = (result as { error?: RunsError })?.error?.status;
+      if (!result.success && "stale" in result && result.stale) {
+        setIsRetryingRefresh(false);
+        return;
+      }
+      const status = !result.success && "error" in result ? result.error?.status : undefined;
       if (!isRetryableRefreshStatus(status) || attempt >= 2) {
         setIsRetryingRefresh(false);
         return;
       }
       const delay = Math.min(4000, resolvedRetryDelays[attempt] ?? resolvedRetryDelays[resolvedRetryDelays.length - 1]);
       retryTimeoutRef.current = window.setTimeout(() => {
-        void performRefreshRetry(attempt + 1);
+        void performRefreshRetry(attempt + 1, generation, targetRunId);
       }, delay);
     },
-    [loadDetail, runId],
+    [loadDetail],
   );
 
   const handleRefreshRetry = () => {
     if (!runId || !refreshError) return;
-    clearRetryTimeout();
+    cancelRefreshRetries();
     setIsRetryingRefresh(true);
-    void performRefreshRetry(0);
+    void performRefreshRetry(0, refreshRetryGenerationRef.current, runId);
   };
 
   const artifactActions: ArtifactAction[] = useMemo(() => {

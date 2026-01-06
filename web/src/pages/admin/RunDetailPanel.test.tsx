@@ -265,4 +265,83 @@ describe("RunDetailPanel", () => {
     await waitFor(() => expect(mockToastError).toHaveBeenCalled());
     expect(screen.queryByTestId("refresh-retry-banner")).not.toBeInTheDocument();
   });
+
+  it("cancels refresh retries when run changes", async () => {
+    mockGetRunDetailV1.mockResolvedValueOnce(baseDetail);
+
+    const { rerender } = render(<RunDetailPanel runId="run-1" onClose={() => {}} />);
+
+    await screen.findByText("RUN_FAILED");
+    mockGetRunDetailV1.mockRejectedValueOnce({ message: "server down", status: 500 });
+
+    fireEvent.click(screen.getByText("Refresh"));
+    await screen.findByTestId("refresh-retry-banner");
+
+    let retryResolve: (value: unknown) => void = () => undefined;
+    const retryPromise = new Promise((resolve) => {
+      retryResolve = resolve;
+    });
+    mockGetRunDetailV1.mockReturnValueOnce(retryPromise);
+
+    mockGetRunDetailV1.mockResolvedValueOnce({ ...baseDetail, run_id: "run-2" });
+
+    fireEvent.click(screen.getByTestId("refresh-retry-button"));
+    rerender(<RunDetailPanel runId="run-2" onClose={() => {}} />);
+
+    retryResolve(baseDetail);
+    await waitFor(() => expect(mockGetRunDetailV1).toHaveBeenCalledWith("run-2"));
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    expect(mockGetRunDetailV1).toHaveBeenCalledTimes(4);
+    expect(screen.queryByTestId("refresh-retry-banner")).not.toBeInTheDocument();
+  });
+
+  it("only retries the active run id", async () => {
+    mockGetRunDetailV1.mockResolvedValueOnce(baseDetail);
+
+    const { rerender } = render(<RunDetailPanel runId="run-1" onClose={() => {}} />);
+
+    await screen.findByText("RUN_FAILED");
+    mockGetRunDetailV1.mockRejectedValueOnce({ message: "server down", status: 500 });
+
+    fireEvent.click(screen.getByText("Refresh"));
+    await screen.findByTestId("refresh-retry-banner");
+
+    mockGetRunDetailV1.mockRejectedValueOnce({ message: "still bad", status: 500 });
+    fireEvent.click(screen.getByTestId("refresh-retry-button"));
+    expect(mockGetRunDetailV1).toHaveBeenCalledTimes(3);
+
+    mockGetRunDetailV1.mockResolvedValueOnce({ ...baseDetail, run_id: "run-2" });
+    rerender(<RunDetailPanel runId="run-2" onClose={() => {}} />);
+
+    await waitFor(() => expect(mockGetRunDetailV1).toHaveBeenCalledWith("run-2"));
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    expect(mockGetRunDetailV1).toHaveBeenCalledTimes(4);
+  });
+
+  it("stops refresh retry when panel unmounts", async () => {
+    mockGetRunDetailV1.mockResolvedValueOnce(baseDetail);
+
+    const { unmount } = render(<RunDetailPanel runId="run-1" onClose={() => {}} />);
+
+    await screen.findByText("RUN_FAILED");
+    mockGetRunDetailV1.mockRejectedValueOnce({ message: "server down", status: 500 });
+
+    fireEvent.click(screen.getByText("Refresh"));
+    await screen.findByTestId("refresh-retry-banner");
+
+    let retryResolve: (value: unknown) => void = () => undefined;
+    const retryPromise = new Promise((resolve) => {
+      retryResolve = resolve;
+    });
+    mockGetRunDetailV1.mockReturnValueOnce(retryPromise);
+
+    fireEvent.click(screen.getByTestId("refresh-retry-button"));
+    expect(mockGetRunDetailV1).toHaveBeenCalledTimes(3);
+
+    unmount();
+    retryResolve(baseDetail);
+
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    expect(mockGetRunDetailV1).toHaveBeenCalledTimes(3);
+  });
 });
