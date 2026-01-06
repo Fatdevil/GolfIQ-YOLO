@@ -1,14 +1,18 @@
 import { describe, expect, it, beforeEach, vi } from "vitest";
 
 const mockApiClientGet = vi.fn();
-const mockWithAuth = vi.fn((extra: Record<string, string> = {}) => ({ ...extra, "x-api-key": "test-key" }));
+const mockWithAuth = vi.fn((extra: Record<string, string> = {}): Record<string, string> => ({
+  ...extra,
+  "x-api-key": "test-key",
+}));
 
 vi.mock("@/api", () => ({
+  API: "https://api.example.com",
   apiClient: { get: (...args: unknown[]) => mockApiClientGet(...args) },
   withAuth: (extra?: Record<string, string>) => mockWithAuth(extra),
 }));
 
-import { buildRunsListQuery, getRunDetailV1 } from "./runsV1";
+import { buildRunDetailCurl, buildRunsListQuery, getRunDetailV1 } from "./runsV1";
 
 describe("buildRunsListQuery", () => {
   it("serializes filters and ISO dates", () => {
@@ -95,5 +99,21 @@ describe("getRunDetailV1", () => {
       message: "missing",
       status: 404,
     });
+  });
+});
+
+describe("buildRunDetailCurl", () => {
+  beforeEach(() => {
+    mockWithAuth.mockClear();
+  });
+
+  it("includes base API path and auth headers", () => {
+    mockWithAuth.mockReturnValue({ "x-api-key": "abc", Accept: "application/json", "Content-Type": "application/json" });
+
+    const command = buildRunDetailCurl("run-99");
+
+    expect(command).toContain("https://api.example.com/runs/v1/run-99");
+    expect(command).toContain('-H "x-api-key: abc"');
+    expect(command).toContain('-H "Accept: application/json"');
   });
 });

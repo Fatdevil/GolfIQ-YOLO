@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { getRunDetailV1, resolveRunsError, type RunDetailV1, type RunsError } from "@/api/runsV1";
+import { buildRunDetailCurl, getRunDetailV1, resolveRunsError, type RunDetailV1, type RunsError } from "@/api/runsV1";
 import { copyToClipboard } from "@/utils/copy";
 import { toast } from "@/ui/toast";
 
@@ -26,29 +26,72 @@ type ArtifactAction = {
   disabledReason?: string;
 };
 
+const formatPrimitiveValue = (value: unknown): string => {
+  if (typeof value === "string") return `"${value}"`;
+  if (typeof value === "number" || typeof value === "boolean") return String(value);
+  if (value === null) return "null";
+  if (value === undefined) return "undefined";
+  return JSON.stringify(value);
+};
+
+const REFRESH_RETRY_DELAYS_MS = [500, 1000, 2000];
+const isTestEnvironment = typeof import.meta !== "undefined" && Boolean((import.meta as { vitest?: unknown }).vitest);
+const resolvedRetryDelays = isTestEnvironment ? [0, 0, 0] : REFRESH_RETRY_DELAYS_MS;
+
+type LoadDetailResult =
+  | { success: true }
+  | { success: false; error?: RunsError }
+  | {
+      success: false;
+      stale: true;
+    };
+
+const isRetryableRefreshStatus = (status?: number) => status === undefined || status >= 500;
+
+const isEmptyDiagnosticsValue = (value: unknown): boolean => {
+  if (value === null || value === undefined) return true;
+  if (Array.isArray(value)) return value.length === 0;
+  if (typeof value === "object") return Object.keys(value as Record<string, unknown>).length === 0;
+  return false;
+};
+
 export function RunDetailPanel({ runId, onClose }: Props) {
   const [detail, setDetail] = useState<RunDetailV1 | null>(null);
   const [state, setState] = useState<DetailState>("idle");
   const [error, setError] = useState<RunsError | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [showDiagnostics, setShowDiagnostics] = useState(false);
+  const [refreshError, setRefreshError] = useState<RunsError | null>(null);
+  const [isRetryingRefresh, setIsRetryingRefresh] = useState(false);
   const mountedRef = useRef(true);
   const requestSeqRef = useRef(0);
+  const retryTimeoutRef = useRef<number | null>(null);
 
   useEffect(() => {
     mountedRef.current = true;
     return () => {
       mountedRef.current = false;
+      if (retryTimeoutRef.current) {
+        window.clearTimeout(retryTimeoutRef.current);
+      }
     };
   }, []);
 
   const loadDetail = useCallback(
-    async (currentRunId: string, options?: { preserveData?: boolean }) => {
+    async (
+      currentRunId: string,
+      options?: {
+        preserveData?: boolean;
+        silenceErrorToast?: boolean;
+      },
+    ): Promise<LoadDetailResult> => {
       const requestId = ++requestSeqRef.current;
       const requestedRunId = currentRunId;
       const preserveData = options?.preserveData ?? false;
+      const silenceErrorToast = options?.silenceErrorToast ?? false;
       if (preserveData) {
         setIsRefreshing(true);
+        setRefreshError(null);
       } else {
         setState("loading");
         setError(null);
@@ -57,23 +100,33 @@ export function RunDetailPanel({ runId, onClose }: Props) {
       try {
         const response = await getRunDetailV1(currentRunId);
         if (!mountedRef.current || requestId !== requestSeqRef.current || requestedRunId !== currentRunId) {
-          return;
+          return { success: false, stale: true };
         }
         setDetail(response);
         setState("loaded");
+        setRefreshError(null);
         if (preserveData && mountedRef.current && requestId === requestSeqRef.current && requestedRunId === currentRunId) {
           toast.success("Updated");
         }
+        return { success: true };
       } catch (err) {
         const resolved = normalizeError(err);
         if (!mountedRef.current || requestId !== requestSeqRef.current || requestedRunId !== currentRunId) {
-          return;
+          return { success: false, stale: true };
         }
         if (!preserveData) {
           setError(resolved);
           setState("error");
         }
-        toast.error(resolved.message);
+        if (preserveData && isRetryableRefreshStatus(resolved.status)) {
+          setRefreshError(resolved);
+        } else if (preserveData) {
+          setRefreshError(null);
+        }
+        if (!silenceErrorToast) {
+          toast.error(resolved.message);
+        }
+        return { success: false, error: resolved };
       } finally {
         if (preserveData && mountedRef.current && requestId === requestSeqRef.current && requestedRunId === currentRunId) {
           setIsRefreshing(false);
@@ -83,7 +136,17 @@ export function RunDetailPanel({ runId, onClose }: Props) {
     [],
   );
 
+  const clearRetryTimeout = useCallback(() => {
+    if (retryTimeoutRef.current) {
+      window.clearTimeout(retryTimeoutRef.current);
+      retryTimeoutRef.current = null;
+    }
+  }, []);
+
   useEffect(() => {
+    clearRetryTimeout();
+    setIsRetryingRefresh(false);
+    setRefreshError(null);
     if (!runId) {
       setDetail(null);
       setError(null);
@@ -92,7 +155,7 @@ export function RunDetailPanel({ runId, onClose }: Props) {
     }
 
     loadDetail(runId);
-  }, [loadDetail, runId]);
+  }, [clearRetryTimeout, loadDetail, runId]);
 
   const duration = useMemo(() => {
     if (!detail?.started_ts || !detail.finished_ts) return null;
@@ -155,9 +218,68 @@ export function RunDetailPanel({ runId, onClose }: Props) {
     }
   };
 
+  const handleCopyCurl = async () => {
+    if (!runId) return;
+    try {
+      const command = buildRunDetailCurl(runId);
+      await copyToClipboard(command);
+      toast.success("cURL command copied");
+    } catch (err) {
+      const resolved = normalizeError(err);
+      toast.error(resolved.message || "Failed to copy cURL");
+    }
+  };
+
+  const handleCopyDiagnostics = async (payload: unknown) => {
+    if (!payload) return;
+    try {
+      const serialized = JSON.stringify(payload, null, 2);
+      await copyToClipboard(serialized);
+      toast.success("Diagnostics copied");
+    } catch (err) {
+      const resolved = normalizeError(err);
+      toast.error(resolved.message || "Failed to copy diagnostics");
+    }
+  };
+
   const handleRefresh = () => {
     if (!runId) return;
+    clearRetryTimeout();
+    setIsRetryingRefresh(false);
+    setRefreshError(null);
     loadDetail(runId, { preserveData: true });
+  };
+
+  const performRefreshRetry = useCallback(
+    async (attempt: number) => {
+      if (!runId) {
+        setIsRetryingRefresh(false);
+        return;
+      }
+      const result = await loadDetail(runId, { preserveData: true, silenceErrorToast: attempt > 0 });
+      if (result?.success) {
+        setRefreshError(null);
+        setIsRetryingRefresh(false);
+        return;
+      }
+      const status = (result as { error?: RunsError })?.error?.status;
+      if (!isRetryableRefreshStatus(status) || attempt >= 2) {
+        setIsRetryingRefresh(false);
+        return;
+      }
+      const delay = Math.min(4000, resolvedRetryDelays[attempt] ?? resolvedRetryDelays[resolvedRetryDelays.length - 1]);
+      retryTimeoutRef.current = window.setTimeout(() => {
+        void performRefreshRetry(attempt + 1);
+      }, delay);
+    },
+    [loadDetail, runId],
+  );
+
+  const handleRefreshRetry = () => {
+    if (!runId || !refreshError) return;
+    clearRetryTimeout();
+    setIsRetryingRefresh(true);
+    void performRefreshRetry(0);
   };
 
   const artifactActions: ArtifactAction[] = useMemo(() => {
@@ -197,7 +319,25 @@ export function RunDetailPanel({ runId, onClose }: Props) {
     return actions;
   }, [detail]);
 
-  if (!runId) return null;
+  const diagnosticsPayload = useMemo(() => {
+    if (!detail) return null;
+    const diagnosticFields = (detail as RunDetailV1 & { diagnostics?: unknown; raw_payload?: unknown }).diagnostics;
+    if (diagnosticFields && !isEmptyDiagnosticsValue(diagnosticFields)) {
+      return diagnosticFields;
+    }
+    if (detail.metadata && !isEmptyDiagnosticsValue(detail.metadata)) {
+      return detail.metadata;
+    }
+    const rawPayload = (detail as RunDetailV1 & { raw_payload?: unknown }).raw_payload;
+    if (rawPayload && !isEmptyDiagnosticsValue(rawPayload)) {
+      return rawPayload;
+    }
+    return null;
+  }, [detail]);
+
+  const hasDiagnostics = !!diagnosticsPayload && !isEmptyDiagnosticsValue(diagnosticsPayload);
+
+  if (runId == null) return null;
 
   return (
     <div className="fixed inset-0 z-50 bg-slate-950/70 backdrop-blur">
@@ -217,7 +357,7 @@ export function RunDetailPanel({ runId, onClose }: Props) {
           <div className="flex flex-wrap items-center gap-2">
             <button
               onClick={handleRefresh}
-              disabled={state === "loading" || isRefreshing}
+              disabled={state === "loading" || isRefreshing || isRetryingRefresh}
               className="flex items-center gap-2 rounded-md border border-slate-700 px-3 py-1 text-sm font-semibold text-slate-200 transition hover:border-emerald-400 hover:text-emerald-200 disabled:cursor-not-allowed disabled:border-slate-800 disabled:text-slate-500"
             >
               {isRefreshing ? (
@@ -230,6 +370,14 @@ export function RunDetailPanel({ runId, onClose }: Props) {
               className="rounded-md border border-slate-700 px-3 py-1 text-sm font-semibold text-slate-200 transition hover:border-emerald-400 hover:text-emerald-200"
             >
               Copy run id
+            </button>
+            <button
+              onClick={handleCopyCurl}
+              disabled={!runId}
+              className="rounded-md border border-slate-700 px-3 py-1 text-sm font-semibold text-slate-200 transition hover:border-emerald-400 hover:text-emerald-200 disabled:cursor-not-allowed disabled:border-slate-800 disabled:text-slate-500"
+              data-testid="copy-curl"
+            >
+              Copy cURL
             </button>
             <button
               onClick={onClose}
@@ -246,6 +394,28 @@ export function RunDetailPanel({ runId, onClose }: Props) {
               Loading run…
             </div>
           )}
+
+          {state === "loaded" && refreshError ? (
+            <div
+              className="rounded-lg border border-amber-600/40 bg-amber-500/5 p-4 text-sm text-amber-100"
+              data-testid="refresh-retry-banner"
+            >
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <div className="text-xs uppercase text-amber-300">Refresh failed</div>
+                  <div className="text-sm text-amber-100/90">{refreshError.message}</div>
+                </div>
+                <button
+                  onClick={handleRefreshRetry}
+                  disabled={isRetryingRefresh || isRefreshing}
+                  className="rounded-md border border-amber-500/60 px-3 py-1 text-xs font-semibold text-amber-50 transition hover:bg-amber-500/10 disabled:cursor-not-allowed disabled:border-amber-900 disabled:text-amber-200/50"
+                  data-testid="refresh-retry-button"
+                >
+                  {isRetryingRefresh ? "Retrying…" : "Retry"}
+                </button>
+              </div>
+            </div>
+          ) : null}
 
           {state === "error" && errorView && (
             <div className="rounded-lg border border-slate-800 bg-slate-950/60 p-4 text-sm text-slate-200">
@@ -356,20 +526,34 @@ export function RunDetailPanel({ runId, onClose }: Props) {
 
               <section className="rounded-lg border border-slate-800 bg-slate-950/50 p-4 text-sm text-slate-200">
                 <div className="flex items-center justify-between">
-                  <div className="text-xs uppercase text-slate-500">Diagnostics (raw JSON)</div>
-                  <button
-                    className="text-xs font-semibold text-emerald-300 underline-offset-2 hover:underline"
-                    onClick={() => setShowDiagnostics((value) => !value)}
-                  >
-                    {showDiagnostics ? "Hide" : "Show"}
-                  </button>
+                  <div className="text-xs uppercase text-slate-500">Diagnostics</div>
+                  <div className="flex items-center gap-2">
+                    {hasDiagnostics ? (
+                      <button
+                        className="text-xs font-semibold text-emerald-300 underline-offset-2 hover:underline"
+                        onClick={() => handleCopyDiagnostics(diagnosticsPayload)}
+                        data-testid="copy-diagnostics"
+                      >
+                        Copy JSON
+                      </button>
+                    ) : null}
+                    <button
+                      className="text-xs font-semibold text-emerald-300 underline-offset-2 hover:underline"
+                      onClick={() => setShowDiagnostics((value) => !value)}
+                      data-testid="toggle-diagnostics"
+                    >
+                      {showDiagnostics ? "Collapse" : "Expand"}
+                    </button>
+                  </div>
                 </div>
-                {showDiagnostics ? (
-                  <pre className="mt-2 max-h-96 overflow-auto rounded bg-slate-900/80 p-3 text-xs text-slate-100">
-{JSON.stringify(detail, null, 2)}
-                  </pre>
+                {!hasDiagnostics ? (
+                  <p className="mt-2 text-xs text-slate-400">No diagnostics available.</p>
+                ) : showDiagnostics ? (
+                  <div className="mt-2 max-h-96 space-y-2 overflow-auto rounded bg-slate-900/80 p-3 text-xs text-slate-100">
+                    <JsonTree data={diagnosticsPayload} />
+                  </div>
                 ) : (
-                  <p className="mt-2 text-xs text-slate-400">Diagnostics hidden.</p>
+                  <p className="mt-2 text-xs text-slate-400">Diagnostics collapsed.</p>
                 )}
               </section>
             </>
@@ -377,6 +561,45 @@ export function RunDetailPanel({ runId, onClose }: Props) {
         </div>
       </div>
     </div>
+  );
+}
+
+function JsonTree({ data }: { data: unknown }) {
+  return <JsonTreeNode data={data} depth={0} />;
+}
+
+function JsonTreeNode({ data, depth }: { data: unknown; depth: number }) {
+  if (data === null || typeof data !== "object") {
+    return (
+      <pre className="whitespace-pre-wrap break-all font-mono text-slate-100">
+        {formatPrimitiveValue(data)}
+      </pre>
+    );
+  }
+
+  const isArray = Array.isArray(data);
+  const entries = isArray
+    ? (data as unknown[]).map((value, index) => ({ key: String(index), value }))
+    : Object.entries(data as Record<string, unknown>).map(([key, value]) => ({ key, value }));
+
+  return (
+    <details
+      open={depth === 0}
+      className="rounded border border-slate-800/60 bg-slate-950/40"
+      data-testid={depth === 0 ? "diagnostics-root" : undefined}
+    >
+      <summary className="cursor-pointer select-none px-2 py-1 font-mono text-slate-200">
+        {isArray ? `Array(${entries.length})` : `Object(${entries.length})`}
+      </summary>
+      <div className="border-t border-slate-800/60 pl-3">
+        {entries.map(({ key, value }) => (
+          <div key={String(key)} className="space-y-1 py-1">
+            <div className="font-mono text-emerald-200">{String(key)}</div>
+            <JsonTreeNode data={value} depth={depth + 1} />
+          </div>
+        ))}
+      </div>
+    </details>
   );
 }
 

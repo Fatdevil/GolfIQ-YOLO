@@ -1,5 +1,5 @@
 import type { AxiosError } from "axios";
-import { apiClient, withAuth } from "@/api";
+import { API, apiClient, withAuth } from "@/api";
 
 export type RunStatusV1 = "processing" | "succeeded" | "failed";
 export type RunKindV1 = "image" | "video" | "range";
@@ -79,6 +79,8 @@ export type RunDetailV1 = RunListItem & {
   inputs?: Record<string, unknown> | null;
   artifacts?: RunArtifactLink[];
   media?: RunMediaLinks;
+  diagnostics?: Record<string, unknown> | null;
+  raw_payload?: Record<string, unknown> | null;
 };
 
 export type RunDetail = RunDetailV1;
@@ -153,4 +155,14 @@ export async function pruneRunsV1(payload?: RunPruneRequest): Promise<RunPruneRe
     headers: withAuth({ "Content-Type": "application/json" }),
   });
   return response.data;
+}
+
+export function buildRunDetailCurl(runId: string): string {
+  const headers = withAuth({ Accept: "application/json", "Content-Type": "application/json" });
+  const headerFlags = Object.entries(headers)
+    .filter(([, value]) => Boolean(value))
+    .map(([key, value]) => `-H "${key}: ${value}"`)
+    .join(" ");
+  const url = `${API}/runs/v1/${encodeURIComponent(runId)}`;
+  return `curl -X GET "${url}" ${headerFlags}`.trim();
 }
