@@ -1,6 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useRef } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { useRef } from "react";
 import {
   listRunsV1,
   pruneRunsV1,
@@ -14,20 +13,16 @@ import RunsFilters from "@/features/admin/runs/RunsFilters";
 import {
   buildRunsQuery,
   parseRunsQuery,
+  updateRunsUrlState,
   type RunsSortDirection,
   type RunsSortKey,
   type RunsUrlState,
+  DEFAULT_RUNS_URL_STATE,
 } from "@/features/admin/runs/runsUrlState";
 import RunDetailPanel from "./RunDetailPanel";
 import { runsPruneEnabled, runsPruneLocked } from "@/config";
 import { toast } from "@/ui/toast";
 
-type RunsDashboardPageProps = {
-  initialCursor?: string | null;
-  debugControls?: (controls: { setCursor: (cursor: string | null) => void }) => void;
-};
-
-const DEFAULT_LIMIT = 25;
 const INVALID_NUMBER_MESSAGE = "Must be a number";
 export const SEARCH_DEBOUNCE_MS = 300;
 
@@ -64,7 +59,7 @@ export function buildPrunePayload(
   return { payload, errors };
 }
 
-export default function RunsDashboardPage({ initialCursor = null, debugControls }: RunsDashboardPageProps) {
+export default function RunsDashboardPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const urlState = useMemo(() => parseRunsQuery(location.search), [location.search]);
@@ -72,10 +67,12 @@ export default function RunsDashboardPage({ initialCursor = null, debugControls 
   const [runs, setRuns] = useState<RunListItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [filters, setFilters] = useState<RunsListFilters>({ limit: DEFAULT_LIMIT, status: urlState.status || undefined });
-  const [nextCursor, setNextCursor] = useState<string | null>(initialCursor ?? null);
-  const [cursorStack, setCursorStack] = useState<string[]>([]);
-  const [currentCursor, setCurrentCursor] = useState<string | null>(null);
+  const [filters, setFilters] = useState<RunsListFilters>({
+    limit: urlState.limit ?? DEFAULT_RUNS_URL_STATE.limit,
+    status: urlState.status || undefined,
+  });
+  const [nextCursor, setNextCursor] = useState<string | null>(null);
+  const [prevCursor, setPrevCursor] = useState<string | null>(null);
   const [searchInput, setSearchInput] = useState(urlState.q);
   const [onlyErrors, setOnlyErrors] = useState(false);
   const [pruneModalOpen, setPruneModalOpen] = useState(false);
@@ -91,24 +88,19 @@ export default function RunsDashboardPage({ initialCursor = null, debugControls 
   );
 
   useEffect(() => {
-    if (debugControls) {
-      debugControls({ setCursor: setCurrentCursor });
-    }
-  }, [debugControls]);
-
-  useEffect(() => {
     urlStateRef.current = urlState;
   }, [urlState]);
 
   const getLatestUrlState = () => urlStateRef.current ?? urlState;
 
   useEffect(() => {
-    const nextStatus = urlState.status || undefined;
     setFilters((prev) => {
-      if (prev.status === nextStatus) return prev;
-      return { ...prev, status: nextStatus };
+      const nextStatus = urlState.status || undefined;
+      const nextLimit = urlState.limit ?? DEFAULT_RUNS_URL_STATE.limit;
+      if (prev.status === nextStatus && prev.limit === nextLimit) return prev;
+      return { ...prev, status: nextStatus, limit: nextLimit };
     });
-  }, [urlState.status]);
+  }, [urlState.status, urlState.limit]);
 
   useEffect(() => {
     setSearchInput((prev) => (prev === urlState.q ? prev : urlState.q));
@@ -122,11 +114,17 @@ export default function RunsDashboardPage({ initialCursor = null, debugControls 
       try {
         const response = await listRunsV1({
           ...filters,
-          cursor: currentCursor ?? undefined,
+          q: urlState.q || undefined,
+          status: urlState.status || undefined,
+          sort: urlState.sort,
+          dir: urlState.dir,
+          cursor: urlState.cursor ?? undefined,
+          limit: urlState.limit,
         });
         if (cancelled) return;
         setRuns(response.items);
         setNextCursor(response.next_cursor ?? null);
+        setPrevCursor(response.prev_cursor ?? null);
       } catch (err) {
         if (cancelled) return;
         const resolved = resolveRunsError(err, "Failed to load runs");
@@ -140,9 +138,9 @@ export default function RunsDashboardPage({ initialCursor = null, debugControls 
     return () => {
       cancelled = true;
     };
-  }, [filters, currentCursor]);
+  }, [filters, urlState.cursor, urlState.q, urlState.status, urlState.sort, urlState.dir, urlState.limit]);
 
-  const canGoPrev = useMemo(() => cursorStack.length > 0, [cursorStack.length]);
+  const canGoPrev = useMemo(() => Boolean(prevCursor), [prevCursor]);
   const canGoNext = useMemo(() => Boolean(nextCursor), [nextCursor]);
 
   const updateQuery = (
@@ -151,7 +149,7 @@ export default function RunsDashboardPage({ initialCursor = null, debugControls 
   ) => {
     const base = getLatestUrlState();
     const updates = typeof patch === "function" ? patch(base) : patch;
-    const nextState = { ...base, ...updates };
+    const nextState = updateRunsUrlState(base, updates);
     urlStateRef.current = nextState;
     const nextSearch = buildRunsQuery(nextState);
     navigate({ search: nextSearch }, { replace: options.replace ?? true });
@@ -161,36 +159,29 @@ export default function RunsDashboardPage({ initialCursor = null, debugControls 
     const handle = window.setTimeout(() => {
       const latest = getLatestUrlState();
       if (searchInput !== latest.q) {
-        updateQuery((prev) => ({ ...prev, q: searchInput }), { replace: true });
+        updateQuery((prev) => ({ ...prev, q: searchInput, cursor: null }), { replace: true });
       }
     }, SEARCH_DEBOUNCE_MS);
     return () => window.clearTimeout(handle);
   }, [searchInput]);
 
   const handleFilterChange = (next: RunsListFilters) => {
-    setCursorStack([]);
-    setCurrentCursor(initialCursor);
     setFilters(next);
-    const latest = getLatestUrlState();
-    if (next.status !== latest.status) {
-      updateQuery({ status: next.status ?? "" });
-    }
+    updateQuery({
+      status: next.status ?? "",
+      limit: next.limit ?? DEFAULT_RUNS_URL_STATE.limit,
+      cursor: null,
+    });
   };
 
   const handleNext = () => {
     if (!nextCursor) return;
-    setCursorStack((stack) => [...stack, currentCursor ?? ""]);
-    setCurrentCursor(nextCursor);
+    updateQuery({ cursor: nextCursor }, { replace: false });
   };
 
   const handlePrev = () => {
-    setCursorStack((stack) => {
-      if (!stack.length) return stack;
-      const updated = [...stack];
-      const prev = updated.pop() ?? null;
-      setCurrentCursor(prev && prev.length ? prev : null);
-      return updated;
-    });
+    if (!prevCursor) return;
+    updateQuery({ cursor: prevCursor }, { replace: false });
   };
 
   const handleSelectRun = (runId: string) => {
@@ -202,12 +193,12 @@ export default function RunsDashboardPage({ initialCursor = null, debugControls 
   };
 
   const handleSortChange = (sort: RunsSortKey) => {
-    updateQuery({ sort });
+    updateQuery({ sort, cursor: null });
   };
 
   const handleDirectionToggle = () => {
     const nextDir: RunsSortDirection = urlState.dir === "asc" ? "desc" : "asc";
-    updateQuery({ dir: nextDir });
+    updateQuery({ dir: nextDir, cursor: null });
   };
 
   const handlePrune = async () => {
@@ -222,8 +213,7 @@ export default function RunsDashboardPage({ initialCursor = null, debugControls 
       const response = await pruneRunsV1(pruneValidation.payload);
       setPruneResult(`Scanned ${response.scanned}; deleted ${response.deleted}; kept ${response.kept}.`);
       toast.success(`Pruned ${response.deleted} runs (kept ${response.kept}).`);
-      setCursorStack([]);
-      setCurrentCursor(null);
+      updateQuery({ cursor: null }, { replace: true });
     } catch (err) {
       const resolved = resolveRunsError(err, "Prune failed");
       setPruneResult(resolved.message);
@@ -244,57 +234,9 @@ export default function RunsDashboardPage({ initialCursor = null, debugControls 
   }, [pruneConfirm, pruneValidation.errors.maxAgeDays, pruneValidation.errors.maxRuns, runsPruneEnabled, runsPruneLocked]);
 
   const filteredRuns = useMemo(() => {
-    const query = searchInput.trim().toLowerCase();
-    const selectedStatus = urlState.status;
-    const items = runs.filter((run) => {
-      if (selectedStatus && run.status !== selectedStatus) return false;
-      if (onlyErrors && !run.error_code) return false;
-      if (!query) return true;
-      const haystacks = [run.run_id, run.status, run.kind, run.error_code, (run as { user_id?: string }).user_id].filter(
-        Boolean,
-      );
-      return haystacks.some((value) => String(value).toLowerCase().includes(query));
-    });
-
-    const withDuration = items.map((run) => {
-      const started = run.started_at ? new Date(run.started_at).getTime() : null;
-      const finished = run.finished_at ? new Date(run.finished_at).getTime() : null;
-      const duration =
-        started != null && finished != null && Number.isFinite(started) && Number.isFinite(finished)
-          ? finished - started
-          : null;
-      const created = new Date(run.created_at ?? "").getTime();
-      return { run, duration, created: Number.isFinite(created) ? created : 0 };
-    });
-
-    const sortKey = urlState.sort;
-    const direction = urlState.dir === "asc" ? 1 : -1;
-
-    const sorted = withDuration.sort((a, b) => {
-      const aRun = a.run;
-      const bRun = b.run;
-      if (sortKey === "duration") {
-        const aDur = a.duration;
-        const bDur = b.duration;
-        if (aDur == null && bDur == null) {
-          // tie-break below
-        } else if (aDur == null) {
-          return 1;
-        } else if (bDur == null) {
-          return -1;
-        } else if (aDur !== bDur) {
-          return (aDur - bDur) * direction;
-        }
-      } else if (sortKey === "status") {
-        if (aRun.status !== bRun.status) return aRun.status.localeCompare(bRun.status) * direction;
-      } else {
-        if (a.created !== b.created) return (a.created - b.created) * direction;
-      }
-      return aRun.run_id.localeCompare(bRun.run_id) * direction;
-    });
-
-    return sorted.map((item) => item.run);
-  }, [runs, searchInput, urlState.status, urlState.sort, urlState.dir, onlyErrors]);
+    if (!onlyErrors) return runs;
+    return runs.filter((run) => Boolean(run.error_code));
+  }, [runs, onlyErrors]);
 
   return (
     <section className="space-y-6">

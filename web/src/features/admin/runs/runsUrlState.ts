@@ -1,7 +1,7 @@
-import type { RunStatusV1 } from "@/api/runsV1";
+import type { RunStatusV1, RunsSortDirectionV1, RunsSortKeyV1 } from "@/api/runsV1";
 
-export type RunsSortKey = "created" | "duration" | "status";
-export type RunsSortDirection = "asc" | "desc";
+export type RunsSortKey = RunsSortKeyV1;
+export type RunsSortDirection = RunsSortDirectionV1;
 
 export type RunsUrlState = {
   q: string;
@@ -9,6 +9,8 @@ export type RunsUrlState = {
   sort: RunsSortKey;
   dir: RunsSortDirection;
   runId: string | null;
+  cursor: string | null;
+  limit: number;
 };
 
 export const DEFAULT_RUNS_URL_STATE: RunsUrlState = {
@@ -17,6 +19,8 @@ export const DEFAULT_RUNS_URL_STATE: RunsUrlState = {
   sort: "created",
   dir: "desc",
   runId: null,
+  cursor: null,
+  limit: 25,
 };
 
 const SORT_KEYS: RunsSortKey[] = ["created", "duration", "status"];
@@ -44,6 +48,13 @@ const parseStatus = (value: string | null): RunStatusV1 | "" => {
   return DEFAULT_RUNS_URL_STATE.status;
 };
 
+const parseLimit = (value: string | null): number => {
+  if (!value) return DEFAULT_RUNS_URL_STATE.limit;
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed <= 0) return DEFAULT_RUNS_URL_STATE.limit;
+  return Math.floor(parsed);
+};
+
 export function parseRunsQuery(search: URLSearchParams | string | null | undefined): RunsUrlState {
   const params =
     typeof search === "string"
@@ -55,6 +66,8 @@ export function parseRunsQuery(search: URLSearchParams | string | null | undefin
   const sort = parseSort(params.get("sort"));
   const dir = parseDir(params.get("dir"));
   const runId = params.get("runId");
+  const cursor = params.get("cursor");
+  const limit = parseLimit(params.get("limit"));
 
   return {
     q,
@@ -62,7 +75,29 @@ export function parseRunsQuery(search: URLSearchParams | string | null | undefin
     sort,
     dir,
     runId: runId ?? null,
+    cursor: cursor ?? null,
+    limit,
   };
+}
+
+export function updateRunsUrlState(prev: RunsUrlState, patch: Partial<RunsUrlState>): RunsUrlState {
+  const next: RunsUrlState = {
+    ...prev,
+    ...patch,
+  };
+
+  const shouldResetCursor =
+    (patch.q !== undefined && patch.q !== prev.q) ||
+    (patch.status !== undefined && patch.status !== prev.status) ||
+    (patch.sort !== undefined && patch.sort !== prev.sort) ||
+    (patch.dir !== undefined && patch.dir !== prev.dir) ||
+    (patch.limit !== undefined && patch.limit !== prev.limit);
+
+  if (shouldResetCursor) {
+    next.cursor = null;
+  }
+
+  return next;
 }
 
 export function buildRunsQuery(state: Partial<RunsUrlState>): string {
@@ -78,6 +113,8 @@ export function buildRunsQuery(state: Partial<RunsUrlState>): string {
   if (merged.sort !== DEFAULT_RUNS_URL_STATE.sort) params.set("sort", merged.sort);
   if (merged.dir !== DEFAULT_RUNS_URL_STATE.dir) params.set("dir", merged.dir);
   if (merged.runId) params.set("runId", merged.runId);
+  if (merged.cursor) params.set("cursor", merged.cursor);
+  if (merged.limit !== DEFAULT_RUNS_URL_STATE.limit) params.set("limit", String(merged.limit));
 
   const query = params.toString();
   return query.length ? `?${query}` : "";
