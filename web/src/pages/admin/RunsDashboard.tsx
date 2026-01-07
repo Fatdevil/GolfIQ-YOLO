@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
+import { useRef } from "react";
 import {
   listRunsV1,
   pruneRunsV1,
@@ -67,6 +68,7 @@ export default function RunsDashboardPage({ initialCursor = null, debugControls 
   const navigate = useNavigate();
   const location = useLocation();
   const urlState = useMemo(() => parseRunsQuery(location.search), [location.search]);
+  const urlStateRef = useRef(urlState);
   const [runs, setRuns] = useState<RunListItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -95,13 +97,22 @@ export default function RunsDashboardPage({ initialCursor = null, debugControls 
   }, [debugControls]);
 
   useEffect(() => {
+    urlStateRef.current = urlState;
+  }, [urlState]);
+
+  const getLatestUrlState = () => urlStateRef.current ?? urlState;
+
+  useEffect(() => {
     const nextStatus = urlState.status || undefined;
     setFilters((prev) => {
       if (prev.status === nextStatus) return prev;
       return { ...prev, status: nextStatus };
     });
+  }, [urlState.status]);
+
+  useEffect(() => {
     setSearchInput((prev) => (prev === urlState.q ? prev : urlState.q));
-  }, [urlState.status, urlState.q]);
+  }, [urlState.q]);
 
   useEffect(() => {
     let cancelled = false;
@@ -135,27 +146,33 @@ export default function RunsDashboardPage({ initialCursor = null, debugControls 
   const canGoNext = useMemo(() => Boolean(nextCursor), [nextCursor]);
 
   const updateQuery = (
-    patch: Partial<RunsUrlState>,
+    patch: Partial<RunsUrlState> | ((prev: RunsUrlState) => Partial<RunsUrlState> | RunsUrlState),
     options: { replace?: boolean } = { replace: true },
   ) => {
-    const nextSearch = buildRunsQuery({ ...urlState, ...patch });
+    const base = getLatestUrlState();
+    const updates = typeof patch === "function" ? patch(base) : patch;
+    const nextState = { ...base, ...updates };
+    urlStateRef.current = nextState;
+    const nextSearch = buildRunsQuery(nextState);
     navigate({ search: nextSearch }, { replace: options.replace ?? true });
   };
 
   useEffect(() => {
     const handle = window.setTimeout(() => {
-      if (searchInput !== urlState.q) {
-        updateQuery({ q: searchInput }, { replace: true });
+      const latest = getLatestUrlState();
+      if (searchInput !== latest.q) {
+        updateQuery((prev) => ({ ...prev, q: searchInput }), { replace: true });
       }
     }, SEARCH_DEBOUNCE_MS);
     return () => window.clearTimeout(handle);
-  }, [searchInput, urlState.q]);
+  }, [searchInput]);
 
   const handleFilterChange = (next: RunsListFilters) => {
     setCursorStack([]);
     setCurrentCursor(initialCursor);
     setFilters(next);
-    if (next.status !== urlState.status) {
+    const latest = getLatestUrlState();
+    if (next.status !== latest.status) {
       updateQuery({ status: next.status ?? "" });
     }
   };

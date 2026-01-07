@@ -302,6 +302,89 @@ describe("RunsDashboardPage", () => {
 
     await waitFor(() => expect(getSearch()).toContain("q=abc"));
   });
+
+  it("does not overwrite other URL params when the debounced search resolves", async () => {
+    mockListRunsV1.mockResolvedValue({
+      items: [
+        {
+          run_id: "run-1",
+          status: "processing",
+          kind: "video",
+          created_at: "2025-01-01T00:00:00Z",
+          updated_at: "2025-01-01T00:00:00Z",
+          override_source: "header",
+          source: "test",
+          source_type: "video",
+        },
+      ],
+      next_cursor: null,
+    });
+
+    const { getSearch } = renderPage();
+    const input = await screen.findByTestId("runs-search-input");
+    const statusFilter = screen.getByTestId("runs-status-filter");
+
+    act(() => {
+      fireEvent.change(input, { target: { value: "abc" } });
+    });
+
+    act(() => {
+      fireEvent.change(statusFilter, { target: { value: "failed" } });
+    });
+
+    expect(getSearch()).toContain("status=failed");
+
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, SEARCH_DEBOUNCE_MS + 50));
+    });
+
+    expect(getSearch()).toContain("status=failed");
+    expect(getSearch()).toContain("q=abc");
+  });
+
+  it("preserves newer status filters when the debounced search sync completes", async () => {
+    vi.useFakeTimers();
+    mockListRunsV1.mockResolvedValue({
+      items: [
+        {
+          run_id: "run-1",
+          status: "processing",
+          kind: "video",
+          created_at: "2025-01-01T00:00:00Z",
+          updated_at: "2025-01-01T00:00:00Z",
+          override_source: "header",
+          source: "test",
+          source_type: "video",
+        },
+      ],
+      next_cursor: null,
+    });
+
+    const { getSearch } = renderPage({ initialEntries: ["/admin/runs?status=processing"] });
+    const input = screen.getByTestId("runs-search-input");
+    const statusFilter = screen.getByTestId("runs-status-filter");
+
+    act(() => {
+      fireEvent.change(input, { target: { value: "abc" } });
+    });
+
+    act(() => {
+      vi.advanceTimersByTime(SEARCH_DEBOUNCE_MS / 2);
+    });
+
+    act(() => {
+      fireEvent.change(statusFilter, { target: { value: "failed" } });
+    });
+
+    expect(getSearch()).toContain("status=failed");
+
+    await act(async () => {
+      vi.runOnlyPendingTimers();
+    });
+
+    expect(getSearch()).toContain("status=failed");
+    expect(getSearch()).toContain("q=abc");
+  });
 });
 
 describe("buildPrunePayload", () => {
