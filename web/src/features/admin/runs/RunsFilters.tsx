@@ -8,8 +8,8 @@ type Props = {
 };
 
 const STATUS_OPTIONS: Array<{ label: string; value: RunStatusV1 | "" }> = [
-  { label: "Any status", value: "" },
-  { label: "Processing", value: "processing" },
+  { label: "All statuses", value: "" },
+  { label: "Running", value: "processing" },
   { label: "Succeeded", value: "succeeded" },
   { label: "Failed", value: "failed" },
 ];
@@ -46,6 +46,7 @@ export function RunsFilters({ filters, onChange, disabled }: Props) {
         value={filters.status ?? ""}
         onChange={(e) => update({ status: e.target.value as RunStatusV1 | "" })}
         disabled={disabled}
+        data-testid="runs-status-filter"
       >
         {STATUS_OPTIONS.map((option) => (
           <option key={option.label} value={option.value}>
