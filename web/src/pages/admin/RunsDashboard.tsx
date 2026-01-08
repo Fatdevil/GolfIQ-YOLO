@@ -26,6 +26,41 @@ import { toast } from "@/ui/toast";
 const INVALID_NUMBER_MESSAGE = "Must be a number";
 export const SEARCH_DEBOUNCE_MS = 300;
 
+const toEpochMs = (value?: string | null): number | null => {
+  if (!value) return null;
+  const parsed = new Date(value).getTime();
+  return Number.isNaN(parsed) ? null : parsed;
+};
+
+const compareNumbers = (left: number | null, right: number | null): number => {
+  const a = left ?? -1;
+  const b = right ?? -1;
+  if (a === b) return 0;
+  return a < b ? -1 : 1;
+};
+
+const compareStrings = (left?: string | null, right?: string | null): number =>
+  (left ?? "").localeCompare(right ?? "", undefined, { sensitivity: "base" });
+
+const compareRuns = (left: RunListItem, right: RunListItem, sortKey: RunsSortKey): number => {
+  switch (sortKey) {
+    case "duration": {
+      const leftStart = toEpochMs(left.started_at);
+      const leftFinish = toEpochMs(left.finished_at);
+      const rightStart = toEpochMs(right.started_at);
+      const rightFinish = toEpochMs(right.finished_at);
+      const leftDuration = leftStart && leftFinish ? leftFinish - leftStart : null;
+      const rightDuration = rightStart && rightFinish ? rightFinish - rightStart : null;
+      return compareNumbers(leftDuration, rightDuration);
+    }
+    case "status":
+      return compareStrings(left.status, right.status);
+    case "created":
+    default:
+      return compareNumbers(toEpochMs(left.created_at), toEpochMs(right.created_at));
+  }
+};
+
 export function buildPrunePayload(
   maxRuns: string,
   maxAgeDays: string,
@@ -72,7 +107,7 @@ export default function RunsDashboardPage() {
     status: urlState.status || undefined,
   });
   const [nextCursor, setNextCursor] = useState<string | null>(null);
-  const [prevCursor, setPrevCursor] = useState<string | null>(null);
+  const [cursorStack, setCursorStack] = useState<Array<string | null>>([]);
   const [searchInput, setSearchInput] = useState(urlState.q);
   const [onlyErrors, setOnlyErrors] = useState(false);
   const [pruneModalOpen, setPruneModalOpen] = useState(false);
@@ -107,6 +142,10 @@ export default function RunsDashboardPage() {
   }, [urlState.q]);
 
   useEffect(() => {
+    setCursorStack([]);
+  }, [urlState.q, urlState.status, urlState.sort, urlState.dir, urlState.limit]);
+
+  useEffect(() => {
     let cancelled = false;
     async function fetchRuns() {
       setLoading(true);
@@ -114,17 +153,11 @@ export default function RunsDashboardPage() {
       try {
         const response = await listRunsV1({
           ...filters,
-          q: urlState.q || undefined,
-          status: urlState.status || undefined,
-          sort: urlState.sort,
-          dir: urlState.dir,
           cursor: urlState.cursor ?? undefined,
-          limit: urlState.limit,
         });
         if (cancelled) return;
         setRuns(response.items);
         setNextCursor(response.next_cursor ?? null);
-        setPrevCursor(response.prev_cursor ?? null);
       } catch (err) {
         if (cancelled) return;
         const resolved = resolveRunsError(err, "Failed to load runs");
@@ -138,9 +171,9 @@ export default function RunsDashboardPage() {
     return () => {
       cancelled = true;
     };
-  }, [filters, urlState.cursor, urlState.q, urlState.status, urlState.sort, urlState.dir, urlState.limit]);
+  }, [filters, urlState.cursor]);
 
-  const canGoPrev = useMemo(() => Boolean(prevCursor), [prevCursor]);
+  const canGoPrev = useMemo(() => cursorStack.length > 0, [cursorStack.length]);
   const canGoNext = useMemo(() => Boolean(nextCursor), [nextCursor]);
 
   const updateQuery = (
@@ -176,12 +209,18 @@ export default function RunsDashboardPage() {
 
   const handleNext = () => {
     if (!nextCursor) return;
+    setCursorStack((prev) => [...prev, urlState.cursor ?? null]);
     updateQuery({ cursor: nextCursor }, { replace: false });
   };
 
   const handlePrev = () => {
-    if (!prevCursor) return;
-    updateQuery({ cursor: prevCursor }, { replace: false });
+    setCursorStack((prev) => {
+      if (!prev.length) return prev;
+      const nextStack = prev.slice(0, -1);
+      const prevCursor = prev[prev.length - 1] ?? null;
+      updateQuery({ cursor: prevCursor }, { replace: false });
+      return nextStack;
+    });
   };
 
   const handleSelectRun = (runId: string) => {
@@ -234,9 +273,40 @@ export default function RunsDashboardPage() {
   }, [pruneConfirm, pruneValidation.errors.maxAgeDays, pruneValidation.errors.maxRuns, runsPruneEnabled, runsPruneLocked]);
 
   const filteredRuns = useMemo(() => {
-    if (!onlyErrors) return runs;
-    return runs.filter((run) => Boolean(run.error_code));
-  }, [runs, onlyErrors]);
+    const query = urlState.q.trim().toLowerCase();
+    let nextRuns = runs;
+    if (onlyErrors) {
+      nextRuns = nextRuns.filter((run) => Boolean(run.error_code));
+    }
+    if (query) {
+      nextRuns = nextRuns.filter((run) => {
+        const haystack = [
+          run.run_id,
+          run.status,
+          run.kind,
+          run.model_variant_selected,
+          run.source,
+          run.source_type,
+          run.error_code,
+          run.error_message,
+        ]
+          .filter(Boolean)
+          .join(" ")
+          .toLowerCase();
+        return haystack.includes(query);
+      });
+    }
+
+    const direction = urlState.dir === "asc" ? 1 : -1;
+    return nextRuns
+      .map((run, index) => ({ run, index }))
+      .sort((a, b) => {
+        const primary = compareRuns(a.run, b.run, urlState.sort);
+        if (primary !== 0) return primary * direction;
+        return a.index - b.index;
+      })
+      .map(({ run }) => run);
+  }, [runs, onlyErrors, urlState.q, urlState.dir, urlState.sort]);
 
   return (
     <section className="space-y-6">
@@ -308,7 +378,7 @@ export default function RunsDashboardPage() {
         className="flex items-center justify-between text-sm text-slate-400"
         data-testid="runs-pagination"
       >
-        <div>Showing {runs.length} runs</div>
+        <div>Showing {filteredRuns.length} runs</div>
         <div className="flex gap-2">
           <button
             onClick={handlePrev}

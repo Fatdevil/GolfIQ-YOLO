@@ -54,7 +54,6 @@ export type RunListItem = {
 export type RunListResponse = {
   items: RunListItem[];
   next_cursor?: string | null;
-  prev_cursor?: string | null;
 };
 
 export type RunArtifactLink = {
