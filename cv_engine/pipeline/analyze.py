@@ -10,6 +10,7 @@ from cv_engine.calibration.homography import (
     ground_homography_from_scale,
     to_ground_plane,
 )
+from cv_engine.calibration.v1 import CalibrationConfig, calibrated_metrics
 from cv_engine.metrics.angle import compute_side_angle
 from cv_engine.metrics.carry_v1 import estimate_carry
 from cv_engine.metrics.launch_mono import estimate_vertical_launch
@@ -56,6 +57,7 @@ def analyze_frames(
     smoothing_window: int = 1,
     model_variant: str | None = None,
     variant_source: str | None = None,
+    calibration: CalibrationConfig | None = None,
 ) -> Dict[str, Any]:
     """Analyze sequence of frames for ball/club metrics."""
 
@@ -108,6 +110,7 @@ def analyze_frames(
     events: List[int] = []
     confidence = 0.0
     metrics: Dict[str, Any]
+    calibration_payload: Dict[str, Any] | None = None
     base_metrics: Any | None = None
     side_angle: float | None = None
     vert_launch: float | None = None
@@ -345,6 +348,10 @@ def analyze_frames(
             timings["kinematics_ms"] = kin_ms
             record_stage_latency("kinematics", kin_ms)
 
+        if calibration is not None:
+            calibration_payload = calibrated_metrics(ball_track_px, calibration)
+            metrics["calibrated"] = calibration_payload
+
         impact_start = perf_counter()
         with span("cv.pipeline.impact"):
             impact_events = ImpactDetector(detector=det).run_with_boxes(
@@ -427,5 +434,6 @@ def analyze_frames(
     return {
         "events": events,
         "metrics": metrics,
+        "calibrated": calibration_payload,
         "flight_recorder": flight_recorder,
     }
