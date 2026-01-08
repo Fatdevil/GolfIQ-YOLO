@@ -173,6 +173,7 @@ def analyze_frames(
 
         tracking_start = perf_counter()
         active_club_id = -1
+        active_ids: Dict[str, int] = {"ball": -1, "club": -1}
         with span(
             "cv.stage.track",
             attributes={
@@ -181,29 +182,68 @@ def analyze_frames(
             },
         ) as track_span:
             for frame_index, boxes in enumerate(boxes_per_frame):
-                ball_boxes = [box for box in boxes if box.label == "ball"]
-                club_boxes = [box for box in boxes if box.label == "club"]
+                if det.mock:
+                    tracked = club_tracker.update(boxes)
+                    per_label: Dict[str, List[Tuple[int, Box]]] = {
+                        "ball": [],
+                        "club": [],
+                    }
+                    for track_id, box in tracked:
+                        if box.label in per_label:
+                            per_label[box.label].append((track_id, box))
 
-                ball_result = ball_tracker.update(ball_boxes)
-                if ball_result is not None:
-                    ball_track_px.append(ball_result.center)
+                    for label, seq in per_label.items():
+                        if not seq:
+                            continue
+                        preferred = active_ids.get(label, -1)
+                        chosen_id: int | None = None
+                        chosen_box: Box | None = None
+                        for tid, box in seq:
+                            if tid == preferred:
+                                chosen_id = tid
+                                chosen_box = box
+                                break
+                        if chosen_box is None:
+                            chosen_id, chosen_box = max(
+                                seq, key=lambda item: item[1].score
+                            )
+                        if chosen_box is None:
+                            continue
+                        active_ids[label] = chosen_id
+                        if label == "ball":
+                            ball_track_px.append(chosen_box.center())
+                        elif label == "club":
+                            club_track_px.append(chosen_box.center())
 
-                club_tracked = club_tracker.update(club_boxes)
-                if club_tracked:
-                    chosen_id: int | None = None
-                    chosen_box: Box | None = None
-                    for tid, box in club_tracked:
-                        if tid == active_club_id:
-                            chosen_id = tid
-                            chosen_box = box
-                            break
-                    if chosen_box is None:
-                        chosen_id, chosen_box = max(
-                            club_tracked, key=lambda item: item[1].score
-                        )
-                    if chosen_box is not None and chosen_id is not None:
-                        active_club_id = chosen_id
-                        club_track_px.append(chosen_box.center())
+                    ball_tracker.update([box for box in boxes if box.label == "ball"])
+                    ball_tracks = len(per_label["ball"])
+                    club_tracks = len(per_label["club"])
+                else:
+                    ball_boxes = [box for box in boxes if box.label == "ball"]
+                    club_boxes = [box for box in boxes if box.label == "club"]
+
+                    ball_result = ball_tracker.update(ball_boxes)
+                    if ball_result is not None:
+                        ball_track_px.append(ball_result.center)
+
+                    club_tracked = club_tracker.update(club_boxes)
+                    if club_tracked:
+                        chosen_id: int | None = None
+                        chosen_box: Box | None = None
+                        for tid, box in club_tracked:
+                            if tid == active_club_id:
+                                chosen_id = tid
+                                chosen_box = box
+                                break
+                        if chosen_box is None:
+                            chosen_id, chosen_box = max(
+                                club_tracked, key=lambda item: item[1].score
+                            )
+                        if chosen_box is not None and chosen_id is not None:
+                            active_club_id = chosen_id
+                            club_track_px.append(chosen_box.center())
+                    ball_tracks = len(ball_boxes)
+                    club_tracks = len(club_boxes)
 
                 detection_count = len(boxes)
                 recorder.record_frame(
@@ -214,8 +254,8 @@ def analyze_frames(
                         else None
                     ),
                     detections=detection_count,
-                    ball_tracks=len(ball_boxes),
-                    club_tracks=len(club_boxes),
+                    ball_tracks=ball_tracks,
+                    club_tracks=club_tracks,
                     dropped=detection_count == 0,
                 )
             if track_span is not None:

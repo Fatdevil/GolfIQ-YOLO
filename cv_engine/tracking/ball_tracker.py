@@ -163,9 +163,7 @@ class StabilizedBallTracker(BallTracker):
         self._confidence_sum += float(box.score)
         self._confidence_count += 1
         if self._confidence_count > 0:
-            self._metrics.avg_confidence = (
-                self._confidence_sum / self._confidence_count
-            )
+            self._metrics.avg_confidence = self._confidence_sum / self._confidence_count
 
     def update(self, detections: Sequence[Box]) -> BallTrackResult | None:
         tracked = self._tracker.update(detections)

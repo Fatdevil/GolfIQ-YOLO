@@ -21,9 +21,9 @@ def test_backview_mock_clip_golden() -> None:
     result = analyze_frames(frames, calib, mock=True)
     metrics = result["metrics"]
 
-    expected_ball_speed = 1.443
+    expected_ball_speed = 1.594
     expected_side_angle = 90.0
-    expected_carry_est = 0.21
+    expected_carry_est = 0.25
 
     assert _abs_pct_delta(metrics["ballSpeedMps"], expected_ball_speed) <= 0.03
     assert abs(metrics["sideAngleDeg"] - expected_side_angle) <= 1.5

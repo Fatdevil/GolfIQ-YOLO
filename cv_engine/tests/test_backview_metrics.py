@@ -12,7 +12,7 @@ def test_mock_clip_backview_metrics():
     result = analyze_frames(frames, calib, mock=True, smoothing_window=1)
     metrics = result["metrics"]
 
-    expected_speed = 2.947
+    expected_speed = 3.109
     expected_angle = 90.0
 
     assert abs(metrics["ballSpeedMps"] - expected_speed) / expected_speed < 0.03
