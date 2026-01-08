@@ -9,15 +9,19 @@ const mockWithAuth = vi.fn((extra: Record<string, string> = {}): Record<string, 
 vi.mock("@/api", () => ({
   API: "https://api.example.com",
   apiClient: { get: (...args: unknown[]) => mockApiClientGet(...args) },
-  withAuth: (extra?: Record<string, string>) => mockWithAuth(extra),
+  withAuth: (extra?: Record<string, string>) =>
+    typeof extra === "undefined" ? mockWithAuth() : mockWithAuth(extra),
 }));
 
-import { buildRunDetailCurl, buildRunsListQuery, getRunDetailV1 } from "./runsV1";
+import { buildRunDetailCurl, buildRunsListQuery, getRunDetailV1, listRunsV1 } from "./runsV1";
 
 describe("buildRunsListQuery", () => {
   it("serializes filters and ISO dates", () => {
     const query = buildRunsListQuery({
+      q: "search",
       status: "succeeded",
+      sort: "created",
+      dir: "asc",
       kind: "video",
       modelVariant: "yolov10",
       createdAfter: "2025-01-01T00:00:00Z",
@@ -27,7 +31,10 @@ describe("buildRunsListQuery", () => {
     });
 
     expect(query).toMatchObject({
+      q: "search",
       status: "succeeded",
+      sort: "created",
+      dir: "asc",
       kind: "video",
       model_variant: "yolov10",
       created_after: "2025-01-01T00:00:00.000Z",
@@ -44,6 +51,32 @@ describe("buildRunsListQuery", () => {
     });
     expect(query.created_after).toBeUndefined();
     expect(query.created_before).toBeUndefined();
+  });
+});
+
+describe("listRunsV1", () => {
+  beforeEach(() => {
+    mockApiClientGet.mockReset();
+    mockWithAuth.mockClear();
+  });
+
+  it("passes query params and auth headers", async () => {
+    mockApiClientGet.mockResolvedValue({ data: { items: [], next_cursor: null } });
+
+    await listRunsV1({ q: "golf", status: "failed", sort: "status", dir: "desc", cursor: "c-1", limit: 10 });
+
+    expect(mockWithAuth).toHaveBeenCalledWith();
+    expect(mockApiClientGet).toHaveBeenCalledWith("/runs/v1", {
+      params: expect.objectContaining({
+        q: "golf",
+        status: "failed",
+        sort: "status",
+        dir: "desc",
+        cursor: "c-1",
+        limit: 10,
+      }),
+      headers: { "x-api-key": "test-key" },
+    });
   });
 });
 

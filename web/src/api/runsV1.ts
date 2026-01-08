@@ -3,9 +3,14 @@ import { API, apiClient, withAuth } from "@/api";
 
 export type RunStatusV1 = "processing" | "succeeded" | "failed";
 export type RunKindV1 = "image" | "video" | "range";
+export type RunsSortKeyV1 = "created" | "duration" | "status";
+export type RunsSortDirectionV1 = "asc" | "desc";
 
 export type RunsListFilters = {
+  q?: string;
   status?: RunStatusV1 | "";
+  sort?: RunsSortKeyV1;
+  dir?: RunsSortDirectionV1;
   kind?: RunKindV1 | string;
   modelVariant?: string;
   createdAfter?: string;
@@ -107,7 +112,10 @@ export function buildRunsListQuery(params: RunsListFilters = {}): Record<string,
     limit: params.limit ?? 50,
   };
 
+  if (params.q?.trim()) query.q = params.q.trim();
   if (params.status) query.status = params.status;
+  if (params.sort) query.sort = params.sort;
+  if (params.dir) query.dir = params.dir;
   if (params.kind) query.kind = params.kind;
   if (params.modelVariant) query.model_variant = params.modelVariant;
   if (params.cursor) query.cursor = params.cursor;

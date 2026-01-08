@@ -37,8 +37,6 @@ function NavigationSpy({ onReady }: { onReady: (navigate: ReturnType<typeof useN
 }
 
 function renderPage(props?: {
-  initialCursor?: string | null;
-  onControls?: (controls: { setCursor: (cursor: string | null) => void }) => void;
   initialEntries?: string[];
   onLocation?: (location: ReturnType<typeof useLocation>) => void;
 }): { getSearch: () => string; navigate: (delta: number) => void } & ReturnType<typeof render> {
@@ -55,12 +53,7 @@ function renderPage(props?: {
         }}
       />
       <Routes>
-        <Route
-          path="/admin/runs"
-          element={
-            <RunsDashboardPage initialCursor={props?.initialCursor} debugControls={props?.onControls} />
-          }
-        />
+        <Route path="/admin/runs" element={<RunsDashboardPage />} />
       </Routes>
     </MemoryRouter>,
   );
@@ -99,7 +92,7 @@ describe("RunsDashboardPage", () => {
       next_cursor: null,
     });
 
-    renderPage({ initialCursor: "cursor-1" });
+    renderPage();
 
     expect(await screen.findByText("run-1")).toBeInTheDocument();
     expect(mockListRunsV1).toHaveBeenCalled();
@@ -126,20 +119,18 @@ describe("RunsDashboardPage", () => {
       next_cursor: null,
     });
 
-    let controls: { setCursor: (cursor: string | null) => void } | null = null;
-    renderPage({
-      onControls: (c) => {
-        controls = c;
-      },
-    });
+    const { getSearch } = renderPage();
 
     await screen.findByText("run-1");
     await waitFor(() => expect(mockListRunsV1).toHaveBeenCalledTimes(1));
 
-    act(() => controls?.setCursor("cursor-1"));
+    act(() => {
+      screen.getByTestId("runs-next-page").click();
+    });
 
     await waitFor(() => expect(mockListRunsV1).toHaveBeenCalledTimes(2));
     expect(mockListRunsV1.mock.calls[1][0]).toMatchObject({ cursor: "cursor-1" });
+    expect(getSearch()).toContain("cursor=cursor-1");
   });
 
   it("restores URL query parameters into UI state and opens detail panel", async () => {

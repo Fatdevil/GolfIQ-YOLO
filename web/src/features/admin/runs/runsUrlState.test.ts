@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 
-import { buildRunsQuery, DEFAULT_RUNS_URL_STATE, parseRunsQuery, type RunsUrlState } from "./runsUrlState";
+import {
+  buildRunsQuery,
+  DEFAULT_RUNS_URL_STATE,
+  parseRunsQuery,
+  updateRunsUrlState,
+  type RunsUrlState,
+} from "./runsUrlState";
 
 describe("runsUrlState", () => {
   it("parses default values when search string is empty", () => {
@@ -9,13 +15,15 @@ describe("runsUrlState", () => {
   });
 
   it("parses provided query parameters", () => {
-    const parsed = parseRunsQuery("?q=test&status=failed&sort=duration&dir=asc&runId=run-1");
+    const parsed = parseRunsQuery("?q=test&status=failed&sort=duration&dir=asc&runId=run-1&cursor=next&limit=50");
     expect(parsed).toEqual({
       q: "test",
       status: "failed",
       sort: "duration",
       dir: "asc",
       runId: "run-1",
+      cursor: "next",
+      limit: 50,
     });
   });
 
@@ -33,6 +41,8 @@ describe("runsUrlState", () => {
       sort: "duration",
       dir: "asc",
       runId: "run-1",
+      cursor: "cursor-1",
+      limit: 50,
     };
     const query = buildRunsQuery(state);
     const params = new URLSearchParams(query.replace(/^\?/, ""));
@@ -41,10 +51,25 @@ describe("runsUrlState", () => {
     expect(params.get("sort")).toBe("duration");
     expect(params.get("dir")).toBe("asc");
     expect(params.get("runId")).toBe("run-1");
+    expect(params.get("cursor")).toBe("cursor-1");
+    expect(params.get("limit")).toBe("50");
   });
 
   it("omits default values when building", () => {
     const query = buildRunsQuery(DEFAULT_RUNS_URL_STATE);
     expect(query).toBe("");
+  });
+
+  it("resets cursor when search or sort inputs change", () => {
+    const initial: RunsUrlState = {
+      ...DEFAULT_RUNS_URL_STATE,
+      cursor: "cursor-1",
+    };
+
+    const next = updateRunsUrlState(initial, { q: "new" });
+    expect(next.cursor).toBeNull();
+
+    const nextSort = updateRunsUrlState(initial, { sort: "duration" });
+    expect(nextSort.cursor).toBeNull();
   });
 });
