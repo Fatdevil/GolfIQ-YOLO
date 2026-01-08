@@ -45,6 +45,8 @@ class YoloV8Detector:
                 self.model = YOLO(weight_path)
             except Exception:
                 self.mock = True
+        if not self.mock and self.model is None:
+            self.mock = True
 
     def run(self, image: "np.ndarray") -> List[Box]:
         h, w = image.shape[:2]

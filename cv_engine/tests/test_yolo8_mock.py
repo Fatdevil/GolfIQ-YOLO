@@ -8,3 +8,8 @@ def test_yolo8_mock_returns_boxes():
     boxes = YoloV8Detector(mock=True).run(img)
     labels = sorted([b.label for b in boxes])
     assert labels == ["ball", "club"]
+
+
+def test_yolo8_fallback_marks_mock_when_no_weights():
+    detector = YoloV8Detector(mock=False, weight_path=None)
+    assert detector.mock is True

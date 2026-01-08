@@ -312,11 +312,43 @@ def main() -> int:
     out_path.write_text(json.dumps(report, indent=2))
 
     if not gate_pass:
+        _print_regression_summary(report)
         print("Accuracy regression detected — see", out_path)
         return 1
 
     print("Accuracy check passed — see", out_path)
     return 0
+
+
+def _print_regression_summary(report: Mapping[str, Any]) -> None:
+    metrics = report.get("metrics", {})
+    clips = report.get("clips", [])
+    sys.stderr.write("Accuracy regression summary:\n")
+    for metric, summary in metrics.items():
+        if not summary.get("pass", True):
+            sys.stderr.write(
+                f"- {metric}: mae={summary.get('mae')} "
+                f"p95={summary.get('p95')} mape={summary.get('mape')}\n"
+            )
+
+    for metric in ("ballSpeed", "sideAngle", "carry"):
+        errors = []
+        for clip in clips:
+            expected = clip.get("expected", {}).get(metric)
+            actual = clip.get("actual", {}).get(metric)
+            error = clip.get("errors", {}).get(metric)
+            if error is None:
+                continue
+            errors.append((abs(error), clip.get("id"), expected, actual))
+        if not errors:
+            continue
+        errors.sort(reverse=True)
+        sys.stderr.write(f"Top {metric} deltas:\n")
+        for delta, clip_id, expected, actual in errors[:5]:
+            sys.stderr.write(
+                f"  - {clip_id}: expected={expected} actual={actual} "
+                f"abs_error={delta}\n"
+            )
 
 
 if __name__ == "__main__":
