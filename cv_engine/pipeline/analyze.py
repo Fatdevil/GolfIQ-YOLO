@@ -16,7 +16,7 @@ from cv_engine.metrics.launch_mono import estimate_vertical_launch
 from cv_engine.inference.model_registry import get_detection_engine
 from cv_engine.pose.adapter import PoseAdapter
 from cv_engine.sequence import analyze_kinematic_sequence
-from cv_engine.tracking.factory import get_tracker
+from cv_engine.tracking.factory import get_ball_tracker, get_tracker
 from cv_engine.telemetry import FlightRecorder, flight_recorder_settings
 from observability.otel import span
 from server.metrics.faceon import compute_faceon_metrics
@@ -68,8 +68,10 @@ def analyze_frames(
         variant_source=variant_source,
     )
 
-    tracker = get_tracker()
-    tracker_name = tracker.__class__.__name__
+    ball_tracker = get_ball_tracker()
+    ball_tracker_name = ball_tracker.__class__.__name__
+    club_tracker = get_tracker()
+    club_tracker_name = club_tracker.__class__.__name__
     pose_adapter = PoseAdapter()
     pose_backend = pose_adapter.backend_name or "unknown"
 
@@ -82,7 +84,8 @@ def analyze_frames(
     recorder_metadata = {
         "detector": det.__class__.__name__,
         "mock": det.mock,
-        "tracker": tracker_name,
+        "tracker": club_tracker_name,
+        "ballTracker": ball_tracker_name,
         "poseBackend": pose_backend,
         "inputSize": input_size,
         "fps": calib.fps,
@@ -113,7 +116,8 @@ def analyze_frames(
 
     span_attributes = {
         "cv.frames_total": len(frames_list),
-        "cv.tracker": tracker_name,
+        "cv.tracker": club_tracker_name,
+        "cv.ball_tracker": ball_tracker_name,
         "cv.pose_backend": pose_backend,
         "cv.input_size": input_size,
     }
@@ -168,37 +172,37 @@ def analyze_frames(
                 faceon_metrics = None
 
         tracking_start = perf_counter()
-        active_ids: Dict[str, int] = {"ball": -1, "club": -1}
+        active_club_id = -1
         with span(
-            "cv.stage.track", attributes={"cv.tracker": tracker_name}
+            "cv.stage.track",
+            attributes={
+                "cv.tracker": club_tracker_name,
+                "cv.ball_tracker": ball_tracker_name,
+            },
         ) as track_span:
             for frame_index, boxes in enumerate(boxes_per_frame):
-                tracked = tracker.update(boxes)
+                ball_boxes = [box for box in boxes if box.label == "ball"]
+                club_boxes = [box for box in boxes if box.label == "club"]
 
-                per_label: Dict[str, List[Tuple[int, Box]]] = {"ball": [], "club": []}
-                for track_id, box in tracked:
-                    if box.label in per_label:
-                        per_label[box.label].append((track_id, box))
+                ball_result = ball_tracker.update(ball_boxes)
+                if ball_result is not None:
+                    ball_track_px.append(ball_result.center)
 
-                for label, seq in per_label.items():
-                    if not seq:
-                        continue
-                    preferred = active_ids.get(label, -1)
+                club_tracked = club_tracker.update(club_boxes)
+                if club_tracked:
                     chosen_id: int | None = None
                     chosen_box: Box | None = None
-                    for tid, box in seq:
-                        if tid == preferred:
+                    for tid, box in club_tracked:
+                        if tid == active_club_id:
                             chosen_id = tid
                             chosen_box = box
                             break
                     if chosen_box is None:
-                        chosen_id, chosen_box = max(seq, key=lambda item: item[1].score)
-                    if chosen_box is None:
-                        continue
-                    active_ids[label] = chosen_id
-                    if label == "ball":
-                        ball_track_px.append(chosen_box.center())
-                    elif label == "club":
+                        chosen_id, chosen_box = max(
+                            club_tracked, key=lambda item: item[1].score
+                        )
+                    if chosen_box is not None and chosen_id is not None:
+                        active_club_id = chosen_id
                         club_track_px.append(chosen_box.center())
 
                 detection_count = len(boxes)
@@ -210,15 +214,19 @@ def analyze_frames(
                         else None
                     ),
                     detections=detection_count,
-                    ball_tracks=len(per_label["ball"]),
-                    club_tracks=len(per_label["club"]),
+                    ball_tracks=len(ball_boxes),
+                    club_tracks=len(club_boxes),
                     dropped=detection_count == 0,
                 )
             if track_span is not None:
                 track_span.set_attribute("cv.track.frames", len(boxes_per_frame))
+                tracking_metrics = ball_tracker.metrics.as_dict()
+                for metric_name, metric_value in tracking_metrics.items():
+                    track_span.set_attribute(f"cv.track.{metric_name}", metric_value)
         tracking_ms = (perf_counter() - tracking_start) * 1000.0
         timings["track_ms"] = tracking_ms
         record_stage_latency("track", tracking_ms)
+        recorder.record_tracking_metrics(ball_tracker.metrics.as_dict())
 
         pose_start = perf_counter()
         with span(

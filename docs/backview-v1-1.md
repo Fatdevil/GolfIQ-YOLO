@@ -2,7 +2,17 @@
 
 ## Environment toggles
 - `GOLFIQ_TRACKER`: `bytetrack` (default), `norfair`, or `identity` for deterministic ids.
+- `GOLFIQ_BALL_TRACKER`: `norfair` (default), `bytetrack`, or `identity` for stabilized ball tracking.
 - `POSE_BACKEND`: `mediapipe` (default), `movenet`, or `none` to disable pose sampling.
+
+## Ball tracking stabilization
+The ball tracking layer applies gating + EMA smoothing to reduce track breaks on dropouts.
+Tune the following environment variables when needed:
+
+- `TRACK_MAX_GAP_FRAMES` (default: `4`): maximum number of missing frames before the track is reset.
+- `TRACK_GATING_DISTANCE_PX` (default: `90`): distance threshold (pixels) used to recover a track after a gap.
+- `TRACK_OUTLIER_DISTANCE_PX` (default: `140`): maximum allowed jump before a detection is treated as an outlier.
+- `TRACK_SMOOTHING_ALPHA` (default: `0.45`): EMA smoothing factor for ball positions.
 
 ## API response extensions
 The `/cv/analyze` and `/cv/analyze/video` endpoints now return the existing metrics plus additional fields:

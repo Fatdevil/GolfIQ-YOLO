@@ -43,6 +43,7 @@ class FlightRecorder:
         self._inference_ms: List[float] = []
         self._max_ball_tracks = 0
         self._max_club_tracks = 0
+        self._tracking_metrics: Dict[str, float | int] | None = None
 
     def record_frame(
         self,
@@ -118,6 +119,11 @@ class FlightRecorder:
             return
         self.events.append({"kind": kind, "data": dict(data)})
 
+    def record_tracking_metrics(self, metrics: Dict[str, float | int]) -> None:
+        if not self.enabled:
+            return
+        self._tracking_metrics = dict(metrics)
+
     def set_status(self, status: str) -> None:
         if not self.enabled:
             return
@@ -146,6 +152,7 @@ class FlightRecorder:
             "maxConcurrentBallTracks": self._max_ball_tracks or None,
             "maxConcurrentClubTracks": self._max_club_tracks or None,
             "fallbackModesUsed": sorted(fallback_modes),
+            "trackingMetrics": self._tracking_metrics,
         }
 
     def to_dict(self) -> Dict[str, Any]:

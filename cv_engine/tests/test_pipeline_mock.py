@@ -14,6 +14,6 @@ def test_pipeline_detector_mock_motion_produces_metrics():
         motion=(2.0, -1.0, 1.5, 0.0),
     )
     m = out["metrics"]
-    assert abs(m["ball_speed_mps"] - 2.68) < 0.2
-    assert 6.2 <= m["ball_speed_mph"] <= 6.6
+    assert abs(m["ball_speed_mps"] - 2.41) < 0.2
+    assert 5.3 <= m["ball_speed_mph"] <= 5.5
     assert 32.0 <= m["launch_deg"] <= 34.5

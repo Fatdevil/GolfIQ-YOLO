@@ -20,6 +20,6 @@ def test_cv_mock_analyze_detector_mode():
     assert r.status_code == 200, r.text
     data = r.json()
     m = data["metrics"]
-    assert abs(m["ball_speed_mps"] - 2.68) < 0.25
-    assert 6.2 <= m["ball_speed_mph"] <= 6.6
+    assert abs(m["ball_speed_mps"] - 2.41) < 0.25
+    assert 5.3 <= m["ball_speed_mph"] <= 5.5
     assert 32.0 <= m["launch_deg"] <= 34.5

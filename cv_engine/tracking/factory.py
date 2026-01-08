@@ -4,6 +4,7 @@ import os
 from typing import Dict
 
 from cv_engine.tracking.base import TrackerBase
+from cv_engine.tracking.ball_tracker import BallTracker, build_ball_tracker
 from cv_engine.tracking.identity import IdentityTracker
 from cv_engine.tracking.bytetrack import ByteTrackTracker
 from cv_engine.tracking.norfair import NorfairTracker
@@ -24,3 +25,9 @@ def get_tracker(name: str | None = None, **kwargs) -> TrackerBase:
     if tracker_cls is None:
         tracker_cls = _TRACKERS["identity"]
     return tracker_cls(**kwargs)
+
+
+def get_ball_tracker(name: str | None = None, **kwargs) -> BallTracker:
+    """Return ball tracker instance based on env or explicit name."""
+
+    return build_ball_tracker(name=name, tracker_kwargs=kwargs)
