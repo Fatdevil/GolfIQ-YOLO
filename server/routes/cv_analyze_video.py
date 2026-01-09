@@ -23,8 +23,10 @@ from cv_engine.metrics.kinematics import CalibrationParams
 from cv_engine.pipeline.analyze import analyze_frames
 from .cv_analyze import (
     AnalyzeMetrics,
+    _calibration_from_payload,
     _fail_run,
     _inference_timing,
+    _parse_calibration_payload,
     _variant_source_label,
 )
 from server.config import (
@@ -91,6 +93,10 @@ async def analyze_video(
     smoothing_window: int = Form(3),
     persist: bool = Form(False),
     run_name: str | None = Form(None),
+    calibration: str | None = Form(
+        default=None,
+        description="Optional calibration JSON payload",
+    ),
     video: UploadFile = File(..., description="Video (e.g., MP4)"),
 ):
     query = AnalyzeVideoQuery(
@@ -191,17 +197,23 @@ async def analyze_video(
 
     fps = fps_from_video(data) or float(query.fps_fallback)
     calib = CalibrationParams.from_reference(query.ref_len_m, query.ref_len_px, fps)
+    calibration_config = _calibration_from_payload(
+        _parse_calibration_payload(calibration),
+        fps=fps,
+        mock=use_mock,
+    )
 
     variant_source = _variant_source_label(variant_info.override_source)
     try:
-        result = analyze_frames(
-            frames,
-            calib,
-            mock=use_mock,
-            smoothing_window=query.smoothing_window,
-            model_variant=variant_info.selected,
-            variant_source=variant_source,
-        )
+        analyze_kwargs = {
+            "mock": use_mock,
+            "smoothing_window": query.smoothing_window,
+            "model_variant": variant_info.selected,
+            "variant_source": variant_source,
+        }
+        if calibration_config is not None:
+            analyze_kwargs["calibration"] = calibration_config
+        result = analyze_frames(frames, calib, **analyze_kwargs)
     except RuntimeError as exc:
         message = str(exc)
         if "yolov11" in message.lower():

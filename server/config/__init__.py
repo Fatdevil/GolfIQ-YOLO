@@ -11,6 +11,7 @@ from typing import Any
 __all__ = [
     "_Settings",
     "CAPTURE_IMPACT_FRAMES",
+    "ENABLE_CALIBRATION_V1",
     "ENABLE_SPIN",
     "IMPACT_CAPTURE_AFTER",
     "IMPACT_CAPTURE_BEFORE",
@@ -88,6 +89,7 @@ LIVE_HEARTBEAT_TTL_SEC: int = _int_env("LIVE_HEARTBEAT_TTL_SEC", 120)
 LIVE_LATENCY_MODE: str = os.getenv("LIVE_LATENCY_MODE", "ll-hls").strip() or "ll-hls"
 
 ENABLE_SPIN: bool = env_bool("ENABLE_SPIN", False)
+ENABLE_CALIBRATION_V1: bool = env_bool("GOLFIQ_ENABLE_CALIBRATION_V1", False)
 CAPTURE_IMPACT_FRAMES: bool = env_bool("CAPTURE_IMPACT_FRAMES", True)
 IMPACT_CAPTURE_BEFORE: int = _int_env("IMPACT_CAPTURE_BEFORE", 2)
 IMPACT_CAPTURE_AFTER: int = _int_env("IMPACT_CAPTURE_AFTER", 6)
