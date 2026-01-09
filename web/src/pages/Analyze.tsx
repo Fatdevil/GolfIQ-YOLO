@@ -20,8 +20,22 @@ interface AnalyzeMetrics {
   spin_rpm?: number | null;
   spin_axis_deg?: number | null;
   club_path_deg?: number | null;
+  explain?: ExplainResult;
   [key: string]: unknown;
 }
+
+type ExplainIssue = {
+  code: string;
+  severity: "info" | "warn" | "error";
+  message: string;
+  details?: Record<string, unknown>;
+};
+
+type ExplainResult = {
+  confidence: number;
+  issues: ExplainIssue[];
+  summary: string;
+};
 
 interface AnalyzeEvent {
   id?: string;
@@ -84,6 +98,24 @@ export default function AnalyzePage() {
   const metrics = useMemo<AnalyzeMetrics>(() => result?.metrics ?? {}, [result]);
   const backView = useMemo(() => extractBackViewPayload(result), [result]);
   const qualityFlags = useMemo(() => backView?.quality ?? null, [backView]);
+  const explain = useMemo<ExplainResult | null>(() => {
+    const payload = metrics.explain;
+    if (!payload || typeof payload !== "object") {
+      return null;
+    }
+    return payload as ExplainResult;
+  }, [metrics]);
+  const explainIssues = useMemo<ExplainIssue[]>(() => {
+    if (!explain?.issues) {
+      return [];
+    }
+    const rank: Record<ExplainIssue["severity"], number> = {
+      error: 0,
+      warn: 1,
+      info: 2,
+    };
+    return [...explain.issues].sort((a, b) => rank[a.severity] - rank[b.severity]);
+  }, [explain]);
 
   const [zipForm, setZipForm] = useState({
     file: null as File | null,
@@ -214,6 +246,12 @@ export default function AnalyzePage() {
   };
 
   const qualityBadgeItems = renderQualityBadges();
+  const topExplainIssues = explainIssues.slice(0, 3);
+  const severityStyles: Record<ExplainIssue["severity"], string> = {
+    error: "border-red-500/40 bg-red-500/10 text-red-200",
+    warn: "border-amber-500/40 bg-amber-500/10 text-amber-200",
+    info: "border-slate-500/40 bg-slate-500/10 text-slate-200",
+  };
 
   return (
     <section className="space-y-6">
@@ -472,6 +510,60 @@ export default function AnalyzePage() {
             )}
             {renderMetrics()}
           </div>
+          {explain && (
+            <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-6">
+              <div className="flex flex-wrap items-start justify-between gap-4">
+                <div>
+                  <h3 className="text-base font-semibold text-emerald-200">Explain Result</h3>
+                  <p className="mt-1 text-sm text-slate-400">{explain.summary}</p>
+                </div>
+                <div className="text-right">
+                  <p className="text-xs uppercase tracking-wide text-slate-400">Confidence</p>
+                  <p className="text-xl font-semibold text-emerald-100">
+                    {`${Math.round((explain.confidence ?? 0) * 100)}%`}
+                  </p>
+                </div>
+              </div>
+              {topExplainIssues.length > 0 ? (
+                <ul className="mt-4 space-y-2 text-sm text-slate-200">
+                  {topExplainIssues.map((issue) => (
+                    <li
+                      key={issue.code}
+                      className={`rounded border px-3 py-2 ${severityStyles[issue.severity]}`}
+                    >
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <span className="font-medium">{issue.message}</span>
+                        <span className="text-xs uppercase tracking-wide">{issue.severity}</span>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="mt-4 text-sm text-slate-300">No explainability issues were detected.</p>
+              )}
+              <details className="mt-4 text-sm text-slate-300">
+                <summary className="cursor-pointer select-none text-emerald-200">
+                  View diagnostics
+                </summary>
+                <div className="mt-3 space-y-2">
+                  {explainIssues.map((issue) => (
+                    <div key={issue.code} className="rounded border border-slate-800 bg-slate-950/60 p-3">
+                      <div className="flex items-center justify-between gap-3 text-xs uppercase tracking-wide text-slate-400">
+                        <span>{issue.code}</span>
+                        <span>{issue.severity}</span>
+                      </div>
+                      <p className="mt-2 text-sm text-slate-200">{issue.message}</p>
+                      {issue.details && (
+                        <pre className="mt-2 overflow-x-auto rounded bg-slate-950/80 p-2 text-[0.7rem] text-slate-400">
+                          {JSON.stringify(issue.details, null, 2)}
+                        </pre>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </details>
+            </div>
+          )}
           {visualTracerEnabled && <LiveCards />}
           {result.events && result.events.length > 0 && (
             <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-6">

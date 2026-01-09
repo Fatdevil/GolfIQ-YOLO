@@ -11,6 +11,7 @@ from cv_engine.calibration.homography import (
     to_ground_plane,
 )
 from cv_engine.calibration.v1 import CalibrationConfig, calibrated_metrics
+from cv_engine.explain.diagnostics import build_explain_result
 from cv_engine.metrics.angle import compute_side_angle
 from cv_engine.metrics.carry_v1 import estimate_carry
 from cv_engine.metrics.launch_mono import estimate_vertical_launch
@@ -116,6 +117,8 @@ def analyze_frames(
     vert_launch: float | None = None
     carry_est: float | None = None
     faceon_metrics: Dict[str, Any] | None = None
+    tracking_metrics: Dict[str, float | int] = {}
+    missing_ball_frames = 0
 
     span_attributes = {
         "cv.frames_total": len(frames_list),
@@ -247,6 +250,8 @@ def analyze_frames(
                             club_track_px.append(chosen_box.center())
                     ball_tracks = len(ball_boxes)
                     club_tracks = len(club_boxes)
+                if ball_tracks == 0:
+                    missing_ball_frames += 1
 
                 detection_count = len(boxes)
                 recorder.record_frame(
@@ -263,13 +268,15 @@ def analyze_frames(
                 )
             if track_span is not None:
                 track_span.set_attribute("cv.track.frames", len(boxes_per_frame))
-                tracking_metrics = ball_tracker.metrics.as_dict()
+                tracking_metrics = dict(ball_tracker.metrics.as_dict())
                 for metric_name, metric_value in tracking_metrics.items():
                     track_span.set_attribute(f"cv.track.{metric_name}", metric_value)
         tracking_ms = (perf_counter() - tracking_start) * 1000.0
         timings["track_ms"] = tracking_ms
         record_stage_latency("track", tracking_ms)
         recorder.record_tracking_metrics(ball_tracker.metrics.as_dict())
+        if not tracking_metrics:
+            tracking_metrics = dict(ball_tracker.metrics.as_dict())
 
         pose_start = perf_counter()
         with span(
@@ -430,6 +437,17 @@ def analyze_frames(
         ),
     }
     metrics["inference"] = detection_summary
+    metrics["explain"] = build_explain_result(
+        tracking_metrics=tracking_metrics,
+        calibration_info=calibration_payload,
+        run_stats={
+            "num_frames": len(frames_list),
+            "fps": calib.fps,
+            "camera_fps": calibration.camera_fps if calibration is not None else None,
+            "missing_ball_frames": missing_ball_frames,
+            "ball_points": len(ball_track_px),
+        },
+    )
 
     return {
         "events": events,
