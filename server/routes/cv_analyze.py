@@ -12,6 +12,7 @@ from fastapi import (
     File,
     Form,
     Header,
+    HTTPException,
     Response,
     UploadFile,
 )
@@ -134,16 +135,72 @@ def _parse_calibration_payload(raw: str | None) -> dict[str, Any] | None:
     return None
 
 
+def _coerce_optional_float(
+    value: Any,
+    *,
+    field_name: str,
+    errors: list[dict[str, Any]],
+) -> float | None:
+    if value is None:
+        return None
+    if isinstance(value, bool):
+        errors.append({"field": field_name, "value": value})
+        return None
+    if isinstance(value, (int, float)):
+        return float(value)
+    if isinstance(value, str):
+        stripped = value.strip()
+        if stripped == "":
+            return None
+        try:
+            return float(stripped)
+        except ValueError:
+            errors.append({"field": field_name, "value": value})
+            return None
+    errors.append({"field": field_name, "value": value})
+    return None
+
+
 def _parse_reference_points(
     value: Any,
+    *,
+    errors: list[dict[str, Any]],
 ) -> tuple[tuple[float, float], tuple[float, float]] | None:
     if isinstance(value, (list, tuple)):
         if len(value) == 4:
             x1, y1, x2, y2 = value
-            return (float(x1), float(y1)), (float(x2), float(y2))
+            x1 = _coerce_optional_float(
+                x1, field_name="referencePointsPx[0]", errors=errors
+            )
+            y1 = _coerce_optional_float(
+                y1, field_name="referencePointsPx[1]", errors=errors
+            )
+            x2 = _coerce_optional_float(
+                x2, field_name="referencePointsPx[2]", errors=errors
+            )
+            y2 = _coerce_optional_float(
+                y2, field_name="referencePointsPx[3]", errors=errors
+            )
+            if None in (x1, y1, x2, y2):
+                return None
+            return (x1, y1), (x2, y2)
         if len(value) == 2 and all(isinstance(item, (list, tuple)) for item in value):
             (x1, y1), (x2, y2) = value
-            return (float(x1), float(y1)), (float(x2), float(y2))
+            x1 = _coerce_optional_float(
+                x1, field_name="referencePointsPx[0][0]", errors=errors
+            )
+            y1 = _coerce_optional_float(
+                y1, field_name="referencePointsPx[0][1]", errors=errors
+            )
+            x2 = _coerce_optional_float(
+                x2, field_name="referencePointsPx[1][0]", errors=errors
+            )
+            y2 = _coerce_optional_float(
+                y2, field_name="referencePointsPx[1][1]", errors=errors
+            )
+            if None in (x1, y1, x2, y2):
+                return None
+            return (x1, y1), (x2, y2)
     return None
 
 
@@ -164,30 +221,42 @@ def _calibration_from_payload(
     if payload is None and not enabled:
         return CalibrationConfig(enabled=False, camera_fps=fps)
 
+    errors: list[dict[str, Any]] = []
     meters_per_pixel = payload.get("meters_per_pixel") if payload else None
     if meters_per_pixel is None and payload:
         meters_per_pixel = payload.get("metersPerPixel")
+    meters_per_pixel = _coerce_optional_float(
+        meters_per_pixel, field_name="metersPerPixel", errors=errors
+    )
     reference_distance_m = payload.get("reference_distance_m") if payload else None
     if reference_distance_m is None and payload:
         reference_distance_m = payload.get("referenceDistanceM")
+    reference_distance_m = _coerce_optional_float(
+        reference_distance_m, field_name="referenceDistanceM", errors=errors
+    )
     reference_points_px = None
     if payload is not None:
         reference_points_px = _parse_reference_points(
-            payload.get("reference_points_px") or payload.get("referencePointsPx")
+            payload.get("reference_points_px") or payload.get("referencePointsPx"),
+            errors=errors,
         )
     camera_fps = payload.get("camera_fps") if payload else None
     if camera_fps is None and payload:
         camera_fps = payload.get("cameraFps")
+    camera_fps = _coerce_optional_float(
+        camera_fps, field_name="cameraFps", errors=errors
+    )
+    if errors:
+        raise HTTPException(
+            status_code=422,
+            detail={"error": "invalid_calibration_payload", "invalidFields": errors},
+        )
     return CalibrationConfig(
         enabled=enabled,
-        meters_per_pixel=(
-            float(meters_per_pixel) if meters_per_pixel is not None else None
-        ),
-        reference_distance_m=(
-            float(reference_distance_m) if reference_distance_m is not None else None
-        ),
+        meters_per_pixel=meters_per_pixel,
+        reference_distance_m=reference_distance_m,
         reference_points_px=reference_points_px,
-        camera_fps=float(camera_fps) if camera_fps is not None else fps,
+        camera_fps=camera_fps if camera_fps is not None else fps,
     )
 
 
