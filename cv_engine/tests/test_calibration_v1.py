@@ -1,7 +1,5 @@
 import math
 
-import numpy as np
-
 from cv_engine.calibration.v1 import (
     CalibrationConfig,
     calibrated_metrics,
