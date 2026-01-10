@@ -1,5 +1,5 @@
 import { ChangeEvent, FormEvent, useMemo, useRef, useState } from "react";
-import { Upload, Video } from "lucide-react";
+import { CheckCircle2, Upload, Video, XCircle } from "lucide-react";
 import MetricCard from "../components/MetricCard";
 import { postVideoAnalyze, postZipAnalyze } from "../api";
 import TracerCanvas from "../components/TracerCanvas";
@@ -7,6 +7,21 @@ import GhostFrames from "../components/GhostFrames";
 import LiveCards from "../components/LiveCards";
 import { extractBackViewPayload } from "../lib/traceUtils";
 import { visualTracerEnabled } from "../config";
+import {
+  buildCaptureMetadata,
+  calculateLaplacianVariance,
+  calculateMeanLuminance,
+  verdictForBlur,
+  verdictForBrightness,
+  verdictForFpsEstimate,
+  type CaptureIssue,
+  type CaptureMetadata,
+} from "../lib/capturePreflight";
+import {
+  effectiveFpsFromEstimate,
+  estimateFpsFromTimes,
+  type FpsEstimate,
+} from "../lib/videoFps";
 
 interface AnalyzeMetrics {
   ball_speed_mps?: number;
@@ -48,6 +63,7 @@ interface AnalyzeResult {
   run_id?: string;
   metrics?: AnalyzeMetrics;
   events?: AnalyzeEvent[];
+  capture?: CaptureMetadata;
   [key: string]: unknown;
 }
 
@@ -91,6 +107,19 @@ export default function AnalyzePage() {
   const [videoLoading, setVideoLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<AnalyzeResult | null>(null);
+  const [rangeModeEnabled, setRangeModeEnabled] = useState(false);
+  const [preflightStatus, setPreflightStatus] = useState<
+    "idle" | "running" | "ready" | "error"
+  >("idle");
+  const [preflightError, setPreflightError] = useState<string | null>(null);
+  const [preflightIssues, setPreflightIssues] = useState<CaptureIssue[]>([]);
+  const [preflightMeta, setPreflightMeta] = useState<CaptureMetadata | null>(null);
+  const [preflightSummary, setPreflightSummary] = useState({
+    fps: null as number | null,
+    fpsEstimate: null as FpsEstimate | null,
+    brightness: null as number | null,
+    blur: null as number | null,
+  });
 
   const { inputRef: zipRef, reset: resetZip } = useFileInput();
   const { inputRef: videoRef, reset: resetVideo } = useFileInput();
@@ -134,7 +163,17 @@ export default function AnalyzePage() {
     ref_len_px: 600,
     smoothing_window: 3,
     persist: false,
+    capture: null as CaptureMetadata | null,
   });
+
+  const resetPreflight = () => {
+    setPreflightStatus("idle");
+    setPreflightError(null);
+    setPreflightIssues([]);
+    setPreflightMeta(null);
+    setPreflightSummary({ fps: null, fpsEstimate: null, brightness: null, blur: null });
+    setVideoForm((prev) => ({ ...prev, capture: null }));
+  };
 
   const handleZipFile = (e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -144,6 +183,7 @@ export default function AnalyzePage() {
   const handleVideoFile = (e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     setVideoForm((prev) => ({ ...prev, file: file ?? null }));
+    resetPreflight();
   };
 
   const handleZipSubmit = async (event: FormEvent) => {
@@ -182,11 +222,18 @@ export default function AnalyzePage() {
       setError("Please select a video file to analyze.");
       return;
     }
+    if (rangeModeEnabled && preflightMeta && !preflightMeta.okToRecordOrUpload) {
+      setError("Range Mode checks must pass before uploading.");
+      return;
+    }
     setVideoLoading(true);
     setError(null);
     try {
       const form = new FormData();
       form.append("video", videoForm.file);
+      if (videoForm.capture) {
+        form.append("capture", JSON.stringify(videoForm.capture));
+      }
       const data = await postVideoAnalyze(form, {
         fps_fallback: videoForm.fps_fallback,
         ref_len_m: videoForm.ref_len_m,
@@ -197,11 +244,125 @@ export default function AnalyzePage() {
       setResult(data);
       resetVideo();
       setVideoForm((prev) => ({ ...prev, file: null }));
+      resetPreflight();
     } catch (err) {
       console.error(err);
       setError("Failed to analyze video. Check API logs for details.");
     } finally {
       setVideoLoading(false);
+    }
+  };
+
+  const runRangePreflight = async () => {
+    if (!videoForm.file) {
+      setError("Select a video file first to run Range Mode checks.");
+      return;
+    }
+    setPreflightStatus("running");
+    setPreflightError(null);
+    setPreflightIssues([]);
+    setPreflightSummary({ fps: null, fpsEstimate: null, brightness: null, blur: null });
+
+    const file = videoForm.file;
+    let objectUrl: string | null = null;
+    try {
+      const url = URL.createObjectURL(file);
+      objectUrl = url;
+      const video = document.createElement("video");
+      video.src = url;
+      video.muted = true;
+      video.preload = "metadata";
+      await new Promise<void>((resolve, reject) => {
+        video.onloadedmetadata = () => resolve();
+        video.onerror = () => reject(new Error("Unable to read video metadata."));
+      });
+
+      const canvas = document.createElement("canvas");
+      const ctx = canvas.getContext("2d");
+      if (!ctx) {
+        throw new Error("Canvas is unavailable in this browser.");
+      }
+      const width = video.videoWidth || 0;
+      const height = video.videoHeight || 0;
+      if (!width || !height) {
+        throw new Error("Unable to read video dimensions.");
+      }
+      canvas.width = width;
+      canvas.height = height;
+
+      const frameTimes: number[] = [];
+      const brightnessSamples: number[] = [];
+      const blurSamples: number[] = [];
+
+      const sampleCount = 6;
+      const duration = Number.isFinite(video.duration) ? video.duration : 0;
+      const stride = duration > 0 ? duration / (sampleCount + 1) : 0.1;
+      const useRvfc = typeof video.requestVideoFrameCallback === "function";
+      for (let i = 1; i <= sampleCount; i += 1) {
+        const targetTime = duration > 0 ? Math.min(duration * 0.98, i * stride) : i * 0.1;
+        const sampleTime = await new Promise<number>((resolve, reject) => {
+          const onError = () => reject(new Error("Unable to sample frames."));
+          const onSeeked = () => {
+            if (useRvfc) {
+              video.requestVideoFrameCallback((_now, metadata) => {
+                resolve(metadata.mediaTime);
+              });
+            } else {
+              resolve(video.currentTime);
+            }
+          };
+          video.onseeked = onSeeked;
+          video.onerror = onError;
+          video.currentTime = targetTime;
+        });
+        ctx.drawImage(video, 0, 0, width, height);
+        const frame = ctx.getImageData(0, 0, width, height);
+        const brightness = calculateMeanLuminance(frame);
+        const blur = calculateLaplacianVariance(frame);
+        brightnessSamples.push(brightness);
+        blurSamples.push(blur);
+        frameTimes.push(sampleTime);
+      }
+
+      const brightnessMean =
+        brightnessSamples.reduce((sum, value) => sum + value, 0) /
+        (brightnessSamples.length || 1);
+      const blurScore =
+        blurSamples.reduce((sum, value) => sum + value, 0) /
+        (blurSamples.length || 1);
+      const fpsEstimate = estimateFpsFromTimes(frameTimes, useRvfc ? "rvfc" : "seeked");
+      const fps = fpsEstimate.value ?? null;
+      const effectiveFps = effectiveFpsFromEstimate(fpsEstimate, videoForm.fps_fallback);
+
+      const metadata = buildCaptureMetadata({
+        fpsEstimate,
+        brightnessMean,
+        blurScore,
+        framingTipsShown: true,
+      });
+
+      setPreflightStatus("ready");
+      setPreflightMeta(metadata);
+      setPreflightIssues(metadata.issues);
+      setPreflightSummary({
+        fps: effectiveFps,
+        fpsEstimate,
+        brightness: brightnessMean,
+        blur: blurScore,
+      });
+      setVideoForm((prev) => ({ ...prev, capture: metadata }));
+    } catch (err) {
+      console.error(err);
+      setPreflightStatus("error");
+      setPreflightError(
+        err instanceof Error
+          ? err.message
+          : "Range Mode preflight checks failed. Try another file."
+      );
+    } finally {
+      if (objectUrl) {
+        URL.revokeObjectURL(objectUrl);
+      }
     }
   };
 
@@ -262,23 +423,38 @@ export default function AnalyzePage() {
             Upload capture ZIPs or MP4s to run full analysis with GolfIQ.
           </p>
         </div>
-        <div className="flex gap-2 rounded-lg border border-slate-800 bg-slate-900/60 p-1 text-sm">
+        <div className="flex flex-wrap items-center gap-2">
           <button
-            className={`flex items-center gap-2 rounded-md px-3 py-2 transition ${
-              activeTab === "zip" ? "bg-emerald-500/10 text-emerald-200" : "text-slate-300 hover:text-emerald-200"
+            className={`rounded-full border px-3 py-1 text-xs font-semibold uppercase tracking-wide transition ${
+              rangeModeEnabled
+                ? "border-emerald-500/60 bg-emerald-500/10 text-emerald-200"
+                : "border-slate-700 bg-slate-900/60 text-slate-300 hover:text-emerald-200"
             }`}
-            onClick={() => setActiveTab("zip")}
+            onClick={() => {
+              setRangeModeEnabled((prev) => !prev);
+              resetPreflight();
+            }}
           >
-            <Upload className="h-4 w-4" /> ZIP
+            Range Mode
           </button>
-          <button
-            className={`flex items-center gap-2 rounded-md px-3 py-2 transition ${
-              activeTab === "video" ? "bg-emerald-500/10 text-emerald-200" : "text-slate-300 hover:text-emerald-200"
-            }`}
-            onClick={() => setActiveTab("video")}
-          >
-            <Video className="h-4 w-4" /> MP4
-          </button>
+          <div className="flex gap-2 rounded-lg border border-slate-800 bg-slate-900/60 p-1 text-sm">
+            <button
+              className={`flex items-center gap-2 rounded-md px-3 py-2 transition ${
+                activeTab === "zip" ? "bg-emerald-500/10 text-emerald-200" : "text-slate-300 hover:text-emerald-200"
+              }`}
+              onClick={() => setActiveTab("zip")}
+            >
+              <Upload className="h-4 w-4" /> ZIP
+            </button>
+            <button
+              className={`flex items-center gap-2 rounded-md px-3 py-2 transition ${
+                activeTab === "video" ? "bg-emerald-500/10 text-emerald-200" : "text-slate-300 hover:text-emerald-200"
+              }`}
+              onClick={() => setActiveTab("video")}
+            >
+              <Video className="h-4 w-4" /> MP4
+            </button>
+          </div>
         </div>
       </header>
 
@@ -382,6 +558,132 @@ export default function AnalyzePage() {
           onSubmit={handleVideoSubmit}
           className="space-y-4 rounded-xl border border-slate-800 bg-slate-900/60 p-6 shadow-lg"
         >
+          {rangeModeEnabled && (
+            <div className="space-y-6 rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-5">
+              <div className="space-y-1">
+                <p className="text-xs font-semibold uppercase tracking-wide text-emerald-200">
+                  Range Mode · Capture Quality
+                </p>
+                <h2 className="text-lg font-semibold text-slate-100">3-step setup</h2>
+                <p className="text-sm text-slate-300">
+                  Follow the checklist, run preflight checks, then upload when everything looks good.
+                </p>
+              </div>
+              <div className="grid gap-4 md:grid-cols-3">
+                <div className="rounded-lg border border-slate-800 bg-slate-950/60 p-4">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-emerald-300">
+                    Step 1 · Setup tips
+                  </p>
+                  <ul className="mt-3 space-y-2 text-sm text-slate-200">
+                    <li>Use a tripod or steady mount.</li>
+                    <li>Keep ball flight in frame (start to landing).</li>
+                    <li>Lock focus/exposure and avoid zooming.</li>
+                  </ul>
+                </div>
+                <div className="rounded-lg border border-slate-800 bg-slate-950/60 p-4">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-emerald-300">
+                    Step 2 · Preflight checks
+                  </p>
+                  <div className="mt-3 space-y-2 text-sm text-slate-200">
+                    <p>FPS stability, exposure, and blur are sampled automatically.</p>
+                    <button
+                      type="button"
+                      onClick={runRangePreflight}
+                      disabled={preflightStatus === "running"}
+                      className="mt-2 inline-flex items-center justify-center rounded-md border border-emerald-500/60 bg-emerald-500/20 px-3 py-2 text-xs font-semibold uppercase text-emerald-100 transition hover:bg-emerald-500/30 disabled:cursor-not-allowed"
+                    >
+                      {preflightStatus === "running" ? "Running checks…" : "Run preflight"}
+                    </button>
+                  </div>
+                </div>
+                <div className="rounded-lg border border-slate-800 bg-slate-950/60 p-4">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-emerald-300">
+                    Step 3 · OK to upload
+                  </p>
+                  <p className="mt-3 text-sm text-slate-200">
+                    Upload is enabled once critical issues are resolved.
+                  </p>
+                  <div className="mt-3 flex items-center gap-2 text-sm">
+                    {preflightMeta?.okToRecordOrUpload ? (
+                      <span className="inline-flex items-center gap-2 text-emerald-200">
+                        <CheckCircle2 className="h-4 w-4" /> OK to upload
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-2 text-amber-200">
+                        <XCircle className="h-4 w-4" /> Fix issues first
+                      </span>
+                    )}
+                  </div>
+                </div>
+              </div>
+              <div className="grid gap-3 md:grid-cols-3">
+                <div className="rounded-lg border border-slate-800 bg-slate-950/60 p-3 text-sm">
+                  <p className="text-xs uppercase tracking-wide text-slate-400">FPS</p>
+                  <p className="mt-1 text-base font-semibold text-slate-100">
+                    {preflightSummary.fps ? `${preflightSummary.fps.toFixed(1)} fps` : "—"}
+                  </p>
+                  <p className="text-xs text-slate-400">
+                    {preflightSummary.fpsEstimate
+                      ? `${verdictForFpsEstimate(preflightSummary.fpsEstimate).toUpperCase()} • ${preflightSummary.fpsEstimate.confidence}`
+                      : "Estimate unavailable"}
+                  </p>
+                </div>
+                <div className="rounded-lg border border-slate-800 bg-slate-950/60 p-3 text-sm">
+                  <p className="text-xs uppercase tracking-wide text-slate-400">Brightness</p>
+                  <p className="mt-1 text-base font-semibold text-slate-100">
+                    {preflightSummary.brightness != null
+                      ? preflightSummary.brightness.toFixed(1)
+                      : "—"}
+                  </p>
+                  <p className="text-xs text-slate-400">
+                    {preflightSummary.brightness == null
+                      ? "Not sampled"
+                      : verdictForBrightness(preflightSummary.brightness).toUpperCase()}
+                  </p>
+                </div>
+                <div className="rounded-lg border border-slate-800 bg-slate-950/60 p-3 text-sm">
+                  <p className="text-xs uppercase tracking-wide text-slate-400">Blur</p>
+                  <p className="mt-1 text-base font-semibold text-slate-100">
+                    {preflightSummary.blur != null
+                      ? preflightSummary.blur.toFixed(1)
+                      : "—"}
+                  </p>
+                  <p className="text-xs text-slate-400">
+                    {preflightSummary.blur == null
+                      ? "Not sampled"
+                      : verdictForBlur(preflightSummary.blur).toUpperCase()}
+                  </p>
+                </div>
+              </div>
+              {preflightError && (
+                <div className="rounded-md border border-red-500/40 bg-red-500/10 px-4 py-3 text-sm text-red-200">
+                  {preflightError}
+                </div>
+              )}
+              {preflightIssues.length > 0 && (
+                <div className="space-y-2">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-300">
+                    Issues & tips
+                  </p>
+                  <ul className="space-y-2 text-sm">
+                    {preflightIssues.map((issue) => (
+                      <li
+                        key={issue.code}
+                        className="rounded-md border border-slate-800 bg-slate-950/70 px-3 py-2 text-slate-200"
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <span>{issue.message}</span>
+                          <span className="text-xs uppercase tracking-wide text-slate-400">
+                            {issue.severity}
+                          </span>
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
+          )}
           <div>
             <label className="text-sm font-medium text-slate-300">Video file</label>
             <input
@@ -578,6 +880,55 @@ export default function AnalyzePage() {
                   </li>
                 ))}
               </ul>
+            </div>
+          )}
+          {result.capture && (
+            <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-6">
+              <h3 className="text-base font-semibold text-emerald-200">Capture diagnostics</h3>
+              <div className="mt-4 grid gap-3 md:grid-cols-3">
+                <div className="rounded-lg border border-slate-800 bg-slate-950/60 p-3 text-sm">
+                  <p className="text-xs uppercase tracking-wide text-slate-400">FPS</p>
+                  <p className="mt-1 text-base font-semibold text-slate-100">
+                    {result.capture.fps ? `${result.capture.fps.toFixed(1)} fps` : "—"}
+                  </p>
+                  {result.capture.fpsEstimate && (
+                    <p className="text-xs text-slate-400">
+                      {result.capture.fpsEstimate.method} · {result.capture.fpsEstimate.confidence}
+                    </p>
+                  )}
+                </div>
+                <div className="rounded-lg border border-slate-800 bg-slate-950/60 p-3 text-sm">
+                  <p className="text-xs uppercase tracking-wide text-slate-400">Brightness</p>
+                  <p className="mt-1 text-base font-semibold text-slate-100">
+                    {result.capture.brightness.mean.toFixed(1)} ({result.capture.brightness.verdict})
+                  </p>
+                </div>
+                <div className="rounded-lg border border-slate-800 bg-slate-950/60 p-3 text-sm">
+                  <p className="text-xs uppercase tracking-wide text-slate-400">Blur</p>
+                  <p className="mt-1 text-base font-semibold text-slate-100">
+                    {result.capture.blur.score.toFixed(1)} ({result.capture.blur.verdict})
+                  </p>
+                </div>
+              </div>
+              {result.capture.issues.length > 0 ? (
+                <ul className="mt-4 space-y-2 text-sm text-slate-200">
+                  {result.capture.issues.map((issue) => (
+                    <li
+                      key={issue.code}
+                      className="rounded border border-slate-800 bg-slate-950/60 px-3 py-2"
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <span>{issue.message}</span>
+                        <span className="text-xs uppercase tracking-wide text-slate-400">
+                          {issue.severity}
+                        </span>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="mt-4 text-sm text-slate-300">No capture issues reported.</p>
+              )}
             </div>
           )}
         </div>
