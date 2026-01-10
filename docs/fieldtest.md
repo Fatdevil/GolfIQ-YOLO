@@ -50,3 +50,9 @@ During field sessions monitor:
 ## Ops dashboard
 
 Operators can review captured summaries in the web console under **Field runs**. Each run lists aggregate metrics alongside the ordered marker timeline to help correlate HUD performance with on-course events.
+
+## Range Mode capture settings (recommended)
+- **Frame rate:** target ≥60 FPS (30 FPS minimum).
+- **Exposure:** lock exposure/focus when possible; avoid over/under-exposed frames.
+- **Stability:** use a tripod or fixed mount to reduce blur.
+- **Framing:** keep the full ball flight path in frame and avoid zoom changes mid-shot.

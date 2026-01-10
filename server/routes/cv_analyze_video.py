@@ -67,6 +67,7 @@ class AnalyzeResponse(BaseModel):
     run_id: str
     error_code: str | None = None
     error_message: str | None = None
+    capture: dict[str, object] | None = None
 
 
 @router.post("/analyze/video", response_model=AnalyzeResponse)
@@ -97,6 +98,10 @@ async def analyze_video(
         default=None,
         description="Optional calibration JSON payload",
     ),
+    capture: str | None = Form(
+        default=None,
+        description="Optional capture metadata (Range Mode preflight)",
+    ),
     video: UploadFile = File(..., description="Video (e.g., MP4)"),
 ):
     query = AnalyzeVideoQuery(
@@ -114,6 +119,7 @@ async def analyze_video(
     response.headers["x-cv-source"] = "mock" if use_mock else "real"
     params = query.model_dump(exclude_none=True)
     params.pop("persist", None)
+    capture_payload = _parse_calibration_payload(capture)
     run = create_run(
         source="mock" if use_mock else "real",
         source_type=RunSourceType.ANALYZE_VIDEO.value,
@@ -130,7 +136,10 @@ async def analyze_video(
             "content_length_header": video.headers.get("content-length"),
             "type": "video",
         },
-        metadata={"variant_fallback": variant_info.fallback_applied},
+        metadata={
+            "variant_fallback": variant_info.fallback_applied,
+            "capture": capture_payload,
+        },
     )
 
     header_len = video.headers.get("content-length")
@@ -269,4 +278,5 @@ async def analyze_video(
         events=events,
         metrics=metrics_model,
         run_id=run.run_id,
+        capture=capture_payload,
     )
