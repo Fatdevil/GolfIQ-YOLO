@@ -6,6 +6,13 @@ Install [`pre-commit`](https://pre-commit.com/) and run `pre-commit install` to 
 
 When you need to share videos, weights, fonts, or similar assets, push them to the dedicated Git LFS branch and reference them from your change notes instead of committing them directly.
 
+## Python formatting and linting
+
+- Install tooling: `pip install -r requirements-dev.txt`
+- Enable hooks: `pre-commit install`
+- Run manually: `pre-commit run --all-files`
+- Quick commands: `make lint`, `make format`, `make test`
+
 ## Run CI checks locally
 
 - Use Node 18 (matching `.nvmrc` and the CI workflow). If you use `nvm`, run `nvm use` from the repo root before running the checks.
