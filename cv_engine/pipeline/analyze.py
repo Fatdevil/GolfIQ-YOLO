@@ -186,8 +186,7 @@ def analyze_frames(
                 faceon_metrics = None
 
         ball_detections_per_frame = [
-            [box for box in boxes if box.label == "ball"]
-            for boxes in boxes_per_frame
+            [box for box in boxes if box.label == "ball"] for boxes in boxes_per_frame
         ]
 
         tracking_start = perf_counter()
@@ -319,9 +318,7 @@ def analyze_frames(
             missing_ball_frames = stabilized_track.n_missing
         else:
             ball_track_px = list(raw_ball_track_px)
-            gap_ratio = (
-                missing_ball_frames / len(frames_list) if frames_list else 0.0
-            )
+            gap_ratio = missing_ball_frames / len(frames_list) if frames_list else 0.0
             tracking_diagnostics = {
                 "n_frames": len(frames_list),
                 "n_detections": len(raw_ball_track_px),

@@ -9,7 +9,9 @@ from cv_engine.tracking.stabilizer import (
 )
 
 
-def _linear_track(n: int, *, dx: float = 2.0, dy: float = -1.0) -> list[tuple[float, float]]:
+def _linear_track(
+    n: int, *, dx: float = 2.0, dy: float = -1.0
+) -> list[tuple[float, float]]:
     return [(10.0 + i * dx, 120.0 + i * dy) for i in range(n)]
 
 
