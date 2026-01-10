@@ -11,13 +11,17 @@ import {
   buildCaptureMetadata,
   calculateLaplacianVariance,
   calculateMeanLuminance,
-  estimateFpsFromSamples,
   verdictForBlur,
   verdictForBrightness,
-  verdictForFps,
+  verdictForFpsEstimate,
   type CaptureIssue,
   type CaptureMetadata,
 } from "../lib/capturePreflight";
+import {
+  effectiveFpsFromEstimate,
+  estimateFpsFromTimes,
+  type FpsEstimate,
+} from "../lib/videoFps";
 
 interface AnalyzeMetrics {
   ball_speed_mps?: number;
@@ -112,6 +116,7 @@ export default function AnalyzePage() {
   const [preflightMeta, setPreflightMeta] = useState<CaptureMetadata | null>(null);
   const [preflightSummary, setPreflightSummary] = useState({
     fps: null as number | null,
+    fpsEstimate: null as FpsEstimate | null,
     brightness: null as number | null,
     blur: null as number | null,
   });
@@ -166,7 +171,7 @@ export default function AnalyzePage() {
     setPreflightError(null);
     setPreflightIssues([]);
     setPreflightMeta(null);
-    setPreflightSummary({ fps: null, brightness: null, blur: null });
+    setPreflightSummary({ fps: null, fpsEstimate: null, brightness: null, blur: null });
     setVideoForm((prev) => ({ ...prev, capture: null }));
   };
 
@@ -256,7 +261,7 @@ export default function AnalyzePage() {
     setPreflightStatus("running");
     setPreflightError(null);
     setPreflightIssues([]);
-    setPreflightSummary({ fps: null, brightness: null, blur: null });
+    setPreflightSummary({ fps: null, fpsEstimate: null, brightness: null, blur: null });
 
     const file = videoForm.file;
     let objectUrl: string | null = null;
@@ -286,18 +291,26 @@ export default function AnalyzePage() {
       canvas.height = height;
 
       const frameTimes: number[] = [];
-      const frameNumbers: number[] = [];
       const brightnessSamples: number[] = [];
       const blurSamples: number[] = [];
 
       const sampleCount = 6;
       const duration = Number.isFinite(video.duration) ? video.duration : 0;
       const stride = duration > 0 ? duration / (sampleCount + 1) : 0.1;
+      const useRvfc = typeof video.requestVideoFrameCallback === "function";
       for (let i = 1; i <= sampleCount; i += 1) {
         const targetTime = duration > 0 ? Math.min(duration * 0.98, i * stride) : i * 0.1;
-        await new Promise<void>((resolve, reject) => {
-          const onSeeked = () => resolve();
+        const sampleTime = await new Promise<number>((resolve, reject) => {
           const onError = () => reject(new Error("Unable to sample frames."));
+          const onSeeked = () => {
+            if (useRvfc) {
+              video.requestVideoFrameCallback((_now, metadata) => {
+                resolve(metadata.mediaTime);
+              });
+            } else {
+              resolve(video.currentTime);
+            }
+          };
           video.onseeked = onSeeked;
           video.onerror = onError;
           video.currentTime = targetTime;
@@ -308,12 +321,7 @@ export default function AnalyzePage() {
         const blur = calculateLaplacianVariance(frame);
         brightnessSamples.push(brightness);
         blurSamples.push(blur);
-        frameTimes.push(video.currentTime);
-        const frameNumber =
-          typeof video.getVideoPlaybackQuality === "function"
-            ? video.getVideoPlaybackQuality().totalVideoFrames
-            : i * Math.round(videoForm.fps_fallback * stride);
-        frameNumbers.push(frameNumber);
+        frameTimes.push(sampleTime);
       }
 
       const brightnessMean =
@@ -322,15 +330,12 @@ export default function AnalyzePage() {
       const blurScore =
         blurSamples.reduce((sum, value) => sum + value, 0) /
         (blurSamples.length || 1);
-      const fps = estimateFpsFromSamples({
-        brightnessMean,
-        blurScore,
-        frameTimes,
-        frameNumbers,
-      });
+      const fpsEstimate = estimateFpsFromTimes(frameTimes, useRvfc ? "rvfc" : "seeked");
+      const fps = fpsEstimate.value ?? null;
+      const effectiveFps = effectiveFpsFromEstimate(fpsEstimate, videoForm.fps_fallback);
 
       const metadata = buildCaptureMetadata({
-        fps,
+        fpsEstimate,
         brightnessMean,
         blurScore,
         framingTipsShown: true,
@@ -339,7 +344,12 @@ export default function AnalyzePage() {
       setPreflightStatus("ready");
       setPreflightMeta(metadata);
       setPreflightIssues(metadata.issues);
-      setPreflightSummary({ fps, brightness: brightnessMean, blur: blurScore });
+      setPreflightSummary({
+        fps: effectiveFps,
+        fpsEstimate,
+        brightness: brightnessMean,
+        blur: blurScore,
+      });
       setVideoForm((prev) => ({ ...prev, capture: metadata }));
     } catch (err) {
       console.error(err);
@@ -613,9 +623,9 @@ export default function AnalyzePage() {
                     {preflightSummary.fps ? `${preflightSummary.fps.toFixed(1)} fps` : "—"}
                   </p>
                   <p className="text-xs text-slate-400">
-                    {preflightSummary.fps == null
-                      ? "Estimate unavailable"
-                      : verdictForFps(preflightSummary.fps).toUpperCase()}
+                    {preflightSummary.fpsEstimate
+                      ? `${verdictForFpsEstimate(preflightSummary.fpsEstimate).toUpperCase()} • ${preflightSummary.fpsEstimate.confidence}`
+                      : "Estimate unavailable"}
                   </p>
                 </div>
                 <div className="rounded-lg border border-slate-800 bg-slate-950/60 p-3 text-sm">
@@ -881,6 +891,11 @@ export default function AnalyzePage() {
                   <p className="mt-1 text-base font-semibold text-slate-100">
                     {result.capture.fps ? `${result.capture.fps.toFixed(1)} fps` : "—"}
                   </p>
+                  {result.capture.fpsEstimate && (
+                    <p className="text-xs text-slate-400">
+                      {result.capture.fpsEstimate.method} · {result.capture.fpsEstimate.confidence}
+                    </p>
+                  )}
                 </div>
                 <div className="rounded-lg border border-slate-800 bg-slate-950/60 p-3 text-sm">
                   <p className="text-xs uppercase tracking-wide text-slate-400">Brightness</p>

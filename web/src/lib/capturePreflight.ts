@@ -13,21 +13,21 @@ export type CaptureMetricVerdict = {
   verdict: CaptureVerdict;
 };
 
+export type CaptureFpsEstimate = {
+  value?: number;
+  method: "rvfc" | "seeked" | "metadata" | "fallback";
+  confidence: "high" | "medium" | "low";
+};
+
 export type CaptureMetadata = {
   mode: "range";
   fps: number | null;
+  fpsEstimate?: CaptureFpsEstimate;
   brightness: CaptureMetricVerdict & { mean: number };
   blur: CaptureMetricVerdict & { score: number };
   framingTipsShown: boolean;
   issues: CaptureIssue[];
   okToRecordOrUpload: boolean;
-};
-
-export type CapturePreflightSample = {
-  brightnessMean: number;
-  blurScore: number;
-  frameTimes: number[];
-  frameNumbers: number[];
 };
 
 export const CAPTURE_PREFLIGHT_THRESHOLDS = {
@@ -95,8 +95,12 @@ export function calculateLaplacianVariance(imageData: ImageData): number {
   return variance / laplacian.length;
 }
 
-export function verdictForFps(fps: number | null): CaptureVerdict {
+export function verdictForFpsEstimate(estimate?: CaptureFpsEstimate): CaptureVerdict {
+  const fps = estimate?.value;
   if (!fps || Number.isNaN(fps)) {
+    return "warn";
+  }
+  if (estimate?.confidence === "low") {
     return "warn";
   }
   if (fps < CAPTURE_PREFLIGHT_THRESHOLDS.fps.min) {
@@ -131,48 +135,30 @@ export function verdictForBlur(score: number): CaptureVerdict {
   return "ok";
 }
 
-export function estimateFpsFromSamples(sample: CapturePreflightSample): number | null {
-  const { frameTimes, frameNumbers } = sample;
-  if (frameTimes.length < 2 || frameNumbers.length < 2) {
-    return null;
-  }
-  const startIdx = frameNumbers.findIndex((value) => value >= 0);
-  if (startIdx === -1) {
-    return null;
-  }
-  const endIdx = frameNumbers.length - 1;
-  const startFrame = frameNumbers[startIdx];
-  const endFrame = frameNumbers[endIdx];
-  const startTime = frameTimes[startIdx];
-  const endTime = frameTimes[endIdx];
-  const frameDelta = endFrame - startFrame;
-  const timeDelta = endTime - startTime;
-  if (frameDelta <= 0 || timeDelta <= 0) {
-    return null;
-  }
-  return frameDelta / timeDelta;
-}
-
 export function buildCaptureMetadata(options: {
-  fps: number | null;
+  fpsEstimate?: CaptureFpsEstimate;
   brightnessMean: number;
   blurScore: number;
   framingTipsShown: boolean;
 }): CaptureMetadata {
-  const fpsVerdict = verdictForFps(options.fps);
+  const fpsVerdict = verdictForFpsEstimate(options.fpsEstimate);
   const brightnessVerdict = verdictForBrightness(options.brightnessMean);
   const blurVerdict = verdictForBlur(options.blurScore);
   const issues: CaptureIssue[] = [];
+  const fpsValue = options.fpsEstimate?.value;
 
   if (fpsVerdict !== "ok") {
     issues.push({
-      code: options.fps ? "fps_low" : "fps_unavailable",
-      severity: fpsVerdict,
+      code: fpsValue ? "fps_low" : "fps_unavailable",
+      severity: fpsVerdict === "bad" ? "bad" : "warn",
       message:
-        options.fps == null
-          ? "Unable to estimate FPS; verify your camera is set to 60+ FPS."
-          : `FPS is ${Math.round(options.fps)} — aim for 60+ FPS (30 minimum).`,
-      details: options.fps == null ? undefined : { fps: options.fps },
+        fpsValue == null || options.fpsEstimate?.confidence === "low"
+          ? "Couldn't reliably estimate FPS; verify your camera is set to 60+ FPS."
+          : `FPS is ${Math.round(fpsValue)} — aim for 60+ FPS (30 minimum).`,
+      details:
+        fpsValue == null
+          ? { estimate: options.fpsEstimate }
+          : { fps: fpsValue, estimate: options.fpsEstimate },
     });
   }
 
@@ -204,7 +190,8 @@ export function buildCaptureMetadata(options: {
 
   return {
     mode: "range",
-    fps: options.fps,
+    fps: fpsValue ?? null,
+    fpsEstimate: options.fpsEstimate,
     brightness: {
       mean: options.brightnessMean,
       verdict: brightnessVerdict,
