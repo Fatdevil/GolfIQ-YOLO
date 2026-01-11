@@ -3,7 +3,7 @@ from __future__ import annotations
 import os
 import statistics
 from dataclasses import dataclass
-from typing import Iterable, Sequence, Tuple
+from typing import Sequence, Tuple
 
 from cv_engine.types import Box
 
