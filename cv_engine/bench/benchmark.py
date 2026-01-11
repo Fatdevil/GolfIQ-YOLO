@@ -255,7 +255,7 @@ def run_model(
     ordered_samples = list(samples)
     rng.shuffle(ordered_samples)
     if max_images is not None:
-        ordered_samples = ordered_samples[: max_images]
+        ordered_samples = ordered_samples[:max_images]
 
     engine = get_detection_engine(
         variant=model_id,
