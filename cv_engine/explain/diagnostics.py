@@ -13,6 +13,10 @@ DEFAULT_THRESHOLDS = {
     "avg_confidence_error": 0.2,
     "id_switches_warn": 1,
     "id_switches_error": 3,
+    "tracking_gap_ratio_warn": 0.18,
+    "tracking_gap_ratio_error": 0.32,
+    "tracking_jitter_warn_px": 6.0,
+    "tracking_jitter_error_px": 12.0,
     "missing_ball_frames_ratio_warn": 0.2,
     "missing_ball_frames_ratio_error": 0.4,
     "min_ball_points": 6,
@@ -133,6 +137,44 @@ def build_explain_result(
             },
             penalty_amount=0.2 if severity == "error" else 0.1,
         )
+
+    if "gap_ratio" in tracking_metrics:
+        gap_ratio = float(tracking_metrics.get("gap_ratio", 0.0) or 0.0)
+        if severity := _severity_for(
+            gap_ratio,
+            DEFAULT_THRESHOLDS["tracking_gap_ratio_warn"],
+            DEFAULT_THRESHOLDS["tracking_gap_ratio_error"],
+        ):
+            add_issue(
+                "ball_track_gappy",
+                severity,
+                "Ball tracking contains frequent gaps.",
+                details={
+                    "gap_ratio": round(gap_ratio, 3),
+                    "warn_at": DEFAULT_THRESHOLDS["tracking_gap_ratio_warn"],
+                    "error_at": DEFAULT_THRESHOLDS["tracking_gap_ratio_error"],
+                },
+                penalty_amount=0.2 if severity == "error" else 0.1,
+            )
+
+    if "jitter_px" in tracking_metrics:
+        jitter_px = float(tracking_metrics.get("jitter_px", 0.0) or 0.0)
+        if severity := _severity_for(
+            jitter_px,
+            DEFAULT_THRESHOLDS["tracking_jitter_warn_px"],
+            DEFAULT_THRESHOLDS["tracking_jitter_error_px"],
+        ):
+            add_issue(
+                "ball_track_unstable",
+                severity,
+                "Ball tracking jitter exceeded stability thresholds.",
+                details={
+                    "jitter_px": round(jitter_px, 3),
+                    "warn_at": DEFAULT_THRESHOLDS["tracking_jitter_warn_px"],
+                    "error_at": DEFAULT_THRESHOLDS["tracking_jitter_error_px"],
+                },
+                penalty_amount=0.2 if severity == "error" else 0.1,
+            )
 
     avg_confidence = float(tracking_metrics.get("avg_confidence", 0.0) or 0.0)
     if severity := _severity_for_low(

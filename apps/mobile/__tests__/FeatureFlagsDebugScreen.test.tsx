@@ -75,7 +75,9 @@ describe('FeatureFlagsDebugScreen', () => {
   it('refreshes flags on demand', async () => {
     render(<FeatureFlagsDebugScreen navigation={navigation} route={defaultRoute} />);
 
-    fireEvent.click(await screen.findByTestId('refresh-flags'));
+    const refreshButton = await screen.findByTestId('refresh-flags');
+    await waitFor(() => expect(refreshButton).not.toBeDisabled());
+    fireEvent.click(refreshButton);
 
     await waitFor(() => expect(loadFeatureFlags).toHaveBeenCalledWith({ userId: 'user-123' }));
   });

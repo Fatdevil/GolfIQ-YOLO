@@ -19,6 +19,12 @@ from cv_engine.inference.model_registry import get_detection_engine
 from cv_engine.pose.adapter import PoseAdapter
 from cv_engine.sequence import analyze_kinematic_sequence
 from cv_engine.tracking.factory import get_ball_tracker, get_tracker
+from cv_engine.tracking.stabilizer import (
+    BallDetection,
+    BallTrackingStabilizer,
+    compute_jitter_px,
+    stabilizer_from_env,
+)
 from cv_engine.telemetry import FlightRecorder, flight_recorder_settings
 from observability.otel import span
 from server.metrics.faceon import compute_faceon_metrics
@@ -106,6 +112,7 @@ def analyze_frames(
     timings: Dict[str, float] = {}
     boxes_per_frame: List[List[Box]] = []
     detection_times: List[float] = []
+    raw_ball_track_px: List[Tuple[float, float]] = []
     ball_track_px: List[Tuple[float, float]] = []
     club_track_px: List[Tuple[float, float]] = []
     events: List[int] = []
@@ -118,6 +125,7 @@ def analyze_frames(
     carry_est: float | None = None
     faceon_metrics: Dict[str, Any] | None = None
     tracking_metrics: Dict[str, float | int] = {}
+    tracking_diagnostics: Dict[str, float | int | bool] = {}
     missing_ball_frames = 0
 
     span_attributes = {
@@ -177,6 +185,10 @@ def analyze_frames(
             except Exception:
                 faceon_metrics = None
 
+        ball_detections_per_frame = [
+            [box for box in boxes if box.label == "ball"] for boxes in boxes_per_frame
+        ]
+
         tracking_start = perf_counter()
         active_club_id = -1
         active_ids: Dict[str, int] = {"ball": -1, "club": -1}
@@ -217,7 +229,7 @@ def analyze_frames(
                             continue
                         active_ids[label] = chosen_id
                         if label == "ball":
-                            ball_track_px.append(chosen_box.center())
+                            raw_ball_track_px.append(chosen_box.center())
                         elif label == "club":
                             club_track_px.append(chosen_box.center())
 
@@ -225,12 +237,12 @@ def analyze_frames(
                     ball_tracks = len(per_label["ball"])
                     club_tracks = len(per_label["club"])
                 else:
-                    ball_boxes = [box for box in boxes if box.label == "ball"]
+                    ball_boxes = ball_detections_per_frame[frame_index]
                     club_boxes = [box for box in boxes if box.label == "club"]
 
                     ball_result = ball_tracker.update(ball_boxes)
                     if ball_result is not None:
-                        ball_track_px.append(ball_result.center)
+                        raw_ball_track_px.append(ball_result.center)
 
                     club_tracked = club_tracker.update(club_boxes)
                     if club_tracked:
@@ -277,6 +289,46 @@ def analyze_frames(
         recorder.record_tracking_metrics(ball_tracker.metrics.as_dict())
         if not tracking_metrics:
             tracking_metrics = dict(ball_tracker.metrics.as_dict())
+
+        ball_stabilizer = stabilizer_from_env()
+        if det.mock:
+            ball_stabilizer = BallTrackingStabilizer(
+                max_gap_frames=ball_stabilizer.max_gap_frames,
+                gating_distance=ball_stabilizer.gating_distance,
+                outlier_distance=ball_stabilizer.outlier_distance,
+                smoothing_alpha=1.0,
+            )
+        stabilized_track = None
+        try:
+            stabilized_track = ball_stabilizer.stabilize(
+                [
+                    [BallDetection.from_box(box) for box in ball_boxes]
+                    for ball_boxes in ball_detections_per_frame
+                ]
+            )
+        except Exception:
+            stabilized_track = None
+
+        if stabilized_track is not None and stabilized_track.n_detections >= 2:
+            ball_track_px = stabilized_track.as_points()
+            tracking_diagnostics = stabilized_track.metrics(
+                id_switches=int(tracking_metrics.get("id_switches", 0) or 0),
+                stabilized=True,
+            )
+            missing_ball_frames = stabilized_track.n_missing
+        else:
+            ball_track_px = list(raw_ball_track_px)
+            gap_ratio = missing_ball_frames / len(frames_list) if frames_list else 0.0
+            tracking_diagnostics = {
+                "n_frames": len(frames_list),
+                "n_detections": len(raw_ball_track_px),
+                "n_missing": missing_ball_frames,
+                "max_gap": int(tracking_metrics.get("max_gap_frames", 0) or 0),
+                "gap_ratio": round(gap_ratio, 4),
+                "jitter_px": round(compute_jitter_px(ball_track_px), 3),
+                "id_switches": int(tracking_metrics.get("id_switches", 0) or 0),
+                "stabilized": False,
+            }
 
         pose_start = perf_counter()
         with span(
@@ -437,8 +489,9 @@ def analyze_frames(
         ),
     }
     metrics["inference"] = detection_summary
+    metrics["tracking"] = tracking_diagnostics
     metrics["explain"] = build_explain_result(
-        tracking_metrics=tracking_metrics,
+        tracking_metrics=tracking_metrics | tracking_diagnostics,
         calibration_info=calibration_payload,
         run_stats={
             "num_frames": len(frames_list),

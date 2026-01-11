@@ -56,3 +56,17 @@ Operators can review captured summaries in the web console under **Field runs**.
 - **Exposure:** lock exposure/focus when possible; avoid over/under-exposed frames.
 - **Stability:** use a tripod or fixed mount to reduce blur.
 - **Framing:** keep the full ball flight path in frame and avoid zoom changes mid-shot.
+
+## Ball tracking stabilizer diagnostics
+
+The tracking stabilizer smooths ball detections, bridges short dropouts, and rejects
+outlier jumps before trajectory fitting. Use the diagnostics surfaced in results to
+understand tracking quality:
+
+- **gap_ratio** – fraction of frames without a stabilized ball point; higher values
+  indicate gappy detection sequences.
+- **max_gap** – longest missing stretch after stabilization; long gaps reduce fit confidence.
+- **jitter_px** – median step acceleration in pixels; higher values imply unstable tracks.
+
+Low-quality tracking (high gap_ratio or jitter_px) will lower Explain Result confidence
+and may surface warnings such as `ball_track_unstable` or `ball_track_gappy`.
