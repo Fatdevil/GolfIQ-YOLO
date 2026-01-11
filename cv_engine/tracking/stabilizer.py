@@ -158,10 +158,14 @@ class BallTrackingStabilizer:
                     alpha * candidate.x + (1 - alpha) * last_smoothed[0],
                     alpha * candidate.y + (1 - alpha) * last_smoothed[1],
                 )
-                velocity = (
-                    smoothed[0] - last_smoothed[0],
-                    smoothed[1] - last_smoothed[1],
-                )
+                dx = smoothed[0] - last_smoothed[0]
+                dy = smoothed[1] - last_smoothed[1]
+                frames_elapsed = pending_gap + 1
+                if frames_elapsed > 1:
+                    step = float(frames_elapsed)
+                    velocity = (dx / step, dy / step)
+                else:
+                    velocity = (dx, dy)
 
             if (
                 last_smoothed is not None

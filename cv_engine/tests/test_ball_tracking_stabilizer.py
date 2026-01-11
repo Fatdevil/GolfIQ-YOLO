@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from typing import Iterable, Sequence
 
+import pytest
+
 from cv_engine.tracking.stabilizer import (
     BallDetection,
     BallTrackingStabilizer,
@@ -111,3 +113,31 @@ def test_stabilizer_is_deterministic() -> None:
     second = stabilizer.stabilize(detections)
 
     assert _track_signature(first.points) == _track_signature(second.points)
+
+
+def test_stabilizer_scales_velocity_after_gap() -> None:
+    points = [
+        (0.0, 0.0),
+        (0.0, 0.0),
+        (0.0, 0.0),
+        (9.0, 0.0),
+        (12.0, 0.0),
+    ]
+    detections = _detections_from_points(points, missing=[1, 2])
+    stabilizer = BallTrackingStabilizer(
+        max_gap_frames=3,
+        gating_distance=4.0,
+        smoothing_alpha=1.0,
+    )
+    track = stabilizer.stabilize(detections)
+
+    resumed_point = track.points[3]
+    assert resumed_point is not None
+    assert resumed_point.x == pytest.approx(9.0)
+    assert resumed_point.y == pytest.approx(0.0)
+
+    next_point = track.points[4]
+    assert next_point is not None
+    assert not next_point.is_interpolated
+    assert next_point.x == pytest.approx(12.0)
+    assert next_point.y == pytest.approx(0.0)
