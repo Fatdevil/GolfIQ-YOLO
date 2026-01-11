@@ -13,10 +13,15 @@ Thanks for taking the time to improve GolfIQ! This document captures the essenti
 
 ### Python services & tooling
 1. Install dependencies: `python -m venv .venv && source .venv/bin/activate && pip install -r requirements-dev.txt`.
-2. Lint: `ruff check .` (use `--fix` locally if appropriate).
-3. Type check (where supported): `mypy .`.
-4. Unit tests: `pytest` (add `-k <pattern>` to scope).
-5. Telemetry/ingest services: `python server_app.py --dev` or relevant entrypoint in `server/`.
+2. Install pre-commit hooks: `pre-commit install`.
+3. Lint: `ruff check .` (use `--fix` locally if appropriate).
+4. Format/lint locally:
+   - `pre-commit run --all-files`
+   - `black .`
+   - `flake8 .`
+5. Type check (where supported): `mypy .`.
+6. Unit tests: `pytest -q` (add `-k <pattern>` to scope).
+7. Telemetry/ingest services: `python server_app.py --dev` or relevant entrypoint in `server/`.
 
 > **Tip:** If you are working across both stacks, run `npm run build` before Python tests to regenerate shared artifacts in `shared/`.
 
