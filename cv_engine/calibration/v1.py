@@ -13,6 +13,7 @@ from cv_engine.calibration.trajectory_fit import (
 )
 from cv_engine.calibration.types import (
     CalibrationConfig,
+    LaunchWindowResult,
     TrackPoint,
     to_track_points,
 )
