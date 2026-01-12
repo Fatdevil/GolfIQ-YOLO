@@ -299,7 +299,13 @@ def build_explain_result(
                 penalty_amount=0.1,
             )
 
-    if calibration_info.get("enabled") is True:
+    calibration_enabled = calibration_info.get("enabled") is True
+    calibration_quality = calibration_info.get("quality")
+    calibration_reasons: list[str] = []
+    if isinstance(calibration_quality, Mapping):
+        calibration_reasons = list(calibration_quality.get("reasonCodes", []) or [])
+
+    if calibration_enabled:
         quality = calibration_info.get("quality")
         if isinstance(quality, Mapping):
             quality_confidence = quality.get("confidence")
@@ -352,6 +358,46 @@ def build_explain_result(
                         },
                         penalty_amount=0.1,
                     )
+    else:
+        if calibration_reasons:
+            if (
+                "missing_scale" in calibration_reasons
+                or "calibration_missing" in calibration_reasons
+            ):
+                add_issue(
+                    "calibration_missing",
+                    "warn",
+                    "Calibration scale was not available.",
+                    details={"reason_codes": calibration_reasons},
+                    penalty_amount=0.1,
+                )
+            if "launch_window_too_short" in calibration_reasons:
+                add_issue(
+                    "launch_window_too_short",
+                    "warn",
+                    "Launch window did not contain enough frames.",
+                    details={"reason_codes": calibration_reasons},
+                    penalty_amount=0.1,
+                )
+            if (
+                "fit_low_confidence" in calibration_reasons
+                or "calibration_unstable" in calibration_reasons
+            ):
+                add_issue(
+                    "calibration_unstable",
+                    "warn",
+                    "Calibration fit quality was unstable.",
+                    details={"reason_codes": calibration_reasons},
+                    penalty_amount=0.15,
+                )
+            if "fit_failed" in calibration_reasons:
+                add_issue(
+                    "fit_low_confidence",
+                    "warn",
+                    "Trajectory fit did not converge cleanly.",
+                    details={"reason_codes": calibration_reasons},
+                    penalty_amount=0.15,
+                )
 
     confidence = _clamp(1.0 - penalty)
     sorted_issues = sorted(issues, key=lambda issue: SEVERITY_ORDER[issue.severity])
