@@ -302,7 +302,10 @@ def analyze_frames(
                 [BallDetection.from_box(box) for box in ball_boxes]
                 for ball_boxes in ball_detections_per_frame
             ]
-            track_points = detections_to_track_points(detections_per_frame)
+            track_points = detections_to_track_points(
+                detections_per_frame,
+                ball_stabilizer,
+            )
             stabilized_track = stabilize_ball_track(
                 track_points,
                 ball_stabilizer,

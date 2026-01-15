@@ -5,7 +5,12 @@ from typing import Iterable, Sequence
 import pytest
 
 from cv_engine.calibration.types import TrackPoint
-from cv_engine.tracking.stabilizer import StabilizerConfig, stabilize_ball_track
+from cv_engine.tracking.stabilizer import (
+    BallDetection,
+    StabilizerConfig,
+    detections_to_track_points,
+    stabilize_ball_track,
+)
 
 
 def _linear_track(
@@ -48,6 +53,28 @@ def _track_points_from_line(
             )
         )
     return track_points
+
+
+def _detections_from_points(
+    points: Sequence[tuple[float, float, float]],
+) -> list[list[BallDetection]]:
+    detections: list[list[BallDetection]] = []
+    for x, y, conf in points:
+        detections.append([BallDetection(x, y, conf)])
+    return detections
+
+
+def _detections_with_choices(
+    points: Sequence[tuple[float, float, float] | list[tuple[float, float, float]]],
+) -> list[list[BallDetection]]:
+    detections: list[list[BallDetection]] = []
+    for entry in points:
+        if isinstance(entry, list):
+            detections.append([BallDetection(*det) for det in entry])
+        else:
+            x, y, conf = entry
+            detections.append([BallDetection(x, y, conf)])
+    return detections
 
 
 def _average_step(points: Sequence[TrackPoint]) -> float:
@@ -134,3 +161,43 @@ def test_stabilizer_fills_and_reports_metrics() -> None:
     assert stabilized.filled_frames >= 1
     assert stabilized.n_missing == 0
     assert stabilized.gap_ratio == pytest.approx(0.0)
+
+
+def test_detection_selection_prefers_predicted_path() -> None:
+    detections = _detections_with_choices(
+        [
+            (0.0, 0.0, 0.6),
+            (2.0, 0.0, 0.6),
+            [
+                (4.0, 0.0, 0.4),
+                (80.0, 80.0, 0.95),
+            ],
+        ]
+    )
+    config = StabilizerConfig(base_gate=8.0, max_px_per_frame=6.0)
+
+    points = detections_to_track_points(detections, config)
+
+    assert len(points) == 3
+    assert points[-1].frame_idx == 2
+    assert points[-1].x_px == pytest.approx(4.0)
+    assert points[-1].y_px == pytest.approx(0.0)
+
+
+def test_detection_selection_rejects_far_fallback() -> None:
+    detections = _detections_from_points(
+        [
+            (0.0, 0.0, 0.7),
+            (1.0, 0.0, 0.7),
+            (120.0, -120.0, 0.95),
+        ]
+    )
+    config = StabilizerConfig(
+        base_gate=5.0,
+        max_px_per_frame=3.0,
+        fallback_max_distance=20.0,
+    )
+
+    points = detections_to_track_points(detections, config)
+
+    assert [pt.frame_idx for pt in points] == [0, 1]

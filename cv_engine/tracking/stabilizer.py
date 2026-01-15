@@ -28,9 +28,13 @@ class BallDetection:
 class StabilizerConfig:
     max_gap_frames: int = 4
     max_px_per_frame: float = 80.0
+    base_gate: float = 20.0
     ema_alpha: float = 0.45
     min_conf: float = 0.35
     link_max_distance: float = 120.0
+    dist_weight: float = 1.0
+    conf_weight: float = 10.0
+    fallback_max_distance: float = 220.0
 
 
 @dataclass
@@ -104,17 +108,78 @@ def compute_jitter_px(points: Sequence[Point]) -> float:
     return float(statistics.median(accel))
 
 
+def _gate_radius(dt: int, cfg: StabilizerConfig) -> float:
+    return cfg.base_gate + cfg.max_px_per_frame * dt
+
+
+def _select_detection(
+    detections: Sequence[BallDetection],
+    *,
+    predicted: Point | None,
+    dt: int,
+    cfg: StabilizerConfig,
+) -> BallDetection | None:
+    if not detections:
+        return None
+
+    ordered = sorted(detections, key=lambda det: (-det.confidence, det.x, det.y))
+    if predicted is None:
+        return ordered[0]
+
+    distances = {det: _distance_detection(det, predicted) for det in ordered}
+    gate = _gate_radius(dt, cfg)
+    in_gate = [det for det in ordered if distances[det] <= gate]
+
+    def score(det: BallDetection) -> tuple[float, float, float, float, float]:
+        dist = distances[det]
+        combined = cfg.dist_weight * dist + cfg.conf_weight * (1 - det.confidence)
+        return (combined, dist, -det.confidence, det.x, det.y)
+
+    if in_gate:
+        return min(in_gate, key=score)
+
+    best = ordered[0]
+    if distances[best] <= cfg.fallback_max_distance:
+        return best
+    return None
+
+
 def detections_to_track_points(
     detections_per_frame: Sequence[Sequence[BallDetection]],
+    cfg: StabilizerConfig | None = None,
 ) -> list[TrackPoint]:
+    cfg = cfg or StabilizerConfig()
     points: list[TrackPoint] = []
+    last_point: TrackPoint | None = None
+    prev_point: TrackPoint | None = None
     for frame_index, detections in enumerate(detections_per_frame):
         if not detections:
             continue
-        best = sorted(
+        predicted: Point | None = None
+        dt = 1
+        if last_point is not None:
+            dt = max(frame_index - last_point.frame_idx, 1)
+            if prev_point is not None:
+                prev_dt = max(last_point.frame_idx - prev_point.frame_idx, 1)
+                velocity = (
+                    (last_point.x_px - prev_point.x_px) / prev_dt,
+                    (last_point.y_px - prev_point.y_px) / prev_dt,
+                )
+                predicted = (
+                    last_point.x_px + velocity[0] * dt,
+                    last_point.y_px + velocity[1] * dt,
+                )
+            else:
+                predicted = (last_point.x_px, last_point.y_px)
+
+        best = _select_detection(
             detections,
-            key=lambda det: (-det.confidence, det.x, det.y),
-        )[0]
+            predicted=predicted,
+            dt=dt,
+            cfg=cfg,
+        )
+        if best is None:
+            continue
         points.append(
             TrackPoint(
                 frame_idx=frame_index,
@@ -123,6 +188,8 @@ def detections_to_track_points(
                 confidence=best.confidence,
             )
         )
+        prev_point = last_point
+        last_point = points[-1]
     return points
 
 
@@ -184,8 +251,7 @@ def stabilize_ball_track(
             last_smoothed[1] + velocity[1] * dt,
         )
         distance = _distance_point(point, predicted)
-        confidence = point.confidence if point.confidence is not None else 1.0
-        if distance > cfg.max_px_per_frame * dt and confidence < cfg.min_conf:
+        if distance > _gate_radius(dt, cfg):
             outliers_removed += 1
             continue
 
@@ -388,6 +454,10 @@ def _distance_point(point: TrackPoint, predicted: Point) -> float:
     return ((point.x_px - predicted[0]) ** 2 + (point.y_px - predicted[1]) ** 2) ** 0.5
 
 
+def _distance_detection(det: BallDetection, predicted: Point) -> float:
+    return ((det.x - predicted[0]) ** 2 + (det.y - predicted[1]) ** 2) ** 0.5
+
+
 def _distance_points(first: TrackPoint, second: TrackPoint) -> float:
     return ((first.x_px - second.x_px) ** 2 + (first.y_px - second.y_px) ** 2) ** 0.5
 
@@ -399,12 +469,16 @@ def stabilizer_config_from_env() -> StabilizerConfig:
             "TRACK_MAX_PX_PER_FRAME",
             _env_float("TRACK_GATING_DISTANCE_PX", 90.0),
         ),
+        base_gate=_env_float("TRACK_BASE_GATE_PX", 20.0),
         ema_alpha=_env_float("TRACK_SMOOTHING_ALPHA", 0.45),
         min_conf=_env_float("TRACK_MIN_CONF", 0.35),
         link_max_distance=_env_float(
             "TRACK_LINK_MAX_DISTANCE_PX",
             _env_float("TRACK_OUTLIER_DISTANCE_PX", 140.0),
         ),
+        dist_weight=_env_float("TRACK_DIST_WEIGHT", 1.0),
+        conf_weight=_env_float("TRACK_CONF_WEIGHT", 10.0),
+        fallback_max_distance=_env_float("TRACK_FALLBACK_MAX_DISTANCE_PX", 220.0),
     )
 
 
