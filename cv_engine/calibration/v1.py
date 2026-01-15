@@ -43,6 +43,7 @@ def calibrated_metrics(
             "quality": {"reasonCodes": ["disabled"], "confidence": 0.0},
         }
     points = to_track_points(ball_track_px)
+    # Normalize ordering for launch-window detection and trajectory fitting.
     ordered_points = sorted(points, key=lambda pt: pt.frame_idx)
     scale_result = resolve_scale(config)
     meters_per_pixel = scale_result.meters_per_pixel
