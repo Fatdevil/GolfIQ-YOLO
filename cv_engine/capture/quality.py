@@ -221,9 +221,9 @@ def analyze_capture_quality(
         "CAPTURE_QUALITY_BLUR_VAR_THRESHOLD", BLUR_LAPLACIAN_VAR_THRESHOLD
     )
     blur_bad_pct = _env_float("CAPTURE_QUALITY_BLUR_BAD_PCT", BLUR_BAD_FRAMES_PCT)
-    blur_scores = np.array([
-        _laplacian_variance(_to_gray(frame)) for frame in frames_list
-    ])
+    blur_scores = np.array(
+        [_laplacian_variance(_to_gray(frame)) for frame in frames_list]
+    )
     blurry_pct = float(np.mean(blur_scores < blur_threshold))
     summary["blurry_pct"] = round(blurry_pct, 4)
     summary["blur_variance_mean"] = round(float(blur_scores.mean()), 4)
