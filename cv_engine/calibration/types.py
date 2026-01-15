@@ -8,6 +8,13 @@ Point = Tuple[float, float]
 
 @dataclass(frozen=True)
 class TrackPoint:
+    """Pixel-space track point with a frame index for timing/gap checks.
+
+    frame_idx is sourced from the track sequence (e.g., stabilized per-frame list or
+    sequential index in a raw point list) and is expected to be monotonic for that
+    sequence.
+    """
+
     frame_idx: int
     x_px: float
     y_px: float

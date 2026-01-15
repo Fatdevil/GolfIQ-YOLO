@@ -28,6 +28,29 @@ Calibration v1 requires:
 Optional fallback:
 - `referenceDistanceM` + `referencePointsPx` (two pixel points with known distance)
 
+## TrackPoint.frame_idx semantics
+`TrackPoint.frame_idx` is the frame index used for timing and gap detection inside
+calibration. It is intentionally lightweight and derived from the track sequence:
+
+- When `TrackPoint` values are constructed from a stabilized track, `frame_idx`
+  comes from enumerating the stabilized track's full frame list (including `None`
+  placeholders for missing detections). This preserves the original per-frame
+  index so gaps appear as jumps in `frame_idx`.
+- When `TrackPoint` values are created from a plain list of `(x_px, y_px)` points,
+  `frame_idx` is simply the sequential index in that list (0..N-1).
+
+Because calibration only needs relative timing and gap sizes, this is consistent
+and safe for downstream calculations: `frame_idx` is always monotonic within the
+track source, and gaps map to larger deltas even when the raw video frame count
+differs from the number of detections.
+
+## Ordering & sorting assumptions
+Calibration functions assume the track is in temporal order but still sort by
+`frame_idx` before window selection and trajectory fitting. The launch-window
+detector also sorts internally, so passing unsorted points is safe. Downstream
+metrics (including `ballTrackM`) use the sorted order, while the launch-window
+logic consumes the current ordered track when evaluating gaps.
+
 ## Enabling calibration
 Calibration is wired through the analyze pipeline. The API payload accepts:
 - `scalePxPerMeter` (pixels per meter)
