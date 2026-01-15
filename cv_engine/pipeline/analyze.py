@@ -10,6 +10,7 @@ from cv_engine.calibration.homography import (
     ground_homography_from_scale,
     to_ground_plane,
 )
+from cv_engine.calibration.types import TrackPoint
 from cv_engine.calibration.v1 import CalibrationConfig, calibrated_metrics
 from cv_engine.explain.diagnostics import build_explain_result
 from cv_engine.metrics.angle import compute_side_angle
@@ -349,6 +350,38 @@ def analyze_frames(
             ball_track_px = moving_average(ball_track_px, smoothing_window)
             club_track_px = moving_average(club_track_px, smoothing_window)
 
+        calibration_track_points: list[TrackPoint] = []
+        if stabilized_track is not None and stabilized_track.points:
+            calibration_track_points = [
+                TrackPoint(
+                    frame_idx=idx,
+                    x_px=point.x,
+                    y_px=point.y,
+                    confidence=point.confidence,
+                )
+                for idx, point in enumerate(stabilized_track.points)
+                if point is not None
+            ]
+            if smoothing_window > 1 and calibration_track_points:
+                smoothed = moving_average(
+                    [pt.as_point() for pt in calibration_track_points],
+                    smoothing_window,
+                )
+                calibration_track_points = [
+                    TrackPoint(
+                        frame_idx=pt.frame_idx,
+                        x_px=smoothed[idx][0],
+                        y_px=smoothed[idx][1],
+                        confidence=pt.confidence,
+                    )
+                    for idx, pt in enumerate(calibration_track_points)
+                ]
+        else:
+            calibration_track_points = [
+                TrackPoint(frame_idx=idx, x_px=pt[0], y_px=pt[1])
+                for idx, pt in enumerate(ball_track_px)
+            ]
+
         kin_start = perf_counter()
         base_quality = {
             "fps": _quality_from_fps(calib.fps),
@@ -408,7 +441,19 @@ def analyze_frames(
             record_stage_latency("kinematics", kin_ms)
 
         if calibration is not None:
-            calibration_payload = calibrated_metrics(ball_track_px, calibration)
+            if calibration.fps is None:
+                calibration = CalibrationConfig(
+                    enabled=calibration.enabled,
+                    scale_px_per_meter=calibration.scale_px_per_meter,
+                    meters_per_pixel=calibration.meters_per_pixel,
+                    reference_distance_m=calibration.reference_distance_m,
+                    reference_points_px=calibration.reference_points_px,
+                    camera_fps=calibration.camera_fps,
+                    fps=calib.fps,
+                )
+            calibration_payload = calibrated_metrics(
+                calibration_track_points, calibration
+            )
             metrics["calibrated"] = calibration_payload
 
         impact_start = perf_counter()

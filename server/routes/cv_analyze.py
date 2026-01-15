@@ -228,6 +228,12 @@ def _calibration_from_payload(
     meters_per_pixel = _coerce_optional_float(
         meters_per_pixel, field_name="metersPerPixel", errors=errors
     )
+    scale_px_per_meter = payload.get("scale_px_per_meter") if payload else None
+    if scale_px_per_meter is None and payload:
+        scale_px_per_meter = payload.get("scalePxPerMeter")
+    scale_px_per_meter = _coerce_optional_float(
+        scale_px_per_meter, field_name="scalePxPerMeter", errors=errors
+    )
     reference_distance_m = payload.get("reference_distance_m") if payload else None
     if reference_distance_m is None and payload:
         reference_distance_m = payload.get("referenceDistanceM")
@@ -253,6 +259,7 @@ def _calibration_from_payload(
         )
     return CalibrationConfig(
         enabled=enabled,
+        scale_px_per_meter=scale_px_per_meter,
         meters_per_pixel=meters_per_pixel,
         reference_distance_m=reference_distance_m,
         reference_points_px=reference_points_px,

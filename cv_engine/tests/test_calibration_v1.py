@@ -1,49 +1,96 @@
 import math
+import random
 
-from cv_engine.calibration.v1 import (
-    CalibrationConfig,
-    calibrated_metrics,
-    detect_launch_window,
-)
+from cv_engine.calibration.launch_window import LaunchWindowConfig, detect_launch_window
+from cv_engine.calibration.scale import points_px_to_meters, resolve_scale
+from cv_engine.calibration.trajectory_fit import fit_trajectory
+from cv_engine.calibration.types import CalibrationConfig, TrackPoint
+from cv_engine.calibration.v1 import calibrated_metrics
 
 
-def test_calibration_scale_from_reference_points():
-    config = CalibrationConfig(
-        enabled=True,
-        reference_distance_m=2.0,
-        reference_points_px=((0.0, 0.0), (0.0, 200.0)),
+def _synthetic_track(
+    *,
+    vx: float,
+    vy: float,
+    fps: float,
+    scale_px_per_meter: float,
+    frames: int,
+    noise_px: float = 0.0,
+    gap_start: int | None = None,
+    gap_len: int = 0,
+) -> list[TrackPoint]:
+    rng = random.Random(42)
+    points: list[TrackPoint] = []
+    for frame_idx in range(frames):
+        if gap_start is not None and gap_start <= frame_idx < gap_start + gap_len:
+            continue
+        t = frame_idx / fps
+        x_m = vx * t
+        y_m = vy * t - 0.5 * 9.81 * t * t
+        x_px = x_m * scale_px_per_meter
+        y_px = -y_m * scale_px_per_meter
+        if noise_px:
+            x_px += rng.uniform(-noise_px, noise_px)
+            y_px += rng.uniform(-noise_px, noise_px)
+        points.append(TrackPoint(frame_idx=frame_idx, x_px=x_px, y_px=y_px))
+    return points
+
+
+def test_pixel_to_meter_conversion_round_trip():
+    config = CalibrationConfig(enabled=True, scale_px_per_meter=100.0)
+    result = resolve_scale(config)
+    assert result.meters_per_pixel is not None
+    points_px = [(0.0, 0.0), (100.0, -200.0)]
+    points_m = points_px_to_meters(points_px, meters_per_pixel=result.meters_per_pixel)
+    assert math.isclose(points_m[1][0], 1.0, rel_tol=1e-6)
+    assert math.isclose(points_m[1][1], 2.0, rel_tol=1e-6)
+
+
+def test_launch_window_rejects_long_gaps():
+    track = _synthetic_track(
+        vx=20.0,
+        vy=10.0,
+        fps=120.0,
+        scale_px_per_meter=90.0,
+        frames=16,
+        gap_start=6,
+        gap_len=6,
     )
-    meters_per_pixel, reasons = config.resolve_meters_per_pixel()
-    assert reasons == []
-    assert meters_per_pixel == 0.01
+    window = detect_launch_window(track, config=LaunchWindowConfig(max_gap_frames=2))
+    assert window.start_index is not None
+    assert window.end_index is not None
+    assert window.end_frame is not None
+    assert window.end_frame < 6
 
 
-def test_detect_launch_window_finds_motion_segment():
-    track = [(0.0, 0.0), (0.2, 0.1), (0.3, 0.0)]
-    track += [(5.0 + i * 2.0, -1.0 - i * 0.5) for i in range(8)]
-    result = detect_launch_window(track)
-    assert result.start is not None
-    assert result.end is not None
-    assert result.start <= 3
-    assert result.end >= result.start + 2
-
-
-def test_calibrated_metrics_fit_parabola_with_outlier():
-    points = []
-    for i in range(12):
-        x = i * 5.0
-        y = 120.0 - 0.08 * (x - 30.0) ** 2
-        points.append((x, y))
-    points[5] = (points[5][0], points[5][1] + 40.0)
-
-    config = CalibrationConfig(
-        enabled=True,
-        meters_per_pixel=0.01,
-        camera_fps=120.0,
+def test_trajectory_fit_recovers_speed_and_angle():
+    track = _synthetic_track(
+        vx=30.0,
+        vy=14.0,
+        fps=120.0,
+        scale_px_per_meter=120.0,
+        frames=12,
     )
-    metrics = calibrated_metrics(points, config)
-    assert metrics["enabled"] is True
-    assert math.isclose(metrics["metersPerPixel"], 0.01, rel_tol=1e-6)
-    assert metrics["carryM"] > 0.4
-    assert metrics["peakHeightM"] > 0.0
-    assert metrics.get("speedMps") is not None
+    fit = fit_trajectory(track, fps=120.0, meters_per_pixel=1 / 120.0)
+    assert fit.calibrated is True
+    assert math.isclose(fit.speed_mps or 0.0, math.hypot(30.0, 14.0), rel_tol=0.1)
+    assert math.isclose(
+        fit.launch_angle_deg or 0.0,
+        math.degrees(math.atan2(14.0, 30.0)),
+        rel_tol=0.1,
+    )
+
+
+def test_calibration_fallback_with_missing_scale():
+    track = _synthetic_track(
+        vx=25.0,
+        vy=12.0,
+        fps=120.0,
+        scale_px_per_meter=80.0,
+        frames=8,
+        noise_px=0.5,
+    )
+    config = CalibrationConfig(enabled=True, camera_fps=120.0)
+    metrics = calibrated_metrics(track, config)
+    assert metrics["enabled"] is False
+    assert "calibration_missing" in metrics["quality"]["reasonCodes"]
