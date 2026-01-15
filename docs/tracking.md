@@ -32,3 +32,22 @@ Health is derived from the stored homography metadata:
 | **Poor** | Baseline < 0.75 m, the angle is > 50° from vertical, or the snapshot is missing/expired. |
 
 The HUD status chip mirrors this evaluation so operators can identify when recalibration is required.
+
+## Ball tracking stabilizer
+
+The pipeline applies a lightweight ball tracking stabilizer after raw per-frame detections and before calibration/metrics. The stabilizer smooths jitter with an EMA, fills short gaps, and can optionally re-link short segments when motion is plausible. Interpolated points are flagged with `is_interpolated=True` on the `TrackPoint` data. This keeps downstream calibration robust while preserving frame index semantics for timing-aware steps.
+
+### Tuning knobs
+
+The stabilizer is configured through `StabilizerConfig` (and matching environment overrides):
+
+* `max_gap_frames` – maximum number of consecutive missing frames to fill via interpolation.
+* `max_px_per_frame` – speed gate for outlier rejection (scaled by frame delta).
+* `base_gate` – minimum distance gate for per-frame detection selection.
+* `ema_alpha` – smoothing factor (higher = less smoothing).
+* `min_conf` – minimum confidence to accept large jumps.
+* `link_max_distance` – distance gate for segment re-linking (scaled by gap length).
+* `dist_weight` / `conf_weight` – scoring weights when choosing between multiple in-gate detections.
+* `fallback_max_distance` – maximum distance for fallback selection when no candidates are in gate.
+
+Frame indices remain monotonic and are used to compute gaps; keep them aligned with the original frame ordering when providing detections.
