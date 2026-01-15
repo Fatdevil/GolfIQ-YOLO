@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 # isort: skip_file
+from dataclasses import replace
 from time import perf_counter
 from typing import Any, Dict, Iterable, List, Tuple
 
@@ -22,9 +23,10 @@ from cv_engine.sequence import analyze_kinematic_sequence
 from cv_engine.tracking.factory import get_ball_tracker, get_tracker
 from cv_engine.tracking.stabilizer import (
     BallDetection,
-    BallTrackingStabilizer,
     compute_jitter_px,
-    stabilizer_from_env,
+    detections_to_track_points,
+    stabilizer_config_from_env,
+    stabilize_ball_track,
 )
 from cv_engine.telemetry import FlightRecorder, flight_recorder_settings
 from observability.otel import span
@@ -291,21 +293,20 @@ def analyze_frames(
         if not tracking_metrics:
             tracking_metrics = dict(ball_tracker.metrics.as_dict())
 
-        ball_stabilizer = stabilizer_from_env()
+        ball_stabilizer = stabilizer_config_from_env()
         if det.mock:
-            ball_stabilizer = BallTrackingStabilizer(
-                max_gap_frames=ball_stabilizer.max_gap_frames,
-                gating_distance=ball_stabilizer.gating_distance,
-                outlier_distance=ball_stabilizer.outlier_distance,
-                smoothing_alpha=1.0,
-            )
+            ball_stabilizer = replace(ball_stabilizer, ema_alpha=1.0)
         stabilized_track = None
         try:
-            stabilized_track = ball_stabilizer.stabilize(
-                [
-                    [BallDetection.from_box(box) for box in ball_boxes]
-                    for ball_boxes in ball_detections_per_frame
-                ]
+            detections_per_frame = [
+                [BallDetection.from_box(box) for box in ball_boxes]
+                for ball_boxes in ball_detections_per_frame
+            ]
+            track_points = detections_to_track_points(detections_per_frame)
+            stabilized_track = stabilize_ball_track(
+                track_points,
+                ball_stabilizer,
+                total_frames=len(detections_per_frame),
             )
         except Exception:
             stabilized_track = None
@@ -352,16 +353,7 @@ def analyze_frames(
 
         calibration_track_points: list[TrackPoint] = []
         if stabilized_track is not None and stabilized_track.points:
-            calibration_track_points = [
-                TrackPoint(
-                    frame_idx=idx,
-                    x_px=point.x,
-                    y_px=point.y,
-                    confidence=point.confidence,
-                )
-                for idx, point in enumerate(stabilized_track.points)
-                if point is not None
-            ]
+            calibration_track_points = list(stabilized_track.points)
             if smoothing_window > 1 and calibration_track_points:
                 smoothed = moving_average(
                     [pt.as_point() for pt in calibration_track_points],
@@ -373,6 +365,7 @@ def analyze_frames(
                         x_px=smoothed[idx][0],
                         y_px=smoothed[idx][1],
                         confidence=pt.confidence,
+                        is_interpolated=pt.is_interpolated,
                     )
                     for idx, pt in enumerate(calibration_track_points)
                 ]

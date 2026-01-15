@@ -19,6 +19,7 @@ class TrackPoint:
     x_px: float
     y_px: float
     confidence: float | None = None
+    is_interpolated: bool = False
 
     def as_point(self) -> Point:
         return (self.x_px, self.y_px)

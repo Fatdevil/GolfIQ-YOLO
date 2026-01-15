@@ -5,6 +5,7 @@ import statistics
 from dataclasses import dataclass
 from typing import Sequence, Tuple
 
+from cv_engine.calibration.types import TrackPoint
 from cv_engine.types import Box
 
 
@@ -24,28 +25,29 @@ class BallDetection:
 
 
 @dataclass(frozen=True)
-class BallTrackPoint:
-    x: float
-    y: float
-    confidence: float
-    is_interpolated: bool = False
-
-    def as_point(self) -> Point:
-        return (self.x, self.y)
+class StabilizerConfig:
+    max_gap_frames: int = 4
+    max_px_per_frame: float = 80.0
+    ema_alpha: float = 0.45
+    min_conf: float = 0.35
+    link_max_distance: float = 120.0
 
 
 @dataclass
 class StabilizedTrack:
-    points: list[BallTrackPoint | None]
+    points: list[TrackPoint]
     n_frames: int
     n_detections: int
     n_missing: int
     max_gap: int
     gap_ratio: float
     jitter_px: float
+    filled_frames: int
+    outliers_removed: int
+    segments_linked: int
 
     def as_points(self) -> list[Point]:
-        return [point.as_point() for point in self.points if point is not None]
+        return [point.as_point() for point in self.points]
 
     def metrics(self, *, id_switches: int = 0, stabilized: bool = True) -> dict:
         return {
@@ -57,6 +59,9 @@ class StabilizedTrack:
             "jitter_px": round(self.jitter_px, 3),
             "id_switches": int(id_switches),
             "stabilized": stabilized,
+            "filled_frames": int(self.filled_frames),
+            "outliers_removed": int(self.outliers_removed),
+            "segments_linked": int(self.segments_linked),
         }
 
 
@@ -99,158 +104,328 @@ def compute_jitter_px(points: Sequence[Point]) -> float:
     return float(statistics.median(accel))
 
 
-class BallTrackingStabilizer:
-    """Single-track stabilizer with gating, interpolation, and EMA smoothing."""
-
-    def __init__(
-        self,
-        *,
-        max_gap_frames: int = 4,
-        gating_distance: float = 90.0,
-        outlier_distance: float = 140.0,
-        smoothing_alpha: float = 0.45,
-    ) -> None:
-        self.max_gap_frames = max(0, int(max_gap_frames))
-        self.gating_distance = float(gating_distance)
-        self.outlier_distance = float(outlier_distance)
-        self.smoothing_alpha = float(smoothing_alpha)
-
-    def stabilize(
-        self, detections_per_frame: Sequence[Sequence[BallDetection]]
-    ) -> StabilizedTrack:
-        points: list[BallTrackPoint | None] = [None] * len(detections_per_frame)
-        last_smoothed: Point | None = None
-        last_smoothed_index: int | None = None
-        velocity: Point = (0.0, 0.0)
-        pending_gap = 0
-        consecutive_missing = 0
-        max_gap = 0
-        n_detections = 0
-
-        for frame_index, detections in enumerate(detections_per_frame):
-            predicted = (
-                (last_smoothed[0] + velocity[0], last_smoothed[1] + velocity[1])
-                if last_smoothed is not None
-                else None
+def detections_to_track_points(
+    detections_per_frame: Sequence[Sequence[BallDetection]],
+) -> list[TrackPoint]:
+    points: list[TrackPoint] = []
+    for frame_index, detections in enumerate(detections_per_frame):
+        if not detections:
+            continue
+        best = sorted(
+            detections,
+            key=lambda det: (-det.confidence, det.x, det.y),
+        )[0]
+        points.append(
+            TrackPoint(
+                frame_idx=frame_index,
+                x_px=best.x,
+                y_px=best.y,
+                confidence=best.confidence,
             )
-            candidate = self._select_detection(
-                detections, predicted=predicted, gap_frames=max(1, pending_gap or 1)
-            )
-            if candidate is None:
-                points[frame_index] = None
-                consecutive_missing += 1
-                max_gap = max(max_gap, consecutive_missing)
-                if last_smoothed is not None:
-                    pending_gap += 1
-                    if pending_gap > self.max_gap_frames:
-                        last_smoothed = None
-                        last_smoothed_index = None
-                        velocity = (0.0, 0.0)
-                        pending_gap = 0
-                continue
+        )
+    return points
 
-            consecutive_missing = 0
-            if last_smoothed is None:
-                smoothed = (candidate.x, candidate.y)
-            else:
-                alpha = self.smoothing_alpha
-                smoothed = (
-                    alpha * candidate.x + (1 - alpha) * last_smoothed[0],
-                    alpha * candidate.y + (1 - alpha) * last_smoothed[1],
+
+def stabilize_ball_track(
+    points: Sequence[TrackPoint],
+    cfg: StabilizerConfig | None = None,
+    *,
+    total_frames: int | None = None,
+) -> StabilizedTrack:
+    cfg = cfg or StabilizerConfig()
+    if not points:
+        n_frames = total_frames or 0
+        return StabilizedTrack(
+            points=[],
+            n_frames=n_frames,
+            n_detections=0,
+            n_missing=n_frames,
+            max_gap=0,
+            gap_ratio=0.0 if n_frames == 0 else 1.0,
+            jitter_px=0.0,
+            filled_frames=0,
+            outliers_removed=0,
+            segments_linked=0,
+        )
+
+    ordered = _dedupe_points(points)
+    segments: list[list[TrackPoint]] = []
+    current_segment: list[TrackPoint] = []
+    last_smoothed: Point | None = None
+    last_frame: int | None = None
+    velocity: Point = (0.0, 0.0)
+    filled_frames = 0
+    outliers_removed = 0
+    max_gap = 0
+
+    for point in ordered:
+        if last_frame is None:
+            smoothed = (point.x_px, point.y_px)
+            current_segment.append(
+                TrackPoint(
+                    frame_idx=point.frame_idx,
+                    x_px=smoothed[0],
+                    y_px=smoothed[1],
+                    confidence=point.confidence,
+                    is_interpolated=False,
                 )
-                dx = smoothed[0] - last_smoothed[0]
-                dy = smoothed[1] - last_smoothed[1]
-                frames_elapsed = pending_gap + 1
-                if frames_elapsed > 1:
-                    step = float(frames_elapsed)
-                    velocity = (dx / step, dy / step)
-                else:
-                    velocity = (dx, dy)
-
-            if (
-                last_smoothed is not None
-                and last_smoothed_index is not None
-                and pending_gap > 0
-                and pending_gap <= self.max_gap_frames
-            ):
-                for gap_idx in range(1, pending_gap + 1):
-                    t = gap_idx / (pending_gap + 1)
-                    interp = (
-                        last_smoothed[0] + t * (smoothed[0] - last_smoothed[0]),
-                        last_smoothed[1] + t * (smoothed[1] - last_smoothed[1]),
-                    )
-                    fill_index = last_smoothed_index + gap_idx
-                    if 0 <= fill_index < len(points):
-                        points[fill_index] = BallTrackPoint(
-                            interp[0],
-                            interp[1],
-                            confidence=0.0,
-                            is_interpolated=True,
-                        )
-            points[frame_index] = BallTrackPoint(
-                smoothed[0],
-                smoothed[1],
-                confidence=candidate.confidence,
-                is_interpolated=False,
             )
             last_smoothed = smoothed
-            last_smoothed_index = frame_index
-            pending_gap = 0
-            n_detections += 1
+            last_frame = point.frame_idx
+            velocity = (0.0, 0.0)
+            continue
 
-        n_frames = len(points)
-        n_missing = sum(1 for point in points if point is None)
-        gap_ratio = n_missing / n_frames if n_frames else 0.0
-        jitter_px = compute_jitter_px(
-            [point.as_point() for point in points if point is not None]
+        dt = point.frame_idx - last_frame
+        if dt <= 0:
+            continue
+
+        predicted = (
+            last_smoothed[0] + velocity[0] * dt,
+            last_smoothed[1] + velocity[1] * dt,
         )
-        return StabilizedTrack(
-            points=points,
-            n_frames=n_frames,
-            n_detections=n_detections,
-            n_missing=n_missing,
-            max_gap=max_gap,
-            gap_ratio=gap_ratio,
-            jitter_px=jitter_px,
+        distance = _distance_point(point, predicted)
+        confidence = point.confidence if point.confidence is not None else 1.0
+        if distance > cfg.max_px_per_frame * dt and confidence < cfg.min_conf:
+            outliers_removed += 1
+            continue
+
+        if last_smoothed is None:
+            smoothed = (point.x_px, point.y_px)
+        else:
+            alpha = cfg.ema_alpha
+            smoothed = (
+                alpha * point.x_px + (1 - alpha) * last_smoothed[0],
+                alpha * point.y_px + (1 - alpha) * last_smoothed[1],
+            )
+
+        gap = dt - 1
+        if gap > 0:
+            max_gap = max(max_gap, gap)
+            if gap <= cfg.max_gap_frames:
+                filled_frames += _fill_gap(
+                    current_segment,
+                    last_smoothed,
+                    smoothed,
+                    last_frame,
+                    gap,
+                )
+            else:
+                if current_segment:
+                    segments.append(current_segment)
+                current_segment = []
+                last_smoothed = None
+                velocity = (0.0, 0.0)
+                smoothed = (point.x_px, point.y_px)
+
+        current_segment.append(
+            TrackPoint(
+                frame_idx=point.frame_idx,
+                x_px=smoothed[0],
+                y_px=smoothed[1],
+                confidence=point.confidence,
+                is_interpolated=False,
+            )
         )
+        if last_smoothed is not None:
+            velocity = (
+                (smoothed[0] - last_smoothed[0]) / dt,
+                (smoothed[1] - last_smoothed[1]) / dt,
+            )
+        last_smoothed = smoothed
+        last_frame = point.frame_idx
 
-    def _select_detection(
-        self,
-        detections: Sequence[BallDetection],
-        *,
-        predicted: Point | None,
-        gap_frames: int,
-    ) -> BallDetection | None:
-        if not detections:
-            return None
-        ordered = sorted(detections, key=lambda det: (-det.confidence, det.x, det.y))
-        if predicted is None:
-            return ordered[0]
+    if current_segment:
+        segments.append(current_segment)
 
-        def distance(det: BallDetection) -> float:
-            return ((det.x - predicted[0]) ** 2 + (det.y - predicted[1]) ** 2) ** 0.5
+    segments, linked, filled_linked = _link_segments(segments, cfg)
+    filled_frames += filled_linked
 
-        best = min(
-            ordered,
-            key=lambda det: (
-                distance(det),
-                -det.confidence,
-                det.x,
-                det.y,
-            ),
-        )
-        dist = distance(best)
-        if dist > self.outlier_distance:
-            return None
-        if gap_frames > 0 and dist > self.gating_distance * gap_frames:
-            return None
-        return best
+    selected = _select_segment(segments)
+    n_frames = total_frames or _frame_span(selected)
+    n_missing = max(n_frames - len(selected), 0)
+    gap_ratio = n_missing / n_frames if n_frames else 0.0
+    jitter_px = compute_jitter_px([pt.as_point() for pt in selected])
+    n_detections = sum(1 for pt in selected if not pt.is_interpolated)
 
-
-def stabilizer_from_env() -> BallTrackingStabilizer:
-    return BallTrackingStabilizer(
-        max_gap_frames=_env_int("TRACK_MAX_GAP_FRAMES", 4),
-        gating_distance=_env_float("TRACK_GATING_DISTANCE_PX", 90.0),
-        outlier_distance=_env_float("TRACK_OUTLIER_DISTANCE_PX", 140.0),
-        smoothing_alpha=_env_float("TRACK_SMOOTHING_ALPHA", 0.45),
+    return StabilizedTrack(
+        points=selected,
+        n_frames=n_frames,
+        n_detections=n_detections,
+        n_missing=n_missing,
+        max_gap=max_gap,
+        gap_ratio=gap_ratio,
+        jitter_px=jitter_px,
+        filled_frames=filled_frames,
+        outliers_removed=outliers_removed,
+        segments_linked=linked,
     )
+
+
+def _dedupe_points(points: Sequence[TrackPoint]) -> list[TrackPoint]:
+    ordered = sorted(
+        points,
+        key=lambda pt: (
+            pt.frame_idx,
+            -(pt.confidence or 0.0),
+            pt.x_px,
+            pt.y_px,
+        ),
+    )
+    seen: set[int] = set()
+    deduped: list[TrackPoint] = []
+    for point in ordered:
+        if point.frame_idx in seen:
+            continue
+        deduped.append(point)
+        seen.add(point.frame_idx)
+    return deduped
+
+
+def _fill_gap(
+    segment: list[TrackPoint],
+    start: Point,
+    end: Point,
+    start_frame: int,
+    gap: int,
+) -> int:
+    filled = 0
+    for gap_idx in range(1, gap + 1):
+        t = gap_idx / (gap + 1)
+        interp = (
+            start[0] + t * (end[0] - start[0]),
+            start[1] + t * (end[1] - start[1]),
+        )
+        segment.append(
+            TrackPoint(
+                frame_idx=start_frame + gap_idx,
+                x_px=interp[0],
+                y_px=interp[1],
+                confidence=0.0,
+                is_interpolated=True,
+            )
+        )
+        filled += 1
+    return filled
+
+
+def _link_segments(
+    segments: list[list[TrackPoint]],
+    cfg: StabilizerConfig,
+) -> tuple[list[list[TrackPoint]], int, int]:
+    if len(segments) <= 1:
+        return segments, 0, 0
+
+    linked = 0
+    filled_frames = 0
+    merged: list[list[TrackPoint]] = [segments[0]]
+    for segment in segments[1:]:
+        prev = merged[-1]
+        if not prev or not segment:
+            merged.append(segment)
+            continue
+        end = prev[-1]
+        start = segment[0]
+        gap = start.frame_idx - end.frame_idx - 1
+        if gap <= 0:
+            prev.extend(segment)
+            continue
+
+        distance = _distance_points(end, start)
+        direction = _segment_direction(prev)
+        confidence = start.confidence if start.confidence is not None else 1.0
+        if (
+            gap <= cfg.max_gap_frames * 2
+            and distance <= cfg.link_max_distance * (gap + 1)
+            and confidence >= cfg.min_conf
+            and _direction_plausible(direction, end, start)
+        ):
+            filled_frames += _fill_gap(
+                prev,
+                (end.x_px, end.y_px),
+                (start.x_px, start.y_px),
+                end.frame_idx,
+                gap,
+            )
+            prev.extend(segment)
+            linked += 1
+        else:
+            merged.append(segment)
+    return merged, linked, filled_frames
+
+
+def _segment_direction(segment: Sequence[TrackPoint]) -> Point | None:
+    if len(segment) < 2:
+        return None
+    prev = segment[-2]
+    last = segment[-1]
+    return (last.x_px - prev.x_px, last.y_px - prev.y_px)
+
+
+def _direction_plausible(
+    direction: Point | None,
+    end: TrackPoint,
+    start: TrackPoint,
+) -> bool:
+    if direction is None:
+        return True
+    link_vec = (start.x_px - end.x_px, start.y_px - end.y_px)
+    return direction[0] * link_vec[0] + direction[1] * link_vec[1] >= 0.0
+
+
+def _select_segment(segments: Sequence[Sequence[TrackPoint]]) -> list[TrackPoint]:
+    if not segments:
+        return []
+    return list(max(segments, key=lambda seg: (len(seg), -(seg[0].frame_idx))))
+
+
+def _frame_span(points: Sequence[TrackPoint]) -> int:
+    if not points:
+        return 0
+    return points[-1].frame_idx - points[0].frame_idx + 1
+
+
+def _distance_point(point: TrackPoint, predicted: Point) -> float:
+    return ((point.x_px - predicted[0]) ** 2 + (point.y_px - predicted[1]) ** 2) ** 0.5
+
+
+def _distance_points(first: TrackPoint, second: TrackPoint) -> float:
+    return ((first.x_px - second.x_px) ** 2 + (first.y_px - second.y_px) ** 2) ** 0.5
+
+
+def stabilizer_config_from_env() -> StabilizerConfig:
+    return StabilizerConfig(
+        max_gap_frames=_env_int("TRACK_MAX_GAP_FRAMES", 4),
+        max_px_per_frame=_env_float(
+            "TRACK_MAX_PX_PER_FRAME",
+            _env_float("TRACK_GATING_DISTANCE_PX", 90.0),
+        ),
+        ema_alpha=_env_float("TRACK_SMOOTHING_ALPHA", 0.45),
+        min_conf=_env_float("TRACK_MIN_CONF", 0.35),
+        link_max_distance=_env_float(
+            "TRACK_LINK_MAX_DISTANCE_PX",
+            _env_float("TRACK_OUTLIER_DISTANCE_PX", 140.0),
+        ),
+    )
+
+
+def stabilizer_from_env() -> StabilizerConfig:
+    return stabilizer_config_from_env()
+
+
+def track_points_from_env(points: Sequence[TrackPoint]) -> StabilizedTrack:
+    return stabilize_ball_track(points, stabilizer_config_from_env())
+
+
+def track_points_from_detections(
+    detections_per_frame: Sequence[Sequence[BallDetection]],
+) -> list[TrackPoint]:
+    return detections_to_track_points(detections_per_frame)
+
+
+def track_points_from_boxes(
+    boxes_per_frame: Sequence[Sequence[Box]],
+) -> list[TrackPoint]:
+    detections = [
+        [BallDetection.from_box(box) for box in boxes] for boxes in boxes_per_frame
+    ]
+    return detections_to_track_points(detections)
