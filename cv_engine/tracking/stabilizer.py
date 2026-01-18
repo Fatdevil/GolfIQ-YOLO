@@ -31,7 +31,7 @@ class StabilizerConfig:
     base_gate: float = 20.0
     gate_radius_px: float = 30.0
     gate_speed_factor: float = 1.5
-    unknown_speed_px_per_frame: float = 18.0
+    unknown_speed_px_per_frame: float | None = None
     max_gate_px: float | None = None
     ema_alpha: float = 0.45
     min_conf: float = 0.35
@@ -140,7 +140,13 @@ def _selection_gate_radius(
     speed_known: bool,
 ) -> float:
     if not speed_known or speed_px_per_frame <= 0.0:
-        gate = cfg.base_gate + cfg.unknown_speed_px_per_frame * dt
+        # Preserve legacy behavior: default unknown-speed growth to max_px_per_frame.
+        effective_unknown = (
+            cfg.unknown_speed_px_per_frame
+            if cfg.unknown_speed_px_per_frame is not None
+            else cfg.max_px_per_frame
+        )
+        gate = cfg.base_gate + effective_unknown * dt
         return _cap_gate_radius(gate, cfg)
     adaptive = cfg.base_gate + cfg.gate_speed_factor * speed_px_per_frame * dt
     return _cap_gate_radius(max(cfg.gate_radius_px, adaptive), cfg)
@@ -536,9 +542,8 @@ def stabilizer_config_from_env() -> StabilizerConfig:
         base_gate=_env_float("TRACK_BASE_GATE_PX", 20.0),
         gate_radius_px=_env_float("TRACK_GATE_RADIUS_PX", 30.0),
         gate_speed_factor=_env_float("TRACK_GATE_SPEED_FACTOR", 1.5),
-        unknown_speed_px_per_frame=_env_float(
-            "TRACK_UNKNOWN_SPEED_PX_PER_FRAME",
-            18.0,
+        unknown_speed_px_per_frame=_env_optional_float(
+            "TRACK_UNKNOWN_SPEED_PX_PER_FRAME"
         ),
         max_gate_px=_env_optional_float("TRACK_MAX_GATE_PX"),
         ema_alpha=_env_float("TRACK_SMOOTHING_ALPHA", 0.45),
