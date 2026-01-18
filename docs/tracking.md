@@ -37,13 +37,17 @@ The HUD status chip mirrors this evaluation so operators can identify when recal
 
 The pipeline applies a lightweight ball tracking stabilizer after raw per-frame detections and before calibration/metrics. The stabilizer smooths jitter with an EMA, fills short gaps, and can optionally re-link short segments when motion is plausible. Interpolated points are flagged with `is_interpolated=True` on the `TrackPoint` data. This keeps downstream calibration robust while preserving frame index semantics for timing-aware steps.
 
+When multiple detections exist in the same frame, the stabilizer predicts the next ball position from recent trackpoints and selects the closest detection within a configurable gate. This prevents the track from jumping to distant high-confidence false positives. If no detection falls inside the gate, it falls back to the highest-confidence candidate and records a fallback counter for diagnostics.
+
 ### Tuning knobs
 
 The stabilizer is configured through `StabilizerConfig` (and matching environment overrides):
 
 * `max_gap_frames` – maximum number of consecutive missing frames to fill via interpolation.
 * `max_px_per_frame` – speed gate for outlier rejection (scaled by frame delta).
-* `base_gate` – minimum distance gate for per-frame detection selection.
+* `base_gate` – minimum distance gate for stabilizer outlier rejection.
+* `gate_radius_px` – base radius for per-frame detection gating against the predicted position.
+* `gate_speed_factor` – multiplier for adaptive gate growth based on recent per-frame speed.
 * `ema_alpha` – smoothing factor (higher = less smoothing).
 * `min_conf` – minimum confidence to accept large jumps.
 * `link_max_distance` – distance gate for segment re-linking (scaled by gap length).

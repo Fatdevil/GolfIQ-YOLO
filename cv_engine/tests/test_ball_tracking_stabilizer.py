@@ -174,14 +174,42 @@ def test_detection_selection_prefers_predicted_path() -> None:
             ],
         ]
     )
-    config = StabilizerConfig(base_gate=8.0, max_px_per_frame=6.0)
+    config = StabilizerConfig(gate_radius_px=6.0, gate_speed_factor=1.2)
 
-    points = detections_to_track_points(detections, config)
+    debug: dict[str, int] = {}
+    points = detections_to_track_points(detections, config, debug=debug)
 
     assert len(points) == 3
     assert points[-1].frame_idx == 2
     assert points[-1].x_px == pytest.approx(4.0)
     assert points[-1].y_px == pytest.approx(0.0)
+    assert debug.get("detection_gate_fallbacks", 0) == 0
+
+
+def test_detection_selection_falls_back_outside_gate() -> None:
+    detections = _detections_with_choices(
+        [
+            (0.0, 0.0, 0.7),
+            (2.0, 0.0, 0.7),
+            [
+                (40.0, 40.0, 0.92),
+                (45.0, 45.0, 0.95),
+            ],
+        ]
+    )
+    config = StabilizerConfig(
+        gate_radius_px=6.0,
+        gate_speed_factor=1.0,
+        fallback_max_distance=120.0,
+    )
+
+    debug: dict[str, int] = {}
+    points = detections_to_track_points(detections, config, debug=debug)
+
+    assert len(points) == 3
+    assert points[-1].x_px == pytest.approx(45.0)
+    assert points[-1].y_px == pytest.approx(45.0)
+    assert debug.get("detection_gate_fallbacks", 0) == 1
 
 
 def test_detection_selection_rejects_far_fallback() -> None:
@@ -193,8 +221,8 @@ def test_detection_selection_rejects_far_fallback() -> None:
         ]
     )
     config = StabilizerConfig(
-        base_gate=5.0,
-        max_px_per_frame=3.0,
+        gate_radius_px=5.0,
+        gate_speed_factor=1.0,
         fallback_max_distance=20.0,
     )
 

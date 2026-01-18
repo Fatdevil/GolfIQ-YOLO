@@ -29,6 +29,8 @@ class StabilizerConfig:
     max_gap_frames: int = 4
     max_px_per_frame: float = 80.0
     base_gate: float = 20.0
+    gate_radius_px: float = 30.0
+    gate_speed_factor: float = 1.5
     ema_alpha: float = 0.45
     min_conf: float = 0.35
     link_max_distance: float = 120.0
@@ -112,23 +114,58 @@ def _gate_radius(dt: int, cfg: StabilizerConfig) -> float:
     return cfg.base_gate + cfg.max_px_per_frame * dt
 
 
+def _selection_gate_radius(
+    *,
+    speed_px_per_frame: float,
+    dt: int,
+    cfg: StabilizerConfig,
+) -> float:
+    adaptive = cfg.gate_speed_factor * speed_px_per_frame * dt
+    return max(cfg.gate_radius_px, adaptive)
+
+
+def _predict_next_xy(
+    points: Sequence[TrackPoint],
+    *,
+    frame_index: int,
+) -> tuple[Point | None, float, int]:
+    if not points:
+        return None, 0.0, 1
+    last = points[-1]
+    dt = max(frame_index - last.frame_idx, 1)
+    if len(points) < 2:
+        return (last.x_px, last.y_px), 0.0, dt
+
+    prev = points[-2]
+    prev_dt = max(last.frame_idx - prev.frame_idx, 1)
+    velocity = (
+        (last.x_px - prev.x_px) / prev_dt,
+        (last.y_px - prev.y_px) / prev_dt,
+    )
+    predicted = (
+        last.x_px + velocity[0] * dt,
+        last.y_px + velocity[1] * dt,
+    )
+    speed = (velocity[0] ** 2 + velocity[1] ** 2) ** 0.5
+    return predicted, speed, dt
+
+
 def _select_detection(
     detections: Sequence[BallDetection],
     *,
     predicted: Point | None,
-    dt: int,
     cfg: StabilizerConfig,
-) -> BallDetection | None:
+    gate_radius_px: float,
+) -> tuple[BallDetection | None, bool]:
     if not detections:
-        return None
+        return None, False
 
     ordered = sorted(detections, key=lambda det: (-det.confidence, det.x, det.y))
     if predicted is None:
-        return ordered[0]
+        return ordered[0], False
 
     distances = {det: _distance_detection(det, predicted) for det in ordered}
-    gate = _gate_radius(dt, cfg)
-    in_gate = [det for det in ordered if distances[det] <= gate]
+    in_gate = [det for det in ordered if distances[det] <= gate_radius_px]
 
     def score(det: BallDetection) -> tuple[float, float, float, float, float]:
         dist = distances[det]
@@ -136,50 +173,49 @@ def _select_detection(
         return (combined, dist, -det.confidence, det.x, det.y)
 
     if in_gate:
-        return min(in_gate, key=score)
+        return min(in_gate, key=score), False
 
     best = ordered[0]
     if distances[best] <= cfg.fallback_max_distance:
-        return best
-    return None
+        return best, True
+    return None, False
 
 
 def detections_to_track_points(
     detections_per_frame: Sequence[Sequence[BallDetection]],
     cfg: StabilizerConfig | None = None,
+    *,
+    debug: dict[str, int] | None = None,
 ) -> list[TrackPoint]:
     cfg = cfg or StabilizerConfig()
     points: list[TrackPoint] = []
-    last_point: TrackPoint | None = None
-    prev_point: TrackPoint | None = None
     for frame_index, detections in enumerate(detections_per_frame):
         if not detections:
             continue
-        predicted: Point | None = None
-        dt = 1
-        if last_point is not None:
-            dt = max(frame_index - last_point.frame_idx, 1)
-            if prev_point is not None:
-                prev_dt = max(last_point.frame_idx - prev_point.frame_idx, 1)
-                velocity = (
-                    (last_point.x_px - prev_point.x_px) / prev_dt,
-                    (last_point.y_px - prev_point.y_px) / prev_dt,
-                )
-                predicted = (
-                    last_point.x_px + velocity[0] * dt,
-                    last_point.y_px + velocity[1] * dt,
-                )
-            else:
-                predicted = (last_point.x_px, last_point.y_px)
 
-        best = _select_detection(
+        predicted, speed, dt = _predict_next_xy(points, frame_index=frame_index)
+        gate_radius_px = (
+            _selection_gate_radius(speed_px_per_frame=speed, dt=dt, cfg=cfg)
+            if predicted is not None
+            else cfg.gate_radius_px
+        )
+
+        best, fell_back = _select_detection(
             detections,
             predicted=predicted,
-            dt=dt,
             cfg=cfg,
+            gate_radius_px=gate_radius_px,
         )
         if best is None:
             continue
+        if fell_back and debug is not None:
+            debug["detection_gate_fallbacks"] = (
+                debug.get(
+                    "detection_gate_fallbacks",
+                    0,
+                )
+                + 1
+            )
         points.append(
             TrackPoint(
                 frame_idx=frame_index,
@@ -188,8 +224,6 @@ def detections_to_track_points(
                 confidence=best.confidence,
             )
         )
-        prev_point = last_point
-        last_point = points[-1]
     return points
 
 
@@ -470,6 +504,8 @@ def stabilizer_config_from_env() -> StabilizerConfig:
             _env_float("TRACK_GATING_DISTANCE_PX", 90.0),
         ),
         base_gate=_env_float("TRACK_BASE_GATE_PX", 20.0),
+        gate_radius_px=_env_float("TRACK_GATE_RADIUS_PX", 30.0),
+        gate_speed_factor=_env_float("TRACK_GATE_SPEED_FACTOR", 1.5),
         ema_alpha=_env_float("TRACK_SMOOTHING_ALPHA", 0.45),
         min_conf=_env_float("TRACK_MIN_CONF", 0.35),
         link_max_distance=_env_float(
