@@ -119,8 +119,11 @@ def _selection_gate_radius(
     speed_px_per_frame: float,
     dt: int,
     cfg: StabilizerConfig,
+    speed_known: bool,
 ) -> float:
-    adaptive = cfg.gate_speed_factor * speed_px_per_frame * dt
+    if not speed_known or speed_px_per_frame <= 0.0:
+        return _gate_radius(dt, cfg)
+    adaptive = cfg.base_gate + cfg.gate_speed_factor * speed_px_per_frame * dt
     return max(cfg.gate_radius_px, adaptive)
 
 
@@ -128,13 +131,13 @@ def _predict_next_xy(
     points: Sequence[TrackPoint],
     *,
     frame_index: int,
-) -> tuple[Point | None, float, int]:
+) -> tuple[Point | None, float, int, bool]:
     if not points:
-        return None, 0.0, 1
+        return None, 0.0, 1, False
     last = points[-1]
     dt = max(frame_index - last.frame_idx, 1)
     if len(points) < 2:
-        return (last.x_px, last.y_px), 0.0, dt
+        return (last.x_px, last.y_px), 0.0, dt, False
 
     prev = points[-2]
     prev_dt = max(last.frame_idx - prev.frame_idx, 1)
@@ -147,7 +150,7 @@ def _predict_next_xy(
         last.y_px + velocity[1] * dt,
     )
     speed = (velocity[0] ** 2 + velocity[1] ** 2) ** 0.5
-    return predicted, speed, dt
+    return predicted, speed, dt, True
 
 
 def _select_detection(
@@ -193,9 +196,17 @@ def detections_to_track_points(
         if not detections:
             continue
 
-        predicted, speed, dt = _predict_next_xy(points, frame_index=frame_index)
+        predicted, speed, dt, speed_known = _predict_next_xy(
+            points,
+            frame_index=frame_index,
+        )
         gate_radius_px = (
-            _selection_gate_radius(speed_px_per_frame=speed, dt=dt, cfg=cfg)
+            _selection_gate_radius(
+                speed_px_per_frame=speed,
+                dt=dt,
+                cfg=cfg,
+                speed_known=speed_known,
+            )
             if predicted is not None
             else cfg.gate_radius_px
         )

@@ -212,6 +212,29 @@ def test_detection_selection_falls_back_outside_gate() -> None:
     assert debug.get("detection_gate_fallbacks", 0) == 1
 
 
+def test_detection_selection_expands_gate_with_single_history_point() -> None:
+    detections = [
+        [BallDetection(0.0, 0.0, 0.8)],
+        [],
+        [],
+        [],
+        [BallDetection(120.0, 0.0, 0.85)],
+    ]
+    config = StabilizerConfig(
+        base_gate=20.0,
+        max_px_per_frame=30.0,
+        gate_radius_px=6.0,
+        gate_speed_factor=1.0,
+        fallback_max_distance=80.0,
+    )
+
+    points = detections_to_track_points(detections, config)
+
+    assert [pt.frame_idx for pt in points] == [0, 4]
+    assert points[-1].x_px == pytest.approx(120.0)
+    assert points[-1].y_px == pytest.approx(0.0)
+
+
 def test_detection_selection_rejects_far_fallback() -> None:
     detections = _detections_from_points(
         [

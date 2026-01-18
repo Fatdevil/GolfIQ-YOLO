@@ -54,4 +54,6 @@ The stabilizer is configured through `StabilizerConfig` (and matching environmen
 * `dist_weight` / `conf_weight` – scoring weights when choosing between multiple in-gate detections.
 * `fallback_max_distance` – maximum distance for fallback selection when no candidates are in gate.
 
+When only one historical point is available (unknown speed), the per-frame selection gate expands using `base_gate + max_px_per_frame * dt` to allow reacquisition after gaps. With a known speed, the gate expands as `base_gate + gate_speed_factor * speed * dt`, and `gate_radius_px` acts as the minimum radius floor.
+
 Frame indices remain monotonic and are used to compute gaps; keep them aligned with the original frame ordering when providing detections.
