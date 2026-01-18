@@ -20,6 +20,21 @@ minimal and CI-safe: no heavy inference or external dependencies beyond numpy.
 - Spin/curve modeling.
 - Any UI rendering or mobile-side changes.
 
+## Calibration v1 (calibration_v1)
+The `calibration_v1` module is a minimal, deterministic estimator used for product
+demos. It focuses on the earliest part of ball flight to provide a stable
+pixel→meter scale, launch window selection, and a simple trajectory fit. It does
+not infer spin, wind, or curvature, and it assumes 2D motion.
+
+Inputs that improve accuracy:
+- `metersPerPixel` or `scalePxPerMeter` (best accuracy).
+- `referenceDistanceM` + `referencePointsPx` (two points with known distance).
+- Future UI can supply a known target line to tighten azimuth.
+
+Confidence reasons include fallback scale usage, insufficient points, gaps in the
+launch window, or poor fit residuals. These are intended to guide demo operators
+on when calibration outputs are only approximate.
+
 ## Required inputs
 Calibration v1 requires:
 - `scalePxPerMeter` (preferred) or `metersPerPixel`

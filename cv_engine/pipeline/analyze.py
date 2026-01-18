@@ -12,6 +12,7 @@ from cv_engine.calibration.homography import (
     to_ground_plane,
 )
 from cv_engine.calibration.types import TrackPoint
+from cv_engine.calibration.calibration_v1 import CalibrationV1Config, calibrate_v1
 from cv_engine.calibration.v1 import CalibrationConfig, calibrated_metrics
 from cv_engine.capture.quality import analyze_capture_quality
 from cv_engine.explain.diagnostics import build_explain_result
@@ -464,6 +465,31 @@ def analyze_frames(
                 calibration_track_points, calibration
             )
             metrics["calibrated"] = calibration_payload
+        meters_per_pixel_v1 = None
+        if calibration is not None:
+            if calibration.meters_per_pixel is not None:
+                meters_per_pixel_v1 = calibration.meters_per_pixel
+            elif calibration.scale_px_per_meter:
+                meters_per_pixel_v1 = 1.0 / calibration.scale_px_per_meter
+        calibration_v1_config = CalibrationV1Config(
+            meters_per_pixel=meters_per_pixel_v1,
+            reference_distance_m=(
+                calibration.reference_distance_m if calibration is not None else None
+            ),
+            reference_points_px=(
+                calibration.reference_points_px if calibration is not None else None
+            ),
+        )
+        calibration_v1_fps = (
+            calibration.camera_fps
+            if calibration is not None and calibration.camera_fps is not None
+            else calib.fps
+        )
+        metrics["calibration_v1"] = calibrate_v1(
+            calibration_track_points,
+            fps=calibration_v1_fps,
+            config=calibration_v1_config,
+        )
 
         impact_start = perf_counter()
         with span("cv.pipeline.impact"):

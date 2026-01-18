@@ -4,6 +4,10 @@ import random
 from cv_engine.calibration.launch_window import LaunchWindowConfig, detect_launch_window
 from cv_engine.calibration.scale import points_px_to_meters, resolve_scale
 from cv_engine.calibration.trajectory_fit import fit_trajectory
+from cv_engine.calibration.calibration_v1 import (
+    CalibrationV1Config,
+    calibrate_v1,
+)
 from cv_engine.calibration.types import CalibrationConfig, TrackPoint
 from cv_engine.calibration.v1 import calibrated_metrics
 
@@ -94,3 +98,81 @@ def test_calibration_fallback_with_missing_scale():
     metrics = calibrated_metrics(track, config)
     assert metrics["enabled"] is False
     assert "calibration_missing" in metrics["quality"]["reasonCodes"]
+
+
+def test_calibration_v1_perfect_parabola_fit():
+    fps = 120.0
+    scale_px_per_meter = 100.0
+    vx = 35.0
+    vy = 18.0
+    track = _synthetic_track(
+        vx=vx,
+        vy=vy,
+        fps=fps,
+        scale_px_per_meter=scale_px_per_meter,
+        frames=16,
+    )
+    result = calibrate_v1(
+        track,
+        fps=fps,
+        config=CalibrationV1Config(meters_per_pixel=1 / scale_px_per_meter),
+    )
+    assert result["status"] == "ok"
+    expected_angle = math.degrees(math.atan2(vy, vx))
+    expected_carry = vx * (2 * vy / 9.81)
+    assert math.isclose(
+        result["fit"]["launch_angle_deg"] or 0.0, expected_angle, rel_tol=0.05
+    )
+    assert math.isclose(
+        result["fit"]["carry_m_est"] or 0.0, expected_carry, rel_tol=0.1
+    )
+
+
+def test_calibration_v1_handles_small_gap():
+    fps = 120.0
+    scale_px_per_meter = 90.0
+    track = _synthetic_track(
+        vx=28.0,
+        vy=13.0,
+        fps=fps,
+        scale_px_per_meter=scale_px_per_meter,
+        frames=14,
+        gap_start=6,
+        gap_len=1,
+    )
+    result = calibrate_v1(
+        track,
+        fps=fps,
+        config=CalibrationV1Config(meters_per_pixel=1 / scale_px_per_meter),
+    )
+    assert result["status"] == "ok"
+    assert result["launch_window"]["n_points"] >= 6
+
+
+def test_calibration_v1_insufficient_points():
+    track = _synthetic_track(
+        vx=20.0,
+        vy=10.0,
+        fps=120.0,
+        scale_px_per_meter=80.0,
+        frames=4,
+    )
+    result = calibrate_v1(
+        track,
+        fps=120.0,
+        config=CalibrationV1Config(meters_per_pixel=1 / 80.0),
+    )
+    assert result["status"] == "insufficient_data"
+
+
+def test_calibration_v1_fallback_scale_low_confidence():
+    track = _synthetic_track(
+        vx=22.0,
+        vy=11.0,
+        fps=120.0,
+        scale_px_per_meter=85.0,
+        frames=12,
+    )
+    result = calibrate_v1(track, fps=120.0, config=CalibrationV1Config())
+    assert result["status"] == "low_confidence"
+    assert "fallback_scale" in result["quality"]["reasons"]
