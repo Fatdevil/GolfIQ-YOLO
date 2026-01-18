@@ -26,6 +26,8 @@ class CalibrationV1Config:
     max_gap_frames: int = 2
     max_carry_m: float = 400.0
     min_confidence_score: float = 0.5
+    min_fit_r2: float = 0.8
+    max_fit_rmse_m: float = 0.1
 
 
 @dataclass(frozen=True)
@@ -51,7 +53,10 @@ class FitV1Result:
     launch_angle_deg: float | None
     carry_m_est: float | None
     apex_m_est: float | None
+    fit_r2: float | None
+    fit_rmse: float | None
     r2_or_residual: float | None
+    fit_metric: str | None
     n_fit_points: int
 
 
@@ -195,7 +200,10 @@ def _fit_trajectory(
             launch_angle_deg=None,
             carry_m_est=None,
             apex_m_est=None,
+            fit_r2=None,
+            fit_rmse=None,
             r2_or_residual=None,
+            fit_metric=None,
             n_fit_points=len(window_points),
         )
 
@@ -244,13 +252,16 @@ def _fit_trajectory(
                 if apex_val >= 0:
                     apex = float(apex_val)
 
-    r2_or_residual = r2 if r2 is not None else rmse
     return FitV1Result(
         azimuth_deg=azimuth_deg,
         launch_angle_deg=launch_angle_deg,
         carry_m_est=carry,
         apex_m_est=apex,
-        r2_or_residual=r2_or_residual,
+        fit_r2=r2,
+        fit_rmse=rmse,
+        # TODO: keep legacy field until downstream consumers migrate.
+        r2_or_residual=r2 if r2 is not None else rmse,
+        fit_metric="r2" if r2 is not None else "rmse",
         n_fit_points=len(points),
     )
 
@@ -284,6 +295,9 @@ def calibrate_v1(
                 "carry_m_est": None,
                 "apex_m_est": None,
                 "r2_or_residual": None,
+                "fit_metric": None,
+                "fit_r2": None,
+                "fit_rmse": None,
                 "n_fit_points": 0,
             },
             "quality": {
@@ -308,6 +322,9 @@ def calibrate_v1(
                 "carry_m_est": None,
                 "apex_m_est": None,
                 "r2_or_residual": None,
+                "fit_metric": None,
+                "fit_r2": None,
+                "fit_rmse": None,
                 "n_fit_points": 0,
             },
             "quality": {
@@ -348,9 +365,12 @@ def calibrate_v1(
     if max_gap > cfg.max_gap_frames:
         confidence_score -= 0.2
         reasons.append("gaps_in_window")
-    if fit.r2_or_residual is not None and fit.r2_or_residual < 0.8:
+    if fit.fit_r2 is not None and fit.fit_r2 < cfg.min_fit_r2:
         confidence_score -= 0.3
-        reasons.append("fit_residual_high")
+        reasons.append("fit_r2_low")
+    if fit.fit_rmse is not None and fit.fit_rmse > cfg.max_fit_rmse_m:
+        confidence_score -= 0.3
+        reasons.append("fit_rmse_high")
     if fit.n_fit_points < cfg.min_points + 2:
         confidence_score -= 0.1
         reasons.append("few_points")
@@ -376,6 +396,9 @@ def calibrate_v1(
             "carry_m_est": fit.carry_m_est,
             "apex_m_est": fit.apex_m_est,
             "r2_or_residual": fit.r2_or_residual,
+            "fit_metric": fit.fit_metric,
+            "fit_r2": fit.fit_r2,
+            "fit_rmse": fit.fit_rmse,
             "n_fit_points": fit.n_fit_points,
         },
         "quality": {
