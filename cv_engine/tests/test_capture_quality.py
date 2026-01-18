@@ -110,6 +110,22 @@ def test_guardrails_ball_lost_early_short_track():
     assert "ball_lost_early" in _guardrail_flags(result)
 
 
+def test_guardrails_ball_lost_early_deduped():
+    guardrails = CaptureGuardrails()
+    track_points = [TrackPoint(frame_idx=10, x_px=500.0, y_px=500.0) for _ in range(3)]
+    result = guardrails.evaluate(
+        frames=[_checkerboard() for _ in range(3)],
+        fps=240.0,
+        frame_size=(1000, 1000),
+        track_points=track_points,
+    )
+    assert list(result.capture_quality_flags).count("ball_lost_early") == 1
+    assert (
+        result.capture_quality_score
+        == 1.0 - guardrails.config.score_penalties["ball_lost_early"]
+    )
+
+
 def test_guardrails_score_improves_with_good_capture():
     guardrails = CaptureGuardrails()
     frames = [_checkerboard() for _ in range(10)]

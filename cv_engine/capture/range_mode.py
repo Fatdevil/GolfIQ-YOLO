@@ -176,6 +176,7 @@ class CaptureGuardrails:
                 )
             )
 
+        flags = _dedupe_preserve_order(flags)
         recommendations = _recommendations_for(flags, self.config)
         score = _score_from_flags(flags, self.config)
 
@@ -330,3 +331,14 @@ def _score_from_flags(flags: Sequence[str], config: CaptureGuardrailsConfig) -> 
     for flag in flags:
         score -= config.score_penalties.get(flag, 0.1)
     return max(0.0, min(1.0, score))
+
+
+def _dedupe_preserve_order(flags: Sequence[str]) -> list[str]:
+    seen: set[str] = set()
+    deduped: list[str] = []
+    for flag in flags:
+        if flag in seen:
+            continue
+        seen.add(flag)
+        deduped.append(flag)
+    return deduped
