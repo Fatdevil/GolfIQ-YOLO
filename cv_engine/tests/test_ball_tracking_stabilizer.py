@@ -8,6 +8,7 @@ from cv_engine.calibration.types import TrackPoint
 from cv_engine.tracking.stabilizer import (
     BallDetection,
     StabilizerConfig,
+    _selection_gate_radius,
     detections_to_track_points,
     stabilize_ball_track,
 )
@@ -222,9 +223,9 @@ def test_detection_selection_expands_gate_with_single_history_point() -> None:
     ]
     config = StabilizerConfig(
         base_gate=20.0,
-        max_px_per_frame=30.0,
         gate_radius_px=6.0,
         gate_speed_factor=1.0,
+        unknown_speed_px_per_frame=30.0,
         fallback_max_distance=80.0,
     )
 
@@ -252,3 +253,69 @@ def test_detection_selection_rejects_far_fallback() -> None:
     points = detections_to_track_points(detections, config)
 
     assert [pt.frame_idx for pt in points] == [0, 1]
+
+
+def test_gate_grows_with_dt_for_unknown_speed() -> None:
+    config = StabilizerConfig(base_gate=20.0, unknown_speed_px_per_frame=15.0)
+
+    gate_short = _selection_gate_radius(
+        speed_px_per_frame=0.0,
+        dt=1,
+        cfg=config,
+        speed_known=False,
+    )
+    gate_long = _selection_gate_radius(
+        speed_px_per_frame=0.0,
+        dt=10,
+        cfg=config,
+        speed_known=False,
+    )
+
+    assert gate_long > gate_short
+    assert gate_short > config.base_gate
+
+
+def test_reacquisition_after_gap_uses_expanded_gate() -> None:
+    detections = [
+        [BallDetection(0.0, 0.0, 0.9)],
+        [],
+        [],
+        [],
+        [],
+        [],
+        [],
+        [],
+        [],
+        [],
+        [BallDetection(120.0, 0.0, 0.8)],
+    ]
+    config = StabilizerConfig(
+        base_gate=20.0,
+        gate_radius_px=25.0,
+        gate_speed_factor=1.0,
+        unknown_speed_px_per_frame=12.0,
+        fallback_max_distance=60.0,
+    )
+
+    points = detections_to_track_points(detections, config)
+
+    assert [pt.frame_idx for pt in points] == [0, 10]
+    assert points[-1].x_px == pytest.approx(120.0)
+
+
+def test_speed_known_gate_uses_velocity_logic() -> None:
+    config = StabilizerConfig(
+        base_gate=20.0,
+        gate_radius_px=30.0,
+        gate_speed_factor=2.0,
+        unknown_speed_px_per_frame=200.0,
+    )
+
+    gate = _selection_gate_radius(
+        speed_px_per_frame=8.0,
+        dt=3,
+        cfg=config,
+        speed_known=True,
+    )
+
+    assert gate == pytest.approx(68.0)

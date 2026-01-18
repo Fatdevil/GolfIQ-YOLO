@@ -31,6 +31,8 @@ class StabilizerConfig:
     base_gate: float = 20.0
     gate_radius_px: float = 30.0
     gate_speed_factor: float = 1.5
+    unknown_speed_px_per_frame: float = 18.0
+    max_gate_px: float | None = None
     ema_alpha: float = 0.45
     min_conf: float = 0.35
     link_max_distance: float = 120.0
@@ -91,6 +93,16 @@ def _env_int(name: str, default: int) -> int:
         return default
 
 
+def _env_optional_float(name: str) -> float | None:
+    raw = os.getenv(name)
+    if raw is None:
+        return None
+    try:
+        return float(raw)
+    except ValueError:
+        return None
+
+
 def compute_jitter_px(points: Sequence[Point]) -> float:
     if len(points) < 3:
         return 0.0
@@ -114,6 +126,12 @@ def _gate_radius(dt: int, cfg: StabilizerConfig) -> float:
     return cfg.base_gate + cfg.max_px_per_frame * dt
 
 
+def _cap_gate_radius(radius_px: float, cfg: StabilizerConfig) -> float:
+    if cfg.max_gate_px is None:
+        return radius_px
+    return min(cfg.max_gate_px, radius_px)
+
+
 def _selection_gate_radius(
     *,
     speed_px_per_frame: float,
@@ -122,9 +140,10 @@ def _selection_gate_radius(
     speed_known: bool,
 ) -> float:
     if not speed_known or speed_px_per_frame <= 0.0:
-        return _gate_radius(dt, cfg)
+        gate = cfg.base_gate + cfg.unknown_speed_px_per_frame * dt
+        return _cap_gate_radius(gate, cfg)
     adaptive = cfg.base_gate + cfg.gate_speed_factor * speed_px_per_frame * dt
-    return max(cfg.gate_radius_px, adaptive)
+    return _cap_gate_radius(max(cfg.gate_radius_px, adaptive), cfg)
 
 
 def _predict_next_xy(
@@ -517,6 +536,11 @@ def stabilizer_config_from_env() -> StabilizerConfig:
         base_gate=_env_float("TRACK_BASE_GATE_PX", 20.0),
         gate_radius_px=_env_float("TRACK_GATE_RADIUS_PX", 30.0),
         gate_speed_factor=_env_float("TRACK_GATE_SPEED_FACTOR", 1.5),
+        unknown_speed_px_per_frame=_env_float(
+            "TRACK_UNKNOWN_SPEED_PX_PER_FRAME",
+            18.0,
+        ),
+        max_gate_px=_env_optional_float("TRACK_MAX_GATE_PX"),
         ema_alpha=_env_float("TRACK_SMOOTHING_ALPHA", 0.45),
         min_conf=_env_float("TRACK_MIN_CONF", 0.35),
         link_max_distance=_env_float(
