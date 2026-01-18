@@ -1,6 +1,8 @@
 import numpy as np
 
+from cv_engine.calibration.types import TrackPoint
 from cv_engine.capture.quality import analyze_capture_quality
+from cv_engine.capture.range_mode import CaptureGuardrails
 
 
 def _checkerboard(size: int = 720, tile: int = 16) -> np.ndarray:
@@ -73,3 +75,68 @@ def test_report_serialization():
     assert isinstance(data["summary"], dict)
     assert isinstance(data["issues"], list)
     assert isinstance(data["recommendations"], list)
+
+
+def _guardrail_flags(result) -> set[str]:
+    return set(result.capture_quality_flags)
+
+
+def test_guardrails_fps_low_from_timestamps():
+    guardrails = CaptureGuardrails()
+    timestamps = [0.0, 1.0 / 30.0, 2.0 / 30.0]
+    result = guardrails.evaluate(frame_timestamps=timestamps, fps=240.0)
+    assert "fps_low" in _guardrail_flags(result)
+
+
+def test_guardrails_blur_high_on_synthetic_blur():
+    guardrails = CaptureGuardrails()
+    sharp = _checkerboard()
+    blurred = _box_blur(_box_blur(_box_blur(_box_blur(sharp))))
+    result = guardrails.evaluate(frames=[blurred for _ in range(6)], fps=240.0)
+    assert "blur_high" in _guardrail_flags(result)
+
+
+def test_guardrails_ball_lost_early_short_track():
+    guardrails = CaptureGuardrails()
+    track_points = [
+        TrackPoint(frame_idx=idx, x_px=500.0, y_px=500.0) for idx in range(4)
+    ]
+    result = guardrails.evaluate(
+        frames=[_checkerboard() for _ in range(4)],
+        fps=240.0,
+        frame_size=(1000, 1000),
+        track_points=track_points,
+    )
+    assert "ball_lost_early" in _guardrail_flags(result)
+
+
+def test_guardrails_ball_lost_early_deduped():
+    guardrails = CaptureGuardrails()
+    track_points = [TrackPoint(frame_idx=10, x_px=500.0, y_px=500.0) for _ in range(3)]
+    result = guardrails.evaluate(
+        frames=[_checkerboard() for _ in range(3)],
+        fps=240.0,
+        frame_size=(1000, 1000),
+        track_points=track_points,
+    )
+    assert list(result.capture_quality_flags).count("ball_lost_early") == 1
+    assert (
+        result.capture_quality_score
+        == 1.0 - guardrails.config.score_penalties["ball_lost_early"]
+    )
+
+
+def test_guardrails_score_improves_with_good_capture():
+    guardrails = CaptureGuardrails()
+    frames = [_checkerboard() for _ in range(10)]
+    track_points = [
+        TrackPoint(frame_idx=idx, x_px=500.0, y_px=500.0) for idx in range(10)
+    ]
+    result = guardrails.evaluate(
+        frames=frames,
+        fps=240.0,
+        frame_size=(1000, 1000),
+        track_points=track_points,
+    )
+    assert result.capture_quality_score >= 0.9
+    assert not _guardrail_flags(result)

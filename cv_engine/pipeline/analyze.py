@@ -15,6 +15,7 @@ from cv_engine.calibration.types import TrackPoint
 from cv_engine.calibration.calibration_v1 import CalibrationV1Config, calibrate_v1
 from cv_engine.calibration.v1 import CalibrationConfig, calibrated_metrics
 from cv_engine.capture.quality import analyze_capture_quality
+from cv_engine.capture.range_mode import CaptureGuardrails
 from cv_engine.explain.diagnostics import build_explain_result
 from cv_engine.metrics.angle import compute_side_angle
 from cv_engine.metrics.carry_v1 import estimate_carry
@@ -75,6 +76,7 @@ def analyze_frames(
 
     frames_list = list(frames)
     capture_quality_report = analyze_capture_quality(frames_list, fps=calib.fps)
+    guardrails = CaptureGuardrails()
 
     det = get_detection_engine(
         mock=(mock if mock is not None else False),
@@ -300,6 +302,7 @@ def analyze_frames(
         if det.mock:
             ball_stabilizer = replace(ball_stabilizer, ema_alpha=1.0)
         stabilized_track = None
+        track_points: list[TrackPoint] = []
         try:
             detections_per_frame = [
                 [BallDetection.from_box(box) for box in ball_boxes]
@@ -348,6 +351,22 @@ def analyze_frames(
                 tracking_diagnostics["detection_gate_fallbacks"] = gate_debug[
                     "detection_gate_fallbacks"
                 ]
+
+        track_points_for_guardrails = (
+            list(stabilized_track.points)
+            if stabilized_track is not None and stabilized_track.points
+            else track_points
+        )
+        capture_guardrails = guardrails.evaluate(
+            frames=frames_list,
+            fps=calib.fps,
+            frame_size=(
+                (frames_list[0].shape[1], frames_list[0].shape[0])
+                if frames_list
+                else None
+            ),
+            track_points=track_points_for_guardrails,
+        )
 
         pose_start = perf_counter()
         with span(
@@ -540,7 +559,10 @@ def analyze_frames(
                 metrics["sequence"] = sequence_metrics
             if faceon_metrics is not None:
                 metrics["faceon"] = faceon_metrics
-            metrics["capture_quality"] = capture_quality_report.to_dict()
+            metrics["capture_quality"] = {
+                **capture_quality_report.to_dict(),
+                "range_mode": capture_guardrails.to_dict(),
+            }
         persist_ms = (perf_counter() - postproc_start) * 1000.0
         timings["persist_ms"] = persist_ms
         record_stage_latency("persist", persist_ms)
