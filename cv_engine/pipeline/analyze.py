@@ -304,9 +304,11 @@ def analyze_frames(
                 [BallDetection.from_box(box) for box in ball_boxes]
                 for ball_boxes in ball_detections_per_frame
             ]
+            gate_debug: dict[str, int] = {}
             track_points = detections_to_track_points(
                 detections_per_frame,
                 ball_stabilizer,
+                debug=gate_debug,
             )
             stabilized_track = stabilize_ball_track(
                 track_points,
@@ -315,6 +317,7 @@ def analyze_frames(
             )
         except Exception:
             stabilized_track = None
+            gate_debug = {}
 
         if stabilized_track is not None and stabilized_track.n_detections >= 2:
             ball_track_px = stabilized_track.as_points()
@@ -322,6 +325,10 @@ def analyze_frames(
                 id_switches=int(tracking_metrics.get("id_switches", 0) or 0),
                 stabilized=True,
             )
+            if gate_debug.get("detection_gate_fallbacks", 0):
+                tracking_diagnostics["detection_gate_fallbacks"] = gate_debug[
+                    "detection_gate_fallbacks"
+                ]
             missing_ball_frames = stabilized_track.n_missing
         else:
             ball_track_px = list(raw_ball_track_px)
@@ -336,6 +343,10 @@ def analyze_frames(
                 "id_switches": int(tracking_metrics.get("id_switches", 0) or 0),
                 "stabilized": False,
             }
+            if gate_debug.get("detection_gate_fallbacks", 0):
+                tracking_diagnostics["detection_gate_fallbacks"] = gate_debug[
+                    "detection_gate_fallbacks"
+                ]
 
         pose_start = perf_counter()
         with span(
