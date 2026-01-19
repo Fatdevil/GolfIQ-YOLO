@@ -56,6 +56,7 @@ To avoid rapid state changes across frames, the HUD uses hysteresis:
 - **Enter BLOCK:** Require N consecutive frames below the BLOCK threshold.
 - **Return to READY:** Require M consecutive frames above the READY threshold.
 - **WARN:** Used as the transition state while quality improves.
+- **Single-shot analysis:** The pipeline HUD payload disables hysteresis so a low score can immediately report BLOCK.
 
 ### Example HUD messages
 - READY: “Capture looks good”

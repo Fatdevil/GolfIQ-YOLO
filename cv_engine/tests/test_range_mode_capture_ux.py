@@ -51,6 +51,14 @@ def test_hud_hysteresis_blocks_after_consecutive_frames():
     assert second.state == RangeModeUXState.BLOCK
 
 
+def test_hud_single_eval_can_block_without_hysteresis():
+    hud = build_range_mode_hud(
+        _guardrails_result(0.4, ["fps_low"]),
+        apply_hysteresis=False,
+    )
+    assert hud.state == RangeModeUXState.BLOCK
+
+
 def test_hud_hysteresis_ready_requires_consecutive_frames():
     config = RangeModeHysteresisConfig(block_enter_frames=2, ready_enter_frames=2)
     start = build_range_mode_hud(
