@@ -215,8 +215,10 @@ def test_calibration_v1_rmse_threshold_triggers():
         config=CalibrationV1Config(
             meters_per_pixel=1 / scale_px_per_meter,
             max_fit_rmse_m=0.1,
+            fit_metric_override="rmse",
         ),
     )
+    assert result["fit"]["fit_metric"] == "rmse"
     assert "fit_rmse_high" in result["quality"]["reasons"]
     assert result["quality"]["confidence_score_0_1"] < 1.0
 

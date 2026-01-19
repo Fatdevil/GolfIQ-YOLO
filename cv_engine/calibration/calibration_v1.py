@@ -28,6 +28,7 @@ class CalibrationV1Config:
     min_confidence_score: float = 0.5
     min_fit_r2: float = 0.8
     max_fit_rmse_m: float = 0.1
+    fit_metric_override: str | None = None
 
 
 @dataclass(frozen=True)
@@ -224,6 +225,9 @@ def _fit_trajectory(
     ss_tot = float(np.sum((y_m - float(np.mean(y_m))) ** 2))
     r2 = None if ss_tot == 0 else 1 - ss_res / ss_tot
     rmse = float(np.sqrt(ss_res / len(y_m))) if len(y_m) else None
+    metric = "r2" if r2 is not None else "rmse"
+    if config.fit_metric_override in {"r2", "rmse"}:
+        metric = config.fit_metric_override
 
     launch_angle_deg = float(np.degrees(np.arctan2(b, vx))) if vx != 0 else None
     azimuth_deg = 0.0 if vx >= 0 else 180.0
@@ -260,8 +264,8 @@ def _fit_trajectory(
         fit_r2=r2,
         fit_rmse=rmse,
         # TODO: keep legacy field until downstream consumers migrate.
-        r2_or_residual=r2 if r2 is not None else rmse,
-        fit_metric="r2" if r2 is not None else "rmse",
+        r2_or_residual=r2 if metric == "r2" else rmse,
+        fit_metric=metric,
         n_fit_points=len(points),
     )
 
@@ -365,12 +369,15 @@ def calibrate_v1(
     if max_gap > cfg.max_gap_frames:
         confidence_score -= 0.2
         reasons.append("gaps_in_window")
-    if fit.fit_r2 is not None and fit.fit_r2 < cfg.min_fit_r2:
-        confidence_score -= 0.3
-        reasons.append("fit_r2_low")
-    if fit.fit_rmse is not None and fit.fit_rmse > cfg.max_fit_rmse_m:
-        confidence_score -= 0.3
-        reasons.append("fit_rmse_high")
+    if fit.fit_metric == "r2":
+        if fit.fit_r2 is not None and fit.fit_r2 < cfg.min_fit_r2:
+            confidence_score -= 0.3
+            reasons.append("fit_r2_low")
+    elif fit.fit_metric == "rmse":
+        # RMSE is lower-is-better, unlike R² which is higher-is-better.
+        if fit.fit_rmse is not None and fit.fit_rmse > cfg.max_fit_rmse_m:
+            confidence_score -= 0.3
+            reasons.append("fit_rmse_high")
     if fit.n_fit_points < cfg.min_points + 2:
         confidence_score -= 0.1
         reasons.append("few_points")
