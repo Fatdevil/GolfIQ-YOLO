@@ -18,6 +18,7 @@ from cv_engine.capture.quality import analyze_capture_quality
 from cv_engine.capture.range_mode import CaptureGuardrails
 from cv_engine.capture.range_mode_ux import build_range_mode_hud
 from cv_engine.explain.diagnostics import build_explain_result
+from cv_engine.explain.explain_result_v1 import build_explain_result_v1
 from cv_engine.metrics.angle import compute_side_angle
 from cv_engine.metrics.carry_v1 import estimate_carry
 from cv_engine.metrics.launch_mono import estimate_vertical_launch
@@ -609,6 +610,11 @@ def analyze_frames(
             "missing_ball_frames": missing_ball_frames,
             "ball_points": len(ball_track_px),
         },
+    )
+    metrics["explain_result"] = build_explain_result_v1(
+        capture_guardrails=capture_guardrails,
+        range_mode_hud=range_mode_hud,
+        calibration=metrics.get("calibration_v1"),
     )
 
     return {
