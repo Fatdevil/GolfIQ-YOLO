@@ -16,6 +16,7 @@ from cv_engine.calibration.calibration_v1 import CalibrationV1Config, calibrate_
 from cv_engine.calibration.v1 import CalibrationConfig, calibrated_metrics
 from cv_engine.capture.quality import analyze_capture_quality
 from cv_engine.capture.range_mode import CaptureGuardrails
+from cv_engine.capture.range_mode_ux import build_range_mode_hud
 from cv_engine.explain.diagnostics import build_explain_result
 from cv_engine.metrics.angle import compute_side_angle
 from cv_engine.metrics.carry_v1 import estimate_carry
@@ -559,9 +560,11 @@ def analyze_frames(
                 metrics["sequence"] = sequence_metrics
             if faceon_metrics is not None:
                 metrics["faceon"] = faceon_metrics
+            range_mode_hud = build_range_mode_hud(capture_guardrails)
             metrics["capture_quality"] = {
                 **capture_quality_report.to_dict(),
                 "range_mode": capture_guardrails.to_dict(),
+                "range_mode_hud": range_mode_hud.to_dict(),
             }
         persist_ms = (perf_counter() - postproc_start) * 1000.0
         timings["persist_ms"] = persist_ms
