@@ -54,9 +54,23 @@ def test_hud_hysteresis_blocks_after_consecutive_frames():
 def test_hud_single_eval_can_block_without_hysteresis():
     hud = build_range_mode_hud(
         _guardrails_result(0.4, ["fps_low"]),
-        apply_hysteresis=False,
+        single_eval=True,
     )
     assert hud.state == RangeModeUXState.BLOCK
+
+
+def test_hud_single_eval_preserves_warn_and_ready_states():
+    warn = build_range_mode_hud(
+        _guardrails_result(0.7, ["fps_low"]),
+        single_eval=True,
+    )
+    ready = build_range_mode_hud(
+        _guardrails_result(0.9, []),
+        single_eval=True,
+    )
+
+    assert warn.state == RangeModeUXState.WARN
+    assert ready.state == RangeModeUXState.READY
 
 
 def test_hud_hysteresis_ready_requires_consecutive_frames():

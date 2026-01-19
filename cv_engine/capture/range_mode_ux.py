@@ -108,13 +108,17 @@ def build_range_mode_hud(
         RangeModeHysteresisState | dict[str, object] | RangeModeHUD | None
     ) = None,
     apply_hysteresis: bool = True,
+    single_eval: bool = False,
 ) -> RangeModeHUD:
     score_0_100, flags = _extract_guardrails(guardrails_result)
     config = hysteresis or RangeModeHysteresisConfig()
     raw_state = _score_to_state(score_0_100, config)
 
-    prev_state = _parse_last_state(last_state) if apply_hysteresis else None
-    if apply_hysteresis:
+    apply_hysteresis_effective = apply_hysteresis and not (
+        single_eval and last_state is None
+    )
+    prev_state = _parse_last_state(last_state) if apply_hysteresis_effective else None
+    if apply_hysteresis_effective:
         state, hysteresis_state = _apply_hysteresis(
             raw_state=raw_state,
             prev_state=prev_state,
@@ -145,7 +149,8 @@ def build_range_mode_hud(
         "score_0_100": score_0_100,
         "flags": list(flags),
         "hysteresis": hysteresis_state.to_dict(),
-        "apply_hysteresis": apply_hysteresis,
+        "apply_hysteresis": apply_hysteresis_effective,
+        "single_eval": single_eval,
     }
 
     return RangeModeHUD(
