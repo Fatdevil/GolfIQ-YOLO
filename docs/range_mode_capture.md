@@ -40,6 +40,29 @@ Range Mode produces a deterministic capture quality score and flags that help fi
 - **Flags:** Deterministic heuristics based on FPS, exposure/blur, and framing.
 - **Recommendations:** Short user-facing tips tied to each flag.
 
+## Range Mode capture HUD (Range Mode Capture UX v2)
+Range Mode surfaces a live HUD payload that converts guardrails output into actionable guidance.
+
+- **Score (0–100):** A user-facing score derived from the guardrail score.
+- **State machine:** READY / WARN / BLOCK.
+  - **READY (80–100):** Safe to start/keep recording.
+  - **WARN (55–79):** Recording is allowed, but fix the highlighted issues.
+  - **BLOCK (<55):** Recording should pause until capture conditions improve.
+- **Top issues:** Only the top 1–2 flags are shown to keep the UX focused.
+
+### Hysteresis (anti-flicker)
+To avoid rapid state changes across frames, the HUD uses hysteresis:
+
+- **Enter BLOCK:** Require N consecutive frames below the BLOCK threshold.
+- **Return to READY:** Require M consecutive frames above the READY threshold.
+- **WARN:** Used as the transition state while quality improves.
+- **Single-shot analysis:** The pipeline HUD payload disables hysteresis so a low score can immediately report BLOCK.
+
+### Example HUD messages
+- READY: “Capture looks good”
+- WARN: “Low frame rate” → action: “Switch to slow-mo (120–240 FPS).”
+- BLOCK: “Too much motion blur” → action: “Stabilize the phone or use faster shutter.”
+
 ## Range Mode flags → Tips mapping
 - **fps_low** → Record in slow-motion mode (120+ FPS minimum, 240 FPS ideal).
 - **blur_high** → Use faster shutter/lock exposure and stabilize the phone.
