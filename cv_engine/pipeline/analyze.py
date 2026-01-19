@@ -561,7 +561,8 @@ def analyze_frames(
             if faceon_metrics is not None:
                 metrics["faceon"] = faceon_metrics
             range_mode_hud = build_range_mode_hud(
-                capture_guardrails, apply_hysteresis=False
+                capture_guardrails,
+                single_eval=True,
             )
             metrics["capture_quality"] = {
                 **capture_quality_report.to_dict(),
