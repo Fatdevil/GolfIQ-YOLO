@@ -1,0 +1,12 @@
+{
+  "case_id": "block",
+  "description": "Very low FPS with dark, blurry frames to trigger a block state.",
+  "fps": 30,
+  "frame_count": 12,
+  "width": 64,
+  "height": 64,
+  "pattern": {
+    "type": "solid",
+    "value": 20
+  }
+}

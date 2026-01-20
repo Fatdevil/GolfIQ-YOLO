@@ -1,0 +1,343 @@
+{
+  "ballSpeedMps": 1.829,
+  "ball_speed_mph": 4.1,
+  "ball_speed_mps": 1.83,
+  "calibration_v1": {
+    "fit": {
+      "apex_m_est": null,
+      "azimuth_deg": 0.0,
+      "carry_m_est": null,
+      "fit_metric": "r2",
+      "fit_r2": 1.0,
+      "fit_rmse": 2.383707702181096e-17,
+      "launch_angle_deg": 26.565051177077983,
+      "n_fit_points": 12,
+      "r2_or_residual": 1.0
+    },
+    "launch_window": {
+      "end_frame": 11,
+      "n_points": 12,
+      "start_frame": 0
+    },
+    "quality": {
+      "confidence_score_0_1": 0.65,
+      "reasons": [
+        "fallback_scale"
+      ]
+    },
+    "status": "low_confidence",
+    "used_m_per_px": 0.0025
+  },
+  "capture_quality": {
+    "issues": [
+      {
+        "code": "LOW_FPS",
+        "details": {
+          "fps": 30.0,
+          "recommended": 120.0,
+          "warn_threshold": 60.0
+        },
+        "message": "Frame rate is too low for reliable tracking.",
+        "severity": "warn"
+      },
+      {
+        "code": "LOW_RESOLUTION",
+        "details": {
+          "height": 64,
+          "min_height": 720,
+          "recommended_height": 1080
+        },
+        "message": "Resolution is below the recommended minimum.",
+        "severity": "warn"
+      },
+      {
+        "code": "UNDEREXPOSED",
+        "details": {
+          "luma_threshold": 60.0,
+          "threshold": 0.3,
+          "underexposed_pct": 1.0
+        },
+        "message": "Video appears too dark for reliable tracking.",
+        "severity": "warn"
+      },
+      {
+        "code": "MOTION_BLUR",
+        "details": {
+          "blur_variance_mean": 0.0,
+          "blurry_pct": 1.0,
+          "laplacian_var_threshold": 200.0,
+          "threshold": 0.3
+        },
+        "message": "Video appears blurry; use a faster shutter or stabilize.",
+        "severity": "warn"
+      }
+    ],
+    "range_mode": {
+      "diagnostics": {
+        "brightness_bright_pct": 0.0,
+        "brightness_dark_pct": 1.0,
+        "brightness_mean": 20.0,
+        "effective_fps": 30.0,
+        "sharpness_blur_pct": 1.0,
+        "sharpness_mean": 0.0,
+        "track_edge_pct": 0.0,
+        "track_length": 12
+      },
+      "flags": [
+        "fps_low",
+        "exposure_too_dark",
+        "blur_high"
+      ],
+      "recommendations": [
+        "Record in slow-motion mode (120+ FPS minimum, 240 FPS ideal).",
+        "Increase lighting or move to a brighter area.",
+        "Use faster shutter/lock exposure and stabilize the phone."
+      ],
+      "score": 0.45
+    },
+    "range_mode_hud": {
+      "badges": [
+        "FPS",
+        "BLUR"
+      ],
+      "debug": {
+        "apply_hysteresis": false,
+        "flags": [
+          "fps_low",
+          "exposure_too_dark",
+          "blur_high"
+        ],
+        "hysteresis": {
+          "above_ready_count": 0,
+          "below_block_count": 0,
+          "state": "block"
+        },
+        "raw_state": "block",
+        "score_0_100": 45,
+        "single_eval": true
+      },
+      "primary_message": "Low frame rate",
+      "recommended_actions": [
+        "Switch to slow-mo (120\u2013240 FPS).",
+        "Stabilize the phone or use faster shutter."
+      ],
+      "score_0_100": 45,
+      "secondary_message": "Too much motion blur",
+      "state": "block"
+    },
+    "recommendations": [
+      "Enable slow-motion mode or increase capture FPS (120+ recommended).",
+      "Increase capture resolution (1080p+ recommended).",
+      "Improve lighting or move to a brighter area.",
+      "Use a faster shutter or stabilize the camera to reduce blur."
+    ],
+    "score": 40,
+    "summary": {
+      "blur_variance_mean": 0.0,
+      "blurry_pct": 1.0,
+      "fps": 30.0,
+      "frames": 12,
+      "overexposed_pct": 0.0,
+      "resolution": {
+        "height": 64,
+        "width": 64
+      },
+      "shake_diff_mean": 0.0,
+      "shaky_pct": 0.0,
+      "underexposed_pct": 1.0
+    }
+  },
+  "carryEstM": 0.02,
+  "carry_m": 0.0,
+  "clubSpeedMps": 0.043,
+  "club_path_deg": null,
+  "club_speed_mph": 0.1,
+  "club_speed_mps": 0.04,
+  "confidence": 0.0,
+  "explain": {
+    "confidence": 0.75,
+    "issues": [
+      {
+        "code": "fps_low",
+        "details": {
+          "error_below": 45.0,
+          "fps": 30.0
+        },
+        "message": "Capture FPS is below the recommended minimum.",
+        "severity": "error"
+      }
+    ],
+    "summary": "Confidence reduced: Capture FPS is below the recommended minimum."
+  },
+  "explain_result": {
+    "confidence": {
+      "label": "LOW",
+      "score": 0
+    },
+    "debug": {
+      "inputs_present": {
+        "calibration": true,
+        "guardrails": true,
+        "range_mode_hud": true
+      },
+      "signals_used": [
+        "fps_low",
+        "blur_high",
+        "exposure_too_dark"
+      ]
+    },
+    "version": "v1",
+    "what_to_do_now": [
+      {
+        "detail": "Enable slow-mo capture (120\u2013240 FPS).",
+        "id": "increase_fps",
+        "title": "Increase frame rate"
+      },
+      {
+        "detail": "Stabilize the phone or use faster shutter.",
+        "id": "reduce_blur",
+        "title": "Reduce blur"
+      },
+      {
+        "detail": "Brighten the hitting area and ball.",
+        "id": "improve_lighting",
+        "title": "Add lighting"
+      }
+    ],
+    "why_may_be_wrong": [
+      {
+        "detail": "Low FPS can miss the ball after impact.",
+        "id": "fps_low",
+        "title": "Low frame rate"
+      },
+      {
+        "detail": "Motion blur hides the ball in flight.",
+        "id": "blur_high",
+        "title": "Too much blur"
+      },
+      {
+        "detail": "The ball blends into a dark background.",
+        "id": "exposure_too_dark",
+        "title": "Too dark"
+      }
+    ]
+  },
+  "faceon": {
+    "frame": {
+      "h": 64,
+      "w": 64
+    },
+    "notes": "no-person-detected",
+    "shaft_lean_deg": 0.0,
+    "shoulder_tilt_deg": 0.0,
+    "sway_cm": 0.0,
+    "sway_px": 0.0
+  },
+  "inference": {
+    "avgInferenceMs": 0.0,
+    "frames": 12,
+    "modelVariant": "yolov10",
+    "totalInferenceMs": 0.0
+  },
+  "launch_deg": 88.1,
+  "metrics_version": 1,
+  "micro_coach": {
+    "debug": {
+      "deduped_tip_ids": [
+        "tip_fps_light",
+        "tip_stabilize_phone",
+        "tip_even_lighting"
+      ],
+      "inputs_present": {
+        "calibration": true,
+        "explain_result": true,
+        "range_mode_hud": true
+      },
+      "selected_rule_ids": [
+        "tip_fps_light",
+        "tip_stabilize_phone",
+        "tip_even_lighting"
+      ]
+    },
+    "enabled": true,
+    "tips": [
+      {
+        "detail": "\u00d6ka belysningen s\u00e5 kameran kan k\u00f6ra snabbare bildhastighet.",
+        "id": "tip_fps_light",
+        "priority": 1,
+        "source": {
+          "action_ids": [
+            "increase_fps"
+          ],
+          "confidence_label": "LOW",
+          "hud_flags": [
+            "fps_low"
+          ],
+          "reason_ids": [
+            "fps_low"
+          ]
+        },
+        "title": "Mer ljus f\u00f6r h\u00f6gre FPS"
+      },
+      {
+        "detail": "St\u00f6d mobilen och undvik panorering s\u00e5 bollen blir skarp.",
+        "id": "tip_stabilize_phone",
+        "priority": 1,
+        "source": {
+          "action_ids": [
+            "reduce_blur"
+          ],
+          "confidence_label": "LOW",
+          "hud_flags": [
+            "blur_high"
+          ],
+          "reason_ids": [
+            "blur_high"
+          ]
+        },
+        "title": "Stabilisera kameran"
+      },
+      {
+        "detail": "Flytta till j\u00e4mnare ljus s\u00e5 bollen syns tydligt.",
+        "id": "tip_even_lighting",
+        "priority": 2,
+        "source": {
+          "action_ids": [
+            "improve_lighting"
+          ],
+          "confidence_label": "LOW",
+          "hud_flags": [
+            "exposure_too_dark"
+          ],
+          "reason_ids": [
+            "exposure_too_dark"
+          ]
+        },
+        "title": "J\u00e4mnare ljus"
+      }
+    ],
+    "version": "v1"
+  },
+  "quality": {
+    "fps": "low",
+    "homography": "warn",
+    "lighting": "low"
+  },
+  "sideAngleDeg": 90.0,
+  "spin_axis_deg": null,
+  "spin_rpm": null,
+  "tracking": {
+    "filled_frames": 0,
+    "gap_ratio": 0.0,
+    "id_switches": 0,
+    "jitter_px": 0.0,
+    "max_gap": 0,
+    "n_detections": 12,
+    "n_frames": 12,
+    "n_missing": 0,
+    "outliers_removed": 0,
+    "segments_linked": 0,
+    "stabilized": true
+  },
+  "vertLaunchDeg": 0.0
+}
