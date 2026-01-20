@@ -17,6 +17,7 @@ from cv_engine.calibration.v1 import CalibrationConfig, calibrated_metrics
 from cv_engine.capture.quality import analyze_capture_quality
 from cv_engine.capture.range_mode import CaptureGuardrails
 from cv_engine.capture.range_mode_ux import build_range_mode_hud
+from cv_engine.coach import build_micro_coach_v1
 from cv_engine.explain.diagnostics import build_explain_result
 from cv_engine.explain.explain_result_v1 import build_explain_result_v1
 from cv_engine.metrics.angle import compute_side_angle
@@ -615,6 +616,15 @@ def analyze_frames(
         capture_guardrails=capture_guardrails,
         range_mode_hud=range_mode_hud,
         calibration=metrics.get("calibration_v1"),
+    )
+    metrics["micro_coach"] = build_micro_coach_v1(
+        explain_result=metrics.get("explain_result"),
+        range_mode_hud=metrics.get("capture_quality", {}).get("range_mode_hud")
+        or metrics.get("range_mode_hud"),
+        calibration=metrics.get("calibration")
+        or metrics.get("fit_v1")
+        or metrics.get("calibration_v1"),
+        max_tips=3,
     )
 
     return {
