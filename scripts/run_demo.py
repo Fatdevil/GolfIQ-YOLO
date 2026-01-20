@@ -16,6 +16,7 @@ DEMO_ASSETS = REPO_ROOT / "demo_assets"
 CASE_DIR = DEMO_ASSETS / "cases"
 GOLDEN_DIR = DEMO_ASSETS / "golden"
 DEFAULT_OUT_DIR = REPO_ROOT / "demo_out"
+DEMO_MODEL_VARIANT = "yolov10"
 
 _DEPS: tuple[object, object, object] | None = None
 
@@ -191,14 +192,22 @@ def run_demo_case(
     out_path: Path | None = None,
     verify: bool = False,
 ) -> dict[str, Any]:
-    np, CalibrationParams, analyze_frames = _load_pipeline_deps()
+    _, CalibrationParams, analyze_frames = _load_pipeline_deps()
     case = load_case(case_id)
     frames = build_frames(case)
     calib = CalibrationParams(
         m_per_px=float(case.get("m_per_px", 0.001)),
         fps=float(case.get("fps", 240.0)),
     )
-    result = analyze_frames(frames, calib, mock=True, smoothing_window=1)
+    # Demo Mode pins a mock-capable model variant to stay offline/deterministic
+    # regardless of MODEL_VARIANT environment settings.
+    result = analyze_frames(
+        frames,
+        calib,
+        mock=True,
+        smoothing_window=1,
+        model_variant=DEMO_MODEL_VARIANT,
+    )
     metrics = _normalize_metrics(result["metrics"])
 
     if out_path is None:
