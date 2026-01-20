@@ -6,20 +6,32 @@ import math
 import sys
 from dataclasses import asdict, is_dataclass
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    import numpy as np
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(REPO_ROOT))
-
-import numpy as np
-
-from cv_engine.metrics.kinematics import CalibrationParams
-from cv_engine.pipeline.analyze import analyze_frames
-
 DEMO_ASSETS = REPO_ROOT / "demo_assets"
 CASE_DIR = DEMO_ASSETS / "cases"
 GOLDEN_DIR = DEMO_ASSETS / "golden"
 DEFAULT_OUT_DIR = REPO_ROOT / "demo_out"
+
+_DEPS: tuple[object, object, object] | None = None
+
+
+def _load_pipeline_deps() -> tuple[object, object, object]:
+    global _DEPS
+    if _DEPS is not None:
+        return _DEPS
+    sys.path.insert(0, str(REPO_ROOT))
+    import numpy as np
+
+    from cv_engine.metrics.kinematics import CalibrationParams
+    from cv_engine.pipeline.analyze import analyze_frames
+
+    _DEPS = (np, CalibrationParams, analyze_frames)
+    return _DEPS
 
 
 def load_case(case_id: str) -> dict[str, Any]:
@@ -36,7 +48,9 @@ def load_golden(case_id: str) -> dict[str, Any]:
     return json.loads(path.read_text())
 
 
-def _build_frame(pattern: dict[str, Any], width: int, height: int) -> np.ndarray:
+def _build_frame(
+    pattern: dict[str, Any], width: int, height: int, np: "np"
+) -> "np.ndarray":
     pattern_type = pattern.get("type")
     if pattern_type == "checkerboard":
         low = int(pattern.get("low", 0))
@@ -51,12 +65,13 @@ def _build_frame(pattern: dict[str, Any], width: int, height: int) -> np.ndarray
     return np.stack([base, base, base], axis=-1)
 
 
-def build_frames(case: dict[str, Any]) -> list[np.ndarray]:
+def build_frames(case: dict[str, Any]) -> list["np.ndarray"]:
+    np, _, _ = _load_pipeline_deps()
     width = int(case.get("width", 64))
     height = int(case.get("height", 64))
     frame_count = int(case.get("frame_count", 8))
     pattern = case.get("pattern", {"type": "solid", "value": 0})
-    frame = _build_frame(pattern, width=width, height=height)
+    frame = _build_frame(pattern, width=width, height=height, np=np)
     return [frame.copy() for _ in range(frame_count)]
 
 
@@ -176,6 +191,7 @@ def run_demo_case(
     out_path: Path | None = None,
     verify: bool = False,
 ) -> dict[str, Any]:
+    np, CalibrationParams, analyze_frames = _load_pipeline_deps()
     case = load_case(case_id)
     frames = build_frames(case)
     calib = CalibrationParams(
