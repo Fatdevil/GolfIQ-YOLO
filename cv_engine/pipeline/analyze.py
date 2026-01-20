@@ -27,6 +27,7 @@ from cv_engine.inference.model_registry import get_detection_engine
 from cv_engine.pose.adapter import PoseAdapter
 from cv_engine.sequence import analyze_kinematic_sequence
 from cv_engine.tracking.factory import get_ball_tracker, get_tracker
+from cv_engine.ux import build_ux_payload_v1
 from cv_engine.tracking.stabilizer import (
     BallDetection,
     compute_jitter_px,
@@ -625,6 +626,12 @@ def analyze_frames(
         or metrics.get("fit_v1")
         or metrics.get("calibration_v1"),
         max_tips=3,
+    )
+    metrics["ux_payload_v1"] = build_ux_payload_v1(
+        range_mode_hud=range_mode_hud,
+        explain_result=metrics.get("explain_result"),
+        micro_coach=metrics.get("micro_coach"),
+        mode="swing",
     )
 
     return {
