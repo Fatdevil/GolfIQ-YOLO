@@ -1,0 +1,305 @@
+{
+  "ballSpeedMps": 0.967,
+  "ball_speed_mph": 2.2,
+  "ball_speed_mps": 0.97,
+  "calibration_v1": {
+    "fit": {
+      "apex_m_est": null,
+      "azimuth_deg": 0.0,
+      "carry_m_est": null,
+      "fit_metric": "r2",
+      "fit_r2": 1.0,
+      "fit_rmse": 7.078101895173003e-18,
+      "launch_angle_deg": 26.565051177077986,
+      "n_fit_points": 12,
+      "r2_or_residual": 1.0
+    },
+    "launch_window": {
+      "end_frame": 11,
+      "n_points": 12,
+      "start_frame": 0
+    },
+    "quality": {
+      "confidence_score_0_1": 0.65,
+      "reasons": [
+        "fallback_scale"
+      ]
+    },
+    "status": "low_confidence",
+    "used_m_per_px": 0.0025
+  },
+  "capture_quality": {
+    "issues": [
+      {
+        "code": "LOW_RESOLUTION",
+        "details": {
+          "height": 64,
+          "min_height": 720,
+          "recommended_height": 1080
+        },
+        "message": "Resolution is below the recommended minimum.",
+        "severity": "warn"
+      },
+      {
+        "code": "UNDEREXPOSED",
+        "details": {
+          "luma_threshold": 60.0,
+          "threshold": 0.3,
+          "underexposed_pct": 1.0
+        },
+        "message": "Video appears too dark for reliable tracking.",
+        "severity": "warn"
+      }
+    ],
+    "range_mode": {
+      "diagnostics": {
+        "brightness_bright_pct": 0.0,
+        "brightness_dark_pct": 1.0,
+        "brightness_mean": 50.0,
+        "effective_fps": 60.0,
+        "sharpness_blur_pct": 0.0,
+        "sharpness_mean": 155644.516,
+        "track_edge_pct": 0.0,
+        "track_length": 12
+      },
+      "flags": [
+        "fps_low",
+        "exposure_too_dark"
+      ],
+      "recommendations": [
+        "Record in slow-motion mode (120+ FPS minimum, 240 FPS ideal).",
+        "Increase lighting or move to a brighter area."
+      ],
+      "score": 0.65
+    },
+    "range_mode_hud": {
+      "badges": [
+        "FPS",
+        "LIGHT"
+      ],
+      "debug": {
+        "apply_hysteresis": false,
+        "flags": [
+          "fps_low",
+          "exposure_too_dark"
+        ],
+        "hysteresis": {
+          "above_ready_count": 0,
+          "below_block_count": 0,
+          "state": "warn"
+        },
+        "raw_state": "warn",
+        "score_0_100": 65,
+        "single_eval": true
+      },
+      "primary_message": "Low frame rate",
+      "recommended_actions": [
+        "Switch to slow-mo (120\u2013240 FPS).",
+        "Increase light on the hitting area."
+      ],
+      "score_0_100": 65,
+      "secondary_message": "Scene is too dark",
+      "state": "warn"
+    },
+    "recommendations": [
+      "Increase capture resolution (1080p+ recommended).",
+      "Improve lighting or move to a brighter area."
+    ],
+    "score": 70,
+    "summary": {
+      "blur_variance_mean": 155644.5312,
+      "blurry_pct": 0.0,
+      "fps": 60.0,
+      "frames": 12,
+      "overexposed_pct": 0.0,
+      "resolution": {
+        "height": 64,
+        "width": 64
+      },
+      "shake_diff_mean": 0.0,
+      "shaky_pct": 0.0,
+      "underexposed_pct": 1.0
+    }
+  },
+  "carryEstM": 0.02,
+  "carry_m": 0.0,
+  "clubSpeedMps": 0.086,
+  "club_path_deg": null,
+  "club_speed_mph": 0.2,
+  "club_speed_mps": 0.09,
+  "confidence": 0.0,
+  "explain": {
+    "confidence": 1.0,
+    "issues": [],
+    "summary": "No issues detected."
+  },
+  "explain_result": {
+    "confidence": {
+      "label": "LOW",
+      "score": 15
+    },
+    "debug": {
+      "inputs_present": {
+        "calibration": true,
+        "guardrails": true,
+        "range_mode_hud": true
+      },
+      "signals_used": [
+        "fps_low",
+        "exposure_too_dark",
+        "calibration_low_confidence"
+      ]
+    },
+    "version": "v1",
+    "what_to_do_now": [
+      {
+        "detail": "Enable slow-mo capture (120\u2013240 FPS).",
+        "id": "increase_fps",
+        "title": "Increase frame rate"
+      },
+      {
+        "detail": "Brighten the hitting area and ball.",
+        "id": "improve_lighting",
+        "title": "Add lighting"
+      },
+      {
+        "detail": "Re-run calibration with clearer tracking.",
+        "id": "recalibrate_scale",
+        "title": "Recalibrate scale"
+      }
+    ],
+    "why_may_be_wrong": [
+      {
+        "detail": "Low FPS can miss the ball after impact.",
+        "id": "fps_low",
+        "title": "Low frame rate"
+      },
+      {
+        "detail": "The ball blends into a dark background.",
+        "id": "exposure_too_dark",
+        "title": "Too dark"
+      },
+      {
+        "detail": "Metric fit confidence is below target.",
+        "id": "calibration_low_confidence",
+        "title": "Calibration confidence low"
+      }
+    ]
+  },
+  "faceon": {
+    "frame": {
+      "h": 64,
+      "w": 64
+    },
+    "notes": "no-person-detected",
+    "shaft_lean_deg": 0.0,
+    "shoulder_tilt_deg": 0.0,
+    "sway_cm": 0.0,
+    "sway_px": 0.0
+  },
+  "inference": {
+    "avgInferenceMs": 0.0,
+    "frames": 12,
+    "modelVariant": "yolov10",
+    "totalInferenceMs": 0.0
+  },
+  "launch_deg": 82.9,
+  "metrics_version": 1,
+  "micro_coach": {
+    "debug": {
+      "deduped_tip_ids": [
+        "tip_fps_light",
+        "tip_even_lighting",
+        "tip_redo_calibration"
+      ],
+      "inputs_present": {
+        "calibration": true,
+        "explain_result": true,
+        "range_mode_hud": true
+      },
+      "selected_rule_ids": [
+        "tip_fps_light",
+        "tip_even_lighting",
+        "tip_redo_calibration"
+      ]
+    },
+    "enabled": true,
+    "tips": [
+      {
+        "detail": "\u00d6ka belysningen s\u00e5 kameran kan k\u00f6ra snabbare bildhastighet.",
+        "id": "tip_fps_light",
+        "priority": 1,
+        "source": {
+          "action_ids": [
+            "increase_fps"
+          ],
+          "confidence_label": "LOW",
+          "hud_flags": [
+            "fps_low"
+          ],
+          "reason_ids": [
+            "fps_low"
+          ]
+        },
+        "title": "Mer ljus f\u00f6r h\u00f6gre FPS"
+      },
+      {
+        "detail": "Flytta till j\u00e4mnare ljus s\u00e5 bollen syns tydligt.",
+        "id": "tip_even_lighting",
+        "priority": 2,
+        "source": {
+          "action_ids": [
+            "improve_lighting"
+          ],
+          "confidence_label": "LOW",
+          "hud_flags": [
+            "exposure_too_dark"
+          ],
+          "reason_ids": [
+            "exposure_too_dark"
+          ]
+        },
+        "title": "J\u00e4mnare ljus"
+      },
+      {
+        "detail": "Anv\u00e4nd tydliga mark\u00f6rer och r\u00e4tt avst\u00e5nd n\u00e4r du kalibrerar.",
+        "id": "tip_redo_calibration",
+        "priority": 3,
+        "source": {
+          "action_ids": [
+            "recalibrate_scale"
+          ],
+          "confidence_label": "LOW",
+          "hud_flags": [],
+          "reason_ids": [
+            "calibration_low_confidence"
+          ]
+        },
+        "title": "G\u00f6r om kalibreringen"
+      }
+    ],
+    "version": "v1"
+  },
+  "quality": {
+    "fps": "warn",
+    "homography": "warn",
+    "lighting": "low"
+  },
+  "sideAngleDeg": 90.0,
+  "spin_axis_deg": null,
+  "spin_rpm": null,
+  "tracking": {
+    "filled_frames": 0,
+    "gap_ratio": 0.0,
+    "id_switches": 0,
+    "jitter_px": 0.0,
+    "max_gap": 0,
+    "n_detections": 12,
+    "n_frames": 12,
+    "n_missing": 0,
+    "outliers_removed": 0,
+    "segments_linked": 0,
+    "stabilized": true
+  },
+  "vertLaunchDeg": 0.0
+}

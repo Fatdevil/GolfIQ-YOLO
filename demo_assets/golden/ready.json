@@ -1,0 +1,217 @@
+{
+  "ballSpeedMps": 0.668,
+  "ball_speed_mph": 1.5,
+  "ball_speed_mps": 0.67,
+  "calibration_v1": {
+    "fit": {
+      "apex_m_est": null,
+      "azimuth_deg": 0.0,
+      "carry_m_est": null,
+      "fit_metric": "r2",
+      "fit_r2": 1.0,
+      "fit_rmse": 2.6040805070549545e-16,
+      "launch_angle_deg": 26.56505117707779,
+      "n_fit_points": 12,
+      "r2_or_residual": 1.0
+    },
+    "launch_window": {
+      "end_frame": 11,
+      "n_points": 12,
+      "start_frame": 0
+    },
+    "quality": {
+      "confidence_score_0_1": 0.65,
+      "reasons": [
+        "fallback_scale"
+      ]
+    },
+    "status": "low_confidence",
+    "used_m_per_px": 0.0025
+  },
+  "capture_quality": {
+    "issues": [
+      {
+        "code": "LOW_RESOLUTION",
+        "details": {
+          "height": 64,
+          "min_height": 720,
+          "recommended_height": 1080
+        },
+        "message": "Resolution is below the recommended minimum.",
+        "severity": "warn"
+      }
+    ],
+    "range_mode": {
+      "diagnostics": {
+        "brightness_bright_pct": 0.0,
+        "brightness_dark_pct": 0.0,
+        "brightness_mean": 120.0,
+        "effective_fps": 240.0,
+        "sharpness_blur_pct": 0.0,
+        "sharpness_mean": 99612.5,
+        "track_edge_pct": 0.0,
+        "track_length": 12
+      },
+      "flags": [],
+      "recommendations": [],
+      "score": 1.0
+    },
+    "range_mode_hud": {
+      "badges": [],
+      "debug": {
+        "apply_hysteresis": false,
+        "flags": [],
+        "hysteresis": {
+          "above_ready_count": 0,
+          "below_block_count": 0,
+          "state": "ready"
+        },
+        "raw_state": "ready",
+        "score_0_100": 100,
+        "single_eval": true
+      },
+      "primary_message": "Capture looks good",
+      "recommended_actions": [],
+      "score_0_100": 100,
+      "secondary_message": null,
+      "state": "ready"
+    },
+    "recommendations": [
+      "Increase capture resolution (1080p+ recommended)."
+    ],
+    "score": 85,
+    "summary": {
+      "blur_variance_mean": 99612.5,
+      "blurry_pct": 0.0,
+      "fps": 240.0,
+      "frames": 12,
+      "overexposed_pct": 0.0,
+      "resolution": {
+        "height": 64,
+        "width": 64
+      },
+      "shake_diff_mean": 0.0,
+      "shaky_pct": 0.0,
+      "underexposed_pct": 0.0
+    }
+  },
+  "carryEstM": 0.04,
+  "carry_m": 0.0,
+  "clubSpeedMps": 0.345,
+  "club_path_deg": null,
+  "club_speed_mph": 0.8,
+  "club_speed_mps": 0.35,
+  "confidence": 0.0,
+  "explain": {
+    "confidence": 1.0,
+    "issues": [],
+    "summary": "No issues detected."
+  },
+  "explain_result": {
+    "confidence": {
+      "label": "HIGH",
+      "score": 75
+    },
+    "debug": {
+      "inputs_present": {
+        "calibration": true,
+        "guardrails": true,
+        "range_mode_hud": true
+      },
+      "signals_used": [
+        "calibration_low_confidence"
+      ]
+    },
+    "version": "v1",
+    "what_to_do_now": [
+      {
+        "detail": "Re-run calibration with clearer tracking.",
+        "id": "recalibrate_scale",
+        "title": "Recalibrate scale"
+      }
+    ],
+    "why_may_be_wrong": [
+      {
+        "detail": "Metric fit confidence is below target.",
+        "id": "calibration_low_confidence",
+        "title": "Calibration confidence low"
+      }
+    ]
+  },
+  "faceon": {
+    "frame": {
+      "h": 64,
+      "w": 64
+    },
+    "notes": "no-person-detected",
+    "shaft_lean_deg": 0.0,
+    "shoulder_tilt_deg": 0.0,
+    "sway_cm": 0.0,
+    "sway_px": 0.0
+  },
+  "inference": {
+    "avgInferenceMs": 0.0,
+    "frames": 12,
+    "modelVariant": "yolov10",
+    "totalInferenceMs": 0.0
+  },
+  "launch_deg": 44.1,
+  "metrics_version": 1,
+  "micro_coach": {
+    "debug": {
+      "deduped_tip_ids": [
+        "tip_redo_calibration"
+      ],
+      "inputs_present": {
+        "calibration": true,
+        "explain_result": true,
+        "range_mode_hud": true
+      },
+      "selected_rule_ids": [
+        "tip_redo_calibration"
+      ]
+    },
+    "enabled": true,
+    "tips": [
+      {
+        "detail": "Anv\u00e4nd tydliga mark\u00f6rer och r\u00e4tt avst\u00e5nd n\u00e4r du kalibrerar.",
+        "id": "tip_redo_calibration",
+        "priority": 3,
+        "source": {
+          "action_ids": [
+            "recalibrate_scale"
+          ],
+          "confidence_label": "HIGH",
+          "hud_flags": [],
+          "reason_ids": [
+            "calibration_low_confidence"
+          ]
+        },
+        "title": "G\u00f6r om kalibreringen"
+      }
+    ],
+    "version": "v1"
+  },
+  "quality": {
+    "fps": "good",
+    "homography": "warn",
+    "lighting": "good"
+  },
+  "sideAngleDeg": 90.0,
+  "spin_axis_deg": null,
+  "spin_rpm": null,
+  "tracking": {
+    "filled_frames": 0,
+    "gap_ratio": 0.0,
+    "id_switches": 0,
+    "jitter_px": 0.0,
+    "max_gap": 0,
+    "n_detections": 12,
+    "n_frames": 12,
+    "n_missing": 0,
+    "outliers_removed": 0,
+    "segments_linked": 0,
+    "stabilized": true
+  },
+  "vertLaunchDeg": 0.0
+}

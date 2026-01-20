@@ -1,0 +1,13 @@
+{
+  "case_id": "warn",
+  "description": "Low-FPS capture with dark lighting but sharp frames.",
+  "fps": 60,
+  "frame_count": 12,
+  "width": 64,
+  "height": 64,
+  "pattern": {
+    "type": "checkerboard",
+    "low": 0,
+    "high": 100
+  }
+}

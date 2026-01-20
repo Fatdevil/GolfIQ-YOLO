@@ -1,0 +1,13 @@
+{
+  "case_id": "ready",
+  "description": "High-quality capture with stable lighting and sharp frames.",
+  "fps": 240,
+  "frame_count": 12,
+  "width": 64,
+  "height": 64,
+  "pattern": {
+    "type": "checkerboard",
+    "low": 80,
+    "high": 160
+  }
+}
