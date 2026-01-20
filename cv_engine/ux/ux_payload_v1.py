@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from dataclasses import is_dataclass
-from typing import Any
 
 from cv_engine.capture.range_mode_ux import RangeModeHUD
 
