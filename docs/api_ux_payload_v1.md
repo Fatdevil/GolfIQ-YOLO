@@ -3,6 +3,12 @@
 `ux_payload_v1` is the unified mobile UX contract returned by analysis endpoints.
 Clients should read the top-level `ux_payload_v1` field directly (no metrics parsing).
 
+## Schema
+
+The canonical JSON Schema is available at:
+
+- [`docs/schemas/ux_payload_v1.schema.json`](schemas/ux_payload_v1.schema.json)
+
 ## Endpoints
 
 | Endpoint | Mode | Notes |
@@ -29,9 +35,17 @@ loading. Demo responses include a concise `summary` field and a stable
 
 `POST /cv/analyze?demo=true`
 
+## Compatibility policy
+
+- Clients should branch on `ux_payload_v1.version`.
+- Optional sub-objects (`hud`, `explain`, `coach`, `confidence`, `debug`) may be
+  `null` or omitted, so be tolerant when rendering.
+- Demo responses keep the same `mode` as the endpoint context (swing or range),
+  and include a concise `summary` at the top level.
+
 ## Example JSON
 
-### Swing (cv analyze)
+### Swing READY (cv analyze)
 
 ```json
 {
@@ -44,15 +58,14 @@ loading. Demo responses include a concise `summary` field and a stable
     "state": "READY",
     "confidence": {"score": 92, "label": "HIGH"},
     "hud": null,
-    "explain": null,
-    "coach": null,
+    "explain": {"version": "v1", "confidence": {"score": 92, "label": "HIGH"}},
+    "coach": {"version": "v1", "enabled": true, "tips": []},
     "debug": null
-  },
-  "summary": "demo mode: synthetic swing analysis"
+  }
 }
 ```
 
-### Range (range practice)
+### Range WARN (range practice)
 
 ```json
 {
@@ -62,13 +75,33 @@ loading. Demo responses include a concise `summary` field and a stable
   "ux_payload_v1": {
     "version": "v1",
     "mode": "range",
-    "state": "READY",
-    "confidence": null,
-    "hud": {"state": "ready"},
-    "explain": null,
-    "coach": null,
+    "state": "WARN",
+    "confidence": {"score": 62, "label": "MED"},
+    "hud": {"state": "warn", "score_0_100": 62},
+    "explain": {"version": "v1", "confidence": {"score": 62, "label": "MED"}},
+    "coach": {"version": "v1", "enabled": true, "tips": []},
+    "debug": {"flags": ["fps_low"]}
+  }
+}
+```
+
+### Demo BLOCK (cv analyze demo)
+
+```json
+{
+  "run_id": "demo-789",
+  "events": [4],
+  "metrics": {"ball_speed_mps": 21.4},
+  "ux_payload_v1": {
+    "version": "v1",
+    "mode": "swing",
+    "state": "BLOCK",
+    "confidence": {"score": 18, "label": "LOW"},
+    "hud": {"state": "block", "score_0_100": 18},
+    "explain": {"version": "v1", "confidence": {"score": 18, "label": "LOW"}},
+    "coach": {"version": "v1", "enabled": true, "tips": []},
     "debug": null
   },
-  "summary": "demo mode: synthetic range analysis"
+  "summary": "demo mode: synthetic swing analysis"
 }
 ```
