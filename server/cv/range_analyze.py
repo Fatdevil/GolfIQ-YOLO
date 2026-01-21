@@ -204,6 +204,7 @@ def run_real_analyze(
         model_variant=model_variant or payload.model_variant,
         variant_source=variant_source
         or ("range_analyze.model_variant" if payload.model_variant else None),
+        mode="range",
     )
     metrics_obj = result.get("metrics", {})
     metrics = dict(metrics_obj) if isinstance(metrics_obj, Mapping) else {}

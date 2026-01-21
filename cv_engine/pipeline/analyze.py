@@ -3,7 +3,7 @@ from __future__ import annotations
 # isort: skip_file
 from dataclasses import replace
 from time import perf_counter
-from typing import Any, Dict, Iterable, List, Tuple
+from typing import Any, Dict, Iterable, List, Literal, Tuple
 
 import numpy as np
 
@@ -27,6 +27,7 @@ from cv_engine.inference.model_registry import get_detection_engine
 from cv_engine.pose.adapter import PoseAdapter
 from cv_engine.sequence import analyze_kinematic_sequence
 from cv_engine.tracking.factory import get_ball_tracker, get_tracker
+from cv_engine.ux import build_ux_payload_v1
 from cv_engine.tracking.stabilizer import (
     BallDetection,
     compute_jitter_px,
@@ -74,6 +75,7 @@ def analyze_frames(
     model_variant: str | None = None,
     variant_source: str | None = None,
     calibration: CalibrationConfig | None = None,
+    mode: Literal["swing", "range"] | str = "swing",
 ) -> Dict[str, Any]:
     """Analyze sequence of frames for ball/club metrics."""
 
@@ -625,6 +627,12 @@ def analyze_frames(
         or metrics.get("fit_v1")
         or metrics.get("calibration_v1"),
         max_tips=3,
+    )
+    metrics["ux_payload_v1"] = build_ux_payload_v1(
+        range_mode_hud=range_mode_hud,
+        explain_result=metrics.get("explain_result"),
+        micro_coach=metrics.get("micro_coach"),
+        mode=mode,
     )
 
     return {

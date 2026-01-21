@@ -27,3 +27,17 @@ def test_pipeline_mock_is_deterministic():
 
     for key in ("ball_speed_mps", "ball_speed_mph", "launch_deg", "carry_m"):
         assert first["metrics"][key] == second["metrics"][key]
+
+
+def test_pipeline_range_mode_sets_ux_payload_mode():
+    frames = [np.zeros((64, 64, 3), dtype=np.uint8) for _ in range(10)]
+    calib = CalibrationParams.from_reference(1.0, 100.0, 120.0)
+    result = analyze_frames(
+        frames,
+        calib,
+        mock=True,
+        motion=(2.0, -1.0, 1.5, 0.0),
+        mode="range",
+    )
+
+    assert result["metrics"]["ux_payload_v1"]["mode"] == "range"
