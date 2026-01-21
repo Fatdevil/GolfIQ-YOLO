@@ -92,6 +92,12 @@ web/
 └── package.json
 ```
 
+### tools/
+```
+tools/
+└── ux_preview/         # lightweight web renderer for ux_payload_v1 demos
+```
+
 ### android/
 ```
 android/
