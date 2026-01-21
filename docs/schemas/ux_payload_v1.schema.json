@@ -1,0 +1,80 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://golfiq.ai/schemas/ux_payload_v1.schema.json",
+  "title": "UX Payload v1",
+  "type": "object",
+  "description": "Unified UX payload for mobile rendering.",
+  "additionalProperties": false,
+  "required": ["version", "mode", "state"],
+  "properties": {
+    "version": {
+      "type": "string",
+      "const": "v1",
+      "description": "Contract version for clients."
+    },
+    "mode": {
+      "type": "string",
+      "enum": ["swing", "range", "unknown"],
+      "description": "Capture context. Demo responses still report swing or range."
+    },
+    "state": {
+      "type": "string",
+      "enum": ["READY", "WARN", "BLOCK", "UNKNOWN"],
+      "description": "User-facing readiness derived from HUD or explain confidence."
+    },
+    "confidence": {
+      "type": ["object", "null"],
+      "description": "Explain confidence summary if available.",
+      "additionalProperties": false,
+      "required": ["score", "label"],
+      "properties": {
+        "score": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 100
+        },
+        "label": {
+          "type": "string"
+        }
+      }
+    },
+    "hud": {
+      "type": ["object", "null"],
+      "description": "Normalized range HUD payload.",
+      "additionalProperties": true
+    },
+    "explain": {
+      "type": ["object", "null"],
+      "description": "Explainability payload if available.",
+      "additionalProperties": true
+    },
+    "coach": {
+      "type": ["object", "null"],
+      "description": "Micro-coach tips (max 3 tips) if available.",
+      "additionalProperties": true,
+      "properties": {
+        "tips": {
+          "type": "array",
+          "maxItems": 3,
+          "items": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        }
+      }
+    },
+    "debug": {
+      "type": ["object", "null"],
+      "description": "Optional debug metadata.",
+      "additionalProperties": false,
+      "properties": {
+        "case_id": {"type": "string"},
+        "timestamps": {"type": "object", "additionalProperties": true},
+        "flags": {
+          "type": "array",
+          "items": {"type": "string"}
+        }
+      }
+    }
+  }
+}
