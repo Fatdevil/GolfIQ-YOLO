@@ -36,6 +36,11 @@ from server.config import (
     MAX_VIDEO_BYTES,
 )
 from server.security import require_api_key
+from server.services.analysis_demo import (
+    demo_summary,
+    ensure_ux_payload,
+    run_demo_analysis,
+)
 from server.services.cv_mock import effective_mock
 from server.storage.runs import (
     RunSourceType,
@@ -59,12 +64,15 @@ class AnalyzeVideoQuery(BaseModel):
     smoothing_window: int = 3
     persist: bool = False
     run_name: str | None = None
+    demo: bool = False
 
 
 class AnalyzeResponse(BaseModel):
     events: list[int]
     metrics: AnalyzeMetrics
     run_id: str
+    ux_payload_v1: dict[str, object] | None = None
+    summary: str | None = None
     error_code: str | None = None
     error_message: str | None = None
     capture: dict[str, object] | None = None
@@ -75,6 +83,9 @@ async def analyze_video(
     response: Response,
     mock: bool | None = Query(
         None, description="Optional override for CV mock backend"
+    ),
+    demo: bool = Query(
+        False, description="Return a deterministic demo response without heavy ML"
     ),
     mock_header: str | None = Header(default=None, alias="x-cv-mock"),
     model_variant_header: str | None = Header(default=None, alias="x-model-variant"),
@@ -111,11 +122,12 @@ async def analyze_video(
         smoothing_window=smoothing_window,
         persist=persist,
         run_name=run_name,
+        demo=demo,
     )
     variant_info = resolve_variant(
         header=model_variant_header, form=model_variant_form, query=None
     )
-    use_mock = effective_mock(mock, mock_header, mock_form)
+    use_mock = True if demo else effective_mock(mock, mock_header, mock_form)
     response.headers["x-cv-source"] = "mock" if use_mock else "real"
     params = query.model_dump(exclude_none=True)
     params.pop("persist", None)
@@ -173,6 +185,43 @@ async def analyze_video(
             tmp.write(chunk)
         tmp.seek(0)
         data = tmp.read()
+    if demo:
+        demo_result = run_demo_analysis(
+            mode="swing",
+            fps=query.fps_fallback,
+            ref_len_m=query.ref_len_m,
+            ref_len_px=query.ref_len_px,
+            smoothing_window=query.smoothing_window,
+        )
+        events = demo_result.get("events", [])
+        metrics_dict = dict(demo_result.get("metrics", {}))
+        if "confidence" not in metrics_dict:
+            metrics_dict["confidence"] = 0.0
+        ux_payload = ensure_ux_payload(metrics_dict, mode="swing")
+        timing = _inference_timing(metrics_dict) or {}
+        metrics_model = AnalyzeMetrics(**metrics_dict)
+        update_run(
+            run.run_id,
+            status=RunStatus.SUCCEEDED,
+            metrics=metrics_model.model_dump(),
+            events=list(events),
+            inference_timing=timing,
+            model_variant_selected=variant_info.selected,
+            input_ref={
+                "filename": video.filename,
+                "content_length": len(data),
+                "frame_count": 0,
+                "type": "video",
+            },
+        )
+        return AnalyzeResponse(
+            events=list(events),
+            metrics=metrics_model,
+            run_id=run.run_id,
+            ux_payload_v1=ux_payload,
+            summary=demo_summary("swing"),
+            capture=capture_payload,
+        )
     try:
         frames = frames_from_video(data, max_frames=300, stride=1)
     except ImportError:
@@ -219,6 +268,7 @@ async def analyze_video(
             "smoothing_window": query.smoothing_window,
             "model_variant": variant_info.selected,
             "variant_source": variant_source,
+            "mode": "swing",
         }
         if calibration_config is not None:
             analyze_kwargs["calibration"] = calibration_config
@@ -249,6 +299,7 @@ async def analyze_video(
     metrics_dict = dict(result["metrics"])
     if "confidence" not in metrics_dict:
         metrics_dict["confidence"] = 0.0
+    ux_payload = ensure_ux_payload(metrics_dict, mode="swing")
     timing = _inference_timing(metrics_dict) or {}
     metrics_model = AnalyzeMetrics(**metrics_dict)
     impact_preview = None
@@ -278,5 +329,6 @@ async def analyze_video(
         events=events,
         metrics=metrics_model,
         run_id=run.run_id,
+        ux_payload_v1=ux_payload,
         capture=capture_payload,
     )

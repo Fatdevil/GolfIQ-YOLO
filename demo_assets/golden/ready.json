@@ -213,5 +213,101 @@
     "segments_linked": 0,
     "stabilized": true
   },
+  "ux_payload_v1": {
+    "coach": {
+      "debug": {
+        "deduped_tip_ids": [
+          "tip_redo_calibration"
+        ],
+        "inputs_present": {
+          "calibration": true,
+          "explain_result": true,
+          "range_mode_hud": true
+        },
+        "selected_rule_ids": [
+          "tip_redo_calibration"
+        ]
+      },
+      "enabled": true,
+      "tips": [
+        {
+          "detail": "Anv\u00e4nd tydliga mark\u00f6rer och r\u00e4tt avst\u00e5nd n\u00e4r du kalibrerar.",
+          "id": "tip_redo_calibration",
+          "priority": 3,
+          "source": {
+            "action_ids": [
+              "recalibrate_scale"
+            ],
+            "confidence_label": "HIGH",
+            "hud_flags": [],
+            "reason_ids": [
+              "calibration_low_confidence"
+            ]
+          },
+          "title": "G\u00f6r om kalibreringen"
+        }
+      ],
+      "version": "v1"
+    },
+    "confidence": {
+      "label": "HIGH",
+      "score": 75
+    },
+    "debug": null,
+    "explain": {
+      "confidence": {
+        "label": "HIGH",
+        "score": 75
+      },
+      "debug": {
+        "inputs_present": {
+          "calibration": true,
+          "guardrails": true,
+          "range_mode_hud": true
+        },
+        "signals_used": [
+          "calibration_low_confidence"
+        ]
+      },
+      "version": "v1",
+      "what_to_do_now": [
+        {
+          "detail": "Re-run calibration with clearer tracking.",
+          "id": "recalibrate_scale",
+          "title": "Recalibrate scale"
+        }
+      ],
+      "why_may_be_wrong": [
+        {
+          "detail": "Metric fit confidence is below target.",
+          "id": "calibration_low_confidence",
+          "title": "Calibration confidence low"
+        }
+      ]
+    },
+    "hud": {
+      "badges": [],
+      "debug": {
+        "apply_hysteresis": false,
+        "flags": [],
+        "hysteresis": {
+          "above_ready_count": 0,
+          "below_block_count": 0,
+          "state": "ready"
+        },
+        "raw_state": "ready",
+        "score_0_100": 100,
+        "single_eval": true
+      },
+      "primary_message": "Capture looks good",
+      "recommended_actions": [],
+      "score_0_100": 100,
+      "secondary_message": null,
+      "state": "ready"
+    },
+    "mode": "swing",
+    "state": "READY",
+    "version": "v1"
+  },
   "vertLaunchDeg": 0.0
 }

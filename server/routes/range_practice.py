@@ -4,8 +4,19 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends, status
 
-from server.cv.range_analyze import RangeAnalyzeIn, RangeAnalyzeOut, run_range_analyze
+from server.cv.config import CvBackend
+from server.cv.range_analyze import (
+    RangeAnalyzeIn,
+    RangeAnalyzeOut,
+    build_range_out,
+    run_range_analyze,
+)
 from server.security import require_api_key
+from server.services.analysis_demo import (
+    demo_summary,
+    ensure_ux_payload,
+    run_demo_analysis,
+)
 from server.storage.runs import RunSourceType, RunStatus, create_run, update_run
 from server.utils.model_variant import resolve_variant
 from .cv_analyze import _fail_run, _inference_timing, _variant_source_label
@@ -45,12 +56,30 @@ def analyze_range_capture(payload: RangeAnalyzeIn) -> RangeAnalyzeOut:
         metadata={"variant_fallback": variant_info.fallback_applied},
     )
     try:
-        out, metrics, events, backend = run_range_analyze(
-            payload,
-            return_raw=True,
-            model_variant=variant_info.selected,
-            variant_source=_variant_source_label(variant_info.override_source),
-        )
+        if payload.demo:
+            demo_result = run_demo_analysis(
+                mode="range",
+                fps=payload.fps,
+                ref_len_m=payload.ref_len_m,
+                ref_len_px=payload.ref_len_px,
+                smoothing_window=payload.smoothing_window,
+            )
+            events = demo_result.get("events", [])
+            metrics = dict(demo_result.get("metrics", {}))
+            out = build_range_out(metrics).model_copy(
+                update={
+                    "ux_payload_v1": ensure_ux_payload(metrics, mode="range"),
+                    "summary": demo_summary("range"),
+                }
+            )
+            backend = CvBackend.MOCK
+        else:
+            out, metrics, events, backend = run_range_analyze(
+                payload,
+                return_raw=True,
+                model_variant=variant_info.selected,
+                variant_source=_variant_source_label(variant_info.override_source),
+            )
     except RuntimeError as exc:
         message = str(exc)
         if "yolov11" in message.lower():
@@ -74,11 +103,13 @@ def analyze_range_capture(payload: RangeAnalyzeIn) -> RangeAnalyzeOut:
             status.HTTP_500_INTERNAL_SERVER_ERROR,
         )
 
-    timing = _inference_timing(metrics if isinstance(metrics, dict) else {}) or {}
+    metrics_dict = dict(metrics) if isinstance(metrics, dict) else {}
+    ux_payload = ensure_ux_payload(metrics_dict, mode="range")
+    timing = _inference_timing(metrics_dict) or {}
     update_run(
         run.run_id,
         status=RunStatus.SUCCEEDED,
-        metrics=metrics if isinstance(metrics, dict) else {},
+        metrics=metrics_dict,
         events=list(events),
         inference_timing=timing,
         model_variant_selected=variant_info.selected,
@@ -89,6 +120,13 @@ def analyze_range_capture(payload: RangeAnalyzeIn) -> RangeAnalyzeOut:
             "type": "range",
         },
     )
+    if out.ux_payload_v1 is None:
+        out = out.model_copy(
+            update={
+                "ux_payload_v1": ux_payload,
+                "summary": out.summary,
+            }
+        )
     return out.model_copy(update={"run_id": run.run_id})
 
 

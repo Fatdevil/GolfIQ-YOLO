@@ -47,6 +47,10 @@ class RangeAnalyzeIn(BaseModel):
     model_variant: str | None = Field(
         default=None, description="Optional override for YOLO model variant"
     )
+    demo: bool = Field(
+        default=False,
+        description="Return a deterministic demo response without heavy ML",
+    )
 
 
 class CameraFitness(BaseModel):
@@ -65,6 +69,8 @@ class RangeAnalyzeOut(BaseModel):
     side_deg: float | None = None
     quality: CameraFitness | None = None
     run_id: str | None = None
+    ux_payload_v1: dict[str, Any] | None = None
+    summary: str | None = None
 
 
 _QUALITY_REASON_MAP: Dict[str, str] = {
@@ -143,6 +149,10 @@ def _build_out(metrics: Mapping[str, Any]) -> RangeAnalyzeOut:
         side_deg=side_deg,
         quality=camera,
     )
+
+
+def build_range_out(metrics: Mapping[str, Any]) -> RangeAnalyzeOut:
+    return _build_out(metrics)
 
 
 def _frames_from_payload(payload: RangeAnalyzeIn) -> Iterable[np.ndarray]:
@@ -259,6 +269,7 @@ __all__ = [
     "CameraFitness",
     "RangeAnalyzeIn",
     "RangeAnalyzeOut",
+    "build_range_out",
     "run_range_analyze",
     "run_mock_analyze",
     "run_real_analyze",
