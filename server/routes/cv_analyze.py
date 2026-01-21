@@ -37,6 +37,11 @@ from server.config import (
     MAX_ZIP_SIZE_BYTES,
 )
 from server.security import require_api_key
+from server.services.analysis_demo import (
+    demo_summary,
+    ensure_ux_payload,
+    run_demo_analysis,
+)
 from server.services.cv_mock import effective_mock
 from server.storage.runs import (
     RunSourceType,
@@ -91,12 +96,18 @@ class AnalyzeQuery(BaseModel):
         default=None,
         description="Optional calibration JSON payload (px->m scale + timing)",
     )
+    demo: bool = Field(
+        default=False,
+        description="Return a deterministic demo response without heavy ML",
+    )
 
 
 class AnalyzeResponse(BaseModel):
     events: list[int]
     metrics: AnalyzeMetrics
     run_id: str
+    ux_payload_v1: dict[str, Any] | None = None
+    summary: str | None = None
     error_code: str | None = None
     error_message: str | None = None
 
@@ -308,7 +319,9 @@ async def analyze(
     variant_info = resolve_variant(
         header=model_variant_header, form=model_variant_form, query=query.model_variant
     )
-    use_mock = effective_mock(query.mock, mock_header, mock_form)
+    use_mock = (
+        True if query.demo else effective_mock(query.mock, mock_header, mock_form)
+    )
     response.headers["x-cv-source"] = "mock" if use_mock else "real"
     params = query.model_dump(exclude_none=True)
     params.pop("persist", None)
@@ -337,6 +350,42 @@ async def analyze(
             "ZIP_TOO_LARGE",
             "ZIP too large",
             HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+        )
+    if query.demo:
+        demo_result = run_demo_analysis(
+            mode="swing",
+            fps=query.fps,
+            ref_len_m=query.ref_len_m,
+            ref_len_px=query.ref_len_px,
+            smoothing_window=query.smoothing_window,
+        )
+        events = demo_result.get("events", [])
+        metrics_dict = dict(demo_result.get("metrics", {}))
+        if "confidence" not in metrics_dict:
+            metrics_dict["confidence"] = 0.0
+        ux_payload = ensure_ux_payload(metrics_dict, mode="swing")
+        timing = _inference_timing(metrics_dict) or {}
+        metrics_model = AnalyzeMetrics(**metrics_dict)
+        update_run(
+            run.run_id,
+            status=RunStatus.SUCCEEDED,
+            metrics=metrics_model.model_dump(),
+            events=list(events),
+            inference_timing=timing,
+            model_variant_selected=variant_info.selected,
+            input_ref={
+                "filename": frames_zip.filename,
+                "content_length": len(data),
+                "frame_count": 0,
+                "type": "zip",
+            },
+        )
+        return AnalyzeResponse(
+            events=list(events),
+            metrics=metrics_model,
+            run_id=run.run_id,
+            ux_payload_v1=ux_payload,
+            summary=demo_summary("swing"),
         )
     try:
         with zipfile.ZipFile(io.BytesIO(data)) as zf:
@@ -414,6 +463,7 @@ async def analyze(
             "smoothing_window": query.smoothing_window,
             "model_variant": variant_info.selected,
             "variant_source": variant_source,
+            "mode": "swing",
         }
         if calibration_config is not None:
             analyze_kwargs["calibration"] = calibration_config
@@ -445,6 +495,7 @@ async def analyze(
     metrics_dict = dict(result["metrics"])
     if "confidence" not in metrics_dict:
         metrics_dict["confidence"] = 0.0
+    ux_payload = ensure_ux_payload(metrics_dict, mode="swing")
     timing = _inference_timing(metrics_dict) or {}
     metrics_model = AnalyzeMetrics(**metrics_dict)
 
@@ -475,4 +526,5 @@ async def analyze(
         events=events,
         metrics=metrics_model,
         run_id=run.run_id,
+        ux_payload_v1=ux_payload,
     )

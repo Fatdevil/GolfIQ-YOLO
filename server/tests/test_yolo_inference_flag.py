@@ -49,6 +49,7 @@ def test_cv_analyze_video_uses_mock_when_flag_disabled(
         smoothing_window,
         model_variant=None,
         variant_source=None,
+        mode=None,
     ):
         captured["mock"] = mock
         captured["model_variant"] = model_variant
@@ -79,6 +80,7 @@ def test_cv_analyze_video_uses_real_when_flag_enabled(
         smoothing_window,
         model_variant=None,
         variant_source=None,
+        mode=None,
     ):
         captured["mock"] = mock
         captured["model_variant"] = model_variant

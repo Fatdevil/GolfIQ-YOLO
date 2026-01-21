@@ -47,6 +47,7 @@ class AnalyzeResponse(BaseModel):
     events: list[int]
     metrics: dict
     run_id: str
+    ux_payload_v1: dict | None = None
     error_code: str | None = None
     error_message: str | None = None
 
@@ -105,8 +106,12 @@ def analyze(req: AnalyzeRequest):
         inference_timing=timing,
         impact_preview=impact_preview,
     )
+    ux_payload = None
+    if isinstance(metrics, dict):
+        ux_payload = metrics.get("ux_payload_v1")
     return AnalyzeResponse(
         events=events,
         metrics=metrics,
         run_id=run.run_id,
+        ux_payload_v1=ux_payload,
     )

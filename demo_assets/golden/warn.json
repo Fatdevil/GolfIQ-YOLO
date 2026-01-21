@@ -301,5 +301,172 @@
     "segments_linked": 0,
     "stabilized": true
   },
+  "ux_payload_v1": {
+    "coach": {
+      "debug": {
+        "deduped_tip_ids": [
+          "tip_fps_light",
+          "tip_even_lighting",
+          "tip_redo_calibration"
+        ],
+        "inputs_present": {
+          "calibration": true,
+          "explain_result": true,
+          "range_mode_hud": true
+        },
+        "selected_rule_ids": [
+          "tip_fps_light",
+          "tip_even_lighting",
+          "tip_redo_calibration"
+        ]
+      },
+      "enabled": true,
+      "tips": [
+        {
+          "detail": "\u00d6ka belysningen s\u00e5 kameran kan k\u00f6ra snabbare bildhastighet.",
+          "id": "tip_fps_light",
+          "priority": 1,
+          "source": {
+            "action_ids": [
+              "increase_fps"
+            ],
+            "confidence_label": "LOW",
+            "hud_flags": [
+              "fps_low"
+            ],
+            "reason_ids": [
+              "fps_low"
+            ]
+          },
+          "title": "Mer ljus f\u00f6r h\u00f6gre FPS"
+        },
+        {
+          "detail": "Flytta till j\u00e4mnare ljus s\u00e5 bollen syns tydligt.",
+          "id": "tip_even_lighting",
+          "priority": 2,
+          "source": {
+            "action_ids": [
+              "improve_lighting"
+            ],
+            "confidence_label": "LOW",
+            "hud_flags": [
+              "exposure_too_dark"
+            ],
+            "reason_ids": [
+              "exposure_too_dark"
+            ]
+          },
+          "title": "J\u00e4mnare ljus"
+        },
+        {
+          "detail": "Anv\u00e4nd tydliga mark\u00f6rer och r\u00e4tt avst\u00e5nd n\u00e4r du kalibrerar.",
+          "id": "tip_redo_calibration",
+          "priority": 3,
+          "source": {
+            "action_ids": [
+              "recalibrate_scale"
+            ],
+            "confidence_label": "LOW",
+            "hud_flags": [],
+            "reason_ids": [
+              "calibration_low_confidence"
+            ]
+          },
+          "title": "G\u00f6r om kalibreringen"
+        }
+      ],
+      "version": "v1"
+    },
+    "confidence": {
+      "label": "LOW",
+      "score": 15
+    },
+    "debug": null,
+    "explain": {
+      "confidence": {
+        "label": "LOW",
+        "score": 15
+      },
+      "debug": {
+        "inputs_present": {
+          "calibration": true,
+          "guardrails": true,
+          "range_mode_hud": true
+        },
+        "signals_used": [
+          "fps_low",
+          "exposure_too_dark",
+          "calibration_low_confidence"
+        ]
+      },
+      "version": "v1",
+      "what_to_do_now": [
+        {
+          "detail": "Enable slow-mo capture (120\u2013240 FPS).",
+          "id": "increase_fps",
+          "title": "Increase frame rate"
+        },
+        {
+          "detail": "Brighten the hitting area and ball.",
+          "id": "improve_lighting",
+          "title": "Add lighting"
+        },
+        {
+          "detail": "Re-run calibration with clearer tracking.",
+          "id": "recalibrate_scale",
+          "title": "Recalibrate scale"
+        }
+      ],
+      "why_may_be_wrong": [
+        {
+          "detail": "Low FPS can miss the ball after impact.",
+          "id": "fps_low",
+          "title": "Low frame rate"
+        },
+        {
+          "detail": "The ball blends into a dark background.",
+          "id": "exposure_too_dark",
+          "title": "Too dark"
+        },
+        {
+          "detail": "Metric fit confidence is below target.",
+          "id": "calibration_low_confidence",
+          "title": "Calibration confidence low"
+        }
+      ]
+    },
+    "hud": {
+      "badges": [
+        "FPS",
+        "LIGHT"
+      ],
+      "debug": {
+        "apply_hysteresis": false,
+        "flags": [
+          "fps_low",
+          "exposure_too_dark"
+        ],
+        "hysteresis": {
+          "above_ready_count": 0,
+          "below_block_count": 0,
+          "state": "warn"
+        },
+        "raw_state": "warn",
+        "score_0_100": 65,
+        "single_eval": true
+      },
+      "primary_message": "Low frame rate",
+      "recommended_actions": [
+        "Switch to slow-mo (120\u2013240 FPS).",
+        "Increase light on the hitting area."
+      ],
+      "score_0_100": 65,
+      "secondary_message": "Scene is too dark",
+      "state": "warn"
+    },
+    "mode": "swing",
+    "state": "WARN",
+    "version": "v1"
+  },
   "vertLaunchDeg": 0.0
 }
