@@ -1,0 +1,31 @@
+{
+  "version": "v1",
+  "mode": "range",
+  "state": "WARN",
+  "confidence": { "score": 62, "label": "MED" },
+  "hud": { "score_0_100": 62, "state": "warn", "flags": ["fps_low"] },
+  "explain": {
+    "version": "v1",
+    "confidence": { "score": 62, "label": "MED" },
+    "reasons": ["fps_low", "framing_unstable"]
+  },
+  "coach": {
+    "version": "v1",
+    "enabled": true,
+    "tips": [
+      {
+        "id": "tip_fps_light",
+        "title": "Mer ljus för högre FPS",
+        "detail": "Öka belysningen så kameran kan köra snabbare bildhastighet.",
+        "rank": 1
+      },
+      {
+        "id": "tip_keep_ball_in_frame",
+        "title": "Håll bollbanan i bild",
+        "detail": "Se till att bollen är i bild hela vägen.",
+        "rank": 2
+      }
+    ]
+  },
+  "debug": { "flags": ["fps_low"] }
+}
