@@ -12,6 +12,7 @@ from cv_engine.ux import build_ux_payload_v1
 _DEMO_FRAME_WIDTH = 64
 _DEMO_FRAME_HEIGHT = 64
 _DEMO_FRAME_COUNT = 12
+DEMO_MODEL_VARIANT = "yolov10"
 
 
 def demo_summary(mode: str) -> str:
@@ -42,6 +43,7 @@ def run_demo_analysis(
         calib,
         mock=True,
         smoothing_window=smoothing_window,
+        model_variant=DEMO_MODEL_VARIANT,
         mode=mode,
     )
 
@@ -66,4 +68,9 @@ def ensure_ux_payload(metrics: dict[str, Any], *, mode: str) -> dict[str, Any]:
     return payload
 
 
-__all__ = ["demo_summary", "run_demo_analysis", "ensure_ux_payload"]
+__all__ = [
+    "DEMO_MODEL_VARIANT",
+    "demo_summary",
+    "run_demo_analysis",
+    "ensure_ux_payload",
+]

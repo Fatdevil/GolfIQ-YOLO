@@ -38,3 +38,13 @@ def test_demo_mode_is_deterministic_for_cv_analyze() -> None:
     assert first.status_code == 200
     assert second.status_code == 200
     assert first.json()["ux_payload_v1"] == second.json()["ux_payload_v1"]
+
+
+def test_demo_mode_ignores_model_variant_env(monkeypatch) -> None:
+    monkeypatch.setenv("MODEL_VARIANT", "yolov11")
+    files = {"frames_zip": ("frames.zip", b"demo", "application/zip")}
+    with _make_client() as client:
+        resp = client.post("/cv/analyze?demo=true", files=files)
+
+    assert resp.status_code == 200
+    assert resp.json()["ux_payload_v1"]["mode"] == "swing"

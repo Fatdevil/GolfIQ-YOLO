@@ -22,7 +22,8 @@ All analysis responses include:
 
 Add `demo=true` (or `demo=1`) to return deterministic, mock results without model
 loading. Demo responses include a concise `summary` field and a stable
-`ux_payload_v1`.
+`ux_payload_v1`. Demo mode forces a mock-safe detector variant and ignores
+`MODEL_VARIANT`.
 
 #### Example
 
