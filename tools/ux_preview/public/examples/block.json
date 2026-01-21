@@ -1,0 +1,37 @@
+{
+  "version": "v1",
+  "mode": "range",
+  "state": "BLOCK",
+  "confidence": { "score": 20, "label": "LOW" },
+  "hud": { "score_0_100": 20, "state": "block", "flags": ["exposure_low"] },
+  "explain": {
+    "version": "v1",
+    "confidence": { "score": 20, "label": "LOW" },
+    "reasons": ["exposure_low", "framing_bad"]
+  },
+  "coach": {
+    "version": "v1",
+    "enabled": true,
+    "tips": [
+      {
+        "id": "tip_even_lighting",
+        "title": "Jämnare ljus",
+        "detail": "Flytta till jämnare belysning utan hårda skuggor.",
+        "rank": 1
+      },
+      {
+        "id": "tip_capture_block",
+        "title": "Fixa fångsten först",
+        "detail": "Åtgärda kamerans placering innan du slår.",
+        "rank": 2
+      },
+      {
+        "id": "tip_stabilize_phone",
+        "title": "Stabilisera kameran",
+        "detail": "Säkra mobilen så att den inte rör sig.",
+        "rank": 3
+      }
+    ]
+  },
+  "debug": { "flags": ["exposure_low"] }
+}
