@@ -1,0 +1,21 @@
+{
+  "version": "v1",
+  "mode": "swing",
+  "state": "READY",
+  "confidence": { "score": 92, "label": "HIGH" },
+  "hud": { "score_0_100": 92, "state": "ready" },
+  "explain": { "version": "v1", "confidence": { "score": 92, "label": "HIGH" } },
+  "coach": {
+    "version": "v1",
+    "enabled": true,
+    "tips": [
+      {
+        "id": "tip_start_earlier",
+        "title": "Starta lite tidigare",
+        "detail": "Börja inspelningen strax innan slaget för stabil tracking.",
+        "rank": 1
+      }
+    ]
+  },
+  "debug": { "case_id": "demo_ready" }
+}
