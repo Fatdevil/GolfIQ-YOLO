@@ -79,6 +79,7 @@ from .routes.range_practice import router as range_practice_router
 from .routes.runs import router as runs_router
 from .routes.runs import router_v1 as runs_router_v1
 from .routes.runs_upload import router as runs_upload_router
+from .routes.session import router as session_router
 from .routes.sg_preview import router as sg_preview_router
 from .routes.sg_summary import router as sg_summary_router
 from .routes.events import join_router as events_join_router
@@ -188,6 +189,7 @@ app.include_router(clips_events_router)
 app.include_router(commentary_router)
 app.include_router(metrics.router)
 app.include_router(anchors_router)
+app.include_router(session_router)
 app.include_router(sg_preview_router)
 app.include_router(sg_summary_router)
 app.include_router(api_uploads.router)
